@@ -1,0 +1,47 @@
+# Copyright 1999-2019 Gentoo Authors
+# Distributed under the terms of the GNU General Public License v2
+
+EAPI=6
+
+CHOST=${CHOST_x86}
+ABI='x86'
+DEFAULT_ABI='x86'
+ABI_X86='32'
+AS="${CHOST_x86}-as"
+LD="${CHOST_x86}-ld"
+AR="${CHOST_x86}-ar"
+RANLIB="${CHOST_x86}-ranlib"
+CFLAGS_x86=""
+
+inherit toolchain
+
+# ia64 - broken static handling; USE=static emerge busybox
+KEYWORDS="amd64 x86"
+
+# NOTE: we SHOULD be using at least binutils 2.15.90.0.1 everywhere for proper
+# .eh_frame ld optimisation and symbol visibility support, but it hasnt been
+# well tested in gentoo on any arch other than amd64!!
+RDEPEND=""
+DEPEND="${RDEPEND}
+	sys-devel/gcc:3.4.6
+	amd64? (
+		legacy-gcc/i686-pc-linux-gnu-binutils
+	)"
+
+case ${ARCH} in
+	amd64)
+		CC="gcc-3.4.6 -m32"
+		CXX="g++-3.4.6 -m32"
+		;;
+	x86)
+		CC="gcc-3.4.6"
+		CXX="g++-3.4.6"
+		;;
+esac
+
+src_prepare() {
+	toolchain_src_prepare
+	eapply "${FILESDIR}"/3.0.4/00_gcc-3.0.4.patch
+	#eapply "${FILESDIR}"/3.0.4/01_workaround-for-legacy-glibc-in-non-system-dir.patch
+}
+

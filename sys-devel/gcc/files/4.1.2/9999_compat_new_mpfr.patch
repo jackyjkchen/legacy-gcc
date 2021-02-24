@@ -1,0 +1,286 @@
+diff --git a/gcc/fortran/.simplify.c.swp b/gcc/fortran/.simplify.c.swp
+deleted file mode 100644
+index fc311030..00000000
+Binary files a/gcc/fortran/.simplify.c.swp and /dev/null differ
+diff --git a/gcc/fortran/arith.c b/gcc/fortran/arith.c
+index 55289b49..c99c5249 100644
+--- a/gcc/fortran/arith.c
++++ b/gcc/fortran/arith.c
+@@ -75,6 +75,7 @@ gfc_set_model (mpfr_t x)
+   mpfr_set_default_prec (mpfr_get_prec (x));
+ }
+ 
++#if defined(GFC_MPFR_TOO_OLD)
+ /* Calculate atan2 (y, x)
+ 
+ atan2(y, x) = atan(y/x)				if x > 0,
+@@ -125,6 +126,7 @@ arctangent2 (mpfr_t y, mpfr_t x, mpfr_t result)
+   mpfr_clear (t);
+ 
+ }
++#endif
+ 
+ 
+ /* Given an arithmetic error code, return a pointer to a string that
+@@ -411,6 +413,7 @@ gfc_check_real_range (mpfr_t p, int kind)
+     }
+   else if (mpfr_cmp (q, gfc_real_kinds[i].tiny) < 0)
+     {
++#if defined(GFC_MPFR_TOO_OLD)
+       /* MPFR operates on a numbers with a given precision and enormous
+ 	exponential range.  To represent subnormal numbers the exponent is
+ 	allowed to become smaller than emin, but always retains the full
+@@ -432,14 +435,33 @@ gfc_check_real_range (mpfr_t p, int kind)
+       sprintf (s, "0.%sE%d", bin, (int) e);
+       mpfr_set_str (q, s, gfc_real_kinds[i].radix, GMP_RNDN);
+ 
++      gfc_free (s);
++      gfc_free (bin);
++#else
++      mp_exp_t emin, emax;
++      int en;
++
++      /* Save current values of emin and emax.  */
++      emin = mpfr_get_emin ();
++      emax = mpfr_get_emax ();
++
++      /* Set emin and emax for the current model number.  */
++      en = gfc_real_kinds[i].min_exponent - gfc_real_kinds[i].digits + 1; 
++      mpfr_set_emin ((mp_exp_t) en); 
++      mpfr_set_emax ((mp_exp_t) gfc_real_kinds[i].max_exponent);
++      mpfr_subnormalize (q, 0, GFC_RND_MODE);
++
++      /* Reset emin and emax.  */
++      mpfr_set_emin (emin);
++      mpfr_set_emax (emax);
++#endif
++
++      /* Copy sign if needed.  */
+       if (mpfr_sgn (p) < 0)
+ 	mpfr_neg (p, q, GMP_RNDN);
+       else
+ 	mpfr_set (p, q, GMP_RNDN);
+ 
+-      gfc_free (s);
+-      gfc_free (bin);
+-
+       retval = ARITH_OK;
+     }
+   else
+diff --git a/gcc/fortran/gfortran.h b/gcc/fortran/gfortran.h
+index c991fd4b..ee30d9d1 100644
+--- a/gcc/fortran/gfortran.h
++++ b/gcc/fortran/gfortran.h
+@@ -1145,6 +1145,10 @@ gfc_intrinsic_sym;
+ #include <gmp.h>
+ #include <mpfr.h>
+ #define GFC_RND_MODE GMP_RNDN
++#undef GFC_MPFR_TOO_OLD
++#if MPFR_VERSION_MAJOR < 2 || (MPFR_VERSION_MAJOR == 2 && MPFR_VERSION_MINOR < 2)
++#define GFC_MPFR_TOO_OLD 1
++#endif
+ 
+ typedef struct gfc_expr
+ {
+diff --git a/gcc/fortran/simplify.c b/gcc/fortran/simplify.c
+index ef0cb034..6ea9858d 100644
+--- a/gcc/fortran/simplify.c
++++ b/gcc/fortran/simplify.c
+@@ -607,7 +607,11 @@ gfc_simplify_atan2 (gfc_expr * y, gfc_expr * x)
+       return &gfc_bad_expr;
+     }
+ 
++#if defined(GFC_MPFR_TOO_OLD)
+   arctangent2 (y->value.real, x->value.real, result->value.real);
++#else
++  mpfr_atan2 (result->value.real, y->value.real, x->value.real, GFC_RND_MODE);
++#endif
+ 
+   return range_check (result, "ATAN2");
+ }
+@@ -1054,9 +1058,12 @@ gfc_expr *
+ gfc_simplify_exponent (gfc_expr * x)
+ {
+   int i;
+-  mpfr_t tmp;
+   gfc_expr *result;
+ 
++#if defined(GFC_MPFR_TOO_OLD)
++  mpfr_t tmp; 
++#endif
++
+   if (x->expr_type != EXPR_CONSTANT)
+     return NULL;
+ 
+@@ -1071,6 +1078,7 @@ gfc_simplify_exponent (gfc_expr * x)
+       return result;
+     }
+ 
++#if defined(GFC_MPFR_TOO_OLD)
+   mpfr_init (tmp);
+ 
+   mpfr_abs (tmp, x->value.real, GFC_RND_MODE);
+@@ -1085,6 +1093,10 @@ gfc_simplify_exponent (gfc_expr * x)
+     mpz_add_ui (result->value.integer,result->value.integer, 1);
+ 
+   mpfr_clear (tmp);
++#else
++  i = (int) mpfr_get_exp (x->value.real);
++  mpz_set_si (result->value.integer, i);
++#endif
+ 
+   return range_check (result, "EXPONENT");
+ }
+@@ -2117,8 +2129,12 @@ gfc_simplify_log (gfc_expr * x)
+       mpfr_init (xr);
+       mpfr_init (xi);
+ 
+-      arctangent2 (x->value.complex.i, x->value.complex.r,
+-	           result->value.complex.i);
++#if defined(GFC_MPFR_TOO_OLD)
++      arctangent2 (x->value.complex.i, x->value.complex.r, result->value.complex.i);
++#else
++      mpfr_atan2 (result->value.complex.i, x->value.complex.i, x->value.complex.r,
++          GFC_RND_MODE);
++#endif
+ 
+       mpfr_mul (xr, x->value.complex.r, x->value.complex.r, GFC_RND_MODE);
+       mpfr_mul (xi, x->value.complex.i, x->value.complex.i, GFC_RND_MODE);
+@@ -2445,7 +2461,10 @@ gfc_simplify_nearest (gfc_expr * x, gfc_expr * s)
+ {
+   gfc_expr *result;
+   mpfr_t tmp;
+-  int direction, sgn;
++  int sgn;
++#if defined(GFC_MPFR_TOO_OLD)
++  int direction;
++#endif
+ 
+   if (x->expr_type != EXPR_CONSTANT || s->expr_type != EXPR_CONSTANT)
+     return NULL;
+@@ -2453,6 +2472,8 @@ gfc_simplify_nearest (gfc_expr * x, gfc_expr * s)
+   gfc_set_model_kind (x->ts.kind);
+   result = gfc_copy_expr (x);
+ 
++#if defined(GFC_MPFR_TOO_OLD)
++
+   direction = mpfr_sgn (s->value.real);
+ 
+   if (direction == 0)
+@@ -2510,6 +2531,13 @@ gfc_simplify_nearest (gfc_expr * x, gfc_expr * s)
+       if (sgn < 0)
+ 	mpfr_neg (result->value.real, result->value.real, GFC_RND_MODE);
+     }
++#else
++  sgn = mpfr_sgn (s->value.real);
++  mpfr_init (tmp);
++  mpfr_set_inf (tmp, sgn);
++  mpfr_nexttoward (result->value.real, tmp);
++  mpfr_clear(tmp);
++#endif
+ 
+   return range_check (result, "NEAREST");
+ }
+@@ -3033,6 +3061,7 @@ bad_reshape:
+ }
+ 
+ 
++#if defined(GFC_MPFR_TOO_OLD)
+ gfc_expr *
+ gfc_simplify_rrspacing (gfc_expr * x)
+ {
+@@ -3082,7 +3111,40 @@ gfc_simplify_rrspacing (gfc_expr * x)
+ 
+   return range_check (result, "RRSPACING");
+ }
++#else
++gfc_expr *
++gfc_simplify_rrspacing (gfc_expr * x)
++{
++  gfc_expr *result;
++  int i;
++  long int e, p;
++
++  if (x->expr_type != EXPR_CONSTANT)
++    return NULL;
+ 
++  i = gfc_validate_kind (x->ts.type, x->ts.kind, false);
++
++  result = gfc_constant_result (BT_REAL, x->ts.kind, &x->where);
++
++  mpfr_abs (result->value.real, x->value.real, GFC_RND_MODE);
++
++  /* Special case x = 0 and 0.  */
++  if (mpfr_sgn (result->value.real) == 0)
++    {
++      mpfr_set_ui (result->value.real, 0, GFC_RND_MODE);
++      return result;
++    }
++
++  /* | x * 2**(-e) | * 2**p.  */
++  e = - (long int) mpfr_get_exp (x->value.real);
++  mpfr_mul_2si (result->value.real, result->value.real, e, GFC_RND_MODE);
++
++  p = (long int) gfc_real_kinds[i].digits;
++  mpfr_mul_2si (result->value.real, result->value.real, p, GFC_RND_MODE);
++
++  return range_check (result, "RRSPACING");
++}
++#endif
+ 
+ gfc_expr *
+ gfc_simplify_scale (gfc_expr * x, gfc_expr * i)
+@@ -3526,7 +3588,7 @@ gfc_simplify_sngl (gfc_expr * a)
+   return range_check (result, "SNGL");
+ }
+ 
+-
++#if defined(GFC_MPFR_TOO_OLD)
+ gfc_expr *
+ gfc_simplify_spacing (gfc_expr * x)
+ {
+@@ -3577,7 +3639,44 @@ gfc_simplify_spacing (gfc_expr * x)
+ 
+   return range_check (result, "SPACING");
+ }
++#else
++gfc_expr *
++gfc_simplify_spacing (gfc_expr * x)
++{
++  gfc_expr *result;
++  int i;
++  long int en, ep;
+ 
++  if (x->expr_type != EXPR_CONSTANT)
++    return NULL;
++
++  i = gfc_validate_kind (x->ts.type, x->ts.kind, false);
++
++  result = gfc_constant_result (BT_REAL, x->ts.kind, &x->where);
++
++  /* Special case x = 0 and -0.  */
++  mpfr_abs (result->value.real, x->value.real, GFC_RND_MODE);
++  if (mpfr_sgn (result->value.real) == 0)
++    {
++      mpfr_set (result->value.real, gfc_real_kinds[i].tiny, GFC_RND_MODE);
++      return result;
++    }
++
++  /* In the Fortran 95 standard, the result is b**(e - p) where b, e, and p
++     are the radix, exponent of x, and precision.  This excludes the 
++     possibility of subnormal numbers.  Fortran 2003 states the result is
++     b**max(e - p, emin - 1).  */
++
++  ep = (long int) mpfr_get_exp (x->value.real) - gfc_real_kinds[i].digits;
++  en = (long int) gfc_real_kinds[i].min_exponent - 1;
++  en = en > ep ? en : ep;
++
++  mpfr_set_ui (result->value.real, 1, GFC_RND_MODE);
++  mpfr_mul_2si (result->value.real, result->value.real, en, GFC_RND_MODE);
++
++  return range_check (result, "SPACING");
++}
++#endif
+ 
+ gfc_expr *
+ gfc_simplify_sqrt (gfc_expr * e)

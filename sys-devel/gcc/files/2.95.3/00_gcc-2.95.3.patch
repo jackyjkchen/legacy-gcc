@@ -1,0 +1,1073 @@
+diff --git a/Makefile.in b/Makefile.in
+index 7af1784..5248a26 100644
+--- a/Makefile.in
++++ b/Makefile.in
+@@ -375,6 +375,7 @@ BASE_FLAGS_TO_PASS = \
+ 	"CXXFLAGS=$(CXXFLAGS)" \
+ 	"CXXFLAGS_FOR_TARGET=$(CXXFLAGS_FOR_TARGET)" \
+ 	"CXX_FOR_TARGET=$(CXX_FOR_TARGET)" \
++	"DESTDIR=$(DESTDIR)" \
+ 	"DLLTOOL_FOR_TARGET=$(DLLTOOL_FOR_TARGET)" \
+ 	"INSTALL=$(INSTALL)" \
+ 	"INSTALL_DATA=$(INSTALL_DATA)" \
+@@ -1032,7 +1033,7 @@ do-info: all-texinfo
+ install-info: do-install-info dir.info
+ 	s=`cd $(srcdir); pwd`; export s; \
+ 	if [ -f dir.info ] ; then \
+-	  $(INSTALL_DATA) dir.info $(infodir)/dir.info ; \
++	  $(INSTALL_DATA) dir.info $(DESTDIR)$(infodir)/dir.info ; \
+ 	else true ; fi
+ 
+ local-clean:
+@@ -1670,15 +1671,15 @@ install-target: $(INSTALL_TARGET_MODULES)
+ ### other supporting targets
+ 
+ MAKEDIRS= \
+-	$(prefix) \
+-	$(exec_prefix)
++	$(DESTDIR)$(prefix) \
++	$(DESTDIR)$(exec_prefix)
+ .PHONY: installdirs
+ installdirs: mkinstalldirs
+ 	$(SHELL) $(srcdir)/mkinstalldirs $(MAKEDIRS)
+ 
+ dir.info: do-install-info
+ 	if [ -f $(srcdir)/texinfo/gen-info-dir ] ; then \
+-	  $(srcdir)/texinfo/gen-info-dir $(infodir) $(srcdir)/texinfo/dir.info-template > dir.info.new ; \
++	  $(srcdir)/texinfo/gen-info-dir $(DESTDIR)$(infodir) $(srcdir)/texinfo/dir.info-template > dir.info.new ; \
+ 	  mv -f dir.info.new dir.info ; \
+ 	else true ; \
+ 	fi
+diff --git a/config-ml.in b/config-ml.in
+index ed8b1ed..d96eff1 100644
+--- a/config-ml.in
++++ b/config-ml.in
+@@ -435,6 +435,7 @@ multi-do:
+ 				LIBCFLAGS="$(LIBCFLAGS) $${flags}" \
+ 				LIBCXXFLAGS="$(LIBCXXFLAGS) $${flags}" \
+ 				LDFLAGS="$(LDFLAGS) $${flags}" \
++				DESTDIR="$(DESTDIR)" \
+ 				$(DO)); then \
+ 		  true; \
+ 		else \
+diff --git a/gcc/Makefile.in b/gcc/Makefile.in
+index 85bf9f8..0ff89a1 100644
+--- a/gcc/Makefile.in
++++ b/gcc/Makefile.in
+@@ -624,6 +624,7 @@ ORDINARY_FLAGS_TO_PASS = \
+ 	"BISON=$(BISON)" \
+ 	"BISONFLAGS=$(BISONFLAGS)" \
+ 	"CFLAGS=$(CFLAGS)" \
++	"DESTDIR=$(DESTDIR)" \
+ 	"CLIB=$(CLIB)" \
+ 	"GCC_FOR_TARGET=$(GCC_FOR_TARGET)" \
+ 	"LDFLAGS=$(LDFLAGS)" \
+@@ -2450,17 +2451,17 @@ install-cross-rest: install-float-h-cross
+ 
+ # Handle cpp installation.
+ install-cpp: cpp$(exeext)
+-	-rm -f $(bindir)/$(CPP_INSTALL_NAME)$(exeext)
+-	$(INSTALL_PROGRAM) -m 755 cpp$(exeext) $(bindir)/$(CPP_INSTALL_NAME)$(exeext)
++	-rm -f $(DESTDIR)$(bindir)/$(CPP_INSTALL_NAME)$(exeext)
++	$(INSTALL_PROGRAM) -m 755 cpp$(exeext) $(DESTDIR)$(bindir)/$(CPP_INSTALL_NAME)$(exeext)
+ 	if [ x$(cpp_install_dir) != x ]; then \
+-	  rm -f $(prefix)/$(cpp_install_dir)/$(CPP_INSTALL_NAME)$(exeext); \
+-	  $(INSTALL_PROGRAM) -m 755 cpp$(exeext) $(prefix)/$(cpp_install_dir)/$(CPP_INSTALL_NAME)$(exeext); \
++	  rm -f $(DESTDIR)$(prefix)/$(cpp_install_dir)/$(CPP_INSTALL_NAME)$(exeext); \
++	  $(INSTALL_PROGRAM) -m 755 cpp$(exeext) $(DESTDIR)$(prefix)/$(cpp_install_dir)/$(CPP_INSTALL_NAME)$(exeext); \
+ 	else true; fi
+ 
+ uninstall-cpp:
+-	-rm -f $(bindir)/cpp
++	-rm -f $(DESTDIR)$(bindir)/cpp
+ 	-if [ x$(cpp_install_dir) != x ]; then \
+-	  rm -f $(prefix)/$(cpp_install_dir)/cpp; \
++	  rm -f $(DESTDIR)$(prefix)/$(cpp_install_dir)/cpp; \
+ 	else true; fi
+ 
+ # Install float.h for cross compiler.
+@@ -2477,156 +2478,142 @@ install-float-h-cross: installdirs
+ 
+ # Create the installation directories.
+ installdirs:
+-	-if [ -d $(prefix) ] ; then true ; else mkdir $(prefix) ; chmod a+rx $(prefix) ; fi
+-	-if [ -d $(exec_prefix) ] ; then true ; else mkdir $(exec_prefix) ; chmod a+rx $(exec_prefix) ; fi
+-	-if [ -d $(libdir) ] ; then true ; else mkdir $(libdir) ; chmod a+rx $(libdir) ; fi
+-	-if [ -d $(libdir)/gcc-lib ] ; then true ; else mkdir $(libdir)/gcc-lib ; chmod a+rx $(libdir)/gcc-lib ; fi
+-# This dir isn't currently searched by cpp.
+-#	-if [ -d $(libdir)/gcc-lib/include ] ; then true ; else mkdir $(libdir)/gcc-lib/include ; chmod a+rx $(libdir)/gcc-lib/include ; fi
+-	-fdir= ; for dir in `echo $(libsubdir) | tr '/' ' '`; do \
+-	  fdir=$${fdir}/$${dir}; \
+-	  if [ -d $${fdir} ] ; then true ; else mkdir $${fdir}; chmod a+rx $${fdir}; fi ; \
+-	done
+-	-if [ -d $(bindir) ] ; then true ; else mkdir $(bindir) ; chmod a+rx $(bindir) ; fi
+-	-if [ -d $(includedir) ] ; then true ; else mkdir $(includedir) ; chmod a+rx $(includedir) ; fi
+-	-if [ -d $(gcc_tooldir) ] ; then true ; else mkdir $(gcc_tooldir) ; chmod a+rx $(gcc_tooldir) ; fi
+-	-if [ -d $(assertdir) ] ; then true ; else mkdir $(assertdir) ; chmod a+rx $(assertdir) ; fi
+-	-if [ -d $(infodir) ] ; then true ; else mkdir $(infodir) ; chmod a+rx $(infodir) ; fi
+-# We don't use mkdir -p to create the parents of man1dir,
+-# because some systems don't support it.
+-# Instead, we use this technique to create the immediate parent of man1dir.
+-	-parent=`echo $(man1dir)|sed -e 's@/[^/]*$$@@'`; \
+-	if [ -d $$parent ] ; then true ; else mkdir $$parent ; chmod a+rx $$parent ; fi
+-	-if [ -d $(man1dir) ] ; then true ; else mkdir $(man1dir) ; chmod a+rx $(man1dir) ; fi
++	$(SHELL) ${srcdir}/mkinstalldirs $(DESTDIR)$(libsubdir)
++	$(SHELL) ${srcdir}/mkinstalldirs $(DESTDIR)$(bindir)
++	$(SHELL) ${srcdir}/mkinstalldirs $(DESTDIR)$(includedir)
++	$(SHELL) ${srcdir}/mkinstalldirs $(DESTDIR)$(infodir)
++	$(SHELL) ${srcdir}/mkinstalldirs $(DESTDIR)$(slibdir)
++	$(SHELL) ${srcdir}/mkinstalldirs $(DESTDIR)$(man1dir)
++	$(SHELL) ${srcdir}/mkinstalldirs $(DESTDIR)$(man7dir)
+ 
+ # Install the compiler executables built during cross compilation.
+ install-common: native installdirs $(EXTRA_PARTS) lang.install-common
+ 	for file in $(COMPILERS); do \
+ 	  if [ -f $$file ] ; then \
+-	    rm -f $(libsubdir)/$$file; \
+-	    $(INSTALL_PROGRAM) $$file $(libsubdir)/$$file; \
++	    rm -f $(DESTDIR)$(libsubdir)/$$file; \
++	    $(INSTALL_PROGRAM) $$file $(DESTDIR)$(libsubdir)/$$file; \
+ 	  else true; \
+ 	  fi; \
+ 	done
+ 	for file in $(EXTRA_PASSES) $(EXTRA_PROGRAMS) $(USE_COLLECT2) ..; do \
+ 	  if [ x"$$file" != x.. ]; then \
+-	    rm -f $(libsubdir)/$$file; \
+-	    $(INSTALL_PROGRAM) $$file $(libsubdir)/$$file; \
++	    rm -f $(DESTDIR)$(libsubdir)/$$file; \
++	    $(INSTALL_PROGRAM) $$file $(DESTDIR)$(libsubdir)/$$file; \
+ 	  else true; fi; \
+ 	done
+ 	for file in $(EXTRA_PARTS) ..; do \
+ 	  if [ x"$$file" != x.. ]; then \
+-	    rm -f $(libsubdir)/$$file; \
+-	    $(INSTALL_DATA) $$file $(libsubdir)/$$file; \
+-	    chmod a-x $(libsubdir)/$$file; \
++	    rm -f $(DESTDIR)$(libsubdir)/$$file; \
++	    $(INSTALL_DATA) $$file $(DESTDIR)$(libsubdir)/$$file; \
++	    chmod a-x $(DESTDIR)$(libsubdir)/$$file; \
+ 	  else true; fi; \
+ 	done
+ # Don't mess with specs if it doesn't exist yet.
+ 	-if [ -f specs ] ; then \
+-	  rm -f $(libsubdir)/specs; \
+-	  $(INSTALL_DATA) specs $(libsubdir)/specs; \
+-	  chmod a-x $(libsubdir)/specs; \
++	  rm -f $(DESTDIR)$(libsubdir)/specs; \
++	  $(INSTALL_DATA) specs $(DESTDIR)$(libsubdir)/specs; \
++	  chmod a-x $(DESTDIR)$(libsubdir)/specs; \
+ 	fi
+ # Install protoize if it was compiled.
+ 	-if [ -f protoize$(exeext) ]; \
+ 	then \
+ 	    if [ -f gcc-cross$(exeext) ] ; then \
+-		rm -f $(bindir)/$(PROTOIZE_CROSS_NAME)$(exeext); \
+-		$(INSTALL_PROGRAM) protoize$(exeext) $(bindir)/$(PROTOIZE_CROSS_NAME)$(exeext); \
+-		rm -f $(bindir)/$(UNPROTOIZE_CROSS_NAME)$(exeext); \
+-		$(INSTALL_PROGRAM) unprotoize$(exeext) $(bindir)/$(UNPROTOIZE_CROSS_NAME)$(exeext); \
++		rm -f $(DESTDIR)$(bindir)/$(PROTOIZE_CROSS_NAME)$(exeext); \
++		$(INSTALL_PROGRAM) protoize$(exeext) $(DESTDIR)$(bindir)/$(PROTOIZE_CROSS_NAME)$(exeext); \
++		rm -f $(DESTDIR)$(bindir)/$(UNPROTOIZE_CROSS_NAME)$(exeext); \
++		$(INSTALL_PROGRAM) unprotoize$(exeext) $(DESTDIR)$(bindir)/$(UNPROTOIZE_CROSS_NAME)$(exeext); \
+ 	    else \
+-		rm -f $(bindir)/$(PROTOIZE_INSTALL_NAME)$(exeext); \
+-		$(INSTALL_PROGRAM) protoize$(exeext) $(bindir)/$(PROTOIZE_INSTALL_NAME)$(exeext); \
+-		rm -f $(bindir)/$(UNPROTOIZE_INSTALL_NAME)$(exeext); \
+-		$(INSTALL_PROGRAM) unprotoize$(exeext) $(bindir)/$(UNPROTOIZE_INSTALL_NAME)$(exeext); \
++		rm -f $(DESTDIR)$(bindir)/$(PROTOIZE_INSTALL_NAME)$(exeext); \
++		$(INSTALL_PROGRAM) protoize$(exeext) $(DESTDIR)$(bindir)/$(PROTOIZE_INSTALL_NAME)$(exeext); \
++		rm -f $(DESTDIR)$(bindir)/$(UNPROTOIZE_INSTALL_NAME)$(exeext); \
++		$(INSTALL_PROGRAM) unprotoize$(exeext) $(DESTDIR)$(bindir)/$(UNPROTOIZE_INSTALL_NAME)$(exeext); \
+ 	    fi ; \
+-	    rm -f $(libsubdir)/SYSCALLS.c.X; \
+-	    $(INSTALL_DATA) SYSCALLS.c.X $(libsubdir)/SYSCALLS.c.X; \
+-	    chmod a-x $(libsubdir)/SYSCALLS.c.X; \
++	    rm -f $(DESTDIR)$(libsubdir)/SYSCALLS.c.X; \
++	    $(INSTALL_DATA) SYSCALLS.c.X $(DESTDIR)$(libsubdir)/SYSCALLS.c.X; \
++	    chmod a-x $(DESTDIR)$(libsubdir)/SYSCALLS.c.X; \
+ 	fi
+-	-rm -f $(libsubdir)/cpp0$(exeext)
+-	$(INSTALL_PROGRAM) cpp0$(exeext) $(libsubdir)/cpp0$(exeext)
++	-rm -f $(DESTDIR)$(libsubdir)/cpp0$(exeext)
++	$(INSTALL_PROGRAM) cpp0$(exeext) $(DESTDIR)$(libsubdir)/cpp0$(exeext)
+ # Install gcov if it was compiled.
+ 	-if [ -f gcov$(exeext) ]; \
+ 	then \
+-	    rm -f $(bindir)/gcov$(exeext); \
+-	    $(INSTALL_PROGRAM) gcov$(exeext) $(bindir)/$(GCOV_INSTALL_NAME)$(exeext); \
++	    rm -f $(DESTDIR)$(bindir)/gcov$(exeext); \
++	    $(INSTALL_PROGRAM) gcov$(exeext) $(DESTDIR)$(bindir)/$(GCOV_INSTALL_NAME)$(exeext); \
+ 	fi
+ 
+ # Install the driver program as $(target_alias)-gcc
+ # and also as either gcc (if native) or $(gcc_tooldir)/bin/gcc.
+ install-driver: xgcc$(exeext)
+ 	-if [ -f gcc-cross$(exeext) ] ; then \
+-	  rm -f $(bindir)/$(GCC_CROSS_NAME)$(exeext); \
+-	  $(INSTALL_PROGRAM) gcc-cross$(exeext) $(bindir)/$(GCC_CROSS_NAME)$(exeext); \
+-	  if [ -d $(gcc_tooldir)/bin/. ] ; then \
+-	    rm -f $(gcc_tooldir)/bin/gcc$(exeext); \
+-	    $(INSTALL_PROGRAM) gcc-cross$(exeext) $(gcc_tooldir)/bin/gcc$(exeext); \
++	  rm -f $(DESTDIR)$(bindir)/$(GCC_CROSS_NAME)$(exeext); \
++	  $(INSTALL_PROGRAM) gcc-cross$(exeext) $(DESTDIR)$(bindir)/$(GCC_CROSS_NAME)$(exeext); \
++	  if [ -d $(DESTDIR)$(gcc_tooldir)/bin/. ] ; then \
++	    rm -f $(DESTDIR)$(gcc_tooldir)/bin/gcc$(exeext); \
++	    $(INSTALL_PROGRAM) gcc-cross$(exeext) $(DESTDIR)$(gcc_tooldir)/bin/gcc$(exeext); \
+ 	  else true; fi; \
+ 	else \
+-	  rm -f $(bindir)/$(GCC_INSTALL_NAME)$(exeext); \
+-	  $(INSTALL_PROGRAM) xgcc$(exeext) $(bindir)/$(GCC_INSTALL_NAME)$(exeext); \
+-	  rm -f $(bindir)/$(target_alias)-gcc-1$(exeext); \
+-	  $(LN) $(bindir)/$(GCC_INSTALL_NAME)$(exeext) $(bindir)/$(target_alias)-gcc-1$(exeext); \
+-	  mv $(bindir)/$(target_alias)-gcc-1$(exeext) $(bindir)/$(target_alias)-gcc$(exeext); \
++	  rm -f $(DESTDIR)$(bindir)/$(GCC_INSTALL_NAME)$(exeext); \
++	  $(INSTALL_PROGRAM) xgcc$(exeext) $(DESTDIR)$(bindir)/$(GCC_INSTALL_NAME)$(exeext); \
++	  rm -f $(DESTDIR)$(bindir)/$(target_alias)-gcc-1$(exeext); \
++	  $(LN) $(DESTDIR)$(bindir)/$(GCC_INSTALL_NAME)$(exeext) $(DESTDIR)$(bindir)/$(target_alias)-gcc-1$(exeext); \
++	  mv $(DESTDIR)$(bindir)/$(target_alias)-gcc-1$(exeext) $(DESTDIR)$(bindir)/$(target_alias)-gcc$(exeext); \
+ 	fi
+ 
+ # Install the info files.
+ # $(INSTALL_DATA) might be a relative pathname, so we can't cd into srcdir
+ # to do the install.
+ install-info: doc installdirs lang.install-info
+-	-rm -f $(infodir)/cpp.info* $(infodir)/gcc.info*
++	-rm -f $(DESTDIR)$(infodir)/cpp.info* $(DESTDIR)$(infodir)/gcc.info*
+ 	for f in cpp.info* gcc.info*; do \
+-	    $(INSTALL_DATA) $$f $(infodir)/$$f; \
++	    $(INSTALL_DATA) $$f $(DESTDIR)$(infodir)/$$f; \
+ 	done
+ 	-if $(SHELL) -c 'install-info --version' >/dev/null 2>&1; then \
+-	  if [ -f $(infodir)/dir ] ; then \
++	  if [ -f $(DESTDIR)$(infodir)/dir ] ; then \
+ 	    for f in cpp.info gcc.info; do \
+-		install-info --dir-file=$(infodir)/dir $(infodir)/$$f; \
++		install-info --dir-file=$(DESTDIR)$(infodir)/dir $(DESTDIR)$(infodir)/$$f; \
+ 	    done; \
+ 	  else true; fi; \
+ 	else true; fi;
+-	-chmod a-x $(infodir)/cpp.info* $(infodir)/gcc.info*
++	-chmod a-x $(DESTDIR)$(infodir)/cpp.info* $(DESTDIR)$(infodir)/gcc.info*
+ 
+ # Install the man pages.
+ install-man: installdirs $(srcdir)/gcc.1 $(srcdir)/cccp.1 lang.install-man
+ 	-if [ -f gcc-cross$(exeext) ] ; then \
+-	  rm -f $(man1dir)/$(GCC_CROSS_NAME)$(manext); \
+-	  $(INSTALL_DATA) $(srcdir)/gcc.1 $(man1dir)/$(GCC_CROSS_NAME)$(manext); \
+-	  chmod a-x $(man1dir)/$(GCC_CROSS_NAME)$(manext); \
++	  rm -f $(DESTDIR)$(man1dir)/$(GCC_CROSS_NAME)$(manext); \
++	  $(INSTALL_DATA) $(srcdir)/gcc.1 $(DESTDIR)$(man1dir)/$(GCC_CROSS_NAME)$(manext); \
++	  chmod a-x $(DESTDIR)$(man1dir)/$(GCC_CROSS_NAME)$(manext); \
+ 	else \
+-	  rm -f $(man1dir)/$(GCC_INSTALL_NAME)$(manext); \
+-	  $(INSTALL_DATA) $(srcdir)/gcc.1 $(man1dir)/$(GCC_INSTALL_NAME)$(manext); \
+-	  chmod a-x $(man1dir)/$(GCC_INSTALL_NAME)$(manext); \
++	  rm -f $(DESTDIR)$(man1dir)/$(GCC_INSTALL_NAME)$(manext); \
++	  $(INSTALL_DATA) $(srcdir)/gcc.1 $(DESTDIR)$(man1dir)/$(GCC_INSTALL_NAME)$(manext); \
++	  chmod a-x $(DESTDIR)$(man1dir)/$(GCC_INSTALL_NAME)$(manext); \
+ 	fi
+-	-rm -f $(man1dir)/cccp$(manext)
+-	-$(INSTALL_DATA) $(srcdir)/cccp.1 $(man1dir)/cccp$(manext)
+-	-chmod a-x $(man1dir)/cccp$(manext)
++	-rm -f $(DESTDIR)$(man1dir)/cccp$(manext)
++	-$(INSTALL_DATA) $(srcdir)/cccp.1 $(DESTDIR)$(man1dir)/cccp$(manext)
++	-chmod a-x $(DESTDIR)$(man1dir)/cccp$(manext)
+ 
+ # Install the library.
+ install-libgcc: libgcc.a installdirs
+ 	-if [ -f libgcc.a ] ; then \
+-	  rm -f $(libsubdir)/libgcc.a; \
+-	  $(INSTALL_DATA) libgcc.a $(libsubdir)/libgcc.a; \
++	  rm -f $(DESTDIR)$(libsubdir)/libgcc.a; \
++	  $(INSTALL_DATA) libgcc.a $(DESTDIR)$(libsubdir)/libgcc.a; \
+ 	  if $(RANLIB_TEST_FOR_TARGET) ; then \
+-	    (cd $(libsubdir); $(RANLIB_FOR_TARGET) libgcc.a); else true; fi; \
+-	  chmod a-x $(libsubdir)/libgcc.a; \
++	    (cd $(DESTDIR)$(libsubdir); $(RANLIB_FOR_TARGET) libgcc.a); else true; fi; \
++	  chmod a-x $(DESTDIR)$(libsubdir)/libgcc.a; \
+ 	else true; fi
+ 
+ # Install multiple versions of libgcc.a.
+ install-multilib: stmp-multilib installdirs
+ 	for i in `$(GCC_FOR_TARGET) --print-multi-lib`; do \
+ 	  dir=`echo $$i | sed -e 's/;.*$$//'`; \
+-	  if [ -d $(libsubdir)/$${dir} ]; then true; else mkdir $(libsubdir)/$${dir}; fi; \
++	  if [ -d $(DESTDIR)$(libsubdir)/$${dir} ]; then true; else mkdir $(DESTDIR)$(libsubdir)/$${dir}; fi; \
+ 	  for f in libgcc.a $(EXTRA_MULTILIB_PARTS); do \
+-	    rm -f $(libsubdir)/$${dir}/$${f}; \
+-	    $(INSTALL_DATA) $${dir}/$${f} $(libsubdir)/$${dir}/$${f}; \
++	    rm -f $(DESTDIR)$(libsubdir)/$${dir}/$${f}; \
++	    $(INSTALL_DATA) $${dir}/$${f} $(DESTDIR)$(libsubdir)/$${dir}/$${f}; \
+ 	  done; \
+ 	  if $(RANLIB_TEST_FOR_TARGET); then \
+-	    (cd $(libsubdir)/$${dir}; $(RANLIB_FOR_TARGET) libgcc.a); \
++	    (cd $(DESTDIR)$(libsubdir)/$${dir}; $(RANLIB_FOR_TARGET) libgcc.a); \
+ 	  else true; fi; \
+-	  chmod a-x $(libsubdir)/$${dir}/libgcc.a; \
++	  chmod a-x $(DESTDIR)$(libsubdir)/$${dir}/libgcc.a; \
+ 	done
+ 
+ # Install all the header files built in the include subdirectory.
+@@ -2634,23 +2621,23 @@ install-headers: install-include-dir $(INSTALL_HEADERS_DIR) $(INSTALL_ASSERT_H)
+ # Fix symlinks to absolute paths in the installed include directory to
+ # point to the installed directory, not the build directory.
+ # Don't need to use LN_S here since we really do need ln -s and no substitutes.
+-	-files=`cd $(libsubdir)/include; find . -type l -print 2>/dev/null`; \
++	-files=`cd $(DESTDIR)$(libsubdir)/include; find . -type l -print 2>/dev/null`; \
+ 	if [ $$? -eq 0 ]; then \
+ 	  dir=`cd include; pwd`; \
+ 	  for i in $$files; do \
+-	    dest=`ls -ld $(libsubdir)/include/$$i | sed -n 's/.*-> //p'`; \
++	    dest=`ls -ld $(DESTDIR)$(libsubdir)/include/$$i | sed -n 's/.*-> //p'`; \
+ 	    if expr "$$dest" : "$$dir.*" > /dev/null; then \
+-	      rm -f $(libsubdir)/include/$$i; \
+-	      ln -s `echo $$i | sed "s|/[^/]*|/..|g" | sed 's|/..$$||'``echo "$$dest" | sed "s|$$dir||"` $(libsubdir)/include/$$i; \
++	      rm -f $(DESTDIR)$(libsubdir)/include/$$i; \
++	      ln -s `echo $$i | sed "s|/[^/]*|/..|g" | sed 's|/..$$||'``echo "$$dest" | sed "s|$$dir||"` $(DESTDIR)$(libsubdir)/include/$$i; \
+ 	    fi; \
+ 	  done; \
+ 	fi
+ 
+ # Create or recreate the gcc private include file directory.
+ install-include-dir: installdirs
+-	-rm -rf $(libsubdir)/include
+-	mkdir $(libsubdir)/include
+-	-chmod a+rx $(libsubdir)/include
++	-rm -rf $(DESTDIR)$(libsubdir)/include
++	mkdir $(DESTDIR)$(libsubdir)/include
++	-chmod a+rx $(DESTDIR)$(libsubdir)/include
+ 
+ # Install the include directory using tar.
+ install-headers-tar: stmp-headers $(STMP_FIXPROTO) install-include-dir
+@@ -2659,7 +2646,7 @@ install-headers-tar: stmp-headers $(STMP_FIXPROTO) install-include-dir
+ # found in CDPATH, corrupting the output.  We could just redirect the
+ # output of `cd', but some shells lose on redirection within `()'s
+ 	(cd `pwd`/include ; \
+-	 tar -cf - .; exit 0) | (cd $(libsubdir)/include; tar $(TAROUTOPTS) - )
++	 tar -cf - .; exit 0) | (cd $(DESTDIR)$(libsubdir)/include; tar $(TAROUTOPTS) - )
+ # /bin/sh on some systems returns the status of the first tar,
+ # and that can lose with GNU tar which always writes a full block.
+ # So use `exit 0' to ignore its exit status.
+@@ -2668,7 +2655,7 @@ install-headers-tar: stmp-headers $(STMP_FIXPROTO) install-include-dir
+ install-headers-cpio: stmp-headers $(STMP_FIXPROTO) install-include-dir
+ # See discussion about the use of `pwd` above
+ 	cd `pwd`/include ; \
+-	find . -print | cpio -pdum $(libsubdir)/include
++	find . -print | cpio -pdum $(DESTDIR)$(libsubdir)/include
+ 
+ # Put assert.h where it won't override GNU libc's assert.h.
+ # It goes in a dir that is searched after GNU libc's headers;
+@@ -2678,43 +2665,43 @@ install-headers-cpio: stmp-headers $(STMP_FIXPROTO) install-include-dir
+ ## This code would be simpler if it tested for -f ... && ! grep ...
+ ## but supposedly the ! operator is missing in sh on some systems.
+ install-assert-h: assert.h installdirs
+-	if [ -f $(assertdir)/assert.h ]; \
++	if [ -f $(DESTDIR)$(assertdir)/assert.h ]; \
+ 	then \
+-	  if grep "__eprintf" $(assertdir)/assert.h >/dev/null; \
++	  if grep "__eprintf" $(DESTDIR)$(assertdir)/assert.h >/dev/null; \
+ 	    then \
+-	    rm -f $(assertdir)/assert.h; \
+-	    $(INSTALL_DATA) $(srcdir)/assert.h $(assertdir)/assert.h; \
+-	    chmod a-x $(assertdir)/assert.h; \
++	    rm -f $(DESTDIR)$(assertdir)/assert.h; \
++	    $(INSTALL_DATA) $(srcdir)/assert.h $(DESTDIR)$(assertdir)/assert.h; \
++	    chmod a-x $(DESTDIR)$(assertdir)/assert.h; \
+ 	  else true; \
+ 	  fi; \
+ 	else \
+-	  rm -f $(assertdir)/assert.h; \
+-	  $(INSTALL_DATA) $(srcdir)/assert.h $(assertdir)/assert.h; \
+-	  chmod a-x $(assertdir)/assert.h; \
++	  rm -f $(DESTDIR)$(assertdir)/assert.h; \
++	  $(INSTALL_DATA) $(DESTDIR)$(srcdir)/assert.h $(DESTDIR)$(assertdir)/assert.h; \
++	  chmod a-x $(DESTDIR)$(assertdir)/assert.h; \
+ 	fi
+ 
+ # Use this target to install the program `collect2' under the name `collect2'.
+ install-collect2: collect2 installdirs
+-	$(INSTALL_PROGRAM) collect2$(exeext) $(libsubdir)/collect2$(exeext)
++	$(INSTALL_PROGRAM) collect2$(exeext) $(DESTDIR)$(libsubdir)/collect2$(exeext)
+ # Install the driver program as $(libsubdir)/gcc for collect2.
+-	$(INSTALL_PROGRAM) xgcc$(exeext) $(libsubdir)/gcc$(exeext)
++	$(INSTALL_PROGRAM) xgcc$(exeext) $(DESTDIR)$(libsubdir)/gcc$(exeext)
+ 
+ # Cancel installation by deleting the installed files.
+ uninstall: intl.uninstall lang.uninstall $(UNINSTALL_CPP)
+-	-rm -rf $(libsubdir)
+-	-rm -rf $(bindir)/$(GCC_INSTALL_NAME)$(exeext)
+-	-rm -rf $(bindir)/$(GCC_CROSS_NAME)$(exeext)
+-	-rm -rf $(bindir)/$(PROTOIZE_INSTALL_NAME)$(exeext)
+-	-rm -rf $(bindir)/$(PROTOIZE_CROSS_NAME)$(exeext)
+-	-rm -rf $(bindir)/$(UNPROTOIZE_INSTALL_NAME)$(exeext)
+-	-rm -rf $(bindir)/$(UNPROTOIZE_CROSS_NAME)$(exeext)
+-	-rm -rf $(bindir)/$(GCOV_INSTALL_NAME)$(exeext)
+-	-rm -rf $(man1dir)/$(GCC_INSTALL_NAME)$(manext)
+-	-rm -rf $(man1dir)/$(GCC_CROSS_NAME)$(manext)
+-	-rm -rf $(man1dir)/cccp$(manext)
+-	-rm -rf $(man1dir)/protoize$(manext)
+-	-rm -rf $(man1dir)/unprotoize$(manext)
+-	-rm -f $(infodir)/cpp.info* $(infodir)/gcc.info*
++	-rm -rf $(DESTDIR)$(libsubdir)
++	-rm -rf $(DESTDIR)$(bindir)/$(GCC_INSTALL_NAME)$(exeext)
++	-rm -rf $(DESTDIR)$(bindir)/$(GCC_CROSS_NAME)$(exeext)
++	-rm -rf $(DESTDIR)$(bindir)/$(PROTOIZE_INSTALL_NAME)$(exeext)
++	-rm -rf $(DESTDIR)$(bindir)/$(PROTOIZE_CROSS_NAME)$(exeext)
++	-rm -rf $(DESTDIR)$(bindir)/$(UNPROTOIZE_INSTALL_NAME)$(exeext)
++	-rm -rf $(DESTDIR)$(bindir)/$(UNPROTOIZE_CROSS_NAME)$(exeext)
++	-rm -rf $(DESTDIR)$(bindir)/$(GCOV_INSTALL_NAME)$(exeext)
++	-rm -rf $(DESTDIR)$(man1dir)/$(GCC_INSTALL_NAME)$(manext)
++	-rm -rf $(DESTDIR)$(man1dir)/$(GCC_CROSS_NAME)$(manext)
++	-rm -rf $(DESTDIR)$(man1dir)/cccp$(manext)
++	-rm -rf $(DESTDIR)$(man1dir)/protoize$(manext)
++	-rm -rf $(DESTDIR)$(man1dir)/unprotoize$(manext)
++	-rm -f $(DESTDIR)$(infodir)/cpp.info* $(DESTDIR)$(infodir)/gcc.info*
+ #
+ # These targets are for the dejagnu testsuites. The file site.exp 
+ # contains global variables that all the testsuites will use.
+diff --git a/gcc/config/arc/t-arc b/gcc/config/arc/t-arc
+index d922c27..c455e8b 100644
+--- a/gcc/config/arc/t-arc
++++ b/gcc/config/arc/t-arc
+@@ -63,10 +63,10 @@ stmp-multilib-arc: stmp-multilib
+ install-multilib-arc: install-multilib
+ 	for i in `$(GCC_FOR_TARGET) --print-multi-lib`; do \
+ 	  dir=`echo $$i | sed -e 's/;.*$$//'`; \
+-	  rm -f $(libsubdir)/$${dir}/crtinit.o; \
+-	  $(INSTALL_DATA) $${dir}/crtinit.o $(libsubdir)/$${dir}/crtinit.o; \
+-	  chmod a-x $(libsubdir)/$${dir}/crtinit.o; \
+-	  rm -f $(libsubdir)/$${dir}/crtfini.o; \
+-	  $(INSTALL_DATA) $${dir}/crtfini.o $(libsubdir)/$${dir}/crtfini.o; \
+-	  chmod a-x $(libsubdir)/$${dir}/crtfini.o; \
++	  rm -f $(DESTDIR)$(libsubdir)/$${dir}/crtinit.o; \
++	  $(INSTALL_DATA) $${dir}/crtinit.o $(DESTDIR)$(libsubdir)/$${dir}/crtinit.o; \
++	  chmod a-x $(DESTDIR)$(libsubdir)/$${dir}/crtinit.o; \
++	  rm -f $(DESTDIR)$(libsubdir)/$${dir}/crtfini.o; \
++	  $(INSTALL_DATA) $${dir}/crtfini.o $(DESTDIR)$(libsubdir)/$${dir}/crtfini.o; \
++	  chmod a-x $(DESTDIR)$(libsubdir)/$${dir}/crtfini.o; \
+ 	done
+diff --git a/gcc/cp/Make-lang.in b/gcc/cp/Make-lang.in
+index d5d4e4d..28b0055 100644
+--- a/gcc/cp/Make-lang.in
++++ b/gcc/cp/Make-lang.in
+@@ -214,27 +214,27 @@ c++.install-normal:
+ c++.install-common:
+ 	-if [ -f cc1plus$(exeext) ] ; then \
+ 	  if [ -f g++-cross$(exeext) ] ; then \
+-	    rm -f $(bindir)/$(GXX_CROSS_NAME)$(exeext); \
+-	    $(INSTALL_PROGRAM) g++-cross$(exeext) $(bindir)/$(GXX_CROSS_NAME)$(exeext); \
+-	    chmod a+x $(bindir)/$(GXX_CROSS_NAME)$(exeext); \
+-	    rm -f $(bindir)/$(CXX_CROSS_NAME)$(exeext); \
+-	    $(LN) $(bindir)/$(GXX_CROSS_NAME)$(exeext) $(bindir)/$(CXX_CROSS_NAME)$(exeext); \
++	    rm -f $(DESTDIR)$(bindir)/$(GXX_CROSS_NAME)$(exeext); \
++	    $(INSTALL_PROGRAM) g++-cross$(exeext) $(DESTDIR)$(bindir)/$(GXX_CROSS_NAME)$(exeext); \
++	    chmod a+x $(DESTDIR)$(bindir)/$(GXX_CROSS_NAME)$(exeext); \
++	    rm -f $(DESTDIR)$(bindir)/$(CXX_CROSS_NAME)$(exeext); \
++	    $(LN) $(DESTDIR)$(bindir)/$(GXX_CROSS_NAME)$(exeext) $(DESTDIR)$(bindir)/$(CXX_CROSS_NAME)$(exeext); \
+ 	  else \
+-	    rm -f $(bindir)/$(GXX_INSTALL_NAME)$(exeext); \
+-	    $(INSTALL_PROGRAM) g++$(exeext) $(bindir)/$(GXX_INSTALL_NAME)$(exeext); \
+-	    chmod a+x $(bindir)/$(GXX_INSTALL_NAME)$(exeext); \
+-	    rm -f $(bindir)/$(CXX_INSTALL_NAME)$(exeext); \
+-	    $(LN) $(bindir)/$(GXX_INSTALL_NAME)$(exeext) $(bindir)/$(CXX_INSTALL_NAME)$(exeext); \
++	    rm -f $(DESTDIR)$(bindir)/$(GXX_INSTALL_NAME)$(exeext); \
++	    $(INSTALL_PROGRAM) g++$(exeext) $(DESTDIR)$(bindir)/$(GXX_INSTALL_NAME)$(exeext); \
++	    chmod a+x $(DESTDIR)$(bindir)/$(GXX_INSTALL_NAME)$(exeext); \
++	    rm -f $(DESTDIR)$(bindir)/$(CXX_INSTALL_NAME)$(exeext); \
++	    $(LN) $(DESTDIR)$(bindir)/$(GXX_INSTALL_NAME)$(exeext) $(DESTDIR)$(bindir)/$(CXX_INSTALL_NAME)$(exeext); \
+ 	  fi ; \
+ 	  if [ x$(DEMANGLER_PROG) != x ] && [ -x "$(DEMANGLER_PROG)" ]; then \
+ 	    if [ -f g++-cross$(exeext) ] ; then \
+-	      rm -f $(bindir)/$(DEMANGLER_CROSS_NAME)$(exeext); \
+-	      $(INSTALL_PROGRAM) $(DEMANGLER_PROG) $(bindir)/$(DEMANGLER_CROSS_NAME)$(exeext); \
+-	      chmod a+x $(bindir)/$(DEMANGLER_CROSS_NAME)$(exeext); \
++	      rm -f $(DESTDIR)$(bindir)/$(DEMANGLER_CROSS_NAME)$(exeext); \
++	      $(INSTALL_PROGRAM) $(DEMANGLER_PROG) $(DESTDIR)$(bindir)/$(DEMANGLER_CROSS_NAME)$(exeext); \
++	      chmod a+x $(DESTDIR)$(bindir)/$(DEMANGLER_CROSS_NAME)$(exeext); \
+ 	    else \
+-	      rm -f $(bindir)/$(DEMANGLER_INSTALL_NAME)$(exeext); \
+-	      $(INSTALL_PROGRAM) $(DEMANGLER_PROG) $(bindir)/$(DEMANGLER_INSTALL_NAME)$(exeext); \
+-	      chmod a+x $(bindir)/$(DEMANGLER_INSTALL_NAME)$(exeext); \
++	      rm -f $(DESTDIR)$(bindir)/$(DEMANGLER_INSTALL_NAME)$(exeext); \
++	      $(INSTALL_PROGRAM) $(DEMANGLER_PROG) $(DESTDIR)$(bindir)/$(DEMANGLER_INSTALL_NAME)$(exeext); \
++	      chmod a+x $(DESTDIR)$(bindir)/$(DEMANGLER_INSTALL_NAME)$(exeext); \
+ 	    fi ; \
+ 	  fi ; \
+ 	fi
+@@ -244,25 +244,25 @@ c++.install-info:
+ c++.install-man: $(srcdir)/cp/g++.1
+ 	-if [ -f cc1plus$(exeext) ] ; then \
+ 	  if [ -f g++-cross$(exeext) ] ; then \
+-	    rm -f $(man1dir)/$(GXX_CROSS_NAME)$(manext); \
+-	    $(INSTALL_DATA) $(srcdir)/cp/g++.1 $(man1dir)/$(GXX_CROSS_NAME)$(manext); \
+-	    chmod a-x $(man1dir)/$(GXX_CROSS_NAME)$(manext); \
++	    rm -f $(DESTDIR)$(man1dir)/$(GXX_CROSS_NAME)$(manext); \
++	    $(INSTALL_DATA) $(srcdir)/cp/g++.1 $(DESTDIR)$(man1dir)/$(GXX_CROSS_NAME)$(manext); \
++	    chmod a-x $(DESTDIR)$(man1dir)/$(GXX_CROSS_NAME)$(manext); \
+ 	  else \
+-	    rm -f $(man1dir)/$(GXX_INSTALL_NAME)$(manext); \
+-	    $(INSTALL_DATA) $(srcdir)/cp/g++.1 $(man1dir)/$(GXX_INSTALL_NAME)$(manext); \
+-	    chmod a-x $(man1dir)/$(GXX_INSTALL_NAME)$(manext); \
++	    rm -f $(DESTDIR)$(man1dir)/$(GXX_INSTALL_NAME)$(manext); \
++	    $(INSTALL_DATA) $(srcdir)/cp/g++.1 $(DESTDIR)$(man1dir)/$(GXX_INSTALL_NAME)$(manext); \
++	    chmod a-x $(DESTDIR)$(man1dir)/$(GXX_INSTALL_NAME)$(manext); \
+ 	  fi; \
+ 	else true; fi
+ 
+ c++.uninstall:
+-	-rm -rf $(bindir)/$(CXX_INSTALL_NAME)$(exeext)
+-	-rm -rf $(bindir)/$(CXX_CROSS_NAME)$(exeext)
+-	-rm -rf $(bindir)/$(GXX_INSTALL_NAME)$(exeext)
+-	-rm -rf $(bindir)/$(GXX_CROSS_NAME)$(exeext)
+-	-rm -rf $(bindir)/$(DEMANGLER_INSTALL_NAME)$(exeext)
+-	-rm -rf $(bindir)/$(DEMANGLER_CROSS_NAME)$(exeext)
+-	-rm -rf $(man1dir)/$(GXX_INSTALL_NAME)$(manext)
+-	-rm -rf $(man1dir)/$(GXX_CROSS_NAME)$(manext)
++	-rm -rf $(DESTDIR)$(bindir)/$(CXX_INSTALL_NAME)$(exeext)
++	-rm -rf $(DESTDIR)$(bindir)/$(CXX_CROSS_NAME)$(exeext)
++	-rm -rf $(DESTDIR)$(bindir)/$(GXX_INSTALL_NAME)$(exeext)
++	-rm -rf $(DESTDIR)$(bindir)/$(GXX_CROSS_NAME)$(exeext)
++	-rm -rf $(DESTDIR)$(bindir)/$(DEMANGLER_INSTALL_NAME)$(exeext)
++	-rm -rf $(DESTDIR)$(bindir)/$(DEMANGLER_CROSS_NAME)$(exeext)
++	-rm -rf $(DESTDIR)$(man1dir)/$(GXX_INSTALL_NAME)$(manext)
++	-rm -rf $(DESTDIR)$(man1dir)/$(GXX_CROSS_NAME)$(manext)
+ #
+ # Clean hooks:
+ # A lot of the ancillary files are deleted by the main makefile.
+diff --git a/gcc/f/Make-lang.in b/gcc/f/Make-lang.in
+index a531abb..6c24700 100644
+--- a/gcc/f/Make-lang.in
++++ b/gcc/f/Make-lang.in
+@@ -312,18 +312,18 @@ f77.install-normal:
+ # run, since we use libsubdir to store our `flag' file, lang-f77.
+ f77.install-common: installdirs
+ 	case "$(LANGUAGES)" in \
+-	  *[fF]77*) touch $(libsubdir)/lang-f77;; \
+-	  *) rm -f $(libsubdir)/lang-f77;; \
++	  *[fF]77*) touch $(DESTDIR)$(libsubdir)/lang-f77;; \
++	  *) rm -f $(DESTDIR)$(libsubdir)/lang-f77;; \
+ 	esac
+-	-if [ -f $(libsubdir)/lang-f77 -a -f f771$(exeext) ] ; then \
++	-if [ -f $(DESTDIR)$(libsubdir)/lang-f77 -a -f f771$(exeext) ] ; then \
+ 	  if [ -f g77-cross$(exeext) ] ; then \
+-	    rm -f $(bindir)/$(G77_CROSS_NAME)$(exeext); \
+-	    $(INSTALL_PROGRAM) g77-cross$(exeext) $(bindir)/$(G77_CROSS_NAME)$(exeext); \
+-	    chmod a+x $(bindir)/$(G77_CROSS_NAME)$(exeext); \
++	    rm -f $(DESTDIR)$(bindir)/$(G77_CROSS_NAME)$(exeext); \
++	    $(INSTALL_PROGRAM) g77-cross$(exeext) $(DESTDIR)$(bindir)/$(G77_CROSS_NAME)$(exeext); \
++	    chmod a+x $(DESTDIR)$(bindir)/$(G77_CROSS_NAME)$(exeext); \
+ 	  else \
+-	    rm -f $(bindir)/$(G77_INSTALL_NAME)$(exeext); \
+-	    $(INSTALL_PROGRAM) g77$(exeext) $(bindir)/$(G77_INSTALL_NAME)$(exeext); \
+-	    chmod a+x $(bindir)/$(G77_INSTALL_NAME)$(exeext); \
++	    rm -f $(DESTDIR)$(bindir)/$(G77_INSTALL_NAME)$(exeext); \
++	    $(INSTALL_PROGRAM) g77$(exeext) $(DESTDIR)$(bindir)/$(G77_INSTALL_NAME)$(exeext); \
++	    chmod a+x $(DESTDIR)$(bindir)/$(G77_INSTALL_NAME)$(exeext); \
+ 	  fi ; \
+ 	else true; fi
+ 	@if [ -f f77-install-ok -o -f $(srcdir)/f77-install-ok ]; then \
+@@ -335,7 +335,7 @@ f77.install-common: installdirs
+ 	  echo '         f77-install-ok in the source or build directory.)'; \
+ 	  echo ''; \
+ 	else true; fi
+-	rm -f $(libsubdir)/lang-f77
++	rm -f $(DESTDIR)$(libsubdir)/lang-f77
+ 
+ # $(INSTALL_DATA) might be a relative pathname, so we can't cd into srcdir
+ # to do the install.  The sed rule was copied from stmp-int-hdrs.
+@@ -343,66 +343,66 @@ f77.install-common: installdirs
+ # run, since we use libsubdir to store our `flag' file, lang-f77.
+ f77.install-info: f77.info installdirs
+ 	case "$(LANGUAGES)" in \
+-	  *[fF]77*) touch $(libsubdir)/lang-f77;; \
+-	  *) rm -f $(libsubdir)/lang-f77;; \
++	  *[fF]77*) touch $(DESTDIR)$(libsubdir)/lang-f77;; \
++	  *) rm -f $(DESTDIR)$(libsubdir)/lang-f77;; \
+ 	esac
+-	if [ -f $(libsubdir)/lang-f77 -a -f f/g77.info ] ; then \
+-	  rm -f $(infodir)/g77.info*; \
++	if [ -f $(DESTDIR)$(libsubdir)/lang-f77 -a -f f/g77.info ] ; then \
++	  rm -f $(DESTDIR)$(infodir)/g77.info*; \
+ 	  for f in f/g77.info*; do \
+ 	      realfile=`echo $$f | sed -e 's|.*/\([^/]*\)$$|\1|'`; \
+-	      $(INSTALL_DATA) $$f $(infodir)/$$realfile; \
++	      $(INSTALL_DATA) $$f $(DESTDIR)$(infodir)/$$realfile; \
+ 	  done; \
+-	  chmod a-x $(infodir)/g77.info*; \
++	  chmod a-x $(DESTDIR)$(infodir)/g77.info*; \
+ 	else true; fi
+-	@if [ -f $(libsubdir)/lang-f77 -a -f $(srcdir)/f/g77.info ] ; then \
++	@if [ -f $(DESTDIR)$(libsubdir)/lang-f77 -a -f $(srcdir)/f/g77.info ] ; then \
+ 	  if $(SHELL) -c 'install-info --version | sed 1q | fgrep -s -v -i debian' >/dev/null 2>&1; then \
+-	    echo " install-info --info-dir=$(infodir) $(infodir)/g77.info"; \
+-	    install-info --info-dir=$(infodir) $(infodir)/g77.info || : ; \
++	    echo " install-info --info-dir=$(DESTDIR)$(infodir) $(DESTDIR)$(infodir)/g77.info"; \
++	    install-info --info-dir=$(DESTDIR)$(infodir) $(DESTDIR)$(infodir)/g77.info || : ; \
+ 	  else : ; fi; \
+ 	else : ; fi
+-	rm -f $(libsubdir)/lang-f77
++	rm -f $(DESTDIR)$(libsubdir)/lang-f77
+ 
+ # Make sure `installdirs' target (from gcc Makefile) has been
+ # run, since we use libsubdir to store our `flag' file, lang-f77.
+ f77.install-man: $(srcdir)/f/g77.1 installdirs
+ 	case "$(LANGUAGES)" in \
+-	  *[fF]77*) touch $(libsubdir)/lang-f77;; \
+-	  *) rm -f $(libsubdir)/lang-f77;; \
++	  *[fF]77*) touch $(DESTDIR)$(libsubdir)/lang-f77;; \
++	  *) rm -f $(DESTDIR)$(libsubdir)/lang-f77;; \
+ 	esac
+-	-if [ -f $(libsubdir)/lang-f77 -a -f f771$(exeext) ] ; then \
++	-if [ -f $(DESTDIR)$(libsubdir)/lang-f77 -a -f f771$(exeext) ] ; then \
+ 	  if [ -f g77-cross$(exeext) ] ; then \
+-	    rm -f $(man1dir)/$(G77_CROSS_NAME)$(manext); \
+-	    $(INSTALL_DATA) $(srcdir)/f/g77.1 $(man1dir)/$(G77_CROSS_NAME)$(manext); \
+-	    chmod a-x $(man1dir)/$(G77_CROSS_NAME)$(manext); \
++	    rm -f $(DESTDIR)$(man1dir)/$(G77_CROSS_NAME)$(manext); \
++	    $(INSTALL_DATA) $(srcdir)/f/g77.1 $(DESTDIR)$(man1dir)/$(G77_CROSS_NAME)$(manext); \
++	    chmod a-x $(DESTDIR)$(man1dir)/$(G77_CROSS_NAME)$(manext); \
+ 	  else \
+-	    rm -f $(man1dir)/$(G77_INSTALL_NAME)$(manext); \
+-	    $(INSTALL_DATA) $(srcdir)/f/g77.1 $(man1dir)/$(G77_INSTALL_NAME)$(manext); \
+-	    chmod a-x $(man1dir)/$(G77_INSTALL_NAME)$(manext); \
++	    rm -f $(DESTDIR)$(man1dir)/$(G77_INSTALL_NAME)$(manext); \
++	    $(INSTALL_DATA) $(srcdir)/f/g77.1 $(DESTDIR)$(man1dir)/$(G77_INSTALL_NAME)$(manext); \
++	    chmod a-x $(DESTDIR)$(man1dir)/$(G77_INSTALL_NAME)$(manext); \
+ 	  fi; \
+ 	else true; fi
+-	rm -f $(libsubdir)/lang-f77
++	rm -f $(DESTDIR)$(libsubdir)/lang-f77
+ 
+ # Make sure `installdirs' target (from gcc Makefile) has been
+ # run, since we use libsubdir to store our `flag' file, lang-f77.
+ f77.uninstall: installdirs
+ 	case "$(LANGUAGES)" in \
+-	  *[fF]77*) touch $(libsubdir)/lang-f77;; \
+-	  *) rm -f $(libsubdir)/lang-f77;; \
++	  *[fF]77*) touch $(DESTDIR)$(libsubdir)/lang-f77;; \
++	  *) rm -f $(DESTDIR)$(libsubdir)/lang-f77;; \
+ 	esac
+-	@if [ -f $(libsubdir)/lang-f77 ] ; then \
++	@if [ -f $(DESTDIR)$(libsubdir)/lang-f77 ] ; then \
+ 	  if $(SHELL) -c 'install-info --version | sed 1q | fgrep -s -v -i debian' >/dev/null 2>&1; then \
+-	    echo " install-info --delete --info-dir=$(infodir) $(infodir)/g77.info"; \
+-	    install-info --delete --info-dir=$(infodir) $(infodir)/g77.info || : ; \
++	    echo " install-info --delete --info-dir=$(DESTDIR)$(infodir) $(DESTDIR)$(infodir)/g77.info"; \
++	    install-info --delete --info-dir=$(DESTDIR)$(infodir) $(DESTDIR)$(infodir)/g77.info || : ; \
+ 	  else : ; fi; \
+ 	else : ; fi
+-	-if [ -f $(libsubdir)/lang-f77 ]; then \
+-	  rm -rf $(bindir)/$(G77_INSTALL_NAME)$(exeext); \
+-	  rm -rf $(bindir)/$(G77_CROSS_NAME)$(exeext); \
+-	  rm -rf $(man1dir)/$(G77_INSTALL_NAME)$(manext); \
+-	  rm -rf $(man1dir)/$(G77_CROSS_NAME)$(manext); \
+-	  rm -rf $(infodir)/g77.info*; \
++	-if [ -f $(DESTDIR)$(libsubdir)/lang-f77 ]; then \
++	  rm -rf $(DESTDIR)$(bindir)/$(G77_INSTALL_NAME)$(exeext); \
++	  rm -rf $(DESTDIR)$(bindir)/$(G77_CROSS_NAME)$(exeext); \
++	  rm -rf $(DESTDIR)$(man1dir)/$(G77_INSTALL_NAME)$(manext); \
++	  rm -rf $(DESTDIR)$(man1dir)/$(G77_CROSS_NAME)$(manext); \
++	  rm -rf $(DESTDIR)$(infodir)/g77.info*; \
+ 	fi
+-	rm -f $(libsubdir)/lang-f77
++	rm -f $(DESTDIR)$(libsubdir)/lang-f77
+ #
+ # Clean hooks:
+ # A lot of the ancillary files are deleted by the main makefile.
+diff --git a/gcc/frame.c b/gcc/frame.c
+index 990a0ac..b3f6d29 100644
+--- a/gcc/frame.c
++++ b/gcc/frame.c
+@@ -51,11 +51,7 @@ Boston, MA 02111-1307, USA.  */
+ #include "frame.h"
+ #include "gthr.h"
+ 
+-#ifdef __GTHREAD_MUTEX_INIT
+-static __gthread_mutex_t object_mutex = __GTHREAD_MUTEX_INIT;
+-#else
+ static __gthread_mutex_t object_mutex;
+-#endif
+ 
+ /* Don't use `fancy_abort' here even if config.h says to use it.  */
+ #ifdef abort
+diff --git a/gcc/po/Makefile.in.in b/gcc/po/Makefile.in.in
+index 746d521..f623a98 100644
+--- a/gcc/po/Makefile.in.in
++++ b/gcc/po/Makefile.in.in
+@@ -111,9 +111,9 @@ install-data: install-data-@USE_NLS@
+ install-data-no: all
+ install-data-yes: all
+ 	if test -r "$(MKINSTALLDIRS)"; then \
+-	  $(MKINSTALLDIRS) $(datadir); \
++	  $(MKINSTALLDIRS) $(DESTDIR)$(datadir); \
+ 	else \
+-	  $(SHELL) $(top_srcdir)/mkinstalldirs $(datadir); \
++	  $(SHELL) $(top_srcdir)/mkinstalldirs $(DESTDIR)$(datadir); \
+ 	fi
+ 	@catalogs='$(CATALOGS)'; \
+ 	for cat in $$catalogs; do \
+@@ -125,27 +125,27 @@ install-data-yes: all
+ 	  lang=`echo $$cat | sed 's/\$(CATOBJEXT)$$//'`; \
+ 	  dir=$$destdir/$$lang/LC_MESSAGES; \
+ 	  if test -r "$(MKINSTALLDIRS)"; then \
+-	    $(MKINSTALLDIRS) $$dir; \
++	    $(MKINSTALLDIRS) $(DESTDIR)$$dir; \
+ 	  else \
+-	    $(SHELL) $(top_srcdir)/mkinstalldirs $$dir; \
++	    $(SHELL) $(top_srcdir)/mkinstalldirs $(DESTDIR)$$dir; \
+ 	  fi; \
+ 	  if test -r $$cat; then \
+-	    $(INSTALL_DATA) $$cat $$dir/$(PACKAGE)$(INSTOBJEXT); \
+-	    echo "installing $$cat as $$dir/$(PACKAGE)$(INSTOBJEXT)"; \
++	    $(INSTALL_DATA) $$cat $(DESTDIR)$$dir/$(PACKAGE)$(INSTOBJEXT); \
++	    echo "installing $$cat as $(DESTDIR)$$dir/$(PACKAGE)$(INSTOBJEXT)"; \
+ 	  else \
+-	    $(INSTALL_DATA) $(srcdir)/$$cat $$dir/$(PACKAGE)$(INSTOBJEXT); \
++	    $(INSTALL_DATA) $(srcdir)/$$cat $(DESTDIR)$$dir/$(PACKAGE)$(INSTOBJEXT); \
+ 	    echo "installing $(srcdir)/$$cat as" \
+-		 "$$dir/$(PACKAGE)$(INSTOBJEXT)"; \
++		 "$(DESTDIR)$$dir/$(PACKAGE)$(INSTOBJEXT)"; \
+ 	  fi; \
+ 	  if test -r $$cat.m; then \
+-	    $(INSTALL_DATA) $$cat.m $$dir/$(PACKAGE)$(INSTOBJEXT).m; \
+-	    echo "installing $$cat.m as $$dir/$(PACKAGE)$(INSTOBJEXT).m"; \
++	    $(INSTALL_DATA) $$cat.m $(DESTDIR)$$dir/$(PACKAGE)$(INSTOBJEXT).m; \
++	    echo "installing $$cat.m as $(DESTDIR)$$dir/$(PACKAGE)$(INSTOBJEXT).m"; \
+ 	  else \
+ 	    if test -r $(srcdir)/$$cat.m ; then \
+ 	      $(INSTALL_DATA) $(srcdir)/$$cat.m \
+-		$$dir/$(PACKAGE)$(INSTOBJEXT).m; \
++		$(DESTDIR)$$dir/$(PACKAGE)$(INSTOBJEXT).m; \
+ 	      echo "installing $(srcdir)/$$cat as" \
+-		   "$$dir/$(PACKAGE)$(INSTOBJEXT).m"; \
++		   "$(DESTDIR)$$dir/$(PACKAGE)$(INSTOBJEXT).m"; \
+ 	    else \
+ 	      true; \
+ 	    fi; \
+@@ -153,12 +153,12 @@ install-data-yes: all
+ 	done
+ 	if test "$(PACKAGE)" = "gettext"; then \
+ 	  if test -r "$(MKINSTALLDIRS)"; then \
+-	    $(MKINSTALLDIRS) $(gettextsrcdir); \
++	    $(MKINSTALLDIRS) $(DESTDIR)$(gettextsrcdir); \
+ 	  else \
+-	    $(SHELL) $(top_srcdir)/mkinstalldirs $(gettextsrcdir); \
++	    $(SHELL) $(top_srcdir)/mkinstalldirs $(DESTDIR)$(gettextsrcdir); \
+ 	  fi; \
+ 	  $(INSTALL_DATA) $(srcdir)/Makefile.in.in \
+-			  $(gettextsrcdir)/Makefile.in.in; \
++			  $(DESTDIR)$(gettextsrcdir)/Makefile.in.in; \
+ 	else \
+ 	  : ; \
+ 	fi
+@@ -171,12 +171,12 @@ uninstall:
+ 	for cat in $$catalogs; do \
+ 	  cat=`basename $$cat`; \
+ 	  lang=`echo $$cat | sed 's/\$(CATOBJEXT)$$//'`; \
+-	  rm -f $(localedir)/$$lang/LC_MESSAGES/$(PACKAGE)$(INSTOBJEXT); \
+-	  rm -f $(localedir)/$$lang/LC_MESSAGES/$(PACKAGE)$(INSTOBJEXT).m; \
+-	  rm -f $(gnulocaledir)/$$lang/LC_MESSAGES/$(PACKAGE)$(INSTOBJEXT); \
+-	  rm -f $(gnulocaledir)/$$lang/LC_MESSAGES/$(PACKAGE)$(INSTOBJEXT).m; \
++	  rm -f $(DESTDIR)$(localedir)/$$lang/LC_MESSAGES/$(PACKAGE)$(INSTOBJEXT); \
++	  rm -f $(DESTDIR)$(localedir)/$$lang/LC_MESSAGES/$(PACKAGE)$(INSTOBJEXT).m; \
++	  rm -f $(DESTDIR)$(gnulocaledir)/$$lang/LC_MESSAGES/$(PACKAGE)$(INSTOBJEXT); \
++	  rm -f $(DESTDIR)$(gnulocaledir)/$$lang/LC_MESSAGES/$(PACKAGE)$(INSTOBJEXT).m; \
+ 	done
+-	rm -f $(gettextsrcdir)/po-Makefile.in.in
++	rm -f $(DESTDIR)$(gettextsrcdir)/po-Makefile.in.in
+ 
+ check: all
+ 
+diff --git a/libchill/Makefile.in b/libchill/Makefile.in
+index e1abc77..a024f91 100644
+--- a/libchill/Makefile.in
++++ b/libchill/Makefile.in
+@@ -185,6 +185,7 @@ FLAGS_TO_PASS = \
+ 	"CC=$(CC)" \
+ 	"CFLAGS=$(CFLAGS)" \
+ 	"LIBCFLAGS=$(LIBCFLAGS)" \
++	"DESTDIR=$(DESTDIR)" \
+ 	"EXTRA_OFILES=$(EXTRA_OFILES)" \
+ 	"HDEFINES=$(HDEFINES)" \
+ 	"INSTALL=$(INSTALL)" \
+@@ -217,10 +218,10 @@ ${srcdir}/configure: configure.in
+ 	cd ${srcdir} && autoconf
+ 
+ install: all
+-	$(INSTALL_DATA) libchill.a $(libsubdir)$(MULTISUBDIR)/libchill.a.n
+-	$(RANLIB) $(libsubdir)$(MULTISUBDIR)/libchill.a.n
+-	mv $(libsubdir)$(MULTISUBDIR)/libchill.a.n $(libsubdir)$(MULTISUBDIR)/libchill.a
+-	$(INSTALL_DATA) chillrt0.o $(libsubdir)$(MULTISUBDIR)/chillrt0.o
++	$(INSTALL_DATA) libchill.a $(DESTDIR)$(libsubdir)$(MULTISUBDIR)/libchill.a.n
++	$(RANLIB) $(DESTDIR)$(libsubdir)$(MULTISUBDIR)/libchill.a.n
++	mv $(libsubdir)$(MULTISUBDIR)/libchill.a.n $(DESTDIR)$(libsubdir)$(MULTISUBDIR)/libchill.a
++	$(INSTALL_DATA) chillrt0.o $(DESTDIR)$(libsubdir)$(MULTISUBDIR)/chillrt0.o
+ 	@rootme=`pwd`/ ; export rootme ; \
+ 	$(MULTIDO) $(FLAGS_TO_PASS) multi-do DO=install
+ 
+diff --git a/libf2c/Makefile.in b/libf2c/Makefile.in
+index 790e6cd..a81aaa0 100644
+--- a/libf2c/Makefile.in
++++ b/libf2c/Makefile.in
+@@ -64,6 +64,7 @@ FLAGS_TO_PASS= \
+ 	CC='$(CC)' \
+ 	CFLAGS='$(CFLAGS)' \
+ 	CPPFLAGS='$(CPPFLAGS)' \
++	DESTDIR='$(DESTDIR)' \
+ 	AR='$(AR)' \
+ 	RANLIB='$(RANLIB)' \
+ 	PICFLAG='$(PICFLAG)' \
+@@ -197,10 +198,10 @@ check:
+ 	cd libU77; $(MAKE) G77DIR=../../../gcc/ check
+ 
+ install: all
+-	$(INSTALL_DATA) $(LIBG2C) $(libsubdir)/$(MULTISUBDIR)/$(LIBG2C).n
+-	( cd $(libsubdir)/$(MULTISUBDIR) ; $(RANLIB) $(LIBG2C).n )
+-	mv -f $(libsubdir)/$(MULTISUBDIR)/$(LIBG2C).n $(libsubdir)/$(MULTISUBDIR)/$(LIBG2C)
+-	$(INSTALL_DATA) g2c.h $(libsubdir)/include/g2c.h
++	$(INSTALL_DATA) $(LIBG2C) $(DESTDIR)$(libsubdir)/$(MULTISUBDIR)/$(LIBG2C).n
++	( cd $(DESTDIR)$(libsubdir)/$(MULTISUBDIR) ; $(RANLIB) $(LIBG2C).n )
++	mv -f $(DESTDIR)$(libsubdir)/$(MULTISUBDIR)/$(LIBG2C).n $(DESTDIR)$(libsubdir)/$(MULTISUBDIR)/$(LIBG2C)
++	$(INSTALL_DATA) g2c.h $(DESTDIR)$(libsubdir)/include/g2c.h
+ 	@if [ -f f2c-install-ok -o -f $(srcdir)/f2c-install-ok ]; then \
+ 	  echo ''; \
+ 	  echo 'Warning: g77 no longer installs libf2c.a or f2c.h.'; \
+@@ -216,7 +217,7 @@ install-strip:
+ 	$(MAKE) INSTALL_PROGRAM='$(INSTALL_PROGRAM) -s' install
+ 
+ uninstall:
+-	rm -f $(libsubdir)/$(MULTISUBDIR)/include/g2c.h $(libsubdir)/$(MULTISUBDIR)/$(LIBG2C)
++	rm -f $(DESTDIR)$(libsubdir)/$(MULTISUBDIR)/include/g2c.h $(DESTDIR)$(libsubdir)/$(MULTISUBDIR)/$(LIBG2C)
+ 	$(MULTIDO) $(FLAGS_TO_PASS) multi-do DO="$@"
+ 
+ mostlyclean:
+diff --git a/libiberty/Makefile.in b/libiberty/Makefile.in
+index 5642058..82536f2 100644
+--- a/libiberty/Makefile.in
++++ b/libiberty/Makefile.in
+@@ -76,6 +76,7 @@ FLAGS_TO_PASS = \
+ 	"AR_FLAGS=$(AR_FLAGS)" \
+ 	"CC=$(CC)" \
+ 	"CFLAGS=$(CFLAGS)" \
++	"DESTDIR=$(DESTDIR)" \
+ 	"LIBCFLAGS=$(LIBCFLAGS)" \
+ 	"EXTRA_OFILES=$(EXTRA_OFILES)" \
+ 	"HDEFINES=$(HDEFINES)" \
+@@ -148,15 +149,15 @@ INSTALL_DEST = @INSTALL_DEST@
+ install: install_to_$(INSTALL_DEST) install-subdir
+ 
+ install_to_libdir: all
+-	$(INSTALL_DATA) $(TARGETLIB) $(libdir)$(MULTISUBDIR)/$(TARGETLIB).n
+-	( cd $(libdir)$(MULTISUBDIR) ; $(RANLIB) $(TARGETLIB).n )
+-	mv -f $(libdir)$(MULTISUBDIR)/$(TARGETLIB).n $(libdir)$(MULTISUBDIR)/$(TARGETLIB)
++	$(INSTALL_DATA) $(TARGETLIB) $(DESTDIR)$(libdir)$(MULTISUBDIR)/$(TARGETLIB).n
++	( cd $(DESTDIR)$(libdir)$(MULTISUBDIR) ; $(RANLIB) $(TARGETLIB).n )
++	mv -f $(DESTDIR)$(libdir)$(MULTISUBDIR)/$(TARGETLIB).n $(DESTDIR)$(libdir)$(MULTISUBDIR)/$(TARGETLIB)
+ 	@$(MULTIDO) $(FLAGS_TO_PASS) multi-do DO=install
+ 
+ install_to_tooldir: all
+-	$(INSTALL_DATA) $(TARGETLIB) $(tooldir)/lib$(MULTISUBDIR)/$(TARGETLIB).n
+-	( cd $(tooldir)/lib$(MULTISUBDIR) ; $(RANLIB) $(TARGETLIB).n )
+-	mv -f $(tooldir)/lib$(MULTISUBDIR)/$(TARGETLIB).n $(tooldir)/lib$(MULTISUBDIR)/$(TARGETLIB)
++	$(INSTALL_DATA) $(TARGETLIB) $(DESTDIR)$(tooldir)/lib$(MULTISUBDIR)/$(TARGETLIB).n
++	( cd $(DESTDIR)$(tooldir)/lib$(MULTISUBDIR) ; $(RANLIB) $(TARGETLIB).n )
++	mv -f $(DESTDIR)$(tooldir)/lib$(MULTISUBDIR)/$(TARGETLIB).n $(DESTDIR)$(tooldir)/lib$(MULTISUBDIR)/$(TARGETLIB)
+ 	@$(MULTIDO) $(FLAGS_TO_PASS) multi-do DO=install
+ 
+ # needed-list is used by libstdc++.  NEEDED is the list of functions
+diff --git a/libio/Makefile.in b/libio/Makefile.in
+index 1d4123b..4342beb 100644
+--- a/libio/Makefile.in
++++ b/libio/Makefile.in
+@@ -113,19 +113,19 @@ install:
+ 	if [ -z "$(MULTISUBDIR)" ]; then \
+ 	  if [ "$(_G_CONFIG_H)" != "" ]; then \
+ 	    if [ x$(enable_version_specific_runtime_libs) = xyes ]; then \
+-	      rm -f $(gxx_include_dir)/_G_config.h ; \
+-	      $(INSTALL_DATA) _G_config.h $(gxx_include_dir)/_G_config.h || exit 1; \
++	      rm -f $(DESTDIR)$(gxx_include_dir)/_G_config.h ; \
++	      $(INSTALL_DATA) _G_config.h $(DESTDIR)$(gxx_include_dir)/_G_config.h || exit 1; \
+ 	    else \
+-	      rm -f $(tooldir)/include/_G_config.h ; \
+-	      $(INSTALL_DATA) _G_config.h $(tooldir)/include/_G_config.h || exit 1; \
++	      rm -f $(DESTDIR)$(tooldir)/include/_G_config.h ; \
++	      $(INSTALL_DATA) _G_config.h $(DESTDIR)$(tooldir)/include/_G_config.h || exit 1; \
+ 	    fi; \
+ 	  else true; \
+ 	  fi ; \
+ 	  cd $(srcdir); \
+ 	  for FILE in $(USER_INCLUDES); do if [ $$FILE != _G_config.h ]; then \
+-	    rm -f $(gxx_include_dir)/$$FILE ; \
+-	    $(INSTALL_DATA) $$FILE $(gxx_include_dir)/$$FILE ; \
+-	    chmod a-x $(gxx_include_dir)/$$FILE ; \
++	    rm -f $(DESTDIR)$(gxx_include_dir)/$$FILE ; \
++	    $(INSTALL_DATA) $$FILE $(DESTDIR)$(gxx_include_dir)/$$FILE ; \
++	    chmod a-x $(DESTDIR)$(gxx_include_dir)/$$FILE ; \
+ 	  else true; fi; done ; \
+ 	else true; \
+ 	fi
+diff --git a/libobjc/Makefile.in b/libobjc/Makefile.in
+index e1de9ae..cf8a04e 100644
+--- a/libobjc/Makefile.in
++++ b/libobjc/Makefile.in
+@@ -93,6 +93,7 @@ FLAGS_TO_PASS = \
+ 	"CC=$(CC)" \
+ 	"CFLAGS=$(CFLAGS)" \
+ 	"LIBCFLAGS=$(LIBCFLAGS)" \
++	"DESTDIR=$(DESTDIR)" \
+ 	"EXTRA_OFILES=$(EXTRA_OFILES)" \
+ 	"HDEFINES=$(HDEFINES)" \
+ 	"INSTALL=$(INSTALL)" \
+@@ -271,33 +272,33 @@ install: install-libs copy-headers
+ 
+ install-libs: installdirs
+ 	-if test -f libobjc.a ; then \
+-	  rm -f $(libsubdir)/libobjc.a; \
+-	  $(INSTALL_DATA) libobjc.a $(libsubdir)/libobjc.a; \
+-	  chmod a-x $(libsubdir)/libobjc.a; \
++	  rm -f $(DESTDIR)$(libsubdir)/libobjc.a; \
++	  $(INSTALL_DATA) libobjc.a $(DESTDIR)$(libsubdir)/libobjc.a; \
++	  chmod a-x $(DESTDIR)$(libsubdir)/libobjc.a; \
+ 	else true; fi
+ 	-if test -f libobjc_gc.a ; then \
+-	  rm -f $(libsubdir)/libobjc_gc.a; \
+-	  $(INSTALL_DATA) libobjc_gc.a $(libsubdir)/libobjc_gc.a; \
+-	  chmod a-x $(libsubdir)/libobjc_gc.a; \
++	  rm -f $(DESTDIR)$(libsubdir)/libobjc_gc.a; \
++	  $(INSTALL_DATA) libobjc_gc.a $(DESTDIR)$(libsubdir)/libobjc_gc.a; \
++	  chmod a-x $(DESTDIR)$(libsubdir)/libobjc_gc.a; \
+ 	else true; fi
+ 	-if test -f libobjc_s.a ; then \
+-	  rm -f $(libsubdir)/libobjc_s.a; \
+-	  $(INSTALL_DATA) libobjc_s.a $(libsubdir)/libobjc_s.a; \
+-	  chmod a-x $(libsubdir)/libobjc_s.a; \
++	  rm -f $(DESTDIR)$(libsubdir)/libobjc_s.a; \
++	  $(INSTALL_DATA) libobjc_s.a $(DESTDIR)$(libsubdir)/libobjc_s.a; \
++	  chmod a-x $(DESTDIR)$(libsubdir)/libobjc_s.a; \
+ 	else true; fi
+ 	  -if test -f libobjc.dll ; then \
+-	  rm -f $(bindir)/libobjc.dll; \
+-	  $(INSTALL_DATA) libobjc.dll $(bindir)/libobjc.dll; \
++	  rm -f $(DESTDIR)$(bindir)/libobjc.dll; \
++	  $(INSTALL_DATA) libobjc.dll $(DESTDIR)$(bindir)/libobjc.dll; \
+ 	else true; fi
+ 
+ # Copy Objective C headers to installation include directory.
+ copy-headers:
+-	-rm -rf $(incinstalldir)/objc
+-	-mkdir $(incinstalldir)/objc
++	-rm -rf $(DESTDIR)$(incinstalldir)/objc
++	-mkdir $(DESTDIR)$(incinstalldir)/objc
+ 	for file in $(OBJC_H); do \
+ 	  realfile=$(srcdir)/objc/$${file}; \
+-	  cp $${realfile} $(incinstalldir)/objc; \
+-	  chmod a+r $(incinstalldir)/objc/$${file}; \
++	  cp $${realfile} $(DESTDIR)$(incinstalldir)/objc; \
++	  chmod a+r $(DESTDIR)$(incinstalldir)/objc/$${file}; \
+ 	done
+ 
+ check uninstall install-strip dist installcheck installdirs:
+diff --git a/libstdc++/Makefile.in b/libstdc++/Makefile.in
+index f13eddc..7ba3806 100644
+--- a/libstdc++/Makefile.in
++++ b/libstdc++/Makefile.in
+@@ -263,55 +263,34 @@ install:
+ 	if [ -z "$(MULTISUBDIR)" ]; then \
+ 	  cd $(srcdir); \
+ 	  for FILE in $(HEADERS); do \
+-	    rm -f $(gxx_include_dir)/$$FILE ; \
++	    rm -f $(DESTDIR)$(gxx_include_dir)/$$FILE ; \
+ 	    if [ -f stl/$$FILE ]; then \
+-	      $(INSTALL_DATA) stl/$$FILE $(gxx_include_dir)/$$FILE ; \
++	      $(INSTALL_DATA) stl/$$FILE $(DESTDIR)$(gxx_include_dir)/$$FILE ; \
+ 	    else \
+-	      $(INSTALL_DATA) $$FILE $(gxx_include_dir)/$$FILE ; \
++	      $(INSTALL_DATA) $$FILE $(DESTDIR)$(gxx_include_dir)/$$FILE ; \
+ 	    fi ; \
+-	    chmod a-x $(gxx_include_dir)/$$FILE ; \
++	    chmod a-x $(DESTDIR)$(gxx_include_dir)/$$FILE ; \
+ 	  done ; \
+ 	  for FILE in *.h std/*.h std/*.cc std/*.tcc; do \
+-	    rm -f $(gxx_include_dir)/$$FILE ; \
+-	    $(INSTALL_DATA) $$FILE $(gxx_include_dir)/$$FILE ; \
+-	    chmod a-x $(gxx_include_dir)/$$FILE ; \
++	    rm -f  $(DESTDIR)$(gxx_include_dir)/$$FILE ; \
++	    $(INSTALL_DATA) $$FILE $(DESTDIR)$(gxx_include_dir)/$$FILE ; \
++	    chmod a-x $(DESTDIR)$(gxx_include_dir)/$$FILE ; \
+ 	  done ; \
+ 	  cd stl; \
+ 	  for FILE in *.h; do \
+-	    rm -f $(gxx_include_dir)/$$FILE ; \
+-	    $(INSTALL_DATA) $$FILE $(gxx_include_dir)/$$FILE ; \
+-	    chmod a-x $(gxx_include_dir)/$$FILE ; \
++	    rm -f  $(DESTDIR)$(gxx_include_dir)/$$FILE ; \
++	    $(INSTALL_DATA) $$FILE $(DESTDIR)$(gxx_include_dir)/$$FILE ; \
++	    chmod a-x $(DESTDIR)$(gxx_include_dir)/$$FILE ; \
+ 	  done ; \
+ 	else true ; \
+ 	fi
+ 	rootme=`pwd`/ ; export rootme ; \
+ 	if [ x$(enable_version_specific_runtime_libs) != xyes ]; then \
+-	  INSTALLDIR=$(libdir); \
++	  INSTALLDIR=$(DESTDIR)$(libdir); \
+ 	else \
+-	  INSTALLDIR=$(libsubdir); \
+-	fi; \
+-	INSTALLLINKDIR=$(libsubdir); \
+-	if [ $${INSTALLLINKDIR}$(MULTISUBDIR) = $${INSTALLDIR}$(MULTISUBDIR) ]; then \
+-	  RELINSTALLDIR=; \
+-	elif [ x$(MULTISUBDIR) = x ]; then \
+-	  if [ $(build_alias) = $(target_alias) ]; then \
+-	    RELINSTALLDIR=../../../; \
+-	  else \
+-	    RELINSTALLDIR=../../../../$(target_alias)/lib/; \
+-	  fi; \
+-	else \
+-	  if [ $(build_alias) = $(target_alias) ]; then \
+-	    RELINSTALLDIR=../../..`echo $(MULTISUBDIR) | sed -e 's,/[^/]*,/..,g'`$(MULTISUBDIR)/; \
+-	  else \
+-	    RELINSTALLDIR=../../../..`echo $(MULTISUBDIR) | sed -e 's,/[^/]*,/..,g'`/$(target_alias)/lib$(MULTISUBDIR)/; \
+-	  fi; \
+-	fi; \
+-	if [ $(build_alias) != $(target_alias) ]; then \
+-	  case $$RELINSTALLDIR in \
+-	  ../../../|../../../../) \
+-	    RELINSTALLDIR=../$${RELINSTALLDIR}$(target_alias)/lib/;; \
+-	  esac; \
++	  INSTALLDIR=$(DESTDIR)$(libsubdir); \
+ 	fi; \
++	INSTALLLINKDIR=$(DESTDIR)$(libsubdir); \
+ 	rm -f $${INSTALLLINKDIR}$(MULTISUBDIR)/$(SHLINK) ; \
+ 	rm -f $${INSTALLLINKDIR}$(MULTISUBDIR)/$(ARLINK) ; \
+ 	for FILE in $(LIBS) ; do \
+@@ -319,22 +298,22 @@ install:
+ 	  if [ $$FILE = $(SHLINK) ] ; then \
+ 	    if [ -f $${INSTALLDIR}/$(MSHLINK) ]; then \
+ 	      rm -f $${INSTALLLINKDIR}$(MULTISUBDIR)/$$FILE ; \
+-	      $(LN_S) $${RELINSTALLDIR}$(MSHLINK) $${INSTALLLINKDIR}$(MULTISUBDIR)/$$FILE \
+-		|| cp $${RELINSTALLDIR}$(MSHLINK) $${INSTALLLINKDIR}$(MULTISUBDIR)/$$FILE ; \
++	      $(LN_S) $(MSHLINK) $${INSTALLLINKDIR}$(MULTISUBDIR)/$$FILE \
++		|| cp $(MSHLINK) $${INSTALLLINKDIR}$(MULTISUBDIR)/$$FILE ; \
+ 	    else \
+ 	      rm -f $${INSTALLLINKDIR}$(MULTISUBDIR)/$$FILE ; \
+-	      $(LN_S) $${RELINSTALLDIR}$(SHLIB) $${INSTALLLINKDIR}$(MULTISUBDIR)/$$FILE \
+-		|| cp $${RELINSTALLDIR}$(SHLIB) $${INSTALLLINKDIR}$(MULTISUBDIR)/$$FILE ; \
++	      $(LN_S) $(SHLIB) $${INSTALLLINKDIR}$(MULTISUBDIR)/$$FILE \
++		|| cp $(SHLIB) $${INSTALLLINKDIR}$(MULTISUBDIR)/$$FILE ; \
+ 	    fi; \
+ 	  elif [ $$FILE = $(ARLINK) ] ; then \
+ 	    if [ -f $${INSTALLDIR}/$(MARLINK) ]; then \
+ 	      rm -f $${INSTALLLINKDIR}$(MULTISUBDIR)/$$FILE ; \
+-	      $(LN_S) $${RELINSTALLDIR}$(MARLINK) $${INSTALLLINKDIR}$(MULTISUBDIR)/$$FILE \
+-		|| cp $${RELINSTALLDIR}$(MARLINK) $${INSTALLLINKDIR}$(MULTISUBDIR)/$$FILE ; \
++	      $(LN_S) $(MARLINK) $${INSTALLLINKDIR}$(MULTISUBDIR)/$$FILE \
++		|| cp $(MARLINK) $${INSTALLLINKDIR}$(MULTISUBDIR)/$$FILE ; \
+ 	    else \
+ 	      rm -f $${INSTALLLINKDIR}$(MULTISUBDIR)/$$FILE ; \
+-	      $(LN_S) $${RELINSTALLDIR}$(ARLIB) $${INSTALLLINKDIR}$(MULTISUBDIR)/$$FILE \
+-		|| cp $${RELINSTALLDIR}$(ARLIB) $${INSTALLLINKDIR}$(MULTISUBDIR)/$$FILE ; \
++	      $(LN_S) $(ARLIB) $${INSTALLLINKDIR}$(MULTISUBDIR)/$$FILE \
++		|| cp $(ARLIB) $${INSTALLLINKDIR}$(MULTISUBDIR)/$$FILE ; \
+ 	    fi; \
+ 	  elif [ $$FILE = mshlink ]; then \
+ 	    for FILE in $(MSHLINK) ; do \
