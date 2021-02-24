@@ -25,11 +25,8 @@ KEYWORDS="alpha amd64 arm arm64 hppa ia64 m68k mips ppc ppc64 s390 sparc x86"
 
 RDEPEND=""
 DEPEND="${RDEPEND}
-	sys-devel/gcc:7.5.0
 	elibc_glibc? ( >=sys-libs/glibc-2.8 )
 	>=sys-devel/binutils-2.20"
-CC="gcc-7.5.0"
-CXX="g++-7.5.0"
 
 if [[ ${CATEGORY} != cross-* ]] ; then
 	PDEPEND="${PDEPEND} elibc_glibc? ( >=sys-libs/glibc-2.8 )"
