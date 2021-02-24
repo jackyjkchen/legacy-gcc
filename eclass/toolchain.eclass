@@ -102,7 +102,7 @@ fi
 
 PREFIX=${TOOLCHAIN_PREFIX:-${EPREFIX}/usr}
 
-if tc_version_is_between 2.7 3.1 ; then
+if tc_version_is_between 2 3.1 ; then
 	case ${CBUILD} in
 	x86_64*-linux*)
 		CBUILD=${CHOST_x86}
@@ -391,8 +391,12 @@ get_gcc_src_uri() {
 			GCC_SRC_URI="mirror://gnu/gcc/gcc-${GCC_PV}/gcc-${GCC_RELEASE_VER}.tar.bz2"
 		elif tc_version_is_between 3.0 3.2 ; then
 			GCC_SRC_URI="mirror://gnu/gcc/gcc-${GCC_PV}/gcc-${GCC_RELEASE_VER}.tar.gz"
-		elif tc_version_is_between 2.7 3 ; then
+		elif tc_version_is_between 2.7 3 || tc_version_is_between 1.42 1.43 ; then
 			GCC_SRC_URI="mirror://gnu/gcc/gcc-${GCC_RELEASE_VER}.tar.gz"
+		elif tc_version_is_between 2.5 2.6 ; then
+			GCC_SRC_URI="http://ftp.gnu.org/old-gnu/gcc/gcc-${GCC_RELEASE_VER}.tar.gz"
+		else
+			GCC_SRC_URI="http://ftp.gnu.org/old-gnu/gcc/gcc-${GCC_RELEASE_VER}.tar.bz2"
 		fi
 	fi
 
@@ -880,9 +884,12 @@ toolchain_src_configure() {
 	confgcc+=(
 		--enable-obsolete
 		--enable-secureplt
-		--disable-werror
 		--with-system-zlib
 	)
+
+	if tc_version_is_at_least 2.7 ; then
+		confgcc+=( --disable-werror )
+	fi
 
 	if use nls ; then
 		confgcc+=( --enable-nls --without-included-gettext )
@@ -890,7 +897,9 @@ toolchain_src_configure() {
 		confgcc+=( --disable-nls )
 	fi
 
-	tc_version_is_at_least 3.4 || confgcc+=( --disable-libunwind-exceptions )
+	if tc_version_is_between 2.7 3.4 ; then
+		confgcc+=( --disable-libunwind-exceptions )
+	fi
 
 	# Use the default ("release") checking because upstream usually neglects
 	# to test "disabled" so it has a history of breaking. bug #317217
@@ -1323,6 +1332,10 @@ toolchain_src_configure() {
 		)
 	fi
 
+	if ! tc_version_is_at_least 2.7 ; then
+		confgcc+=( --with-elf )
+	fi
+
 	# Disable gcc info regeneration -- it ships with generated info pages
 	# already.  Our custom version/urls/etc... trigger it.  #464008
 	export gcc_cv_prog_makeinfo_modern=no
@@ -1670,7 +1683,9 @@ setup_minispecs_gcc_build_specs() {
 
 gcc-multilib-configure() {
 	if ! is_multilib ; then
-		confgcc+=( --disable-multilib )
+		if tc_version_is_at_least 2.7 ; then
+			confgcc+=( --disable-multilib )
+		fi
 		# Fun times: if we are building for a target that has multiple
 		# possible ABI formats, and the user has told us to pick one
 		# that isn't the default, then not specifying it via the list
@@ -2071,7 +2086,7 @@ toolchain_src_install() {
 # when installing gcc, it dumps internal libraries into /usr/lib
 # instead of the private gcc lib path
 gcc_movelibs() {
-	if tc_version_is_between 2.7 3.1 ; then
+	if tc_version_is_between 2 3.1 ; then
 		mv "${ED}"/usr/lib/lib* "${ED}${LIBPATH}"
 		return 0
 	fi
