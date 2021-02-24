@@ -26,15 +26,15 @@ src_unpack(){
 }
 
 src_install() {
-	mkdir -p "${ED}"${UNIX_PREFIX}/bin
-	mkdir -p "${ED}"${UNIX_PREFIX}/${TARGET_PREFIX}/bin
+	mkdir -p "${ED}"${UNIX_PREFIX}/bin || die
+	mkdir -p "${ED}"${UNIX_PREFIX}/${TARGET_PREFIX}/bin || die
 	ln -sv ${HOST_PREFIX}-addr2line "${ED}"${UNIX_PREFIX}/bin/${TARGET_PREFIX}-addr2line || die
 	ln -sv ${HOST_PREFIX}-ar "${ED}"${UNIX_PREFIX}/bin/${TARGET_PREFIX}-ar || die
 	cat <<-_EOF_ > "${ED}${UNIX_PREFIX}/bin/${TARGET_PREFIX}-as" || die
 #!/bin/sh
 ${HOST_PREFIX}-as --32 "\$@"
 _EOF_
-	chmod +x "${ED}"${UNIX_PREFIX}/bin/${TARGET_PREFIX}-as
+	chmod +x "${ED}"${UNIX_PREFIX}/bin/${TARGET_PREFIX}-as || die
 	ln -sv ${HOST_PREFIX}-c++filt "${ED}"${UNIX_PREFIX}/bin/${TARGET_PREFIX}-c++filt || die
 	ln -sv ${HOST_PREFIX}-dwp "${ED}"${UNIX_PREFIX}/bin/${TARGET_PREFIX}-dwp || die
 	ln -sv ${HOST_PREFIX}-elfedit "${ED}"${UNIX_PREFIX}/bin/${TARGET_PREFIX}-elfedit || die
@@ -43,13 +43,13 @@ _EOF_
 #!/bin/sh
 ${HOST_PREFIX}-ld -m elf_i386 "\$@"
 _EOF_
-	chmod +x "${ED}"${UNIX_PREFIX}/bin/${TARGET_PREFIX}-ld
+	chmod +x "${ED}"${UNIX_PREFIX}/bin/${TARGET_PREFIX}-ld || die
 	ln -sv ${TARGET_PREFIX}-ld "${ED}"${UNIX_PREFIX}/bin/${TARGET_PREFIX}-ld.bfd || die
 	cat <<-_EOF_ > "${ED}${UNIX_PREFIX}/bin/${TARGET_PREFIX}-ld.gold" || die
 #!/bin/sh
 ${HOST_PREFIX}-ld.gold -m elf_i386 "\$@"
 _EOF_
-	chmod +x "${ED}"${UNIX_PREFIX}/bin/${TARGET_PREFIX}-ld.gold
+	chmod +x "${ED}"${UNIX_PREFIX}/bin/${TARGET_PREFIX}-ld.gold || die
 	ln -sv ${HOST_PREFIX}-nm "${ED}"${UNIX_PREFIX}/bin/${TARGET_PREFIX}-nm || die
 	ln -sv ${HOST_PREFIX}-objcopy "${ED}"${UNIX_PREFIX}/bin/${TARGET_PREFIX}-objcopy || die
 	ln -sv ${HOST_PREFIX}-objdump "${ED}"${UNIX_PREFIX}/bin/${TARGET_PREFIX}-objdump || die
