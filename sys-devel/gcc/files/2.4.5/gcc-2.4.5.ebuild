@@ -37,9 +37,9 @@ src_unpack() {
 
 src_prepare() {
 	toolchain_src_prepare
-	eapply "${FILESDIR}"/2.5.8/00_gcc-2.5.8.patch
-	eapply "${FILESDIR}"/2.5.8/01_gcc-2.5.8-gentoo-install-path.patch
-	eapply "${FILESDIR}"/2.5.8/02_gcc-2.5.8-workaround-for-new-glibc.patch
+	eapply "${FILESDIR}"/2.4.5/00_gcc-2.4.5.patch
+	eapply "${FILESDIR}"/2.4.5/01_gcc-2.4.5-gentoo-install-path.patch
+	eapply "${FILESDIR}"/2.4.5/02_gcc-2.4.5-workaround-for-new-glibc.patch
 }
 
 src_install() {
