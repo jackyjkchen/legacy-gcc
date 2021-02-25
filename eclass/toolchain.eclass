@@ -418,7 +418,7 @@ get_gcc_src_uri() {
 
 SRC_URI=$(get_gcc_src_uri)
 
-unpark_gcc_patchset() {
+unpack_gcc_patchset() {
 	export PATCH_GCC_VER=${PATCH_GCC_VER:-${GCC_RELEASE_VER}}
 	export UCLIBC_GCC_VER=${UCLIBC_GCC_VER:-${PATCH_GCC_VER}}
 	export PIE_GCC_VER=${PIE_GCC_VER:-${GCC_RELEASE_VER}}
@@ -470,6 +470,13 @@ toolchain_pkg_setup() {
 	unset LANGUAGES #265283
 }
 
+git_init_src() {
+	pushd "${WORKDIR}"/${P} > /dev/null
+	git init && git config user.email "local@local" && \
+	git add * && git commit -am "init" 1>/dev/null
+	popd > /dev/null
+}
+
 #---->> src_unpack <<----
 
 toolchain_src_unpack() {
@@ -478,7 +485,8 @@ toolchain_src_unpack() {
 	fi
 
 	default_src_unpack
-	unpark_gcc_patchset
+	unpack_gcc_patchset
+	git_init_src
 }
 
 #---->> src_prepare <<----
@@ -824,6 +832,8 @@ toolchain_src_configure() {
 	fi
 	[[ -n ${CBUILD} ]] && confgcc+=( --build=${CBUILD} )
 
+	tc_version_is_at_least 2.6 || confgcc+=( --target=${CTARGET} )
+
 	confgcc+=(
 		--prefix="${PREFIX}"
 	)
@@ -892,7 +902,8 @@ toolchain_src_configure() {
 	fi
 
 	if use nls ; then
-		confgcc+=( --enable-nls --without-included-gettext )
+		confgcc+=( --enable-nls )
+		tc_version_is_at_least 2.6 && confgcc+=( --without-included-gettext )
 	else
 		confgcc+=( --disable-nls )
 	fi
@@ -1815,7 +1826,6 @@ gcc_do_make() {
 			LDFLAGS="${LDFLAGS}" \
 			STAGE1_CFLAGS="${STAGE1_CFLAGS}" \
 			LIBPATH="${LIBPATH}" \
-			BOOT_CFLAGS="${BOOT_CFLAGS}" \
 			${GCC_MAKE_TARGET} \
 			|| die "emake failed with ${GCC_MAKE_TARGET}"
 	fi

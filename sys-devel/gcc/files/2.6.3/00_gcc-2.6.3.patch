@@ -37,10 +37,11 @@ index cdfcba0..696de66 100644
  	"GCC_FOR_TARGET=$(GCC_FOR_TARGET)" \
  	"LDFLAGS=$(LDFLAGS)" \
  	"LEX=$(LEX)" \
-@@ -938,6 +939,15 @@ crtend.o:	crtstuff.c $(GCC_PASSES) $(CONFIG_H) gbl-ctors.h
+@@ -938,6 +939,17 @@ crtend.o:	crtstuff.c $(GCC_PASSES) $(CONFIG_H) gbl-ctors.h
  	$(GCC_FOR_TARGET) $(GCC_CFLAGS) $(INCLUDES) -DCRT_END \
  	  -finhibit-size-directive -fno-inline-functions \
  	  -g0 -c $(srcdir)/crtstuff.c -o crtend.o
++
 +crtbeginS.o:	crtstuff.c $(GCC_PASSES) $(CONFIG_H) gbl-ctors.h
 +	$(GCC_FOR_TARGET) $(GCC_CFLAGS) $(INCLUDES) -DCRT_BEGIN \
 +	  -finhibit-size-directive -fno-inline-functions \
@@ -50,6 +51,7 @@ index cdfcba0..696de66 100644
 +	$(GCC_FOR_TARGET) $(GCC_CFLAGS) $(INCLUDES) -DCRT_END \
 +	  -finhibit-size-directive -fno-inline-functions \
 +	  -g0 -c $(srcdir)/crtstuff.c -o crtendS.o -fPIC
++
  
  # Compiling object files from source files.
  
@@ -1902,6 +1904,67 @@ index 8de0b09..75c1d7c 100644
  }
  
  /* More 'friendly' abort that prints the line and file.
+diff --git a/cp/g++.c b/cp/g++.c
+index b3f7590..372ba27 100644
+--- a/cp/g++.c
++++ b/cp/g++.c
+@@ -203,17 +203,33 @@ concat (s1, s2, s3)
+   return result;
+ }
+ 
++char *
++my_strerror(e)
++     int e;
++{
++
++#ifdef HAVE_STRERROR
++  return strerror(e);
++
++#else
++
++  static char buffer[30];
++  if (!e)
++    return "";
++
++  if (e > 0 && e < sys_nerr)
++    return sys_errlist[e];
++
++  sprintf (buffer, "Unknown error %d", e);
++  return buffer;
++#endif
++}
++
+ static void
+ pfatal_with_name (name)
+      char *name;
+ {
+-  char *s;
+-
+-  if (errno < sys_nerr)
+-    s = concat ("%s: ", sys_errlist[errno], "");
+-  else
+-    s = "cannot open %s";
+-  fatal (s, name);
++  fatal ("%s: %s", name, my_strerror (errno));
+ }
+ 
+ #ifdef __MSDOS__
+@@ -279,14 +295,7 @@ static void
+ perror_exec (name)
+      char *name;
+ {
+-  char *s;
+-
+-  if (errno < sys_nerr)
+-    s = concat ("installation problem, cannot exec %s: ",
+-		sys_errlist[errno], "");
+-  else
+-    s = "installation problem, cannot exec %s";
+-  error (s, name);
++  error ("%s: %s", name, my_strerror (errno));
+ }
+ 
+ /* This is almost exactly what's in gcc.c:pexecute for MSDOS.  */
 diff --git a/ginclude/stdarg.h b/ginclude/stdarg.h
 index 1c6e1fc..ca79a3e 100644
 --- a/ginclude/stdarg.h
