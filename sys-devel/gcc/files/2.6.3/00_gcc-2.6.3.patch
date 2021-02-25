@@ -1,5 +1,5 @@
 diff --git a/Makefile.in b/Makefile.in
-index cdfcba0..696de66 100644
+index cdfcba0..cbc3cf2 100644
 --- a/Makefile.in
 +++ b/Makefile.in
 @@ -34,7 +34,7 @@ SUBDIRS =
@@ -29,7 +29,18 @@ index cdfcba0..696de66 100644
  
  # CFLAGS for use with OLDCC, for compiling libgcc1.a.
  # NOTE: -O does not work on some Unix systems!
-@@ -424,6 +424,7 @@ FLAGS_TO_PASS = \
+@@ -248,6 +248,10 @@ EXTRA_OBJS =
+ # Often this is edited directly by `configure'.
+ EXTRA_HEADERS =
+ 
++# Target to use whe installing assert.h.  Some systems may
++# want to set this empty.
++INSTALL_ASSERT_H = install-assert-h
++
+ # Set this to `ld' to enable use of collect2.
+ # USE_COLLECT2 =
+ # It is convenient for configure to add the assignment at the beginning,
+@@ -424,6 +428,7 @@ FLAGS_TO_PASS = \
  	"BISONFLAGS=$(BISONFLAGS)" \
  	"CC=set-by-configure" \
  	"CFLAGS=$(CFLAGS)" \
@@ -37,7 +48,7 @@ index cdfcba0..696de66 100644
  	"GCC_FOR_TARGET=$(GCC_FOR_TARGET)" \
  	"LDFLAGS=$(LDFLAGS)" \
  	"LEX=$(LEX)" \
-@@ -938,6 +939,17 @@ crtend.o:	crtstuff.c $(GCC_PASSES) $(CONFIG_H) gbl-ctors.h
+@@ -938,6 +943,17 @@ crtend.o:	crtstuff.c $(GCC_PASSES) $(CONFIG_H) gbl-ctors.h
  	$(GCC_FOR_TARGET) $(GCC_CFLAGS) $(INCLUDES) -DCRT_END \
  	  -finhibit-size-directive -fno-inline-functions \
  	  -g0 -c $(srcdir)/crtstuff.c -o crtend.o
@@ -55,7 +66,7 @@ index cdfcba0..696de66 100644
  
  # Compiling object files from source files.
  
-@@ -1896,162 +1906,162 @@ install-float-h-cross: install-dir
+@@ -1896,162 +1912,162 @@ install-float-h-cross: install-dir
  
  # Create the installation directory.
  install-dir:
@@ -245,7 +256,8 @@ index cdfcba0..696de66 100644
  	else true; fi
  
  # Install all the header files built in the include subdirectory.
- install-headers: install-include-dir $(INSTALL_HEADERS_DIR) install-assert-h
+-install-headers: install-include-dir $(INSTALL_HEADERS_DIR) install-assert-h
++install-headers: install-include-dir $(INSTALL_HEADERS_DIR) $(INSTALL_ASSERT_H)
  # Fix symlinks to absolute paths in the installed include directory to
  # point to the installed directory, not the build directory.
 -	-files=`cd $(libsubdir)/include; find . -type l -print 2>/dev/null`; \
@@ -289,7 +301,7 @@ index cdfcba0..696de66 100644
  
  # Put assert.h where it won't override GNU libc's assert.h.
  # It goes in a dir that is searched after GNU libc's headers;
-@@ -2063,35 +2073,35 @@ install-headers-cpio: stmp-headers $(STMP_FIXPROTO) install-include-dir
+@@ -2063,35 +2079,35 @@ install-headers-cpio: stmp-headers $(STMP_FIXPROTO) install-include-dir
  install-assert-h: assert.h install-dir
  	if [ -f $(assertdir)/assert.h ]; \
  	then \
@@ -1241,6 +1253,22 @@ index 663ff4b..96ce9a3 100644
 +
 +/* All SVR4 targets use the ELF object file format.  */
 +#define OBJECT_FORMAT_ELF
+diff --git a/config/t-linux b/config/t-linux
+new file mode 100644
+index 0000000..843fa1b
+--- /dev/null
++++ b/config/t-linux
+@@ -0,0 +1,10 @@
++# Don't run fixproto
++STMP_FIXPROTO =
++
++# Don't install "assert.h" in gcc. We use the one in glibc.
++INSTALL_ASSERT_H =
++
++# Compile crtbeginS.o and crtendS.o with pic.
++CRTSTUFF_T_CFLAGS_S = -fPIC
++# Compile libgcc2.a with pic.
++TARGET_LIBGCC2_CFLAGS = -fPIC
 diff --git a/config/xm-linux.h b/config/xm-linux.h
 new file mode 100644
 index 0000000..a842299
@@ -1290,7 +1318,7 @@ index 0000000..a842299
 +#undef index
 +#undef rindex
 diff --git a/configure b/configure
-index 1f0106d..3dfa6f7 100755
+index 1f0106d..34677eb 100755
 --- a/configure
 +++ b/configure
 @@ -664,7 +664,7 @@ for machine in $canon_build $canon_host $canon_target; do
@@ -1393,7 +1421,7 @@ index 1f0106d..3dfa6f7 100755
  		    xmake_file=i386/x-isc3
  		    ;;
  		  *)
-@@ -790,20 +779,21 @@ for machine in $canon_build $canon_host $canon_target; do
+@@ -790,20 +779,22 @@ for machine in $canon_build $canon_host $canon_target; do
  		install_headers_dir=install-headers-cpio
  		broken_install=yes
  		;;
@@ -1407,6 +1435,7 @@ index 1f0106d..3dfa6f7 100755
 -			tm_file=i386/linuxelf.h
 -		else
  			tm_file=i386/linux.h
++			tmake_file=t-linux
 +			extra_parts="crtbegin.o crtend.o crtbeginS.o crtendS.o"
 +		else
 +			tm_file=i386/linux-aout.h
@@ -1419,7 +1448,7 @@ index 1f0106d..3dfa6f7 100755
  		cpu_type=i386
  		if [ x$gas = xyes ]
  		then
-@@ -814,13 +804,13 @@ for machine in $canon_build $canon_host $canon_target; do
+@@ -814,13 +805,13 @@ for machine in $canon_build $canon_host $canon_target; do
  		xm_file=xm-lynx.h
  		xmake_file=x-lynx
  		;;
@@ -1435,7 +1464,7 @@ index 1f0106d..3dfa6f7 100755
  		cpu_type=i386
                  if [ x$elf = xyes ]
  		then
-@@ -834,7 +824,7 @@ for machine in $canon_build $canon_host $canon_target; do
+@@ -834,7 +825,7 @@ for machine in $canon_build $canon_host $canon_target; do
  		xmake_file=i386/x-osfrose
  		extra_objs=halfpic.o
  		;;
@@ -1444,7 +1473,7 @@ index 1f0106d..3dfa6f7 100755
  		cpu_type=i386
  		xm_file=i386/xm-sco.h
  		xmake_file=i386/x-sco4
-@@ -850,7 +840,7 @@ for machine in $canon_build $canon_host $canon_target; do
+@@ -850,7 +841,7 @@ for machine in $canon_build $canon_host $canon_target; do
  			extra_parts="crtbegin.o crtend.o"
  		fi
  		;;
@@ -1453,7 +1482,7 @@ index 1f0106d..3dfa6f7 100755
  		cpu_type=i386
  		xm_file=i386/xm-sco.h
  		xmake_file=i386/x-sco
-@@ -866,7 +856,7 @@ for machine in $canon_build $canon_host $canon_target; do
+@@ -866,7 +857,7 @@ for machine in $canon_build $canon_host $canon_target; do
  		fi
  		truncate_target=yes
  		;;
@@ -1462,7 +1491,7 @@ index 1f0106d..3dfa6f7 100755
  		cpu_type=i386
  		xm_file=i386/xm-sysv4.h
  		tm_file=i386/sol2.h
-@@ -876,7 +866,7 @@ for machine in $canon_build $canon_host $canon_target; do
+@@ -876,7 +867,7 @@ for machine in $canon_build $canon_host $canon_target; do
  		fixincludes=fixinc.svr4
  		broken_install=yes
  		;;
@@ -1471,7 +1500,7 @@ index 1f0106d..3dfa6f7 100755
  		cpu_type=i386
  		xm_file=i386/xm-sysv4.h
  		if [ x$stabs = xyes ]
-@@ -888,7 +878,7 @@ for machine in $canon_build $canon_host $canon_target; do
+@@ -888,7 +879,7 @@ for machine in $canon_build $canon_host $canon_target; do
  		tmake_file=t-svr4
  		xmake_file=x-svr4
  		;;
@@ -1480,7 +1509,7 @@ index 1f0106d..3dfa6f7 100755
  		cpu_type=i386
  		xm_file=i386/xm-sysv3.h
  		xmake_file=i386/x-sysv3
-@@ -907,7 +897,7 @@ for machine in $canon_build $canon_host $canon_target; do
+@@ -907,7 +898,7 @@ for machine in $canon_build $canon_host $canon_target; do
  			extra_parts="crtbegin.o crtend.o"
  		fi
  		;;
@@ -1545,6 +1574,67 @@ index b888289..cafae5d 100644
  
  # Clean hooks:
  # A lot of the ancillary files are deleted by the main makefile.
+diff --git a/cp/g++.c b/cp/g++.c
+index b3f7590..372ba27 100644
+--- a/cp/g++.c
++++ b/cp/g++.c
+@@ -203,17 +203,33 @@ concat (s1, s2, s3)
+   return result;
+ }
+ 
++char *
++my_strerror(e)
++     int e;
++{
++
++#ifdef HAVE_STRERROR
++  return strerror(e);
++
++#else
++
++  static char buffer[30];
++  if (!e)
++    return "";
++
++  if (e > 0 && e < sys_nerr)
++    return sys_errlist[e];
++
++  sprintf (buffer, "Unknown error %d", e);
++  return buffer;
++#endif
++}
++
+ static void
+ pfatal_with_name (name)
+      char *name;
+ {
+-  char *s;
+-
+-  if (errno < sys_nerr)
+-    s = concat ("%s: ", sys_errlist[errno], "");
+-  else
+-    s = "cannot open %s";
+-  fatal (s, name);
++  fatal ("%s: %s", name, my_strerror (errno));
+ }
+ 
+ #ifdef __MSDOS__
+@@ -279,14 +295,7 @@ static void
+ perror_exec (name)
+      char *name;
+ {
+-  char *s;
+-
+-  if (errno < sys_nerr)
+-    s = concat ("installation problem, cannot exec %s: ",
+-		sys_errlist[errno], "");
+-  else
+-    s = "installation problem, cannot exec %s";
+-  error (s, name);
++  error ("%s: %s", name, my_strerror (errno));
+ }
+ 
+ /* This is almost exactly what's in gcc.c:pexecute for MSDOS.  */
 diff --git a/crtstuff.c b/crtstuff.c
 index dcfd819..8bd3b1a 100644
 --- a/crtstuff.c
@@ -1904,67 +1994,6 @@ index 8de0b09..75c1d7c 100644
  }
  
  /* More 'friendly' abort that prints the line and file.
-diff --git a/cp/g++.c b/cp/g++.c
-index b3f7590..372ba27 100644
---- a/cp/g++.c
-+++ b/cp/g++.c
-@@ -203,17 +203,33 @@ concat (s1, s2, s3)
-   return result;
- }
- 
-+char *
-+my_strerror(e)
-+     int e;
-+{
-+
-+#ifdef HAVE_STRERROR
-+  return strerror(e);
-+
-+#else
-+
-+  static char buffer[30];
-+  if (!e)
-+    return "";
-+
-+  if (e > 0 && e < sys_nerr)
-+    return sys_errlist[e];
-+
-+  sprintf (buffer, "Unknown error %d", e);
-+  return buffer;
-+#endif
-+}
-+
- static void
- pfatal_with_name (name)
-      char *name;
- {
--  char *s;
--
--  if (errno < sys_nerr)
--    s = concat ("%s: ", sys_errlist[errno], "");
--  else
--    s = "cannot open %s";
--  fatal (s, name);
-+  fatal ("%s: %s", name, my_strerror (errno));
- }
- 
- #ifdef __MSDOS__
-@@ -279,14 +295,7 @@ static void
- perror_exec (name)
-      char *name;
- {
--  char *s;
--
--  if (errno < sys_nerr)
--    s = concat ("installation problem, cannot exec %s: ",
--		sys_errlist[errno], "");
--  else
--    s = "installation problem, cannot exec %s";
--  error (s, name);
-+  error ("%s: %s", name, my_strerror (errno));
- }
- 
- /* This is almost exactly what's in gcc.c:pexecute for MSDOS.  */
 diff --git a/ginclude/stdarg.h b/ginclude/stdarg.h
 index 1c6e1fc..ca79a3e 100644
 --- a/ginclude/stdarg.h

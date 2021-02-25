@@ -1,5 +1,5 @@
 diff --git a/Makefile.in b/Makefile.in
-index c1860db..67e60de 100644
+index c1860db..63f032f 100644
 --- a/Makefile.in
 +++ b/Makefile.in
 @@ -29,7 +29,7 @@
@@ -29,7 +29,18 @@ index c1860db..67e60de 100644
  
  # CFLAGS for use with OLDCC, for compiling libgcc1.a.
  # NOTE: -O does not work on some Unix systems!
-@@ -597,7 +597,7 @@ enquire.o: $(srcdir)/enquire.c $(GCC_PASSES)
+@@ -237,6 +237,10 @@ EXTRA_OBJS =
+ # Often this is edited directly by `configure'.
+ EXTRA_HEADERS =
+ 
++# Target to use whe installing assert.h.  Some systems may
++# want to set this empty.
++INSTALL_ASSERT_H = install-assert-h
++
+ # Set this to `ld' to enable use of collect2.
+ # USE_COLLECT2 =
+ # It is convenient for configure to add the assignment at the beginning,
+@@ -597,7 +601,7 @@ enquire.o: $(srcdir)/enquire.c $(GCC_PASSES)
  #	-if [ "$(srcdir)" != "." ]; then rm -f ./enquire.c; else true; fi
  #	-cp $(srcdir)/enquire.c . > /dev/null 2>&1
  # Breaking this line caused a problem with one version of GNU make.
@@ -38,7 +49,7 @@ index c1860db..67e60de 100644
  
  # Build the version of limits.h that we will install.
  xlimits.h: glimits.h limitx.h limity.h
-@@ -797,6 +797,17 @@ crtend.o:	crtstuff.c $(GCC_PASSES) $(CONFIG_H) gbl-ctors.h
+@@ -797,6 +801,17 @@ crtend.o:	crtstuff.c $(GCC_PASSES) $(CONFIG_H) gbl-ctors.h
  	$(GCC_FOR_TARGET) $(GCC_CFLAGS) $(INCLUDES) -DCRT_END \
  	  -finhibit-size-directive -fno-inline-functions \
  	  -g0 -c $(srcdir)/crtstuff.c -o crtend.o
@@ -56,7 +67,7 @@ index c1860db..67e60de 100644
  
  # Compiling object files from source files.
  
-@@ -1785,167 +1796,167 @@ install-float-h-cross: install-dir
+@@ -1785,167 +1800,167 @@ install-float-h-cross: install-dir
  #	if [ -f enquire ] ; then true; else false; fi
  # Note: don't use -.  We should fail right away if enquire was not made.
  	./enquire -f > $(tmpdir)/float.h
@@ -259,7 +270,8 @@ index c1860db..67e60de 100644
  	else true; fi
  
  # Install all the header files built in the include subdirectory.
- install-headers: install-include-dir $(INSTALL_HEADERS_DIR) install-assert-h
+-install-headers: install-include-dir $(INSTALL_HEADERS_DIR) install-assert-h
++install-headers: install-include-dir $(INSTALL_HEADERS_DIR) $(INSTALL_ASSERT_H)
  # Fix symlinks to absolute paths in the installed include directory to
  # point to the installed directory, not the build directory.
 -	-files=`cd $(libsubdir)/include; find . -type l -print 2>/dev/null`; \
@@ -303,7 +315,7 @@ index c1860db..67e60de 100644
  
  # Put assert.h where it won't override GNU libc's assert.h.
  # It goes in a dir that is searched after GNU libc's headers;
-@@ -1955,38 +1966,38 @@ install-headers-cpio: stmp-headers $(STMP_FIXPROTO) install-include-dir
+@@ -1955,38 +1970,38 @@ install-headers-cpio: stmp-headers $(STMP_FIXPROTO) install-include-dir
  ## This code would be simpler if it tested for -f ... && ! grep ...
  ## but supposedly the ! operator is missing in sh on some systems.
  install-assert-h: assert.h install-dir
@@ -1707,6 +1719,22 @@ index e895751..96ce9a3 100644
 +
 +/* All SVR4 targets use the ELF object file format.  */
 +#define OBJECT_FORMAT_ELF
+diff --git a/config/t-linux b/config/t-linux
+new file mode 100644
+index 0000000..843fa1b
+--- /dev/null
++++ b/config/t-linux
+@@ -0,0 +1,10 @@
++# Don't run fixproto
++STMP_FIXPROTO =
++
++# Don't install "assert.h" in gcc. We use the one in glibc.
++INSTALL_ASSERT_H =
++
++# Compile crtbeginS.o and crtendS.o with pic.
++CRTSTUFF_T_CFLAGS_S = -fPIC
++# Compile libgcc2.a with pic.
++TARGET_LIBGCC2_CFLAGS = -fPIC
 diff --git a/config/xm-linux.h b/config/xm-linux.h
 new file mode 100644
 index 0000000..a842299
@@ -1756,7 +1784,7 @@ index 0000000..a842299
 +#undef index
 +#undef rindex
 diff --git a/configure b/configure
-index 64a8cc3..00bd697 100755
+index 64a8cc3..8e03012 100755
 --- a/configure
 +++ b/configure
 @@ -293,6 +293,7 @@ for machine in $canon_build $canon_host $canon_target; do
@@ -1850,7 +1878,7 @@ index 64a8cc3..00bd697 100755
  		cpu_type=i386
                  if [ x$gas = xyes ]
  		then
-@@ -480,15 +481,16 @@ for machine in $canon_build $canon_host $canon_target; do
+@@ -480,15 +481,17 @@ for machine in $canon_build $canon_host $canon_target; do
  		tm_file=i386/sun.h
  		use_collect2=yes
  		;;
@@ -1864,13 +1892,14 @@ index 64a8cc3..00bd697 100755
 -			tm_file=i386/linuxelf.h
 -		else
  			tm_file=i386/linux.h
++			tmake_file=t-linux
 +			extra_parts="crtbegin.o crtend.o crtbeginS.o crtendS.o"
 +		else
 +			tm_file=i386/linuxaout.h
  		fi
  		fixincludes=Makefile.in #On Linux, the headers are ok already.
  		broken_install=yes
-@@ -500,14 +502,14 @@ for machine in $canon_build $canon_host $canon_target; do
+@@ -500,14 +503,14 @@ for machine in $canon_build $canon_host $canon_target; do
  		tm_file=i386/sysv4.h
  		tmake_file=t-svr4
  		;;
@@ -1887,7 +1916,7 @@ index 64a8cc3..00bd697 100755
  		cpu_type=i386
  		xm_file=i386/xm-sysv3.h
  		xmake_file=i386/x-sysv3
-@@ -516,7 +518,7 @@ for machine in $canon_build $canon_host $canon_target; do
+@@ -516,7 +519,7 @@ for machine in $canon_build $canon_host $canon_target; do
  		fixincludes=fixinc.svr4
  		broken_install=yes
  		;;
@@ -1896,7 +1925,7 @@ index 64a8cc3..00bd697 100755
  		cpu_type=i386
  		xm_file=i386/xm-sysv3.h
  		xmake_file=i386/x-sysv3
-@@ -535,7 +537,7 @@ for machine in $canon_build $canon_host $canon_target; do
+@@ -535,7 +538,7 @@ for machine in $canon_build $canon_host $canon_target; do
  			tmake_file=t-svr3
  		fi
  		;;
@@ -1905,7 +1934,7 @@ index 64a8cc3..00bd697 100755
  		cpu_type=i386
  		xm_file=i386/xm-sysv4.h
  		tm_file=i386/sol2.h
-@@ -544,7 +546,7 @@ for machine in $canon_build $canon_host $canon_target; do
+@@ -544,7 +547,7 @@ for machine in $canon_build $canon_host $canon_target; do
  		fixincludes=fixinc.svr4
  		broken_install=yes
  		;;
@@ -1914,7 +1943,7 @@ index 64a8cc3..00bd697 100755
  		cpu_type=i386
  		tm_file=i386/lynx.h
  		xm_file=xm-lynx.h
-@@ -1791,6 +1793,17 @@ else
+@@ -1791,6 +1794,17 @@ else
  	mv Makefile.xx Makefile.tem
  fi
  
