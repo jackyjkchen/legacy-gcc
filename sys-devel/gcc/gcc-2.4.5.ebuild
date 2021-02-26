@@ -26,9 +26,9 @@ KEYWORDS="amd64 x86"
 RDEPEND=""
 DEPEND="${RDEPEND}
 	sys-devel/gcc:2.95.3
-	legacy-gcc/linux-headers:i686-legacy
-	legacy-gcc/glibc-headers:i686-legacy
-	legacy-gcc/binutils-wrapper:i686-legacy"
+	legacy-gcc/linux-headers:i486-legacy
+	legacy-gcc/glibc-headers:i486-legacy
+	legacy-gcc/binutils-wrapper:i486-legacy"
 
 CC="gcc-2.95.3"
 CXX="g++-2.95.3"
