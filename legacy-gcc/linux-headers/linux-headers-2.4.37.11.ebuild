@@ -5,10 +5,10 @@ EAPI=7
 
 DESCRIPTION=""
 HOMEPAGE=""
-SRC_URI="https://mirrors.ustc.edu.cn/kernel.org/linux/kernel/v2.6/longterm/v2.6.32/linux-${PV}.tar.xz"
+SRC_URI="https://mirrors.ustc.edu.cn/kernel.org/linux/kernel/v2.4/linux-${PV}.tar.xz"
 
 LICENSE=""
-SLOT="i686-legacy"
+SLOT="i486-legacy"
 KEYWORDS="amd64 x86"
 
 DEPEND=""
@@ -27,13 +27,18 @@ src_unpack(){
 src_compile() {
 	pushd "${WORKDIR}"/${P} > /dev/null
 	emake mrproper || die
-	emake headers_check || die
+	emake include/linux/version.h || die
+	emake symlinks || die
 	popd >/dev/null
 }
 
 src_install() {
 	pushd "${WORKDIR}"/${P} > /dev/null
-	emake INSTALL_HDR_PATH="${ED}"${UNIX_PREFIX}/${TARGET_PREFIX} headers_install || die
+	mkdir -p "${ED}"${UNIX_PREFIX}/${TARGET_PREFIX}/include || die
 	find "${ED}"${UNIX_PREFIX}/${TARGET_PREFIX} -name '..install.cmd' -delete || die
+	cp -HR include/asm "${ED}"${UNIX_PREFIX}/${TARGET_PREFIX}/include || die
+	cp -R include/asm-generic "${ED}"${UNIX_PREFIX}/${TARGET_PREFIX}/include || die
+	cp -R include/linux "${ED}"${UNIX_PREFIX}/${TARGET_PREFIX}/include || die
+	touch "${ED}"${UNIX_PREFIX}/${TARGET_PREFIX}/include/linux/autoconf.h || die
 	popd >/dev/null
 }

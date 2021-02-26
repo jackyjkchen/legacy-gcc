@@ -827,6 +827,25 @@ toolchain_src_configure() {
 	confgcc+=(
 		--prefix="${PREFIX}"
 	)
+
+	if ! tc_version_is_at_least 2.5 ; then
+		export gcc_cv_prog_makeinfo_modern=no
+		export ac_cv_have_x='have_x=yes ac_x_includes= ac_x_libraries='
+
+		confgcc+=( "$@" ${EXTRA_ECONF} )
+
+		mkdir -p "${WORKDIR}"/build
+		pushd "${WORKDIR}"/build > /dev/null
+
+		addwrite /dev/zero
+		echo "${S}"/configure "${confgcc[@]}"
+		CONFIG_SHELL="${EPREFIX}/bin/bash" \
+		bash "${S}"/configure "${confgcc[@]}" || die "failed to run configure"
+
+		popd > /dev/null
+		return 0
+	fi
+
 	if tc_version_is_at_least 2.8 ; then
 		confgcc+=(
 			--bindir="${BINPATH}"

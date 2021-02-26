@@ -10,13 +10,13 @@ SRC_URI="https://mirrors.ustc.edu.cn/gnu/glibc/glibc-${PV}.tar.bz2"
 inherit downgrade_arch_flags
 
 LICENSE=""
-SLOT="i686-legacy"
+SLOT="i486-legacy"
 KEYWORDS="amd64 x86"
 
 DEPEND="
-	sys-devel/gcc:4.9.4
-	legacy-gcc/linux-headers:i686-legacy
-	legacy-gcc/binutils-wrapper:i686-legacy"
+	sys-devel/gcc:3.4.6
+	legacy-gcc/linux-headers:i486-legacy
+	legacy-gcc/binutils-wrapper:i486-legacy"
 RDEPEND="${DEPEND}"
 BDEPEND=""
 
@@ -24,14 +24,15 @@ TARGET_PREFIX="${SLOT}-linux-gnu"
 
 case ${ARCH} in
 	amd64)
-		CC="gcc-4.9.4 -m32"
-		CXX="g++-4.9.4 -m32"
+		CC="gcc-3.4.6 -m32"
+		CXX="g++-3.4.6 -m32"
 		;;
 	x86)
-		CC="gcc-4.9.4"
-		CXX="g++-4.9.4"
+		CC="gcc-3.4.6"
+		CXX="g++-3.4.6"
 		;;
 esac
+
 
 src_unpack() {
 	default
@@ -40,17 +41,16 @@ src_unpack() {
 
 src_prepare() {
 	default
-	tar -pxf ${FILESDIR}/glibc-2.19-patches-9.tar.bz2 -C ${WORKDIR}/ || die
-	eapply "${WORKDIR}"/patches/*.patch || die
 	eapply "${FILESDIR}"/${PV}/00_glibc-${PV}.patch || die
+	eapply "${FILESDIR}"/${PV}/01_glibc-${PV}-workaround-for-old-gcc.patch || die
 }
 
 src_configure() {
-	downgrade_arch_flags 4.4
+	downgrade_arch_flags 2.9
 	local econfargs=(
 		--build=${TARGET_PREFIX}
 		--host=${TARGET_PREFIX}
-		--enable-kernel=2.6.32
+		--enable-kernel=2.4.37
 		--with-headers=/usr/${TARGET_PREFIX}/include
 		--prefix=${ED}/usr/${TARGET_PREFIX}
 		--enable-shared
@@ -84,6 +84,7 @@ src_install() {
 	pushd "${WORKDIR}"/build >/dev/null
 	emake install-headers || die
 	touch  ${ED}/usr/${TARGET_PREFIX}/include/gnu/stubs.h || die
+	cp -v bits/stdio_lim.h ${ED}/usr/${TARGET_PREFIX}/include/bits || die
 	rm -rv ${ED}/usr/${TARGET_PREFIX}/include/scsi || die
 	popd > /dev/null
 }
