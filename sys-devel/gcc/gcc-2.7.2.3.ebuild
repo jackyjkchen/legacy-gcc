@@ -3,14 +3,16 @@
 
 EAPI=6
 
-CHOST=${CHOST_x86}
+CBUILD='i686-legacy-linux-gnu'
+CHOST=${CBUILD}
+CHOST_x86=${CBUILD}
 ABI='x86'
 DEFAULT_ABI='x86'
 ABI_X86='32'
-AS="${CHOST_x86}-as"
-LD="${CHOST_x86}-ld"
-AR="${CHOST_x86}-ar"
-RANLIB="${CHOST_x86}-ranlib"
+AS="${CHOST}-as"
+LD="${CHOST}-ld"
+AR="${CHOST}-ar"
+RANLIB="${CHOST}-ranlib"
 CFLAGS_x86=""
 
 inherit toolchain
@@ -24,22 +26,18 @@ KEYWORDS="amd64 x86"
 RDEPEND=""
 DEPEND="${RDEPEND}
 	sys-devel/gcc:2.95.3
-	amd64? (
-		legacy-gcc/i686-pc-linux-gnu-binutils
-	)"
+	legacy-gcc/linux-headers:i686-legacy
+	legacy-gcc/glibc-headers:i686-legacy
+	legacy-gcc/binutils-wrapper:i686-legacy"
 
 CC="gcc-2.95.3"
 CXX="g++-2.95.3"
 
-src_unpack() {
-	toolchain_src_unpack
-}
-
 src_prepare() {
 	toolchain_src_prepare
-	eapply "${FILESDIR}"/2.7.2.3/00_gcc-2.7.2.3.patch
-	eapply "${FILESDIR}"/2.7.2.3/01_gcc-2.7.2.3-gentoo-install-path.patch
-	eapply "${FILESDIR}"/2.7.2.3/02_gcc-2.7.2.3-workaround-for-new-glibc.patch
+	eapply "${FILESDIR}"/${PV}/00_gcc-${PV}.patch
+	eapply "${FILESDIR}"/${PV}/01_gcc-${PV}-gentoo-install-path.patch
+	eapply "${FILESDIR}"/${PV}/02_gcc-${PV}-workaround-for-new-glibc.patch
 	rm -rf ${WORKDIR}/${P}/cp
 }
 
