@@ -820,13 +820,18 @@ toolchain_src_configure() {
 		# not provide a configure target when configuring a native compiler."
 		confgcc+=( --target=${CTARGET} )
 	fi
-	[[ -n ${CBUILD} ]] && confgcc+=( --build=${CBUILD} )
+
+	if tc_version_is_at_least 2.3 ; then
+		[[ -n ${CBUILD} ]] && confgcc+=( --build=${CBUILD} )
+	fi
 
 	tc_version_is_at_least 2.6 || confgcc+=( --target=${CTARGET} )
 
-	confgcc+=(
-		--prefix="${PREFIX}"
-	)
+	if tc_version_is_at_least 2.3 ; then
+		confgcc+=(
+			--prefix="${PREFIX}"
+		)
+	fi
 
 	if ! tc_version_is_at_least 2.5 ; then
 		export gcc_cv_prog_makeinfo_modern=no
