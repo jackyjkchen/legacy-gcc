@@ -17,12 +17,8 @@ CFLAGS_x86=""
 
 inherit toolchain
 
-# ia64 - broken static handling; USE=static emerge busybox
 KEYWORDS="amd64 x86"
 
-# NOTE: we SHOULD be using at least binutils 2.15.90.0.1 everywhere for proper
-# .eh_frame ld optimisation and symbol visibility support, but it hasnt been
-# well tested in gentoo on any arch other than amd64!!
 RDEPEND=""
 DEPEND="${RDEPEND}
 	sys-devel/gcc:3.4.6

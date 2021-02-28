@@ -46,7 +46,12 @@ src_prepare() {
 }
 
 src_configure() {
-	downgrade_arch_flags 2.9
+	downgrade_arch_flags 3.4
+	cat <<-_EOF_ > config.cache || die
+libc_cv_forced_unwind=yes
+libc_cv_c_cleanup=yes
+libc_cv_386_tls=yes
+_EOF_
 	local econfargs=(
 		--build=${TARGET_PREFIX}
 		--host=${TARGET_PREFIX}
@@ -54,7 +59,11 @@ src_configure() {
 		--with-headers=/usr/${TARGET_PREFIX}/include
 		--prefix=${ED}/usr/${TARGET_PREFIX}
 		--enable-shared
+		--enable-nptl
 		--enable-add-ons
+		--with-tls
+		--with-__thread
+		--enable-sim
 		--without-cvs
 		--without-selinux
 		--disable-werror
@@ -63,7 +72,7 @@ src_configure() {
 		--without-gd
 		--enable-crypt
 		--disable-nscd
-		--disable-sanity-checks
+		--disable-sanity-checks --cache-file=config.cache
 	)
 
 	mkdir -p "${WORKDIR}"/build
@@ -71,7 +80,7 @@ src_configure() {
 
 	echo "${S}"/configure "${econfargs[@]}"
 
-	"${S}"/configure "${econfargs[@]}" libc_cv_forced_unwind=yes libc_cv_c_cleanup=yes || die "failed to run configure"
+	"${S}"/configure "${econfargs[@]}" || die "failed to run configure"
 
 	popd > /dev/null
 }
