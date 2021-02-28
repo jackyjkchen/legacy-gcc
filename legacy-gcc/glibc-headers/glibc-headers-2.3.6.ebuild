@@ -10,13 +10,13 @@ SRC_URI="https://mirrors.ustc.edu.cn/gnu/glibc/glibc-${PV}.tar.bz2"
 inherit downgrade_arch_flags
 
 LICENSE=""
-SLOT="i486-legacy"
+SLOT="i686-legacy"
 KEYWORDS="amd64 x86"
 
 DEPEND="
 	sys-devel/gcc:3.4.6
-	legacy-gcc/linux-headers:i486-legacy
-	legacy-gcc/binutils-wrapper:i486-legacy"
+	legacy-gcc/linux-headers:i686-legacy
+	legacy-gcc/binutils-wrapper:i686-legacy"
 RDEPEND="${DEPEND}"
 BDEPEND=""
 
@@ -50,7 +50,7 @@ src_configure() {
 	local econfargs=(
 		--build=${TARGET_PREFIX}
 		--host=${TARGET_PREFIX}
-		--enable-kernel=2.4.37
+		--enable-kernel=2.6.0
 		--with-headers=/usr/${TARGET_PREFIX}/include
 		--prefix=${ED}/usr/${TARGET_PREFIX}
 		--enable-shared
