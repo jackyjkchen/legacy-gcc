@@ -1,5 +1,5 @@
 diff --git a/Makefile.in b/Makefile.in
-index 05f86e7..57f327a 100644
+index 73a7734..88e74a5 100644
 --- a/Makefile.in
 +++ b/Makefile.in
 @@ -29,7 +29,7 @@
@@ -10,7 +10,7 @@ index 05f86e7..57f327a 100644
 +LANGUAGES = c
  
  ALLOCA =
- ALLOCA_FLAGS =
+ ALLOCA_FLAGS = -S -Demacs
 @@ -50,7 +50,7 @@ T_CFLAGS =
  X_CPPFLAGS =
  T_CPPFLAGS =
@@ -29,12 +29,12 @@ index 05f86e7..57f327a 100644
  
  # CFLAGS for use with OLDCC, for compiling libgcc1.a.
  # NOTE: -O does not work on some Unix systems!
-@@ -126,13 +126,18 @@ PREMADE_ATTRTAB =
+@@ -114,19 +114,26 @@ CROSS_TOOLS =
  target= ... `configure' substitutes actual target name here.
  xmake_file= ... `configure' substitutes actual x- file name here.
  tmake_file= ... `configure' substitutes actual t- file name here.
--version=`sed -e 's/.*\"\([^ \"]*\)[ \"].*/\1/' < $(srcdir)/version.c`
-+version=2.3.3
+-version=`awk '{printf "%s", substr ($$4, 2, length ($$4) - 3); }' $(srcdir)/version.c`
++version=2.0
  
  # Directory where sources are, from where we are.
  srcdir = .
@@ -46,33 +46,41 @@ index 05f86e7..57f327a 100644
 +# `/usr'.
 +# NOTE: local_prefix *should not* default from prefix.
 +local_prefix = /usr/local
- # Directory in which to put host dependent programs and libraries
- exec_prefix = $(prefix)
++# Directory in which to put host dependent programs and libraries
++exec_prefix = $(prefix)
  # Directory in which to put the executable for the command `gcc'
-@@ -196,6 +201,10 @@ EXTRA_OBJS =
- # Often this is edited directly by `configure'.
- EXTRA_HEADERS =
- 
-+# Target to use whe installing assert.h.  Some systems may
-+# want to set this empty.
-+INSTALL_ASSERT_H = assert.h
-+
- # Set this to `ld' to enable use of collect2.
- # USE_COLLECT2 =
- # It is convenient for configure to add the assignment at the beginning,
-@@ -512,7 +521,7 @@ enquire.o: $(srcdir)/enquire.c $(GCC_PASSES)
- #	-if [ "$(srcdir)" != "." ]; then rm -f ./enquire.c; else true; fi
- #	-cp $(srcdir)/enquire.c . > /dev/null 2>&1
+ bindir = $(prefix)/bin
+ # Directory in which to put the directories used by the compiler.
+-libdir = $(prefix)/lib
++libdir = $(exec_prefix)/lib
+ # Directory in which the compiler finds executables, libraries, etc.
+-libsubdir = $(libdir)/gcc/$(target)/$(version)
++libsubdir = $(libdir)/gcc-lib/$(target)/$(version)
+ # Extension (if any) to put in installed man-page filename.
+ manext = .1
+ # Directory in which to put man pages.
+@@ -444,7 +451,7 @@ enquire: enquire.o $(GCC_PARTS)
+ enquire.o: $(srcdir)/enquire.c $(GCC_PASSES)
+ 	-cp $(srcdir)/enquire.c . > /dev/null 2>&1
  # Breaking this line caused a problem with one version of GNU make.
--	$(GCC_FOR_TARGET) $(GCC_CFLAGS) $(ALL_CPPFLAGS) $(ENQUIRE_CFLAGS) -I. -c $(srcdir)/enquire.c
-+	$(GCC_FOR_TARGET) $(GCC_CFLAGS) $(ALL_CPPFLAGS) $(ENQUIRE_CFLAGS) -I. -I$(srcdir) -c $(srcdir)/enquire.c
+-	$(GCC_FOR_TARGET) $(GCC_CFLAGS) $(ALL_CPPFLAGS) $(ENQUIRE_CFLAGS) -I. -c enquire.c
++	$(GCC_FOR_TARGET) $(GCC_CFLAGS) $(ALL_CPPFLAGS) $(ENQUIRE_CFLAGS) -I. -I$(srcdir) -c enquire.c
+ 
+ # Build libgcc.a.
+ # This is done in two parts because some functions, in libgcc1.c,
+@@ -589,13 +596,20 @@ libgcc.a: $(LIBGCC1) $(LIBGCC2)
+ # linked using GCC on system V, for the sake of C++ constructors.
+ crtbegin.o:	crtstuff.c $(GCC_PASSES) $(CONFIG_H) gbl-ctors.h
+ 	$(GCC_FOR_TARGET) $(GCC_CFLAGS) $(INCLUDES) -DCRT_BEGIN \
+-	  -finhibit-size-directive -g0 -c $(srcdir)/crtstuff.c
+-	mv crtstuff.o crtbegin.o
++	  -finhibit-size-directive -g0 -c $(srcdir)/crtstuff.c -o crtbegin.o
  
- # Build the version of limits.h that we will install.
- xlimits.h: glimits.h limitx.h limity.h
-@@ -702,6 +711,15 @@ crtbegin.o:	crtstuff.c $(GCC_PASSES) $(CONFIG_H) gbl-ctors.h
  crtend.o:	crtstuff.c $(GCC_PASSES) $(CONFIG_H) gbl-ctors.h
  	$(GCC_FOR_TARGET) $(GCC_CFLAGS) $(INCLUDES) -DCRT_END \
- 	  -finhibit-size-directive -g0 -c $(srcdir)/crtstuff.c -o crtend.o
+-	  -finhibit-size-directive -g0 -c $(srcdir)/crtstuff.c
+-	mv crtstuff.o crtend.o
++	  -finhibit-size-directive -g0 -c $(srcdir)/crtstuff.c -o crtend.o
 +
 +crtbeginS.o:	crtstuff.c $(GCC_PASSES) $(CONFIG_H) gbl-ctors.h
 +	$(GCC_FOR_TARGET) $(GCC_CFLAGS) $(INCLUDES) -DCRT_BEGIN -fPIC \
@@ -85,77 +93,83 @@ index 05f86e7..57f327a 100644
  
  # Compiling object files from source files.
  
-@@ -811,6 +829,7 @@ gcc.o: gcc.c $(CONFIG_H) gvarargs.h obstack.h
+@@ -683,8 +697,10 @@ c-common.o : c-common.c $(CONFIG_H) $(TREE_H) c-tree.h c-lex.h flags.h
+ gcc.o: gcc.c $(CONFIG_H) gvarargs.h obstack.h
+ 	$(CC) $(ALL_CFLAGS) $(ALL_CPPFLAGS) $(INCLUDES) \
    -DSTANDARD_STARTFILE_PREFIX=\"$(libdir)/\" \
-   -DSTANDARD_EXEC_PREFIX=\"$(libdir)/gcc-lib/\" \
+-  -DSTANDARD_EXEC_PREFIX=\"$(libdir)/gcc/\" \
++  -DSTANDARD_EXEC_PREFIX=\"$(libdir)/gcc-lib/\" \
    -DDEFAULT_TARGET_MACHINE=\"$(target)\" \
 +  -DTOOLDIR_BASE_PREFIX=\"$(exec_prefix)/\" \
-   -DTOOLDIR=\"$(tooldir)/\" \
++  -DTOOLDIR=\"$(tooldir)/\" \
    -c `echo $(srcdir)/gcc.c | sed 's,^\./,,'`
  
-@@ -1170,8 +1189,9 @@ cccp.o: cccp.c $(CONFIG_H) pcp.h version.c
+ dumpvers: dumpvers.c
+@@ -697,6 +713,9 @@ print-tree.o : print-tree.c $(CONFIG_H) $(TREE_H)
+ stor-layout.o : stor-layout.c $(CONFIG_H) $(TREE_H) function.h
+ fold-const.o : fold-const.c $(CONFIG_H) $(TREE_H) flags.h 
+ toplev.o : toplev.c $(CONFIG_H) $(TREE_H) $(RTL_H) flags.h input.h insn-attr.h
++	$(CC) $(ALL_CFLAGS) $(ALL_CPPFLAGS) $(INCLUDES) \
++	$(MAYBE_TARGET_DEFAULT) \
++	-c `echo $(srcdir)/toplev.c | sed 's,^\./,,'`
+ 
+ rtl.o : rtl.c $(CONFIG_H) $(RTL_H)
+ 
+@@ -1021,8 +1040,10 @@ cccp.o: cccp.c $(CONFIG_H) pcp.h version.c
  	$(CC) $(ALL_CFLAGS) $(ALL_CPPFLAGS) $(INCLUDES) \
- 	  -DGCC_INCLUDE_DIR=\"$(libsubdir)/include\" \
- 	  -DGPLUSPLUS_INCLUDE_DIR=\"$(libdir)/g++-include\" \
+           -DGCC_INCLUDE_DIR=\"$(libsubdir)/include\" \
+           -DGPLUSPLUS_INCLUDE_DIR=\"$(libdir)/g++-include\" \
 -	  -DLOCAL_INCLUDE_DIR=\"$(prefix)/include\" \
 +	  -DLOCAL_INCLUDE_DIR=\"$(local_prefix)/include\" \
- 	  -DCROSS_INCLUDE_DIR=\"$(libsubdir)/sys-include\" \
-+	  -DTOOL_INCLUDE_DIR=\"$(tooldir)/include\" \
- 	  -DTOOLDIR=\"$(tooldir)/\" \
+           -DCROSS_INCLUDE_DIR=\"$(libsubdir)/sys-include\" \
++          -DTOOL_INCLUDE_DIR=\"$(tooldir)/include\" \
++          -DTOOLDIR=\"$(tooldir)/\" \
  	  -c `echo $(srcdir)/cccp.c | sed 's,^\./,,'`
  
-@@ -1192,7 +1212,8 @@ stamp-proto:	$(srcdir)/protoize.c getopt.h $(CONFIG_H)
+ proto: config.status protoize unprotoize SYSCALLS.c.X protoize.1 unprotoize.1
+@@ -1035,7 +1056,8 @@ protoize.o:	$(srcdir)/protoize.c getopt.h $(CONFIG_H)
            -DGCC_INCLUDE_DIR=\"$(libsubdir)/include\" \
            -DGPLUSPLUS_INCLUDE_DIR=\"$(libdir)/g++-include\" \
            -DCROSS_INCLUDE_DIR=\"$(libsubdir)/sys-include\" \
 -	  -DLOCAL_INCLUDE_DIR=\"$(prefix)/include\" \
-+	  -DTOOL_INCLUDE_DIR=\"$(tooldir)/include\" \
-+	  -DLOCAL_INCLUDE_DIR=\"$(local_prefix)/include\" \
- 	  -DSTD_PROTO_DIR=\"$(libsubdir)\" \
- 	  -DUNPROTOIZE $(srcdir)/protoize.c
- 	mv protoize.o unprotoize.o
-@@ -1200,7 +1221,8 @@ stamp-proto:	$(srcdir)/protoize.c getopt.h $(CONFIG_H)
-           -DGCC_INCLUDE_DIR=\"$(libsubdir)/include\" \
-           -DGPLUSPLUS_INCLUDE_DIR=\"$(libdir)/g++-include\" \
-           -DCROSS_INCLUDE_DIR=\"$(libsubdir)/sys-include\" \
--	  -DLOCAL_INCLUDE_DIR=\"$(prefix)/include\" \
-+	  -DTOOL_INCLUDE_DIR=\"$(tooldir)/include\" \
++          -DTOOL_INCLUDE_DIR=\"$(tooldir)/include\" \
 +	  -DLOCAL_INCLUDE_DIR=\"$(local_prefix)/include\" \
  	  -DSTD_PROTO_DIR=\"$(libsubdir)\" \
  	  $(srcdir)/protoize.c
- 	touch stamp-proto
-@@ -1227,6 +1249,7 @@ test-protoize-simple: ./protoize ./unprotoize $(GCC_PASSES)
- 	  -DGCC_INCLUDE_DIR=0 \
- 	  -DGPLUSPLUS_INCLUDE_DIR=0 \
- 	  -DCROSS_INCLUDE_DIR=0 \
-+	  -DTOOL_INCLUDE_DIR=0 \
- 	  -DSTD_PROTO_DIR=0" tmp-proto.c
- 	@echo '**********' Expect 400 lines of differences.
- 	-diff $(srcdir)/protoize.c tmp-proto.c > tmp-proto.diff
-@@ -1236,6 +1259,7 @@ test-protoize-simple: ./protoize ./unprotoize $(GCC_PASSES)
- 	  -DGCC_INCLUDE_DIR=0 \
- 	  -DGPLUSPLUS_INCLUDE_DIR=0 \
- 	  -DCROSS_INCLUDE_DIR=0 \
-+	  -DTOOL_INCLUDE_DIR=0 \
- 	  -DSTD_PROTO_DIR=0" tmp-proto.c
- 	@echo Expect zero differences.
- 	diff $(srcdir)/protoize.c tmp-proto.c | cat
-@@ -1381,35 +1405,35 @@ install-cross-tools: install-dir
+ 
+@@ -1048,7 +1070,8 @@ unprotoize.o:	$(srcdir)/protoize.c getopt.h $(CONFIG_H)
+           -DGCC_INCLUDE_DIR=\"$(libsubdir)/include\" \
+           -DGPLUSPLUS_INCLUDE_DIR=\"$(libdir)/g++-include\" \
+           -DCROSS_INCLUDE_DIR=\"$(libsubdir)/sys-include\" \
+-	  -DLOCAL_INCLUDE_DIR=\"$(prefix)/include\" \
++	  -DTOOL_INCLUDE_DIR=\"$(tooldir)/include\" \
++	  -DLOCAL_INCLUDE_DIR=\"$(local_prefix)/include\" \
+ 	  -DSTD_PROTO_DIR=\"$(libsubdir)\" \
+ 	  -DUNPROTOIZE unprotoize.c
+ 	rm -f unprotoize.c
+@@ -1154,7 +1177,7 @@ install: $(INSTALL_TARGET)
+ 
+ # Copy the files of native compiler into directories where they will be run.
+ install-native: install-common install-libgcc $(INSTALL_HEADERS) \
+-   install-man install-proto
++   install-man
+ 
+ # Copy the files of cross compiler into directories where they will be run.
+ install-cross: install-common install-common-headers \
+@@ -1172,32 +1195,32 @@ install-cross-tools: install-dir
  # leading us to overwrite the real file through the symlink.
  	-if [ -f gcc-cross ] ; \
  	then \
 -	  if [ -d $(tooldir)/. ] ; \
 +	  if [ -d $(DESTDIR)$(tooldir)/. ] ; \
  	  then \
- 	    for file in as ld ar nm ranlib; do \
+ 	    for file in as ld ar ranlib; do \
 -	      if [ -f $(libsubdir)/$$file ] ; \
 +	      if [ -f $(DESTDIR)$(libsubdir)/$$file ] ; \
  	      then true; \
  	      else  \
--		rm -rf $(libsubdir)/$$file; \
 -		$(SYMLINK) $(tooldir)/bin/$$file $(libsubdir)/$$file \
 -		|| (echo "#!/bin/sh"; echo $(tooldir)/bin/$$file "$$@") > $(libsubdir)/$$file; \
-+		rm -rf $(DESTDIR)$(libsubdir)/$$file; \
 +		$(SYMLINK) $(DESTDIR)$(tooldir)/bin/$$file $(DESTDIR)$(libsubdir)/$$file \
 +		|| (echo "#!/bin/sh"; echo $(DESTDIR)$(tooldir)/bin/$$file "$$@") > $(DESTDIR)$(libsubdir)/$$file; \
  	      fi; \
@@ -168,10 +182,8 @@ index 05f86e7..57f327a 100644
 +		if [ -f $(DESTDIR)$(libsubdir)/`basename $$file` ] ; \
  		then true; \
  		else  \
--		  rm -rf $(libsubdir)/`basename $$file`; \
 -		  $(SYMLINK) $$file $(libsubdir)/`basename $$file` \
 -		  || $(INSTALL_DATA) $$file $(libsubdir)/`basename $$file`; \
-+		  rm -rf $(DESTDIR)$(libsubdir)/`basename $$file`; \
 +		  $(SYMLINK) $$file $(DESTDIR)$(libsubdir)/`basename $$file` \
 +		  || $(INSTALL_DATA) $$file $(DESTDIR)$(libsubdir)/`basename $$file`; \
  		fi; \
@@ -179,72 +191,51 @@ index 05f86e7..57f327a 100644
  	      fi; \
  	    done; \
 -	    if [ -d $(tooldir)/include/. ] ; then \
--	      rm -rf $(libsubdir)/sys-include; \
 -	      $(SYMLINK) $(tooldir)/include $(libsubdir)/sys-include \
 -	      || (if [ -d $(libsubdir)/sys-include ] ; then true ; else mkdir $(libsubdir)/sys-include ; fi; \
--		  (cd $(tooldir)/include; tar cf - .) | (cd $(libsubdir)/sys-include; tar xpf -)); \
+-		  cd $(tooldir)/include; tar cf - . | (cd $(libsubdir)/sys-include; tar xpf -)); \
 +	    if [ -d $(DESTDIR)$(tooldir)/include/. ] ; then \
-+	      rm -rf $(DESTDIR)$(libsubdir)/sys-include; \
-+	      $(SYMLINK) $(DESTDIR)$(tooldir)/include $(DESTDIR)$(libsubdir)/sys-include \
-+	      || (if [ -d $(DESTDIR)$(libsubdir)/sys-include ] ; then true ; else mkdir -p $(DESTDIR)$(libsubdir)/sys-include ; fi; \
-+		  (cd $(DESTDIR)$(tooldir)/include; tar cf - .) | (cd $(DESTDIR)$(libsubdir)/sys-include; tar xpf -)); \
++	      $(SYMLINK) $(DESTDIR)$(tooldir)/include $(libsubdir)/sys-include \
++	      || (if [ -d $(DESTDIR)$(libsubdir)/sys-include ] ; then true ; else mkdir $(DESTDIR)$(libsubdir)/sys-include ; fi; \
++		  cd $(DESTDIR)$(tooldir)/include; tar cf - . | (cd $(DESTDIR)$(libsubdir)/sys-include; tar xpf -)); \
  	    else true; fi; \
  	  else true; \
  	  fi; \
-@@ -1427,34 +1451,34 @@ install-float-h-cross:
- # If you see what good it does, please tell me.  -- rms.
- 	if [ -f enquire ] ; then true; else false; fi
- 	-./enquire -f > $(tmpdir)/float.h
+@@ -1213,91 +1236,97 @@ install-cross-rest: install-float-h-cross
+ install-float-h-cross:
+ 	if [ -f enquire ] ; then true; else false; done
+ 	-./enquire -f > float.h
 -	-rm -f $(libsubdir)/include/float.h
--	$(INSTALL_DATA) $(tmpdir)/float.h $(libsubdir)/include/float.h
-+	-rm -f $(DESTDIR)$(libsubdir)/include/float.h
-+	$(INSTALL_DATA) $(tmpdir)/float.h $(DESTDIR)$(libsubdir)/include/float.h
- 	-rm -f $(tmpdir)/float.h
+-	$(INSTALL_DATA) float.h $(libsubdir)/include/float.h
 -	chmod a-x $(libsubdir)/include/float.h
++	-rm -f $(DESTDIR)$(libsubdir)/include/float.h
++	$(INSTALL_DATA) float.h $(DESTDIR)$(libsubdir)/include/float.h
 +	chmod a-x $(DESTDIR)$(libsubdir)/include/float.h
  
  # Create the installation directory.
  install-dir:
--	-if [ -d $(libdir) ] ; then true ; else mkdir $(libdir) ; fi
--	-if [ -d $(libdir)/gcc-lib ] ; then true ; else mkdir $(libdir)/gcc-lib ; fi
--	-if [ -d $(libdir)/gcc-lib/include ] ; then true ; else mkdir $(libdir)/gcc-lib/include ; fi
--	-if [ -d $(libdir)/gcc-lib/$(target) ] ; then true ; else mkdir $(libdir)/gcc-lib/$(target) ; fi
--	-if [ -d $(libdir)/gcc-lib/$(target)/$(version) ] ; then true ; else mkdir $(libdir)/gcc-lib/$(target)/$(version) ; fi
--	-if [ -d $(libdir)/gcc-lib/$(target)/$(version)/include ] ; then true ; else mkdir $(libdir)/gcc-lib/$(target)/$(version)/include ; fi
--	-if [ -d $(bindir) ] ; then true ; else mkdir $(bindir) ; fi
--	-if [ -d $(includedir) ] ; then true ; else mkdir $(includedir) ; fi
--	-if [ -d $(includedir) ] ; then true ; else mkdir $(includedir) ; fi
-+	-if [ -d $(DESTDIR)$(libdir) ] ; then true ; else mkdir -p $(DESTDIR)$(libdir) ; fi
-+	-if [ -d $(DESTDIR)$(libdir)/gcc-lib ] ; then true ; else mkdir -p $(DESTDIR)$(libdir)/gcc-lib ; fi
-+	-if [ -d $(DESTDIR)$(libdir)/gcc-lib/include ] ; then true ; else mkdir -p $(DESTDIR)$(libdir)/gcc-lib/include ; fi
-+	-if [ -d $(DESTDIR)$(libdir)/gcc-lib/$(target) ] ; then true ; else mkdir -p $(DESTDIR)$(libdir)/gcc-lib/$(target) ; fi
-+	-if [ -d $(DESTDIR)$(libdir)/gcc-lib/$(target)/$(version) ] ; then true ; else mkdir -p $(DESTDIR)$(libdir)/gcc-lib/$(target)/$(version) ; fi
-+	-if [ -d $(DESTDIR)$(libdir)/gcc-lib/$(target)/$(version)/include ] ; then true ; else mkdir -p $(DESTDIR)$(libdir)/gcc-lib/$(target)/$(version)/include ; fi
-+	-if [ -d $(DESTDIR)$(bindir) ] ; then true ; else mkdir -p $(DESTDIR)$(bindir) ; fi
-+	-if [ -d $(DESTDIR)$(includedir) ] ; then true ; else mkdir -p $(DESTDIR)$(includedir) ; fi
-+	-if [ -d $(DESTDIR)$(includedir) ] ; then true ; else mkdir -p $(DESTDIR)$(includedir) ; fi
- 	-if [ -f gcc-cross ] ; \
- 	then \
--	  if [ -d $(tooldir) ] ; then true ; else mkdir $(tooldir) ; fi ; \
--	  if [ -d $(assertdir) ] ; then true ; else mkdir $(assertdir) ; fi ; \
-+	  if [ -d $(DESTDIR)$(tooldir) ] ; then true ; else mkdir -p $(DESTDIR)$(tooldir) ; fi ; \
-+	  if [ -d $(DESTDIR)$(assertdir) ] ; then true ; else mkdir -p $(DESTDIR)$(assertdir) ; fi ; \
- 	else true; \
- 	fi
+-	if [ -d $(libdir) ] ; then true ; else mkdir $(libdir) ; fi
+-	if [ -d $(libdir)/gcc ] ; then true ; else mkdir $(libdir)/gcc ; fi
+-	if [ -d $(libdir)/gcc/$(target) ] ; then true ; else mkdir $(libdir)/gcc/$(target) ; fi
+-	if [ -d $(libdir)/gcc/$(target)/$(version) ] ; then true ; else mkdir $(libdir)/gcc/$(target)/$(version) ; fi
+-	if [ -d $(bindir) ] ; then true ; else mkdir $(bindir) ; fi
++	if [ -d $(DESTDIR)$(libdir) ] ; then true ; else mkdir -p $(DESTDIR)$(libdir) ; fi
++	if [ -d $(DESTDIR)$(libdir)/gcc-lib ] ; then true ; else mkdir -p $(DESTDIR)$(libdir)/gcc-lib ; fi
++	if [ -d $(DESTDIR)$(libdir)/gcc-lib/$(target) ] ; then true ; else mkdir -p $(DESTDIR)$(libdir)/gcc-lib/$(target) ; fi
++	if [ -d $(DESTDIR)$(libdir)/gcc-lib/$(target)/$(version) ] ; then true ; else mkdir -p $(DESTDIR)$(libdir)/gcc-lib/$(target)/$(version) ; fi
++	if [ -d $(DESTDIR)$(bindir) ] ; then true ; else mkdir -p $(DESTDIR)$(bindir) ; fi
  # We don't use mkdir -p to create the parents of mandir,
  # because some systems don't support it.
  # Instead, we use this technique to create the immediate parent of mandir.
--	-parent=`echo $(mandir)|sed -e 's@/[^/]*$$@@'`; \
+-	parent=`echo $(mandir)|sed -e 's@/[^/]*$$@@'`; \
 -	if [ -d $$parent ] ; then true ; else mkdir $$parent ; fi
 -	-if [ -d $(mandir) ] ; then true ; else mkdir $(mandir) ; fi
-+	-parent=`echo $(DESTDIR)$(mandir)|sed -e 's@/[^/]*$$@@'`; \
++	parent=`echo $(DESTDIR)$(mandir)|sed -e 's@/[^/]*$$@@'`; \
 +	if [ -d $$parent ] ; then true ; else mkdir -p $$parent ; fi
 +	-if [ -d $(DESTDIR)$(mandir) ] ; then true ; else mkdir -p $(DESTDIR)$(mandir) ; fi
  
  # Install the compiler executables built during cross compilation.
- # Deps on  $(srcdir)/g++ $(srcdir)/c++  would be natural here,
-@@ -1462,84 +1486,88 @@ install-dir:
- install-common: native install-dir xgcc $(EXTRA_PARTS)
+ install-common: native install-dir
  	for file in $(COMPILERS); do \
  	  if [ -f $$file ] ; then \
 -	    rm -f $(libsubdir)/$$file; \
@@ -254,7 +245,7 @@ index 05f86e7..57f327a 100644
  	  else true; \
  	  fi; \
  	done
- 	for file in $(EXTRA_PASSES) $(EXTRA_PARTS) $(EXTRA_PROGRAMS) $(USE_COLLECT2) ..; do \
+ 	for file in $(EXTRA_PASSES) $(EXTRA_PARTS) ..; do \
  	  if [ x"$$file" != x.. ]; then \
 -	    rm -f $(libsubdir)/$$file; \
 -	    $(INSTALL_PROGRAM) $$file $(libsubdir)/$$file; \
@@ -262,91 +253,89 @@ index 05f86e7..57f327a 100644
 +	    $(INSTALL_PROGRAM) $$file $(DESTDIR)$(libsubdir)/$$file; \
  	  else true; fi; \
  	done
- # Don't mess with specs if it doesn't exist yet.
- 	-if [ -f specs ] ; then \
--	  rm -f $(libsubdir)/specs; \
--	  $(INSTALL_DATA) specs $(libsubdir)/specs; \
-+	  rm -f $(DESTDIR)$(libsubdir)/specs; \
-+	  $(INSTALL_DATA) specs $(DESTDIR)$(libsubdir)/specs; \
- 	fi
+-	-rm -f $(libsubdir)/specs
+-	$(INSTALL_DATA) specs $(libsubdir)/specs
++	-rm -f $(DESTDIR)$(libsubdir)/specs
++	$(INSTALL_DATA) specs $(DESTDIR)$(libsubdir)/specs
  # Install the driver program as gcc-$(target)
  # and also as either gcc (if native) or $(tooldir)/bin/gcc.
  	-if [ -f gcc-cross ] ; then \
--	  $(INSTALL_PROGRAM) gcc-cross $(bindir)/gcc-$(target); \
 -	  if [ -d $(tooldir)/bin/. ] ; then \
 -	    rm -f $(tooldir)/bin/gcc; \
 -	    $(INSTALL_PROGRAM) gcc-cross $(tooldir)/bin/gcc; \
-+	  $(INSTALL_PROGRAM) gcc-cross $(DESTDIR)$(bindir)/gcc-$(target); \
+-	    $(INSTALL_PROGRAM) gcc-cross $(bindir)/gcc-$(target); \
 +	  if [ -d $(DESTDIR)$(tooldir)/bin/. ] ; then \
 +	    rm -f $(DESTDIR)$(tooldir)/bin/gcc; \
 +	    $(INSTALL_PROGRAM) gcc-cross $(DESTDIR)$(tooldir)/bin/gcc; \
++	    $(INSTALL_PROGRAM) gcc-cross $(DESTDIR)$(bindir)/gcc-$(target); \
  	  else true; fi; \
  	else \
 -	  rm -f $(bindir)/gcc; \
--	  $(INSTALL_PROGRAM) xgcc $(bindir)/gcc; \
+-	  $(INSTALL_PROGRAM) gcc $(bindir)/gcc; \
 -	  rm -f $(bindir)/gcc-$(target)-1; \
 -	  ln $(bindir)/gcc $(bindir)/gcc-$(target)-1; \
 -	  mv $(bindir)/gcc-$(target)-1 $(bindir)/gcc-$(target); \
 +	  rm -f $(DESTDIR)$(bindir)/gcc; \
-+	  $(INSTALL_PROGRAM) xgcc $(DESTDIR)$(bindir)/gcc; \
++	  $(INSTALL_PROGRAM) gcc $(DESTDIR)$(bindir)/gcc; \
 +	  rm -f $(DESTDIR)$(bindir)/$(target)-gcc-1; \
 +	  ln $(DESTDIR)$(bindir)/gcc $(DESTDIR)$(bindir)/$(target)-gcc-1; \
 +	  mv $(DESTDIR)$(bindir)/$(target)-gcc-1 $(DESTDIR)$(bindir)/$(target)-gcc; \
- 	fi
- # Install protoize if it was compiled.
- 	-if [ -f protoize ]; \
- 	then \
--	    rm -f $(bindir)/protoize; \
--	    $(INSTALL_PROGRAM) protoize $(bindir)/protoize; \
-+	    rm -f $(DESTDIR)$(bindir)/protoize; \
-+	    $(INSTALL_PROGRAM) protoize $(DESTDIR)$(bindir)/protoize; \
- 	    rm -f $(bindir)/unprotoize; \
--	    $(INSTALL_PROGRAM) unprotoize $(bindir)/unprotoize; \
-+	    $(INSTALL_PROGRAM) unprotoize $(DESTDIR)$(bindir)/unprotoize; \
- 	    rm -f $(libsubdir)/SYSCALLS.c.X; \
--	    $(INSTALL_DATA) SYSCALLS.c.X $(libsubdir)/SYSCALLS.c.X; \
--	    chmod a-x $(libsubdir)/SYSCALLS.c.X; \
-+	    $(INSTALL_DATA) SYSCALLS.c.X $(DESTDIR)$(libsubdir)/SYSCALLS.c.X; \
-+	    chmod a-x $(DESTDIR)$(libsubdir)/SYSCALLS.c.X; \
 +	fi
 +	-if [ -f cc1plus ] ; then \
-+	  -rm -f $(DESTDIR)$(bindir)/c++; \
 +	  $(INSTALL_PROGRAM) $(srcdir)/c++ $(DESTDIR)$(bindir)/c++; \
-+	  -rm -f $(DESTDIR)$(bindir)/g++; \
-+	  $(INSTALL_PROGRAM) $(srcdir)/g++; $(DESTDIR)$(bindir)/g++; \
++	  $(INSTALL_PROGRAM) $(srcdir)/g++ $(DESTDIR)$(bindir)/g++; \
  	fi
--	-rm -f $(bindir)/c++
 -	$(INSTALL_PROGRAM) $(srcdir)/c++ $(bindir)/c++
--	-rm -f $(bindir)/g++
 -	$(INSTALL_PROGRAM) $(srcdir)/g++ $(bindir)/g++
 -	-rm -f $(libsubdir)/cpp
 -	$(INSTALL_PROGRAM) cpp $(libsubdir)/cpp
 +	-rm -f $(DESTDIR)$(libsubdir)/cpp
 +	$(INSTALL_PROGRAM) cpp $(DESTDIR)$(libsubdir)/cpp
  
+ # Install protoize.
+ install-proto: proto install-dir
+-	-rm -f $(bindir)/protoize
+-	$(INSTALL_PROGRAM) protoize $(bindir)/protoize
+-	-rm -f $(bindir)/unprotoize
+-	$(INSTALL_PROGRAM) unprotoize $(bindir)/unprotoize
+-	-rm -f $(libsubdir)/SYSCALLS.c.X
+-	$(INSTALL_DATA) SYSCALLS.c.X $(libsubdir)/SYSCALLS.c.X
+-	chmod a-x $(libsubdir)/SYSCALLS.c.X
++	-if [ -f protoize ]; then \
++	  rm -f $(DESTDIR)$(bindir)/protoize; \
++	  $(INSTALL_PROGRAM) protoize $(DESTDIR)$(bindir)/protoize; \
++	  rm -f $(DESTDIR)$(bindir)/unprotoize; \
++	  $(INSTALL_PROGRAM) unprotoize $(DESTDIR)$(bindir)/unprotoize; \
++	  rm -f $(DESTDIR)$(libsubdir)/SYSCALLS.c.X; \
++	  $(INSTALL_DATA) SYSCALLS.c.X $(DESTDIR)$(libsubdir)/SYSCALLS.c.X; \
++	  chmod a-x $(DESTDIR)$(libsubdir)/SYSCALLS.c.X; \
++	else true; fi
+ 
  # Install the man pages.
- install-man: install-dir $(srcdir)/gcc.1 $(srcdir)/cccp.1 $(srcdir)/g++.1
+ install-man: install-dir $(srcdir)/gcc.1 protoize.1 unprotoize.1
 -	-rm -f $(mandir)/gcc$(manext)
--	-$(INSTALL_DATA) $(srcdir)/gcc.1 $(mandir)/gcc$(manext)
--	-chmod a-x $(mandir)/gcc$(manext)
--	-rm -f $(mandir)/cccp$(manext)
--	-$(INSTALL_DATA) $(srcdir)/cccp.1 $(mandir)/cccp$(manext)
--	-chmod a-x $(mandir)/cccp$(manext)
--	-$(INSTALL_DATA) $(srcdir)/g++.1 $(mandir)/g++$(manext)
--	-chmod a-x $(mandir)/g++$(manext)
+-	$(INSTALL_DATA) $(srcdir)/gcc.1 $(mandir)/gcc$(manext)
+-	chmod a-x $(mandir)/gcc$(manext)
+-	-rm -f $(mandir)/protoize$(manext)
+-	$(INSTALL_DATA) protoize.1 $(mandir)/protoize$(manext)
+-	chmod a-x $(mandir)/protoize$(manext)
+-	-rm -f $(mandir)/unprotoize$(manext)
+-	$(INSTALL_DATA) unprotoize.1 $(mandir)/unprotoize$(manext)
+-	chmod a-x $(mandir)/unprotoize$(manext)
 +	-rm -f $(DESTDIR)$(mandir)/gcc$(manext)
-+	-$(INSTALL_DATA) $(srcdir)/gcc.1 $(DESTDIR)$(mandir)/gcc$(manext)
-+	-chmod a-x $(DESTDIR)$(mandir)/gcc$(manext)
-+	-rm -f $(DESTDIR)$(mandir)/cccp$(manext)
-+	-$(INSTALL_DATA) $(srcdir)/cccp.1 $(DESTDIR)$(mandir)/cccp$(manext)
-+	-chmod a-x $(DESTDIR)$(mandir)/cccp$(manext)
-+	-if [ -f cc1plus ] ; then \
-+	  $(INSTALL_DATA) $(srcdir)/g++.1 $(DESTDIR)$(mandir)/g++$(manext); \
-+	  chmod a-x $(DESTDIR)$(mandir)/g++$(manext); \
++	$(INSTALL_DATA) $(srcdir)/gcc.1 $(DESTDIR)$(mandir)/gcc$(manext)
++	chmod a-x $(DESTDIR)$(mandir)/gcc$(manext)
++	-if [ -f protoize ]; then \
++	  rm -f $(DESTDIR)$(mandir)/protoize$(manext); \
++	  $(INSTALL_DATA) protoize.1 $(DESTDIR)$(mandir)/protoize$(manext); \
++	  chmod a-x $(DESTDIR)$(mandir)/protoize$(manext); \
++	  rm -f $(DESTDIR)$(mandir)/unprotoize$(manext); \
++	  $(INSTALL_DATA) unprotoize.1 $(DESTDIR)$(mandir)/unprotoize$(manext); \
++	  chmod a-x $(DESTDIR)$(mandir)/unprotoize$(manext); \
 +	fi
  
  # Install the library.
- install-libgcc: libgcc.a install-dir
+ install-libgcc: libgcc.a
  	-if [ -f libgcc.a ] ; then \
 -	  rm -f $(libsubdir)/libgcc.a; \
 -	  $(INSTALL_DATA) libgcc.a $(libsubdir)/libgcc.a; \
@@ -359,25 +348,11 @@ index 05f86e7..57f327a 100644
 +	  chmod a-x $(DESTDIR)$(libsubdir)/libgcc.a; \
  	else true; fi
  
- # Install the objc run time library.
- install-libobjc: libobjc.a install-dir
- 	-if [ -f libobjc.a ] ; then \
--	  rm -f $(libsubdir)/libobjc.a; \
--	  $(INSTALL_DATA) libobjc.a $(libsubdir)/libobjc.a; \
-+	  rm -f $(DESTDIR)$(libsubdir)/libobjc.a; \
-+	  $(INSTALL_DATA) libobjc.a $(DESTDIR)$(libsubdir)/libobjc.a; \
- 	  if $(RANLIB_TEST) ; then \
--	    (cd $(libsubdir); $(RANLIB) libobjc.a); else true; fi; \
--	  chmod a-x $(libsubdir)/libobjc.a; \
-+	    (cd $(DESTDIR)$(libsubdir); $(RANLIB) libobjc.a); else true; fi; \
-+	  chmod a-x $(DESTDIR)$(libsubdir)/libobjc.a; \
- 	else true; fi
- 
  # Install all the header files for native compiler.
-@@ -1547,22 +1575,22 @@ install-headers: install-common-headers install-float-h install-limits-h
+@@ -1305,93 +1334,83 @@ install-headers: install-common-headers install-float-h install-limits-h
  
  # Install float.h for native compiler.
- install-float-h: float.h install-dir
+ install-float-h: float.h
 -	-rm -f $(libsubdir)/include/float.h
 -	$(INSTALL_DATA) float.h $(libsubdir)/include/float.h
 -	chmod a-x $(libsubdir)/include/float.h
@@ -385,21 +360,26 @@ index 05f86e7..57f327a 100644
 +	$(INSTALL_DATA) float.h $(DESTDIR)$(libsubdir)/include/float.h
 +	chmod a-x $(DESTDIR)$(libsubdir)/include/float.h
  
- # Install limits.h.
- install-limits-h: xlimits.h install-dir
--	-rm -f $(libsubdir)/include/limits.h
--	$(INSTALL_DATA) xlimits.h $(libsubdir)/include/limits.h
+ # Install limits.h, optionally inheriting from the standard system version.
+ install-limits-h: limits.h limitx.h
+-	-rm -f $(libsubdir)/include/limits.h tmp-limits.h
++	-rm -f $(DESTDIR)$(libsubdir)/include/limits.h tmp-limits.h
+ 	if [ -f /usr/include/limits.h ] ; then \
+ 	  cat $(srcdir)/limitx.h $(srcdir)/limits.h > tmp-limits.h; \
+ 	else \
+ 	  cat $(srcdir)/limits.h > tmp-limits.h; \
+ 	fi
+-	$(INSTALL_DATA) tmp-limits.h $(libsubdir)/include/limits.h
 -	chmod a-x $(libsubdir)/include/limits.h
-+	-rm -f $(DESTDIR)$(libsubdir)/include/limits.h
-+	$(INSTALL_DATA) xlimits.h $(DESTDIR)$(libsubdir)/include/limits.h
++	$(INSTALL_DATA) tmp-limits.h $(DESTDIR)$(libsubdir)/include/limits.h
 +	chmod a-x $(DESTDIR)$(libsubdir)/include/limits.h
+ 	rm tmp-limits.h
  
  # Install the fixed headers that are the same for all machines.
--install-common-headers: install-dir $(USER_H) gvarargs.h gstdarg.h gstddef.h gsyslimits.h assert.h
--	-if [ -d $(libsubdir)/include ] ; then true ; else mkdir $(libsubdir)/include ; fi
+ install-common-headers: install-dir $(USER_H) gvarargs.h gstdarg.h gstddef.h
+-	if [ -d $(libsubdir)/include ] ; then true ; else mkdir $(libsubdir)/include ; fi
 -	-chmod ugo+rx $(libsubdir)/include
-+install-common-headers: install-dir $(USER_H) gvarargs.h gstdarg.h gstddef.h gsyslimits.h $(INSTALL_ASSERT_H)
-+	-if [ -d $(DESTDIR)$(libsubdir)/include ] ; then true ; else mkdir $(DESTDIR)$(libsubdir)/include ; fi
++	if [ -d $(DESTDIR)$(libsubdir)/include ] ; then true ; else mkdir $(DESTDIR)$(libsubdir)/include ; fi
 +	-chmod ugo+rx $(DESTDIR)$(libsubdir)/include
  # Must compute $(libsubdir) before the cd; the awk script won't work after.
 -	shelllibsubdir=$(libsubdir); \
@@ -407,35 +387,9 @@ index 05f86e7..57f327a 100644
  	cd $(srcdir); \
  	for file in $(USER_H); do \
  	   rm -f $$shelllibsubdir/include/`basename $$file`; \
-@@ -1573,32 +1601,32 @@ install-common-headers: install-dir $(USER_H) gvarargs.h gstdarg.h gstddef.h gsy
- # Don't replace the assert.h already there if it is not from GCC.
- # This code would be simpler if it tested for -f ... && ! grep ...
- # but supposedly the ! operator is missing in sh on some systems.
--	if [ -f $(assertdir)/assert.h ]; \
-+	if [ -f $(DESTDIR)$(assertdir)/assert.h ]; \
- 	then \
--	  if grep "__eprintf" $(assertdir)/assert.h; \
-+	  if grep "__eprintf" $(DESTDIR)$(assertdir)/assert.h; \
- 	    then \
--	    rm -f $(assertdir)/assert.h; \
--	    $(INSTALL_DATA) $(srcdir)/assert.h $(assertdir)/assert.h; \
--	    chmod a-x $(assertdir)/assert.h; \
-+	    rm -f $(DESTDIR)$(assertdir)/assert.h; \
-+	    $(INSTALL_DATA) $(srcdir)/assert.h $(DESTDIR)$(assertdir)/assert.h; \
-+	    chmod a-x $(DESTDIR)$(assertdir)/assert.h; \
- 	  else true; \
- 	  fi; \
- 	else \
--	  rm -f $(assertdir)/assert.h; \
--	  $(INSTALL_DATA) $(srcdir)/assert.h $(assertdir)/assert.h; \
--	  chmod a-x $(assertdir)/assert.h; \
-+	  rm -f $(DESTDIR)$(assertdir)/assert.h; \
-+	  $(INSTALL_DATA) $(srcdir)/assert.h $(DESTDIR)$(assertdir)/assert.h; \
-+	  chmod a-x $(DESTDIR)$(assertdir)/assert.h; \
- 	fi
--	-rm -f $(libsubdir)/include/syslimits.h
--	$(INSTALL_DATA) $(srcdir)/gsyslimits.h $(libsubdir)/include/syslimits.h
--	chmod a-x $(libsubdir)/include/syslimits.h
+ 	   $(INSTALL_DATA) `basename $$file` $$shelllibsubdir/include/`basename $$file`; \
+ 	   chmod a-x $$shelllibsubdir/include/`basename $$file`; \
+ 	done
 -	-rm -f $(libsubdir)/include/varargs.h
 -	$(INSTALL_DATA) $(srcdir)/gvarargs.h $(libsubdir)/include/varargs.h
 -	chmod a-x $(libsubdir)/include/varargs.h
@@ -445,9 +399,6 @@ index 05f86e7..57f327a 100644
 -	-rm -f $(libsubdir)/include/stddef.h
 -	$(INSTALL_DATA) $(srcdir)/gstddef.h $(libsubdir)/include/stddef.h
 -	chmod a-x $(libsubdir)/include/stddef.h
-+	-rm -f $(DESTDIR)$(libsubdir)/include/syslimits.h
-+	$(INSTALL_DATA) $(srcdir)/gsyslimits.h $(DESTDIR)$(libsubdir)/include/syslimits.h
-+	chmod a-x $(DESTDIR)$(libsubdir)/include/syslimits.h
 +	-rm -f $(DESTDIR)$(libsubdir)/include/varargs.h
 +	$(INSTALL_DATA) $(srcdir)/gvarargs.h $(DESTDIR)$(libsubdir)/include/varargs.h
 +	chmod a-x $(DESTDIR)$(libsubdir)/include/varargs.h
@@ -457,11 +408,21 @@ index 05f86e7..57f327a 100644
 +	-rm -f $(DESTDIR)$(libsubdir)/include/stddef.h
 +	$(INSTALL_DATA) $(srcdir)/gstddef.h $(DESTDIR)$(libsubdir)/include/stddef.h
 +	chmod a-x $(DESTDIR)$(libsubdir)/include/stddef.h
- # This is turned off because fixinc.svr4 can now get it directly from srcdir.
- ## Copy byteorder.h into the object file directory 
- ## so that fixinc.svr4 can get at it if necessary.
-@@ -1619,13 +1647,13 @@ install-common-headers: install-dir $(USER_H) gvarargs.h gstdarg.h gstddef.h gsy
+ # Copy byteorder.h into the object file directory 
+ # so that fixinc.svr4 can get at it if necessary.
+ # If the dirs are the same, this won't do anything.
+ 	-cp $(srcdir)/byteorder.h .
  
+-# $(libsubdir)/include:
+-#	if [ -d $(libsubdir)/include ] ; then true ; else mkdir $(libsubdir)/include ; fi
+-#	-chmod ugo+rx $(libsubdir)/include
+-
+-# This appears not to work.  It isn't clear how to fix it.
+-# $(libsubdir)/include/README: $(libsubdir)/include $(srcdir)/fixincludes
+-#	LIB=$(libsubdir)/include $(srcdir)/fixincludes
+-#	$(INSTALL_DATA) $(srcdir)/fixincludes-README $@
+-#	chmod a-x $@
+-
  # Run fixincludes in the proper directory.
  install-fixincludes: install-headers
 -	rm -rf $(libsubdir)/tmp
@@ -469,28 +430,11 @@ index 05f86e7..57f327a 100644
 +	rm -rf $(DESTDIR)$(libsubdir)/tmp
 +	mkdir $(DESTDIR)$(libsubdir)/tmp
  # Move aside the headers that come from GCC; delete all else.
- # The sed command gets just the last file name component;
- # this is necessary because VPATH could add a dirname.
- # Using basename would be simpler, but some systems don't have it.
--	cd $(libsubdir)/include; \
-+	cd $(DESTDIR)$(libsubdir)/include; \
- 	for file in $(INSTALLED_H); do \
- 	  realfile=`echo $$file | sed -e 's|.*/\([^/]*\)$$|\1|'`; \
- 	  mv $$realfile ../tmp; \
-@@ -1635,36 +1663,36 @@ install-fixincludes: install-headers
- 	for dir in $(SYSTEM_HEADER_DIR) $(OTHER_FIXINCLUDES_DIRS); do \
- 	  if [ -d $$dir ]; \
- 	  then \
--	    $(srcdir)/$(FIXINCLUDES) $(libsubdir)/include $$dir $(srcdir); \
-+	    $(srcdir)/$(FIXINCLUDES) $(DESTDIR)$(libsubdir)/include $$dir $(srcdir); \
- 	  else true; fi; \
- 	done
--	-cd $(libsubdir)/include; \
-+	-cd $(DESTDIR)$(libsubdir)/include; \
- 	if [ -f limits.h ]; then \
- 	  rm -f ../tmp/syslimits.h; \
- 	  cp limits.h ../tmp/syslimits.h; \
- 	else true; fi
+-	cd $(libsubdir)/include; mv $(INSTALLED_H) ../tmp; rm -rf *
++	cd $(DESTDIR)$(libsubdir)/include; mv $(INSTALLED_H) ../tmp; rm -rf *
+ # Install fixed copies of system files.
+-	$(srcdir)/$(FIXINCLUDES) $(libsubdir)/include
++	$(srcdir)/$(FIXINCLUDES) $(DESTDIR)$(libsubdir)/include
  # Bring back gcc's header files.
 -	cd $(libsubdir)/include; mv ../tmp/* .; rmdir ../tmp
 +	cd $(DESTDIR)$(libsubdir)/include; mv ../tmp/* .; rmdir ../tmp
@@ -505,60 +449,78 @@ index 05f86e7..57f327a 100644
 -	$(INSTALL_PROGRAM) collect2 $(libsubdir)/ld
 +	$(INSTALL_PROGRAM) collect2 $(DESTDIR)$(libsubdir)/ld
  # Install the driver program as $(libsubdir)/gcc for collect2.
--	$(INSTALL_PROGRAM) xgcc $(libsubdir)/gcc
-+	$(INSTALL_PROGRAM) xgcc $(DESTDIR)$(libsubdir)/gcc
+ 	-if [ -f gcc-cross ] ; then \
+-	  $(INSTALL_PROGRAM) gcc-cross $(libsubdir)/gcc; \
++	  $(INSTALL_PROGRAM) gcc-cross $(DESTDIR)$(libsubdir)/gcc; \
+ 	else \
+-	  $(INSTALL_PROGRAM) gcc $(libsubdir)/gcc; \
++	  $(INSTALL_PROGRAM) gcc $(DESTDIR)$(libsubdir)/gcc; \
+ 	fi
  
  # Cancel installation by deleting the installed files.
  uninstall:
 -	-rm -rf $(libsubdir)
 -	-rm -rf $(bindir)/gcc
+-	-rm -rf $(mandir)/protoize$(manext)
+-	-rm -rf $(mandir)/unprotoize$(manext)
 -	-rm -rf $(bindir)/protoize
 -	-rm -rf $(bindir)/unprotoize
 -	-rm -rf $(mandir)/gcc$(manext)
--	-rm -rf $(mandir)/cccp$(manext)
 -	-rm -rf $(mandir)/protoize$(manext)
 -	-rm -rf $(mandir)/unprotoize$(manext)
 +	-rm -rf $(DESTDIR)$(libsubdir)
 +	-rm -rf $(DESTDIR)$(bindir)/gcc
++	-rm -rf $(DESTDIR)$(mandir)/protoize$(manext)
++	-rm -rf $(DESTDIR)$(mandir)/unprotoize$(manext)
 +	-rm -rf $(DESTDIR)$(bindir)/protoize
 +	-rm -rf $(DESTDIR)$(bindir)/unprotoize
 +	-rm -rf $(DESTDIR)$(mandir)/gcc$(manext)
-+	-rm -rf $(DESTDIR)$(mandir)/cccp$(manext)
 +	-rm -rf $(DESTDIR)$(mandir)/protoize$(manext)
 +	-rm -rf $(DESTDIR)$(mandir)/unprotoize$(manext)
  
  # These exist for maintenance purposes.
  
 diff --git a/c-decl.c b/c-decl.c
-index 0532418..7de04f0 100644
+index 09038c1..834dd55 100644
 --- a/c-decl.c
 +++ b/c-decl.c
-@@ -2805,7 +2805,7 @@ init_decl_processing ()
+@@ -2440,8 +2440,7 @@ init_decl_processing ()
+ 							    endlink))));
+ 
+   /* ``integer_tpe_node'' mispelling corrected: North-Keys 30 Mar 91 */
+-  builtin_function ("__builtin_constant_p",
+-		    build_function_type (integer_type_node, endlink),
++  builtin_function ("__builtin_constant_p", integer_type_node,
+ 		    BUILT_IN_CONSTANT_P, 0);
+ 
+   builtin_function ("__builtin_return_address",
+@@ -2517,7 +2516,7 @@ init_decl_processing ()
    builtin_function ("__builtin_classify_type", default_function_type,
- 		    BUILT_IN_CLASSIFY_TYPE, NULL_PTR);
+ 		    BUILT_IN_CLASSIFY_TYPE, 0);
    builtin_function ("__builtin_next_arg",
 -		    build_function_type (ptr_type_node, endlink),
 +		    build_function_type (ptr_type_node, NULL_TREE),
- 		    BUILT_IN_NEXT_ARG, NULL_PTR);
+ 		    BUILT_IN_NEXT_ARG, 0);
    builtin_function ("__builtin_args_info",
  		    build_function_type (integer_type_node,
 diff --git a/cccp.c b/cccp.c
-index 887db79..6dcc347 100644
+index 5ecc219..d2d63b9 100644
 --- a/cccp.c
 +++ b/cccp.c
-@@ -75,9 +75,11 @@ typedef unsigned char U_CHAR;
- #include <sys/stat.h>
+@@ -63,10 +63,11 @@ typedef unsigned char U_CHAR;
  #include <ctype.h>
  #include <stdio.h>
-+#include <errno.h>		/* This defines "errno" properly */
+ #include <signal.h>
++#include <errno.h>
  
  #ifndef VMS
+-#include <sys/file.h>
  #ifndef USG
 +#include <time.h>
  #include <sys/time.h>		/* for __DATE__ and __TIME__ */
  #include <sys/resource.h>
  #else
-@@ -179,8 +181,13 @@ extern char *getenv ();
+@@ -131,8 +132,13 @@ extern char *getenv ();
  extern FILE *fdopen ();
  extern char *version_string;
  extern struct tm *localtime ();
@@ -572,7 +534,17 @@ index 887db79..6dcc347 100644
  
  #ifndef errno
  extern int errno;
-@@ -534,13 +541,25 @@ static struct default_include { char *fname; int cplusplus; } include_defaults_a
+@@ -328,9 +334,6 @@ static enum {dump_none, dump_only, dump_names, dump_definitions}
+    where they are defined.  */
+ static int debug_output = 0;
+ 
+-/* Holds local startup time.  */
+-static struct tm *timebuf = NULL;
+-
+ /* Nonzero indicates special processing used by the pcp program.  The
+    special effects of this mode are: 
+      
+@@ -479,13 +482,25 @@ static struct default_include { char *fname; int cplusplus; } include_defaults_a
    = {
      /* Pick up GNU C++ specific include files.  */
      { GPLUSPLUS_INCLUDE_DIR, 1},
@@ -599,7 +571,42 @@ index 887db79..6dcc347 100644
      /* Some systems have an extra dir of include files.  */
  #ifdef SYSTEM_INCLUDE_DIR
      { SYSTEM_INCLUDE_DIR, 0},
-@@ -7589,6 +7608,27 @@ delete_newlines (start, length)
+@@ -3384,6 +3399,18 @@ handle_directive (ip, op)
+      That is the responsibility of cc1.  */
+   return 0;
+ }
++
++static struct tm *
++timestamp ()
++{
++  static struct tm *timebuf;
++  if (!timebuf) {
++    time_t t = time (0);
++    timebuf = localtime (&t);
++  }
++  return timebuf;
++}
++
+ 
+ static char *monthnames[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun",
+ 			     "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+@@ -3403,6 +3430,7 @@ special_symbol (hp, op)
+   int i, len;
+   int true_indepth;
+   FILE_BUF *ip = NULL;
++  struct tm *timebuf;
+ 
+   int paren = 0;		/* For special `defined' keyword */
+ 
+@@ -3488,6 +3516,7 @@ special_symbol (hp, op)
+   case T_DATE:
+   case T_TIME:
+     buf = (char *) alloca (20);
++    timebuf = timestamp ();
+     if (hp->type == T_DATE)
+       sprintf (buf, "\"%s %2d %4d\"", monthnames[timebuf->tm_mon],
+ 	      timebuf->tm_mday, timebuf->tm_year + 1900);
+@@ -7345,6 +7374,27 @@ delete_newlines (start, length)
    return obp - start;
  }
  
@@ -627,7 +634,7 @@ index 887db79..6dcc347 100644
  /*
   * error - print error message and increment count of errors.
   */
-@@ -7635,11 +7675,7 @@ error_from_errno (name)
+@@ -7390,11 +7440,7 @@ error_from_errno (name)
  
    if (ip != NULL)
      fprintf (stderr, "%s:%d: ", ip->nominal_fname, ip->lineno);
@@ -640,7 +647,27 @@ index 887db79..6dcc347 100644
  
    errors++;
  }
-@@ -8539,10 +8575,7 @@ perror_with_name (name)
+@@ -7924,11 +7970,6 @@ initialize_builtins (inp, outp)
+      FILE_BUF *inp;
+      FILE_BUF *outp;
+ {
+-  time_t t;
+-
+-  t = time (0);
+-  timebuf = localtime (&t);
+-
+   install ("__LINE__", -1, T_SPECLINE, 0, -1);
+   install ("__DATE__", -1, T_DATE, 0, -1);
+   install ("__FILE__", -1, T_FILE, 0, -1);
+@@ -7951,6 +7992,7 @@ initialize_builtins (inp, outp)
+     {
+       char directive[2048];
+       register struct directive *dp = &directive_table[0];
++      struct tm *timebuf = timestamp ();
+ 
+       sprintf (directive, " __BASE_FILE__ \"%s\"",
+ 	       instack[0].nominal_fname);
+@@ -8294,10 +8336,7 @@ perror_with_name (name)
       char *name;
  {
    fprintf (stderr, "%s: ", progname);
@@ -653,11 +680,11 @@ index 887db79..6dcc347 100644
  }
  
 diff --git a/collect2.c b/collect2.c
-index 70c14ec..50b9b9c 100644
+index 9cbd1c3..7895187 100644
 --- a/collect2.c
 +++ b/collect2.c
-@@ -230,6 +230,9 @@ char *
- my_strerror (e)
+@@ -151,6 +151,9 @@ generic *xmalloc ();
+ char *strerror (e)
       int e;
  {
 +#ifdef HAVE_STRERROR
@@ -666,20 +693,20 @@ index 70c14ec..50b9b9c 100644
    extern char *sys_errlist[];
    extern int sys_nerr;
    static char buffer[30];
-@@ -242,6 +245,7 @@ my_strerror (e)
+@@ -163,6 +166,7 @@ char *strerror (e)
  
    sprintf (buffer, "Unknown error %d", e);
    return buffer;
 +#endif
  }
- 
- /* Delete tempfiles and exit function.  */
+ 
+ #endif
 diff --git a/combine.c b/combine.c
-index 331e6ce..532376e 100644
+index 9f1c65a..1274410 100644
 --- a/combine.c
 +++ b/combine.c
-@@ -74,7 +74,11 @@ the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.  */
-    combine anyway.  */
+@@ -76,7 +76,11 @@ the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.  */
+ #include <stdio.h>
  
  #include "config.h"
 +#ifdef __STDC__
@@ -690,7 +717,7 @@ index 331e6ce..532376e 100644
  #include "rtl.h"
  #include "flags.h"
  #include "regs.h"
-@@ -366,7 +370,7 @@ static int merge_outer_ops ();
+@@ -365,7 +369,7 @@ static int merge_outer_ops ();
  static rtx simplify_shift_const ();
  static int recog_for_combine ();
  static rtx gen_lowpart_for_combine ();
@@ -699,7 +726,7 @@ index 331e6ce..532376e 100644
  static rtx gen_binary ();
  static rtx gen_unary ();
  static enum rtx_code simplify_comparison ();
-@@ -7495,21 +7499,26 @@ gen_lowpart_for_combine (mode, x)
+@@ -6000,21 +6004,26 @@ gen_lowpart_for_combine (mode, x)
  
  /*VARARGS2*/
  static rtx
@@ -729,6 +756,43 @@ index 331e6ce..532376e 100644
 +
    n_args = GET_RTX_LENGTH (code);
    fmt = GET_RTX_FORMAT (code);
+ 
+diff --git a/config/i386.h b/config/i386.h
+index c0cd287..474061c 100644
+--- a/config/i386.h
++++ b/config/i386.h
+@@ -43,6 +43,11 @@ extern int target_flags;
+ 
+ /* Macros used in the machine description to test the flags.  */
+ 
++/* configure can arrage to make this 2, to force a 486.  */
++#ifndef TARGET_CPU_DEFAULT
++#define TARGET_CPU_DEFAULT 0
++#endif
++
+ /* Compile 80387 insns for floating point (not library calls).  */
+ #define TARGET_80387 (target_flags & 1)
+ /* Compile code for an i486. */
+@@ -57,6 +62,11 @@ extern int target_flags;
+    and is not intended to be usable on this cpu.  */
+ #define TARGET_REGPARM (target_flags & 020)
+ 
++/* Functions that return a floating point value may return that value
++   in the 387 FPU or in 386 integer registers.  If set, this flag causes
++   the 387 to be used, which is compatible with most calling conventions. */
++#define TARGET_FLOAT_RETURNS_IN_80387 (target_flags & 0200)
++
+ /* Macro to define tables used to set the flags.
+    This is a list in braces of pairs in braces,
+    each pair being { "NAME", VALUE }
+@@ -73,7 +83,7 @@ extern int target_flags;
+     { "nortd", -8},				\
+     { "regparm", 020},				\
+     { "noregparm", -020},			\
+-    { "", TARGET_DEFAULT}}
++    { "", TARGET_DEFAULT | TARGET_CPU_DEFAULT }}
+ 
+ /* target machine storage layout */
  
 diff --git a/config/i386linux-aout.h b/config/i386linux-aout.h
 new file mode 100644
@@ -813,38 +877,11 @@ index 0000000..a469c58
 +/* Get perform_* macros to build libgcc.a.  */
 +#include "i386perform.h"
 diff --git a/config/i386linux.h b/config/i386linux.h
-index 5b2e96a..ef217b3 100644
---- a/config/i386linux.h
+new file mode 100644
+index 0000000..ef217b3
+--- /dev/null
 +++ b/config/i386linux.h
-@@ -1,84 +1,235 @@
--/* Definitions for Intel 386 running Linux
-- * Copyright (C) 1992 Free Software Foundation, Inc.
-- *
-- * Written by H.J. Lu (hlu@eecs.wsu.edu)
-- *
-- * Linux is a POSIX.1 compatible UNIX clone for i386, which uses GNU
-- * stuffs as the native stuffs.
-- */
--
--#if 0	/* The FSF has fixed the known bugs. But ....... */
--
--/* Linux has a hacked gas 1.38.1, which can handle repz, repnz
-- * and fildll.
-- */
--
--#define GOOD_GAS
--
--#endif
--
--/* This is tested by i386gas.h.  */
--#define YES_UNDERSCORES
--
--#include "i386gstabs.h"
--
--/* Specify predefined symbols in preprocessor.  */
--
--#undef CPP_PREDEFINES
--#define CPP_PREDEFINES "-Dunix -Di386 -Dlinux"
+@@ -0,0 +1,235 @@
 +/* Definitions for Intel 386 running Linux with ELF format
 +   Copyright (C) 1994, 1995 Free Software Foundation, Inc.
 +   Contributed by Eric Youngdale.
@@ -981,60 +1018,29 @@ index 5b2e96a..ef217b3 100644
 +      fprintf (FILE, "\tcall mcount\n");				\
 +    }									\
 +}
- 
- #undef SIZE_TYPE
- #define SIZE_TYPE "unsigned int"
--
++
++#undef SIZE_TYPE
++#define SIZE_TYPE "unsigned int"
 + 
- #undef PTRDIFF_TYPE
- #define PTRDIFF_TYPE "int"
--
++#undef PTRDIFF_TYPE
++#define PTRDIFF_TYPE "int"
 +  
- #undef WCHAR_TYPE
- #define WCHAR_TYPE "long int"
--
++#undef WCHAR_TYPE
++#define WCHAR_TYPE "long int"
 +   
- #undef WCHAR_TYPE_SIZE
- #define WCHAR_TYPE_SIZE BITS_PER_WORD
++#undef WCHAR_TYPE_SIZE
++#define WCHAR_TYPE_SIZE BITS_PER_WORD
 +    
 +#undef CPP_PREDEFINES
 +#define CPP_PREDEFINES "-D__ELF__ -Dunix -Di386 -Dlinux -Asystem(unix) -Asystem(posix) -Acpu(i386) -Amachine(i386)"
- 
--#undef HAVE_ATEXIT
--#define HAVE_ATEXIT
--
--/* Linux uses ctype from glibc.a. I am not sure how complete it is.
-- * For now, we play safe. It may change later.
-- */
--#if 0
--#undef MULTIBYTE_CHARS
--#define MULTIBYTE_CHARS	1
++
 +#undef CPP_SPEC
 +#ifdef USE_GNULIBC_1
 +#if TARGET_CPU_DEFAULT == 2
 +#define CPP_SPEC "%{fPIC:-D__PIC__ -D__pic__} %{fpic:-D__PIC__ -D__pic__} %{!m386:-D__i486__} %{posix:-D_POSIX_SOURCE}"
 +#else
 +#define CPP_SPEC "%{fPIC:-D__PIC__ -D__pic__} %{fpic:-D__PIC__ -D__pic__} %{m486:-D__i486__} %{posix:-D_POSIX_SOURCE}"
- #endif
--
--#undef LIB_SPEC
--#define LIB_SPEC "%{g*:-lg} %{!g*:%{!p:%{!pg:-lc}}%{p:-lgmon -lc_p}%{pg:-lgmon -lc_p}}"
--
--
--#undef STARTFILE_SPEC
--#undef GPLUSPLUS_INCLUDE_DIR
--
--#ifdef CROSS_COMPILE
--
--/*
-- * For cross-compile, we just need to search `$(tooldir)/lib'
-- */
--
--#define STARTFILE_SPEC  \
--  "%{g*:crt0.o%s -static} %{!g*:%{pg:gcrt0.o%s -static} %{!pg:%{p:gcrt0.o%s -static} %{!p:crt0.o%s %{!static:%{nojump:-nojump}} %{static:-static}}}} -L"TOOLDIR"/lib"
--
--/*
-- *The cross-compile uses this.
++#endif
 +#else /* not USE_GNULIBC_1 */
 +#define CPP_SPEC "%(cpp_cpu) %[cpp_cpu] %{fPIC:-D__PIC__ -D__pic__} %{fpic:-D__PIC__ -D__pic__} %{posix:-D_POSIX_SOURCE} %{pthread:-D_REENTRANT}"
 +#endif /* not USE_GNULIBC_1 */
@@ -1048,22 +1054,11 @@ index 5b2e96a..ef217b3 100644
 +/* We no longer link with libc_p.a or libg.a by default. If you
 + * want to profile or debug the Linux C library, please add
 + * -lc_p or -ggdb to LDFLAGS at the link time, respectively.
-  */
--#define GPLUSPLUS_INCLUDE_DIR TOOLDIR"/g++-include"
--
++ */
 +#define LIB_SPEC \
 +  "%{!shared: %{mieee-fp:-lieee} %{p:-lgmon} %{pg:-lgmon} \
 +     %{!ggdb:-lc} %{ggdb:-lg}}"
- #else
--
--#define STARTFILE_SPEC  \
--  "%{g*:crt0.o%s -static} %{!g*:%{pg:gcrt0.o%s -static} %{!pg:%{p:gcrt0.o%s -static} %{!p:crt0.o%s %{!static:%{nojump:-nojump}} %{static:-static}}}}"
--
--/*
-- *The native Linux system uses this.
-- */
--#define GPLUSPLUS_INCLUDE_DIR "/usr/g++-include"
--
++#else
 +#define LIB_SPEC \
 +  "%{!shared: \
 +     %{mieee-fp:-lieee} %{p:-lgmon -lc_p} %{pg:-lgmon -lc_p} \
@@ -1109,7 +1104,7 @@ index 5b2e96a..ef217b3 100644
 +	%{rdynamic:-export-dynamic} \
 +	%{!dynamic-linker:-dynamic-linker /lib/ld-linux.so.1}} \
 +	%{static:-static}}}"
- #endif
++#endif
 +#else /* not USE_GNULIBC_1 */
 +#define LINK_SPEC "-m elf_i386 %{shared:-shared} \
 +  %{!shared: \
@@ -1373,7 +1368,7 @@ index 0000000..c82cfe2
 +#define ENDFILE_SPEC \
 +  "%{!shared:crtend.o%s} %{shared:crtendS.o%s} crtn.o%s"
 diff --git a/config/svr4.h b/config/svr4.h
-index c0fd18f..7f0cbad 100644
+index 7db294c..7377944 100644
 --- a/config/svr4.h
 +++ b/config/svr4.h
 @@ -1,8 +1,7 @@
@@ -1399,7 +1394,21 @@ index c0fd18f..7f0cbad 100644
  
     To use this file, make up a file with a name like:
  
-@@ -65,13 +65,6 @@ the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
+@@ -39,11 +39,8 @@ the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
+    appropriate define for the type of hardware that you are targeting.
+ */
+ 
+-/* Define a symbol so that libgcc* can know what sort of operating
+-   environment and assembler syntax we are targeting for.  */
+-#ifndef SVR4
+-#define SVR4
+-#endif
++/* Define a symbol indicating that we are using svr4.h.  */
++#define USING_SVR4_H
+ 
+ /* For the sake of libgcc2.c, indicate target supports atexit.  */
+ #define HAVE_ATEXIT
+@@ -68,12 +65,6 @@ the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
     || (CHAR) == 'h' \
     || (CHAR) == 'z')
  
@@ -1407,19 +1416,32 @@ index c0fd18f..7f0cbad 100644
 -   there are no such switches except those implemented by GCC itself.  */
 -
 -#define WORD_SWITCH_TAKES_ARG(STR)			\
-- (!strcmp (STR, "include") || !strcmp (STR, "imacros")	\
--  || !strcmp (STR, "aux-info"))
+- (!strcmp (STR, "include") || !strcmp (STR, "imacros"))
 -
  /* You should redefine CPP_PREDEFINES in any file which includes this one.
     The definition should be appropriate for the type of target system
     involved, and it should include any -A (assertion) options which are
-@@ -122,17 +115,25 @@ the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
+@@ -111,24 +102,38 @@ the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
+ #undef ASM_FINAL_SPEC
+ #define ASM_FINAL_SPEC "%{pipe:-}"
+ 
++/* Under svr4, the normal location of the `ld' and `as' programs is the
++   /usr/ccs/bin directory.  */
++
++#undef MD_EXEC_PREFIX
++#define MD_EXEC_PREFIX "/usr/ccs/bin/"
++
+ /* Under svr4, the normal location of the various *crt*.o files is the
+    /usr/ccs/lib directory.  */
+ 
+ #undef MD_STARTFILE_PREFIX
  #define MD_STARTFILE_PREFIX "/usr/ccs/lib/"
  
- /* Provide a LIB_SPEC appropriate for svr4.  Here we tack on the default
+-/* Provide a LIB_SPEC appropropriate for svr4.  Here we tack on the default
 -   standard C library (unless we are building a shared library) followed by
 -   our own magical crtend.o file (see crtstuff.c) which provides part of
 -   the support for getting C++ file-scope static object constructed before
++/* Provide a LIB_SPEC appropriate for svr4.  Here we tack on the default
 +   standard C library (unless we are building a shared library).  */
 +
 +#undef	LIB_SPEC
@@ -1447,18 +1469,31 @@ index c0fd18f..7f0cbad 100644
  
  /* Provide a LINK_SPEC appropriate for svr4.  Here we provide support
     for the special GCC options -static, -shared, and -symbolic which
-@@ -161,8 +162,8 @@ the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
- #define LINK_SPEC "%{h*} %{V} %{v:%{!V:-V}} \
- 		   %{b} %{Wl,*:%*} \
+@@ -154,11 +159,12 @@ the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
+    not being done.  */
+ 
+ #undef	LINK_SPEC
+-#define LINK_SPEC "%{z*} %{h*} %{V} %{v:%{!V:-V}} \
+-		   %{b} %{t} %{Wl,*:%*} \
++#define LINK_SPEC "%{h*} %{V} %{v:%{!V:-V}} \
++		   %{b} %{Wl,*:%*} \
  		   %{static:-dn -Bstatic} \
 -		   %{shared:-G -dy} \
 -		   %{symbolic:-Bsymbolic -G -dy} \
 +		   %{shared:-G -dy -z text %{!h*:%{o*:-h %*}}} \
 +		   %{symbolic:-Bsymbolic -G -dy -z text %{!h*:%{o*:-h %*}}} \
- 		   %{G:-G} \
++		   %{G:-G} \
  		   %{YP,*} \
  		   %{!YP,*:%{p:-Y P,/usr/ccs/lib/libp:/usr/lib/libp:/usr/ccs/lib:/usr/lib} \
-@@ -184,12 +185,13 @@ the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
+ 		    %{!p:-Y P,/usr/ccs/lib:/usr/lib}} \
+@@ -173,28 +179,31 @@ the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
+    The SVR4 library routines query the value of `_lib_version' at run
+    to decide how they should behave.  Specifically, they decide (based
+    upon the value of `_lib_version') if they will act in a strictly ANSI
+-   conformant manner or not.
++   conforming manner or not.
+ */
+ 
  #undef	STARTFILE_SPEC
  #define STARTFILE_SPEC "%{!shared: \
  			 %{!symbolic: \
@@ -1468,6 +1503,8 @@ index c0fd18f..7f0cbad 100644
 -			  %{!ansi: \
 -			   %{traditional:values-Xt.o%s} \
 -			   %{!traditional:values-Xa.o%s}}}} crtbegin.o%s"
+-
+-/* Attach a sepcial .ident directive to the end of the file to identify
 +			  %{pg:gcrt1.o%s}%{!pg:%{p:mcrt1.o%s}%{!p:crt1.o%s}}}}\
 +			%{pg:gcrti.o%s}%{!pg:crti.o%s} \
 +			%{ansi:values-Xc.o%s} \
@@ -1475,10 +1512,45 @@ index c0fd18f..7f0cbad 100644
 +			 %{traditional:values-Xt.o%s} \
 +			 %{!traditional:values-Xa.o%s}} \
 + 			crtbegin.o%s"
- 
- /* Attach a special .ident directive to the end of the file to identify
++
++/* Attach a special .ident directive to the end of the file to identify
     the version of GCC which compiled this code.  The format of the
-@@ -244,6 +246,75 @@ do {				 				\
+-   .ident string is patterened after the ones produced by native svr4
++   .ident string is patterned after the ones produced by native svr4
+    C compilers.  */
+ 
++#define IDENT_ASM_OP ".ident"
++
+ #define ASM_FILE_END(FILE)					\
+ do {				 				\
+-     fprintf ((FILE), "\t.ident\t\"GCC: (GNU) %s\"\n",		\
+-	      version_string);					\
++     fprintf ((FILE), "\t%s\t\"GCC: (GNU) %s\"\n",		\
++	      IDENT_ASM_OP, version_string);			\
+    } while (0)
+ 
+ /* Allow #sccs in preprocessor.  */
+@@ -204,7 +213,7 @@ do {				 				\
+ /* Output #ident as a .ident.  */
+ 
+ #define ASM_OUTPUT_IDENT(FILE, NAME) \
+-  fprintf (FILE, "\t.ident \"%s\"\n", NAME);
++  fprintf (FILE, "\t%s\t\"%s\"\n", IDENT_ASM_OP, NAME);
+ 
+ /* Use periods rather than dollar signs in special g++ assembler names.  */
+ 
+@@ -218,6 +227,10 @@ do {				 				\
+ 
+ #define TARGET_MEM_FUNCTIONS
+ 
++/* Handle #pragma weak and #pragma pack.  */
++
++#define HANDLE_SYSV_PRAGMA
++
+ /* System V Release 4 uses DWARF debugging info.  */
+ 
+ #define DWARF_DEBUGGING_INFO
+@@ -233,6 +246,59 @@ do {				 				\
  
  #undef DBX_REGISTER_NUMBER
  
@@ -1522,22 +1594,6 @@ index c0fd18f..7f0cbad 100644
 +  }									\
 +while (0)
 +
-+/* Like block addresses, stabs line numbers are relative to the
-+   current function.  */
-+
-+#define ASM_OUTPUT_SOURCE_LINE(file, line)				\
-+do									\
-+  {									\
-+    static int sym_lineno = 1;						\
-+    fprintf (file, ".stabn 68,0,%d,.LM%d-",				\
-+	     line, sym_lineno);						\
-+    assemble_name (file,						\
-+		   XSTR (XEXP (DECL_RTL (current_function_decl), 0), 0));\
-+    fprintf (file, "\n.LM%d:\n", sym_lineno);				\
-+    sym_lineno += 1;							\
-+  }									\
-+while (0)
-+
 +/* In order for relative line numbers to work, we must output the
 +   stabs entry for the function name first.  */
 +
@@ -1554,27 +1610,141 @@ index c0fd18f..7f0cbad 100644
  /* Define the actual types of some ANSI-mandated types.  (These
     definitions should work for most SVR4 systems).  */
  
-@@ -324,7 +395,7 @@ do {									\
-   sprintf (LABEL, "*.%s%d", PREFIX, NUM);				\
+@@ -248,8 +314,15 @@ do {				 				\
+ #undef WCHAR_TYPE_SIZE
+ #define WCHAR_TYPE_SIZE BITS_PER_WORD
+ 
++/* This causes trouble, because it requires the host machine
++   to support ANSI C.  */
++/* #define MULTIBYTE_CHARS */
++
+ #undef ASM_BYTE_OP
+-#define ASM_BYTE_OP	"\t.byte"
++#define ASM_BYTE_OP	".byte"
++
++#undef SET_ASM_OP
++#define SET_ASM_OP	".set"
+ 
+ /* This is how to begin an assembly language file.  Most svr4 assemblers want
+    at least a .file directive to come first, and some want to see a .version
+@@ -265,8 +338,11 @@ do {				 				\
+ /* This is how to allocate empty space in some section.  The .zero
+    pseudo-op is used for this on most svr4 assemblers.  */
+ 
++#define SKIP_ASM_OP	".zero"
++
+ #undef ASM_OUTPUT_SKIP
+-#define ASM_OUTPUT_SKIP(FILE,SIZE) fprintf (FILE, "\t.zero\t%u\n", (SIZE))
++#define ASM_OUTPUT_SKIP(FILE,SIZE) \
++  fprintf (FILE, "\t%s\t%u\n", SKIP_ASM_OP, (SIZE))
+ 
+ /* This is how to output a reference to a user-level label named NAME.
+    `assemble_name' uses this.
+@@ -277,6 +353,54 @@ do {				 				\
+ #undef ASM_OUTPUT_LABELREF
+ #define ASM_OUTPUT_LABELREF(FILE,NAME) fprintf (FILE, "%s", NAME)
+ 
++/* This is how to output an internal numbered label where
++   PREFIX is the class of label and NUM is the number within the class.
++
++   For most svr4 systems, the convention is that any symbol which begins
++   with a period is not put into the linker symbol table by the assembler.  */
++
++#undef ASM_OUTPUT_INTERNAL_LABEL
++#define ASM_OUTPUT_INTERNAL_LABEL(FILE, PREFIX, NUM)			\
++do {									\
++  fprintf (FILE, ".%s%d:\n", PREFIX, NUM);				\
++} while (0)
++
++/* This is how to store into the string LABEL
++   the symbol_ref name of an internal numbered label where
++   PREFIX is the class of label and NUM is the number within the class.
++   This is suitable for output with `assemble_name'.
++
++   For most svr4 systems, the convention is that any symbol which begins
++   with a period is not put into the linker symbol table by the assembler.  */
++
++#undef ASM_GENERATE_INTERNAL_LABEL
++#define ASM_GENERATE_INTERNAL_LABEL(LABEL, PREFIX, NUM)			\
++do {									\
++  sprintf (LABEL, "*.%s%d", PREFIX, NUM);				\
++} while (0)
++
++/* Output the label which precedes a jumptable.  Note that for all svr4
++   systems where we actually generate jumptables (which is to say every
++   svr4 target except i386, where we use casesi instead) we put the jump-
++   tables into the .rodata section and since other stuff could have been
++   put into the .rodata section prior to any given jumptable, we have to
++   make sure that the location counter for the .rodata section gets pro-
++   perly re-aligned prior to the actual beginning of the jump table.  */
++
++#define ALIGN_ASM_OP ".align"
++
++#ifndef ASM_OUTPUT_BEFORE_CASE_LABEL
++#define ASM_OUTPUT_BEFORE_CASE_LABEL(FILE,PREFIX,NUM,TABLE) \
++  ASM_OUTPUT_ALIGN ((FILE), 2);
++#endif
++
++#undef ASM_OUTPUT_CASE_LABEL
++#define ASM_OUTPUT_CASE_LABEL(FILE,PREFIX,NUM,JUMPTABLE)		\
++  do {									\
++    ASM_OUTPUT_BEFORE_CASE_LABEL (FILE, PREFIX, NUM, JUMPTABLE)		\
++    ASM_OUTPUT_INTERNAL_LABEL (FILE, PREFIX, NUM);			\
++  } while (0)
++
+ /* The standard SVR4 assembler seems to require that certain builtin
+    library routines (e.g. .udiv) be explicitly declared as .globl
+    in each assembly file where they are referenced.  */
+@@ -289,10 +413,12 @@ do {				 				\
+    the linker seems to want the alignment of data objects
+    to depend on their types.  We do exactly that here.  */
+ 
++#define COMMON_ASM_OP	".comm"
++
+ #undef ASM_OUTPUT_ALIGNED_COMMON
+ #define ASM_OUTPUT_ALIGNED_COMMON(FILE, NAME, SIZE, ALIGN)		\
+ do {									\
+-  fputs ("\t.comm\t", (FILE));						\
++  fprintf ((FILE), "\t%s\t", COMMON_ASM_OP);				\
+   assemble_name ((FILE), (NAME));					\
+   fprintf ((FILE), ",%u,%u\n", (SIZE), (ALIGN) / BITS_PER_UNIT);	\
+ } while (0)
+@@ -302,20 +428,22 @@ do {									\
+    the linker seems to want the alignment of data objects
+    to depend on their types.  We do exactly that here.  */
+ 
+-#define BSS_ASM_OP	"\t.bss"
++#define LOCAL_ASM_OP	".local"
+ 
+ #undef ASM_OUTPUT_ALIGNED_LOCAL
+ #define ASM_OUTPUT_ALIGNED_LOCAL(FILE, NAME, SIZE, ALIGN)		\
+ do {									\
+-  fprintf ((FILE), "%s\t%s,%u,%u\n",					\
+-	   BSS_ASM_OP, (NAME), (SIZE), (ALIGN) / BITS_PER_UNIT);	\
++  fprintf ((FILE), "\t%s\t", LOCAL_ASM_OP);				\
++  assemble_name ((FILE), (NAME));					\
++  fprintf ((FILE), "\n");						\
++  ASM_OUTPUT_ALIGNED_COMMON (FILE, NAME, SIZE, ALIGN);			\
  } while (0)
  
--/* Output the label which preceeds a jumptable.  Note that for all svr4
-+/* Output the label which precedes a jumptable.  Note that for all svr4
-    systems where we actually generate jumptables (which is to say every
-    svr4 target except i386, where we use casesi instead) we put the jump-
-    tables into the .rodata section and since other stuff could have been
-@@ -408,16 +479,33 @@ do {									\
+ /* This is the pseudo-op used to generate a 32-bit word of data with a
+    specific value in some section.  This is the same for all known svr4
+    assemblers.  */
+ 
+-#define INT_ASM_OP		"\t.long\t"
++#define INT_ASM_OP		".long"
+ 
+ /* This is the pseudo-op used to generate a contiguous sequence of byte
+    values from a double-quoted string WITHOUT HAVING A TERMINATING NUL
+@@ -334,17 +462,34 @@ do {									\
+ 
  #define USE_CONST_SECTION	1
  
- #define CONST_SECTION_ASM_OP	".section\t.rodata"
--#define CTORS_SECTION_ASM_OP	".section\t.ctors,\"a\",@progbits"
--#define DTORS_SECTION_ASM_OP	".section\t.dtors,\"a\",@progbits"
- 
--/* On svr4, we *do* have support for the .init section, and we can put
--   stuff in there to be executed before `main'.  We let crtstuff.c and
--   other files know this by defining the following symbol.  The definition
--   says how to change sections to the .init section.  This is the same
--   for all know svr4 assemblers.  */
+-#define CONST_SECTION_ASM_OP	"\t.section\t.rodata"
+-#define CTORS_SECTION_ASM_OP	"\t.section\t.ctors,\"a\",@progbits\n"
+-#define DTORS_SECTION_ASM_OP	"\t.section\t.dtors,\"a\",@progbits\n"
++#define CONST_SECTION_ASM_OP	".section\t.rodata"
++
 +/* Define the pseudo-ops used to switch to the .ctors and .dtors sections.
 +
 +   Note that we want to give these sections the SHF_WRITE attribute
@@ -1592,19 +1762,25 @@ index c0fd18f..7f0cbad 100644
 +
 +#define CTORS_SECTION_ASM_OP	".section\t.ctors,\"aw\""
 +#define DTORS_SECTION_ASM_OP	".section\t.dtors,\"aw\""
-+
+ 
+-/* On svr4, we *do* have support for the .init section, and we can put
+-   stuff in there to be executed before `main'.  We let crtstuff.c and
+-   other files know this by defining the following symbol.  The definition
+-   says how to change sections to the .init section.  This is the same
+-   for all know svr4 assemblers.  */
 +/* On svr4, we *do* have support for the .init and .fini sections, and we
 +   can put stuff in there to be executed before and after `main'.  We let
 +   crtstuff.c and other files know this by defining the following symbols.
 +   The definitions say how to change sections to the .init and .fini
 +   sections.  This is the same for all known svr4 assemblers.  */
  
- #define INIT_SECTION_ASM_OP	".section\t.init"
+-#define INIT_SECTION_ASM_OP	"\t.section\t.init"
++#define INIT_SECTION_ASM_OP	".section\t.init"
 +#define FINI_SECTION_ASM_OP	".section\t.fini"
  
  /* A default list of other sections which we might be "in" at any given
     time.  For targets that use additional sections (e.g. .tdesc) you
-@@ -439,7 +527,7 @@ do {									\
+@@ -366,7 +511,7 @@ do {									\
  
  #define READONLY_DATA_SECTION() const_section ()
  
@@ -1613,7 +1789,43 @@ index c0fd18f..7f0cbad 100644
  
  #define CONST_SECTION_FUNCTION						\
  void									\
-@@ -513,7 +601,10 @@ dtors_section ()							\
+@@ -387,7 +532,7 @@ ctors_section ()							\
+ {									\
+   if (in_section != in_ctors)						\
+     {									\
+-      fprintf (asm_out_file, CTORS_SECTION_ASM_OP);			\
++      fprintf (asm_out_file, "%s\n", CTORS_SECTION_ASM_OP);		\
+       in_section = in_ctors;						\
+     }									\
+ }
+@@ -398,7 +543,7 @@ dtors_section ()							\
+ {									\
+   if (in_section != in_dtors)						\
+     {									\
+-      fprintf (asm_out_file, DTORS_SECTION_ASM_OP);			\
++      fprintf (asm_out_file, "%s\n", DTORS_SECTION_ASM_OP);		\
+       in_section = in_dtors;						\
+     }									\
+ }
+@@ -408,7 +553,7 @@ dtors_section ()							\
+ #define ASM_OUTPUT_CONSTRUCTOR(FILE,NAME)				\
+   do {									\
+     ctors_section ();							\
+-    fprintf (FILE, "%s\t ", INT_ASM_OP);				\
++    fprintf (FILE, "\t%s\t ", INT_ASM_OP);				\
+     assemble_name (FILE, NAME);						\
+     fprintf (FILE, "\n");						\
+   } while (0)
+@@ -418,7 +563,7 @@ dtors_section ()							\
+ #define ASM_OUTPUT_DESTRUCTOR(FILE,NAME)       				\
+   do {									\
+     dtors_section ();                   				\
+-    fprintf (FILE, "%s\t ", INT_ASM_OP);				\
++    fprintf (FILE, "\t%s\t ", INT_ASM_OP);				\
+     assemble_name (FILE, NAME);              				\
+     fprintf (FILE, "\n");						\
+   } while (0)
+@@ -440,7 +585,10 @@ dtors_section ()							\
    else if (TREE_CODE (DECL) == VAR_DECL)				\
      {									\
        if ((flag_pic && RELOC)						\
@@ -1625,11 +1837,14 @@ index c0fd18f..7f0cbad 100644
  	data_section ();						\
        else								\
  	const_section ();						\
-@@ -539,7 +630,12 @@ dtors_section ()							\
+@@ -464,8 +612,14 @@ dtors_section ()							\
+    different pseudo-op names for these, they may be overridden in the
+    file which includes this one.  */
  
- #define TYPE_ASM_OP	".type"
- #define SIZE_ASM_OP	".size"
--#define WEAK_ASM_OP	".weak"
+-#define TYPE_ASM_OP	"\t.type"
+-#define SIZE_ASM_OP	"\t.size"
++#define TYPE_ASM_OP	".type"
++#define SIZE_ASM_OP	".size"
 +
 +/* This is how we tell the assembler that a symbol is weak.  */
 +
@@ -1639,32 +1854,75 @@ index c0fd18f..7f0cbad 100644
  
  /* The following macro defines the format used to output the second
     operand of the .type assembler directive.  Different svr4 assemblers
-@@ -577,24 +673,6 @@ dtors_section ()							\
-     ASM_OUTPUT_LABEL(FILE, NAME);					\
-   } while (0)
+@@ -475,37 +629,31 @@ dtors_section ()							\
  
+ #define TYPE_OPERAND_FMT	"@%s"
+ 
++/* Write the extra assembler code needed to declare a function's result.
++   Most svr4 assemblers don't require any special declaration of the
++   result value, but there are exceptions.  */
++
++#ifndef ASM_DECLARE_RESULT
++#define ASM_DECLARE_RESULT(FILE, RESULT)
++#endif
++
+ /* These macros generate the special .type and .size directives which
+    are used to set the corresponding fields of the linker symbol table
+-   entries in an ELF object file under SVR4.  */
++   entries in an ELF object file under SVR4.  These macros also output
++   the starting labels for the relevant functions/objects.  */
+ 
+-/* Write the extra assembler code needed to declare a function properly.  */
++/* Write the extra assembler code needed to declare a function properly.
++   Some svr4 assemblers need to also have something extra said about the
++   function's return value.  We allow for that here.  */
+ 
+ #define ASM_DECLARE_FUNCTION_NAME(FILE, NAME, DECL)			\
+   do {									\
+-    fprintf (FILE, "%s\t ", TYPE_ASM_OP);				\
++    fprintf (FILE, "\t%s\t ", TYPE_ASM_OP);				\
+     assemble_name (FILE, NAME);						\
+     putc (',', FILE);							\
+     fprintf (FILE, TYPE_OPERAND_FMT, "function");			\
+     putc ('\n', FILE);							\
+-    ASM_OUTPUT_LABEL(FILE, NAME);					\
+-  } while (0)
+-
 -/* Write the extra assembler code needed to declare an object properly.  */
 -
 -#define ASM_DECLARE_OBJECT_NAME(FILE, NAME, DECL)			\
 -  do {									\
--    fprintf (FILE, "\t%s\t ", TYPE_ASM_OP);				\
+-    fprintf (FILE, "%s\t ", TYPE_ASM_OP);				\
 -    assemble_name (FILE, NAME);						\
 -    putc (',', FILE);							\
 -    fprintf (FILE, TYPE_OPERAND_FMT, "object");				\
 -    putc ('\n', FILE);							\
 -    if (!flag_inhibit_size_directive)					\
 -      {									\
--	fprintf (FILE, "\t%s\t ", SIZE_ASM_OP);				\
+-	fprintf (FILE, "%s\t ", SIZE_ASM_OP);				\
 -	assemble_name (FILE, NAME);					\
 -	fprintf (FILE, ",%d\n",  int_size_in_bytes (TREE_TYPE (decl)));	\
 -      }									\
--    ASM_OUTPUT_LABEL(FILE, NAME);					\
--  } while (0)
--
- /* This is how to declare the size of a function.  */
++    ASM_DECLARE_RESULT (FILE, DECL_RESULT (DECL));			\
+     ASM_OUTPUT_LABEL(FILE, NAME);					\
+   } while (0)
  
- #define ASM_DECLARE_FUNCTION_SIZE(FILE, FNAME, DECL)			\
-@@ -627,10 +705,11 @@ dtors_section ()							\
+@@ -520,12 +668,12 @@ dtors_section ()							\
+ 	labelno++;							\
+ 	ASM_GENERATE_INTERNAL_LABEL (label, "Lfe", labelno);		\
+ 	ASM_OUTPUT_INTERNAL_LABEL (FILE, "Lfe", labelno);		\
+-	fprintf (FILE, "%s\t ", SIZE_ASM_OP);				\
++	fprintf (FILE, "\t%s\t ", SIZE_ASM_OP);				\
+ 	assemble_name (FILE, (FNAME));					\
+         fprintf (FILE, ",");						\
+ 	assemble_name (FILE, label);					\
+         fprintf (FILE, "-");						\
+-	ASM_OUTPUT_LABELREF (FILE, (FNAME));				\
++	assemble_name (FILE, (FNAME));					\
+ 	putc ('\n', FILE);						\
+       }									\
+   } while (0)
+@@ -541,10 +689,11 @@ dtors_section ()							\
     in the table.  Note that we can use standard UN*X escape
     sequences for many control characters, but we don't use
     \a to represent BEL because some svr4 assemblers (e.g. on
@@ -1678,7 +1936,16 @@ index c0fd18f..7f0cbad 100644
  \0\0\"\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\
  \0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\\\0\0\0\
  \0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\1\
-@@ -751,3 +830,6 @@ dtors_section ()							\
+@@ -558,7 +707,7 @@ dtors_section ()							\
+    has such a limitation, you should define STRING_LIMIT to reflect that
+    limit.  Note that at least some svr4 assemblers have a limit on the
+    actual number of bytes in the double-quoted string, and that they
+-   count each chanacter in an escape sequence as one byte.  Thus, an
++   count each character in an escape sequence as one byte.  Thus, an
+    escape sequence like \377 would count as four bytes.
+ 
+    If your target assembler doesn't support the .string directive, you
+@@ -665,3 +814,6 @@ dtors_section ()							\
          fprintf ((FILE), "\"\n");					\
      }									\
    while (0)
@@ -1701,16 +1968,50 @@ index 0000000..843fa1b
 +CRTSTUFF_T_CFLAGS_S = -fPIC
 +# Compile libgcc2.a with pic.
 +TARGET_LIBGCC2_CFLAGS = -fPIC
+diff --git a/config/unx386.h b/config/unx386.h
+index 6f517e5..dc5cff0 100644
+--- a/config/unx386.h
++++ b/config/unx386.h
+@@ -41,7 +41,7 @@ the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.  */
+ /* Output the size-letter for an opcode.
+    CODE is the letter used in an operand spec (L, B, W, S or Q).
+    CH is the corresponding lower case letter
+-     (except if CODE is L then CH is `l').  */
++     (except if CODE is `Q' then CH is `l', unless GAS_MNEMONICS).  */
+ #define PUT_OP_SIZE(CODE,CH,FILE) putc (CH,(FILE))
+ 
+ /* Opcode suffix for fullword insn.  */
+@@ -119,3 +119,21 @@ the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.  */
+ 
+ #define ASM_GLOBALIZE_LABEL(FILE,NAME)	\
+   (fputs (".globl ", FILE), assemble_name (FILE, NAME), fputs ("\n", FILE))
++
++/* By default, target has a 80387, uses IEEE compatible arithmetic,
++   and returns float values in the 387, ie,
++   (TARGET_80387 | TARGET_IEEE_FP | TARGET_FLOAT_RETURNS_IN_80387) */
++
++#define TARGET_DEFAULT 0301
++
++/* Floating-point return values come in the FP register.  */
++
++#define VALUE_REGNO(MODE) \
++  (GET_MODE_CLASS (MODE) == MODE_FLOAT				\
++   && TARGET_FLOAT_RETURNS_IN_80387 ? FIRST_FLOAT_REG : 0)
++
++/* 1 if N is a possible register number for a function value. */
++
++#define FUNCTION_VALUE_REGNO_P(N) \
++  ((N) == 0 || ((N)== FIRST_FLOAT_REG && TARGET_FLOAT_RETURNS_IN_80387))
++
 diff --git a/config/x-linux b/config/x-linux
-index 76fc916..db1539e 100644
---- a/config/x-linux
+new file mode 100644
+index 0000000..db1539e
+--- /dev/null
 +++ b/config/x-linux
-@@ -1,5 +1,3 @@
- X_CFLAGS=-DPOSIX
- # we are native.
- prefix=/usr
--# no object c, why bother.
--LANGUAGES = c c++ proto
+@@ -0,0 +1,3 @@
++X_CFLAGS=-DPOSIX
++# we are native.
++prefix=/usr
 diff --git a/config/xm-i386.h b/config/xm-i386.h
 index b617d9b..eb90681 100644
 --- a/config/xm-i386.h
@@ -1724,14 +2025,12 @@ index b617d9b..eb90681 100644
  #endif
  
 diff --git a/config/xm-linux.h b/config/xm-linux.h
-index 39cd2f2..c9795dc 100644
---- a/config/xm-linux.h
+new file mode 100644
+index 0000000..c9795dc
+--- /dev/null
 +++ b/config/xm-linux.h
-@@ -1,10 +1,39 @@
- /* Configuration for GCC for Intel i386 running Linux.
-- *
-- * Written by H.J. Lu (hlu@eecs.wsu.edu)
-- */
+@@ -0,0 +1,44 @@
++/* Configuration for GCC for Intel i386 running Linux.
 +   Copyright (C) 1995 Free Software Foundation, Inc.
 +   Contributed by H.J. Lu (hjl@nynexst.com)
 +
@@ -1751,9 +2050,8 @@ index 39cd2f2..c9795dc 100644
 +along with GNU CC; see the file COPYING.  If not, write to
 +the Free Software Foundation, 59 Temple Place - Suite 330,
 +Boston, MA 02111-1307, USA.  */
- 
- #include "xm-i386.h"
--#include "xm-svr3.h"
++
++#include "xm-i386.h"
 +
 +#define HAVE_VPRINTF
 +
@@ -1768,59 +2066,67 @@ index 39cd2f2..c9795dc 100644
 +/* We do have one, but I'd like to use the one come with gcc since
 +   we have been doing that for a long time with USG defined.  H.J. */
 +#define NO_STAB_H
- 
- #undef BSTRING
- #define BSTRING
-@@ -13,11 +42,3 @@
- #undef bzero
- #undef index
- #undef rindex
--
--#if 0 /* These conflict with stdlib.h in protoize, it is said,
--	 and there's no evidence they are actually needed.  */
--#undef malloc(n)
--#define malloc(n)	malloc ((n) ? (n) : 1)
--#undef calloc(n,e)
--#define calloc(n,e)	calloc (((n) ? (n) : 1), ((e) ? (e) : 1))
--#endif
++
++#undef BSTRING
++#define BSTRING
++#undef bcmp
++#undef bcopy
++#undef bzero
++#undef index
++#undef rindex
 diff --git a/configure b/configure
-index f75c015..9bb1bdf 100755
+index 25660fd..f21ce79 100755
 --- a/configure
 +++ b/configure
-@@ -254,6 +254,7 @@ for machine in $canon_build $canon_host $canon_target; do
+@@ -174,6 +174,8 @@ for machine in $host $target; do
+ 	tm_file=
  	xmake_file=
  	tmake_file=
- 	header_files=
 +	extra_parts=
- 	# Set this to force installation and use of collect2.
- 	use_collect2=
- 	# Set this to override the default target model.
-@@ -375,12 +376,23 @@ for machine in $canon_build $canon_host $canon_target; do
++	target_cpu_default=
+ 
+ 	case $machine in
+ 	# Support site-specific machine types.
+@@ -246,6 +248,24 @@ for machine in $host $target; do
+ 		xm_file=xm-i386sun.h
  		tm_file=i386sun.h
- 		use_collect2=yes
  		;;
--	i[34]86-*-linux*)               # Intel 80386's running Linux
-+	i[34]86-*-linux*aout)           # Intel 80386's running Linux
- 		cpu_type=i386
- 		xm_file=xm-linux.h
- 		xmake_file=x-linux
++	i[34]86-*-linux*aout)               # Intel 80386's running Linux
++		cpu_type=i386
++		xm_file=xm-linux.h
++		xmake_file=x-linux
 +		tm_file=i386linux-aout.h
 +		fixincludes=Makefile.in
 +		broken_install=yes
 +		;;
 +	i[34]86-*-linux*)               # Intel 80386's running Linux
-+		cpu_type=i386           # with ELF support
++		cpu_type=i386               # with ELF support
 +		xm_file=xm-linux.h
 +		xmake_file=x-linux
- 		tm_file=i386linux.h
++		tm_file=i386linux.h
 +		tmake_file=t-linux
 +		fixincludes=Makefile.in
- 		broken_install=yes
++		broken_install=yes
 +		extra_parts="crtbegin.o crtend.o crtbeginS.o crtendS.o"
++		;;
+ 	i386-*-sysv4*)			# Intel 80386's running system V.4
+ 		xm_file=xm-i38v4.h
+ 		xmake_file=x-i386v4
+@@ -606,6 +626,13 @@ for machine in $host $target; do
  		;;
- 	i486-ncr-sysv4*)		# NCR 3000 - i486 running system V.4
- 		cpu_type=i386
-@@ -1230,6 +1242,17 @@ else
+ 	esac
+ 
++	# Distinguish i386 from i486.
++	case $machine in
++	i486-*-*)
++		target_cpu_default=2
++		;;
++	esac
++
+ # Default certain vars that apply to both host and target in turn.
+ 	if [ x$cpu_type = x ]
+ 	then cpu_type=`echo $machine | sed 's/-.*$//'`
+@@ -724,6 +751,29 @@ else
  	mv Makefile.xx Makefile.tem
  fi
  
@@ -1835,14 +2141,36 @@ index f75c015..9bb1bdf 100755
 +	mv Makefile.xx Makefile.tem
 +fi
 +
- # Add a definition of USE_COLLECT2 if system wants one.
- # Also tell toplev.c what to do.
- # This substitutes for lots of t-* files.
++# Add -DTARGET_CPU_DEFAULT for toplev.c if system wants one.
++# This substitutes for lots of *.h files.
++if [ x$target_cpu_default = x ]
++then true
++else
++	rm -f Makefile.xx
++	(echo "MAYBE_TARGET_DEFAULT = -DTARGET_CPU_DEFAULT=$target_cpu_default")\
++ 	   | cat - Makefile.tem > Makefile.xx
++	rm -f Makefile.tem
++	mv Makefile.xx Makefile.tem
++fi
++
+ # Conditionalize the makefile for this target machine.
+ if [ -f ${srcdir}/config/${tmake_file} ]
+ then
 diff --git a/cp-decl.c b/cp-decl.c
-index 4c2ab9a..24233d5 100644
+index 8aacb8b..4bef7c4 100644
 --- a/cp-decl.c
 +++ b/cp-decl.c
-@@ -4316,7 +4316,7 @@ init_decl_processing ()
+@@ -3892,8 +3892,7 @@ init_decl_processing ()
+   vtbl_type_node = build_type_variant (vtbl_type_node, 1, 0);
+   record_builtin_type (RID_MAX, 0, vtbl_type_node);
+ 
+-  builtin_function ("__builtin_constant_p",
+-		    build_function_type (integer_type_node, endlink),
++  builtin_function ("__builtin_constant_p", integer_type_node,
+ 		    BUILT_IN_CONSTANT_P, 0);
+ 
+   builtin_function ("__builtin_alloca",
+@@ -3934,7 +3933,7 @@ init_decl_processing ()
    builtin_function ("__builtin_classify_type", default_function_type,
  		    BUILT_IN_CLASSIFY_TYPE, 0);
    builtin_function ("__builtin_next_arg",
@@ -1852,7 +2180,7 @@ index 4c2ab9a..24233d5 100644
  
    /* Currently under experimentation.  */
 diff --git a/crtstuff.c b/crtstuff.c
-index 0b8fc36..d15a863 100644
+index c72c391..d15a863 100644
 --- a/crtstuff.c
 +++ b/crtstuff.c
 @@ -1,9 +1,9 @@
@@ -1877,7 +2205,20 @@ index 0b8fc36..d15a863 100644
  
  /* As a special exception, if you link this library with files
     compiled with GCC to produce an executable, this does not cause
-@@ -54,23 +55,89 @@ the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.  */
+@@ -41,8 +42,10 @@ the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.  */
+    this file *will* make use of the .init section.  If that symbol is
+    not defined however, then the .init section will not be used.
+ 
+-   Currently, only ELF is actually supported.
+-   The other formats probably need just alternative macro definitions.
++   Currently, only ELF and COFF are supported.  It is likely however that
++   ROSE could also be supported, if someone was willing to do the work to
++   make whatever (small?) adaptations are needed.  (Some work may be
++   needed on the ROSE assembler and linker also.)
+ 
+    This file must be compiled with gcc.  */
+ 
+@@ -52,52 +55,169 @@ the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.  */
  
  #include "tm.h"
  
@@ -1898,11 +2239,11 @@ index 0b8fc36..d15a863 100644
 +   via the SHF_WRITE attribute.)  */
 +
  #ifndef CTORS_SECTION_ASM_OP
--#define CTORS_SECTION_ASM_OP	".section\t.ctors,\"a\",@progbits"
+-#define CTORS_SECTION_ASM_OP	"\t.section\t.ctors,\"a\",@progbits"
 +#define CTORS_SECTION_ASM_OP	".section\t.ctors,\"aw\""
  #endif
  #ifndef DTORS_SECTION_ASM_OP
--#define DTORS_SECTION_ASM_OP	".section\t.dtors,\"a\",@progbits"
+-#define DTORS_SECTION_ASM_OP	"\t.section\t.dtors,\"a\",@progbits"
 +#define DTORS_SECTION_ASM_OP	".section\t.dtors,\"aw\""
  #endif
  
@@ -1916,7 +2257,8 @@ index 0b8fc36..d15a863 100644
 +
  #include "gbl-ctors.h"
  
- #ifndef ON_EXIT
+-#ifndef ON_EXIT /* DO_GLOBAL_CTORS_BODY uses ON_EXIT */
++#ifndef ON_EXIT
  #define ON_EXIT(a, b)
  #endif
 +#define STATIC
@@ -1927,6 +2269,8 @@ index 0b8fc36..d15a863 100644
  
  #ifdef INIT_SECTION_ASM_OP
  
+-/* Force cc1 to switch to .text section.  */
+-static void force_to_text () { }
 +#ifdef OBJECT_FORMAT_ELF
 +
 +/* Run all the global destructors on exit from the program.  */
@@ -1966,38 +2310,52 @@ index 0b8fc36..d15a863 100644
 +
 +#else  /* OBJECT_FORMAT_ELF */
 +
- /* The function __do_global_ctors_aux is compiled twice (once in crtbegin.o
-    and once in crtend.o).  It must be declared static to avoid a link
-    error.  Here, we define __do_global_ctors as an externally callable
-@@ -92,12 +159,12 @@ void __do_global_ctors ()
++/* The function __do_global_ctors_aux is compiled twice (once in crtbegin.o
++   and once in crtend.o).  It must be declared static to avoid a link
++   error.  Here, we define __do_global_ctors as an externally callable
++   function.  It is externally callable so that __main can invoke it when
++   INVOKE__main is defined.  This has the additional effect of forcing cc1
++   to switch to the .text section.  */
++static void __do_global_ctors_aux ();
++void __do_global_ctors ()
++{
++#ifdef INVOKE__main  /* If __main won't actually call __do_global_ctors
++			then it doesn't matter what's inside the function.
++			The inside of __do_global_ctors_aux is called
++			automatically in that case.
++			And the Alliant fx2800 linker crashes
++			on this reference.  So prevent the crash.  */
++  __do_global_ctors_aux ();
++#endif
++}
  
  asm (INIT_SECTION_ASM_OP);	/* cc1 doesn't know that we are switching! */
  
--/* On some svr4 systems, the .init section preamble code provided in
--   crti.o may do some evil things which we have to undo before we reach
--   the function prologue code for __do_global_ctors (directly below).
--   For such systems, define the macro INIT_SECTION_PREAMBLE to
--   expand into the code needed to undo the actions of the crti.o file.  */
--   
 +/* On some svr4 systems, the initial .init section preamble code provided in
 +   crti.o may do something, such as bump the stack, which we have to 
 +   undo before we reach the function prologue code for __do_global_ctors 
 +   (directly below).  For such systems, define the macro INIT_SECTION_PREAMBLE
 +   to expand into the code needed to undo the actions of the crti.o file. */
 +
- #ifdef INIT_SECTION_PREAMBLE
-   INIT_SECTION_PREAMBLE;
- #endif
-@@ -110,30 +177,46 @@ asm (INIT_SECTION_ASM_OP);	/* cc1 doesn't know that we are switching! */
++#ifdef INIT_SECTION_PREAMBLE
++  INIT_SECTION_PREAMBLE;
++#endif
++
+ /* A routine to invoke all of the global constructors upon entry to the
+    program.  We put this into the .init section (for systems that have
+    such a thing) so that we can properly perform the construction of
+    file-scope static-storage C++ objects within shared libraries.   */
+ 
  static void
- __do_global_ctors_aux ()	/* prologue goes in .init section */
+-__do_global_ctors ()		/* prologue goes in .init section */
++__do_global_ctors_aux ()	/* prologue goes in .init section */
  {
 +#ifdef FORCE_INIT_SECTION_ALIGN
 +  FORCE_INIT_SECTION_ALIGN;	/* Explicit align before switch to .text */
 +#endif
    asm (TEXT_SECTION_ASM_OP);	/* don't put epilogue and body in .init */
    DO_GLOBAL_CTORS_BODY;
-   ON_EXIT (__do_global_dtors, 0);
++  ON_EXIT (__do_global_dtors, 0);
  }
  
 +#endif /* OBJECT_FORMAT_ELF */
@@ -2020,24 +2378,25 @@ index 0b8fc36..d15a863 100644
 +
  /* The -1 is a flag to __do_global_[cd]tors
     indicating that this table does not start with a count of elements.  */
- #ifdef CTOR_LIST_BEGIN
- CTOR_LIST_BEGIN;
- #else
++#ifdef CTOR_LIST_BEGIN
++CTOR_LIST_BEGIN;
++#else
  asm (CTORS_SECTION_ASM_OP);	/* cc1 doesn't know that we are switching! */
 -func_ptr __CTOR_LIST__[1] = { (func_ptr) (-1) };
 +STATIC func_ptr __CTOR_LIST__[1] = { (func_ptr) (-1) };
- #endif
++#endif
  
- #ifdef DTOR_LIST_BEGIN
- DTOR_LIST_BEGIN;
- #else
++#ifdef DTOR_LIST_BEGIN
++DTOR_LIST_BEGIN;
++#else
  asm (DTORS_SECTION_ASM_OP);	/* cc1 doesn't know that we are switching! */
 -func_ptr __DTOR_LIST__[1] = { (func_ptr) (-1) };
 +STATIC func_ptr __DTOR_LIST__[1] = { (func_ptr) (-1) };
- #endif
++#endif
  
  #endif /* defined(CRT_BEGIN) */
-@@ -142,17 +225,66 @@ func_ptr __DTOR_LIST__[1] = { (func_ptr) (-1) };
+ 
+@@ -105,34 +225,100 @@ func_ptr __DTOR_LIST__[1] = { (func_ptr) (-1) };
  
  #ifdef INIT_SECTION_ASM_OP
  
@@ -2061,9 +2420,10 @@ index 0b8fc36..d15a863 100644
 +  for (p = __CTOR_END__ - 1; *p != (func_ptr) -1; p--)
 +    (*p) ();
 +}
-+
+ 
 +/* Stick a call to __do_global_ctors_aux into the .init section.  */
-+static void
+ static void
+-__do_global_ctors ()		/* prologue goes in .text section */
 +init_dummy ()
 +{
 +  asm (INIT_SECTION_ASM_OP);
@@ -2111,11 +2471,13 @@ index 0b8fc36..d15a863 100644
 +   include setup operations for very primitive things (e.g. initializing
 +   the state of the floating-point coprocessor, etc.) which should be done
 +   before we start to execute any of the user's code. */
- 
- static void
- __do_global_ctors_aux ()	/* prologue goes in .text section */
-@@ -162,23 +294,31 @@ __do_global_ctors_aux ()	/* prologue goes in .text section */
-   ON_EXIT (__do_global_dtors, 0);
++
++static void
++__do_global_ctors_aux ()	/* prologue goes in .text section */
+ {
+   asm (INIT_SECTION_ASM_OP);
+   DO_GLOBAL_CTORS_BODY;
++  ON_EXIT (__do_global_dtors, 0);
  }				/* epilogue and body go in .init section */
  
 +#endif /* OBJECT_FORMAT_ELF */
@@ -2131,36 +2493,57 @@ index 0b8fc36..d15a863 100644
 +   last, these words naturally end up at the very ends of the two lists
 +   contained in these two sections.  */
 +
- #ifdef CTOR_LIST_END
- CTOR_LIST_END;
- #else
++#ifdef CTOR_LIST_END
++CTOR_LIST_END;
++#else
  asm (CTORS_SECTION_ASM_OP);	/* cc1 doesn't know that we are switching! */
 -func_ptr __CTOR_END__[1] = { (func_ptr) 0 };
 +STATIC func_ptr __CTOR_END__[1] = { (func_ptr) 0 };
- #endif
++#endif
  
- #ifdef DTOR_LIST_END
- DTOR_LIST_END;
- #else
++#ifdef DTOR_LIST_END
++DTOR_LIST_END;
++#else
  asm (DTORS_SECTION_ASM_OP);	/* cc1 doesn't know that we are switching! */
 -func_ptr __DTOR_END__[1] = { (func_ptr) 0 };
 +STATIC func_ptr __DTOR_END__[1] = { (func_ptr) 0 };
- #endif
++#endif
  
  #endif /* defined(CRT_END) */
+diff --git a/dwarfout.c b/dwarfout.c
+index 4357629..20f302c 100644
+--- a/dwarfout.c
++++ b/dwarfout.c
+@@ -48,14 +48,6 @@ extern time_t time ();
+ #endif /* !defined(POSIX) */
+ #endif /* defined(DWARF_TIMESTAMPS) */
+ 
+-#if defined(USG) || defined(POSIX)
+-#include <string.h>
+-#else
+-#include <strings.h>
+-#define strrchr rindex
+-#define getcwd(s,len) getwd(s)
+-#endif
+-
+ /* IMPORTANT NOTE: Please see the file README.DWARF for important details
+    regarding the GNU implementation of Dwarf.  */
+ 
 diff --git a/emit-rtl.c b/emit-rtl.c
-index 1335308..357e23b 100644
+index fd6de5d..1939532 100644
 --- a/emit-rtl.c
 +++ b/emit-rtl.c
-@@ -34,7 +34,11 @@ the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.  */
+@@ -34,8 +34,12 @@ the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.  */
     is the kind of rtx's they make and what arguments they use.  */
  
  #include "config.h"
+-#include <stdio.h>
 +#ifdef __STDC__
 +#include <stdarg.h>
 +#else
  #include "gvarargs.h"
 +#endif
++#include <stdio.h>
  #include "rtl.h"
  #include "flags.h"
  #include "function.h"
@@ -2192,7 +2575,7 @@ index 1335308..357e23b 100644
  
    if (code == CONST_INT)
      {
-@@ -346,15 +354,20 @@ gen_rtx (va_alist)
+@@ -336,15 +344,20 @@ gen_rtx (va_alist)
  
  /*VARARGS1*/
  rtvec
@@ -2218,7 +2601,7 @@ index 1335308..357e23b 100644
    if (n == 0)
      return NULL_RTVEC;		/* Don't allocate an empty rtvec...	*/
 diff --git a/expr.c b/expr.c
-index 1881da4..1de50a3 100644
+index 74fb5a2..787fafb 100644
 --- a/expr.c
 +++ b/expr.c
 @@ -29,7 +29,11 @@ the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.  */
@@ -2233,8 +2616,8 @@ index 1881da4..1de50a3 100644
  #include "typeclass.h"
  
  #define CEIL(x,y) (((x) + (y) - 1) / (y))
-@@ -1941,16 +1945,19 @@ emit_push_insn (x, mode, type, size, align, partial, reg, extra,
-    move memory references across the non-const call.  */
+@@ -1659,16 +1663,19 @@ emit_push_insn (x, mode, type, size, align, partial, reg, extra,
+    to the variable is_const in expand_call.  */
  
  void
 -emit_library_call (va_alist)
@@ -2258,7 +2641,7 @@ index 1881da4..1de50a3 100644
    int inc;
    int count;
    rtx argblock = 0;
-@@ -1959,14 +1966,18 @@ emit_library_call (va_alist)
+@@ -1677,14 +1684,18 @@ emit_library_call (va_alist)
  	       struct args_size offset; struct args_size size; };
    struct arg *argvec;
    int old_inhibit_defer_pop = inhibit_defer_pop;
@@ -2281,10 +2664,10 @@ index 1881da4..1de50a3 100644
    /* Copy all the libcall-arguments out of the varargs data
       and into a vector ARGVEC.
 diff --git a/expr.h b/expr.h
-index 4bcdc17..af9fcd9 100644
+index 68c9221..7f65015 100644
 --- a/expr.h
 +++ b/expr.h
-@@ -527,7 +527,8 @@ extern rtx convert_to_mode ();
+@@ -457,7 +457,8 @@ extern rtx convert_to_mode ();
  /* Emit code to push some arguments and call a library routine,
     storing the value in a specified place.  Calling sequence is
     complicated.  */
@@ -2295,12 +2678,14 @@ index 4bcdc17..af9fcd9 100644
  /* Given an rtx that may include add and multiply operations,
     generate them as insns and return a pseudo-reg containing the value.
 diff --git a/final.c b/final.c
-index 7c3a61b..08b2a18 100644
+index 7fbe8ce..cec09e9 100644
 --- a/final.c
 +++ b/final.c
-@@ -44,7 +44,12 @@ the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.  */
+@@ -43,9 +43,13 @@ the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.  */
+    directly as assembler code by the macros FUNCTION_PROLOGUE and
     FUNCTION_EPILOGUE.  Those instructions never exist as rtl.  */
  
+-#include <stdio.h>
  #include "config.h"
 +#ifdef __STDC__
 +#include <stdarg.h>
@@ -2311,15 +2696,7 @@ index 7c3a61b..08b2a18 100644
  #include "rtl.h"
  #include "regs.h"
  #include "insn-config.h"
-@@ -58,7 +63,6 @@ the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.  */
- #include "hard-reg-set.h"
- #include "defaults.h"
- 
--#include <stdio.h>
- 
- #include "output.h"
- 
-@@ -2374,18 +2378,23 @@ output_addr_const (file, x)
+@@ -2085,18 +2089,23 @@ output_addr_const (file, x)
     Also supported are %d, %x, %s, %e, %f, %g and %%.  */
  
  void
@@ -2349,10 +2726,10 @@ index 7c3a61b..08b2a18 100644
  
    while (c = *p++)
 diff --git a/gcc.c b/gcc.c
-index 80d3edd..70f950d 100644
+index 98e103d..faf254a 100644
 --- a/gcc.c
 +++ b/gcc.c
-@@ -38,9 +38,26 @@ compilation is specified by a string called a "spec".  */
+@@ -39,7 +39,25 @@ compilation is specified by a string called a "spec".  */
  
  #include "config.h"
  #include "obstack.h"
@@ -2362,8 +2739,8 @@ index 80d3edd..70f950d 100644
 +#else
  #include "gvarargs.h"
 +#endif
- #include <stdio.h>
- 
++#include <stdio.h>
++
 +#ifndef VPROTO
 +#ifdef __STDC__
 +#define PVPROTO(ARGS)           ARGS
@@ -2375,11 +2752,35 @@ index 80d3edd..70f950d 100644
 +#define VA_START(va_list,var)   va_start(va_list)
 +#endif
 +#endif
-+
+ 
+ #ifdef USG
  #ifndef R_OK
- #define R_OK 4
- #define W_OK 2
-@@ -176,8 +193,8 @@ static void give_switch ();
+@@ -51,6 +69,24 @@ compilation is specified by a string called a "spec".  */
+ #define vfork fork
+ #endif /* USG */
+ 
++/* Define a generic NULL if one hasn't already been defined.  */
++
++#ifndef NULL
++#define NULL 0
++#endif
++
++#ifndef GENERIC_PTR
++#if defined (USE_PROTOTYPES) ? USE_PROTOTYPES : defined (__STDC__)
++#define GENERIC_PTR void *
++#else
++#define GENERIC_PTR char *
++#endif
++#endif
++
++#ifndef NULL_PTR
++#define NULL_PTR ((GENERIC_PTR)0)
++#endif
++
+ /* On MSDOS, write temp files in current dir
+    because there's no place else we can expect to use.  */
+ #if __MSDOS__
+@@ -136,8 +172,8 @@ static void give_switch ();
  static void pfatal_with_name ();
  static void perror_with_name ();
  static void perror_exec ();
@@ -2390,7 +2791,16 @@ index 80d3edd..70f950d 100644
  void fancy_abort ();
  char *xmalloc ();
  char *xrealloc ();
-@@ -936,6 +953,12 @@ static char *standard_startfile_prefix = STANDARD_STARTFILE_PREFIX;
+@@ -812,7 +848,7 @@ static int machine_explicit;
+ #endif
+ 
+ #ifndef STANDARD_EXEC_PREFIX
+-#define STANDARD_EXEC_PREFIX "/usr/local/lib/gcc/"
++#define STANDARD_EXEC_PREFIX "/usr/local/lib/gcc-lib/"
+ #endif /* !defined STANDARD_EXEC_PREFIX */
+ 
+ static char *standard_exec_prefix = STANDARD_EXEC_PREFIX;
+@@ -832,6 +868,12 @@ static char *standard_startfile_prefix = STANDARD_STARTFILE_PREFIX;
  static char *standard_startfile_prefix_1 = "/lib/";
  static char *standard_startfile_prefix_2 = "/usr/lib/";
  
@@ -2403,9 +2813,34 @@ index 80d3edd..70f950d 100644
  /* Clear out the vector of arguments (after a command is executed).  */
  
  static void
-@@ -2140,6 +2163,40 @@ process_command (argc, argv)
-   add_prefix (&startfile_prefix, standard_exec_prefix, 0, 1, NULL_PTR);
-   add_prefix (&startfile_prefix, standard_exec_prefix_1, 0, 1, NULL_PTR);
+@@ -1549,7 +1591,7 @@ process_command (argc, argv)
+      char **argv;
+ {
+   register int i;
+-  char *temp;
++  char *temp, *gcc_exec_prefix;
+   char *spec_lang = 0;
+   int last_language_n_infiles;
+ 
+@@ -1559,11 +1601,11 @@ process_command (argc, argv)
+ 
+   /* Set up the default search paths.  */
+ 
+-  temp = getenv ("GCC_EXEC_PREFIX");
+-  if (temp)
++  gcc_exec_prefix = getenv ("GCC_EXEC_PREFIX");
++  if (gcc_exec_prefix)
+     {
+-      add_prefix (&exec_prefix, temp, 0, 0, 0);
+-      add_prefix (&startfile_prefix, temp, 0, 0, 0);
++      add_prefix (&exec_prefix, gcc_exec_prefix, 0, 0, 0);
++      add_prefix (&startfile_prefix, gcc_exec_prefix, 0, 0, 0);
+     }
+ 
+   /* COMPILER_PATH and LIBRARY_PATH have values
+@@ -1793,6 +1835,40 @@ process_command (argc, argv)
+   add_prefix (&startfile_prefix, standard_exec_prefix, 0, 1, 0);
+   add_prefix (&startfile_prefix, standard_exec_prefix_1, 0, 1, 0);
  
 +  tooldir_prefix = concat (tooldir_base_prefix, spec_machine, "/");
 +
@@ -2441,10 +2876,20 @@ index 80d3edd..70f950d 100644
 +  add_prefix (&startfile_prefix, concat (tooldir_prefix, "lib", "/"),
 +	      0, 0, NULL_PTR);
 +
-   /* More prefixes are enabled in main, after we read the specs file
-      and determine whether this is cross-compilation or not.  */
+   /* Use the md prefixes only if not cross-compiling.  */
+   if (!strcmp (spec_machine, DEFAULT_TARGET_MACHINE))
+     {
+@@ -2517,6 +2593,9 @@ do_spec_1 (spec, inswitch, soft_matched_part)
+ 		      do_spec_1 (buf, 0, NULL);
+ 		    }
+ 		}
++	       /* Discard the closing paren or bracket.  */
++	       if (*p)
++		 p++;
+ 	    }
+ 	    break;
  
-@@ -3668,44 +3725,47 @@ save_string (s, len)
+@@ -3106,44 +3185,47 @@ save_string (s, len)
    return result;
  }
  
@@ -2514,7 +2959,7 @@ index 80d3edd..70f950d 100644
  }
  
  /* More 'friendly' abort that prints the line and file.
-@@ -3722,14 +3782,19 @@ fancy_abort ()
+@@ -3160,14 +3242,19 @@ fancy_abort ()
  /* Output an error message and exit */
  
  static void
@@ -2538,7 +2983,7 @@ index 80d3edd..70f950d 100644
    fprintf (stderr, "%s: ", programname);
    vfprintf (stderr, format, ap);
    va_end (ap);
-@@ -3739,14 +3804,19 @@ fatal (va_alist)
+@@ -3177,14 +3264,19 @@ fatal (va_alist)
  }
  
  static void
@@ -2551,10 +2996,10 @@ index 80d3edd..70f950d 100644
    char *format;
 +#endif
 +  va_list ap;
-+
-+  VA_START (ap, format);
  
 -  va_start (ap);
++  VA_START (ap, format);
++
 +#ifndef __STDC__
    format = va_arg (ap, char *);
 +#endif
@@ -2562,132 +3007,86 @@ index 80d3edd..70f950d 100644
    fprintf (stderr, "%s: ", programname);
    vfprintf (stderr, format, ap);
    va_end (ap);
-diff --git a/genattrtab.c b/genattrtab.c
-index 4a3e70a..61ff5fb 100644
---- a/genattrtab.c
-+++ b/genattrtab.c
-@@ -94,8 +94,12 @@ the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.  */
-       EQ_ATTR rtx is true if !volatil and false if volatil.  */
- 
- 
--#include "gvarargs.h"
- #include "hconfig.h"
-+#ifdef __STDC__
-+#include <stdarg.h>
-+#else
-+#include "gvarargs.h"
-+#endif
- #include "rtl.h"
- #include "insn-config.h"	/* For REGISTER_CONSTRAINTS */
- #include <stdio.h>
-@@ -310,8 +314,8 @@ static char *alternative_name;
- 
- rtx frame_pointer_rtx, stack_pointer_rtx, arg_pointer_rtx;
- 
--static rtx attr_rtx ();
--static char *attr_printf ();
-+static rtx attr_rtx PVPROTO((enum rtx_code, ...));
-+static char *attr_printf PVPROTO((int, char *, ...));
- static char *attr_string ();
- static rtx check_attr_test ();
- static rtx check_attr_value ();
-@@ -468,11 +472,12 @@ attr_hash_add_string (hashcode, str)
- 
- /*VARARGS1*/
- static rtx
--attr_rtx (va_alist)
--     va_dcl
-+attr_rtx VPROTO((enum rtx_code code, ...))
- {
--  va_list p;
-+#ifndef __STDC__
-   enum rtx_code code;
-+#endif
-+  va_list p;
-   register int i;		/* Array indices...			*/
-   register char *fmt;		/* Current rtx's format...		*/
-   register rtx rt_val;		/* RTX to return to caller...		*/
-@@ -480,8 +485,11 @@ attr_rtx (va_alist)
-   register struct attr_hash *h;
-   struct obstack *old_obstack = rtl_obstack;
- 
--  va_start (p);
-+  VA_START (p, code);
-+
-+#ifndef __STDC__
-   code = va_arg (p, enum rtx_code);
-+#endif
- 
-   /* For each of several cases, search the hash table for an existing entry.
-      Use that entry if one is found; otherwise create a new RTL and add it
-@@ -663,19 +671,24 @@ attr_rtx (va_alist)
- 
- /*VARARGS2*/
- static char *
--attr_printf (va_alist)
--     va_dcl
-+attr_printf VPROTO((register int len, char *fmt, ...))
- {
--  va_list p;
-+#ifndef __STDC__
-   register int len;
-   register char *fmt;
-+#endif
-+  va_list p;
-   register char *str;
- 
-+  VA_START (p, fmt);
-+
-+#ifndef __STDC__
-   /* Print the string into a temporary location.  */
--  va_start (p);
-   len = va_arg (p, int);
--  str = (char *) alloca (len);
-   fmt = va_arg (p, char *);
-+#endif
-+
-+  str = (char *) alloca (len);
-   vsprintf (str, fmt, p);
-   va_end (p);
- 
 diff --git a/gstdarg.h b/gstdarg.h
-index 2b36068..ca79a3e 100644
+index 1382168..ca79a3e 100644
 --- a/gstdarg.h
 +++ b/gstdarg.h
-@@ -11,10 +11,8 @@
- #endif /* not __need___va_list */
- #undef __need___va_list
+@@ -4,64 +4,171 @@
+    Thus, va_arg (..., short) is not valid.  */
+ 
+ #ifndef _STDARG_H
++#ifndef _ANSI_STDARG_H_
++#ifndef __need___va_list
+ #define _STDARG_H
++#define _ANSI_STDARG_H_
++#endif /* not __need___va_list */
++#undef __need___va_list
  
 -#ifndef __GNUC__
--/* Use the system's macros with the system's compiler.
--   This is relevant only when building GCC with some other compiler.  */
+-/* Use the system's macros with the system's compiler.  */
 -#include <stdarg.h>
 +#ifdef __clipper__
 +#include <va-clipper.h>
  #else
  #ifdef __m88k__
- #include <va-m88k.h>
-@@ -37,12 +35,18 @@
- #ifdef __alpha__
- #include <va-alpha.h>
+-#include "va-m88k.h"
++#include <va-m88k.h>
  #else
+ #ifdef __i860__
+-#include "va-i860.h"
++#include <va-i860.h>
+ #else
+-#ifdef __hp9000s800__
+-#include "va-hp800.h"
++#ifdef __hppa__
++#include <va-pa.h>
+ #else
+ #ifdef __mips__
+-#include "va-mips.h"
++#include <va-mips.h>
++#else
++#ifdef __sparc__
++#include <va-sparc.h>
++#else
++#ifdef __i960__
++#include <va-i960.h>
++#else
++#ifdef __alpha__
++#include <va-alpha.h>
++#else
 +#if defined (__H8300__) || defined (__H8300H__)
 +#include <va-h8300.h>
 +#else
 +#if defined (__PPC__) && defined (_CALL_SYSV)
 +#include <va-ppc.h>
-+#else
- 
- /* Define __gnuc_va_list.  */
- 
- #ifndef __GNUC_VA_LIST
- #define __GNUC_VA_LIST
--#if defined(__svr4__) || defined(_AIX) || defined(_M_UNIX)
-+#if defined(__svr4__) || defined(_AIX) || defined(_M_UNIX) || defined(__NetBSD__)
- typedef char *__gnuc_va_list;
  #else
- typedef void *__gnuc_va_list;
-@@ -56,20 +60,25 @@ typedef void *__gnuc_va_list;
+ 
+-#ifdef _HIDDEN_VA_LIST  /* On OSF1, this means varargs.h is "half-loaded".  */
+-#undef _VA_LIST
++/* Define __gnuc_va_list.  */
++
++#ifndef __GNUC_VA_LIST
++#define __GNUC_VA_LIST
++#if defined(__svr4__) || defined(_AIX) || defined(_M_UNIX) || defined(__NetBSD__)
++typedef char *__gnuc_va_list;
++#else
++typedef void *__gnuc_va_list;
++#endif
+ #endif
+ 
+-/* The macro _VA_LIST_ is the same thing used by this file in Ultrix.  */
+-#ifndef _VA_LIST_
+-/* The macro _VA_LIST is used in SCO Unix 3.2.  */
+-#ifndef _VA_LIST
+-#define _VA_LIST_
+-#define _VA_LIST
+-typedef char *va_list;
+-#endif /* _VA_LIST */
+-#endif /* _VA_LIST_ */
++/* Define the standard macros for the user,
++   if this invocation was from the user program.  */
++#ifdef _STDARG_H
+ 
  /* Amount of space required in an argument list for an arg of type TYPE.
     TYPE may alternatively be an expression whose type is used.  */
  
@@ -2699,83 +3098,96 @@ index 2b36068..ca79a3e 100644
    (((sizeof (TYPE) + sizeof (int) - 1) / sizeof (int)) * sizeof (int))
 +#endif
  
+-#ifndef __sparc__
+-#define va_start(AP, LASTARG) 						\
+- (AP = ((char *) __builtin_next_arg ()))
+-#else
  #define va_start(AP, LASTARG) 						\
-- (AP = ((__gnuc_va_list) __builtin_next_arg ()))
+- (__builtin_saveregs (),						\
+-  AP = ((char *) __builtin_next_arg ()))
+-#endif
 + (AP = ((__gnuc_va_list) __builtin_next_arg (LASTARG)))
- 
- #undef va_end
- void va_end (__gnuc_va_list);		/* Defined in libgcc.a */
--#define va_end(AP)
++
++#undef va_end
++void va_end (__gnuc_va_list);		/* Defined in libgcc.a */
 +#define va_end(AP)	((void)0)
  
- /* We cast to void * and then to TYPE * because this avoids
-    a warning about increasing the alignment requirement.  */
+-void va_end (va_list);		/* Defined in libgcc.a */
+-#define va_end(AP)
++/* We cast to void * and then to TYPE * because this avoids
++   a warning about increasing the alignment requirement.  */
  
--#if defined (__arm__) || defined (__i386__) || defined (__ns32000__) || defined (__vax__)
 +#if defined (__arm__) || defined (__i386__) || defined (__i860__) || defined (__ns32000__) || defined (__vax__)
- /* This is for little-endian machines; small args are padded upward.  */
++/* This is for little-endian machines; small args are padded upward.  */
++#define va_arg(AP, TYPE)						\
++ (AP = (__gnuc_va_list) ((char *) (AP) + __va_rounded_size (TYPE)),	\
++  *((TYPE *) (void *) ((char *) (AP) - __va_rounded_size (TYPE))))
++#else /* big-endian */
++/* This is for big-endian machines; small args are padded downward.  */
  #define va_arg(AP, TYPE)						\
-  (AP = (__gnuc_va_list) ((char *) (AP) + __va_rounded_size (TYPE)),	\
-@@ -78,12 +87,14 @@ void va_end (__gnuc_va_list);		/* Defined in libgcc.a */
- /* This is for big-endian machines; small args are padded downward.  */
- #define va_arg(AP, TYPE)						\
-  (AP = (__gnuc_va_list) ((char *) (AP) + __va_rounded_size (TYPE)),	\
--  *((TYPE *) (void *) ((char *) (AP) - ((sizeof (TYPE) < 4		\
--					 ? sizeof (TYPE)		\
--					 : __va_rounded_size (TYPE))))))
+- (AP += __va_rounded_size (TYPE),					\
+-  *((TYPE *) (AP - __va_rounded_size (TYPE))))
++ (AP = (__gnuc_va_list) ((char *) (AP) + __va_rounded_size (TYPE)),	\
 +  *((TYPE *) (void *) ((char *) (AP)					\
 +		       - ((sizeof (TYPE) < __va_rounded_size (char)	\
 +			   ? sizeof (TYPE) : __va_rounded_size (TYPE))))))
- #endif /* big-endian */
- #endif /* _STDARG_H */
++#endif /* big-endian */
++#endif /* _STDARG_H */
  
 +#endif /* not powerpc with V.4 calling sequence */
 +#endif /* not h8300 */
- #endif /* not alpha */
- #endif /* not i960 */
- #endif /* not sparc */
-@@ -91,6 +102,7 @@ void va_end (__gnuc_va_list);		/* Defined in libgcc.a */
- #endif /* not hppa */
++#endif /* not alpha */
++#endif /* not i960 */
++#endif /* not sparc */
+ #endif /* not mips */
+-#endif /* not hp9000s800 */
++#endif /* not hppa */
  #endif /* not i860 */
  #endif /* not m88k */
+-#endif /* __GNUC__ */
 +#endif /* not clipper */
- 
- #ifdef _STDARG_H
- /* Define va_list, if desired, from __gnuc_va_list. */
-@@ -108,34 +120,55 @@ void va_end (__gnuc_va_list);		/* Defined in libgcc.a */
- #undef _BSD_VA_LIST
- #endif
- 
--#ifdef __SVR4_2__
++
++#ifdef _STDARG_H
++/* Define va_list, if desired, from __gnuc_va_list. */
++/* We deliberately do not define va_list when called from
++   stdio.h, because ANSI C says that stdio.h is not supposed to define
++   va_list.  stdio.h needs to have access to that data type, 
++   but must not use that name.  It should use the name __gnuc_va_list,
++   which is safe because it is reserved for the implementation.  */
++
++#ifdef _HIDDEN_VA_LIST  /* On OSF1, this means varargs.h is "half-loaded".  */
++#undef _VA_LIST
++#endif
++
++#ifdef _BSD_VA_LIST
++#undef _BSD_VA_LIST
++#endif
++
 +#ifdef __svr4__
- /* SVR4.2 uses _VA_LIST for an internal alias for va_list,
--   so we must avoid testing it and setting it here.  */
++/* SVR4.2 uses _VA_LIST for an internal alias for va_list,
 +   so we must avoid testing it and setting it here.
 +   SVR4 uses _VA_LIST as a flag in stdarg.h, but we should
 +   have no conflict with that.  */
- #ifndef _VA_LIST_
- #define _VA_LIST_
++#ifndef _VA_LIST_
++#define _VA_LIST_
 +#ifdef __i860__
 +#ifndef _VA_LIST
 +#define _VA_LIST va_list
 +#endif
 +#endif /* __i860__ */
- typedef __gnuc_va_list va_list;
- #endif /* _VA_LIST_ */
--#else /* not __SVR4_2__ */
++typedef __gnuc_va_list va_list;
++#endif /* _VA_LIST_ */
 +#else /* not __svr4__ */
- 
- /* The macro _VA_LIST_ is the same thing used by this file in Ultrix.
-    But on BSD NET2 we must not test or define or undef it.
-    (Note that the comments in NET 2's ansi.h
-    are incorrect for _VA_LIST_--see stdio.h!)  */
--#if !defined (_VA_LIST_) || defined (__BSD_NET2__) || defined (____386BSD____)
++
++/* The macro _VA_LIST_ is the same thing used by this file in Ultrix.
++   But on BSD NET2 we must not test or define or undef it.
++   (Note that the comments in NET 2's ansi.h
++   are incorrect for _VA_LIST_--see stdio.h!)  */
 +#if !defined (_VA_LIST_) || defined (__BSD_NET2__) || defined (____386BSD____) || defined (__bsdi__) || defined (__sequent__) || defined (__FreeBSD__) || defined(WINNT)
 +/* The macro _VA_LIST_DEFINED is used in Windows NT 3.5  */
 +#ifndef _VA_LIST_DEFINED
- /* The macro _VA_LIST is used in SCO Unix 3.2.  */
- #ifndef _VA_LIST
--#if !(defined (__BSD_NET2__) || defined (____386BSD____))
++/* The macro _VA_LIST is used in SCO Unix 3.2.  */
++#ifndef _VA_LIST
 +/* The macro _VA_LIST_T_H is used in the Bull dpx2  */
 +#ifndef _VA_LIST_T_H
 +typedef __gnuc_va_list va_list;
@@ -2783,13 +3195,10 @@ index 2b36068..ca79a3e 100644
 +#endif /* not _VA_LIST */
 +#endif /* not _VA_LIST_DEFINED */
 +#if !(defined (__BSD_NET2__) || defined (____386BSD____) || defined (__bsdi__) || defined (__sequent__) || defined (__FreeBSD__))
- #define _VA_LIST_
- #endif
++#define _VA_LIST_
++#endif
 +#ifndef _VA_LIST
- #define _VA_LIST
--typedef __gnuc_va_list va_list;
--#endif /* not _VA_LIST */
--#endif /* not _VA_LIST_ */
++#define _VA_LIST
 +#endif
 +#ifndef _VA_LIST_DEFINED
 +#define _VA_LIST_DEFINED
@@ -2799,79 +3208,75 @@ index 2b36068..ca79a3e 100644
 +#endif
 +
 +#endif /* not _VA_LIST_, except on certain systems */
- 
--#endif /* not __SVR4_2__ */
++
 +#endif /* not __svr4__ */
- 
++
  #endif /* _STDARG_H */
- 
--#endif /* __GNUC__ */
- #endif /* not _ANSI_STDARG_H_ */
- #endif /* not _STDARG_H */
++
++#endif /* not _ANSI_STDARG_H_ */
++#endif /* not _STDARG_H */
 diff --git a/gstddef.h b/gstddef.h
-index 4601547..af3071f 100644
+index 9ceb469..af3071f 100644
 --- a/gstddef.h
 +++ b/gstddef.h
-@@ -1,6 +1,7 @@
+@@ -1,12 +1,88 @@
  #ifndef _STDDEF_H
  #ifndef _STDDEF_H_
- #ifndef _ANSI_STDDEF_H
++#ifndef _ANSI_STDDEF_H
 +#ifndef __STDDEF_H__
- 
- /* Any one of these symbols __need_* means that GNU libc
-    wants us just to define one data type.  So don't define
-@@ -11,6 +12,8 @@
++
++/* Any one of these symbols __need_* means that GNU libc
++   wants us just to define one data type.  So don't define
++   the symbols that indicate this file's entire job has been done.  */
++#if (!defined(__need_wchar_t) && !defined(__need_size_t)	\
++     && !defined(__need_ptrdiff_t) && !defined(__need_NULL))
+ #define _STDDEF_H
  #define _STDDEF_H_
- /* snaroff@next.com says the NeXT needs this.  */
- #define _ANSI_STDDEF_H
++/* snaroff@next.com says the NeXT needs this.  */
++#define _ANSI_STDDEF_H
 +/* Irix 5.1 needs this.  */
 +#define __STDDEF_H__
- #endif
++#endif
  
  #ifndef __sys_stdtypes_h
-@@ -19,28 +22,66 @@
+-/* This avoids lossage on Sunos but only if stdtypes.h comes first.
++/* This avoids lossage on SunOS but only if stdtypes.h comes first.
+    There's no way to win with the other order!  Sun lossage.  */
  
- /* On 4.3bsd-net2, make sure ansi.h is included, so we have
-    one less case to deal with in the following.  */
--#if defined (__BSD_NET2__) || defined (____386BSD____)
++/* On 4.3bsd-net2, make sure ansi.h is included, so we have
++   one less case to deal with in the following.  */
 +#if defined (__BSD_NET2__) || defined (____386BSD____) || defined (__FreeBSD__) || defined(__NetBSD__)
- #include <machine/ansi.h>
- #endif
- 
- /* In 4.3bsd-net2, machine/ansi.h defines these symbols, which are
--    defined if the corresponding type is *not* defined.  */
--#ifdef _ANSI_H_
--#ifndef _SIZE_T_
++#include <machine/ansi.h>
++#endif
++
++/* In 4.3bsd-net2, machine/ansi.h defines these symbols, which are
 +   defined if the corresponding type is *not* defined.
 +   FreeBSD-2.1 defines _MACHINE_ANSI_H_ instead of _ANSI_H_ */
 +#if defined(_ANSI_H_) || defined(_MACHINE_ANSI_H_)
 +#if !defined(_SIZE_T_) && !defined(_BSD_SIZE_T_)
- #define _SIZE_T
- #endif
--#ifndef _PTRDIFF_T_
++#define _SIZE_T
++#endif
 +#if !defined(_PTRDIFF_T_) && !defined(_BSD_PTRDIFF_T_)
- #define _PTRDIFF_T
- #endif
--#ifndef _WCHAR_T_
++#define _PTRDIFF_T
++#endif
 +/* On BSD/386 1.1, at least, machine/ansi.h defines _BSD_WCHAR_T_
 +   instead of _WCHAR_T_. */
 +#if !defined(_WCHAR_T_) && !defined(_BSD_WCHAR_T_)
 +#ifndef _BSD_WCHAR_T_
- #define _WCHAR_T
- #endif
++#define _WCHAR_T
++#endif
 +#endif
 +/* Undef _FOO_T_ if we are supposed to define foo_t.  */
 +#if defined (__need_ptrdiff_t) || defined (_STDDEF_H_)
- #undef _PTRDIFF_T_
--#ifndef __need_ptrdiff_t
++#undef _PTRDIFF_T_
 +#undef _BSD_PTRDIFF_T_
 +#endif
 +#if defined (__need_size_t) || defined (_STDDEF_H_)
- #undef _SIZE_T_
++#undef _SIZE_T_
 +#undef _BSD_SIZE_T_
 +#endif
 +#if defined (__need_wchar_t) || defined (_STDDEF_H_)
- #undef _WCHAR_T_
++#undef _WCHAR_T_
 +#undef _BSD_WCHAR_T_
 +#endif
 +#endif /* defined(_ANSI_H_) || defined(_MACHINE_ANSI_H_) */
@@ -2899,41 +3304,60 @@ index 4601547..af3071f 100644
 +#if defined (_TYPE_wchar_t) && (defined (__need_wchar_t) || defined (_STDDEF_H_))
 +_TYPE_wchar_t;
 +#undef _TYPE_wchar_t
- #endif
--#endif /* _ANSI_H_ */
- 
++#endif
++
  /* In case nobody has defined these types, but we aren't running under
     GCC 2.00, make sure that __PTRDIFF_TYPE__, __SIZE__TYPE__, and
-@@ -58,6 +99,7 @@
+    __WCHAR_TYPE__ have reasonable values.  This can happen if the
+@@ -15,65 +91,153 @@
+ 
+ /* Signed type of difference of two pointers.  */
+ 
++/* Define this type if we are doing the whole job,
++   or if we want this type in particular.  */
++#if defined (_STDDEF_H) || defined (__need_ptrdiff_t)
+ #ifndef _PTRDIFF_T	/* in case <sys/types.h> has defined it. */
++#ifndef _T_PTRDIFF_
  #ifndef _T_PTRDIFF
  #ifndef __PTRDIFF_T
  #ifndef _PTRDIFF_T_
 +#ifndef _BSD_PTRDIFF_T_
  #ifndef ___int_ptrdiff_t_h
- #ifndef _GCC_PTRDIFF_T
++#ifndef _GCC_PTRDIFF_T
  #define _PTRDIFF_T
-@@ -65,6 +107,7 @@
++#define _T_PTRDIFF_
  #define _T_PTRDIFF
  #define __PTRDIFF_T
  #define _PTRDIFF_T_
 +#define _BSD_PTRDIFF_T_
  #define ___int_ptrdiff_t_h
- #define _GCC_PTRDIFF_T
++#define _GCC_PTRDIFF_T
  #ifndef __PTRDIFF_TYPE__
-@@ -73,6 +116,7 @@
+ #define __PTRDIFF_TYPE__ long int
+ #endif
  typedef __PTRDIFF_TYPE__ ptrdiff_t;
- #endif /* _GCC_PTRDIFF_T */
++#endif /* _GCC_PTRDIFF_T */
  #endif /* ___int_ptrdiff_t_h */
 +#endif /* _BSD_PTRDIFF_T_ */
  #endif /* _PTRDIFF_T_ */
  #endif /* __PTRDIFF_T */
  #endif /* _T_PTRDIFF */
-@@ -90,32 +134,49 @@ typedef __PTRDIFF_TYPE__ ptrdiff_t;
-    or if we want this type in particular.  */
- #if defined (_STDDEF_H) || defined (__need_size_t)
++#endif /* _T_PTRDIFF_ */
+ #endif /* _PTRDIFF_T */
+ 
++/* If this symbol has done its job, get rid of it.  */
++#undef	__need_ptrdiff_t
++
++#endif /* _STDDEF_H or __need_ptrdiff_t.  */
++
+ /* Unsigned type of `sizeof' something.  */
+ 
++/* Define this type if we are doing the whole job,
++   or if we want this type in particular.  */
++#if defined (_STDDEF_H) || defined (__need_size_t)
  #ifndef _SIZE_T	/* in case <sys/types.h> has defined it. */
 +#ifndef _SYS_SIZE_T_H
- #ifndef _T_SIZE_
++#ifndef _T_SIZE_
  #ifndef _T_SIZE
  #ifndef __SIZE_T
  #ifndef _SIZE_T_
@@ -2941,12 +3365,12 @@ index 4601547..af3071f 100644
 +#ifndef _SIZE_T_DEFINED_
 +#ifndef _SIZE_T_DEFINED
  #ifndef ___int_size_t_h
- #ifndef _GCC_SIZE_T
- #ifndef _SIZET_
++#ifndef _GCC_SIZE_T
++#ifndef _SIZET_
 +#ifndef __size_t
  #define _SIZE_T
 +#define _SYS_SIZE_T_H
- #define _T_SIZE_
++#define _T_SIZE_
  #define _T_SIZE
  #define __SIZE_T
  #define _SIZE_T_
@@ -2954,8 +3378,8 @@ index 4601547..af3071f 100644
 +#define _SIZE_T_DEFINED_
 +#define _SIZE_T_DEFINED
  #define ___int_size_t_h
- #define _GCC_SIZE_T
- #define _SIZET_
++#define _GCC_SIZE_T
++#define _SIZET_
 +#define __size_t
  #ifndef __SIZE_TYPE__
  #define __SIZE_TYPE__ long unsigned int
@@ -2964,8 +3388,8 @@ index 4601547..af3071f 100644
  typedef __SIZE_TYPE__ size_t;
 +#endif /* !(defined (__GNUG__) && defined (size_t)) */
 +#endif /* __size_t */
- #endif /* _SIZET_ */
- #endif /* _GCC_SIZE_T */
++#endif /* _SIZET_ */
++#endif /* _GCC_SIZE_T */
  #endif /* ___int_size_t_h */
 +#endif /* _SIZE_T_DEFINED */
 +#endif /* _SIZE_T_DEFINED_ */
@@ -2973,12 +3397,24 @@ index 4601547..af3071f 100644
  #endif /* _SIZE_T_ */
  #endif /* __SIZE_T */
  #endif /* _T_SIZE */
- #endif /* _T_SIZE_ */
++#endif /* _T_SIZE_ */
 +#endif /* _SYS_SIZE_T_H */
  #endif /* _SIZE_T */
- #undef	__need_size_t
- #endif /* _STDDEF_H or __need_size_t.  */
-@@ -134,24 +195,49 @@ typedef __SIZE_TYPE__ size_t;
++#undef	__need_size_t
++#endif /* _STDDEF_H or __need_size_t.  */
+ 
+-/* Data type for wide chars.  */
+ 
++/* Wide character type.
++   Locale-writers should change this as necessary to
++   be big enough to hold unique values not between 0 and 127,
++   and not (wchar_t) -1, for each defined multibyte character.  */
++
++/* Define this type if we are doing the whole job,
++   or if we want this type in particular.  */
++#if defined (_STDDEF_H) || defined (__need_wchar_t)
+ #ifndef _WCHAR_T
+ #ifndef _T_WCHAR_
  #ifndef _T_WCHAR
  #ifndef __WCHAR_T
  #ifndef _WCHAR_T_
@@ -2988,7 +3424,7 @@ index 4601547..af3071f 100644
 +#ifndef _WCHAR_T_H
  #ifndef ___int_wchar_t_h
 +#ifndef __INT_WCHAR_T_H
- #ifndef _GCC_WCHAR_T
++#ifndef _GCC_WCHAR_T
  #define _WCHAR_T
  #define _T_WCHAR_
  #define _T_WCHAR
@@ -3000,7 +3436,7 @@ index 4601547..af3071f 100644
 +#define _WCHAR_T_H
  #define ___int_wchar_t_h
 +#define __INT_WCHAR_T_H
- #define _GCC_WCHAR_T
++#define _GCC_WCHAR_T
 +
 +/* On BSD/386 1.1, at least, machine/ansi.h defines _BSD_WCHAR_T_
 +   instead of _WCHAR_T_, and _BSD_RUNE_T_ (which, unlike the other
@@ -3024,17 +3460,11 @@ index 4601547..af3071f 100644
  #ifndef __WCHAR_TYPE__
  #define __WCHAR_TYPE__ int
  #endif
--#ifdef __GNUG__
--/* In C++, wchar_t is a distinct basic type,
--   and we can expect __wchar_t to be defined by cc1plus.  */
--typedef __wchar_t wchar_t;
--#else
--/* In C, cpp tells us which type to make an alias for.  */
 +#ifndef __cplusplus
  typedef __WCHAR_TYPE__ wchar_t;
  #endif
  #endif
-@@ -161,22 +247,45 @@ typedef __WCHAR_TYPE__ wchar_t;
+@@ -81,17 +245,67 @@ typedef __WCHAR_TYPE__ wchar_t;
  #endif
  #endif
  #endif
@@ -3043,37 +3473,33 @@ index 4601547..af3071f 100644
 +#endif
 +#endif
 +#endif
- #undef	__need_wchar_t
- #endif /* _STDDEF_H or __need_wchar_t.  */
- 
- /*  In 4.3bsd-net2, leave these undefined to indicate that size_t, etc.
--    are already defined.  We need not worry about the case of wanting just
--    one of these types, not on 4.3bsd-net2, because only the GNU libc
--    header files do that.  */
++#endif
++#endif
++#undef	__need_wchar_t
++#endif /* _STDDEF_H or __need_wchar_t.  */
++
++/*  In 4.3bsd-net2, leave these undefined to indicate that size_t, etc.
 +    are already defined.  */
- #ifdef _ANSI_H_
++#ifdef _ANSI_H_
 +/*  The references to _GCC_PTRDIFF_T_, _GCC_SIZE_T_, and _GCC_WCHAR_T_
 +    are probably typos and should be removed before 2.8 is released.  */
 +#ifdef _GCC_PTRDIFF_T_
- #undef _PTRDIFF_T_
--#ifdef _STDDEF_H /* This is a kludge.
--		    _STDDEF_H is defined when we are using the whole file,
--		    undefined when obstack.h wants just ptrdiff_t.  */
++#undef _PTRDIFF_T_
 +#undef _BSD_PTRDIFF_T_
 +#endif
 +#ifdef _GCC_SIZE_T_
- #undef _SIZE_T_
++#undef _SIZE_T_
 +#undef _BSD_SIZE_T_
 +#endif
 +#ifdef _GCC_WCHAR_T_
- #undef _WCHAR_T_
++#undef _WCHAR_T_
 +#undef _BSD_WCHAR_T_
 +#endif
 +/*  The following ones are the real ones.  */
 +#ifdef _GCC_PTRDIFF_T
 +#undef _PTRDIFF_T_
 +#undef _BSD_PTRDIFF_T_
- #endif
++#endif
 +#ifdef _GCC_SIZE_T
 +#undef _SIZE_T_
 +#undef _BSD_SIZE_T_
@@ -3081,21 +3507,35 @@ index 4601547..af3071f 100644
 +#ifdef _GCC_WCHAR_T
 +#undef _WCHAR_T_
 +#undef _BSD_WCHAR_T_
- #endif
++#endif
 +#endif /* _ANSI_H_ */
  
  #endif /* __sys_stdtypes_h */
  
-@@ -196,6 +305,7 @@ typedef __WCHAR_TYPE__ wchar_t;
+ /* A null pointer constant.  */
  
- #endif /* _STDDEF_H was defined this time */
++#if defined (_STDDEF_H) || defined (__need_NULL)
+ #undef NULL		/* in case <stdio.h> has defined it. */
+ #define NULL ((void *)0)
++#endif	/* NULL not defined and <stddef.h> or need NULL.  */
++#undef	__need_NULL
++
++#ifdef _STDDEF_H
  
+ /* Offset of member MEMBER in a struct of type TYPE.  */
+ 
+ #define offsetof(TYPE, MEMBER) ((size_t) &((TYPE *)0)->MEMBER)
+ 
+-#endif /* _STDDEF_H_ */
+-#endif /* _STDDEF_H */
++#endif /* _STDDEF_H was defined this time */
++
 +#endif /* __STDDEF_H__ was not defined before */
- #endif /* _ANSI_STDDEF_H was not defined before */
- #endif /* _STDDEF_H_ was not defined before */
- #endif /* _STDDEF_H was not defined before */
++#endif /* _ANSI_STDDEF_H was not defined before */
++#endif /* _STDDEF_H_ was not defined before */
++#endif /* _STDDEF_H was not defined before */
 diff --git a/output.h b/output.h
-index 480c9e3..6726466 100644
+index edf68ff..660ab01 100644
 --- a/output.h
 +++ b/output.h
 @@ -18,13 +18,33 @@ You should have received a copy of the GNU General Public License
@@ -3131,13 +3571,13 @@ index 480c9e3..6726466 100644
 -extern void asm_fprintf ();
 +extern void asm_fprintf STDIO_PROTO(PVPROTO((FILE *file, char *p, ...)));
  
- /* Print an integer constant expression in assembler syntax.
-    Addition and subtraction are the only arithmetic
+ /* Replace a SUBREG with a REG or a MEM, based on the thing it is a
+    subreg of.  */
 diff --git a/protoize.c b/protoize.c
-index 5a65334..16a96f3 100644
+index 67e51dd..a951f44 100644
 --- a/protoize.c
 +++ b/protoize.c
-@@ -276,13 +276,25 @@ struct default_include { const char *fname; int cplusplus; } include_defaults[]
+@@ -309,13 +309,25 @@ struct default_include { char *fname; int cplusplus; } include_defaults[]
    = {
      /* Pick up GNU C++ specific include files.  */
      { GPLUSPLUS_INCLUDE_DIR, 1},
@@ -3165,13 +3605,22 @@ index 5a65334..16a96f3 100644
  #ifdef SYSTEM_INCLUDE_DIR
      { SYSTEM_INCLUDE_DIR, 0},
 diff --git a/rtl.h b/rtl.h
-index 8ee49f1..dcf26b8 100644
+index 798111a..c7f4c92 100644
 --- a/rtl.h
 +++ b/rtl.h
-@@ -148,6 +148,18 @@ typedef struct rtx_def
- #endif
- #endif
+@@ -130,6 +130,27 @@ typedef struct rtx_def
+   rtunion fld[1];
+ } *rtx;
  
++/* Add prototype support.  */
++#ifndef PROTO
++#if defined (USE_PROTOTYPES) ? USE_PROTOTYPES : defined (__STDC__)
++#define PROTO(ARGS) ARGS
++#else
++#define PROTO(ARGS) ()
++#endif
++#endif
++
 +#ifndef VPROTO
 +#ifdef __STDC__
 +#define PVPROTO(ARGS)           ARGS
@@ -3186,28 +3635,22 @@ index 8ee49f1..dcf26b8 100644
 +
  #define NULL_RTX (rtx) 0
  
- /* Define a generic NULL if one hasn't already been defined.  */
-@@ -620,18 +632,8 @@ extern rtx plus_constant_for_output_wide PROTO((rtx, HOST_WIDE_INT));
- 
- #define GEN_INT(N) gen_rtx (CONST_INT, VOIDmode, (N))
- 
--#if 0
--/* We cannot define prototypes for the variable argument functions,
--   since they have not been ANSI-fied, and an ANSI compiler would
--   complain when compiling the definition of these functions.  */
--
--extern rtx gen_rtx			PROTO((enum rtx_code, enum machine_mode, ...));
--extern rtvec gen_rtvec			PROTO((int, ...));
--
--#else
+ /* Define macros to access the `code' field of the rtx.  */
+@@ -534,12 +555,12 @@ extern int get_integer_term ();
+ extern rtx get_related_value ();
+ extern rtx single_set ();
+ extern rtx find_last_value ();
 -extern rtx gen_rtx ();
++extern rtx gen_rtx PVPROTO((enum rtx_code, enum machine_mode, ...));
+ extern rtx copy_rtx ();
+ extern rtx copy_rtx_if_shared ();
+ extern rtx copy_most_rtx ();
+ extern rtx replace_rtx ();
 -extern rtvec gen_rtvec ();
--#endif
-+extern rtx gen_rtx			PVPROTO((enum rtx_code, enum machine_mode, ...));
-+extern rtvec gen_rtvec			PVPROTO((int, ...));
- 
- #ifdef BUFSIZ			/* stdio.h has been included */
- extern rtx read_rtx			PROTO((FILE *));
++extern rtvec gen_rtvec PVPROTO((int, ...));
+ extern rtvec gen_rtvec_v ();
+ extern rtx read_rtx ();
+ extern rtx gen_reg_rtx ();
 diff --git a/stdarg.h b/stdarg.h
 new file mode 120000
 index 0000000..883f582
@@ -3225,22 +3668,28 @@ index 0000000..4d44230
 +gstddef.h
 \ No newline at end of file
 diff --git a/tree.c b/tree.c
-index 98c06bd..2c9502d 100644
+index e67b093..21e8946 100644
 --- a/tree.c
 +++ b/tree.c
-@@ -37,7 +37,11 @@ the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.  */
- #include "tree.h"
- #include "function.h"
- #include "obstack.h"
+@@ -33,12 +33,16 @@ the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.  */
+    by all passes of the compiler.  */
+ 
+ #include "config.h"
 +#ifdef __STDC__
 +#include <stdarg.h>
 +#else
- #include "gvarargs.h"
++#include "gvarargs.h"
 +#endif
  #include <stdio.h>
+ #include "flags.h"
+ #include "function.h"
+ #include "tree.h"
+ #include "obstack.h"
+-#include "gvarargs.h"
  
  #define obstack_chunk_alloc xmalloc
-@@ -1954,21 +1958,27 @@ stabilize_reference_1 (e)
+ #define obstack_chunk_free free
+@@ -1904,21 +1908,27 @@ stabilize_reference_1 (e)
     Constants, decls, types and misc nodes cannot be.  */
  
  tree
@@ -3273,7 +3722,7 @@ index 98c06bd..2c9502d 100644
  
    if (length == 2)
      {
-@@ -2072,18 +2082,22 @@ build1 (code, type, node)
+@@ -2025,18 +2035,22 @@ build1 (code, type, node)
     or even garbage if their values do not matter.  */
  
  tree
@@ -3300,7 +3749,7 @@ index 98c06bd..2c9502d 100644
    t = make_node (code);
    length = tree_code_length[(int) code];
  
-@@ -2098,21 +2112,24 @@ build_nt (va_alist)
+@@ -2051,21 +2065,24 @@ build_nt (va_alist)
     on the temp_decl_obstack, regardless.  */
  
  tree
@@ -3332,13 +3781,22 @@ index 98c06bd..2c9502d 100644
    length = tree_code_length[(int) code];
  
 diff --git a/tree.h b/tree.h
-index eda62c0..3a2a0bd 100644
+index 909a7b3..4488805 100644
 --- a/tree.h
 +++ b/tree.h
-@@ -943,6 +943,17 @@ union tree_node
- #endif
- #endif
+@@ -829,6 +829,45 @@ union tree_node
+   struct tree_exp exp;
+  };
  
++/* Add prototype support.  */
++#ifndef PROTO
++#if defined (USE_PROTOTYPES) ? USE_PROTOTYPES : defined (__STDC__)
++#define PROTO(ARGS) ARGS
++#else
++#define PROTO(ARGS) ()
++#endif
++#endif
++
 +#ifndef VPROTO
 +#ifdef __STDC__
 +#define PVPROTO(ARGS)           ARGS
@@ -3350,29 +3808,51 @@ index eda62c0..3a2a0bd 100644
 +#define VA_START(va_list,var)   va_start(va_list)
 +#endif
 +#endif
++
++/* Define a generic NULL if one hasn't already been defined.  */
++
++#ifndef NULL
++#define NULL 0
++#endif
++
++#ifndef GENERIC_PTR
++#if defined (USE_PROTOTYPES) ? USE_PROTOTYPES : defined (__STDC__)
++#define GENERIC_PTR void *
++#else
++#define GENERIC_PTR char *
++#endif
++#endif
++
++#ifndef NULL_PTR
++#define NULL_PTR ((GENERIC_PTR)0)
++#endif
++
+ /* Format for global names of constructor and destructor functions.  */
+ #ifndef NO_DOLLAR_IN_LABEL
+ #define CONSTRUCTOR_NAME_FORMAT "_GLOBAL_$I$%s"
+@@ -873,8 +912,10 @@ extern tree build_real_from_string ();
+ extern tree build_real_from_int_cst ();
+ extern tree build_complex ();
+ extern tree build_string ();
+-extern tree build (), build1 ();
+-extern tree build_nt (), build_parse_node ();
++extern tree build1 ();
++extern tree build PVPROTO((enum tree_code, tree, ...));
++extern tree build_nt PVPROTO((enum tree_code, ...));
++extern tree build_parse_node PVPROTO((enum tree_code, ...));
+ extern tree build_tree_list (), build_decl_list ();
+ extern tree build_op_identifier ();
+ extern tree build_decl ();
+diff --git a/varasm.c b/varasm.c
+index b6b218b..588a639 100644
+--- a/varasm.c
++++ b/varasm.c
+@@ -501,7 +501,7 @@ assemble_start_function (decl, fnname)
+ #ifdef DBX_DEBUGGING_INFO
+   /* Output SDB definition of the function.  */
+   if (write_symbols == DBX_DEBUG)
+-    dbxout_begin_function ();
++    dbxout_begin_function (decl);
+ #endif
  
- #define NULL_TREE (tree) NULL
- 
-@@ -1027,19 +1038,9 @@ extern tree get_identifier		PROTO((char *));
- #define build_int_2(LO,HI)  \
-   build_int_2_wide ((HOST_WIDE_INT) (LO), (HOST_WIDE_INT) (HI))
- 
--#if 0
--/* We cannot define prototypes for the variable argument functions,
--   since they have not been ANSI-fied, and an ANSI compiler would
--   complain when compiling the definition of these functions.  */
--
--extern tree build			PROTO((enum tree_code, tree, ...));
--extern tree build_nt			PROTO((enum tree_code, ...));
--extern tree build_parse_node		PROTO((enum tree_code, ...));
--#else
--extern tree build ();
--extern tree build_nt ();
--extern tree build_parse_node ();
--#endif
-+extern tree build			PVPROTO((enum tree_code, tree, ...));
-+extern tree build_nt			PVPROTO((enum tree_code, ...));
-+extern tree build_parse_node		PVPROTO((enum tree_code, ...));
- 
- extern tree build_int_2_wide		PROTO((HOST_WIDE_INT, HOST_WIDE_INT));
- extern tree build_real			PROTO((tree, REAL_VALUE_TYPE));
+   /* Make function name accessible from other files, if appropriate.  */

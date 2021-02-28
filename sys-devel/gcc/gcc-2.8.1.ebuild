@@ -38,8 +38,3 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/00_gcc-${PV}.patch
 	eapply "${FILESDIR}"/${PV}/01_gcc-${PV}-workaround-for-new-glibc.patch
 }
-
-src_install() {
-	toolchain_src_install
-	rm -rf "${ED}"/usr/share/locale
-}

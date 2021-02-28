@@ -40,7 +40,3 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/02_gcc-${PV}-workaround-for-new-glibc.patch
 	rm -rf ${WORKDIR}/${P}/cp
 }
-
-src_install() {
-	toolchain_src_install
-}
