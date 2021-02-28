@@ -476,7 +476,7 @@ toolchain_src_unpack() {
 
 	default_src_unpack
 	unpack_gcc_patchset
-	git_init_src
+	tc_version_is_at_least 3.2 || git_init_src
 }
 
 #---->> src_prepare <<----
