@@ -25,21 +25,13 @@ KEYWORDS="amd64 x86"
 # well tested in gentoo on any arch other than amd64!!
 RDEPEND=""
 DEPEND="${RDEPEND}
-	sys-devel/gcc:3.4.6
+	sys-devel/gcc:2.95.3
 	legacy-gcc/linux-headers:i686-legacy
 	legacy-gcc/glibc-headers:i686-legacy
 	legacy-gcc/binutils-wrapper:i686-legacy"
 
-case ${ARCH} in
-	amd64)
-		CC="gcc-3.4.6 -m32"
-		CXX="g++-3.4.6 -m32"
-		;;
-	x86)
-		CC="gcc-3.4.6"
-		CXX="g++-3.4.6"
-		;;
-esac
+CC="gcc-2.95.3"
+CXX="g++-2.95.3"
 
 src_prepare() {
 	toolchain_src_prepare
