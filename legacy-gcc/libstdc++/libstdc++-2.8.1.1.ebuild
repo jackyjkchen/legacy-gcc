@@ -7,10 +7,10 @@ DESCRIPTION=""
 HOMEPAGE=""
 SRC_URI="https://ftp.gnu.org/old-gnu/libstdc++/libstdc++-${PV}.tar.gz"
 
-inherit downgrade_arch_flags
+inherit downgrade-arch-flags
 
 LICENSE=""
-SLOT="i686-legacy"
+SLOT="${PV}"
 KEYWORDS="amd64 x86"
 
 DEPEND="
@@ -21,7 +21,7 @@ DEPEND="
 RDEPEND="${DEPEND}"
 BDEPEND=""
 
-CHOST="${SLOT}-linux-gnu"
+CHOST="i686-legacy-linux-gnu"
 
 CC="gcc-2.8.1"
 CXX="g++-2.8.1"
@@ -33,7 +33,7 @@ src_prepare() {
 }
 
 src_configure() {
-	downgrade_arch_flags 2.8
+	downgrade_arch_flags 2.8.1
 	local econfargs=(
 		--build=${CHOST}
 		--host=${CHOST}

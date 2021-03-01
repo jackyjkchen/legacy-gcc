@@ -463,7 +463,8 @@ toolchain_pkg_setup() {
 
 git_init_src() {
 	pushd "${WORKDIR}"/${P} > /dev/null
-	git init && git config user.email "local@local" && \
+	git init && git config user.name toolchain && \
+	git config user.email "toolchain@localhost" && \
 	git add * && git commit -am "init" 1>/dev/null
 	popd > /dev/null
 }
@@ -1358,7 +1359,7 @@ toolchain_src_configure() {
 		)
 	fi
 
-	if ! tc_version_is_at_least 2.7 ; then
+	if tc_version_is_between 2.5 2.7 ; then
 		confgcc+=( --with-elf )
 	fi
 

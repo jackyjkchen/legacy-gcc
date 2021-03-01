@@ -7,7 +7,7 @@ DESCRIPTION=""
 HOMEPAGE=""
 SRC_URI="https://mirrors.ustc.edu.cn/gnu/glibc/glibc-${PV}.tar.bz2"
 
-inherit downgrade_arch_flags
+inherit downgrade-arch-flags
 
 LICENSE=""
 SLOT="i686-legacy"
@@ -46,7 +46,7 @@ src_prepare() {
 }
 
 src_configure() {
-	downgrade_arch_flags 3.4
+	downgrade_arch_flags 3.4.6
 	cat <<-_EOF_ > config.cache || die
 libc_cv_forced_unwind=yes
 libc_cv_c_cleanup=yes
