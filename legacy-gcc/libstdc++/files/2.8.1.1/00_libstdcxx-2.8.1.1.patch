@@ -1,0 +1,625 @@
+diff --git a/Makefile.in b/Makefile.in
+index 9b30686..207fb43 100644
+--- a/Makefile.in
++++ b/Makefile.in
+@@ -23,7 +23,7 @@ prefix = /usr/local
+ 
+ exec_prefix = $(prefix)
+ bindir = $(exec_prefix)/bin
+-libdir = $(exec_prefix)/lib
++libdir = $(exec_prefix)/lib/gcc-lib/$(target)/2.8.1/
+ tooldir = $(exec_prefix)/$(target)
+ 
+ program_transform_name =
+@@ -323,6 +323,7 @@ BASE_FLAGS_TO_PASS = \
+ 	"CC_FOR_BUILD=$(CC_FOR_BUILD)" \
+ 	"CC_FOR_TARGET=$(CC_FOR_TARGET)" \
+ 	"CFLAGS=$(CFLAGS)" \
++	"DESTDIR=$(DESTDIR)" \
+ 	"CFLAGS_FOR_TARGET=$(CFLAGS_FOR_TARGET)" \
+ 	"CXX_FOR_BUILD=$(CXX_FOR_BUILD)" \
+ 	"CXXFLAGS=$(CXXFLAGS)" \
+@@ -1466,8 +1467,8 @@ install-target: $(INSTALL_TARGET_MODULES)
+ ### other supporting targets
+ 
+ MAKEDIRS= \
+-	$(prefix) \
+-	$(exec_prefix)
++	$(DESTDIR)$(prefix) \
++	$(DESTDIR)$(exec_prefix)
+ .PHONY: installdirs
+ installdirs: mkinstalldirs
+ 	$(SHELL) $(srcdir)/mkinstalldirs $(MAKEDIRS)
+diff --git a/libiberty/Makefile.in b/libiberty/Makefile.in
+index 29eeab0..a6a02f9 100644
+--- a/libiberty/Makefile.in
++++ b/libiberty/Makefile.in
+@@ -103,6 +103,7 @@ FLAGS_TO_PASS = \
+ 	"AR_FLAGS=$(AR_FLAGS)" \
+ 	"CC=$(CC)" \
+ 	"CFLAGS=$(CFLAGS)" \
++	"DESTDIR=$(DESTDIR)" \
+ 	"LIBCFLAGS=$(LIBCFLAGS)" \
+ 	"EXTRA_OFILES=$(EXTRA_OFILES)" \
+ 	"HDEFINES=$(HDEFINES)" \
+@@ -171,15 +172,15 @@ INSTALL_DEST = libdir
+ install: install_to_$(INSTALL_DEST)
+ 
+ install_to_libdir: all
+-	$(INSTALL_DATA) $(TARGETLIB) $(libdir)$(MULTISUBDIR)/$(TARGETLIB).n
+-	( cd $(libdir)$(MULTISUBDIR) ; $(RANLIB) $(TARGETLIB).n )
+-	mv -f $(libdir)$(MULTISUBDIR)/$(TARGETLIB).n $(libdir)$(MULTISUBDIR)/$(TARGETLIB)
++	$(INSTALL_DATA) $(TARGETLIB) $(DESTDIR)$(libdir)$(MULTISUBDIR)/$(TARGETLIB).n
++	( cd $(DESTDIR)$(libdir)$(MULTISUBDIR) ; $(RANLIB) $(TARGETLIB).n )
++	mv -f $(DESTDIR)$(libdir)$(MULTISUBDIR)/$(TARGETLIB).n $(DESTDIR)$(libdir)$(MULTISUBDIR)/$(TARGETLIB)
+ 	@$(MULTIDO) $(FLAGS_TO_PASS) multi-do DO=install
+ 
+ install_to_tooldir: all
+-	$(INSTALL_DATA) $(TARGETLIB) $(tooldir)/lib$(MULTISUBDIR)/$(TARGETLIB).n
+-	( cd $(tooldir)/lib$(MULTISUBDIR) ; $(RANLIB) $(TARGETLIB).n )
+-	mv -f $(tooldir)/lib$(MULTISUBDIR)/$(TARGETLIB).n $(tooldir)/lib$(MULTISUBDIR)/$(TARGETLIB)
++	$(INSTALL_DATA) $(TARGETLIB) $(DESTDIR)$(tooldir)/lib$(MULTISUBDIR)/$(TARGETLIB).n
++	( cd $(DESTDIR)$(tooldir)/lib$(MULTISUBDIR) ; $(RANLIB) $(TARGETLIB).n )
++	mv -f $(DESTDIR)$(tooldir)/lib$(MULTISUBDIR)/$(TARGETLIB).n $(DESTDIR)$(tooldir)/lib$(MULTISUBDIR)/$(TARGETLIB)
+ 	@$(MULTIDO) $(FLAGS_TO_PASS) multi-do DO=install
+ 
+ # The default configuration adds to libiberty all those functions that are
+diff --git a/libio/Makefile.in b/libio/Makefile.in
+index 2e3fb06..7bef0d1 100644
+--- a/libio/Makefile.in
++++ b/libio/Makefile.in
+@@ -47,7 +47,7 @@ STDIO_WRAP_OBJECTS =  iofdopen.o iofflush.o iofgets.o iofopen.o iofprintf.o iofp
+ 
+ IOSTREAM_OBJECTS = builtinbuf.o filebuf.o fstream.o \
+   indstream.o ioassign.o ioextend.o iomanip.o iostream.o \
+-  isgetline.o isgetsb.o isscan.o \
++  isgetline.o isgetsb.o isscan.o iovfscanf.o \
+   osform.o procbuf.o sbform.o sbgetline.o sbscan.o \
+   stdiostream.o stdstrbufs.o stdstreams.o stream.o streambuf.o strstream.o \
+   PlotFile.o SFile.o parsestream.o pfstream.o editbuf.o
+@@ -107,15 +107,15 @@ install:
+ 	rootme=`pwd`/ ; export rootme ; \
+ 	if [ -z "$(MULTISUBDIR)" ]; then \
+ 	  if [ "$(_G_CONFIG_H)" != "" ]; then \
+-	    rm -f $(tooldir)/include/_G_config.h ; \
+-	    $(INSTALL_DATA) _G_config.h $(tooldir)/include/_G_config.h || exit 1; \
++	    rm -f $(DESTDIR)$(tooldir)/include/_G_config.h ; \
++	    $(INSTALL_DATA) _G_config.h $(DESTDIR)$(tooldir)/include/_G_config.h || exit 1; \
+ 	  else true; \
+ 	  fi ; \
+ 	  cd $(srcdir); \
+ 	  for FILE in $(USER_INCLUDES); do if [ $$FILE != _G_config.h ]; then \
+-	    rm -f $(gxx_include_dir)/$$FILE ; \
+-	    $(INSTALL_DATA) $$FILE $(gxx_include_dir)/$$FILE ; \
+-	    chmod a-x $(gxx_include_dir)/$$FILE ; \
++	    rm -f $(DESTDIR)$(gxx_include_dir)/$$FILE ; \
++	    $(INSTALL_DATA) $$FILE $(DESTDIR)$(gxx_include_dir)/$$FILE ; \
++	    chmod a-x $(DESTDIR)$(gxx_include_dir)/$$FILE ; \
+ 	  else true; fi; done ; \
+ 	else true; \
+ 	fi
+diff --git a/libio/config/linux.mt b/libio/config/linux.mt
+index 0585d90..da20dc2 100644
+--- a/libio/config/linux.mt
++++ b/libio/config/linux.mt
+@@ -1,7 +1,7 @@
+ # Use the libio which comes with the local libc.
+ 
+ # That is where we keep the g++ header files.
+-gxx_include_dir =$(prefix)/include/g++
++gxx_include_dir =$(libdir)/include/g++-v2
+ 
+ # Comment this out to avoid including the stdio functions in libiostream.a:
+ # LIBIOSTREAM_OBJECTS = $(IO_OBJECTS) $(IOSTREAM_OBJECTS) $(STDIO_WRAP_OBJECTS) $(OSPRIM_OBJECTS)
+diff --git a/libio/config/mtsafe.mt b/libio/config/mtsafe.mt
+index 5848851..f6ca986 100644
+--- a/libio/config/mtsafe.mt
++++ b/libio/config/mtsafe.mt
+@@ -1,2 +1,2 @@
+ # tell we want the mt-safe version
+-MT_CFLAGS = -D_IO_MTSAFE_IO
++MT_CFLAGS = 
+diff --git a/libio/libio.h b/libio/libio.h
+index 0b0024f..c453b77 100644
+--- a/libio/libio.h
++++ b/libio/libio.h
+@@ -1,4 +1,4 @@
+-/* Copyright (C) 1991, 92, 93, 94, 95, 97, 1998 Free Software Foundation, Inc.
++/* Copyright (C) 1991, 92, 93, 94, 95, 97, 98 Free Software Foundation, Inc.
+    This file is part of the GNU IO Library.
+    Written by Per Bothner <bothner@cygnus.com>.
+ 
+@@ -59,13 +59,21 @@
+ #  include <sys/cdefs.h>
+ # else
+ #  ifdef __STDC__
+-#   define __P(protos) protos
++#   define __P(p) p
+ #  else
+-#   define __P(protos) ()
++#   define __P(p) ()
+ #  endif
+ # endif
+ #endif /*!__P*/
+ 
++#ifndef __PMT
++# ifdef __STDC__
++#  define __PMT(p) p
++# else
++#  define __PMT(p) ()
++# endif
++#endif /*!__P*/
++
+ /* For backward compatibility */
+ #ifndef _PARAMS
+ # define _PARAMS(protos) __P(protos)
+@@ -128,6 +136,7 @@
+ #define _IO_IS_APPENDING 0x1000
+ #define _IO_IS_FILEBUF 0x2000
+ #define _IO_BAD_SEEN 0x4000
++#define _IO_USER_LOCK 0x8000
+ 
+ /* These are "formatting flags" matching the iostream fmtflags enum values. */
+ #define _IO_SKIPWS 01
+@@ -267,10 +276,10 @@ extern struct _IO_FILE_plus _IO_stdin_, _IO_stdout_, _IO_stderr_;
+ /* Define the user-visible type, with user-friendly member names.  */
+ typedef struct
+ {
+-  _IO_ssize_t (*read) __P ((struct _IO_FILE *, void *, _IO_ssize_t));
+-  _IO_ssize_t (*write) __P ((struct _IO_FILE *, const void *, _IO_ssize_t));
+-  _IO_fpos_t (*seek) __P ((struct _IO_FILE *, _IO_off_t, int));
+-  int (*close) __P ((struct _IO_FILE *));
++  _IO_ssize_t (*read) __PMT ((struct _IO_FILE *, void *, _IO_ssize_t));
++  _IO_ssize_t (*write) __PMT ((struct _IO_FILE *, const void *, _IO_ssize_t));
++  _IO_off_t (*seek) __PMT ((struct _IO_FILE *, _IO_off_t, int));
++  int (*close) __PMT ((struct _IO_FILE *));
+ } _IO_cookie_io_functions_t;
+ 
+ /* Special file type for fopencookie function.  */
+@@ -340,11 +349,11 @@ extern _IO_ssize_t _IO_padn __P ((_IO_FILE *, int, _IO_ssize_t));
+ extern _IO_size_t _IO_sgetn __P ((_IO_FILE *, void *, _IO_size_t));
+ 
+ #if defined(_G_IO_IO_FILE_VERSION) && _G_IO_IO_FILE_VERSION == 0x20001
+-extern _IO_fpos64_t _IO_seekoff __P ((_IO_FILE *, _IO_off64_t, int, int));      
+-extern _IO_fpos64_t _IO_seekpos __P ((_IO_FILE *, _IO_fpos64_t, int));
++extern _IO_off64_t _IO_seekoff __P ((_IO_FILE *, _IO_off64_t, int, int));
++extern _IO_off64_t _IO_seekpos __P ((_IO_FILE *, _IO_off64_t, int));
+ #else
+-extern _IO_fpos_t _IO_seekoff __P ((_IO_FILE *, _IO_off_t, int, int));
+-extern _IO_fpos_t _IO_seekpos __P ((_IO_FILE *, _IO_fpos_t, int));
++extern _IO_off_t _IO_seekoff __P ((_IO_FILE *, _IO_off_t, int, int));
++extern _IO_off_t _IO_seekpos __P ((_IO_FILE *, _IO_off_t, int));
+ #endif
+ 
+ extern void _IO_free_backup_area __P ((_IO_FILE *));
+diff --git a/libio/libioP.h b/libio/libioP.h
+index 8f7398d..be70f52 100644
+--- a/libio/libioP.h
++++ b/libio/libioP.h
+@@ -1,4 +1,4 @@
+-/* Copyright (C) 1993, 1997, 1998 Free Software Foundation, Inc.
++/* Copyright (C) 1993, 1997 Free Software Foundation, Inc.
+    This file is part of the GNU IO Library.
+ 
+    This library is free software; you can redistribute it and/or
+@@ -23,18 +23,25 @@
+    other reasons why the executable file might be covered by the GNU
+    General Public License.  */
+ 
++#ifndef _POSIX_SOURCE
++# define _POSIX_SOURCE
++#endif
++
+ #include <errno.h>
+ #ifndef __set_errno
+ # define __set_errno(Val) errno = (Val)
+ #endif
+-#if defined __GLIBC__ && __GLIBC__ >= 2
+-# if __GLIBC_MINOR__ > 0
+-#  include <bits/libc-lock.h>
++
++#ifdef _IO_MTSAFE_IO
++# if defined __GLIBC__ && __GLIBC__ >= 2
++#  if __GLIBC_MINOR__ > 0
++#   include <bits/libc-lock.h>
++#  else
++#   include <libc-lock.h>
++#  endif
+ # else
+-#  include <libc-lock.h>
+-# endif
+-#else
+ /*# include <comthread.h>*/
++# endif
+ #endif
+ 
+ #include "iolibio.h"
+@@ -91,20 +98,20 @@ extern "C" {
+ /* The 'finish' function does any final cleaning up of an _IO_FILE object.
+    It does not delete (free) it, but does everything else to finalize it/
+    It matches the streambuf::~streambuf virtual destructor.  */
+-typedef void (*_IO_finish_t) __P ((_IO_FILE *, int)); /* finalize */
++typedef void (*_IO_finish_t) __PMT ((_IO_FILE *, int)); /* finalize */
+ #define _IO_FINISH(FP) JUMP1 (__finish, FP, 0)
+ 
+ /* The 'overflow' hook flushes the buffer.
+    The second argument is a character, or EOF.
+    It matches the streambuf::overflow virtual function. */
+-typedef int (*_IO_overflow_t) __P ((_IO_FILE *, int));
++typedef int (*_IO_overflow_t) __PMT ((_IO_FILE *, int));
+ #define _IO_OVERFLOW(FP, CH) JUMP1 (__overflow, FP, CH)
+ 
+ /* The 'underflow' hook tries to fills the get buffer.
+    It returns the next character (as an unsigned char) or EOF.  The next
+    character remains in the get buffer, and the get position is not changed.
+    It matches the streambuf::underflow virtual function. */
+-typedef int (*_IO_underflow_t) __P ((_IO_FILE *));
++typedef int (*_IO_underflow_t) __PMT ((_IO_FILE *));
+ #define _IO_UNDERFLOW(FP) JUMP0 (__underflow, FP)
+ 
+ /* The 'uflow' hook returns the next character in the input stream
+@@ -116,20 +123,20 @@ typedef int (*_IO_underflow_t) __P ((_IO_FILE *));
+ 
+ /* The 'pbackfail' hook handles backing up.
+    It matches the streambuf::pbackfail virtual function. */
+-typedef int (*_IO_pbackfail_t) __P ((_IO_FILE *, int));
++typedef int (*_IO_pbackfail_t) __PMT ((_IO_FILE *, int));
+ #define _IO_PBACKFAIL(FP, CH) JUMP1 (__pbackfail, FP, CH)
+ 
+ /* The 'xsputn' hook writes upto N characters from buffer DATA.
+    Returns the number of character actually written.
+    It matches the streambuf::xsputn virtual function. */
+-typedef _IO_size_t (*_IO_xsputn_t) __P ((_IO_FILE *FP, const void *DATA,
++typedef _IO_size_t (*_IO_xsputn_t) __PMT ((_IO_FILE *FP, const void *DATA,
+ 					 _IO_size_t N));
+ #define _IO_XSPUTN(FP, DATA, N) JUMP2 (__xsputn, FP, DATA, N)
+ 
+ /* The 'xsgetn' hook reads upto N characters into buffer DATA.
+    Returns the number of character actually read.
+    It matches the streambuf::xsgetn virtual function. */
+-typedef _IO_size_t (*_IO_xsgetn_t) __P ((_IO_FILE *FP, void *DATA,
++typedef _IO_size_t (*_IO_xsgetn_t) __PMT ((_IO_FILE *FP, void *DATA,
+ 					 _IO_size_t N));
+ #define _IO_XSGETN(FP, DATA, N) JUMP2 (__xsgetn, FP, DATA, N)
+ 
+@@ -139,10 +146,10 @@ typedef _IO_size_t (*_IO_xsgetn_t) __P ((_IO_FILE *FP, void *DATA,
+    It matches the streambuf::seekoff virtual function.
+    It is also used for the ANSI fseek function. */
+ #if defined(_G_IO_IO_FILE_VERSION) && _G_IO_IO_FILE_VERSION == 0x20001
+-typedef _IO_fpos64_t (*_IO_seekoff_t) __P ((_IO_FILE *FP, _IO_off64_t OFF,
++typedef _IO_off64_t (*_IO_seekoff_t) __PMT ((_IO_FILE *FP, _IO_off64_t OFF,
+ 					  int DIR, int MODE));
+ #else
+-typedef _IO_fpos_t (*_IO_seekoff_t) __P ((_IO_FILE *FP, _IO_off_t OFF,
++typedef _IO_off_t (*_IO_seekoff_t) __PMT ((_IO_FILE *FP, _IO_off_t OFF,
+ 					  int DIR, int MODE));
+ #endif
+ #define _IO_SEEKOFF(FP, OFF, DIR, MODE) JUMP3 (__seekoff, FP, OFF, DIR, MODE)
+@@ -153,27 +160,27 @@ typedef _IO_fpos_t (*_IO_seekoff_t) __P ((_IO_FILE *FP, _IO_off_t OFF,
+    It is also used for the ANSI fgetpos and fsetpos functions.  */
+ /* The _IO_seek_cur and _IO_seek_end options are not allowed. */
+ #if defined(_G_IO_IO_FILE_VERSION) && _G_IO_IO_FILE_VERSION == 0x20001
+-typedef _IO_fpos64_t (*_IO_seekpos_t) __P ((_IO_FILE *, _IO_fpos64_t, int));
++typedef _IO_off64_t (*_IO_seekpos_t) __PMT ((_IO_FILE *, _IO_off64_t, int));
+ #else
+-typedef _IO_fpos_t (*_IO_seekpos_t) __P ((_IO_FILE *, _IO_fpos_t, int));
++typedef _IO_off_t (*_IO_seekpos_t) __PMT ((_IO_FILE *, _IO_off_t, int));
+ #endif
+ #define _IO_SEEKPOS(FP, POS, FLAGS) JUMP2 (__seekpos, FP, POS, FLAGS)
+ 
+ /* The 'setbuf' hook gives a buffer to the file.
+    It matches the streambuf::setbuf virtual function. */
+-typedef _IO_FILE* (*_IO_setbuf_t) __P ((_IO_FILE *, char *, _IO_ssize_t));
++typedef _IO_FILE* (*_IO_setbuf_t) __PMT ((_IO_FILE *, char *, _IO_ssize_t));
+ #define _IO_SETBUF(FP, BUFFER, LENGTH) JUMP2 (__setbuf, FP, BUFFER, LENGTH)
+ 
+ /* The 'sync' hook attempts to synchronize the internal data structures
+    of the file with the external state.
+    It matches the streambuf::sync virtual function. */
+-typedef int (*_IO_sync_t) __P ((_IO_FILE *));
++typedef int (*_IO_sync_t) __PMT ((_IO_FILE *));
+ #define _IO_SYNC(FP) JUMP0 (__sync, FP)
+ 
+ /* The 'doallocate' hook is used to tell the file to allocate a buffer.
+    It matches the streambuf::doallocate virtual function, which is not
+    in the ANSI/ISO C++ standard, but is part traditional implementations. */
+-typedef int (*_IO_doallocate_t) __P ((_IO_FILE *));
++typedef int (*_IO_doallocate_t) __PMT ((_IO_FILE *));
+ #define _IO_DOALLOCATE(FP) JUMP0 (__doallocate, FP)
+ 
+ /* The following four hooks (sysread, syswrite, sysclose, sysseek, and
+@@ -191,14 +198,14 @@ typedef int (*_IO_doallocate_t) __P ((_IO_FILE *));
+    an existing buffer.  It generalizes the Unix read(2) function.
+    It matches the streambuf::sys_read virtual function, which is
+    specific to this implementation. */
+-typedef _IO_ssize_t (*_IO_read_t) __P ((_IO_FILE *, void *, _IO_ssize_t));
++typedef _IO_ssize_t (*_IO_read_t) __PMT ((_IO_FILE *, void *, _IO_ssize_t));
+ #define _IO_SYSREAD(FP, DATA, LEN) JUMP2 (__read, FP, DATA, LEN)
+ 
+ /* The 'syswrite' hook is used to write data from an existing buffer
+    to an external file.  It generalizes the Unix write(2) function.
+    It matches the streambuf::sys_write virtual function, which is
+    specific to this implementation. */
+-typedef _IO_ssize_t (*_IO_write_t) __P ((_IO_FILE *,const void *,_IO_ssize_t));
++typedef _IO_ssize_t (*_IO_write_t) __PMT ((_IO_FILE *,const void *,_IO_ssize_t));
+ #define _IO_SYSWRITE(FP, DATA, LEN) JUMP2 (__write, FP, DATA, LEN)
+ 
+ /* The 'sysseek' hook is used to re-position an external file.
+@@ -206,9 +213,9 @@ typedef _IO_ssize_t (*_IO_write_t) __P ((_IO_FILE *,const void *,_IO_ssize_t));
+    It matches the streambuf::sys_seek virtual function, which is
+    specific to this implementation. */
+ #if defined(_G_IO_IO_FILE_VERSION) && _G_IO_IO_FILE_VERSION == 0x20001
+-typedef _IO_fpos64_t (*_IO_seek_t) __P ((_IO_FILE *, _IO_off64_t, int));
++typedef _IO_off64_t (*_IO_seek_t) __PMT ((_IO_FILE *, _IO_off64_t, int));
+ #else
+-typedef _IO_fpos_t (*_IO_seek_t) __P ((_IO_FILE *, _IO_off_t, int));
++typedef _IO_off_t (*_IO_seek_t) __PMT ((_IO_FILE *, _IO_off_t, int));
+ #endif
+ #define _IO_SYSSEEK(FP, OFFSET, MODE) JUMP2 (__seek, FP, OFFSET, MODE)
+ 
+@@ -216,26 +223,26 @@ typedef _IO_fpos_t (*_IO_seek_t) __P ((_IO_FILE *, _IO_off_t, int));
+    external file.  It generalizes the Unix close(2) function.
+    It matches the streambuf::sys_close virtual function, which is
+    specific to this implementation. */
+-typedef int (*_IO_close_t) __P ((_IO_FILE *)); /* finalize */
++typedef int (*_IO_close_t) __PMT ((_IO_FILE *)); /* finalize */
+ #define _IO_SYSCLOSE(FP) JUMP0 (__close, FP)
+ 
+ /* The 'sysstat' hook is used to get information about an external file
+    into a struct stat buffer.  It generalizes the Unix fstat(2) call.
+    It matches the streambuf::sys_stat virtual function, which is
+    specific to this implementation. */
+-typedef int (*_IO_stat_t) __P ((_IO_FILE *, void *));
++typedef int (*_IO_stat_t) __PMT ((_IO_FILE *, void *));
+ #define _IO_SYSSTAT(FP, BUF) JUMP1 (__stat, FP, BUF)
+ 
+ #if _G_IO_IO_FILE_VERSION == 0x20001
+ /* The 'showmany' hook can be used to get an image how much input is
+    available.  In many cases the answer will be 0 which means unknown
+    but some cases one can provide real information.  */
+-typedef int (*_IO_showmanyc_t) __P ((_IO_FILE *));
++typedef int (*_IO_showmanyc_t) __PMT ((_IO_FILE *));
+ #define _IO_SHOWMANYC(FP) JUMP0 (__showmanyc, FP)
+ 
+ /* The 'imbue' hook is used to get information about the currently
+    installed locales.  */
+-typedef void (*_IO_imbue_t) __P ((_IO_FILE *, void *));
++typedef void (*_IO_imbue_t) __PMT ((_IO_FILE *, void *));
+ #define _IO_IMBUE(FP, LOCALE) JUMP1 (__imbue, FP, LOCALE)
+ #endif
+ 
+@@ -291,11 +298,11 @@ struct _IO_FILE_plus
+ /* Generic functions */
+ 
+ #if defined(_G_IO_IO_FILE_VERSION) && _G_IO_IO_FILE_VERSION == 0x20001
+-extern _IO_fpos64_t _IO_seekoff __P ((_IO_FILE *, _IO_off64_t, int, int));
+-extern _IO_fpos64_t _IO_seekpos __P ((_IO_FILE *, _IO_fpos64_t, int));
++extern _IO_off64_t _IO_seekoff __P ((_IO_FILE *, _IO_off64_t, int, int));
++extern _IO_off64_t _IO_seekpos __P ((_IO_FILE *, _IO_off64_t, int));
+ #else
+-extern _IO_fpos_t _IO_seekoff __P ((_IO_FILE *, _IO_off_t, int, int));
+-extern _IO_fpos_t _IO_seekpos __P ((_IO_FILE *, _IO_fpos_t, int));
++extern _IO_off_t _IO_seekoff __P ((_IO_FILE *, _IO_off_t, int, int));
++extern _IO_off_t _IO_seekpos __P ((_IO_FILE *, _IO_off_t, int));
+ #endif
+ 
+ extern void _IO_switch_to_main_get_area __P ((_IO_FILE *));
+@@ -333,22 +340,22 @@ extern _IO_size_t _IO_default_xsputn __P ((_IO_FILE *, const void *,
+ 					   _IO_size_t));
+ extern _IO_size_t _IO_default_xsgetn __P ((_IO_FILE *, void *, _IO_size_t));
+ #if defined(_G_IO_IO_FILE_VERSION) && _G_IO_IO_FILE_VERSION == 0x20001
+-extern _IO_fpos64_t _IO_default_seekoff __P ((_IO_FILE *,
++extern _IO_off64_t _IO_default_seekoff __P ((_IO_FILE *,
+ 					      _IO_off64_t, int, int));
+-extern _IO_fpos64_t _IO_default_seekpos __P ((_IO_FILE *,
+-					      _IO_fpos64_t, int));
++extern _IO_off64_t _IO_default_seekpos __P ((_IO_FILE *,
++					      _IO_off64_t, int));
+ #else
+-extern _IO_fpos_t _IO_default_seekoff __P ((_IO_FILE *, _IO_off_t, int, int));
+-extern _IO_fpos_t _IO_default_seekpos __P ((_IO_FILE *, _IO_fpos_t, int));
++extern _IO_off_t _IO_default_seekoff __P ((_IO_FILE *, _IO_off_t, int, int));
++extern _IO_off_t _IO_default_seekpos __P ((_IO_FILE *, _IO_off_t, int));
+ #endif
+ extern _IO_ssize_t _IO_default_write __P ((_IO_FILE *, const void *,
+ 					   _IO_ssize_t));
+ extern _IO_ssize_t _IO_default_read __P ((_IO_FILE *, void *, _IO_ssize_t));
+ extern int _IO_default_stat __P ((_IO_FILE *, void *));
+ #if defined(_G_IO_IO_FILE_VERSION) && _G_IO_IO_FILE_VERSION == 0x20001
+-extern _IO_fpos64_t _IO_default_seek __P ((_IO_FILE *, _IO_off64_t, int));
++extern _IO_off64_t _IO_default_seek __P ((_IO_FILE *, _IO_off64_t, int));
+ #else
+-extern _IO_fpos_t _IO_default_seek __P ((_IO_FILE *, _IO_off_t, int));
++extern _IO_off_t _IO_default_seek __P ((_IO_FILE *, _IO_off_t, int));
+ #endif
+ extern int _IO_default_sync __P ((_IO_FILE *));
+ #define _IO_default_close ((_IO_close_t) _IO_default_sync)
+@@ -382,11 +389,11 @@ extern void _IO_flush_all_linebuffered __P ((void));
+ extern int _IO_file_doallocate __P ((_IO_FILE *));
+ extern _IO_FILE* _IO_file_setbuf __P ((_IO_FILE *, char *, _IO_ssize_t));
+ #if defined(_G_IO_IO_FILE_VERSION) && _G_IO_IO_FILE_VERSION == 0x20001
+-extern _IO_fpos64_t _IO_file_seekoff __P ((_IO_FILE *, _IO_off64_t, int, int));
+-extern _IO_fpos64_t _IO_file_seek __P ((_IO_FILE *, _IO_off64_t, int));
++extern _IO_off64_t _IO_file_seekoff __P ((_IO_FILE *, _IO_off64_t, int, int));
++extern _IO_off64_t _IO_file_seek __P ((_IO_FILE *, _IO_off64_t, int));
+ #else
+-extern _IO_fpos_t _IO_file_seekoff __P ((_IO_FILE *, _IO_off_t, int, int));
+-extern _IO_fpos_t _IO_file_seek __P ((_IO_FILE *, _IO_off_t, int));
++extern _IO_off_t _IO_file_seekoff __P ((_IO_FILE *, _IO_off_t, int, int));
++extern _IO_off_t _IO_file_seek __P ((_IO_FILE *, _IO_off_t, int));
+ #endif
+ extern _IO_size_t _IO_file_xsputn __P ((_IO_FILE *, const void *, _IO_size_t));
+ extern int _IO_file_stat __P ((_IO_FILE *, void *));
+@@ -420,9 +427,9 @@ extern int _IO_str_underflow __P ((_IO_FILE *));
+ extern int _IO_str_overflow __P ((_IO_FILE *, int));
+ extern int _IO_str_pbackfail __P ((_IO_FILE *, int));
+ #if defined(_G_IO_IO_FILE_VERSION) && _G_IO_IO_FILE_VERSION == 0x20001
+-extern _IO_fpos64_t _IO_str_seekoff __P ((_IO_FILE *, _IO_off64_t, int, int));
++extern _IO_off64_t _IO_str_seekoff __P ((_IO_FILE *, _IO_off64_t, int, int));
+ #else
+-extern _IO_fpos_t _IO_str_seekoff __P ((_IO_FILE *, _IO_off_t, int, int));
++extern _IO_off_t _IO_str_seekoff __P ((_IO_FILE *, _IO_off_t, int, int));
+ #endif
+ extern void _IO_str_finish __P ((_IO_FILE *, int));
+ 
+@@ -450,7 +457,7 @@ extern int _IO_outfloat __P ((double __value, _IO_FILE *__sb, int __type,
+ 			      int __sign_mode, int __fill));
+ 
+ extern _IO_FILE *_IO_list_all;
+-extern void (*_IO_cleanup_registration_needed) __P ((void));
++extern void (*_IO_cleanup_registration_needed) __PMT ((void));
+ 
+ #ifndef EOF
+ # define EOF (-1)
+@@ -537,12 +544,12 @@ extern int _IO_vscanf __P ((const char *, _IO_va_list));
+    where an _IO_fpos_t is a struct.
+    Note that _IO_off_t must be an integral type. */
+ 
+-/* _IO_pos_BAD is an _IO_fpos_t value indicating error, unknown, or EOF. */
++/* _IO_pos_BAD is an _IO_off_t value indicating error, unknown, or EOF. */
+ #ifndef _IO_pos_BAD
+ # if defined(_G_IO_IO_FILE_VERSION) && _G_IO_IO_FILE_VERSION == 0x20001
+-#  define _IO_pos_BAD ((_IO_fpos64_t) -1)
++#  define _IO_pos_BAD ((_IO_off64_t) -1)
+ # else
+-#  define _IO_pos_BAD ((_IO_fpos_t) -1)
++#  define _IO_pos_BAD ((_IO_off_t) -1)
+ # endif
+ #endif
+ /* _IO_pos_as_off converts an _IO_fpos_t value to an _IO_off_t value. */
+diff --git a/libio/parsestream.h b/libio/parsestream.h
+index 326ab87..97655bc 100644
+--- a/libio/parsestream.h
++++ b/libio/parsestream.h
+@@ -42,7 +42,7 @@ extern "C++" {
+ 
+ class parsebuf : public streambuf {
+   protected:
+-    _IO_fpos_t pos_at_line_start;
++    _IO_off_t pos_at_line_start;
+     long _line_length;
+     unsigned long __line_number;
+     char *buf_start;
+diff --git a/libio/streambuf.h b/libio/streambuf.h
+index 8476064..193c499 100644
+--- a/libio/streambuf.h
++++ b/libio/streambuf.h
+@@ -1,5 +1,5 @@
+ /* This is part of libio/iostream, providing -*- C++ -*- input/output.
+-Copyright (C) 1993, 1998 Free Software Foundation
++Copyright (C) 1993 Free Software Foundation
+ 
+ This file is part of the GNU IO Library.  This library is free
+ software; you can redistribute it and/or modify it under the
+@@ -72,10 +72,10 @@ class ostream; class streambuf;
+ 
+ #if defined(_G_IO_IO_FILE_VERSION) && _G_IO_IO_FILE_VERSION == 0x20001
+ typedef _IO_off64_t streamoff;
+-typedef _IO_fpos64_t streampos;
++typedef _IO_off64_t streampos;
+ #else
+ typedef _IO_off_t streamoff;
+-typedef _IO_fpos_t streampos;
++typedef _IO_off_t streampos;
+ #endif
+ typedef _IO_ssize_t streamsize;
+ 
+@@ -130,7 +130,7 @@ class ios : public _ios_fields {
+     typedef __fmtflags fmtflags;
+     typedef int iostate;
+     typedef int openmode;
+-    typedef int streamsize;
++    typedef _IO_ssize_t streamsize;
+     enum io_state {
+ 	goodbit = _IOS_GOOD,
+ 	eofbit = _IOS_EOF,
+@@ -482,7 +482,9 @@ inline ios::~ios() {
+ #ifndef _IO_NEW_STREAMS
+     if (!(_flags & (unsigned int)ios::dont_close)) delete rdbuf();
+ #endif
+-    if (_arrays) delete [] _arrays;
++    // It is safe to use naked operator delete[] as we know elements have no
++    // dtor, and g++ does not add a new[] cookie for such cases.
++    operator delete[] (_arrays);
+ }
+ } // extern "C++"
+ #endif /* _STREAMBUF_H */
+diff --git a/libstdc++/Makefile.in b/libstdc++/Makefile.in
+index bd35db9..3f32935 100644
+--- a/libstdc++/Makefile.in
++++ b/libstdc++/Makefile.in
+@@ -250,46 +250,46 @@ install:
+ 	if [ -z "$(MULTISUBDIR)" ]; then \
+ 	  cd $(srcdir); \
+ 	  for FILE in $(HEADERS); do \
+-	    rm -f $(gxx_include_dir)/$$FILE ; \
++	    rm -f $(DESTDIR)$(gxx_include_dir)/$$FILE ; \
+ 	    if [ -f stl/$$FILE ]; then \
+-	      $(INSTALL_DATA) stl/$$FILE $(gxx_include_dir)/$$FILE ; \
++	      $(INSTALL_DATA) stl/$$FILE $(DESTDIR)$(gxx_include_dir)/$$FILE ; \
+ 	    else \
+-	      $(INSTALL_DATA) $$FILE $(gxx_include_dir)/$$FILE ; \
++	      $(INSTALL_DATA) $$FILE $(DESTDIR)$(gxx_include_dir)/$$FILE ; \
+ 	    fi ; \
+-	    chmod a-x $(gxx_include_dir)/$$FILE ; \
++	    chmod a-x $(DESTDIR)$(gxx_include_dir)/$$FILE ; \
+ 	  done ; \
+ 	  for FILE in *.h std/*.*; do \
+-	    rm -f $(gxx_include_dir)/$$FILE ; \
+-	    $(INSTALL_DATA) $$FILE $(gxx_include_dir)/$$FILE ; \
+-	    chmod a-x $(gxx_include_dir)/$$FILE ; \
++	    rm -f $(DESTDIR)$(gxx_include_dir)/$$FILE ; \
++	    $(INSTALL_DATA) $$FILE $(DESTDIR)$(gxx_include_dir)/$$FILE ; \
++	    chmod a-x $(DESTDIR)$(gxx_include_dir)/$$FILE ; \
+ 	  done ; \
+ 	  cd stl; \
+ 	  for FILE in *.h; do \
+-	    rm -f $(gxx_include_dir)/$$FILE ; \
+-	    $(INSTALL_DATA) $$FILE $(gxx_include_dir)/$$FILE ; \
+-	    chmod a-x $(gxx_include_dir)/$$FILE ; \
++	    rm -f $(DESTDIR)$(gxx_include_dir)/$$FILE ; \
++	    $(INSTALL_DATA) $$FILE $(DESTDIR)$(gxx_include_dir)/$$FILE ; \
++	    chmod a-x $(DESTDIR)$(gxx_include_dir)/$$FILE ; \
+ 	  done ; \
+ 	else true ; \
+ 	fi
+ 	rootme=`pwd`/ ; export rootme ; \
+-	rm -f $(INSTALLDIR)$(MULTISUBDIR)/$(SHLINK) ; \
++	rm -f $(DESTDIR)$(INSTALLDIR)$(MULTISUBDIR)/$(SHLINK) ; \
+ 	for FILE in $(LIBS) ; do \
+-	  rm -f $(INSTALLDIR)$(MULTISUBDIR)/$$FILE ; \
++	  rm -f $(DESTDIR)$(INSTALLDIR)$(MULTISUBDIR)/$$FILE ; \
+ 	  if [ $$FILE = $(SHLINK) ] ; then \
+-	    ln -f -s $(SHLIB) $(INSTALLDIR)$(MULTISUBDIR)/$$FILE ; \
++	    ln -f -s $(SHLIB) $(DESTDIR)$(INSTALLDIR)$(MULTISUBDIR)/$$FILE ; \
+ 	  elif [ $$FILE = mshlink ]; then \
+ 	    for FILE in $(MSHLINK) ; do \
+-	      rm -f $(INSTALLDIR)$(MULTISUBDIR)/$$FILE ; \
+-	      ln -f -s $(SHLIB) $(INSTALLDIR)$(MULTISUBDIR)/$$FILE ; \
++	      rm -f $(DESTDIR)$(INSTALLDIR)$(MULTISUBDIR)/$$FILE ; \
++	      ln -f -s $(SHLIB) $(DESTDIR)$(INSTALLDIR)$(MULTISUBDIR)/$$FILE ; \
+ 	    done; \
+ 	  elif [ $$FILE = $(SHLIB) ]; then \
+-	    $(INSTALL_PROGRAM) $$FILE $(INSTALLDIR)$(MULTISUBDIR)/$$FILE ; \
++	    $(INSTALL_PROGRAM) $$FILE $(DESTDIR)$(INSTALLDIR)$(MULTISUBDIR)/$$FILE ; \
+ 	    : On the HP, shared libraries must be mode 555. ;\
+-	    chmod 555 $(INSTALLDIR)$(MULTISUBDIR)/$$FILE ; \
++	    chmod 555 $(DESTDIR)$(INSTALLDIR)$(MULTISUBDIR)/$$FILE ; \
+ 	  else \
+-	    $(INSTALL_DATA) $$FILE $(INSTALLDIR)$(MULTISUBDIR)/$$FILE ; \
+-	    $(RANLIB) $(INSTALLDIR)$(MULTISUBDIR)/$$FILE ; \
+-	    chmod a-x $(INSTALLDIR)$(MULTISUBDIR)/$$FILE ; \
++	    $(INSTALL_DATA) $$FILE $(DESTDIR)$(INSTALLDIR)$(MULTISUBDIR)/$$FILE ; \
++	    $(RANLIB) $(DESTDIR)$(INSTALLDIR)$(MULTISUBDIR)/$$FILE ; \
++	    chmod a-x $(DESTDIR)$(INSTALLDIR)$(MULTISUBDIR)/$$FILE ; \
+ 	  fi ; \
+ 	done
+ 	@rootme=`pwd`/ ; export rootme ; \
+diff --git a/libstdc++/config/linux.mt b/libstdc++/config/linux.mt
+index 5848851..1a62e6e 100644
+--- a/libstdc++/config/linux.mt
++++ b/libstdc++/config/linux.mt
+@@ -1,2 +1,2 @@
+ # tell we want the mt-safe version
+-MT_CFLAGS = -D_IO_MTSAFE_IO
++MT_CFLAGS =

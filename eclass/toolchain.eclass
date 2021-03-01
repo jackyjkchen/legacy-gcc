@@ -168,7 +168,7 @@ if [[ ${PN} != "kgcc64" && ${PN} != gcc-* ]] ; then
 	[[ -n ${PIE_VER} ]] && IUSE+=" nopie"
 	[[ -n ${SPECS_VER} ]] && IUSE+=" nossp"
 	# fortran support appeared in 4.1, but 4.1 needs outdated mpfr
-	tc_version_is_at_least 2.9 && IUSE+=" +cxx objc"
+	tc_version_is_at_least 2.8 && IUSE+=" +cxx objc"
 	tc_version_is_at_least 4.1 && IUSE+=" +fortran" TC_FEATURES+=(fortran)
 	tc_version_is_between 4.0 4.1 && IUSE+=" f95"
 	tc_version_is_between 2.9 4.0 && IUSE+=" f77"
@@ -902,7 +902,7 @@ toolchain_src_configure() {
 
 	is_ada && GCC_LANG+=",ada"
 
-	confgcc+=( --enable-languages=${GCC_LANG} )
+	tc_version_is_at_least 2.9 && confgcc+=( --enable-languages=${GCC_LANG} )
 
 	### general options
 

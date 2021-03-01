@@ -34,3 +34,11 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/00_gcc-${PV}.patch
 	eapply "${FILESDIR}"/${PV}/01_gcc-${PV}-workaround-for-new-glibc.patch
 }
+
+src_install() {
+	toolchain_src_install
+	mkdir -p ${ED}/etc/ld.so.conf.d/ || die
+	cat <<-_EOF_ > "${ED}"/etc/ld.so.conf.d/08-${CHOST}-gcc-${PV}.conf || die
+/usr/lib/gcc-lib/${CHOST}/${PV}
+_EOF_
+}

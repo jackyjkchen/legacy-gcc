@@ -43,3 +43,10 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/01_workaround-for-legacy-glibc-in-non-system-dir.patch
 }
 
+src_install() {
+	toolchain_src_install
+	mkdir -p ${ED}/etc/ld.so.conf.d/ || die
+	cat <<-_EOF_ > "${ED}"/etc/ld.so.conf.d/06-${CHOST}-gcc-${PV}.conf || die
+/usr/lib/gcc-lib/${CHOST}/${PV}
+_EOF_
+}

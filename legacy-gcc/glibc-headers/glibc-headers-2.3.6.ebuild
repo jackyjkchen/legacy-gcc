@@ -20,7 +20,7 @@ DEPEND="
 RDEPEND="${DEPEND}"
 BDEPEND=""
 
-TARGET_PREFIX="${SLOT}-linux-gnu"
+CHOST="${SLOT}-linux-gnu"
 
 case ${ARCH} in
 	amd64)
@@ -53,11 +53,11 @@ libc_cv_c_cleanup=yes
 libc_cv_386_tls=yes
 _EOF_
 	local econfargs=(
-		--build=${TARGET_PREFIX}
-		--host=${TARGET_PREFIX}
+		--build=${CHOST}
+		--host=${CHOST}
 		--enable-kernel=2.6.0
-		--with-headers=/usr/${TARGET_PREFIX}/include
-		--prefix=${ED}/usr/${TARGET_PREFIX}
+		--with-headers=/usr/${CHOST}/include
+		--prefix=${ED}/usr/${CHOST}
 		--enable-shared
 		--enable-nptl
 		--enable-add-ons
@@ -92,9 +92,9 @@ src_compile() {
 src_install() {
 	pushd "${WORKDIR}"/build >/dev/null
 	emake install-headers || die
-	touch  ${ED}/usr/${TARGET_PREFIX}/include/gnu/stubs.h || die
-	cp -v bits/stdio_lim.h ${ED}/usr/${TARGET_PREFIX}/include/bits || die
-	rm -rv ${ED}/usr/${TARGET_PREFIX}/include/scsi || die
+	touch  ${ED}/usr/${CHOST}/include/gnu/stubs.h || die
+	cp -v bits/stdio_lim.h ${ED}/usr/${CHOST}/include/bits || die
+	rm -rv ${ED}/usr/${CHOST}/include/scsi || die
 	popd > /dev/null
 }
 
