@@ -389,18 +389,20 @@ get_gcc_src_uri() {
 		fi
 	fi
 
-	if tc_has_feature gcj ; then
-		if tc_version_is_at_least 4.5 ; then
-			GCC_SRC_URI+=" gcj? ( ftp://sourceware.org/pub/java/ecj-4.5.jar )"
-		elif tc_version_is_at_least 4.3 ; then
-			GCC_SRC_URI+=" gcj? ( ftp://sourceware.org/pub/java/ecj-4.3.jar )"
-		fi
-	fi
+	if tc_version_is_at_least 9 ; then
+		[[ -n ${UCLIBC_VER} ]] && \
+			GCC_SRC_URI+=" $(gentoo_urls gcc-${UCLIBC_GCC_VER}-uclibc-patches-${UCLIBC_VER}.tar.bz2)"
+		[[ -n ${PATCH_VER} ]] && \
+			GCC_SRC_URI+=" $(gentoo_urls gcc-${PATCH_GCC_VER}-patches-${PATCH_VER}.tar.bz2)"
 
-	# Cygwin patches from https://github.com/cygwinports/gcc
-	[[ -n ${CYGWINPORTS_GITREV} ]] && \
-		GCC_SRC_URI+=" elibc_Cygwin? ( https://github.com/cygwinports/gcc/archive/${CYGWINPORTS_GITREV}.tar.gz
-			-> gcc-cygwinports-${CYGWINPORTS_GITREV}.tar.gz )"
+		[[ -n ${PIE_VER} ]] && \
+			PIE_CORE=${PIE_CORE:-gcc-${PIE_GCC_VER}-piepatches-v${PIE_VER}.tar.bz2} && \
+			GCC_SRC_URI+=" $(gentoo_urls ${PIE_CORE})"
+
+		# gcc minispec for the hardened gcc 4 compiler
+		[[ -n ${SPECS_VER} ]] && \
+			GCC_SRC_URI+=" $(gentoo_urls gcc-${SPECS_GCC_VER}-specs-${SPECS_VER}.tar.bz2)"
+	fi
 
 	echo "${GCC_SRC_URI}"
 }
@@ -475,7 +477,7 @@ toolchain_src_unpack() {
 	fi
 
 	default_src_unpack
-	unpack_gcc_patchset
+	tc_version_is_at_least 9 || unpack_gcc_patchset
 	tc_version_is_at_least 3.2 || git_init_src
 }
 
