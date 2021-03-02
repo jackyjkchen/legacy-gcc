@@ -1,0 +1,951 @@
+diff --git a/configure b/configure
+index d14f89a..66df2b4 100755
+--- a/configure
++++ b/configure
+@@ -4042,7 +4042,7 @@ echo $ECHO_N "checking version of $AS... $ECHO_C" >&6
+   ac_prog_version=`$AS --version 2>&1 | sed -n 's/^.*GNU assembler.* \([0-9]*\.[0-9.]*\).*$/\1/p'`
+   case $ac_prog_version in
+     '') ac_prog_version="v. ?.??, bad"; ac_verc_fail=yes;;
+-    2.1[3-9]*)
++    2.1[3-9]* | 2.2[0-9]* | 2.3[0-9]* | 2.4[0-9]*)
+        ac_prog_version="$ac_prog_version, ok"; ac_verc_fail=no;;
+     *) ac_prog_version="$ac_prog_version, bad"; ac_verc_fail=yes;;
+ 
+@@ -4103,7 +4103,7 @@ echo $ECHO_N "checking version of $LD... $ECHO_C" >&6
+   ac_prog_version=`$LD --version 2>&1 | sed -n 's/^.*GNU ld.* \([0-9][0-9]*\.[0-9.]*\).*$/\1/p'`
+   case $ac_prog_version in
+     '') ac_prog_version="v. ?.??, bad"; ac_verc_fail=yes;;
+-    2.1[3-9]*)
++    2.1[3-9]* | 2.2[0-9]* | 2.3[0-9]* | 2.4[0-9]*)
+        ac_prog_version="$ac_prog_version, ok"; ac_verc_fail=no;;
+     *) ac_prog_version="$ac_prog_version, bad"; ac_verc_fail=yes;;
+ 
+@@ -4279,7 +4279,7 @@ echo $ECHO_N "checking version of $MAKE... $ECHO_C" >&6
+   ac_prog_version=`$MAKE --version 2>&1 | sed -n 's/^.*GNU Make[^0-9]*\([0-9][0-9.]*\).*$/\1/p'`
+   case $ac_prog_version in
+     '') ac_prog_version="v. ?.??, bad"; ac_verc_fail=yes;;
+-    3.79* | 3.[89]*)
++    3.79* | 3.[89]* | 4.* | 5.*)
+        ac_prog_version="$ac_prog_version, ok"; ac_verc_fail=no;;
+     *) ac_prog_version="$ac_prog_version, bad"; ac_verc_fail=yes;;
+ 
+diff --git a/dlfcn/dlfcn.h b/dlfcn/dlfcn.h
+index 7e373ed..e9dd16d 100644
+--- a/dlfcn/dlfcn.h
++++ b/dlfcn/dlfcn.h
+@@ -164,7 +164,7 @@ enum
+        segment, or if the calling thread has not allocated a block for it.  */
+     RTLD_DI_TLS_DATA = 10,
+ 
+-    RTLD_DI_MAX = 10,
++    RTLD_DI_MAX = 10
+   };
+ 
+ 
+diff --git a/include/features.h b/include/features.h
+index ad9bbc7..4eb49a9 100644
+--- a/include/features.h
++++ b/include/features.h
+@@ -275,7 +275,13 @@
+ #endif
+ 
+ #if defined _FORTIFY_SOURCE && _FORTIFY_SOURCE > 0 \
+-    && __GNUC_PREREQ (4, 1) && defined __OPTIMIZE__ && __OPTIMIZE__ > 0
++    && defined __OPTIMIZE__ && __OPTIMIZE__ > 0 \
++    && (__GNUC_PREREQ (4, 1) \
++        || (defined __GNUC_RH_RELEASE__ && __GNUC_PREREQ (4, 0)) \
++        || (defined __GNUC_RH_RELEASE__ && __GNUC_PREREQ (3, 4) \
++            && __GNUC_MINOR__ == 4 \
++            && (__GNUC_PATCHLEVEL__ > 2 \
++                || (__GNUC_PATCHLEVEL__ == 2 && __GNUC_RH_RELEASE__ >= 8))))
+ # if _FORTIFY_SOURCE > 1
+ #  define __USE_FORTIFY_LEVEL 2
+ # else
+diff --git a/libio/bits/stdio2.h b/libio/bits/stdio2.h
+index 0582edb..f1d745c 100644
+--- a/libio/bits/stdio2.h
++++ b/libio/bits/stdio2.h
+@@ -61,14 +61,25 @@ extern int __vfprintf_chk (FILE *__restrict __stream, int __flag,
+ extern int __vprintf_chk (int __flag, __const char *__restrict __format,
+ 			  _G_va_list __ap);
+ 
+-# define printf(...) \
++# if __GNUC_PREREQ (4, 0)
++#  define printf(...) \
+   __printf_chk (__USE_FORTIFY_LEVEL - 1, __VA_ARGS__)
+-# define fprintf(stream, ...) \
++#  define fprintf(stream, ...) \
+   __fprintf_chk (stream, __USE_FORTIFY_LEVEL - 1, __VA_ARGS__)
+-# define vprintf(format, ap) \
++#  define vprintf(format, ap) \
+   __vprintf_chk (__USE_FORTIFY_LEVEL - 1, format, ap)
+-# define vfprintf(stream, format, ap) \
++#  define vfprintf(stream, format, ap) \
+   __vfprintf_chk (stream, __USE_FORTIFY_LEVEL - 1, format, ap)
++# else
++#  define printf(...) \
++  __builtin___printf_chk (__USE_FORTIFY_LEVEL - 1, __VA_ARGS__)
++#  define fprintf(stream, ...) \
++  __builtin___fprintf_chk (stream, __USE_FORTIFY_LEVEL - 1, __VA_ARGS__)
++#  define vprintf(format, ap) \
++  __builtin___vprintf_chk (__USE_FORTIFY_LEVEL - 1, format, ap)
++#  define vfprintf(stream, format, ap) \
++  __builtin___vfprintf_chk (stream, __USE_FORTIFY_LEVEL - 1, format, ap)
++# endif
+ 
+ #endif
+ 
+diff --git a/libio/stdio.h b/libio/stdio.h
+index 5e74305..cc288a3 100644
+--- a/libio/stdio.h
++++ b/libio/stdio.h
+@@ -142,10 +142,12 @@ typedef _G_fpos64_t fpos64_t;
+ extern struct _IO_FILE *stdin;		/* Standard input stream.  */
+ extern struct _IO_FILE *stdout;		/* Standard output stream.  */
+ extern struct _IO_FILE *stderr;		/* Standard error output stream.  */
++#ifdef __STDC__
+ /* C89/C99 say they're macros.  Make them happy.  */
+ #define stdin stdin
+ #define stdout stdout
+ #define stderr stderr
++#endif
+ 
+ __BEGIN_NAMESPACE_STD
+ /* Remove file FILENAME.  */
+@@ -745,12 +747,6 @@ __BEGIN_NAMESPACE_STD
+ extern void perror (__const char *__s);
+ __END_NAMESPACE_STD
+ 
+-/* Provide the declarations for `sys_errlist' and `sys_nerr' if they
+-   are available on this system.  Even if available, these variables
+-   should not be used directly.  The `strerror' function provides
+-   all the necessary functionality.  */
+-#include <bits/sys_errlist.h>
+-
+ 
+ #ifdef	__USE_POSIX
+ /* Return the system file descriptor for STREAM.  */
+diff --git a/nptl/sysdeps/pthread/bits/libc-lock.h b/nptl/sysdeps/pthread/bits/libc-lock.h
+index 795caa7..5037caf 100644
+--- a/nptl/sysdeps/pthread/bits/libc-lock.h
++++ b/nptl/sysdeps/pthread/bits/libc-lock.h
+@@ -1,5 +1,6 @@
+-/* libc-internal interface for mutex locks.  NPTL version.
+-   Copyright (C) 1996-2001, 2002, 2003, 2005 Free Software Foundation, Inc.
++/* libc-internal interface for mutex locks.  LinuxThreads version.
++   Copyright (C) 1996,1997,1998,1999,2000,2001,2002,2003
++   	Free Software Foundation, Inc.
+    This file is part of the GNU C Library.
+ 
+    The GNU C Library is free software; you can redistribute it and/or
+@@ -21,37 +22,17 @@
+ #define _BITS_LIBC_LOCK_H 1
+ 
+ #include <pthread.h>
+-#define __need_NULL
+-#include <stddef.h>
+-
+-
+-/* Fortunately Linux now has a mean to do locking which is realtime
+-   safe without the aid of the thread library.  We also need no fancy
+-   options like error checking mutexes etc.  We only need simple
+-   locks, maybe recursive.  This can be easily and cheaply implemented
+-   using futexes.  We will use them everywhere except in ld.so since
+-   ld.so might be used on old kernels with a different libc.so.  */
+-#ifdef _LIBC
+-# include <lowlevellock.h>
+-# include <tls.h>
+-# include <pthread-functions.h>
+-#endif
+ 
+ /* Mutex type.  */
+-#if defined _LIBC || defined _IO_MTSAFE_IO
+-# if (defined NOT_IN_libc && !defined IS_IN_libpthread) || !defined _LIBC
++#ifdef _IO_MTSAFE_IO
+ typedef pthread_mutex_t __libc_lock_t;
+ typedef struct { pthread_mutex_t mutex; } __libc_lock_recursive_t;
+-# else
+-typedef int __libc_lock_t;
+-typedef struct { int lock; int cnt; void *owner; } __libc_lock_recursive_t;
+-# endif
+-typedef struct { pthread_mutex_t mutex; } __rtld_lock_recursive_t;
+ # ifdef __USE_UNIX98
+ typedef pthread_rwlock_t __libc_rwlock_t;
+ # else
+ typedef struct __libc_rwlock_opaque__ __libc_rwlock_t;
+ # endif
++typedef __libc_lock_recursive_t __rtld_lock_recursive_t;
+ #else
+ typedef struct __libc_lock_opaque__ __libc_lock_t;
+ typedef struct __libc_lock_recursive_opaque__ __libc_lock_recursive_t;
+@@ -86,22 +67,12 @@ typedef pthread_key_t __libc_key_t;
+    initialized locks must be set to one due to the lack of normal
+    atomic operations.) */
+ 
+-#if defined _LIBC && (!defined NOT_IN_libc || defined IS_IN_libpthread)
+-# if LLL_LOCK_INITIALIZER == 0
++#if __LT_SPINLOCK_INIT == 0
+ #  define __libc_lock_define_initialized(CLASS,NAME) \
+   CLASS __libc_lock_t NAME;
+-# else
+-#  define __libc_lock_define_initialized(CLASS,NAME) \
+-  CLASS __libc_lock_t NAME = LLL_LOCK_INITIALIZER;
+-# endif
+ #else
+-# if __LT_SPINLOCK_INIT == 0
+-#  define __libc_lock_define_initialized(CLASS,NAME) \
+-  CLASS __libc_lock_t NAME;
+-# else
+ #  define __libc_lock_define_initialized(CLASS,NAME) \
+   CLASS __libc_lock_t NAME = PTHREAD_MUTEX_INITIALIZER;
+-# endif
+ #endif
+ 
+ #define __libc_rwlock_define_initialized(CLASS,NAME) \
+@@ -109,37 +80,17 @@ typedef pthread_key_t __libc_key_t;
+ 
+ /* Define an initialized recursive lock variable NAME with storage
+    class CLASS.  */
+-#if defined _LIBC && (!defined NOT_IN_libc || defined IS_IN_libpthread)
+-# if LLL_LOCK_INITIALIZER == 0
+-#  define __libc_lock_define_initialized_recursive(CLASS,NAME) \
+-  CLASS __libc_lock_recursive_t NAME;
+-# else
+-#  define __libc_lock_define_initialized_recursive(CLASS,NAME) \
+-  CLASS __libc_lock_recursive_t NAME = _LIBC_LOCK_RECURSIVE_INITIALIZER;
+-# endif
+-# define _LIBC_LOCK_RECURSIVE_INITIALIZER \
+-  { LLL_LOCK_INITIALIZER, 0, NULL }
+-#else
+-# define __libc_lock_define_initialized_recursive(CLASS,NAME) \
++#define __libc_lock_define_initialized_recursive(CLASS,NAME) \
+   CLASS __libc_lock_recursive_t NAME = _LIBC_LOCK_RECURSIVE_INITIALIZER;
+-# define _LIBC_LOCK_RECURSIVE_INITIALIZER \
++#define _LIBC_LOCK_RECURSIVE_INITIALIZER \
+   {PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP}
+-#endif
+ 
+ #define __rtld_lock_define_initialized_recursive(CLASS,NAME) \
+   CLASS __rtld_lock_recursive_t NAME = _RTLD_LOCK_RECURSIVE_INITIALIZER;
+ #define _RTLD_LOCK_RECURSIVE_INITIALIZER \
+   {PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP}
+ 
+-#define __rtld_lock_initialize(NAME) \
+-  (void) ((NAME) = (__rtld_lock_recursive_t) _RTLD_LOCK_RECURSIVE_INITIALIZER)
+-
+-/* If we check for a weakly referenced symbol and then perform a
+-   normal jump to it te code generated for some platforms in case of
+-   PIC is unnecessarily slow.  What would happen is that the function
+-   is first referenced as data and then it is called indirectly
+-   through the PLT.  We can make this a direct jump.  */
+-#ifdef __PIC__
++#if defined __PIC__
+ # define __libc_maybe_call(FUNC, ARGS, ELSE) \
+   (__extension__ ({ __typeof (FUNC) *_fn = (FUNC); \
+                     _fn != NULL ? (*_fn) ARGS : ELSE; }))
+@@ -147,197 +98,77 @@ typedef pthread_key_t __libc_key_t;
+ # define __libc_maybe_call(FUNC, ARGS, ELSE) \
+   (FUNC != NULL ? FUNC ARGS : ELSE)
+ #endif
+-
+-/* Call thread functions through the function pointer table.  */
+-#if defined SHARED && !defined NOT_IN_libc
+-# define PTF(NAME) __libc_pthread_functions.ptr_##NAME
+-# define __libc_ptf_call(FUNC, ARGS, ELSE) \
+-  (PTF(FUNC) != NULL ? PTF(FUNC) ARGS : ELSE)
+-#else
+-# define PTF(NAME) NAME
+-# define __libc_ptf_call(FUNC, ARGS, ELSE) \
+-  __libc_maybe_call (FUNC, ARGS, ELSE)
+-#endif
+-
++#define __libc_maybe_call2(FUNC, ARGS, ELSE) __libc_maybe_call (__##FUNC, ARGS, ELSE)
+ 
+ /* Initialize the named lock variable, leaving it in a consistent, unlocked
+    state.  */
+-#if defined _LIBC && (!defined NOT_IN_libc || defined IS_IN_libpthread)
+-# define __libc_lock_init(NAME) ((NAME) = LLL_LOCK_INITIALIZER, 0)
+-#else
+-# define __libc_lock_init(NAME) \
+-  __libc_maybe_call (__pthread_mutex_init, (&(NAME), NULL), 0)
+-#endif
++#define __libc_lock_init(NAME) \
++  (__libc_maybe_call2 (pthread_mutex_init, (&(NAME), NULL), 0))
+ #define __libc_rwlock_init(NAME) \
+-  __libc_maybe_call (__pthread_rwlock_init, (&(NAME), NULL), 0)
++  (__libc_maybe_call (__pthread_rwlock_init, (&(NAME), NULL), 0));
+ 
+ /* Same as last but this time we initialize a recursive mutex.  */
+-#if defined _LIBC && (!defined NOT_IN_libc || defined IS_IN_libpthread)
+-# define __libc_lock_init_recursive(NAME) \
+-  ((NAME) = (__libc_lock_recursive_t) _LIBC_LOCK_RECURSIVE_INITIALIZER, 0)
+-#else
+-# define __libc_lock_init_recursive(NAME) \
++#define __libc_lock_init_recursive(NAME) \
+   do {									      \
+     if (__pthread_mutex_init != NULL)					      \
+       {									      \
+ 	pthread_mutexattr_t __attr;					      \
+ 	__pthread_mutexattr_init (&__attr);				      \
+-	__pthread_mutexattr_settype (&__attr, PTHREAD_MUTEX_RECURSIVE_NP);    \
++	__pthread_mutexattr_settype (&__attr, PTHREAD_MUTEX_RECURSIVE_NP); \
+ 	__pthread_mutex_init (&(NAME).mutex, &__attr);			      \
+ 	__pthread_mutexattr_destroy (&__attr);				      \
+       }									      \
+-  } while (0)
+-#endif
+-
++  } while (0);
+ #define __rtld_lock_init_recursive(NAME) \
+-  do {									      \
+-    if (__pthread_mutex_init != NULL)					      \
+-      {									      \
+-	pthread_mutexattr_t __attr;					      \
+-	__pthread_mutexattr_init (&__attr);				      \
+-	__pthread_mutexattr_settype (&__attr, PTHREAD_MUTEX_RECURSIVE_NP);    \
+-	__pthread_mutex_init (&(NAME).mutex, &__attr);			      \
+-	__pthread_mutexattr_destroy (&__attr);				      \
+-      }									      \
+-  } while (0)
++  __libc_lock_init_recursive (NAME)
+ 
+ /* Finalize the named lock variable, which must be locked.  It cannot be
+    used again until __libc_lock_init is called again on it.  This must be
+    called on a lock variable before the containing storage is reused.  */
+-#if defined _LIBC && (!defined NOT_IN_libc || defined IS_IN_libpthread)
+-# define __libc_lock_fini(NAME) ((void) 0)
+-#else
+-# define __libc_lock_fini(NAME) \
+-  __libc_maybe_call (__pthread_mutex_destroy, (&(NAME)), 0)
+-#endif
++#define __libc_lock_fini(NAME) \
++  (__libc_maybe_call2 (pthread_mutex_destroy, (&(NAME)), 0));
+ #define __libc_rwlock_fini(NAME) \
+-  __libc_maybe_call (__pthread_rwlock_destroy, (&(NAME)), 0)
++  (__libc_maybe_call (__pthread_rwlock_destroy, (&(NAME)), 0));
+ 
+ /* Finalize recursive named lock.  */
+-#if defined _LIBC && (!defined NOT_IN_libc || defined IS_IN_libpthread)
+-# define __libc_lock_fini_recursive(NAME) ((void) 0)
+-#else
+-# define __libc_lock_fini_recursive(NAME) \
+-  __libc_maybe_call (__pthread_mutex_destroy, (&(NAME)), 0)
+-#endif
++#define __libc_lock_fini_recursive(NAME) __libc_lock_fini ((NAME).mutex)
++#define __rtld_lock_fini_recursive(NAME) __libc_lock_fini_recursive (NAME)
+ 
+ /* Lock the named lock variable.  */
+-#if defined _LIBC && (!defined NOT_IN_libc || defined IS_IN_libpthread)
+-# define __libc_lock_lock(NAME) \
+-  ({ lll_lock (NAME); 0; })
+-#else
+-# define __libc_lock_lock(NAME) \
+-  __libc_maybe_call (__pthread_mutex_lock, (&(NAME)), 0)
+-#endif
++#define __libc_lock_lock(NAME) \
++  (__libc_maybe_call2 (pthread_mutex_lock, (&(NAME)), 0));
+ #define __libc_rwlock_rdlock(NAME) \
+-  __libc_ptf_call (__pthread_rwlock_rdlock, (&(NAME)), 0)
++  (__libc_maybe_call (__pthread_rwlock_rdlock, (&(NAME)), 0));
+ #define __libc_rwlock_wrlock(NAME) \
+-  __libc_ptf_call (__pthread_rwlock_wrlock, (&(NAME)), 0)
++  (__libc_maybe_call (__pthread_rwlock_wrlock, (&(NAME)), 0));
+ 
+ /* Lock the recursive named lock variable.  */
+-#if defined _LIBC && (!defined NOT_IN_libc || defined IS_IN_libpthread)
+-# define __libc_lock_lock_recursive(NAME) \
+-  do {									      \
+-    void *self = THREAD_SELF;						      \
+-    if ((NAME).owner != self)						      \
+-      {									      \
+-	lll_lock ((NAME).lock);						      \
+-	(NAME).owner = self;						      \
+-      }									      \
+-    ++(NAME).cnt;							      \
+-  } while (0)
+-#else
+-# define __libc_lock_lock_recursive(NAME) \
+-  __libc_maybe_call (__pthread_mutex_lock, (&(NAME).mutex), 0)
+-#endif
++#define __libc_lock_lock_recursive(NAME) __libc_lock_lock ((NAME).mutex)
+ 
+ /* Try to lock the named lock variable.  */
+-#if defined _LIBC && (!defined NOT_IN_libc || defined IS_IN_libpthread)
+-# define __libc_lock_trylock(NAME) \
+-  lll_trylock (NAME)
+-#else
+-# define __libc_lock_trylock(NAME) \
+-  __libc_maybe_call (__pthread_mutex_trylock, (&(NAME)), 0)
+-#endif
++#define __libc_lock_trylock(NAME) \
++  (__libc_maybe_call2 (pthread_mutex_trylock, (&(NAME)), 0))
+ #define __libc_rwlock_tryrdlock(NAME) \
+-  __libc_maybe_call (__pthread_rwlock_tryrdlock, (&(NAME)), 0)
++  (__libc_maybe_call (__pthread_rwlock_tryrdlock, (&(NAME)), 0))
+ #define __libc_rwlock_trywrlock(NAME) \
+-  __libc_maybe_call (__pthread_rwlock_trywrlock, (&(NAME)), 0)
++  (__libc_maybe_call (__pthread_rwlock_trywrlock, (&(NAME)), 0))
+ 
+ /* Try to lock the recursive named lock variable.  */
+-#if defined _LIBC && (!defined NOT_IN_libc || defined IS_IN_libpthread)
+-# define __libc_lock_trylock_recursive(NAME) \
+-  ({									      \
+-    int result = 0;							      \
+-    void *self = THREAD_SELF;						      \
+-    if ((NAME).owner != self)						      \
+-      {									      \
+-	if (lll_trylock ((NAME).lock) == 0)				      \
+-	  {								      \
+-	    (NAME).owner = self;					      \
+-	    (NAME).cnt = 1;						      \
+-	  }								      \
+-	else								      \
+-	  result = EBUSY;						      \
+-      }									      \
+-    else								      \
+-      ++(NAME).cnt;							      \
+-    result;								      \
+-  })
+-#else
+-# define __libc_lock_trylock_recursive(NAME) \
+-  __libc_maybe_call (__pthread_mutex_trylock, (&(NAME)), 0)
+-#endif
+-
++#define __libc_lock_trylock_recursive(NAME) __libc_lock_trylock ((NAME).mutex)
+ #define __rtld_lock_trylock_recursive(NAME) \
+-  __libc_maybe_call (__pthread_mutex_trylock, (&(NAME).mutex), 0)
++  __libc_lock_trylock_recursive (NAME)
+ 
+ /* Unlock the named lock variable.  */
+-#if defined _LIBC && (!defined NOT_IN_libc || defined IS_IN_libpthread)
+-# define __libc_lock_unlock(NAME) \
+-  lll_unlock (NAME)
+-#else
+-# define __libc_lock_unlock(NAME) \
+-  __libc_maybe_call (__pthread_mutex_unlock, (&(NAME)), 0)
+-#endif
++#define __libc_lock_unlock(NAME) \
++  (__libc_maybe_call2 (pthread_mutex_unlock, (&(NAME)), 0));
+ #define __libc_rwlock_unlock(NAME) \
+-  __libc_ptf_call (__pthread_rwlock_unlock, (&(NAME)), 0)
++  (__libc_maybe_call (__pthread_rwlock_unlock, (&(NAME)), 0));
+ 
+ /* Unlock the recursive named lock variable.  */
+-#if defined _LIBC && (!defined NOT_IN_libc || defined IS_IN_libpthread)
+-/* We do no error checking here.  */
+-# define __libc_lock_unlock_recursive(NAME) \
+-  do {									      \
+-    if (--(NAME).cnt == 0)						      \
+-      {									      \
+-	(NAME).owner = NULL;						      \
+-	lll_unlock ((NAME).lock);					      \
+-      }									      \
+-  } while (0)
+-#else
+-# define __libc_lock_unlock_recursive(NAME) \
+-  __libc_maybe_call (__pthread_mutex_unlock, (&(NAME)), 0)
+-#endif
+-
+-#if defined _LIBC && defined SHARED
+-# define __rtld_lock_default_lock_recursive(lock) \
+-  ++((pthread_mutex_t *)(lock))->__data.__count;
+-
+-# define __rtld_lock_default_unlock_recursive(lock) \
+-  --((pthread_mutex_t *)(lock))->__data.__count;
+-
+-# define __rtld_lock_lock_recursive(NAME) \
+-  GL(dl_rtld_lock_recursive) (&(NAME).mutex)
++#define __libc_lock_unlock_recursive(NAME) __libc_lock_unlock ((NAME).mutex)
+ 
+-# define __rtld_lock_unlock_recursive(NAME) \
+-  GL(dl_rtld_unlock_recursive) (&(NAME).mutex)
+-#else
+-# define __rtld_lock_lock_recursive(NAME) \
+-  __libc_maybe_call (__pthread_mutex_lock, (&(NAME).mutex), 0)
+-
+-# define __rtld_lock_unlock_recursive(NAME) \
+-  __libc_maybe_call (__pthread_mutex_unlock, (&(NAME).mutex), 0)
+-#endif
++#define __rtld_lock_lock_recursive(NAME) __libc_lock_lock_recursive (NAME)
++#define __rtld_lock_unlock_recursive(NAME) __libc_lock_unlock_recursive (NAME)
+ 
+ /* Define once control variable.  */
+ #if PTHREAD_ONCE_INIT == 0
+@@ -353,102 +184,70 @@ typedef pthread_key_t __libc_key_t;
+ /* Call handler iff the first call.  */
+ #define __libc_once(ONCE_CONTROL, INIT_FUNCTION) \
+   do {									      \
+-    if (PTF(__pthread_once) != NULL)					      \
+-      PTF(__pthread_once) (&(ONCE_CONTROL), INIT_FUNCTION);		      \
++    if (__pthread_once != NULL)						      \
++      __pthread_once (&(ONCE_CONTROL), (INIT_FUNCTION));		      \
+     else if ((ONCE_CONTROL) == PTHREAD_ONCE_INIT) {			      \
+       INIT_FUNCTION ();							      \
+-      (ONCE_CONTROL) |= 2;						      \
++      (ONCE_CONTROL) = 2;						      \
+     }									      \
+   } while (0)
+ 
+ 
+-/* Note that for I/O cleanup handling we are using the old-style
+-   cancel handling.  It does not have to be integrated with C++ snce
+-   no C++ code is called in the middle.  The old-style handling is
+-   faster and the support is not going away.  */
+-extern void _pthread_cleanup_push (struct _pthread_cleanup_buffer *buffer,
+-                                   void (*routine) (void *), void *arg);
+-extern void _pthread_cleanup_pop (struct _pthread_cleanup_buffer *buffer,
+-                                  int execute);
+-extern void _pthread_cleanup_push_defer (struct _pthread_cleanup_buffer *buffer,
+-                                         void (*routine) (void *), void *arg);
+-extern void _pthread_cleanup_pop_restore (struct _pthread_cleanup_buffer *buffer,
+-                                          int execute);
+-
+ /* Start critical region with cleanup.  */
+ #define __libc_cleanup_region_start(DOIT, FCT, ARG) \
+   { struct _pthread_cleanup_buffer _buffer;				      \
+-    int _avail;								      \
+-    if (DOIT) {								      \
+-      _avail = PTF(_pthread_cleanup_push_defer) != NULL;		      \
+-      if (_avail) {							      \
+-	PTF(_pthread_cleanup_push_defer) (&_buffer, FCT, ARG);		      \
+-      } else {								      \
+-	_buffer.__routine = (FCT);					      \
+-	_buffer.__arg = (ARG);						      \
+-      }									      \
+-    } else {								      \
+-      _avail = 0;							      \
++    int _avail = (DOIT) && _pthread_cleanup_push_defer != NULL;		      \
++    if (_avail) {							      \
++      _pthread_cleanup_push_defer (&_buffer, (FCT), (ARG));		      \
+     }
+ 
+ /* End critical region with cleanup.  */
+ #define __libc_cleanup_region_end(DOIT) \
+     if (_avail) {							      \
+-      PTF(_pthread_cleanup_pop_restore) (&_buffer, DOIT);		      \
+-    } else if (DOIT)							      \
+-      _buffer.__routine (_buffer.__arg);				      \
++      _pthread_cleanup_pop_restore (&_buffer, (DOIT));			      \
++    }									      \
+   }
+ 
+ /* Sometimes we have to exit the block in the middle.  */
+ #define __libc_cleanup_end(DOIT) \
+     if (_avail) {							      \
+-      PTF(_pthread_cleanup_pop_restore) (&_buffer, DOIT);		      \
+-    } else if (DOIT)							      \
+-      _buffer.__routine (_buffer.__arg)
+-
+-
+-/* Normal cleanup handling, based on C cleanup attribute.  */
+-extern __inline void
+-__libc_cleanup_routine (struct __pthread_cleanup_frame *f)
+-{
+-  if (f->__do_it)
+-    f->__cancel_routine (f->__cancel_arg);
+-}
++      _pthread_cleanup_pop_restore (&_buffer, (DOIT));			      \
++    }
+ 
+ #define __libc_cleanup_push(fct, arg) \
+-  do {									      \
+-    struct __pthread_cleanup_frame __clframe				      \
+-      __attribute__ ((__cleanup__ (__libc_cleanup_routine)))		      \
+-      = { .__cancel_routine = (fct), .__cancel_arg = (arg),		      \
+-          .__do_it = 1 };
++    { struct _pthread_cleanup_buffer _buffer; 				      \
++    __libc_maybe_call (_pthread_cleanup_push, (&_buffer, (fct), (arg)), 0)
+ 
+ #define __libc_cleanup_pop(execute) \
+-    __clframe.__do_it = (execute);					      \
+-  } while (0)
+-
++    __libc_maybe_call (_pthread_cleanup_pop, (&_buffer, execute), 0);	      \
++    }
+ 
+ /* Create thread-specific key.  */
+ #define __libc_key_create(KEY, DESTRUCTOR) \
+-  __libc_ptf_call (__pthread_key_create, (KEY, DESTRUCTOR), 1)
++  (__libc_maybe_call (__pthread_key_create, (KEY, DESTRUCTOR), 1))
+ 
+ /* Get thread-specific data.  */
+ #define __libc_getspecific(KEY) \
+-  __libc_ptf_call (__pthread_getspecific, (KEY), NULL)
++  (__libc_maybe_call (__pthread_getspecific, (KEY), NULL))
+ 
+ /* Set thread-specific data.  */
+ #define __libc_setspecific(KEY, VALUE) \
+-  __libc_ptf_call (__pthread_setspecific, (KEY, VALUE), 0)
++  (__libc_maybe_call (__pthread_setspecific, (KEY, VALUE), 0))
+ 
+ 
+-/* Register handlers to execute before and after `fork'.  Note that the
+-   last parameter is NULL.  The handlers registered by the libc are
+-   never removed so this is OK.  */
++/* Register handlers to execute before and after `fork'.  */
+ #define __libc_atfork(PREPARE, PARENT, CHILD) \
+-  __register_atfork (PREPARE, PARENT, CHILD, NULL)
+-extern int __register_atfork (void (*__prepare) (void),
+-			      void (*__parent) (void),
+-			      void (*__child) (void),
+-			      void *__dso_handle);
++  (__libc_maybe_call (__pthread_atfork, (PREPARE, PARENT, CHILD), 0))
++
++__BEGIN_DECLS
++
++extern void _pthread_cleanup_push_defer (struct _pthread_cleanup_buffer *__buffer,
++                                         void (*__routine) (void *),
++                                         void *__arg) __THROW;
++
++extern void _pthread_cleanup_pop_restore (struct _pthread_cleanup_buffer *__buffer,
++                                          int __execute) __THROW;
++
+ 
+ /* Functions that are used by this file and are internal to the GNU C
+    library.  */
+@@ -503,66 +302,39 @@ extern int __pthread_atfork (void (*__prepare) (void),
+ 			     void (*__parent) (void),
+ 			     void (*__child) (void));
+ 
+-
++__END_DECLS
+ 
+ /* Make the pthread functions weak so that we can elide them from
+    single-threaded processes.  */
+ #ifndef __NO_WEAK_PTHREAD_ALIASES
+-# ifdef weak_extern
+-#  if _LIBC
+-#   include <bp-sym.h>
+-#  else
+-#   define BP_SYM (sym) sym
+-#  endif
+-weak_extern (BP_SYM (__pthread_mutex_init))
+-weak_extern (BP_SYM (__pthread_mutex_destroy))
+-weak_extern (BP_SYM (__pthread_mutex_lock))
+-weak_extern (BP_SYM (__pthread_mutex_trylock))
+-weak_extern (BP_SYM (__pthread_mutex_unlock))
+-weak_extern (BP_SYM (__pthread_mutexattr_init))
+-weak_extern (BP_SYM (__pthread_mutexattr_destroy))
+-weak_extern (BP_SYM (__pthread_mutexattr_settype))
+-weak_extern (BP_SYM (__pthread_rwlock_init))
+-weak_extern (BP_SYM (__pthread_rwlock_destroy))
+-weak_extern (BP_SYM (__pthread_rwlock_rdlock))
+-weak_extern (BP_SYM (__pthread_rwlock_tryrdlock))
+-weak_extern (BP_SYM (__pthread_rwlock_wrlock))
+-weak_extern (BP_SYM (__pthread_rwlock_trywrlock))
+-weak_extern (BP_SYM (__pthread_rwlock_unlock))
+-weak_extern (BP_SYM (__pthread_key_create))
+-weak_extern (BP_SYM (__pthread_setspecific))
+-weak_extern (BP_SYM (__pthread_getspecific))
+-weak_extern (BP_SYM (__pthread_once))
+-weak_extern (__pthread_initialize)
+-weak_extern (__pthread_atfork)
+-weak_extern (BP_SYM (_pthread_cleanup_push_defer))
+-weak_extern (BP_SYM (_pthread_cleanup_pop_restore))
+-weak_extern (BP_SYM (pthread_setcancelstate))
+-# else
+-#  pragma weak __pthread_mutex_init
+-#  pragma weak __pthread_mutex_destroy
+-#  pragma weak __pthread_mutex_lock
+-#  pragma weak __pthread_mutex_trylock
+-#  pragma weak __pthread_mutex_unlock
+-#  pragma weak __pthread_mutexattr_init
+-#  pragma weak __pthread_mutexattr_destroy
+-#  pragma weak __pthread_mutexattr_settype
+-#  pragma weak __pthread_rwlock_destroy
+-#  pragma weak __pthread_rwlock_rdlock
+-#  pragma weak __pthread_rwlock_tryrdlock
+-#  pragma weak __pthread_rwlock_wrlock
+-#  pragma weak __pthread_rwlock_trywrlock
+-#  pragma weak __pthread_rwlock_unlock
+-#  pragma weak __pthread_key_create
+-#  pragma weak __pthread_setspecific
+-#  pragma weak __pthread_getspecific
+-#  pragma weak __pthread_once
+-#  pragma weak __pthread_initialize
+-#  pragma weak __pthread_atfork
+-#  pragma weak _pthread_cleanup_push_defer
+-#  pragma weak _pthread_cleanup_pop_restore
+-#  pragma weak pthread_setcancelstate
+-# endif
++# pragma weak __pthread_mutex_init
++# pragma weak __pthread_mutex_destroy
++# pragma weak __pthread_mutex_lock
++# pragma weak __pthread_mutex_trylock
++# pragma weak __pthread_mutex_unlock
++# pragma weak __pthread_mutexattr_init
++# pragma weak __pthread_mutexattr_destroy
++# pragma weak __pthread_mutexattr_settype
++# pragma weak __pthread_rwlock_destroy
++# pragma weak __pthread_rwlock_rdlock
++# pragma weak __pthread_rwlock_tryrdlock
++# pragma weak __pthread_rwlock_wrlock
++# pragma weak __pthread_rwlock_trywrlock
++# pragma weak __pthread_rwlock_unlock
++# pragma weak __pthread_key_create
++# pragma weak __pthread_setspecific
++# pragma weak __pthread_getspecific
++# pragma weak __pthread_once
++# pragma weak __pthread_initialize
++# pragma weak __pthread_atfork
++# pragma weak _pthread_cleanup_push_defer
++# pragma weak _pthread_cleanup_pop_restore
++# pragma weak _pthread_cleanup_push
++# pragma weak _pthread_cleanup_pop
+ #endif
+ 
++/* We need portable names for some functions.  E.g., when they are
++   used as argument to __libc_cleanup_region_start.  */
++#define __libc_mutex_unlock __pthread_mutex_unlock
++
+ #endif	/* bits/libc-lock.h */
+diff --git a/nptl/sysdeps/pthread/bits/stdio-lock.h b/nptl/sysdeps/pthread/bits/stdio-lock.h
+index cd64bc3..d7c1db0 100644
+--- a/nptl/sysdeps/pthread/bits/stdio-lock.h
++++ b/nptl/sysdeps/pthread/bits/stdio-lock.h
+@@ -1,4 +1,4 @@
+-/* Thread package specific definitions of stream lock type.  NPTL version.
++/* Thread package specific definitions of stream lock type.  Generic version.
+    Copyright (C) 2000, 2001, 2002, 2003 Free Software Foundation, Inc.
+    This file is part of the GNU C Library.
+ 
+@@ -21,61 +21,21 @@
+ #define _BITS_STDIO_LOCK_H 1
+ 
+ #include <bits/libc-lock.h>
+-#include <lowlevellock.h>
+ 
++__libc_lock_define_recursive (typedef, _IO_lock_t)
+ 
+-/* The locking here is very inexpensive, even for inlining.  */
+-#define _IO_lock_inexpensive	1
+-
+-typedef struct { int lock; int cnt; void *owner; } _IO_lock_t;
+-
+-#define _IO_lock_initializer { LLL_LOCK_INITIALIZER, 0, NULL }
+-
+-#define _IO_lock_init(_name) \
+-  ((_name) = (_IO_lock_t) _IO_lock_initializer , 0)
+-
+-#define _IO_lock_fini(_name) \
+-  ((void) 0)
+-
+-#define _IO_lock_lock(_name) \
+-  do {									      \
+-    void *__self = THREAD_SELF;						      \
+-    if ((_name).owner != __self)					      \
+-      {									      \
+-        lll_lock ((_name).lock);					      \
+-        (_name).owner = __self;						      \
+-      }									      \
+-    ++(_name).cnt;							      \
+-  } while (0)
+-
+-#define _IO_lock_trylock(_name) \
+-  ({									      \
+-    int __result = 0;							      \
+-    void *__self = THREAD_SELF;						      \
+-    if ((_name).owner != __self)					      \
+-      {									      \
+-        if (lll_trylock ((_name).lock) == 0)				      \
+-          {								      \
+-            (_name).owner = __self;					      \
+-            (_name).cnt = 1;						      \
+-          }								      \
+-        else								      \
+-          __result = EBUSY;						      \
+-      }									      \
+-    else								      \
+-      ++(_name).cnt;							      \
+-    __result;								      \
+-  })
+-
+-#define _IO_lock_unlock(_name) \
+-  do {									      \
+-    if (--(_name).cnt == 0)						      \
+-      {									      \
+-        (_name).owner = NULL;						      \
+-        lll_unlock ((_name).lock);					      \
+-      }									      \
+-  } while (0)
++/* We need recursive (counting) mutexes.  */
++#ifdef _LIBC_LOCK_RECURSIVE_INITIALIZER
++# define _IO_lock_initializer _LIBC_LOCK_RECURSIVE_INITIALIZER
++#elif _IO_MTSAFE_IO
++ #error libio needs recursive mutexes for _IO_MTSAFE_IO
++#endif
+ 
++#define _IO_lock_init(_name)	__libc_lock_init_recursive (_name)
++#define _IO_lock_fini(_name)	__libc_lock_fini_recursive (_name)
++#define _IO_lock_lock(_name)	__libc_lock_lock_recursive (_name)
++#define _IO_lock_trylock(_name)	__libc_lock_trylock_recursive (_name)
++#define _IO_lock_unlock(_name)	__libc_lock_unlock_recursive (_name)
+ 
+ 
+ #define _IO_cleanup_region_start(_fct, _fp) \
+@@ -86,20 +46,13 @@ typedef struct { int lock; int cnt; void *owner; } _IO_lock_t;
+   __libc_cleanup_region_end (_doit)
+ 
+ #if defined _LIBC && !defined NOT_IN_libc
++# define _IO_acquire_lock(_fp) \
++  _IO_cleanup_region_start ((void (*) (void *)) _IO_funlockfile, (_fp));      \
++  _IO_flockfile (_fp)
+ 
+-# ifdef __EXCEPTIONS
+-#  define _IO_acquire_lock(_fp) \
+-  do {									      \
+-    _IO_FILE *_IO_acquire_lock_file					      \
+-	__attribute__((cleanup (_IO_acquire_lock_fct)))			      \
+-	= (_fp);							      \
+-    _IO_flockfile (_IO_acquire_lock_file);
+-
+-# else
+-#  define _IO_acquire_lock(_fp) _IO_acquire_lock_needs_exceptions_enabled
+-# endif
+-# define _IO_release_lock(_fp) ; } while (0)
+-
++# define _IO_release_lock(_fp) \
++  _IO_funlockfile (_fp);						      \
++  _IO_cleanup_region_end (0)
+ #endif
+ 
+ #endif /* bits/stdio-lock.h */
+diff --git a/nptl/sysdeps/pthread/pthread.h b/nptl/sysdeps/pthread/pthread.h
+index f60ecde..8d4bc74 100644
+--- a/nptl/sysdeps/pthread/pthread.h
++++ b/nptl/sysdeps/pthread/pthread.h
+@@ -20,6 +20,7 @@
+ #define _PTHREAD_H	1
+ 
+ #include <features.h>
++#include <endian.h>
+ #include <sched.h>
+ #include <time.h>
+ 
+@@ -119,21 +120,23 @@ enum
+ };
+ 
+ /* Read-write lock initializers.  */
+-# if __WORDSIZE == 64
+-#  define PTHREAD_RWLOCK_INITIALIZER \
++# define PTHREAD_RWLOCK_INITIALIZER \
+   { { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }
+-# else
+-#  define PTHREAD_RWLOCK_INITIALIZER \
+-  { { 0, 0, 0, 0, 0, 0, 0, 0 } }
+-# endif
+ # ifdef __USE_GNU
+ #  if __WORDSIZE == 64
+ #   define PTHREAD_RWLOCK_WRITER_NONRECURSIVE_INITIALIZER_NP \
+   { { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,					      \
+       PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP } }
+ #  else
+-#   define PTHREAD_RWLOCK_WRITER_NONRECURSIVE_INITIALIZER_NP \
+-  { { 0, 0, 0, 0, 0, 0, PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP, 0 } }
++#   if __BYTE_ORDER == __LITTLE_ENDIAN
++#    define PTHREAD_RWLOCK_WRITER_NONRECURSIVE_INITIALIZER_NP \
++  { { 0, 0, 0, 0, 0, 0, PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP, \
++      0, 0, 0, 0 } }
++#   else
++#    define PTHREAD_RWLOCK_WRITER_NONRECURSIVE_INITIALIZER_NP \
++  { { 0, 0, 0, 0, 0, 0, 0, 0, 0, PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP,\
++      0 } }
++#   endif
+ #  endif
+ # endif
+ #endif  /* Unix98 or XOpen2K */
+diff --git a/nptl/sysdeps/unix/sysv/linux/i386/bits/pthreadtypes.h b/nptl/sysdeps/unix/sysv/linux/i386/bits/pthreadtypes.h
+index f53d0e5..7be1314 100644
+--- a/nptl/sysdeps/unix/sysv/linux/i386/bits/pthreadtypes.h
++++ b/nptl/sysdeps/unix/sysv/linux/i386/bits/pthreadtypes.h
+@@ -128,7 +128,10 @@ typedef union
+     unsigned int __nr_writers_queued;
+     /* FLAGS must stay at this position in the structure to maintain
+        binary compatibility.  */
+-    unsigned int __flags;
++    unsigned char __flags;
++    unsigned char __shared;
++    unsigned char __pad1;
++    unsigned char __pad2;
+     int __writer;
+   } __data;
+   char __size[__SIZEOF_PTHREAD_RWLOCK_T];
+diff --git a/posix/bits/unistd.h b/posix/bits/unistd.h
+index b08aef2..96b3e4f 100644
+--- a/posix/bits/unistd.h
++++ b/posix/bits/unistd.h
+@@ -176,7 +176,8 @@ __NTH (getgroups (int __size, __gid_t __list[]))
+ {
+   if (__bos (__list) != (size_t) -1
+       && (!__builtin_constant_p (__size)
+-	  || __size * sizeof (__gid_t) > __bos (__list)))
++	  || __size * sizeof (__gid_t) > __bos (__list)
++	  || __size < 0))
+     return __getgroups_chk (__size, __list, __bos (__list));
+   return __getgroups_alias (__size, __list);
+ }
+diff --git a/signal/signal.h b/signal/signal.h
+index ed39328..d7c7f67 100644
+--- a/signal/signal.h
++++ b/signal/signal.h
+@@ -299,11 +299,6 @@ extern int sigqueue (__pid_t __pid, int __sig, __const union sigval __val)
+ 
+ #ifdef __USE_BSD
+ 
+-/* Names of the signals.  This variable exists only for compatibility.
+-   Use `strsignal' instead (see <string.h>).  */
+-extern __const char *__const _sys_siglist[_NSIG];
+-extern __const char *__const sys_siglist[_NSIG];
+-
+ /* Structure passed to `sigvec'.  */
+ struct sigvec
+   {
+diff --git a/sysdeps/gnu/_G_config.h b/sysdeps/gnu/_G_config.h
+index 83c78f0..6f8ff3d 100644
+--- a/sysdeps/gnu/_G_config.h
++++ b/sysdeps/gnu/_G_config.h
+@@ -52,10 +52,6 @@ typedef union
+   } __combined;
+ } _G_iconv_t;
+ 
+-typedef int _G_int16_t __attribute__ ((__mode__ (__HI__)));
+-typedef int _G_int32_t __attribute__ ((__mode__ (__SI__)));
+-typedef unsigned int _G_uint16_t __attribute__ ((__mode__ (__HI__)));
+-typedef unsigned int _G_uint32_t __attribute__ ((__mode__ (__SI__)));
+ 
+ #define _G_HAVE_BOOL 1
+ 
+diff --git a/sysdeps/unix/inet/Subdirs b/sysdeps/unix/inet/Subdirs
+index 4a191e2..d71d621 100644
+--- a/sysdeps/unix/inet/Subdirs
++++ b/sysdeps/unix/inet/Subdirs
+@@ -1,7 +1,6 @@
+ inet
+ resolv
+ hesiod
+-sunrpc
+ nis
+ nscd
+ streams
+diff --git a/sysdeps/unix/sysv/linux/bits/resource.h b/sysdeps/unix/sysv/linux/bits/resource.h
+index 526cdaf..95d64ed 100644
+--- a/sysdeps/unix/sysv/linux/bits/resource.h
++++ b/sysdeps/unix/sysv/linux/bits/resource.h
+@@ -158,8 +158,16 @@ enum __rusage_who
+ #define RUSAGE_SELF RUSAGE_SELF
+ 
+   /* All of its terminated child processes.  */
+-  RUSAGE_CHILDREN = -1
++  RUSAGE_CHILDREN = -1,
+ #define RUSAGE_CHILDREN RUSAGE_CHILDREN
++
++#ifdef __USE_GNU
++  /* The calling thread.  */
++  RUSAGE_THREAD = 1
++# define RUSAGE_THREAD RUSAGE_THREAD
++  /* Name for the same functionality on Solaris.  */
++# define RUSAGE_LWP RUSAGE_THREAD
++#endif
+ };
+ 
+ #define __need_timeval

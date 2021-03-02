@@ -123,7 +123,7 @@ binutils-wrapper利用x86-64版本binutils的multiarch能力，大部分直接�
 
 linux-headers版本2.6.32.71，方便传统组gcc能调用kernel 2.6+版本的现代系统调用（如epoll）
 
-glibc-headers版本2.3.6，并删除所有不兼容gcc-2.4及以下版本的GNU扩展__attribute__ ((__const))
+glibc-headers版本2.5.1，应用RHEL5的兼容性补丁并删除所有不兼容gcc-2.4及以下版本的GNU扩展__attribute__ ((__const))
 
 各版本gcc主要修改点
 
@@ -132,12 +132,8 @@ glibc-headers版本2.3.6，并删除所有不兼容gcc-2.4及以下版本的GNU�
 * 将bootstrap的依赖调整到工具链i686-legacy-linux-gnu
 
 2.95.3：
-* libstdc++以IO线程不安全方式构建（2.95.3及更低版本的libstdc++，线程安全实现很原始，依赖pthread的内部函数）
 * 将bootstrap的依赖调整到工具链i686-legacy-linux-gnu
-* 该版本以及更低版本，g++不支持C++98标准，gcc不支持C99标准
-
-2.8.1
-* libstdc++以IO线程不安全方式构建，且以独立包方式安装（legacy-gcc/libstdc++:2.8.1.1，该版本libstdc++不是gcc一部分，是独立软件包）
+* 该版本以及更低版本，g++不能完整支持C++98标准，gcc不能完整支持C99标准
 
 2.0-2.8.1：
 * 将编译器内exit调用换成_exit，因为gcc 2.0-2.8.1的堆栈使用方式，在新版本glibc使用特定优化选项时使用exit()方式直接退出程序可能会coredump。

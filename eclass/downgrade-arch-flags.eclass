@@ -207,5 +207,13 @@ downgrade_arch_flags() {
 		isa=${isalist[i + 1]}
 		tc_version_is_at_least ${ver} ${bver} || filter-flags ${isa} ${isa/-m/-mno-}
 	done
+
+	strip-unsupported-flags
+
+	if ! tc_version_is_at_least 2.8 ${bver} ; then
+		filter-flags '-mtune=*' '-march=*' '-mcpu=*' '-m*' '-mno-*'
+		append-cflags -m486
+		return 0
+	fi
 }
 

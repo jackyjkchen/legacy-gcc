@@ -5,9 +5,9 @@ EAPI=7
 
 DESCRIPTION=""
 HOMEPAGE=""
-SRC_URI="https://ftp.gnu.org/old-gnu/libstdc++/libstdc++-${PV}.tar.gz"
+SRC_URI="https://gcc.gnu.org/pub/gcc/old-releases/libstdc++/${P}.tar.bz2"
 
-inherit downgrade-arch-flags
+inherit downgrade-arch-flags gnuconfig
 
 LICENSE=""
 SLOT="${PV}"
@@ -26,9 +26,9 @@ CHOST="i686-legacy-linux-gnu"
 CC="gcc-2.8.1"
 CXX="g++-2.8.1"
 
-
 src_prepare() {
 	default
+	gnuconfig_update
 	eapply "${FILESDIR}"/${PV}/00_libstdcxx-${PV}.patch || die
 }
 

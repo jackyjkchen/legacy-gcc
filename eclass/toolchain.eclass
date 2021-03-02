@@ -382,12 +382,10 @@ get_gcc_src_uri() {
 			GCC_SRC_URI="mirror://gnu/gcc/gcc-${GCC_PV}/gcc-${GCC_RELEASE_VER}.tar.bz2"
 		elif tc_version_is_between 3.0 3.2 ; then
 			GCC_SRC_URI="mirror://gnu/gcc/gcc-${GCC_PV}/gcc-${GCC_RELEASE_VER}.tar.gz"
-		elif tc_version_is_between 2.7 3 || tc_version_is_between 1.42 1.43 ; then
-			GCC_SRC_URI="mirror://gnu/gcc/gcc-${GCC_RELEASE_VER}.tar.gz"
-		elif tc_version_is_between 2.5 2.6 ; then
-			GCC_SRC_URI="http://ftp.gnu.org/old-gnu/gcc/gcc-${GCC_RELEASE_VER}.tar.gz"
-		else
-			GCC_SRC_URI="http://ftp.gnu.org/old-gnu/gcc/gcc-${GCC_RELEASE_VER}.tar.bz2"
+		elif tc_version_is_between 2.0 3.0 ; then
+			GCC_SRC_URI="http://gcc.gnu.org/pub/gcc/old-releases/gcc-2/gcc-${GCC_RELEASE_VER}.tar.bz2"
+		elif tc_version_is_between 1.0 2.0 ; then
+			GCC_SRC_URI="http://gcc.gnu.org/pub/gcc/old-releases/gcc-1/gcc-${GCC_RELEASE_VER}.tar.bz2"
 		fi
 	fi
 

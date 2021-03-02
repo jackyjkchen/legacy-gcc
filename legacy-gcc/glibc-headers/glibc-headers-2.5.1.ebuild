@@ -7,7 +7,7 @@ DESCRIPTION=""
 HOMEPAGE=""
 SRC_URI="https://mirrors.ustc.edu.cn/gnu/glibc/glibc-${PV}.tar.bz2"
 
-inherit downgrade-arch-flags
+inherit downgrade-arch-flags gnuconfig
 
 LICENSE=""
 SLOT="i686-legacy"
@@ -33,14 +33,11 @@ case ${ARCH} in
 		;;
 esac
 
-
-src_unpack() {
-	default
-	ln -sv "${WORKDIR}"/glibc-${PV} "${WORKDIR}"/${P}
-}
+S=${WORKDIR}/glibc-${PV}
 
 src_prepare() {
 	default
+	gnuconfig_update
 	eapply "${FILESDIR}"/${PV}/00_glibc-${PV}.patch || die
 	eapply "${FILESDIR}"/${PV}/01_glibc-${PV}-workaround-for-old-gcc.patch || die
 }

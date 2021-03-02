@@ -19,10 +19,7 @@ TARGET_PREFIX="${SLOT}-linux-gnu"
 UNIX_PREFIX="/usr"
 unset ARCH
 
-src_unpack(){
-	default
-	ln -svf linux-${PV} "${WORKDIR}"/${P} || die
-}
+S=${WORKDIR}/linux-${PV}
 
 src_compile() {
 	pushd "${WORKDIR}"/${P} > /dev/null
