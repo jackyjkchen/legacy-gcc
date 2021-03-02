@@ -366,6 +366,11 @@ gentoo_urls() {
 #			This is done for compilers running on Cygwin, not for cross compilers
 #			with a Cygwin target.
 get_gcc_src_uri() {
+	export PATCH_GCC_VER=${PATCH_GCC_VER:-${GCC_RELEASE_VER}}
+	export UCLIBC_GCC_VER=${UCLIBC_GCC_VER:-${PATCH_GCC_VER}}
+	export PIE_GCC_VER=${PIE_GCC_VER:-${GCC_RELEASE_VER}}
+	export SPECS_GCC_VER=${SPECS_GCC_VER:-${GCC_RELEASE_VER}}
+
 	# Set where to download gcc itself depending on whether we're using a
 	# live git tree, snapshot, or release tarball.
 	if tc_is_live ; then
