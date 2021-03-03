@@ -1,3 +1,25 @@
+diff --git a/INSTALL/README b/INSTALL/README
+index 7c888f5..8afbd06 100644
+--- a/INSTALL/README
++++ b/INSTALL/README
+@@ -1,10 +1,9 @@
+-The installation instructions are no longer in this directory.  Instead
+-they can be found in the "install" directory at the toplevel of the GCC
+-distribution (ie gcc-2.95/install).  For HTML browsing start with
+-install/index.html, for plaintext, start with install/INDEX.
++This directory has been obsoleted for egcs snapshots and CVS access.
+ 
+-Moving the installation instructions in this manner makes it significantly
+-easier to share code between the distribution and the web pages.
++Instead check out the toplevel "wwwdocs" as a sibling of your egcs
++tree or read these files via the egcs web site
++http://www.gnu.org/software/gcc/
+ 
+-This directory (INSTALL) will be completely removed in the next major
+-GCC release.
++
++Copies of the relevant files will be copied into this directory for
++releases.
 diff --git a/Makefile.in b/Makefile.in
 index 7af1784..5248a26 100644
 --- a/Makefile.in
@@ -435,6 +457,221 @@ index 85bf9f8..7793a88 100644
  #
  # These targets are for the dejagnu testsuites. The file site.exp 
  # contains global variables that all the testsuites will use.
+diff --git a/gcc/c-common.c b/gcc/c-common.c
+index 59dd407..2b98e0c 100644
+--- a/gcc/c-common.c
++++ b/gcc/c-common.c
+@@ -965,6 +965,15 @@ split_specs_attrs (specs_attrs, declspecs, prefix_attributes)
+ {
+   tree t, s, a, next, specs, attrs;
+ 
++  /* This can happen after an __extension__ in pedantic mode.  */
++  if (specs_attrs != NULL_TREE 
++      && TREE_CODE (specs_attrs) == INTEGER_CST)
++    {
++      *declspecs = NULL_TREE;
++      *prefix_attributes = NULL_TREE;
++      return;
++    }
++
+   /* This can happen in c++ (eg: decl: typespec initdecls ';').  */
+   if (specs_attrs != NULL_TREE
+       && TREE_CODE (specs_attrs) != TREE_LIST)
+diff --git a/gcc/c-lex.c b/gcc/c-lex.c
+index 27c65f3..8ee2fe4 100644
+--- a/gcc/c-lex.c
++++ b/gcc/c-lex.c
+@@ -1812,7 +1812,11 @@ yylex ()
+ 
+ 	    type = flag_traditional ? traditional_type : ansi_type;
+ 
+-	    if (warn_traditional && traditional_type != ansi_type)
++	    /* We assume that constants specified in a non-decimal
++	       base are bit patterns, and that the programmer really
++	       meant what they wrote.  */
++	    if (warn_traditional && base == 10
++		&& traditional_type != ansi_type)
+ 	      {
+ 		if (TYPE_PRECISION (traditional_type)
+ 		    != TYPE_PRECISION (ansi_type))
+diff --git a/gcc/cccp.c b/gcc/cccp.c
+index 023502f..455c239 100644
+--- a/gcc/cccp.c
++++ b/gcc/cccp.c
+@@ -1024,7 +1024,8 @@ static void print_help PROTO((void));
+    retrying if necessary.  If MAX_READ_LEN is defined, read at most
+    that bytes at a time.  Return a negative value if an error occurs,
+    otherwise return the actual number of bytes read,
+-   which must be LEN unless end-of-file was reached.  */
++   which may be < LEN if CRs have been skipped, though we try not to do
++   that.  */
+ 
+ static int
+ safe_read (desc, ptr, len)
+@@ -1033,6 +1034,7 @@ safe_read (desc, ptr, len)
+      int len;
+ {
+   int left, rcount, nchars;
++  char *rptr;
+ 
+   left = len;
+   while (left > 0) {
+@@ -1052,8 +1054,20 @@ safe_read (desc, ptr, len)
+       }
+     if (nchars == 0)
+       break;
+-    ptr += nchars;
++
++    /* CRLF pairs, found with Unix when processing DOS files,
++       throw off backslash-newline removal.
++       Therefore, CRs are thrown away here. */
+     left -= nchars;
++    rptr = ptr;
++    while(nchars--)
++      {
++	if(*rptr == '\r' && *(rptr+1) == '\n')
++	  left++;
++	else
++	  *ptr++ = *rptr;
++	rptr++;
++      }
+   }
+   return len - left;
+ }
+@@ -1124,7 +1138,7 @@ print_help ()
+   printf ("Usage: %s [switches] input output\n", progname);
+   printf ("Switches:\n");
+   printf ("  -include <file>           Include the contents of <file> before other files\n");
+-  printf ("  -imacros <file>           Accept definition of marcos in <file>\n");
++  printf ("  -imacros <file>           Accept definition of macros in <file>\n");
+   printf ("  -iprefix <path>           Specify <path> as a prefix for next two options\n");
+   printf ("  -iwithprefix <dir>        Add <dir> to the end of the system include paths\n");
+   printf ("  -iwithprefixbefore <dir>  Add <dir> to the end of the main include paths\n");
+@@ -1138,7 +1152,7 @@ print_help ()
+   printf ("  -traditional              Follow K&R pre-processor behaviour\n");
+   printf ("  -trigraphs                Support ANSI C trigraphs\n");
+   printf ("  -lang-c                   Assume that the input sources are in C\n");
+-  printf ("  -lang-c89                 Assume that the input is C89; depricated\n");
++  printf ("  -lang-c89                 Assume that the input is C89; deprecated\n");
+   printf ("  -lang-c++                 Assume that the input sources are in C++\n");
+   printf ("  -lang-objc                Assume that the input sources are in ObjectiveC\n");
+   printf ("  -lang-objc++              Assume that the input sources are in ObjectiveC++\n");
+@@ -2086,8 +2100,8 @@ main (argc, argv)
+     for (;;) {
+       cnt = safe_read (f, (char *) fp->buf + size, bsize - size);
+       if (cnt < 0) goto perror;	/* error! */
++      if (cnt == 0) break; /* End of file */
+       size += cnt;
+-      if (size != bsize) break;	/* End of file */
+       bsize *= 2;
+       fp->buf = (U_CHAR *) xrealloc (fp->buf, bsize + 2);
+     }
+@@ -5027,6 +5041,8 @@ read_name_map (dirname)
+ 	  map_list_ptr->map_list_map = ptr;
+ 
+ 	  while ((ch = getc (f)) != '\n')
++	    if (ch == '\r')
++		continue;
+ 	    if (ch == EOF)
+ 	      break;
+ 	}
+@@ -5259,9 +5275,9 @@ finclude (f, inc, op, system_header_p, dirptr)
+       i = safe_read (f, (char *) fp->buf + st_size, bsize - st_size);
+       if (i < 0)
+ 	goto nope;      /* error! */
+-      st_size += i;
+-      if (st_size != bsize)
++      if (i == 0)
+ 	break;	/* End of file */
++      st_size += i;
+       bsize *= 2;
+       fp->buf = (U_CHAR *) xrealloc (fp->buf, bsize + 2);
+     }
+diff --git a/gcc/combine.c b/gcc/combine.c
+index eb75481..9445e30 100644
+--- a/gcc/combine.c
++++ b/gcc/combine.c
+@@ -7580,8 +7580,11 @@ nonzero_bits (x, mode)
+ 
+       if (reg_last_set_value[REGNO (x)] != 0
+ 	  && reg_last_set_mode[REGNO (x)] == mode
+-	  && (REG_N_SETS (REGNO (x)) == 1
+-	      || reg_last_set_label[REGNO (x)] == label_tick)
++	  && (reg_last_set_label[REGNO (x)] == label_tick
++	      || (REGNO (x) >= FIRST_PSEUDO_REGISTER
++		  && REG_N_SETS (REGNO (x)) == 1
++		  && ! REGNO_REG_SET_P (BASIC_BLOCK (0)->global_live_at_start, 
++					REGNO (x))))
+ 	  && INSN_CUID (reg_last_set[REGNO (x)]) < subst_low_cuid)
+ 	return reg_last_set_nonzero_bits[REGNO (x)];
+ 
+@@ -7970,8 +7973,11 @@ num_sign_bit_copies (x, mode)
+ 
+       if (reg_last_set_value[REGNO (x)] != 0
+ 	  && reg_last_set_mode[REGNO (x)] == mode
+-	  && (REG_N_SETS (REGNO (x)) == 1
+-	      || reg_last_set_label[REGNO (x)] == label_tick)
++	  && (reg_last_set_label[REGNO (x)] == label_tick
++	      || (REGNO (x) >= FIRST_PSEUDO_REGISTER
++		  && REG_N_SETS (REGNO (x)) == 1
++		  && ! REGNO_REG_SET_P (BASIC_BLOCK (0)->global_live_at_start,
++					REGNO (x))))
+ 	  && INSN_CUID (reg_last_set[REGNO (x)]) < subst_low_cuid)
+ 	return reg_last_set_sign_bit_copies[REGNO (x)];
+ 
+@@ -10819,9 +10825,11 @@ get_last_value_validate (loc, insn, tick, replace)
+ 
+       for (j = regno; j < endregno; j++)
+ 	if (reg_last_set_invalid[j]
+-	    /* If this is a pseudo-register that was only set once, it is
+-	       always valid.  */
+-	    || (! (regno >= FIRST_PSEUDO_REGISTER && REG_N_SETS (regno) == 1)
++	    /* If this is a pseudo-register that was only set once and not
++	       live at the beginning of the function, it is always valid.  */
++	    || (! (regno >= FIRST_PSEUDO_REGISTER 
++		   && REG_N_SETS (regno) == 1
++		   && ! REGNO_REG_SET_P (BASIC_BLOCK (0)->global_live_at_start, regno))
+ 		&& reg_last_set_label[j] > tick))
+ 	  {
+ 	    if (replace)
+@@ -10880,12 +10888,21 @@ get_last_value (x)
+   regno = REGNO (x);
+   value = reg_last_set_value[regno];
+ 
+-  /* If we don't have a value or if it isn't for this basic block,
+-     return 0.  */
++  /* If we don't have a value, or if it isn't for this basic block and
++     it's either a hard register, set more than once, or it's a live
++     at the beginning of the function, return 0.  
++
++     Because if it's not live at the beginnning of the function then the reg 
++     is always set before being used (is never used without being set).
++     And, if it's set only once, and it's always set before use, then all
++     uses must have the same last value, even if it's not from this basic
++     block.  */
+ 
+   if (value == 0
+-      || (REG_N_SETS (regno) != 1
+-	  && reg_last_set_label[regno] != label_tick))
++      || (reg_last_set_label[regno] != label_tick
++	  && (regno < FIRST_PSEUDO_REGISTER
++	      || REG_N_SETS (regno) != 1
++	      || REGNO_REG_SET_P (BASIC_BLOCK (0)->global_live_at_start, regno))))
+     return 0;
+ 
+   /* If the value was set in a later insn than the ones we are processing,
+diff --git a/gcc/config/alpha/crtbegin.asm b/gcc/config/alpha/crtbegin.asm
+index f954f1a..6350d47 100644
+--- a/gcc/config/alpha/crtbegin.asm
++++ b/gcc/config/alpha/crtbegin.asm
+@@ -68,6 +68,7 @@ __EH_FRAME_BEGIN__:
+ 	br      $29,1f
+ 1:	ldgp    $29,0($29)
+ 	jsr     $26,__do_global_dtors_aux
++	ldgp    $29,0($26)
+ 
+ 	# Ideally this call would go in crtend.o, except that we can't
+ 	# get hold of __EH_FRAME_BEGIN__ there.
 diff --git a/gcc/config/arc/t-arc b/gcc/config/arc/t-arc
 index d922c27..c455e8b 100644
 --- a/gcc/config/arc/t-arc
@@ -456,6 +693,376 @@ index d922c27..c455e8b 100644
 +	  $(INSTALL_DATA) $${dir}/crtfini.o $(DESTDIR)$(libsubdir)/$${dir}/crtfini.o; \
 +	  chmod a-x $(DESTDIR)$(libsubdir)/$${dir}/crtfini.o; \
  	done
+diff --git a/gcc/config/arm/linux-elf.h b/gcc/config/arm/linux-elf.h
+index a7e9e28..559fb77 100644
+--- a/gcc/config/arm/linux-elf.h
++++ b/gcc/config/arm/linux-elf.h
+@@ -223,6 +223,44 @@ const_section ()							\
+    go into the const section.  */
+ #define SELECT_RTX_SECTION(MODE,RTX) const_section ()
+ 
++#define MAKE_DECL_ONE_ONLY(DECL) (DECL_WEAK (DECL) = 1)
++#define UNIQUE_SECTION_P(DECL)   (DECL_ONE_ONLY (DECL))
++
++#define UNIQUE_SECTION(DECL, RELOC)				\
++  do								\
++    {								\
++      int len;							\
++      char *name;						\
++      char *string;						\
++      char *prefix;						\
++								\
++      name = IDENTIFIER_POINTER (DECL_ASSEMBLER_NAME (DECL));	\
++      								\
++      if (! DECL_ONE_ONLY (DECL))				\
++	{							\
++	  prefix = ".";                                         \
++	  if (TREE_CODE (DECL) == FUNCTION_DECL)		\
++	    prefix = ".text.";					\
++	  else if (DECL_READONLY_SECTION (DECL, RELOC))		\
++	    prefix = ".rodata.";				\
++	  else							\
++	    prefix = ".data.";					\
++	}							\
++      else if (TREE_CODE (DECL) == FUNCTION_DECL)		\
++	prefix = ".gnu.linkonce.t.";				\
++      else if (DECL_READONLY_SECTION (DECL, RELOC))		\
++	prefix = ".gnu.linkonce.r.";				\
++      else							\
++	prefix = ".gnu.linkonce.d.";				\
++      								\
++      len = strlen (name) + strlen (prefix);			\
++      string = alloca (len + 1);				\
++      sprintf (string, "%s%s", prefix, name);			\
++      								\
++      DECL_SECTION_NAME (DECL) = build_string (len, string);	\
++    }								\
++  while (0)
++
+ /* On svr4, we *do* have support for the .init and .fini sections, and we
+    can put stuff in there to be executed before and after `main'.  We let
+    crtstuff.c and other files know this by defining the following symbols.
+diff --git a/gcc/config/i386/freebsd-elf.h b/gcc/config/i386/freebsd-elf.h
+index e97d4ca..4e45020 100644
+--- a/gcc/config/i386/freebsd-elf.h
++++ b/gcc/config/i386/freebsd-elf.h
+@@ -135,6 +135,9 @@ Boston, MA 02111-1307, USA.  */
+  : ((n) >= FIRST_STACK_REG && (n) <= LAST_STACK_REG) ? (n)+3 \
+  : (-1))
+ 
++#undef  NO_PROFILE_COUNTERS
++#define NO_PROFILE_COUNTERS
++
+ /* Tell final.c that we don't need a label passed to mcount.  */
+ 
+ #undef FUNCTION_PROFILER
+diff --git a/gcc/config/i386/linux.h b/gcc/config/i386/linux.h
+index 7b368f8..90b9aa2 100644
+--- a/gcc/config/i386/linux.h
++++ b/gcc/config/i386/linux.h
+@@ -234,3 +234,21 @@ Boston, MA 02111-1307, USA.  */
+     }									\
+   } while (0)
+ #endif
++
++#if defined(__PIC__) && defined (USE_GNULIBC_1)
++/* This is a kludge. The i386 GNU/Linux dynamic linker needs ___brk_addr,
++   __environ and atexit (). We have to make sure they are in the .dynsym
++   section. We accomplish it by making a dummy call here. This
++   code is never reached.  */
++         
++#define CRT_END_INIT_DUMMY		\
++  do					\
++    {					\
++      extern void *___brk_addr;		\
++      extern char **__environ;		\
++					\
++      ___brk_addr = __environ;		\
++      atexit (0);			\
++    }					\
++  while (0)
++#endif
+diff --git a/gcc/config/m68k/mot3300-crt0.S b/gcc/config/m68k/mot3300-crt0.S
+index 3574a72..4221aed 100644
+--- a/gcc/config/m68k/mot3300-crt0.S
++++ b/gcc/config/m68k/mot3300-crt0.S
+@@ -93,6 +93,6 @@ __stop_monitor:
+ 	COMM	splimit%,4
+ 	COMM	environ,4
+ 
+-	IDENT ("$Id: mot3300-crt0.S,v 1.1.1.2 1998/01/14 19:39:06 law Exp $")
++	IDENT ("$Id: mot3300-crt0.S,v 1.2 1998/12/16 21:07:03 law Exp $")
+ 	IDENT ("Contributed by Manfred Hollstein (manfred@lts.sel.alcatel.de)")
+ 	IDENT ("Corrections by Philippe De Muyter (phdm@macqel.be)")
+diff --git a/gcc/config/m68k/mot3300Mcrt0.S b/gcc/config/m68k/mot3300Mcrt0.S
+index c084461..0faf9e5 100644
+--- a/gcc/config/m68k/mot3300Mcrt0.S
++++ b/gcc/config/m68k/mot3300Mcrt0.S
+@@ -137,6 +137,6 @@ LOCAL_LABEL(endofstart):
+ 	COMM	environ,4
+ 	COMM	_countbase,4
+ 
+-	IDENT ("$Id: mot3300Mcrt0.S,v 1.1.1.2 1998/01/14 19:39:08 law Exp $")
++	IDENT ("$Id: mot3300Mcrt0.S,v 1.2 1998/12/16 21:07:05 law Exp $")
+ 	IDENT ("Contributed by Manfred Hollstein (manfred@lts.sel.alcatel.de)")
+ 	IDENT ("Corrections by Philippe De Muyter (phdm@macqel.be)")
+diff --git a/gcc/config/m88k/dgux.h b/gcc/config/m88k/dgux.h
+index 3e4c66e..f93672c 100644
+--- a/gcc/config/m88k/dgux.h
++++ b/gcc/config/m88k/dgux.h
+@@ -30,7 +30,7 @@ Boston, MA 02111-1307, USA.  */
+   (TARGET_SVR4 ? DWARF_DEBUG : SDB_DEBUG)
+ 
+ #ifndef VERSION_INFO2
+-#define VERSION_INFO2   "$Revision: 1.3 $"
++#define VERSION_INFO2   "$Revision: 1.4 $"
+ #endif
+ #ifndef NO_BUGS
+ #define AS_BUG_IMMEDIATE_LABEL
+diff --git a/gcc/config/m88k/m88k.h b/gcc/config/m88k/m88k.h
+index 66d218b..5f3a4f5 100644
+--- a/gcc/config/m88k/m88k.h
++++ b/gcc/config/m88k/m88k.h
+@@ -198,13 +198,13 @@ extern char * reg_names[];
+    Redefined in sysv4.h, and luna.h.  */
+ #define VERSION_INFO1	"m88k, "
+ #ifndef VERSION_INFO2
+-#define VERSION_INFO2   "$Revision: 1.11 $"
++#define VERSION_INFO2   "$Revision: 1.12 $"
+ #endif
+ 
+ #ifndef VERSION_STRING
+ #define VERSION_STRING  version_string
+ #ifdef __STDC__
+-#define TM_RCS_ID      "@(#)" __FILE__ " $Revision: 1.11 $ " __DATE__
++#define TM_RCS_ID      "@(#)" __FILE__ " $Revision: 1.12 $ " __DATE__
+ #else
+ #define TM_RCS_ID      "$What: <@(#) m88k.h,v	1.1.1.2.2.2> $"
+ #endif  /* __STDC__ */
+diff --git a/gcc/config/mips/mips.md b/gcc/config/mips/mips.md
+index 81c5cd3..cc1282c 100644
+--- a/gcc/config/mips/mips.md
++++ b/gcc/config/mips/mips.md
+@@ -10083,6 +10083,21 @@ move\\t%0,%z4\\n\\
+   [(set_attr "type" "move")
+    (set_attr "mode" "SF")])
+ 
++(define_insn ""
++  [(set (match_operand:SF 0 "register_operand" "=f,f")
++	(if_then_else:SF
++	 (match_operator 4 "equality_op"
++			 [(match_operand:DI 1 "se_register_operand" "d,d")
++			  (const_int 0)])
++	 (match_operand:SF 2 "register_operand" "f,0")
++	 (match_operand:SF 3 "register_operand" "0,f")))]
++  "mips_isa >= 4 && TARGET_HARD_FLOAT"
++  "@
++    mov%B4.s\\t%0,%2,%1
++    mov%b4.s\\t%0,%3,%1"
++  [(set_attr "type" "move")
++   (set_attr "mode" "SF")])
++
+ (define_insn ""
+   [(set (match_operand:SF 0 "register_operand" "=f,f")
+ 	(if_then_else:SF
+@@ -10114,6 +10129,21 @@ move\\t%0,%z4\\n\\
+   [(set_attr "type" "move")
+    (set_attr "mode" "DF")])
+ 
++(define_insn ""
++  [(set (match_operand:DF 0 "register_operand" "=f,f")
++	(if_then_else:DF
++	 (match_operator 4 "equality_op"
++			 [(match_operand:DI 1 "se_register_operand" "d,d")
++			  (const_int 0)])
++	 (match_operand:DF 2 "register_operand" "f,0")
++	 (match_operand:DF 3 "register_operand" "0,f")))]
++  "mips_isa >= 4 && TARGET_HARD_FLOAT && TARGET_DOUBLE_FLOAT"
++  "@
++    mov%B4.d\\t%0,%2,%1
++    mov%b4.d\\t%0,%3,%1"
++  [(set_attr "type" "move")
++   (set_attr "mode" "DF")])
++
+ (define_insn ""
+   [(set (match_operand:DF 0 "register_operand" "=f,f")
+ 	(if_then_else:DF
+diff --git a/gcc/config/rs6000/rs6000.md b/gcc/config/rs6000/rs6000.md
+index 23a9715..1238db2 100644
+--- a/gcc/config/rs6000/rs6000.md
++++ b/gcc/config/rs6000/rs6000.md
+@@ -3759,7 +3759,7 @@
+     FAIL;
+   switch (code)
+     {
+-    case GE: case EQ: case NE:
++    case GE: case EQ:
+       op0 = rs6000_compare_op0;
+       op1 = rs6000_compare_op1;
+       break;
+@@ -3790,11 +3790,6 @@
+ 	  emit_insn (gen_negdf2 (temp, temp));
+ 	  emit_insn (gen_fseldfsf4 (operands[0], temp, operands[0], operands[3]));
+ 	}
+-      else if (code == NE)
+-	{
+-	  emit_insn (gen_negdf2 (temp, temp));
+-	  emit_insn (gen_fseldfsf4 (operands[0], temp, operands[3], operands[0]));
+-	}
+     }
+   else
+     {
+@@ -3806,11 +3801,6 @@
+ 	  emit_insn (gen_negsf2 (temp, temp));
+ 	  emit_insn (gen_fselsfsf4 (operands[0], temp, operands[0], operands[3]));
+ 	}
+-      else if (code == NE)
+-	{
+-	  emit_insn (gen_negsf2 (temp, temp));
+-	  emit_insn (gen_fselsfsf4 (operands[0], temp, operands[3], operands[0]));
+-	}
+     }
+   DONE;
+ }")
+@@ -4006,7 +3996,7 @@
+     FAIL;
+   switch (code)
+     {
+-    case GE: case EQ: case NE:
++    case GE: case EQ:
+       op0 = rs6000_compare_op0;
+       op1 = rs6000_compare_op1;
+       break;
+@@ -4037,11 +4027,6 @@
+ 	  emit_insn (gen_negdf2 (temp, temp));
+ 	  emit_insn (gen_fseldfdf4 (operands[0], temp, operands[0], operands[3]));
+ 	}
+-      else if (code == NE)
+-	{
+-	  emit_insn (gen_negdf2 (temp, temp));
+-	  emit_insn (gen_fseldfdf4 (operands[0], temp, operands[3], operands[0]));
+-	}
+     }
+   else
+     {
+@@ -4053,11 +4038,6 @@
+ 	  emit_insn (gen_negsf2 (temp, temp));
+ 	  emit_insn (gen_fselsfdf4 (operands[0], temp, operands[0], operands[3]));
+ 	}
+-      else if (code == NE)
+-	{
+-	  emit_insn (gen_negsf2 (temp, temp));
+-	  emit_insn (gen_fselsfdf4 (operands[0], temp, operands[3], operands[0]));
+-	}
+     }
+   DONE;
+ }")
+@@ -6184,7 +6164,9 @@
+      reg.  So expand it.  */
+   if (GET_CODE (operands[0]) == SUBREG
+       && GET_CODE (SUBREG_REG (operands[0])) == REG
+-      && REGNO (SUBREG_REG (operands[0])) < FIRST_PSEUDO_REGISTER)
++      && REGNO (SUBREG_REG (operands[0])) < FIRST_PSEUDO_REGISTER
++      && (! REG_FUNCTION_VALUE_P (SUBREG_REG (operands[0]))
++	  || ! rtx_equal_function_value_matters))
+     operands[0] = alter_subreg (operands[0]);
+   if (GET_CODE (operands[1]) == SUBREG
+       && GET_CODE (SUBREG_REG (operands[1])) == REG
+diff --git a/gcc/config/sparc/sparc.md b/gcc/config/sparc/sparc.md
+index 58e882c..315a35a 100644
+--- a/gcc/config/sparc/sparc.md
++++ b/gcc/config/sparc/sparc.md
+@@ -2899,6 +2899,11 @@
+          crashes in output_constant_pool.  */
+       if (operands [1] == const0_rtx)
+         operands[1] = CONST0_RTX (SFmode);
++      /* We are able to build any SF constant in integer registers
++	 with at most 2 instructions.  */
++      if (REGNO (operands[0]) < 32)
++	goto movsf_is_ok;
++
+       operands[1] = validize_mem (force_const_mem (GET_MODE (operands[0]),
+                                                    operands[1]));
+     }
+@@ -3093,6 +3098,9 @@
+          crashes in output_constant_pool.  */
+       if (operands [1] == const0_rtx)
+         operands[1] = CONST0_RTX (DFmode);
++      if (REGNO (operands[0]) < 32)
++	goto movdf_is_ok;
++
+       operands[1] = validize_mem (force_const_mem (GET_MODE (operands[0]),
+                                                    operands[1]));
+     }
+@@ -3277,17 +3285,11 @@
+ (define_split
+   [(set (match_operand:DF 0 "register_operand" "")
+ 	(match_operand:DF 1 "memory_operand" ""))]
+-  "((! TARGET_V9
+-     || (! TARGET_ARCH64
+-         && ((GET_CODE (operands[0]) == REG
+-              && REGNO (operands[0]) < 32)
+-             || (GET_CODE (operands[0]) == SUBREG
+-                 && GET_CODE (SUBREG_REG (operands[0])) == REG
+-                 && REGNO (SUBREG_REG (operands[0])) < 32))))
+-    && (reload_completed
+-        && (((REGNO (operands[0])) % 2) != 0
+-             || ! mem_min_alignment (operands[1], 8))
+-        && offsettable_memref_p (operands[1])))"
++  "reload_completed
++   && ! TARGET_ARCH64
++   && (((REGNO (operands[0]) % 2) != 0)
++       || ! mem_min_alignment (operands[1], 8))
++   && offsettable_memref_p (operands[1])"
+   [(clobber (const_int 0))]
+   "
+ {
+@@ -3318,17 +3320,11 @@
+ (define_split
+   [(set (match_operand:DF 0 "memory_operand" "")
+ 	(match_operand:DF 1 "register_operand" ""))]
+-  "((! TARGET_V9
+-     || (! TARGET_ARCH64
+-         && ((GET_CODE (operands[1]) == REG
+-              && REGNO (operands[1]) < 32)
+-             || (GET_CODE (operands[1]) == SUBREG
+-                 && GET_CODE (SUBREG_REG (operands[1])) == REG
+-                 && REGNO (SUBREG_REG (operands[1])) < 32))))
+-    && (reload_completed
+-        && (((REGNO (operands[1])) % 2) != 0
+-             || ! mem_min_alignment (operands[0], 8))
+-        && offsettable_memref_p (operands[0])))"
++  "reload_completed
++   && ! TARGET_ARCH64
++   && (((REGNO (operands[1]) % 2) != 0)
++       || ! mem_min_alignment (operands[0], 8))
++   && offsettable_memref_p (operands[0])"
+   [(clobber (const_int 0))]
+   "
+ {
+@@ -5211,7 +5207,7 @@
+ (define_insn "muldi3_v8plus"
+   [(set (match_operand:DI 0 "register_operand" "=r,h")
+ 	(mult:DI (match_operand:DI 1 "arith_double_operand" "%r,0")
+-		 (match_operand:DI 2 "arith_double_operand" "rHI,rHI")))
++		 (match_operand:DI 2 "arith_double_operand" "rI,rI")))
+    (clobber (match_scratch:SI 3 "=&h,X"))
+    (clobber (match_scratch:SI 4 "=&h,X"))]
+   "TARGET_V8PLUS"
+@@ -5221,6 +5217,13 @@
+     output_asm_insn (\"srl\\t%L1, 0, %L1\", operands);
+   if (which_alternative == 1)
+     output_asm_insn (\"sllx\\t%H1, 32, %H1\", operands);
++  if (GET_CODE (operands[2]) == CONST_INT)
++    {
++      if (which_alternative == 1)
++	return \"or\\t%L1, %H1, %H1\\n\\tmulx\\t%H1, %2, %L0\;srlx\\t%L0, 32, %H0\";
++      else
++	return \"sllx\\t%H1, 32, %3\\n\\tor\\t%L1, %3, %3\\n\\tmulx\\t%3, %2, %3\\n\\tsrlx\\t%3, 32, %H0\\n\\tmov\\t%3, %L0\";
++    }
+   if (sparc_check_64 (operands[2], insn) <= 0)
+     output_asm_insn (\"srl\\t%L2, 0, %L2\", operands);
+   if (which_alternative == 1)
 diff --git a/gcc/cp/Make-lang.in b/gcc/cp/Make-lang.in
 index d5d4e4d..28b0055 100644
 --- a/gcc/cp/Make-lang.in
@@ -544,6 +1151,397 @@ index d5d4e4d..28b0055 100644
  #
  # Clean hooks:
  # A lot of the ancillary files are deleted by the main makefile.
+diff --git a/gcc/crtstuff.c b/gcc/crtstuff.c
+index ccebde1..2d2f360 100644
+--- a/gcc/crtstuff.c
++++ b/gcc/crtstuff.c
+@@ -380,19 +380,8 @@ init_dummy (void)
+ #endif
+   asm (TEXT_SECTION_ASM_OP);
+ 
+-/* This is a kludge. The i386 GNU/Linux dynamic linker needs ___brk_addr,
+-   __environ and atexit (). We have to make sure they are in the .dynsym
+-   section. We accomplish it by making a dummy call here. This
+-   code is never reached.  */
+- 
+-#if defined(__linux__) && defined(__PIC__) && defined(__i386__)
+-  {
+-    extern void *___brk_addr;
+-    extern char **__environ;
+-
+-    ___brk_addr = __environ;
+-    atexit ();
+-  }
++#ifdef CRT_END_INIT_DUMMY
++  CRT_END_INIT_DUMMY;
+ #endif
+ }
+ 
+diff --git a/gcc/cse.c b/gcc/cse.c
+index ca40ab3..ff4d00f 100644
+--- a/gcc/cse.c
++++ b/gcc/cse.c
+@@ -695,8 +695,6 @@ static void check_fold_consts	PROTO((PTR));
+ static struct cse_reg_info* get_cse_reg_info PROTO((int));
+ static void free_cse_reg_info   PROTO((splay_tree_value));
+ static void flush_hash_table	PROTO((void));
+-
+-extern int rtx_equal_function_value_matters;
+ 
+ /* Dump the expressions in the equivalence class indicated by CLASSP.
+    This function is used only for debugging.  */
+diff --git a/gcc/except.c b/gcc/except.c
+index f7d78d6..9075226 100644
+--- a/gcc/except.c
++++ b/gcc/except.c
+@@ -723,21 +723,41 @@ static void
+ receive_exception_label (handler_label)
+      rtx handler_label;
+ {
++  rtx around_label = NULL_RTX;
++
++  if (! flag_new_exceptions || exceptions_via_longjmp)
++    {
++      around_label = gen_label_rtx ();
++      emit_jump (around_label);
++      emit_barrier ();
++    }
++
+   emit_label (handler_label);
+-  
+-#ifdef HAVE_exception_receiver
++
+   if (! exceptions_via_longjmp)
+-    if (HAVE_exception_receiver)
+-      emit_insn (gen_exception_receiver ());
++    {
++#ifdef HAVE_exception_receiver
++      if (HAVE_exception_receiver)
++	emit_insn (gen_exception_receiver ());
++      else
+ #endif
+-
+ #ifdef HAVE_nonlocal_goto_receiver
+-  if (! exceptions_via_longjmp)
+-    if (HAVE_nonlocal_goto_receiver)
+-      emit_insn (gen_nonlocal_goto_receiver ());
++      if (HAVE_nonlocal_goto_receiver)
++	emit_insn (gen_nonlocal_goto_receiver ());
++      else
+ #endif
+-}
++	{ /* Nothing */ }
++    }
++  else
++    {
++#ifndef DONT_USE_BUILTIN_SETJMP
++      expand_builtin_setjmp_receiver (handler_label);
++#endif
++    }
+ 
++  if (around_label)
++    emit_label (around_label);
++}
+ 
+ struct func_eh_entry 
+ {
+@@ -1320,7 +1340,7 @@ static void
+ start_dynamic_handler ()
+ {
+   rtx dhc, dcc;
+-  rtx x, arg, buf;
++  rtx arg, buf;
+   int size;
+ 
+ #ifndef DONT_USE_BUILTIN_SETJMP
+@@ -1362,18 +1382,17 @@ start_dynamic_handler ()
+   buf = plus_constant (XEXP (arg, 0), GET_MODE_SIZE (Pmode)*2);
+ 
+ #ifdef DONT_USE_BUILTIN_SETJMP
+-  x = emit_library_call_value (setjmp_libfunc, NULL_RTX, 1, SImode, 1,
+-			       buf, Pmode);
+-  /* If we come back here for a catch, transfer control to the handler.  */
+-  jumpif_rtx (x, ehstack.top->entry->exception_handler_label);
+-#else
+   {
+-    /* A label to continue execution for the no exception case.  */
+-    rtx noex = gen_label_rtx();
+-    x = expand_builtin_setjmp (buf, NULL_RTX, noex,
+-			       ehstack.top->entry->exception_handler_label);
+-    emit_label (noex);
++    rtx x;
++    x = emit_library_call_value (setjmp_libfunc, NULL_RTX, LCT_CONST,
++                                TYPE_MODE (integer_type_node), 1,
++                                buf, Pmode);
++    /* If we come back here for a catch, transfer control to the handler.  */
++    jumpif_rtx (x, ehstack.top->entry->exception_handler_label);
+   }
++#else
++  expand_builtin_setjmp_setup (buf,
++                              ehstack.top->entry->exception_handler_label);
+ #endif
+ 
+   /* We are committed to this, so update the handler chain.  */
+diff --git a/gcc/expr.c b/gcc/expr.c
+index e3fe1f8..ef16c76 100644
+--- a/gcc/expr.c
++++ b/gcc/expr.c
+@@ -192,6 +192,7 @@ static rtx expand_builtin	PROTO((tree, rtx, rtx,
+ static int apply_args_size	PROTO((void));
+ static int apply_result_size	PROTO((void));
+ static rtx result_vector	PROTO((int, rtx));
++static rtx expand_builtin_setjmp PROTO((tree, rtx));
+ static rtx expand_builtin_apply_args PROTO((void));
+ static rtx expand_builtin_apply	PROTO((rtx, rtx, rtx));
+ static void expand_builtin_return PROTO((rtx));
+@@ -449,6 +450,9 @@ protect_from_queue (x, modify)
+ 				QUEUED_INSN (y));
+ 	      return temp;
+ 	    }
++	  /* Copy the address into a pseudo, so that the returned value
++	     remains correct across calls to emit_queue.  */
++	  XEXP (new, 0) = copy_to_reg (XEXP (new, 0));
+ 	  return new;
+ 	}
+       /* Otherwise, recursively protect the subexpressions of all
+@@ -475,9 +479,11 @@ protect_from_queue (x, modify)
+ 	}
+       return x;
+     }
+-  /* If the increment has not happened, use the variable itself.  */
++  /* If the increment has not happened, use the variable itself.  Copy it
++     into a new pseudo so that the value remains correct across calls to
++     emit_queue.  */
+   if (QUEUED_INSN (x) == 0)
+-    return QUEUED_VAR (x);
++    return copy_to_reg (QUEUED_VAR (x));
+   /* If the increment has happened and a pre-increment copy exists,
+      use that copy.  */
+   if (QUEUED_COPY (x) != 0)
+@@ -8076,7 +8082,9 @@ expand_expr (exp, target, tmode, modifier)
+ 	  if (ignore)
+ 	    return op0;
+ 
+-	  op0 = protect_from_queue (op0, 0);
++	  /* Pass 1 for MODIFY, so that protect_from_queue doesn't get
++	     clever and returns a REG when given a MEM.  */
++	  op0 = protect_from_queue (op0, 1);
+ 
+ 	  /* We would like the object in memory.  If it is a constant,
+ 	     we can have it be statically allocated into memory.  For
+@@ -8544,44 +8552,29 @@ expand_builtin_return_addr (fndecl_code, count, tem)
+   return tem;
+ }
+ 
+-/* __builtin_setjmp is passed a pointer to an array of five words (not
+-   all will be used on all machines).  It operates similarly to the C
+-   library function of the same name, but is more efficient.  Much of
+-   the code below (and for longjmp) is copied from the handling of
+-   non-local gotos.
+-
+-   NOTE: This is intended for use by GNAT and the exception handling
+-   scheme in the compiler and will only work in the method used by
+-   them.  */
++/* Construct the leading half of a __builtin_setjmp call.  Control will
++   return to RECEIVER_LABEL.  This is used directly by sjlj exception
++   handling code.  */
+ 
+-rtx
+-expand_builtin_setjmp (buf_addr, target, first_label, next_label)
++void
++expand_builtin_setjmp_setup (buf_addr, receiver_label)
+      rtx buf_addr;
+-     rtx target;
+-     rtx first_label, next_label;
++     rtx receiver_label;
+ {
+-  rtx lab1 = gen_label_rtx ();
+   enum machine_mode sa_mode = STACK_SAVEAREA_MODE (SAVE_NONLOCAL);
+-  enum machine_mode value_mode;
+   rtx stack_save;
+ 
+-  value_mode = TYPE_MODE (integer_type_node);
+-
+ #ifdef POINTERS_EXTEND_UNSIGNED
+   buf_addr = convert_memory_address (Pmode, buf_addr);
+ #endif
+ 
+   buf_addr = force_reg (Pmode, buf_addr);
+ 
+-  if (target == 0 || GET_CODE (target) != REG
+-      || REGNO (target) < FIRST_PSEUDO_REGISTER)
+-    target = gen_reg_rtx (value_mode);
+-
+   emit_queue ();
+ 
+-  /* We store the frame pointer and the address of lab1 in the buffer
+-     and use the rest of it for the stack save area, which is
+-     machine-dependent.  */
++  /* We store the frame pointer and the address of receiver_label in
++     the buffer and use the rest of it for the stack save area, which
++     is machine-dependent.  */
+ 
+ #ifndef BUILTIN_SETJMP_FRAME_VALUE
+ #define BUILTIN_SETJMP_FRAME_VALUE virtual_stack_vars_rtx
+@@ -8593,7 +8586,7 @@ expand_builtin_setjmp (buf_addr, target, first_label, next_label)
+ 		  (gen_rtx_MEM (Pmode,
+ 				plus_constant (buf_addr,
+ 					       GET_MODE_SIZE (Pmode)))),
+-		  force_reg (Pmode, gen_rtx_LABEL_REF (Pmode, lab1)));
++		  force_reg (Pmode, gen_rtx_LABEL_REF (Pmode, receiver_label)));
+ 
+   stack_save = gen_rtx_MEM (sa_mode,
+ 			    plus_constant (buf_addr,
+@@ -8606,20 +8599,22 @@ expand_builtin_setjmp (buf_addr, target, first_label, next_label)
+     emit_insn (gen_builtin_setjmp_setup (buf_addr));
+ #endif
+ 
+-  /* Set TARGET to zero and branch to the first-time-through label.  */
+-  emit_move_insn (target, const0_rtx);
+-  emit_jump_insn (gen_jump (first_label));
+-  emit_barrier ();
+-  emit_label (lab1);
+-
+-  /* Tell flow about the strange goings on.  Putting `lab1' on
+-     `nonlocal_goto_handler_labels' to indicates that function
+-     calls may traverse the arc back to this label.  */
++  /* Tell optimize_save_area_alloca that extra work is going to
++     need to go on during alloca.  */
++  current_function_calls_setjmp = 1;
+ 
++  /* Set this so all the registers get saved in our frame; we need to be
++     able to copy the saved values for any registers from frames we unwind. */
+   current_function_has_nonlocal_label = 1;
+-  nonlocal_goto_handler_labels =
+-    gen_rtx_EXPR_LIST (VOIDmode, lab1, nonlocal_goto_handler_labels);
++}
++
++/* Construct the trailing part of a __builtin_setjmp call.
++   This is used directly by sjlj exception handling code.  */
+ 
++void
++expand_builtin_setjmp_receiver (receiver_label)
++      rtx receiver_label ATTRIBUTE_UNUSED;
++{
+   /* Clobber the FP when we get here, so we have to make sure it's
+      marked as used by this function.  */
+   emit_insn (gen_rtx_USE (VOIDmode, hard_frame_pointer_rtx));
+@@ -8666,7 +8661,7 @@ expand_builtin_setjmp (buf_addr, target, first_label, next_label)
+ 
+ #ifdef HAVE_builtin_setjmp_receiver
+   if (HAVE_builtin_setjmp_receiver)
+-    emit_insn (gen_builtin_setjmp_receiver (lab1));
++    emit_insn (gen_builtin_setjmp_receiver (receiver_label));
+   else
+ #endif
+ #ifdef HAVE_nonlocal_goto_receiver
+@@ -8678,10 +8673,66 @@ expand_builtin_setjmp (buf_addr, target, first_label, next_label)
+ 	; /* Nothing */
+       }
+ 
+-  /* Set TARGET, and branch to the next-time-through label.  */
+-  emit_move_insn (target, const1_rtx);
+-  emit_jump_insn (gen_jump (next_label));
++  /* @@@ This is a kludge.  Not all machine descriptions define a blockage
++     insn, but we must not allow the code we just generated to be reordered
++     by scheduling.  Specifically, the update of the frame pointer must
++     happen immediately, not later.  So emit an ASM_INPUT to act as blockage
++     insn.  */
++  emit_insn (gen_rtx_ASM_INPUT (VOIDmode, ""));
++}
++
++
++/* __builtin_setjmp is passed a pointer to an array of five words (not
++   all will be used on all machines).  It operates similarly to the C
++   library function of the same name, but is more efficient.  Much of
++   the code below (and for longjmp) is copied from the handling of
++   non-local gotos.
++
++   NOTE: This is intended for use by GNAT and the exception handling
++   scheme in the compiler and will only work in the method used by
++   them.  */
++
++static rtx
++expand_builtin_setjmp (arglist, target)
++     tree arglist;
++     rtx target;
++{
++  rtx buf_addr, next_lab, cont_lab;
++
++  if (arglist == 0
++      || TREE_CODE (TREE_TYPE (TREE_VALUE (arglist))) != POINTER_TYPE)
++    return NULL_RTX;
++
++  if (target == 0 || GET_CODE (target) != REG
++      || REGNO (target) < FIRST_PSEUDO_REGISTER)
++    target = gen_reg_rtx (TYPE_MODE (integer_type_node));
++
++  buf_addr = expand_expr (TREE_VALUE (arglist), NULL_RTX, VOIDmode, 0);
++
++  next_lab = gen_label_rtx ();
++  cont_lab = gen_label_rtx ();
++
++  expand_builtin_setjmp_setup (buf_addr, next_lab);
++
++  /* Set TARGET to zero and branch to the continue label.  */
++  emit_move_insn (target, const0_rtx);
++  emit_jump_insn (gen_jump (cont_lab));
+   emit_barrier ();
++  emit_label (next_lab);
++
++  expand_builtin_setjmp_receiver (next_lab);
++
++  /* Set TARGET to one.  */
++  emit_move_insn (target, const1_rtx);
++  emit_label (cont_lab);
++
++  /* Tell flow about the strange goings on.  Putting `next_lab' on
++     `nonlocal_goto_handler_labels' to indicates that function
++     calls may traverse the arc back to this label.  */
++
++  current_function_has_nonlocal_label = 1;
++  nonlocal_goto_handler_labels
++    = gen_rtx_EXPR_LIST (VOIDmode, next_lab, nonlocal_goto_handler_labels);
+ 
+   return target;
+ }
+@@ -9703,18 +9754,10 @@ expand_builtin (exp, target, subtarget, mode, ignore)
+ #endif
+ 
+     case BUILT_IN_SETJMP:
+-      if (arglist == 0
+-	  || TREE_CODE (TREE_TYPE (TREE_VALUE (arglist))) != POINTER_TYPE)
+-	break;
+-      else
+-	{
+-	  rtx buf_addr = expand_expr (TREE_VALUE (arglist), subtarget,
+-				      VOIDmode, 0);
+-	  rtx lab = gen_label_rtx ();
+-	  rtx ret = expand_builtin_setjmp (buf_addr, target, lab, lab);
+-	  emit_label (lab);
+-	  return ret;
+-	}
++      target = expand_builtin_setjmp (arglist, target);
++      if (target)
++	return target;
++      break;
+ 
+       /* __builtin_longjmp is passed a pointer to an array of five words.
+ 	 It's similar to the C library longjmp function but works with
+diff --git a/gcc/expr.h b/gcc/expr.h
+index 55e82e6..c279774 100644
+--- a/gcc/expr.h
++++ b/gcc/expr.h
+@@ -831,7 +831,8 @@ extern rtx store_expr PROTO((tree, rtx, int));
+    Useful after calling expand_expr with 1 as sum_ok.  */
+ extern rtx force_operand PROTO((rtx, rtx));
+ 
+-extern rtx expand_builtin_setjmp PROTO((rtx, rtx, rtx, rtx));
++extern void expand_builtin_setjmp_setup PARAMS ((rtx, rtx));
++extern void expand_builtin_setjmp_receiver PARAMS ((rtx));
+ 
+ #ifdef TREE_CODE
+ /* Generate code for computing expression EXP.
 diff --git a/gcc/f/Make-lang.in b/gcc/f/Make-lang.in
 index a531abb..6c24700 100644
 --- a/gcc/f/Make-lang.in
@@ -684,6 +1682,89 @@ index a531abb..6c24700 100644
  #
  # Clean hooks:
  # A lot of the ancillary files are deleted by the main makefile.
+diff --git a/gcc/f/version.c b/gcc/f/version.c
+index 4b695cd..495703a 100644
+--- a/gcc/f/version.c
++++ b/gcc/f/version.c
+@@ -1 +1 @@
+-const char *ffe_version_string = "0.5.25 20010315 (release)";
++const char *ffe_version_string = "0.5.25 20010319 (prerelease)";
+diff --git a/gcc/final.c b/gcc/final.c
+index 11cfebf..7a31cde 100644
+--- a/gcc/final.c
++++ b/gcc/final.c
+@@ -1701,7 +1701,9 @@ static void
+ profile_function (file)
+      FILE *file;
+ {
++#ifndef NO_PROFILE_COUNTERS
+   int align = MIN (BIGGEST_ALIGNMENT, LONG_TYPE_SIZE);
++#endif
+ #if defined(ASM_OUTPUT_REG_PUSH)
+ #if defined(STRUCT_VALUE_INCOMING_REGNUM) || defined(STRUCT_VALUE_REGNUM)
+   int sval = current_function_returns_struct;
+@@ -1711,10 +1713,12 @@ profile_function (file)
+ #endif
+ #endif /* ASM_OUTPUT_REG_PUSH */
+ 
++#ifndef NO_PROFILE_COUNTERS
+   data_section ();
+   ASM_OUTPUT_ALIGN (file, floor_log2 (align / BITS_PER_UNIT));
+   ASM_OUTPUT_INTERNAL_LABEL (file, "LP", profile_label_no);
+   assemble_integer (const0_rtx, LONG_TYPE_SIZE / BITS_PER_UNIT, 1);
++#endif
+ 
+   function_section (current_function_decl);
+ 
+@@ -3043,7 +3047,8 @@ cleanup_subreg_operands (insn)
+       if (GET_CODE (recog_operand[i]) == SUBREG)
+         recog_operand[i] = alter_subreg (recog_operand[i]);
+       else if (GET_CODE (recog_operand[i]) == PLUS
+-               || GET_CODE (recog_operand[i]) == MULT)
++               || GET_CODE (recog_operand[i]) == MULT
++	       || GET_CODE (recog_operand[i]) == MEM)
+        recog_operand[i] = walk_alter_subreg (recog_operand[i]);
+     }
+ 
+@@ -3052,7 +3057,8 @@ cleanup_subreg_operands (insn)
+       if (GET_CODE (*recog_dup_loc[i]) == SUBREG)
+         *recog_dup_loc[i] = alter_subreg (*recog_dup_loc[i]);
+       else if (GET_CODE (*recog_dup_loc[i]) == PLUS
+-               || GET_CODE (*recog_dup_loc[i]) == MULT)
++               || GET_CODE (*recog_dup_loc[i]) == MULT
++	       || GET_CODE (*recog_dup_loc[i]) == MEM)
+         *recog_dup_loc[i] = walk_alter_subreg (*recog_dup_loc[i]);
+     }
+ }
+diff --git a/gcc/flow.c b/gcc/flow.c
+index 432a990..f3b3213 100644
+--- a/gcc/flow.c
++++ b/gcc/flow.c
+@@ -2744,15 +2744,23 @@ propagate_block (old, first, last, final, significant, bnum, remove_dead_code)
+ 		{
+ 		  if (REG_NOTE_KIND (inote) == REG_LABEL)
+ 		    {
++		      int n_forced;
+ 		      rtx label = XEXP (inote, 0);
+ 		      rtx next;
+ 		      LABEL_NUSES (label)--;
+ 
++		      /* The label may be forced if it has been put in the
++		         constant pool.  We can't delete it in this case, but
++		         we still must discard a jump table following it.  */
++		      n_forced = 0;
++		      if (LABEL_PRESERVE_P (label))
++			n_forced++;
++
+ 		      /* If this label was attached to an ADDR_VEC, it's
+ 			 safe to delete the ADDR_VEC.  In fact, it's pretty much
+ 			 mandatory to delete it, because the ADDR_VEC may
+ 			 be referencing labels that no longer exist.  */
+-		      if (LABEL_NUSES (label) == 0
++		      if (LABEL_NUSES (label) == n_forced
+ 			  && (next = next_nonnote_insn (label)) != NULL
+ 			  && GET_CODE (next) == JUMP_INSN
+ 			  && (GET_CODE (PATTERN (next)) == ADDR_VEC
 diff --git a/gcc/frame.c b/gcc/frame.c
 index 990a0ac..b3f6d29 100644
 --- a/gcc/frame.c
@@ -700,6 +1781,602 @@ index 990a0ac..b3f6d29 100644
  
  /* Don't use `fancy_abort' here even if config.h says to use it.  */
  #ifdef abort
+diff --git a/gcc/function.c b/gcc/function.c
+index edd0bca..77dabeb 100644
+--- a/gcc/function.c
++++ b/gcc/function.c
+@@ -513,8 +513,9 @@ static int *record_insns	PROTO((rtx));
+ static int contains		PROTO((rtx, int *));
+ #endif /* HAVE_prologue || HAVE_epilogue */
+ static void put_addressof_into_stack PROTO((rtx, struct hash_table *));
+-static void purge_addressof_1	PROTO((rtx *, rtx, int, int, 
++static boolean purge_addressof_1 PROTO((rtx *, rtx, int, int, 
+ 				       struct hash_table *));
++static int is_addressof		PROTO ((rtx *, void *));
+ static struct hash_entry *insns_for_mem_newfunc PROTO((struct hash_entry *,
+ 						       struct hash_table *,
+ 						       hash_table_key));
+@@ -3055,9 +3056,10 @@ static rtx purge_addressof_replacements;
+ 
+ /* Helper function for purge_addressof.  See if the rtx expression at *LOC
+    in INSN needs to be changed.  If FORCE, always put any ADDRESSOFs into
+-   the stack.  */
++   the stack.  If the function returns FALSE then the replacement could not
++   be made.  */
+ 
+-static void
++static boolean
+ purge_addressof_1 (loc, insn, force, store, ht)
+      rtx *loc;
+      rtx insn;
+@@ -3068,13 +3070,14 @@ purge_addressof_1 (loc, insn, force, store, ht)
+   RTX_CODE code;
+   int i, j;
+   char *fmt;
++  boolean result = true;
+ 
+   /* Re-start here to avoid recursion in common cases.  */
+  restart:
+ 
+   x = *loc;
+   if (x == 0)
+-    return;
++    return true;
+ 
+   code = GET_CODE (x);
+ 
+@@ -3087,7 +3090,7 @@ purge_addressof_1 (loc, insn, force, store, ht)
+ 
+       if (validate_change (insn, loc, sub, 0)
+ 	  || validate_replace_rtx (x, sub, insn))
+-	return;
++	return true;
+   
+       start_sequence ();
+       sub = force_operand (sub, NULL_RTX);
+@@ -3098,7 +3101,7 @@ purge_addressof_1 (loc, insn, force, store, ht)
+       insns = gen_sequence ();
+       end_sequence ();
+       emit_insn_before (insns, insn);
+-      return;
++      return true;
+     }
+   else if (code == MEM && GET_CODE (XEXP (x, 0)) == ADDRESSOF && ! force)
+     {
+@@ -3117,7 +3120,7 @@ purge_addressof_1 (loc, insn, force, store, ht)
+ 	  && (MEM_VOLATILE_P (x) || GET_MODE (x) == BLKmode))
+ 	{
+ 	  put_addressof_into_stack (XEXP (x, 0), ht);
+-	  return;
++	  return true;
+ 	}
+       else if (GET_CODE (sub) == REG && GET_MODE (x) != GET_MODE (sub))
+ 	{
+@@ -3136,7 +3139,7 @@ purge_addressof_1 (loc, insn, force, store, ht)
+ 		if (rtx_equal_p (x, XEXP (tem, 0)))
+ 		  {
+ 		    *loc = XEXP (XEXP (tem, 1), 0);
+-		    return;
++		    return true;
+ 		  }
+ 
+ 	      /* See comment for purge_addressof_replacements. */
+@@ -3176,11 +3179,17 @@ purge_addressof_1 (loc, insn, force, store, ht)
+ 		      z = gen_lowpart (GET_MODE (x), z);
+ 
+ 		    *loc = z;
+-		    return;
++		    return true;
+ 		  }
+ 
+-	      /* There should always be such a replacement.  */
+-	      abort ();
++	      /* Sometimes we may not be able to find the replacement.  For
++		 example when the original insn was a MEM in a wider mode,
++		 and the note is part of a sign extension of a narrowed
++		 version of that MEM.  Gcc testcase compile/990829-1.c can
++		 generate an example of this siutation.  Rather than complain
++		 we return false, which will prompt our caller to remove the
++		 offending note.  */
++	      return false;
+ 	    }
+ 
+ 	  size_x = GET_MODE_BITSIZE (GET_MODE (x));
+@@ -3266,7 +3275,7 @@ purge_addressof_1 (loc, insn, force, store, ht)
+ 				      purge_bitfield_addressof_replacements));
+ 
+ 	      /* We replaced with a reg -- all done.  */
+-	      return;
++	      return true;
+ 	    }
+ 	}
+       else if (validate_change (insn, loc, sub, 0))
+@@ -3283,13 +3292,13 @@ purge_addressof_1 (loc, insn, force, store, ht)
+ 		if (rtx_equal_p (XEXP (x, 0), XEXP (tem, 0)))
+ 		  {
+ 		    XEXP (XEXP (tem, 1), 0) = sub;
+-		    return;
++		    return true;
+ 		  }
+ 	      purge_addressof_replacements
+ 		= gen_rtx (EXPR_LIST, VOIDmode, XEXP (x, 0),
+ 			   gen_rtx_EXPR_LIST (VOIDmode, sub,
+ 					      purge_addressof_replacements));
+-	      return;
++	      return true;
+ 	    }
+ 	  goto restart;
+ 	}
+@@ -3299,13 +3308,13 @@ purge_addressof_1 (loc, insn, force, store, ht)
+   else if (code == ADDRESSOF)
+     {
+       put_addressof_into_stack (x, ht);
+-      return;
++      return true;
+     }
+   else if (code == SET)
+     {
+-      purge_addressof_1 (&SET_DEST (x), insn, force, 1, ht);
+-      purge_addressof_1 (&SET_SRC (x), insn, force, 0, ht);
+-      return;
++      result = purge_addressof_1 (&SET_DEST (x), insn, force, 1, ht);
++      result &= purge_addressof_1 (&SET_SRC (x), insn, force, 0, ht);
++      return result;
+     }
+ 
+   /* Scan all subexpressions. */
+@@ -3313,11 +3322,13 @@ purge_addressof_1 (loc, insn, force, store, ht)
+   for (i = 0; i < GET_RTX_LENGTH (code); i++, fmt++)
+     {
+       if (*fmt == 'e')
+-	purge_addressof_1 (&XEXP (x, i), insn, force, 0, ht);
++	result &= purge_addressof_1 (&XEXP (x, i), insn, force, 0, ht);
+       else if (*fmt == 'E')
+ 	for (j = 0; j < XVECLEN (x, i); j++)
+-	  purge_addressof_1 (&XVECEXP (x, i, j), insn, force, 0, ht);
++	  result &= purge_addressof_1 (&XVECEXP (x, i, j), insn, force, 0, ht);
+     }
++
++  return result;
+ }
+ 
+ /* Return a new hash table entry in HT.  */
+@@ -3437,6 +3448,16 @@ compute_insns_for_mem (insns, last_insn, ht)
+ 	}
+ }
+ 
++/* Helper function for purge_addressof called through for_each_rtx.
++   Returns true iff the rtl is an ADDRESSOF.  */
++static int
++is_addressof (rtl, data)
++     rtx * rtl;
++     void * data ATTRIBUTE_UNUSED;
++{
++  return GET_CODE (* rtl) == ADDRESSOF;
++}
++
+ /* Eliminate all occurrences of ADDRESSOF from INSNS.  Elide any remaining
+    (MEM (ADDRESSOF)) patterns, and force any needed registers into the
+    stack.  */
+@@ -3465,9 +3486,30 @@ purge_addressof (insns)
+     if (GET_CODE (insn) == INSN || GET_CODE (insn) == JUMP_INSN
+ 	|| GET_CODE (insn) == CALL_INSN)
+       {
+-	purge_addressof_1 (&PATTERN (insn), insn,
+-			   asm_noperands (PATTERN (insn)) > 0, 0, &ht);
+-	purge_addressof_1 (&REG_NOTES (insn), NULL_RTX, 0, 0, &ht);
++	if (! purge_addressof_1 (&PATTERN (insn), insn,
++				 asm_noperands (PATTERN (insn)) > 0, 0, &ht))
++	  /* If we could not replace the ADDRESSOFs in the insn,
++	     something is wrong.  */
++	  abort ();
++	
++	if (! purge_addressof_1 (&REG_NOTES (insn), NULL_RTX, 0, 0, &ht))
++	  {
++	    /* If we could not replace the ADDRESSOFs in the insn's notes,
++	       we can just remove the offending notes instead.  */
++	    rtx note;
++
++	    for (note = REG_NOTES (insn); note; note = XEXP (note, 1))
++	      {
++		/* If we find a REG_RETVAL note then the insn is a libcall.
++		   Such insns must have REG_EQUAL notes as well, in order
++		   for later passes of the compiler to work.  So it is not
++		   safe to delete the notes here, and instead we abort.  */
++		if (REG_NOTE_KIND (note) == REG_RETVAL)
++		  abort ();
++		if (for_each_rtx (& note, is_addressof, NULL))
++		  remove_note (insn, note);
++	      }
++	  }
+       }
+ 
+   /* Clean up.  */
+@@ -5292,7 +5334,18 @@ locate_and_pad_parm (passed_mode, type, in_regs, fndecl,
+ 				- offset_ptr->constant); 
+     }
+ #else /* !ARGS_GROW_DOWNWARD */
+-  pad_to_arg_alignment (initial_offset_ptr, boundary);
++  if (!in_regs 
++#ifdef REG_PARM_STACK_SPACE
++      || REG_PARM_STACK_SPACE (fndecl) > 0
++#else
++      /* For the gcc-2_95-branch we want to make sure not to break something
++         on platforms which pass argument in registers but don't define
++         REG_PARM_STACK_SPACE. So we force the original behaviour here.  */
++      || 1
++#endif
++      )
++    pad_to_arg_alignment (initial_offset_ptr, boundary);
++
+   *offset_ptr = *initial_offset_ptr;
+ 
+ #ifdef PUSH_ROUNDING
+@@ -6927,7 +6980,7 @@ thread_prologue_and_epilogue_insns (f)
+ 	    }
+ 	}
+       }
+-  #endif
++#endif
+ }
+ 
+ /* Reposition the prologue-end and epilogue-begin notes after instruction
+diff --git a/gcc/gcc.1 b/gcc/gcc.1
+index 74200a1..f6611e2 100644
+--- a/gcc/gcc.1
++++ b/gcc/gcc.1
+@@ -20,7 +20,7 @@
+ .if n .sp
+ .if t .sp 0.4
+ ..
+-.Id $Id: gcc.1,v 1.9 1998/12/16 20:55:57 law Exp $
++.Id $Id: gcc.1,v 1.9.8.1 1999/06/02 01:41:52 law Exp $
+ .TH GCC 1 "\*(Dt" "GNU Tools" "GNU Tools"
+ .SH NAME
+ gcc, g++ \- GNU project C and C++ Compiler (gcc-2.95)
+diff --git a/gcc/gcc.c b/gcc/gcc.c
+index d4dbf5e..c5a312d 100644
+--- a/gcc/gcc.c
++++ b/gcc/gcc.c
+@@ -5040,48 +5040,53 @@ main (argc, argv)
+ 	  int len;
+ 
+ 	  if (cp->spec[0][0] == '#')
+-	    error ("%s: %s compiler not installed on this system",
+-		   input_filename, &cp->spec[0][1]);
+-
+-	  input_basename = input_filename;
+-	  for (p = input_filename; *p; p++)
+-	    if (IS_DIR_SEPARATOR (*p))
+-	      input_basename = p + 1;
+-
+-	  /* Find a suffix starting with the last period,
+-	     and set basename_length to exclude that suffix.  */
+-	  basename_length = strlen (input_basename);
+-	  p = input_basename + basename_length;
+-	  while (p != input_basename && *p != '.') --p;
+-	  if (*p == '.' && p != input_basename)
+ 	    {
+-	      basename_length = p - input_basename;
+-	      input_suffix = p + 1;
++	      error ("%s: %s compiler not installed on this system",
++		     input_filename, &cp->spec[0][1]);
++	      this_file_error = 1;
+ 	    }
+ 	  else
+-	    input_suffix = "";
++	    {
++	      input_basename = input_filename;
++	      for (p = input_filename; *p; p++)
++		if (IS_DIR_SEPARATOR (*p))
++		  input_basename = p + 1;
++
++	      /* Find a suffix starting with the last period,
++		 and set basename_length to exclude that suffix.  */
++	      basename_length = strlen (input_basename);
++	      p = input_basename + basename_length;
++	      while (p != input_basename && *p != '.') --p;
++	      if (*p == '.' && p != input_basename)
++		{
++		  basename_length = p - input_basename;
++		  input_suffix = p + 1;
++		}
++	      else
++		input_suffix = "";
+ 
+-	  len = 0;
+-	  for (j = 0; j < sizeof cp->spec / sizeof cp->spec[0]; j++)
+-	    if (cp->spec[j])
+-	      len += strlen (cp->spec[j]);
++	      len = 0;
++	      for (j = 0; j < sizeof cp->spec / sizeof cp->spec[0]; j++)
++		if (cp->spec[j])
++		  len += strlen (cp->spec[j]);
+ 
+-	  {
+-	    char *p1 = (char *) xmalloc (len + 1);
++	      {
++		char *p1 = (char *) xmalloc (len + 1);
+ 	    
+-	    len = 0;
+-	    for (j = 0; j < sizeof cp->spec / sizeof cp->spec[0]; j++)
+-	      if (cp->spec[j])
+-		{
+-		  strcpy (p1 + len, cp->spec[j]);
+-		  len += strlen (cp->spec[j]);
+-		}
++		len = 0;
++		for (j = 0; j < sizeof cp->spec / sizeof cp->spec[0]; j++)
++		  if (cp->spec[j])
++		    {
++		      strcpy (p1 + len, cp->spec[j]);
++		      len += strlen (cp->spec[j]);
++		    }
+ 	    
+-	    value = do_spec (p1);
+-	    free (p1);
+-	  }
+-	  if (value < 0)
+-	    this_file_error = 1;
++		value = do_spec (p1);
++		free (p1);
++	      }
++	      if (value < 0)
++		this_file_error = 1;
++	    }
+ 	}
+ 
+       /* If this file's name does not contain a recognized suffix,
+diff --git a/gcc/invoke.texi b/gcc/invoke.texi
+index e97495e..9865a34 100644
+--- a/gcc/invoke.texi
++++ b/gcc/invoke.texi
+@@ -1694,6 +1694,12 @@ A @code{switch} statement has an operand of type @code{long}.
+ @item
+ A non-@code{static} function declaration follows a @code{static} one.
+ This construct is not accepted by some traditional C compilers.
++
++@item
++The ANSI type of an integer constant has a different width or signedness
++from its traditional type.  This warning is only issued if the base of
++the constant is ten.  I.e. hexadecimal or octal values, which typically
++represent bit patterns, are not warned about.
+ @end itemize
+ 
+ @item -Wundef
+diff --git a/gcc/jump.c b/gcc/jump.c
+index 32eebd1..6e7e905 100644
+--- a/gcc/jump.c
++++ b/gcc/jump.c
+@@ -200,8 +200,6 @@ jump_optimize_1 (f, cross_jump, noop_moves, after_regscan, mark_labels_only)
+   if (flag_exceptions && cross_jump)
+     init_insn_eh_region (f, max_uid);
+ 
+-  delete_barrier_successors (f);
+-
+   /* Leave some extra room for labels and duplicate exit test insns
+      we make.  */
+   max_jump_chain = max_uid * 14 / 10;
+@@ -224,6 +222,8 @@ jump_optimize_1 (f, cross_jump, noop_moves, after_regscan, mark_labels_only)
+   for (insn = exception_handler_labels; insn; insn = XEXP (insn, 1))
+     LABEL_NUSES (XEXP (insn, 0))++;
+ 
++  delete_barrier_successors (f);
++
+   /* Quit now if we just wanted to rebuild the JUMP_LABEL and REG_LABEL
+      notes and recompute LABEL_NUSES.  */
+   if (mark_labels_only)
+@@ -2139,7 +2139,24 @@ delete_barrier_successors (f)
+ 	  insn = NEXT_INSN (insn);
+ 	  while (insn != 0 && GET_CODE (insn) != CODE_LABEL)
+ 	    {
+-	      if (GET_CODE (insn) == NOTE
++	      if (GET_CODE (insn) == JUMP_INSN)
++		{
++		  /* Detect when we're deleting a tablejump; get rid of
++		     the jump table as well.  */
++		  rtx next1 = next_nonnote_insn (insn);
++		  rtx next2 = next1 ? next_nonnote_insn (next1) : 0;
++		  if (next2 && GET_CODE (next1) == CODE_LABEL
++		      && GET_CODE (next2) == JUMP_INSN
++		      && (GET_CODE (PATTERN (next2)) == ADDR_VEC
++			  || GET_CODE (PATTERN (next2)) == ADDR_DIFF_VEC))
++		    {
++		      delete_insn (insn);
++		      insn = next2;
++		    }
++		  else
++		    insn = delete_insn (insn);
++		}
++	      else if (GET_CODE (insn) == NOTE
+ 		  && NOTE_LINE_NUMBER (insn) != NOTE_INSN_FUNCTION_END)
+ 		insn = NEXT_INSN (insn);
+ 	      else
+diff --git a/gcc/just-fixinc b/gcc/just-fixinc
+index a7d1968..fb61378 100755
+--- a/gcc/just-fixinc
++++ b/gcc/just-fixinc
+@@ -1,5 +1,5 @@
+ #!/bin/sh
+-# $Id: just-fixinc,v 1.2 1998/04/03 16:35:58 law Exp $
++# $Id: just-fixinc,v 1.3 1998/12/16 20:57:01 law Exp $
+ # This script exists for use after installing
+ # the GCC binaries from a distribution tape/CD-ROM.
+ # Use it *after* copying the directory of binaries
+diff --git a/gcc/loop.c b/gcc/loop.c
+index aca291d..0a8e362 100644
+--- a/gcc/loop.c
++++ b/gcc/loop.c
+@@ -320,11 +320,12 @@ static int count_nonfixed_reads PROTO((rtx));
+ static void strength_reduce PROTO((rtx, rtx, rtx, int, rtx, rtx, rtx, int, int));
+ static void find_single_use_in_loop PROTO((rtx, rtx, varray_type));
+ static int valid_initial_value_p PROTO((rtx, rtx, int, rtx));
+-static void find_mem_givs PROTO((rtx, rtx, int, rtx, rtx));
++static void find_mem_givs PROTO((rtx, rtx, int, int, rtx, rtx));
+ static void record_biv PROTO((struct induction *, rtx, rtx, rtx, rtx, rtx *, int, int));
+ static void check_final_value PROTO((struct induction *, rtx, rtx, 
+ 				     unsigned HOST_WIDE_INT));
+-static void record_giv PROTO((struct induction *, rtx, rtx, rtx, rtx, rtx, int, enum g_types, int, rtx *, rtx, rtx));
++static void record_giv PROTO((struct induction *, rtx, rtx, rtx, rtx, rtx,
++			      int, enum g_types, int, int, rtx *, rtx, rtx));
+ static void update_giv_derive PROTO((rtx));
+ static int basic_induction_var PROTO((rtx, enum machine_mode, rtx, rtx, rtx *, rtx *, rtx **));
+ static rtx simplify_giv_expr PROTO((rtx, int *));
+@@ -1481,10 +1482,16 @@ combine_movables (movables, nregs)
+ 		      width as M1.  The check for integer is redundant, but
+ 		      safe, since the only case of differing destination
+ 		      modes with equal sources is when both sources are
+-		      VOIDmode, i.e., CONST_INT.  */
++		      VOIDmode, i.e., CONST_INT.
++		    
++		      For 2.95, don't do this if the mode of M1 is Pmode.
++		      This prevents us from substituting SUBREGs for REGs
++		      in memory accesses; not all targets are prepared to
++		      handle this properly.  */
+ 		   (GET_MODE (m->set_dest) == GET_MODE (m1->set_dest)
+ 		    || (GET_MODE_CLASS (GET_MODE (m->set_dest)) == MODE_INT
+ 			&& GET_MODE_CLASS (GET_MODE (m1->set_dest)) == MODE_INT
++			&& GET_MODE (m1->set_dest) != Pmode
+ 			&& (GET_MODE_BITSIZE (GET_MODE (m->set_dest))
+ 			    >= GET_MODE_BITSIZE (GET_MODE (m1->set_dest)))))
+ 		   /* See if the source of M1 says it matches M.  */
+@@ -4420,6 +4427,7 @@ strength_reduce (scan_start, end, loop_top, insn_count,
+      biv and a constant (or invariant), and it is not a biv.  */
+ 
+   not_every_iteration = 0;
++  maybe_multiple = 0;
+   loop_depth = 0;
+   p = scan_start;
+   while (1)
+@@ -4439,6 +4447,40 @@ strength_reduce (scan_start, end, loop_top, insn_count,
+ 	    break;
+ 	}
+ 
++      if (GET_CODE (p) == CODE_LABEL)
++	{
++	  rtx insn = p;
++
++	  maybe_multiple = 0;
++
++	  while (1)
++	    {
++	      insn = NEXT_INSN (insn);
++	      if (insn == scan_start)
++		break;
++	      if (insn == end)
++		{
++		  if (loop_top != 0)
++		    insn = loop_top;
++		  else
++		    break;
++		  if (insn == scan_start)
++		    break;
++		}
++
++	      if (GET_CODE (insn) == JUMP_INSN
++		  && GET_CODE (PATTERN (insn)) != RETURN
++		  && (! condjump_p (insn)
++		      || (JUMP_LABEL (insn) != 0
++			  && JUMP_LABEL (insn) != scan_start
++			  && ! loop_insn_first_p (p, JUMP_LABEL (insn)))))
++		{
++		  maybe_multiple = 1;
++		  break;
++		}
++	    }
++	}
++
+       /* Look for a general induction variable in a register.  */
+       if (GET_CODE (p) == INSN
+ 	  && (set = single_set (p))
+@@ -4489,8 +4531,8 @@ strength_reduce (scan_start, end, loop_top, insn_count,
+ 		p = last_consec_insn;
+ 
+ 	      record_giv (v, p, src_reg, dest_reg, mult_val, add_val, benefit,
+-			  DEST_REG, not_every_iteration, NULL_PTR, loop_start,
+-			  loop_end);
++			  DEST_REG, not_every_iteration, maybe_multiple,
++			  NULL_PTR, loop_start, loop_end);
+ 
+ 	    }
+ 	}
+@@ -4500,8 +4542,8 @@ strength_reduce (scan_start, end, loop_top, insn_count,
+       /* This resulted in worse code on a VAX 8600.  I wonder if it
+ 	 still does.  */
+       if (GET_CODE (p) == INSN)
+-	find_mem_givs (PATTERN (p), p, not_every_iteration, loop_start,
+-		       loop_end);
++	find_mem_givs (PATTERN (p), p, not_every_iteration, maybe_multiple,
++		       loop_start, loop_end);
+ #endif
+ 
+       /* Update the status of whether giv can derive other givs.  This can
+@@ -5240,10 +5282,12 @@ valid_initial_value_p (x, insn, call_seen, loop_start)
+    every loop iteration.  */
+ 
+ static void
+-find_mem_givs (x, insn, not_every_iteration, loop_start, loop_end)
++find_mem_givs (x, insn, not_every_iteration, maybe_multiple,
++	       loop_start, loop_end)
+      rtx x;
+      rtx insn;
+      int not_every_iteration;
++     int maybe_multiple;
+      rtx loop_start, loop_end;
+ {
+   register int i, j;
+@@ -5291,7 +5335,7 @@ find_mem_givs (x, insn, not_every_iteration, loop_start, loop_end)
+ 
+ 	    record_giv (v, insn, src_reg, addr_placeholder, mult_val,
+ 			add_val, benefit, DEST_ADDR, not_every_iteration,
+-			&XEXP (x, 0), loop_start, loop_end);
++			maybe_multiple, &XEXP (x, 0), loop_start, loop_end);
+ 
+ 	    v->mem_mode = GET_MODE (x);
+ 	  }
+@@ -5307,12 +5351,12 @@ find_mem_givs (x, insn, not_every_iteration, loop_start, loop_end)
+   fmt = GET_RTX_FORMAT (code);
+   for (i = GET_RTX_LENGTH (code) - 1; i >= 0; i--)
+     if (fmt[i] == 'e')
+-      find_mem_givs (XEXP (x, i), insn, not_every_iteration, loop_start,
+-		     loop_end);
++      find_mem_givs (XEXP (x, i), insn, not_every_iteration, maybe_multiple,
++		     loop_start, loop_end);
+     else if (fmt[i] == 'E')
+       for (j = 0; j < XVECLEN (x, i); j++)
+ 	find_mem_givs (XVECEXP (x, i, j), insn, not_every_iteration,
+-		       loop_start, loop_end);
++		       maybe_multiple, loop_start, loop_end);
+ }
+ 
+ /* Fill in the data about one biv update.
+@@ -5434,7 +5478,8 @@ record_biv (v, insn, dest_reg, inc_val, mult_val, location,
+ 
+ static void
+ record_giv (v, insn, src_reg, dest_reg, mult_val, add_val, benefit,
+-	    type, not_every_iteration, location, loop_start, loop_end)
++	    type, not_every_iteration, maybe_multiple,
++	    location, loop_start, loop_end)
+      struct induction *v;
+      rtx insn;
+      rtx src_reg;
+@@ -5443,6 +5488,7 @@ record_giv (v, insn, src_reg, dest_reg, mult_val, add_val, benefit,
+      int benefit;
+      enum g_types type;
+      int not_every_iteration;
++     int maybe_multiple;
+      rtx *location;
+      rtx loop_start, loop_end;
+ {
+@@ -5460,7 +5506,7 @@ record_giv (v, insn, src_reg, dest_reg, mult_val, add_val, benefit,
+   v->location = location;
+   v->cant_derive = 0;
+   v->combined_with = 0;
+-  v->maybe_multiple = 0;
++  v->maybe_multiple = maybe_multiple;
+   v->maybe_dead = 0;
+   v->derive_adjustment = 0;
+   v->same = 0;
 diff --git a/gcc/po/Makefile.in.in b/gcc/po/Makefile.in.in
 index 746d521..f623a98 100644
 --- a/gcc/po/Makefile.in.in
@@ -788,6 +2465,257 @@ index 746d521..f623a98 100644
  
  check: all
  
+diff --git a/gcc/regmove.c b/gcc/regmove.c
+index 8008595..27c6d4a 100644
+--- a/gcc/regmove.c
++++ b/gcc/regmove.c
+@@ -693,6 +693,9 @@ optimize_reg_copy_3 (insn, dest, src)
+     }
+   if (! (set = single_set (p))
+       || GET_CODE (SET_SRC (set)) != MEM
++      /* If there's a REG_EQUIV note, this must be an insn that loads an
++	 argument.  Prefer keeping the note over doing this optimization.  */
++      || find_reg_note (p, REG_EQUIV, NULL_RTX)
+       || SET_DEST (set) != src_reg)
+     return;
+ 
+@@ -737,6 +740,12 @@ optimize_reg_copy_3 (insn, dest, src)
+       PUT_MODE (src_reg, old_mode);
+       XEXP (src, 0) = src_reg;
+     }
++  else
++    {
++      rtx note = find_reg_note (p, REG_EQUAL, NULL_RTX);
++      if (note)
++	remove_note (p, note);
++    }
+ }
+ 
+ 
+diff --git a/gcc/reload1.c b/gcc/reload1.c
+index e95ff5e..24eb011 100644
+--- a/gcc/reload1.c
++++ b/gcc/reload1.c
+@@ -4278,9 +4278,6 @@ reload_as_needed (live_known)
+ 			    spill_reg_order);
+ 	    }
+ 
+-	  if (num_eliminable && chain->need_elim)
+-	    update_eliminable_offsets ();
+-
+ 	  if (n_reloads > 0)
+ 	    {
+ 	      rtx next = NEXT_INSN (insn);
+@@ -4327,6 +4324,10 @@ reload_as_needed (live_known)
+ 		      NOTE_LINE_NUMBER (p) = NOTE_INSN_DELETED;
+ 		    }
+ 	    }
++
++	  if (num_eliminable && chain->need_elim)
++	    update_eliminable_offsets ();
++
+ 	  /* Any previously reloaded spilled pseudo reg, stored in this insn,
+ 	     is no longer validly lying around to save a future reload.
+ 	     Note that this does not detect pseudos that were reloaded
+@@ -8071,7 +8072,9 @@ delete_output_reload (insn, j, last_reload_reg)
+     }
+   n_occurrences = count_occurrences (PATTERN (insn), reg);
+   if (substed)
+-    n_occurrences += count_occurrences (PATTERN (insn), substed);
++    n_occurrences += count_occurrences (PATTERN (insn),
++					eliminate_regs (substed, 0,
++							NULL_RTX));
+   if (n_occurrences > n_inherited)
+     return;
+ 
+@@ -9967,6 +9970,21 @@ reload_combine_note_use (xp, insn)
+ 	}
+       break;
+ 
++    case USE:
++      /* If this is the USE of a return value, we can't change it.  */
++      if (GET_CODE (XEXP (x, 0)) == REG && REG_FUNCTION_VALUE_P (XEXP (x, 0)))
++	{
++	/* Mark the return register as used in an unknown fashion.  */
++	  rtx reg = XEXP (x, 0);
++	  int regno = REGNO (reg);
++	  int nregs = HARD_REGNO_NREGS (regno, GET_MODE (reg));
++
++	  while (--nregs >= 0)
++	    reg_state[regno + nregs].use_index = -1;
++	  return;
++	}
++      break;
++
+     case CLOBBER:
+       if (GET_CODE (SET_DEST (x)) == REG)
+ 	return;
+@@ -9983,12 +10001,23 @@ reload_combine_note_use (xp, insn)
+       {
+ 	int regno = REGNO (x);
+ 	int use_index;
++	int nregs;
+ 
+ 	/* Some spurious USEs of pseudo registers might remain.
+ 	   Just ignore them.  */
+ 	if (regno >= FIRST_PSEUDO_REGISTER)
+ 	  return;
+ 
++	nregs = HARD_REGNO_NREGS (regno, GET_MODE (x));
++
++	/* We can't substitute into multi-hard-reg uses.  */
++	if (nregs > 1)
++	  {
++	    while (--nregs >= 0)
++	      reg_state[regno + nregs].use_index = -1;
++	    return;
++	  }
++
+ 	/* If this register is already used in some unknown fashion, we
+ 	   can't do anything.
+ 	   If we decrement the index from zero to -1, we can't store more
+diff --git a/gcc/rtl.h b/gcc/rtl.h
+index efbf588..16f0527 100644
+--- a/gcc/rtl.h
++++ b/gcc/rtl.h
+@@ -168,7 +168,8 @@ typedef struct rtx_def
+      either changing how we compute the frame address or saving and
+      restoring registers in the prologue and epilogue.  
+      1 in a MEM if the MEM refers to a scalar, rather than a member of
+-     an aggregate.  */
++     an aggregate.
++     1 in a SYMBOL_REF if the symbol is weak.  */
+   unsigned frame_related : 1;
+   /* The first element of the operands of this rtx.
+      The number of operands and their types are controlled
+@@ -661,6 +662,9 @@ extern char *note_insn_name[];
+ /* 1 means a SYMBOL_REF has been the library function in emit_library_call.  */
+ #define SYMBOL_REF_USED(RTX) ((RTX)->used)
+ 
++/* 1 means a SYMBOL_REF is weak.  */
++#define SYMBOL_REF_WEAK(RTX) ((RTX)->frame_related)
++
+ /* For an INLINE_HEADER rtx, FIRST_FUNCTION_INSN is the first insn
+    of the function that is not involved in copying parameters to
+    pseudo-registers.  FIRST_PARM_INSN is the very first insn of
+@@ -888,6 +892,12 @@ extern char *note_insn_name[];
+ /* For a NOTE_INSN_LIVE note, the original basic block number.  */
+ #define RANGE_LIVE_ORIG_BLOCK(INSN) (XINT (INSN, 1))
+ 
++/* Nonzero if we need to distinguish between the return value of this function
++   and the return value of a function called by this function.  This helps
++   integrate.c.
++   This is 1 until after the rtl generation pass.  */
++extern int rtx_equal_function_value_matters;
++
+ /* Generally useful functions.  */
+ 
+ /* The following functions accept a wide integer argument.  Rather than
+diff --git a/gcc/rtlanal.c b/gcc/rtlanal.c
+index d1b9432..05d7420 100644
+--- a/gcc/rtlanal.c
++++ b/gcc/rtlanal.c
+@@ -136,11 +136,9 @@ rtx_addr_can_trap_p (x)
+   switch (code)
+     {
+     case SYMBOL_REF:
++      return SYMBOL_REF_WEAK (x);
++
+     case LABEL_REF:
+-      /* SYMBOL_REF is problematic due to the possible presence of
+-	 a #pragma weak, but to say that loads from symbols can trap is
+-	 *very* costly.  It's not at all clear what's best here.  For
+-	 now, we ignore the impact of #pragma weak.  */
+       return 0;
+ 
+     case REG:
+diff --git a/gcc/texinfo.tex b/gcc/texinfo.tex
+index 4327aa3..475145d 100644
+--- a/gcc/texinfo.tex
++++ b/gcc/texinfo.tex
+@@ -1,5 +1,5 @@
+ % texinfo.tex -- TeX macros to handle Texinfo files.
+-% $Id: texinfo.tex,v 1.5 1998/06/29 21:40:12 law Exp $
++% $Id: texinfo.tex,v 1.6 1998/12/16 20:58:28 law Exp $
+ %
+ % Copyright (C) 1985, 86, 88, 90, 91, 92, 93, 94, 95, 96, 97, 98
+ % Free Software Foundation, Inc.
+@@ -58,7 +58,7 @@
+ 
+ % This automatically updates the version number based on RCS.
+ \def\deftexinfoversion$#1: #2 ${\def\texinfoversion{#2}}
+-\deftexinfoversion$Revision: 1.5 $
++\deftexinfoversion$Revision: 1.6 $
+ \message{Loading texinfo package [Version \texinfoversion]:}
+ 
+ % If in a .fmt file, print the version number
+diff --git a/gcc/tm.texi b/gcc/tm.texi
+index a13c6d9..484c73c 100644
+--- a/gcc/tm.texi
++++ b/gcc/tm.texi
+@@ -3464,6 +3464,13 @@ figure them out, compile a small program for profiling using the
+ system's installed C compiler and look at the assembler code that
+ results.
+ 
++@findex NO_PROFILE_COUNTERS
++@item NO_PROFILE_COUNTERS
++Define this macro if the @code{mcount} subroutine on your system does
++not need a counter variable allocated for each function.  This is true
++for almost all modern implementations.  If you define this macro, you
++must not use the @var{labelno} argument to @code{FUNCTION_PROFILER}.
++
+ @findex PROFILE_BEFORE_PROLOGUE
+ @item PROFILE_BEFORE_PROLOGUE
+ Define this macro if the code for function profiling should come before
+diff --git a/gcc/toplev.c b/gcc/toplev.c
+index 5f8913f..a575dc6 100644
+--- a/gcc/toplev.c
++++ b/gcc/toplev.c
+@@ -137,8 +137,6 @@ You Lose!  You must define PREFERRED_DEBUGGING_TYPE!
+ #define DIR_SEPARATOR '/'
+ #endif
+ 
+-extern int rtx_equal_function_value_matters;
+-
+ #if ! (defined (VMS) || defined (OS2))
+ extern char **environ;
+ #endif
+diff --git a/gcc/varasm.c b/gcc/varasm.c
+index b935065..59cf15a 100644
+--- a/gcc/varasm.c
++++ b/gcc/varasm.c
+@@ -723,6 +723,8 @@ make_decl_rtl (decl, asmspec, top_level)
+ 	 Also handle vars declared register invalidly.  */
+       if (DECL_RTL (decl) == 0)
+ 	{
++	  rtx x;
++
+ 	  /* Can't use just the variable's own name for a variable
+ 	     whose scope is less than the whole file.
+ 	     Concatenate a distinguishing number.  */
+@@ -752,8 +754,10 @@ make_decl_rtl (decl, asmspec, top_level)
+ 	      			   new_name, strlen (new_name));
+ 	    }
+ 
+-	  DECL_RTL (decl) = gen_rtx_MEM (DECL_MODE (decl),
+-					 gen_rtx_SYMBOL_REF (Pmode, name));
++	  x = gen_rtx_SYMBOL_REF (Pmode, name);
++	  SYMBOL_REF_WEAK (x) = DECL_WEAK (decl);
++	  DECL_RTL (decl) = gen_rtx_MEM (DECL_MODE (decl), x);
++	  
+ 	  MEM_ALIAS_SET (DECL_RTL (decl)) = get_alias_set (decl);
+ 	    
+ 	  /* If this variable is to be treated as volatile, show its
+@@ -3495,6 +3499,9 @@ force_const_mem (mode, x)
+ 	  pop_obstacks ();
+ 	}
+ 
++      if (GET_CODE (x) == LABEL_REF)
++	LABEL_PRESERVE_P (XEXP (x, 0)) = 1;
++
+       /* Allocate a pool constant descriptor, fill it in, and chain it in.  */
+ 
+       pool = (struct pool_constant *) savealloc (sizeof (struct pool_constant));
 diff --git a/libchill/Makefile.in b/libchill/Makefile.in
 index e1abc77..a024f91 100644
 --- a/libchill/Makefile.in
@@ -851,6 +2779,18 @@ index 790e6cd..a81aaa0 100644
  	$(MULTIDO) $(FLAGS_TO_PASS) multi-do DO="$@"
  
  mostlyclean:
+diff --git a/libiberty/ChangeLog b/libiberty/ChangeLog
+index 64fe9c0..6a83a44 100644
+--- a/libiberty/ChangeLog
++++ b/libiberty/ChangeLog
+@@ -1,3 +1,7 @@
++2001-03-27  Kaveh R. Ghazi  <ghazi@caip.rutgers.edu>
++
++	* memchr.c (memchr): Adjust condition to avoid infinite loop.
++
+ Fri Mar 16 12:46:19 GMT 2001 Bernd Schmidt  (bernds@redhat.com)
+ 
+ 	* gcc-2.95.3 Released.
 diff --git a/libiberty/Makefile.in b/libiberty/Makefile.in
 index 5642058..82536f2 100644
 --- a/libiberty/Makefile.in
@@ -885,6 +2825,19 @@ index 5642058..82536f2 100644
  	@$(MULTIDO) $(FLAGS_TO_PASS) multi-do DO=install
  
  # needed-list is used by libstdc++.  NEEDED is the list of functions
+diff --git a/libiberty/memchr.c b/libiberty/memchr.c
+index cce3003..89aa98f 100644
+--- a/libiberty/memchr.c
++++ b/libiberty/memchr.c
+@@ -50,7 +50,7 @@ memchr (src_void, c, length)
+ {
+   const unsigned char *src = (const unsigned char *)src_void;
+   
+-  while (--length >= 0)
++  while (length-- > 0)
+   {
+     if (*src == c)
+      return (PTR)src;
 diff --git a/libio/Makefile.in b/libio/Makefile.in
 index 1d4123b..4342beb 100644
 --- a/libio/Makefile.in
@@ -977,6 +2930,21 @@ index e1de9ae..cf8a04e 100644
  	done
  
  check uninstall install-strip dist installcheck installdirs:
+diff --git a/libstdc++/ChangeLog b/libstdc++/ChangeLog
+index 02b950c..f8a71b3 100644
+--- a/libstdc++/ChangeLog
++++ b/libstdc++/ChangeLog
+@@ -1,3 +1,10 @@
++2001-04-06  Matthias Klose <doko@debian.org>
++
++	From <sicard@bigruth.solsoft.fr>:
++	* std/bastring.h: remove some compiler warnings.
++	* std/bastring.cc: Likewise.
++	* stl/stl_hashtable.h: Likewise.
++
+ Fri Mar 16 12:46:19 GMT 2001 Bernd Schmidt  (bernds@redhat.com)
+ 
+ 	* gcc-2.95.3 Released.
 diff --git a/libstdc++/Makefile.in b/libstdc++/Makefile.in
 index f13eddc..7ba3806 100644
 --- a/libstdc++/Makefile.in
@@ -1081,3 +3049,255 @@ index f13eddc..7ba3806 100644
  	    fi; \
  	  elif [ $$FILE = mshlink ]; then \
  	    for FILE in $(MSHLINK) ; do \
+diff --git a/libstdc++/sstream b/libstdc++/sstream
+index 45393b1..e421a80 100644
+--- a/libstdc++/sstream
++++ b/libstdc++/sstream
+@@ -106,7 +106,7 @@ namespace std
+ 	  if (c != EOF)
+ 	    {
+ 	      streamsize old_stream_len = stream_len;
+-	      stream_len += 1;
++	      stream_len += stream_len + 1;
+ 	      char_type* new_stream = new char_type[stream_len];
+ 	      memcpy(new_stream, stream, old_stream_len);
+ 	      delete[] stream;
+diff --git a/libstdc++/std/bastring.cc b/libstdc++/std/bastring.cc
+index f86f6d3..c37941a 100644
+--- a/libstdc++/std/bastring.cc
++++ b/libstdc++/std/bastring.cc
+@@ -116,19 +116,19 @@ template <class charT, class traits, class Allocator>
+ basic_string <charT, traits, Allocator>&
+ basic_string <charT, traits, Allocator>::
+ replace (size_type pos1, size_type n1,
+-	 const basic_string& str, size_type pos2, size_type n2)
++	 const basic_string& _str, size_type pos2, size_type n2)
+ {
+-  const size_t len2 = str.length ();
++  const size_t len2 = _str.length ();
+ 
+   if (pos1 == 0 && n1 >= length () && pos2 == 0 && n2 >= len2)
+-    return operator= (str);
++    return operator= (_str);
+ 
+   OUTOFRANGE (pos2 > len2);
+ 
+   if (n2 > len2 - pos2)
+     n2 = len2 - pos2;
+ 
+-  return replace (pos1, n1, str.data () + pos2, n2);
++  return replace (pos1, n1, _str.data () + pos2, n2);
+ }
+ 
+ template <class charT, class traits, class Allocator>
+@@ -394,21 +394,21 @@ find_last_not_of (charT c, size_type pos) const
+ 
+ template <class charT, class traits, class Allocator>
+ int basic_string <charT, traits, Allocator>::
+-compare (const basic_string& str, size_type pos, size_type n) const
++compare (const basic_string& _str, size_type pos, size_type n) const
+ {
+   OUTOFRANGE (pos > length ());
+ 
+   size_t rlen = length () - pos;
+   if (rlen > n)
+     rlen = n;
+-  if (rlen > str.length ())
+-    rlen = str.length ();
+-  int r = traits::compare (data () + pos, str.data (), rlen);
++  if (rlen > _str.length ())
++    rlen = _str.length ();
++  int r = traits::compare (data () + pos, _str.data (), rlen);
+   if (r != 0)
+     return r;
+   if (rlen == n)
+     return 0;
+-  return (length () - pos) - str.length ();
++  return (length () - pos) - _str.length ();
+ }
+ 
+ template <class charT, class traits, class Allocator>
+@@ -476,7 +476,7 @@ getline (istream &is, basic_string <charT, traits, Allocator>& s, charT delim)
+ {
+   if (is.ipfx1 ())
+     {
+-      _IO_size_t count = 0;
++      _IO_size_t _count = 0;
+       streambuf *sb = is.rdbuf ();
+       s.resize (0);
+ 
+@@ -485,13 +485,13 @@ getline (istream &is, basic_string <charT, traits, Allocator>& s, charT delim)
+ 	  int ch = sb->sbumpc ();
+ 	  if (ch == EOF)
+ 	    {
+-	      is.setstate (count == 0
++	      is.setstate (_count == 0
+ 			   ? (ios::failbit|ios::eofbit)
+ 			   : ios::eofbit);
+ 	      break;
+ 	    }
+ 
+-	  ++count;
++	  ++_count;
+ 
+ 	  if (ch == delim)
+ 	    break;
+@@ -507,7 +507,7 @@ getline (istream &is, basic_string <charT, traits, Allocator>& s, charT delim)
+     }
+ 
+   // We need to be friends with istream to do this.
+-  // is._gcount = count;
++  // is._gcount = _count;
+   is.isfx ();
+ 
+   return is;
+diff --git a/libstdc++/std/bastring.h b/libstdc++/std/bastring.h
+index bbe8730..9479d76 100644
+--- a/libstdc++/std/bastring.h
++++ b/libstdc++/std/bastring.h
+@@ -169,9 +169,9 @@ public:
+     }
+ 
+   explicit basic_string (): dat (nilRep.grab ()) { }
+-  basic_string (const basic_string& str): dat (str.rep ()->grab ()) { }
+-  basic_string (const basic_string& str, size_type pos, size_type n = npos)
+-    : dat (nilRep.grab ()) { assign (str, pos, n); }
++  basic_string (const basic_string& _str): dat (_str.rep ()->grab ()) { }
++  basic_string (const basic_string& _str, size_type pos, size_type n = npos)
++    : dat (nilRep.grab ()) { assign (_str, pos, n); }
+   basic_string (const charT* s, size_type n)
+     : dat (nilRep.grab ()) { assign (s, n); }
+   basic_string (const charT* s)
+@@ -191,9 +191,9 @@ public:
+ 
+   void swap (basic_string &s) { charT *d = dat; dat = s.dat; s.dat = d; }
+ 
+-  basic_string& append (const basic_string& str, size_type pos = 0,
++  basic_string& append (const basic_string& _str, size_type pos = 0,
+ 			size_type n = npos)
+-    { return replace (length (), 0, str, pos, n); }
++    { return replace (length (), 0, _str, pos, n); }
+   basic_string& append (const charT* s, size_type n)
+     { return replace (length (), 0, s, n); }
+   basic_string& append (const charT* s)
+@@ -335,7 +335,8 @@ private:
+ 
+ public:
+   const charT* c_str () const
+-    { if (length () == 0) return ""; terminate (); return data (); }
++    { const charT* null_str = ""; 
++      if (length () == 0) return null_str; terminate (); return data (); }
+   void resize (size_type n, charT c);
+   void resize (size_type n)
+     { resize (n, eos ()); }
+@@ -346,8 +347,8 @@ public:
+   size_type find (const basic_string& str, size_type pos = 0) const
+     { return find (str.data(), pos, str.length()); }
+   size_type find (const charT* s, size_type pos, size_type n) const;
+-  size_type find (const charT* s, size_type pos = 0) const
+-    { return find (s, pos, traits::length (s)); }
++  size_type find (const charT* _s, size_type pos = 0) const
++    { return find (_s, pos, traits::length (_s)); }
+   size_type find (charT c, size_type pos = 0) const;
+ 
+   size_type rfind (const basic_string& str, size_type pos = npos) const
+@@ -469,36 +470,36 @@ inline basic_string <charT, traits, Allocator>
+ operator+ (const basic_string <charT, traits, Allocator>& lhs,
+ 	   const basic_string <charT, traits, Allocator>& rhs)
+ {
+-  basic_string <charT, traits, Allocator> str (lhs);
+-  str.append (rhs);
+-  return str;
++  basic_string <charT, traits, Allocator> _str (lhs);
++  _str.append (rhs);
++  return _str;
+ }
+ 
+ template <class charT, class traits, class Allocator>
+ inline basic_string <charT, traits, Allocator>
+ operator+ (const charT* lhs, const basic_string <charT, traits, Allocator>& rhs)
+ {
+-  basic_string <charT, traits, Allocator> str (lhs);
+-  str.append (rhs);
+-  return str;
++  basic_string <charT, traits, Allocator> _str (lhs);
++  _str.append (rhs);
++  return _str;
+ }
+ 
+ template <class charT, class traits, class Allocator>
+ inline basic_string <charT, traits, Allocator>
+ operator+ (charT lhs, const basic_string <charT, traits, Allocator>& rhs)
+ {
+-  basic_string <charT, traits, Allocator> str (1, lhs);
+-  str.append (rhs);
+-  return str;
++  basic_string <charT, traits, Allocator> _str (1, lhs);
++  _str.append (rhs);
++  return _str;
+ }
+ 
+ template <class charT, class traits, class Allocator>
+ inline basic_string <charT, traits, Allocator>
+ operator+ (const basic_string <charT, traits, Allocator>& lhs, const charT* rhs)
+ {
+-  basic_string <charT, traits, Allocator> str (lhs);
+-  str.append (rhs);
+-  return str;
++  basic_string <charT, traits, Allocator> _str (lhs);
++  _str.append (rhs);
++  return _str;
+ }
+ 
+ template <class charT, class traits, class Allocator>
+diff --git a/libstdc++/stl/stl_alloc.h b/libstdc++/stl/stl_alloc.h
+index 208309a..1647e83 100644
+--- a/libstdc++/stl/stl_alloc.h
++++ b/libstdc++/stl/stl_alloc.h
+@@ -38,7 +38,7 @@
+ // The allocation primitives are intended to allocate individual objects,
+ // not larger arenas as with the original STL allocators.
+ 
+-#if 0
++#ifdef __STL_USE_EXCEPTIONS
+ #   include <new>
+ #   define __THROW_BAD_ALLOC throw bad_alloc()
+ #elif !defined(__THROW_BAD_ALLOC)
+diff --git a/libstdc++/stl/stl_hashtable.h b/libstdc++/stl/stl_hashtable.h
+index 78b36c1..c0354fa 100644
+--- a/libstdc++/stl/stl_hashtable.h
++++ b/libstdc++/stl/stl_hashtable.h
+@@ -1014,14 +1014,14 @@ void hashtable<_Val,_Key,_HF,_Ex,_Eq,_All>
+   __STL_TRY {
+     for (size_type __i = 0; __i < __ht._M_buckets.size(); ++__i) {
+       if (const _Node* __cur = __ht._M_buckets[__i]) {
+-        _Node* __copy = _M_new_node(__cur->_M_val);
+-        _M_buckets[__i] = __copy;
++        _Node* ___copy = _M_new_node(__cur->_M_val);
++        _M_buckets[__i] = ___copy;
+ 
+         for (_Node* __next = __cur->_M_next; 
+              __next; 
+              __cur = __next, __next = __cur->_M_next) {
+-          __copy->_M_next = _M_new_node(__next->_M_val);
+-          __copy = __copy->_M_next;
++          ___copy->_M_next = _M_new_node(__next->_M_val);
++          ___copy = ___copy->_M_next;
+         }
+       }
+     }
+diff --git a/libstdc++/string b/libstdc++/string
+index fa6f1ab..523f435 100644
+--- a/libstdc++/string
++++ b/libstdc++/string
+@@ -7,7 +7,9 @@
+ 
+ extern "C++" {
+ typedef basic_string <char> string;
+-// typedef basic_string <wchar_t> wstring;
++#ifdef __ENABLE_WSTRING
++typedef basic_string <wchar_t> wstring;
++#endif
+ } // extern "C++"
+ 
+ #endif
