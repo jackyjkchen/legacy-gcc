@@ -735,10 +735,10 @@ index 0000000..7e46c68
 +/* Get perform_* macros to build libgcc.a.  */
 +#include "i386/perform.h"
 diff --git a/config/i386/linux.h b/config/i386/linux.h
-index 5018bfc..a0b49ba 100644
+index 5018bfc..92207d1 100644
 --- a/config/i386/linux.h
 +++ b/config/i386/linux.h
-@@ -1,118 +1,235 @@
+@@ -1,38 +1,139 @@
 -/* Definitions for Intel 386 running Linux
 - * Copyright (C) 1992 Free Software Foundation, Inc.
 - *
@@ -913,25 +913,15 @@ index 5018bfc..a0b49ba 100644
  
  #undef SIZE_TYPE
  #define SIZE_TYPE "unsigned int"
--
-+ 
- #undef PTRDIFF_TYPE
- #define PTRDIFF_TYPE "int"
--
-+  
- #undef WCHAR_TYPE
- #define WCHAR_TYPE "long int"
--
-+   
+@@ -46,73 +147,90 @@
  #undef WCHAR_TYPE_SIZE
  #define WCHAR_TYPE_SIZE BITS_PER_WORD
-+    
-+#undef CPP_PREDEFINES
-+#define CPP_PREDEFINES "-D__ELF__ -Dunix -Di386 -Dlinux -Asystem(unix) -Asystem(posix) -Acpu(i386) -Amachine(i386)"
  
 -#undef HAVE_ATEXIT
 -#define HAVE_ATEXIT
--
++#undef CPP_PREDEFINES
++#define CPP_PREDEFINES "-D__ELF__ -Dunix -Di386 -Dlinux -Asystem(unix) -Asystem(posix) -Acpu(i386) -Amachine(i386)"
+ 
 -/* Linux uses ctype from glibc.a. I am not sure how complete it is.
 - * For now, we play safe. It may change later.
 - */
@@ -957,15 +947,8 @@ index 5018bfc..a0b49ba 100644
 -
 -/*
 - * For cross-compile, we just need to search `$(tooldir)/lib'
-- */
--
--#define STARTFILE_SPEC  \
--  "%{g*:crt0.o%s -static} %{!g*:%{pg:gcrt0.o%s -static} %{!pg:%{p:gcrt0.o%s -static} %{!p:crt0.o%s %{!static:%{nojump:-nojump}} %{static:-static}}}}"
--
--/*
-- *The cross-compile uses this.
 +#else /* not USE_GNULIBC_1 */
-+#define CPP_SPEC "%(cpp_cpu) %[cpp_cpu] %{fPIC:-D__PIC__ -D__pic__} %{fpic:-D__PIC__ -D__pic__} %{posix:-D_POSIX_SOURCE} %{pthread:-D_REENTRANT}"
++#define CPP_SPEC "%(cpp_cpu) %{fPIC:-D__PIC__ -D__pic__} %{fpic:-D__PIC__ -D__pic__} %{posix:-D_POSIX_SOURCE} %{pthread:-D_REENTRANT}"
 +#endif /* not USE_GNULIBC_1 */
 +
 +#undef LIBGCC_SPEC
@@ -978,6 +961,13 @@ index 5018bfc..a0b49ba 100644
 + * want to profile or debug the Linux C library, please add
 + * -lc_p or -ggdb to LDFLAGS at the link time, respectively.
   */
+-
+-#define STARTFILE_SPEC  \
+-  "%{g*:crt0.o%s -static} %{!g*:%{pg:gcrt0.o%s -static} %{!pg:%{p:gcrt0.o%s -static} %{!p:crt0.o%s %{!static:%{nojump:-nojump}} %{static:-static}}}}"
+-
+-/*
+- *The cross-compile uses this.
+- */
 -#define GPLUSPLUS_INCLUDE_DIR TOOLDIR"/g++-include"
 -
 +#define LIB_SPEC \
@@ -1025,7 +1015,8 @@ index 5018bfc..a0b49ba 100644
  #else
 -#define LINK_SPEC	"%{v:-dll-verbose} %{m486:-m486}"
 +#define LIB_SPEC \
-+  "%{!shared: %{mieee-fp:-lieee} %{pthread:-lpthread} \
++  "%{shared: -lc} \
++   %{!shared: %{mieee-fp:-lieee} %{pthread:-lpthread} \
 +	%{profile:-lc_p} %{!profile: -lc}}"
 +#endif /* not USE_GNULIBC_1 */
 +
@@ -1630,7 +1621,7 @@ index 0000000..a842299
 +#undef index
 +#undef rindex
 diff --git a/configure b/configure
-index 0791b18..2ca29d9 100755
+index 0791b18..91eda4a 100755
 --- a/configure
 +++ b/configure
 @@ -277,6 +277,7 @@ for machine in $canon_build $canon_host $canon_target; do

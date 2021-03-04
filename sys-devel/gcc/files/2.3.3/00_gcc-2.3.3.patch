@@ -757,7 +757,7 @@ index 0000000..a469c58
 +the Free Software Foundation, 59 Temple Place - Suite 330,
 +Boston, MA 02111-1307, USA.  */
 +
-+/* This is tested by i386/gas.h.  */
++/* This is tested by i386gas.h.  */
 +#define YES_UNDERSCORES
 +
 +#include <i386gstabs.h>
@@ -813,10 +813,10 @@ index 0000000..a469c58
 +/* Get perform_* macros to build libgcc.a.  */
 +#include "i386perform.h"
 diff --git a/config/i386linux.h b/config/i386linux.h
-index 5b2e96a..ef217b3 100644
+index 5b2e96a..92207d1 100644
 --- a/config/i386linux.h
 +++ b/config/i386linux.h
-@@ -1,84 +1,235 @@
+@@ -1,31 +1,139 @@
 -/* Definitions for Intel 386 running Linux
 - * Copyright (C) 1992 Free Software Foundation, Inc.
 - *
@@ -984,25 +984,15 @@ index 5b2e96a..ef217b3 100644
  
  #undef SIZE_TYPE
  #define SIZE_TYPE "unsigned int"
--
-+ 
- #undef PTRDIFF_TYPE
- #define PTRDIFF_TYPE "int"
--
-+  
- #undef WCHAR_TYPE
- #define WCHAR_TYPE "long int"
--
-+   
+@@ -39,46 +147,90 @@
  #undef WCHAR_TYPE_SIZE
  #define WCHAR_TYPE_SIZE BITS_PER_WORD
-+    
-+#undef CPP_PREDEFINES
-+#define CPP_PREDEFINES "-D__ELF__ -Dunix -Di386 -Dlinux -Asystem(unix) -Asystem(posix) -Acpu(i386) -Amachine(i386)"
  
 -#undef HAVE_ATEXIT
 -#define HAVE_ATEXIT
--
++#undef CPP_PREDEFINES
++#define CPP_PREDEFINES "-D__ELF__ -Dunix -Di386 -Dlinux -Asystem(unix) -Asystem(posix) -Acpu(i386) -Amachine(i386)"
+ 
 -/* Linux uses ctype from glibc.a. I am not sure how complete it is.
 - * For now, we play safe. It may change later.
 - */
@@ -1028,15 +1018,8 @@ index 5b2e96a..ef217b3 100644
 -
 -/*
 - * For cross-compile, we just need to search `$(tooldir)/lib'
-- */
--
--#define STARTFILE_SPEC  \
--  "%{g*:crt0.o%s -static} %{!g*:%{pg:gcrt0.o%s -static} %{!pg:%{p:gcrt0.o%s -static} %{!p:crt0.o%s %{!static:%{nojump:-nojump}} %{static:-static}}}} -L"TOOLDIR"/lib"
--
--/*
-- *The cross-compile uses this.
 +#else /* not USE_GNULIBC_1 */
-+#define CPP_SPEC "%(cpp_cpu) %[cpp_cpu] %{fPIC:-D__PIC__ -D__pic__} %{fpic:-D__PIC__ -D__pic__} %{posix:-D_POSIX_SOURCE} %{pthread:-D_REENTRANT}"
++#define CPP_SPEC "%(cpp_cpu) %{fPIC:-D__PIC__ -D__pic__} %{fpic:-D__PIC__ -D__pic__} %{posix:-D_POSIX_SOURCE} %{pthread:-D_REENTRANT}"
 +#endif /* not USE_GNULIBC_1 */
 +
 +#undef LIBGCC_SPEC
@@ -1049,6 +1032,13 @@ index 5b2e96a..ef217b3 100644
 + * want to profile or debug the Linux C library, please add
 + * -lc_p or -ggdb to LDFLAGS at the link time, respectively.
   */
+-
+-#define STARTFILE_SPEC  \
+-  "%{g*:crt0.o%s -static} %{!g*:%{pg:gcrt0.o%s -static} %{!pg:%{p:gcrt0.o%s -static} %{!p:crt0.o%s %{!static:%{nojump:-nojump}} %{static:-static}}}} -L"TOOLDIR"/lib"
+-
+-/*
+- *The cross-compile uses this.
+- */
 -#define GPLUSPLUS_INCLUDE_DIR TOOLDIR"/g++-include"
 -
 +#define LIB_SPEC \
@@ -1071,7 +1061,8 @@ index 5b2e96a..ef217b3 100644
 +#endif
 +#else
 +#define LIB_SPEC \
-+  "%{!shared: %{mieee-fp:-lieee} %{pthread:-lpthread} \
++  "%{shared: -lc} \
++   %{!shared: %{mieee-fp:-lieee} %{pthread:-lpthread} \
 +	%{profile:-lc_p} %{!profile: -lc}}"
 +#endif /* not USE_GNULIBC_1 */
 +
@@ -1784,7 +1775,7 @@ index 39cd2f2..c9795dc 100644
 -#define calloc(n,e)	calloc (((n) ? (n) : 1), ((e) ? (e) : 1))
 -#endif
 diff --git a/configure b/configure
-index f75c015..9bb1bdf 100755
+index f75c015..18375e3 100755
 --- a/configure
 +++ b/configure
 @@ -254,6 +254,7 @@ for machine in $canon_build $canon_host $canon_target; do
@@ -3134,7 +3125,7 @@ index 480c9e3..6726466 100644
  /* Print an integer constant expression in assembler syntax.
     Addition and subtraction are the only arithmetic
 diff --git a/protoize.c b/protoize.c
-index 5a65334..16a96f3 100644
+index 5a65334..97b036c 100644
 --- a/protoize.c
 +++ b/protoize.c
 @@ -276,13 +276,25 @@ struct default_include { const char *fname; int cplusplus; } include_defaults[]

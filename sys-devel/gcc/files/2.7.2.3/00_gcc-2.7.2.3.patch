@@ -7,7 +7,7 @@ index 7ab05ff..5e18770 100644
  # Selection of languages to be made.
  # This is overridden by configure.
 -LANGUAGES = c objective-c proto
-+LANGUAGES = c
++LANGUAGES = c c++ objective-c
  
  ALLOCA =
  ALLOCA_FLAGS =
@@ -1041,9 +1041,39 @@ index 30fb49d..44ec790 100644
  }
  
 diff --git a/config/i386/linux.h b/config/i386/linux.h
-index a0b49ba..4ad4eb4 100644
+index a0b49ba..92207d1 100644
 --- a/config/i386/linux.h
 +++ b/config/i386/linux.h
+@@ -137,16 +137,16 @@ Boston, MA 02111-1307, USA.  */
+ 
+ #undef SIZE_TYPE
+ #define SIZE_TYPE "unsigned int"
+- 
++
+ #undef PTRDIFF_TYPE
+ #define PTRDIFF_TYPE "int"
+-  
++
+ #undef WCHAR_TYPE
+ #define WCHAR_TYPE "long int"
+-   
++
+ #undef WCHAR_TYPE_SIZE
+ #define WCHAR_TYPE_SIZE BITS_PER_WORD
+-    
++
+ #undef CPP_PREDEFINES
+ #define CPP_PREDEFINES "-D__ELF__ -Dunix -Di386 -Dlinux -Asystem(unix) -Asystem(posix) -Acpu(i386) -Amachine(i386)"
+ 
+@@ -158,7 +158,7 @@ Boston, MA 02111-1307, USA.  */
+ #define CPP_SPEC "%{fPIC:-D__PIC__ -D__pic__} %{fpic:-D__PIC__ -D__pic__} %{m486:-D__i486__} %{posix:-D_POSIX_SOURCE}"
+ #endif
+ #else /* not USE_GNULIBC_1 */
+-#define CPP_SPEC "%(cpp_cpu) %[cpp_cpu] %{fPIC:-D__PIC__ -D__pic__} %{fpic:-D__PIC__ -D__pic__} %{posix:-D_POSIX_SOURCE} %{pthread:-D_REENTRANT}"
++#define CPP_SPEC "%(cpp_cpu) %{fPIC:-D__PIC__ -D__pic__} %{fpic:-D__PIC__ -D__pic__} %{posix:-D_POSIX_SOURCE} %{pthread:-D_REENTRANT}"
+ #endif /* not USE_GNULIBC_1 */
+ 
+ #undef LIBGCC_SPEC
 @@ -182,7 +182,8 @@ Boston, MA 02111-1307, USA.  */
  #endif
  #else
@@ -1151,10 +1181,54 @@ index 11466b2..3e94a2b 100644
  # This is used instead of ALL_CFLAGS when compiling with GCC_FOR_TARGET.
  # It omits XCFLAGS, and specifies -B./.
 diff --git a/cp/g++.c b/cp/g++.c
-index f694898..642d07f 100644
+index f694898..6f815fa 100644
 --- a/cp/g++.c
 +++ b/cp/g++.c
-@@ -308,14 +308,7 @@ static void
+@@ -51,7 +51,7 @@ Boston, MA 02111-1307, USA.  */
+    Makefile should compile this file with the proper name
+    (e.g., "i386-aout-gcc").  */
+ #ifndef GCC_NAME
+-#define GCC_NAME "gcc"
++#define GCC_NAME "gcc-2.7.2.3"
+ #endif
+ 
+ /* This bit is set if we saw a `-xfoo' language specification.  */
+@@ -298,24 +298,42 @@ choose_temp_base ()
+     temp_filename[len++] = '/';
+   strcpy (temp_filename + len, "ccXXXXXX");
+ 
++#ifndef HAVE_MKSTEMP
++  /* old behaviour - this can be abused through a symlink attack */
+   mktemp (temp_filename);
+   temp_filename_length = strlen (temp_filename);
+   if (temp_filename_length == 0)
+     abort ();
++#else
++  /* mktemp is insecure; mkstemp isn't. According to the GNU libc docs:
++   *     Unlike `mktemp', `mkstemp' is actually guaranteed to create a unique
++   *     file that cannot possibly clash with any other program trying to
++   *     create a temporary file.  This is because it works by calling `open'
++   *     with the `O_EXCL' flag bit, which says you want to always create a new
++   *     file, and get an error if the file already exists.
++   * This is of course assuming the tempdir used has proper Unix filesystem
++   * semantics - if not (e.g. NFS), we're still lost.
++   *
++   * We assume mkstemp(3) is properly implemented (not like mkstemp from glibc
++   * 2.0.6 and earlier which creates the tempfile mode 0666, according to
++   * mkstemp(3) from the Linux manpages release 1.19)
++   */
++  {
++    int fd;
++    fd = mkstemp (temp_filename);
++    if (fd == -1)
++      abort ();
++    if (close(fd)) 
++      abort ();
++  }
++#endif /* HAVE_MKSTEMP */
+ }
+ 
+ static void
  perror_exec (name)
       char *name;
  {
