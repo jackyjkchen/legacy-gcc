@@ -31,14 +31,15 @@ CXX="g++-2.95.3"
 
 src_prepare() {
 	toolchain_src_prepare
-	eapply "${FILESDIR}"/${PV}/00_gcc-${PV}.patch
-	eapply "${FILESDIR}"/${PV}/01_gcc-${PV}-workaround-for-new-glibc.patch
+	eapply "${FILESDIR}"/${PV}/00_egcs-${PV}.patch
+	eapply "${FILESDIR}"/${PV}/01_workaround-for-new-glibc.patch
 }
 
 src_install() {
 	toolchain_src_install
+	rm -rf "${ED}"/usr/share/locale
 	mkdir -p ${ED}/etc/ld.so.conf.d/ || die
-	cat <<-_EOF_ > "${ED}"/etc/ld.so.conf.d/09-${CHOST}-gcc-${PV}.conf || die
-/usr/lib/gcc-lib/${CHOST}/${PV}
+	cat <<-_EOF_ > "${ED}"/etc/ld.so.conf.d/08-${CHOST}-egcs-${PV}.conf || die
+/usr/lib/gcc-lib/${CHOST}/2.91.66
 _EOF_
 }

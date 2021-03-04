@@ -39,7 +39,7 @@ src_prepare() {
 src_install() {
 	toolchain_src_install
 	mkdir -p ${ED}/etc/ld.so.conf.d/ || die
-	cat <<-_EOF_ > "${ED}"/etc/ld.so.conf.d/09-${CHOST}-gcc-${PV}.conf || die
+	cat <<-_EOF_ > "${ED}"/etc/ld.so.conf.d/10-${CHOST}-gcc-${PV}.conf || die
 /usr/lib/gcc-lib/${CHOST}/${PV}
 _EOF_
 }

@@ -72,6 +72,9 @@ GCC_PVR=${GCC_PV}
 # It's an internal representation of gcc version used for:
 # - versioned paths on disk
 # - 'gcc -dumpversion' output. Must always match <digit>.<digit>.<digit>.
+if [[ ${PN} == "egcs" ]] ; then
+	GCC_PV=2.91.66
+fi
 GCC_RELEASE_VER=$(ver_cut 1-3 ${GCC_PV})
 if [[ ${GCC_PV} == "2.7.2.3" ]] ; then
 	GCC_RELEASE_VER=${GCC_PV}
@@ -297,6 +300,8 @@ S=$(
 		echo ${EGIT_CHECKOUT_DIR}
 	elif [[ -n ${SNAPSHOT} ]] ; then
 		echo ${WORKDIR}/gcc-${SNAPSHOT}
+	elif [[ ${PN} == "egcs" ]] ; then
+		echo ${WORKDIR}/${P}
 	else
 		echo ${WORKDIR}/gcc-${GCC_RELEASE_VER}
 	fi
@@ -387,6 +392,8 @@ get_gcc_src_uri() {
 			GCC_SRC_URI="mirror://gnu/gcc/gcc-${GCC_PV}/gcc-${GCC_RELEASE_VER}.tar.bz2"
 		elif tc_version_is_between 3.0 3.2 ; then
 			GCC_SRC_URI="mirror://gnu/gcc/gcc-${GCC_PV}/gcc-${GCC_RELEASE_VER}.tar.gz"
+		elif [[ ${PN} == "egcs" ]] ; then
+			GCC_SRC_URI="http://gcc.gnu.org/pub/gcc/old-releases/egcs/${P}.tar.bz2"
 		elif tc_version_is_between 2.0 3.0 ; then
 			GCC_SRC_URI="http://gcc.gnu.org/pub/gcc/old-releases/gcc-2/gcc-${GCC_RELEASE_VER}.tar.bz2"
 		elif tc_version_is_between 1.0 2.0 ; then

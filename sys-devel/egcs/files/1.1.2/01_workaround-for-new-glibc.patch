@@ -1,0 +1,111 @@
+diff --git a/gcc/Makefile.in b/gcc/Makefile.in
+index abdf80a..d1335e6 100644
+--- a/gcc/Makefile.in
++++ b/gcc/Makefile.in
+@@ -216,7 +216,7 @@ RANLIB = $(RANLIB_FOR_TARGET)
+ RANLIB_TEST = $(RANLIB_TEST_FOR_TARGET)
+   
+ # Dir to search for system headers.  Overridden by cross-make.
+-SYSTEM_HEADER_DIR = /usr/include
++SYSTEM_HEADER_DIR = $(tooldir)/include
+ 
+ # Control whether to run fixproto.
+ STMP_FIXPROTO = stmp-fixproto
+diff --git a/gcc/libgcc2.c b/gcc/libgcc2.c
+index d1854ed..3793b4d 100644
+--- a/gcc/libgcc2.c
++++ b/gcc/libgcc2.c
+@@ -3006,13 +3006,55 @@ exit (int status)
+ #else /* ON_EXIT defined */
+ int _exit_dummy_decl = 0;	/* prevent compiler & linker warnings */
+ 
+-# ifndef HAVE_ATEXIT
+-/* Provide a fake for atexit() using ON_EXIT.  */
++/* workaround for gentoo new glibc*/
++#include <stdio.h>
++#include <errno.h>
++
++static func_ptr *atexit_chain = 0;
++static long atexit_chain_length = 0;
++static volatile long last_atexit_chain_slot = -1;
++
+ int atexit (func_ptr func)
+ {
+-  return ON_EXIT (func, NULL);
++  if (++last_atexit_chain_slot == atexit_chain_length)
++    {
++      atexit_chain_length += 32;
++      if (atexit_chain)
++	atexit_chain = (func_ptr *) realloc (atexit_chain, atexit_chain_length
++					     * sizeof (func_ptr));
++      else
++	atexit_chain = (func_ptr *) malloc (atexit_chain_length
++					    * sizeof (func_ptr));
++      if (! atexit_chain)
++	{
++	  atexit_chain_length = 0;
++	  last_atexit_chain_slot = -1;
++	  errno = ENOMEM;
++	  return (-1);
++	}
++    }
++  atexit_chain[last_atexit_chain_slot] = func;
++  return (0);
++}
++void
++exit (int status)
++{
++  if (atexit_chain)
++    {
++      for ( ; last_atexit_chain_slot-- >= 0; )
++	{
++	  (*atexit_chain[last_atexit_chain_slot + 1]) ();
++	  atexit_chain[last_atexit_chain_slot + 1] = 0;
++	}
++      free (atexit_chain);
++      atexit_chain = 0;
++    }
++  fflush(stdout);
++  fflush(stderr);
++  _exit(status);
+ }
+-# endif /* HAVE_ATEXIT */
++/* end workaround for gentoo new glibc*/
++
+ #endif /* ON_EXIT defined */
+ 
+ #endif /* L_exit */
+diff --git a/libiberty/atexit.c b/libiberty/atexit.c
+index 137d985..e51d458 100644
+--- a/libiberty/atexit.c
++++ b/libiberty/atexit.c
+@@ -3,16 +3,3 @@
+ 
+ #include "config.h"
+ 
+-#ifdef HAVE_ON_EXIT
+-
+-int
+-atexit(f)
+-     void (*f)();
+-{
+-  /* If the system doesn't provide a definition for atexit, use on_exit
+-     if the system provides that.  */
+-  on_exit (f, 0);
+-  return 0;
+-}
+-
+-#endif
+diff --git a/libio/Makefile.in b/libio/Makefile.in
+index 857778e..6256cb1 100644
+--- a/libio/Makefile.in
++++ b/libio/Makefile.in
+@@ -47,7 +47,7 @@ STDIO_WRAP_OBJECTS =  iofdopen.o iofflush.o iofgets.o iofopen.o iofprintf.o iofp
+ 
+ IOSTREAM_OBJECTS = builtinbuf.o filebuf.o fstream.o \
+   indstream.o ioassign.o ioextend.o iomanip.o iostream.o \
+-  isgetline.o isgetsb.o isscan.o \
++  isgetline.o isgetsb.o isscan.o iovfscanf.o \
+   osform.o procbuf.o sbform.o sbgetline.o sbscan.o \
+   stdiostream.o stdstrbufs.o stdstreams.o stream.o streambuf.o strstream.o \
+   PlotFile.o SFile.o parsestream.o pfstream.o editbuf.o
