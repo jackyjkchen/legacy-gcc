@@ -15,6 +15,8 @@ AR="${CHOST}-ar"
 RANLIB="${CHOST}-ranlib"
 CFLAGS_x86=""
 
+EXTRA_ECONF="--gxx-include-dir=/usr/lib/gcc-lib/${CHOST}/${PV}/include/g++"
+
 inherit toolchain
 
 KEYWORDS="amd64 x86"
@@ -34,5 +36,4 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/00_gcc-${PV}.patch
 	eapply "${FILESDIR}"/${PV}/01_gcc-${PV}-gentoo-install-path.patch
 	eapply "${FILESDIR}"/${PV}/02_gcc-${PV}-workaround-for-new-glibc.patch
-	rm -rf ${WORKDIR}/${P}/cp
 }

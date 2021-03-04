@@ -14,7 +14,7 @@ SLOT="${PV}"
 KEYWORDS="amd64 x86"
 
 DEPEND="
-	sys-devel/gcc:2.7.2.3
+	sys-devel/gcc:2.6.3
 	legacy-gcc/linux-headers:i686-legacy
 	legacy-gcc/glibc-headers:i686-legacy
 	legacy-gcc/binutils-wrapper:i686-legacy"
@@ -23,8 +23,8 @@ BDEPEND=""
 
 CHOST="i686-legacy-linux-gnu"
 
-CC="gcc-2.7.2.3"
-CXX="g++-2.7.2.3"
+CC="gcc-2.6.3"
+CXX="g++-2.6.3"
 
 src_prepare() {
 	default
@@ -33,12 +33,11 @@ src_prepare() {
 }
 
 src_configure() {
-	downgrade_arch_flags 2.7.2.3
+	downgrade_arch_flags 2.6.3
 	local econfargs=(
 		--build=${CHOST}
 		--host=${CHOST}
 		--prefix=/usr
-		--enable-shared
 	)
 
 	mkdir -p "${WORKDIR}"/build
@@ -53,16 +52,16 @@ src_configure() {
 
 src_compile() {
 	pushd "${WORKDIR}"/build > /dev/null
-	emake CC="${CC}" CXX="${CXX}" || die "failed to run make"
+	emake -j1 CC="${CC}" CXX="${CXX}" || die "failed to run make"
 	popd > /dev/null
 }
 
 src_install() {
 	pushd "${WORKDIR}"/build > /dev/null
 	emake -j1 DESTDIR="${ED}" install || die "failed to run make"
-	mkdir -p "${ED}"/usr/lib/gcc-lib/${CHOST}/2.7.2.3/include || die
-	mv -v "${ED}"/usr/lib/g++-include "${ED}"/usr/lib/gcc-lib/${CHOST}/2.7.2.3/include/g++ || die
-	mv -v "${ED}"/usr/lib/libstdc++* "${ED}"/usr/lib/libg++* "${ED}"/usr/lib/gcc-lib/${CHOST}/2.7.2.3/ || die
+	mkdir -p "${ED}"/usr/lib/gcc-lib/${CHOST}/2.6.3/include || die
+	mv -v "${ED}"/usr/lib/g++-include "${ED}"/usr/lib/gcc-lib/${CHOST}/2.6.3/include/g++ || die
+	mv -v "${ED}"/usr/lib/libstdc++.a "${ED}"/usr/lib/libg++.a "${ED}"/usr/lib/libiostream.a "${ED}"/usr/lib/gcc-lib/${CHOST}/2.6.3/ || die
 	rm -rfv "${ED}"/usr/lib/libiberty.a "${ED}"/usr/bin "${ED}"/usr/man "${ED}"/usr/${CHOST}
 	popd > /dev/null
 }
