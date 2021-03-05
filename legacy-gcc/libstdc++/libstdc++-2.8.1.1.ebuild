@@ -10,7 +10,7 @@ SRC_URI="https://gcc.gnu.org/pub/gcc/old-releases/libstdc++/${P}.tar.bz2"
 inherit downgrade-arch-flags gnuconfig
 
 LICENSE=""
-SLOT="${PV}"
+SLOT="$(ver_cut 1-3 ${PV})"
 KEYWORDS="amd64 x86"
 
 DEPEND="

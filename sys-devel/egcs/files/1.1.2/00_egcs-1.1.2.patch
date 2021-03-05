@@ -51,7 +51,7 @@ index 2ba21f4..a4b5421 100644
  		  true; \
  		else \
 diff --git a/configure b/configure
-index 5f39446..a7d3cb8 100755
+index 5f39446..3fd699d 100755
 --- a/configure
 +++ b/configure
 @@ -51,6 +51,8 @@ build_alias=
@@ -306,7 +306,7 @@ index 5f39446..a7d3cb8 100755
    fi
  
    CXX=${CXX-"c++"}
-@@ -1296,6 +1362,18 @@ EOF
+@@ -1296,6 +1390,18 @@ EOF
  	    fi
  	    sed     -e "s|^prefix[ 	]*=.*$|prefix = ${prefix}|" \
                      -e "s|^exec_prefix[ 	]*=.*$|exec_prefix = ${exec_prefix}|" \
@@ -325,7 +325,7 @@ index 5f39446..a7d3cb8 100755
  		    -e "/^CC[ 	]*=/{
  			:loop1
  			/\\\\$/ N
-@@ -1332,6 +1410,7 @@ EOF
+@@ -1332,6 +1438,7 @@ EOF
                      -e "s:^program_suffix[ 	]*=.*$:program_suffix = ${program_suffix}:" \
                      -e "s:^program_transform_name[ 	]*=.*$:program_transform_name = ${program_transform_name}:" \
                      -e "s|^tooldir[ 	]*=.*$|tooldir = ${tooldir}|" \
@@ -333,7 +333,7 @@ index 5f39446..a7d3cb8 100755
  		    -e "s:^DEFAULT_YACC[	 ]*=.*$:DEFAULT_YACC = ${DEFAULT_YACC}:" \
  		    -e "s:^DEFAULT_LEX[	 ]*=.*$:DEFAULT_LEX = ${DEFAULT_LEX}:" \
  		    -e "s:^DEFAULT_M4[  ]*=.*$:DEFAULT_M4 = ${DEFAULT_M4}:" \
-@@ -1418,19 +1497,33 @@ ${progname}" ${arguments}  "
+@@ -1418,19 +1525,33 @@ ${progname}" ${arguments}  "
  done
  
  # If there are subdirectories, then recur.
@@ -373,7 +373,7 @@ index 5f39446..a7d3cb8 100755
                                                  exit 1
                                          fi
                                  fi
-@@ -1438,21 +1531,21 @@ if [ -z "${norecursion}" -a -n "${configdirs}" ] ; then
+@@ -1438,21 +1559,21 @@ if [ -z "${norecursion}" -a -n "${configdirs}" ] ; then
                          esac
  
                          POPDIR=${PWD=`pwd`}
@@ -399,7 +399,7 @@ index 5f39446..a7d3cb8 100755
                                  srcdiroption="--srcdir=${newsrcdir}"
                                  ;;
                          esac
-@@ -1482,15 +1575,15 @@ if [ -z "${norecursion}" -a -n "${configdirs}" ] ; then
+@@ -1482,15 +1603,15 @@ if [ -z "${norecursion}" -a -n "${configdirs}" ] ; then
                                  *)      recprog=../${progname} ;;
                                  esac
  			else
@@ -838,6 +838,33 @@ index 4fcbe73..397f1a3 100644
  
  	  collect_exit (FATAL_EXIT_CODE);
  	}
+diff --git a/gcc/config.in b/gcc/config.in
+index b4e9898..06df15b 100644
+--- a/gcc/config.in
++++ b/gcc/config.in
+@@ -111,6 +111,12 @@
+ /* Define if you have the bzero function.  */
+ #undef HAVE_BZERO
+ 
++/* Define if you have the fputc_unlocked function.  */
++#undef HAVE_FPUTC_UNLOCKED
++
++/* Define if you have the fputs_unlocked function.  */
++#undef HAVE_FPUTS_UNLOCKED
++
+ /* Define if you have the getrlimit function.  */
+ #undef HAVE_GETRLIMIT
+ 
+@@ -129,6 +135,9 @@
+ /* Define if you have the popen function.  */
+ #undef HAVE_POPEN
+ 
++/* Define if you have the putc_unlocked function.  */
++#undef HAVE_PUTC_UNLOCKED
++
+ /* Define if you have the putenv function.  */
+ #undef HAVE_PUTENV
+ 
 diff --git a/gcc/config/arc/t-arc b/gcc/config/arc/t-arc
 index d922c27..c455e8b 100644
 --- a/gcc/config/arc/t-arc
@@ -859,6 +886,117 @@ index d922c27..c455e8b 100644
 +	  $(INSTALL_DATA) $${dir}/crtfini.o $(DESTDIR)$(libsubdir)/$${dir}/crtfini.o; \
 +	  chmod a-x $(DESTDIR)$(libsubdir)/$${dir}/crtfini.o; \
  	done
+diff --git a/gcc/config/i386/i386.h b/gcc/config/i386/i386.h
+index b8fef11..05d0dc8 100644
+--- a/gcc/config/i386/i386.h
++++ b/gcc/config/i386/i386.h
+@@ -896,19 +896,10 @@ enum reg_class
+ /* Similar, but for floating constants, and defining letters G and H.
+    Here VALUE is the CONST_DOUBLE rtx itself.  We allow constants even if
+    TARGET_387 isn't set, because the stack register converter may need to
+-   load 0.0 into the function value register.
+-
+-   We disallow these constants when -fomit-frame-pointer and compiling
+-   PIC code since reload might need to force the constant to memory.
+-   Forcing the constant to memory changes the elimination offsets after
+-   the point where they must stay constant.
+-
+-   However, we must allow them after reload as completed as reg-stack.c
+-   will create insns which use these constants.  */
++   load 0.0 into the function value register.  */
+ 
+ #define CONST_DOUBLE_OK_FOR_LETTER_P(VALUE, C)  \
+-  (((reload_completed || !flag_pic || !flag_omit_frame_pointer) && (C) == 'G') \
+-   ? standard_80387_constant_p (VALUE) : 0)
++  ((C) == 'G' ? standard_80387_constant_p (VALUE) : 0)
+ 
+ /* Place additional restrictions on the register class to use when it
+    is necessary to be able to hold a value of mode MODE in a reload
+@@ -931,8 +922,11 @@ enum reg_class
+    Narrow ALL_REGS to GENERAL_REGS.  This supports allowing movsf and
+    movdf to do mem-to-mem moves through integer regs. */
+ 
+-#define PREFERRED_RELOAD_CLASS(X,CLASS)	\
+-  (GET_CODE (X) == CONST_DOUBLE && GET_MODE (X) != VOIDmode ? NO_REGS	\
++#define PREFERRED_RELOAD_CLASS(X,CLASS)					\
++  (GET_CODE (X) == CONST_DOUBLE && GET_MODE (X) != VOIDmode		\
++   ? (standard_80387_constant_p (X)					\
++      ? reg_class_subset_p (CLASS, FLOAT_REGS) ? CLASS : FLOAT_REGS	\
++      : NO_REGS)							\
+    : GET_MODE (X) == QImode && ! reg_class_subset_p (CLASS, Q_REGS) ? Q_REGS \
+    : ((CLASS) == ALL_REGS						\
+       && GET_MODE_CLASS (GET_MODE (X)) == MODE_FLOAT) ? GENERAL_REGS	\
+diff --git a/gcc/config/rs6000/rs6000.c b/gcc/config/rs6000/rs6000.c
+index 780578e..84e2799 100644
+--- a/gcc/config/rs6000/rs6000.c
++++ b/gcc/config/rs6000/rs6000.c
+@@ -2279,11 +2279,11 @@ struct rtx_def *
+ rs6000_got_register (value)
+      rtx value;
+ {
++  if (reload_in_progress || reload_completed)
++    abort();
++  
+   if (!current_function_uses_pic_offset_table || !pic_offset_table_rtx)
+     {
+-      if (reload_in_progress || reload_completed)
+-	fatal_insn ("internal error -- needed new GOT register during reload phase to load:", value);
+-
+       current_function_uses_pic_offset_table = 1;
+       pic_offset_table_rtx = gen_rtx_REG (Pmode, GOT_TOC_REGNUM);
+     }
+diff --git a/gcc/config/rs6000/rs6000.h b/gcc/config/rs6000/rs6000.h
+index f4d5134..4823d4b 100644
+--- a/gcc/config/rs6000/rs6000.h
++++ b/gcc/config/rs6000/rs6000.h
+@@ -1105,8 +1105,11 @@ enum reg_class
+    floating-point CONST_DOUBLE to force it to be copied to memory.  */
+ 
+ #define PREFERRED_RELOAD_CLASS(X,CLASS)			\
+-  ((GET_CODE (X) == CONST_DOUBLE			\
+-    && GET_MODE_CLASS (GET_MODE (X)) == MODE_FLOAT)	\
++  (CONSTANT_P (X)					\
++   && ((CLASS) == FLOAT_REGS				\
++       || (GET_MODE_CLASS (GET_MODE (X)) == MODE_FLOAT	\
++	   && (HOST_FLOAT_FORMAT != IEEE_FLOAT_FORMAT	\
++	       || HOST_BITS_PER_INT != BITS_PER_WORD)))	\
+    ? NO_REGS : (CLASS))
+ 
+ /* Return the register class of a scratch register needed to copy IN into
+@@ -1122,6 +1125,19 @@ enum reg_class
+ #define SECONDARY_MEMORY_NEEDED(CLASS1,CLASS2,MODE) \
+  ((CLASS1) != (CLASS2) && ((CLASS1) == FLOAT_REGS || (CLASS2) == FLOAT_REGS))
+ 
++/* There are some times when it is inconvenient to generate a new
++   symbol_ref.  */
++
++#define AVOID_NEW_SYMBOL_REF(X) (TARGET_ELF && flag_pic == 1)
++#define NON_RELOAD_CONSTANT_P(X)					\
++   (TARGET_ELF								\
++    && flag_pic == 1							\
++    && (GET_CODE (X) == SYMBOL_REF					\
++	|| (GET_CODE (X) == CONST					\
++	    && GET_CODE (XEXP (X, 0)) == PLUS				\
++	    && GET_CODE (XEXP (XEXP (X, 0), 0)) == SYMBOL_REF)))
++
++
+ /* Return the maximum number of consecutive registers
+    needed to represent mode MODE in a register of class CLASS.
+ 
+diff --git a/gcc/configure.in b/gcc/configure.in
+index a943830..500812e 100644
+--- a/gcc/configure.in
++++ b/gcc/configure.in
+@@ -210,7 +210,8 @@ fi
+ 
+ AC_CHECK_FUNCS(strtoul bsearch strerror putenv popen bcopy bzero bcmp \
+ 	index rindex strchr strrchr kill getrlimit setrlimit atoll atoq \
+-	sysconf isascii gettimeofday)
++	sysconf isascii gettimeofday putc_unlocked fputc_unlocked \
++	fputs_unlocked)
+ 
+ GCC_FUNC_VFPRINTF_DOPRNT
+ GCC_FUNC_PRINTF_PTR
 diff --git a/gcc/cp/Make-lang.in b/gcc/cp/Make-lang.in
 index be02cf1..fce25f4 100644
 --- a/gcc/cp/Make-lang.in
@@ -947,6 +1085,69 @@ index be02cf1..fce25f4 100644
  #
  # Clean hooks:
  # A lot of the ancillary files are deleted by the main makefile.
+diff --git a/gcc/cp/cp-tree.h b/gcc/cp/cp-tree.h
+index 7572921..ef1cf8b 100644
+--- a/gcc/cp/cp-tree.h
++++ b/gcc/cp/cp-tree.h
+@@ -2886,6 +2886,7 @@ extern tree binding_init                        PROTO((struct tree_binding*));
+ extern tree ovl_cons                            PROTO((tree, tree));
+ extern tree scratch_ovl_cons                    PROTO((tree, tree));
+ extern int ovl_member                           PROTO((tree, tree));
++extern int ovl_identity_member                  PROTO((tree, tree));
+ extern tree build_overload                      PROTO((tree, tree));
+ extern tree fnaddr_from_vtable_entry		PROTO((tree));
+ extern tree function_arg_chain			PROTO((tree));
+diff --git a/gcc/cp/decl2.c b/gcc/cp/decl2.c
+index c87c607..4b610f5 100644
+--- a/gcc/cp/decl2.c
++++ b/gcc/cp/decl2.c
+@@ -4210,7 +4210,7 @@ add_function (k, fn)
+      struct arg_lookup *k;
+      tree fn;
+ {
+-  if (ovl_member (fn, k->functions))
++  if (ovl_identity_member (fn, k->functions))
+     return 0;
+   /* We must find only functions, or exactly one non-function. */
+   if (k->functions && is_overloaded_fn (k->functions)
+@@ -4471,7 +4471,8 @@ validate_nonmember_using_decl (decl, scope, name)
+       *name = TREE_OPERAND (decl, 1);
+     }
+   else if (TREE_CODE (decl) == IDENTIFIER_NODE
+-           || TREE_CODE (decl) == TYPE_DECL)
++           || TREE_CODE (decl) == TYPE_DECL
++	   || TREE_CODE (decl) == TEMPLATE_DECL)
+     {
+       *scope = global_namespace;
+       *name = decl;
+diff --git a/gcc/cp/tree.c b/gcc/cp/tree.c
+index 7c7768f..a5b2f5f 100644
+--- a/gcc/cp/tree.c
++++ b/gcc/cp/tree.c
+@@ -1455,6 +1455,23 @@ ovl_member (fn, ovl)
+   return 0;
+ }
+ 
++/* Like ovl_member, but checks identity instead of decls_match. */
++
++int
++ovl_identity_member (fn, ovl)
++     tree fn;
++     tree ovl;
++{
++  if (ovl == NULL_TREE)
++    return 0;
++  if (TREE_CODE (ovl) != OVERLOAD)
++    return ovl == fn;
++  for (; ovl; ovl = OVL_CHAIN (ovl))
++    if (OVL_FUNCTION (ovl) == fn)
++      return 1;
++  return 0;
++}
++
+ int
+ is_aggr_type_2 (t1, t2)
+      tree t1, t2;
 diff --git a/gcc/f/Make-lang.in b/gcc/f/Make-lang.in
 index 38712fd..a2d9a50 100644
 --- a/gcc/f/Make-lang.in
@@ -1054,6 +1255,21 @@ index 4b62759..c6d46a4 100644
  
  /* Don't use `fancy_abort' here even if config.h says to use it.  */
  #ifdef abort
+diff --git a/gcc/jump.c b/gcc/jump.c
+index ff4680c..c1f374b 100644
+--- a/gcc/jump.c
++++ b/gcc/jump.c
+@@ -2479,6 +2479,10 @@ duplicate_loop_exit_test (loop_start)
+ 	  break;
+ 	case JUMP_INSN:
+ 	case INSN:
++	  /* The code below would grossly mishandle REG_WAS_0 notes,
++	     so get rid of them here.  */
++	  while ((p = find_reg_note (insn, REG_WAS_0, NULL_RTX)) != 0)
++	    remove_note (insn, p);
+ 	  if (++num_insns > 20
+ 	      || find_reg_note (insn, REG_RETVAL, NULL_RTX)
+ 	      || find_reg_note (insn, REG_LIBCALL, NULL_RTX)
 diff --git a/gcc/mkinstalldirs b/gcc/mkinstalldirs
 new file mode 100755
 index 0000000..cc8783e
@@ -1126,6 +1342,200 @@ index 3774e22..ed4eae3 100644
  	else true; fi
  	-if [ -f libobjc.dll ] ; then \
  	  rm -f $(bindir)/libobjc.dll; \
+diff --git a/gcc/objc/archive.c b/gcc/objc/archive.c
+index c762fe6..cc2ee7c 100644
+--- a/gcc/objc/archive.c
++++ b/gcc/objc/archive.c
+@@ -91,7 +91,7 @@ objc_write_unsigned_char (struct objc_typed_stream* stream,
+ }
+ 
+ static __inline__ int
+-__objc_code_char (unsigned char* buf, char val)
++__objc_code_char (unsigned char* buf, signed char val)
+ {
+   if (val >= 0)
+     return __objc_code_unsigned_char (buf, val);
+diff --git a/gcc/regclass.c b/gcc/regclass.c
+index 25cac8f..27b1fb6 100644
+--- a/gcc/regclass.c
++++ b/gcc/regclass.c
+@@ -1993,13 +1993,6 @@ reg_scan_mark_refs (x, insn, note_flag, min_regno)
+   register rtx dest;
+   register rtx note;
+ 
+-  /* This can happen when scanning insns referenced by certain notes.
+-
+-     It is unclear if we should be scanning such insns; until someone can
+-     say for sure this seems like the safest fix.  */
+-  if (x == NULL_RTX)
+-    return;
+-
+   code = GET_CODE (x);
+   switch (code)
+     {
+diff --git a/gcc/reload.c b/gcc/reload.c
+index b1483d1..65867b8 100644
+--- a/gcc/reload.c
++++ b/gcc/reload.c
+@@ -113,6 +113,10 @@ a register with any other reload.  */
+ #ifndef REG_MODE_OK_FOR_BASE_P
+ #define REG_MODE_OK_FOR_BASE_P(REGNO, MODE) REG_OK_FOR_BASE_P (REGNO)
+ #endif
++
++#ifndef AVOID_NEW_SYMBOL_REF
++#define AVOID_NEW_SYMBOL_REF(X) 0
++#endif
+ 
+ /* The variables set up by `find_reloads' are:
+ 
+@@ -2995,7 +2999,8 @@ find_reloads (insn, replace, ind_levels, live_known, reload_reg_p)
+ 		  win = 1;
+ 		if (CONSTANT_P (operand)
+ 		    /* force_const_mem does not accept HIGH.  */
+-		    && GET_CODE (operand) != HIGH)
++		    && GET_CODE (operand) != HIGH
++		    && !AVOID_NEW_SYMBOL_REF (operand))
+ 		  badop = 0;
+ 		constmemok = 1;
+ 		break;
+@@ -3071,7 +3076,9 @@ find_reloads (insn, replace, ind_levels, live_known, reload_reg_p)
+ 			    || (reg_equiv_address[REGNO (operand)] != 0))))
+ 		  win = 1;
+ 		/* force_const_mem does not accept HIGH.  */
+-		if ((CONSTANT_P (operand) && GET_CODE (operand) != HIGH)
++		if ((CONSTANT_P (operand)
++		     && GET_CODE (operand) != HIGH
++		     && !AVOID_NEW_SYMBOL_REF (operand))
+ 		    || GET_CODE (operand) == MEM)
+ 		  badop = 0;
+ 		constmemok = 1;
+@@ -3248,6 +3255,7 @@ find_reloads (insn, replace, ind_levels, live_known, reload_reg_p)
+ 	      if (CONSTANT_P (operand)
+ 		  /* force_const_mem does not accept HIGH.  */
+ 		  && GET_CODE (operand) != HIGH
++		  && !AVOID_NEW_SYMBOL_REF (operand)
+ 		  && ((PREFERRED_RELOAD_CLASS (operand,
+ 					      (enum reg_class) this_alternative[i])
+ 		       == NO_REGS)
+@@ -3264,7 +3272,7 @@ find_reloads (insn, replace, ind_levels, live_known, reload_reg_p)
+ 		 LIMIT_RELOAD_RELOAD_CLASS, but we don't check that
+ 		 here.  */
+ 
+-	      if (! CONSTANT_P (operand)
++	      if ((! CONSTANT_P (operand) || AVOID_NEW_SYMBOL_REF (operand))
+ 		  && (enum reg_class) this_alternative[i] != NO_REGS
+ 		  && (PREFERRED_RELOAD_CLASS (operand,
+ 					      (enum reg_class) this_alternative[i])
+@@ -3611,6 +3619,7 @@ find_reloads (insn, replace, ind_levels, live_known, reload_reg_p)
+ 	&& CONSTANT_P (recog_operand[i])
+ 	/* force_const_mem does not accept HIGH.  */
+ 	&& GET_CODE (recog_operand[i]) != HIGH
++	&& !AVOID_NEW_SYMBOL_REF (operand)
+ 	&& ((PREFERRED_RELOAD_CLASS (recog_operand[i],
+ 				    (enum reg_class) goal_alternative[i])
+ 	     == NO_REGS)
+diff --git a/gcc/reload1.c b/gcc/reload1.c
+index c2987bb..989214f 100644
+--- a/gcc/reload1.c
++++ b/gcc/reload1.c
+@@ -363,6 +363,7 @@ static int new_spill_reg		PROTO((int, int, int *, int *, int,
+ static void delete_dead_insn		PROTO((rtx));
+ static void alter_reg  			PROTO((int, int));
+ static void mark_scratch_live		PROTO((rtx));
++static void verify_initial_elim_offsets	PROTO((void));
+ static void set_label_offsets		PROTO((rtx, rtx, int));
+ static int eliminate_regs_in_insn	PROTO((rtx, int));
+ static void mark_not_eliminable		PROTO((rtx, rtx));
+@@ -675,7 +676,11 @@ reload (first, global, dumpfile)
+ 
+ 		      reg_equiv_memory_loc[i] = x;
+ 		    }
+-		  else if (CONSTANT_P (x))
++		  else if (CONSTANT_P (x)
++#ifdef NON_RELOAD_CONSTANT_P
++			   && !NON_RELOAD_CONSTANT_P(x)
++#endif
++			   )
+ 		    {
+ 		      if (LEGITIMATE_CONSTANT_P (x))
+ 			reg_equiv_constant[i] = x;
+@@ -2047,7 +2052,17 @@ reload (first, global, dumpfile)
+   if (something_needs_reloads || something_needs_elimination
+       || (caller_save_needed && num_eliminable)
+       || caller_save_spill_class != NO_REGS)
+-    reload_as_needed (first, global);
++    {
++      int old_frame_size = get_frame_size ();
++
++      reload_as_needed (first, global);
++
++      if (num_eliminable)
++	verify_initial_elim_offsets ();
++
++      if (old_frame_size != get_frame_size ())
++	abort ();
++    }
+ 
+   /* If we were able to eliminate the frame pointer, show that it is no
+      longer live at the start of any basic block.  If it ls live by
+@@ -2619,6 +2634,31 @@ mark_scratch_live (scratch)
+     regs_ever_live[i] = 1;
+ }
+ 
++/* Verify that the initial elimination offsets did not change since the
++   last call to set_initial_elim_offsets.  This is used to catch cases
++   where something illegal happened during reload_as_needed that could
++   cause incorrect code to be generated if we did not check for it.  */
++static void
++verify_initial_elim_offsets ()
++{
++  int t;
++
++#ifdef ELIMINABLE_REGS
++  struct elim_table *ep;
++
++  for (ep = reg_eliminate; ep < &reg_eliminate[NUM_ELIMINABLE_REGS]; ep++)
++    {
++      INITIAL_ELIMINATION_OFFSET (ep->from, ep->to, t);
++      if (t != ep->initial_offset)
++	abort ();
++    }
++#else
++  INITIAL_FRAME_POINTER_OFFSET (t);
++  if (t != reg_eliminate[0].initial_offset)
++    abort ();
++#endif  
++}
++
+ /* This function handles the tracking of elimination offsets around branches.
+ 
+    X is a piece of RTL being scanned.
+diff --git a/gcc/system.h b/gcc/system.h
+index 27b1fee..c77d680 100644
+--- a/gcc/system.h
++++ b/gcc/system.h
+@@ -14,6 +14,21 @@
+ #define NULL 0
+ #endif
+ 
++/* The compiler is not a multi-threaded application and therefore we
++   do not have to use the locking functions.  */
++#ifdef HAVE_PUTC_UNLOCKED
++# undef putc
++# define putc(C, Stream) putc_unlocked (C, Stream)
++#endif
++#ifdef HAVE_FPUTC_UNLOCKED
++# undef fputc
++# define fputc(C, Stream) fputc_unlocked (C, Stream)
++#endif
++#ifdef HAVE_FPUTS_UNLOCKED
++# undef fputs
++# define fputs(String, Stream) fputs_unlocked (String, Stream)
++#endif
++
+ #include <ctype.h>
+ 
+ /* Jim Meyering writes:
 diff --git a/gcc/version.c b/gcc/version.c
 index 573f16b..41d9a23 100644
 --- a/gcc/version.c
@@ -1494,10 +1904,10 @@ index bc734bc..193c499 100644
  } // extern "C++"
  #endif /* _STREAMBUF_H */
 diff --git a/libstdc++/Makefile.in b/libstdc++/Makefile.in
-index 77e2ec9..47e827e 100644
+index 77e2ec9..c417514 100644
 --- a/libstdc++/Makefile.in
 +++ b/libstdc++/Makefile.in
-@@ -248,32 +250,32 @@ install:
+@@ -248,32 +248,32 @@ install:
  	if [ -z "$(MULTISUBDIR)" ]; then \
  	  cd $(srcdir); \
  	  for FILE in $(HEADERS); do \
@@ -1543,3 +1953,121 @@ index 77e2ec9..47e827e 100644
  	fi; \
  	rm -f $${INSTALLDIR}$(MULTISUBDIR)/$(SHLINK) ; \
  	for FILE in $(LIBS) ; do \
+diff --git a/libstdc++/stl/memory b/libstdc++/stl/memory
+index a806588..ebd0759 100644
+--- a/libstdc++/stl/memory
++++ b/libstdc++/stl/memory
+@@ -26,8 +26,8 @@
+ //  of the interface are still being discussed by the C++ standardization
+ //  committee.  It will be included once the iterface is finalized.
+ 
+-#if 0
+-#if defined(_MUTABLE_IS_KEYWORD) && defined(_EXPLICIT_IS_KEYWORD) && \
++#if 1
++#if 1 || defined(_MUTABLE_IS_KEYWORD) && defined(_EXPLICIT_IS_KEYWORD) && \
+     defined(__STL_MEMBER_TEMPLATES)
+ 
+ __STL_BEGIN_NAMESPACE
+@@ -73,7 +73,7 @@ public:
+   X& operator*() const __STL_NOTHROW { return *ptr; }
+   X* operator->() const __STL_NOTHROW { return ptr; }
+   X* get() const __STL_NOTHROW { return ptr; }
+-  X* release const __STL_NOTHROW { owns = false; return ptr }
++  X* release () __STL_NOTHROW { owns = false; return ptr; }
+ };
+ 
+ __STL_END_NAMESPACE
+diff --git a/libstdc++/stl/ropeimpl.h b/libstdc++/stl/ropeimpl.h
+index b4af525..90a7649 100644
+--- a/libstdc++/stl/ropeimpl.h
++++ b/libstdc++/stl/ropeimpl.h
+@@ -518,7 +518,7 @@ template <class charT, class Alloc>
+ rope<charT,Alloc>::RopeBase * rope<charT,Alloc>::concat_char_iter
+ 		(RopeBase * r, const charT *s, size_t slen)
+ {
+-    RopeBase *result;
++    RopeBase *result = NULL;
+     if (0 == slen) {
+ 	ref(r);
+ 	return r;
+@@ -706,7 +706,7 @@ rope<charT,Alloc>::substring(RopeBase * base, size_t start, size_t endp1)
+ 	case RopeBase::leaf:
+ 	    {
+ 		RopeLeaf * l = (RopeLeaf *)base;
+-		RopeLeaf * result;
++		RopeLeaf * result = NULL;
+ 		size_t result_len;
+ 		if (start >= adj_endp1) return 0;
+ 		result_len = adj_endp1 - start;
+@@ -1082,7 +1082,7 @@ rope<charT,Alloc>::min_len[__rope_RopeBase<charT,Alloc>::max_rope_depth + 1] = {
+ /* 35 */24157817, /* 36 */39088169, /* 37 */63245986, /* 38 */102334155,
+ /* 39 */165580141, /* 40 */267914296, /* 41 */433494437,
+ /* 42 */701408733, /* 43 */1134903170, /* 44 */1836311903,
+-/* 45 */2971215073 };
++/* 45 */2971215073u };
+ // These are Fibonacci numbers < 2**32.
+ 
+ template <class charT, class Alloc>
+diff --git a/libstdc++/stl/stl_deque.h b/libstdc++/stl/stl_deque.h
+index 72325d5..4ae873d 100644
+--- a/libstdc++/stl/stl_deque.h
++++ b/libstdc++/stl/stl_deque.h
+@@ -635,7 +635,7 @@ protected:                      // Allocation of map and nodes
+   }
+ 
+   void reserve_map_at_front (size_type nodes_to_add = 1) {
+-    if (nodes_to_add > start.node - map)
++    if (nodes_to_add > size_type(start.node - map))
+       reallocate_map(nodes_to_add, true);
+   }
+ 
+@@ -744,7 +744,7 @@ deque<T, Alloc, BufSize>::erase(iterator first, iterator last) {
+   else {
+     difference_type n = last - first;
+     difference_type elems_before = first - start;
+-    if (elems_before < (size() - n) / 2) {
++    if (elems_before < difference_type(size() - n) / 2) {
+       copy_backward(start, first, last);
+       iterator new_start = start + n;
+       destroy(start, new_start);
+@@ -1056,7 +1056,7 @@ void deque<T, Alloc, BufSize>::insert_aux(iterator pos,
+ {
+   const difference_type elems_before = pos - start;
+   size_type length = size();
+-  if (elems_before < length / 2) {
++  if (elems_before < difference_type(length / 2)) {
+     iterator new_start = reserve_elements_at_front(n);
+     iterator old_start = start;
+     pos = start + elems_before;
+diff --git a/libstdc++/stl/stl_rope.h b/libstdc++/stl/stl_rope.h
+index d37c679..082c727 100644
+--- a/libstdc++/stl/stl_rope.h
++++ b/libstdc++/stl/stl_rope.h
+@@ -545,7 +545,7 @@ class __rope_charT_ref_proxy {
+     my_rope * root;     // The whole rope.
+   public:
+     __rope_charT_ref_proxy(my_rope * r, size_t p) :
+-	pos(p), root(r), current_valid(false) {}
++	pos(p), current_valid(false), root(r) {}
+     __rope_charT_ref_proxy(my_rope * r, size_t p,
+ 		    charT c) :
+ 	pos(p), root(r), current(c), current_valid(true) {}
+@@ -660,7 +660,7 @@ class __rope_iterator_base:
+ 					// cache is valid for previous posn.
+     __rope_iterator_base() {}
+     __rope_iterator_base(RopeBase * root, size_t pos):
+-		   root(root), current_pos(pos), buf_ptr(0) {}
++		   current_pos(pos), root(root), buf_ptr(0) {}
+     __rope_iterator_base(const __rope_iterator_base& x) {
+ 	if (0 != x.buf_ptr) {
+ 	    *this = x;
+@@ -702,7 +702,8 @@ class __rope_const_iterator : public __rope_iterator_base<charT,Alloc> {
+ 	__rope_iterator_base<charT,Alloc>(r.tree_ptr, pos) {}
+     __rope_const_iterator& operator= (const __rope_const_iterator & x) {
+ 	if (0 != x.buf_ptr) {
+-	    *this = x;
++	    *(static_cast<__rope_iterator_base<charT,Alloc>*>(this)) = x;
++		// bugfix by Kevin Atkinosn (kevina@clark.net) was *this = x;
+ 	} else {
+ 	    current_pos = x.current_pos;
+ 	    root = x.root;

@@ -76,9 +76,6 @@ if [[ ${PN} == "egcs" ]] ; then
 	GCC_PV=2.91.66
 fi
 GCC_RELEASE_VER=$(ver_cut 1-3 ${GCC_PV})
-if [[ ${GCC_PV} == "2.7.2.3" ]] ; then
-	GCC_RELEASE_VER=${GCC_PV}
-fi
 
 GCC_BRANCH_VER=$(ver_cut 1-2 ${GCC_PV})
 GCCMAJOR=$(ver_cut 1 ${GCC_PV})
@@ -106,20 +103,20 @@ fi
 PREFIX=${TOOLCHAIN_PREFIX:-${EPREFIX}/usr}
 
 if tc_version_is_at_least 3.4.0 ; then
-	LIBPATH=${TOOLCHAIN_LIBPATH:-${PREFIX}/lib/gcc/${CTARGET}/${GCC_CONFIG_VER}}
+	LIBPATH=${TOOLCHAIN_LIBPATH:-${PREFIX}/lib/gcc/${CTARGET}/${GCC_PV}}
 else
-	LIBPATH=${TOOLCHAIN_LIBPATH:-${PREFIX}/lib/gcc-lib/${CTARGET}/${GCC_CONFIG_VER}}
+	LIBPATH=${TOOLCHAIN_LIBPATH:-${PREFIX}/lib/gcc-lib/${CTARGET}/${GCC_PV}}
 fi
 INCLUDEPATH=${TOOLCHAIN_INCLUDEPATH:-${LIBPATH}/include}
 
 if is_crosscompile ; then
-	BINPATH=${TOOLCHAIN_BINPATH:-${PREFIX}/${CHOST}/${CTARGET}/gcc-bin/${GCC_CONFIG_VER}}
-	HOSTLIBPATH=${PREFIX}/${CHOST}/${CTARGET}/lib/${GCC_CONFIG_VER}
+	BINPATH=${TOOLCHAIN_BINPATH:-${PREFIX}/${CHOST}/${CTARGET}/gcc-bin/${GCC_PV}}
+	HOSTLIBPATH=${PREFIX}/${CHOST}/${CTARGET}/lib/${GCC_PV}
 else
-	BINPATH=${TOOLCHAIN_BINPATH:-${PREFIX}/${CTARGET}/gcc-bin/${GCC_CONFIG_VER}}
+	BINPATH=${TOOLCHAIN_BINPATH:-${PREFIX}/${CTARGET}/gcc-bin/${GCC_PV}}
 fi
 
-DATAPATH=${TOOLCHAIN_DATAPATH:-${PREFIX}/share/gcc-data/${CTARGET}/${GCC_CONFIG_VER}}
+DATAPATH=${TOOLCHAIN_DATAPATH:-${PREFIX}/share/gcc-data/${CTARGET}/${GCC_PV}}
 
 # Dont install in /usr/include/g++-v3/, but in gcc internal directory.
 # We will handle /usr/include/g++-v3/ with gcc-config ...
@@ -215,6 +212,8 @@ if tc_version_is_at_least 10; then
 	# Note: currently we pull in releases, snapshots and
 	# git versions into the same SLOT.
 	SLOT="${GCCMAJOR}"
+elif [[ ${PN} == "egcs" ]] ; then
+	SLOT="${PV}"
 else
 	SLOT="${GCC_CONFIG_VER}"
 fi
@@ -303,7 +302,7 @@ S=$(
 	elif [[ ${PN} == "egcs" ]] ; then
 		echo ${WORKDIR}/${P}
 	else
-		echo ${WORKDIR}/gcc-${GCC_RELEASE_VER}
+		echo ${WORKDIR}/gcc-${GCC_PV}
 	fi
 )
 
@@ -395,9 +394,9 @@ get_gcc_src_uri() {
 		elif [[ ${PN} == "egcs" ]] ; then
 			GCC_SRC_URI="http://gcc.gnu.org/pub/gcc/old-releases/egcs/${P}.tar.bz2"
 		elif tc_version_is_between 2.0 3.0 ; then
-			GCC_SRC_URI="http://gcc.gnu.org/pub/gcc/old-releases/gcc-2/gcc-${GCC_RELEASE_VER}.tar.bz2"
+			GCC_SRC_URI="http://gcc.gnu.org/pub/gcc/old-releases/gcc-2/gcc-${GCC_PV}.tar.bz2"
 		elif tc_version_is_between 1.0 2.0 ; then
-			GCC_SRC_URI="http://gcc.gnu.org/pub/gcc/old-releases/gcc-1/gcc-${GCC_RELEASE_VER}.tar.bz2"
+			GCC_SRC_URI="http://gcc.gnu.org/pub/gcc/old-releases/gcc-1/gcc-${GCC_PV}.tar.bz2"
 		fi
 	fi
 
@@ -885,7 +884,7 @@ toolchain_src_configure() {
 	#  Python modules are to be installed in /usr/lib/python2.5/site-packages,
 	#  then --with-python-dir=/lib/python2.5/site-packages should be passed.
 	#
-	# This should translate into "/share/gcc-data/${CTARGET}/${GCC_CONFIG_VER}/python"
+	# This should translate into "/share/gcc-data/${CTARGET}/${GCC_PV}/python"
 	if tc_version_is_at_least 4.4 ; then
 		confgcc+=( --with-python-dir=${DATAPATH/$PREFIX/}/python )
 	fi
@@ -2109,14 +2108,14 @@ toolchain_src_install() {
 
 	# Disable RANDMMAP so PCH works. #301299
 	if tc_version_is_at_least 4.3 ; then
-		pax-mark -r "${D}${PREFIX}/libexec/gcc/${CTARGET}/${GCC_CONFIG_VER}/cc1"
-		pax-mark -r "${D}${PREFIX}/libexec/gcc/${CTARGET}/${GCC_CONFIG_VER}/cc1plus"
+		pax-mark -r "${D}${PREFIX}/libexec/gcc/${CTARGET}/${GCC_PV}/cc1"
+		pax-mark -r "${D}${PREFIX}/libexec/gcc/${CTARGET}/${GCC_PV}/cc1plus"
 	fi
 
 	# Disable MPROTECT so java works. #574808
 	if is_gcj ; then
-		pax-mark -m "${D}${PREFIX}/libexec/gcc/${CTARGET}/${GCC_CONFIG_VER}/ecj1"
-		pax-mark -m "${D}${PREFIX}/${CTARGET}/gcc-bin/${GCC_CONFIG_VER}/gij"
+		pax-mark -m "${D}${PREFIX}/libexec/gcc/${CTARGET}/${GCC_PV}/ecj1"
+		pax-mark -m "${D}${PREFIX}/${CTARGET}/gcc-bin/${GCC_PV}/gij"
 	fi
 }
 

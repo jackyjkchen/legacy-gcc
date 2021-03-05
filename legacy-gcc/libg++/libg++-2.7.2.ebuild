@@ -10,11 +10,11 @@ SRC_URI="https://gcc.gnu.org/pub/gcc/old-releases/libg++/${P}.tar.bz2"
 inherit downgrade-arch-flags gnuconfig
 
 LICENSE=""
-SLOT="${PV}"
+SLOT="$(ver_cut 1-3 ${PV})"
 KEYWORDS="amd64 x86"
 
 DEPEND="
-	sys-devel/gcc:2.7.2.3
+	=sys-devel/gcc-2.7.2.3
 	legacy-gcc/linux-headers:i686-legacy
 	legacy-gcc/glibc-headers:i686-legacy
 	legacy-gcc/binutils-wrapper:i686-legacy"
@@ -23,8 +23,8 @@ BDEPEND=""
 
 CHOST="i686-legacy-linux-gnu"
 
-CC="gcc-2.7.2.3"
-CXX="g++-2.7.2.3"
+CC="gcc-2.7.2"
+CXX="g++-2.7.2"
 
 src_prepare() {
 	default
@@ -33,7 +33,7 @@ src_prepare() {
 }
 
 src_configure() {
-	downgrade_arch_flags 2.7.2.3
+	downgrade_arch_flags 2.7.2
 	local econfargs=(
 		--build=${CHOST}
 		--host=${CHOST}

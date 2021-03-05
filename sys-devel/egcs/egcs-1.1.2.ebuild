@@ -39,7 +39,7 @@ src_install() {
 	toolchain_src_install
 	rm -rf "${ED}"/usr/share/locale
 	mkdir -p ${ED}/etc/ld.so.conf.d/ || die
-	cat <<-_EOF_ > "${ED}"/etc/ld.so.conf.d/08-${CHOST}-egcs-${PV}.conf || die
+	cat <<-_EOF_ > "${ED}"/etc/ld.so.conf.d/08-${CHOST}-egcs-${SLOT}.conf || die
 /usr/lib/gcc-lib/${CHOST}/2.91.66
 _EOF_
 }
