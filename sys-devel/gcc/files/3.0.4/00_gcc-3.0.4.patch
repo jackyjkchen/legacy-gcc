@@ -671,6 +671,124 @@ index c6afa0b..75c87de 100644
  #
  # Clean hooks:
  # A lot of the ancillary files are deleted by the main makefile.
+diff --git a/gcc/cp/optimize.c b/gcc/cp/optimize.c
+index 76a57d0..aa36eb8 100644
+--- a/gcc/cp/optimize.c
++++ b/gcc/cp/optimize.c
+@@ -463,6 +463,16 @@ initialize_inlined_parameters (id, args, fn)
+       tree var;
+       tree value;
+ 
++      if (a == NULL_TREE)
++	{
++	  pop_srcloc ();
++	  /* If less arguments were passed than actually required,
++	     issue warning and avoid inlining.  */
++	  cp_warning ("too few arguments passed to inline %F, suppressing inlining",
++		      fn);
++	  return error_mark_node;
++	}
++
+       /* Find the initializer.  */
+       value = TREE_VALUE (a);
+       /* If the parameter is never assigned to, we may not need to
+@@ -803,6 +813,14 @@ expand_call_inline (tp, walk_subtrees, data)
+ 
+   /* Initialize the parameters.  */
+   arg_inits = initialize_inlined_parameters (id, TREE_OPERAND (t, 1), fn);
++  if (arg_inits == error_mark_node)
++    {
++      /* Clean up.  */
++      splay_tree_delete (id->decl_map);
++      id->decl_map = st;
++      return NULL_TREE;
++    }
++
+   /* Expand any inlined calls in the initializers.  Do this before we
+      push FN on the stack of functions we are inlining; we want to
+      inline calls to FN that appear in the initializers for the
+diff --git a/gcc/cp/typeck.c b/gcc/cp/typeck.c
+index 2539a9d..d365db6 100644
+--- a/gcc/cp/typeck.c
++++ b/gcc/cp/typeck.c
+@@ -5957,7 +5957,7 @@ get_delta_difference (from, to, force)
+   if (to == from)
+     return delta;
+ 
+-  /* Should get_base_distance here, so we can check if any thing along
++  /* Should get_base_distance here, so we can check if anything along
+      the path is virtual, and we need to make sure we stay inside the
+      real binfos when going through virtual bases.  Maybe we should
+      replace virtual bases with BINFO_FOR_VBASE ... (mrs) */
+diff --git a/gcc/cp/typeck2.c b/gcc/cp/typeck2.c
+index b2a63c7..339c7b2 100644
+--- a/gcc/cp/typeck2.c
++++ b/gcc/cp/typeck2.c
+@@ -1289,9 +1289,11 @@ add_exception_specifier (list, spec, complain)
+     ok = is_ptr;
+   else if (TREE_CODE (core) == TEMPLATE_TYPE_PARM)
+     ok = 1;
++  else if (processing_template_decl)
++    ok = 1;
+   else
+     ok = COMPLETE_TYPE_P (complete_type (core));
+-  
++
+   if (ok)
+     {
+       tree probe;
+diff --git a/gcc/dbxout.c b/gcc/dbxout.c
+index fd32b4a..a629eb1 100644
+--- a/gcc/dbxout.c
++++ b/gcc/dbxout.c
+@@ -2137,6 +2137,8 @@ dbxout_symbol_location (decl, type, suffix, home)
+ 	{
+ 	  letter = 'r';
+ 	  current_sym_code = N_RSYM;
++	  if (REGNO (XEXP (home, 0)) >= FIRST_PSEUDO_REGISTER)
++	    return 0;
+ 	  current_sym_value = DBX_REGISTER_NUMBER (REGNO (XEXP (home, 0)));
+ 	}
+       else
+diff --git a/gcc/expr.c b/gcc/expr.c
+index 033eb70..6a5dbd5 100644
+--- a/gcc/expr.c
++++ b/gcc/expr.c
+@@ -3901,6 +3901,7 @@ store_expr (exp, target, want_value)
+ {
+   register rtx temp;
+   int dont_return_target = 0;
++  int dont_store_target = 0;
+ 
+   if (TREE_CODE (exp) == COMPOUND_EXPR)
+     {
+@@ -3971,7 +3972,15 @@ store_expr (exp, target, want_value)
+     {
+       temp = expand_expr (exp, target, GET_MODE (target), 0);
+       if (GET_MODE (temp) != BLKmode && GET_MODE (temp) != VOIDmode)
+-	temp = copy_to_reg (temp);
++	{
++	  /* If TEMP is already in the desired TARGET, only copy it from
++	     memory and don't store it there again.  */
++	  if (temp == target
++	      || (rtx_equal_p (temp, target)
++		  && ! side_effects_p (temp) && ! side_effects_p (target)))
++	    dont_store_target = 1;
++	  temp = copy_to_reg (temp);
++	}
+       dont_return_target = 1;
+     }
+   else if (GET_CODE (target) == SUBREG && SUBREG_PROMOTED_VAR_P (target))
+@@ -4101,7 +4110,8 @@ store_expr (exp, target, want_value)
+   if ((! rtx_equal_p (temp, target)
+        || (temp != target && (side_effects_p (temp)
+ 			      || side_effects_p (target))))
+-      && TREE_CODE (exp) != ERROR_MARK)
++      && TREE_CODE (exp) != ERROR_MARK
++      && ! dont_store_target)
+     {
+       target = protect_from_queue (target, 1);
+       if (GET_MODE (temp) != GET_MODE (target)
 diff --git a/gcc/f/Make-lang.in b/gcc/f/Make-lang.in
 index 62f05a0..d23f4a7 100644
 --- a/gcc/f/Make-lang.in
@@ -824,6 +942,54 @@ index d0dfe8f..09c04d7 100644
  ffeinfoKindtype ffecom_gfrt_kindtype (ffecomGfrt ix);
  void ffecom_init_0 (void);
  void ffecom_init_2 (void);
+diff --git a/gcc/genrecog.c b/gcc/genrecog.c
+index 2856fe6..3a31381 100644
+--- a/gcc/genrecog.c
++++ b/gcc/genrecog.c
+@@ -186,20 +186,21 @@ static struct pred_table
+   RTX_CODE codes[NUM_RTX_CODE];
+ } preds[] = {
+   {"general_operand", {CONST_INT, CONST_DOUBLE, CONST, SYMBOL_REF,
+-		       LABEL_REF, SUBREG, REG, MEM}},
++		       LABEL_REF, SUBREG, REG, MEM, ADDRESSOF}},
+ #ifdef PREDICATE_CODES
+   PREDICATE_CODES
+ #endif
+   {"address_operand", {CONST_INT, CONST_DOUBLE, CONST, SYMBOL_REF,
+-		       LABEL_REF, SUBREG, REG, MEM, PLUS, MINUS, MULT}},
+-  {"register_operand", {SUBREG, REG}},
+-  {"pmode_register_operand", {SUBREG, REG}},
++		       LABEL_REF, SUBREG, REG, MEM, PLUS, MINUS, MULT,
++		       ADDRESSOF}},
++  {"register_operand", {SUBREG, REG, ADDRESSOF}},
++  {"pmode_register_operand", {SUBREG, REG, ADDRESSOF}},
+   {"scratch_operand", {SCRATCH, REG}},
+   {"immediate_operand", {CONST_INT, CONST_DOUBLE, CONST, SYMBOL_REF,
+ 			 LABEL_REF}},
+   {"const_int_operand", {CONST_INT}},
+   {"const_double_operand", {CONST_INT, CONST_DOUBLE}},
+-  {"nonimmediate_operand", {SUBREG, REG, MEM}},
++  {"nonimmediate_operand", {SUBREG, REG, MEM, ADDRESSOF}},
+   {"nonmemory_operand", {CONST_INT, CONST_DOUBLE, CONST, SYMBOL_REF,
+ 			 LABEL_REF, SUBREG, REG}},
+   {"push_operand", {MEM}},
+@@ -210,7 +211,7 @@ static struct pred_table
+ 			   UNORDERED, ORDERED, UNEQ, UNGE, UNGT, UNLE,
+ 			   UNLT, LTGT}},
+   {"mode_independent_operand", {CONST_INT, CONST_DOUBLE, CONST, SYMBOL_REF,
+-				LABEL_REF, SUBREG, REG, MEM}}
++				LABEL_REF, SUBREG, REG, MEM, ADDRESSOF}}
+ };
+ 
+ #define NUM_KNOWN_PREDS ARRAY_SIZE (preds)
+@@ -519,6 +520,7 @@ validate_pattern (pattern, insn, set, set_code)
+ 		    if (c != REG
+ 			&& c != SUBREG
+ 			&& c != MEM
++			&& c != ADDRESSOF
+ 			&& c != CONCAT
+ 			&& c != PARALLEL
+ 			&& c != STRICT_LOW_PART)
 diff --git a/gcc/java/Make-lang.in b/gcc/java/Make-lang.in
 index 485d3a5..82ba038 100644
 --- a/gcc/java/Make-lang.in
@@ -988,6 +1154,46 @@ index b9252d5..8bdabb6 100644
  	else \
  	  : ; \
  	fi
+diff --git a/gcc/reg-stack.c b/gcc/reg-stack.c
+index 820fc19..66e3f68 100644
+--- a/gcc/reg-stack.c
++++ b/gcc/reg-stack.c
+@@ -656,7 +656,20 @@ check_asm_stack_operands (insn)
+ 	    malformed_asm = 1;
+ 	  }
+         else
+-	  reg_used_as_output[REGNO (recog_data.operand[i])] = 1;
++	  {
++	    int j;
++
++	    for (j = 0; j < n_clobbers; j++)
++	      if (REGNO (recog_data.operand[i]) == REGNO (clobber_reg[j]))
++		{
++		  error_for_asm (insn, "Output constraint %d cannot be specified together with \"%s\" clobber",
++				 i, reg_names [REGNO (clobber_reg[j])]);
++		  malformed_asm = 1;
++		  break;
++		}
++	    if (j == n_clobbers)
++	      reg_used_as_output[REGNO (recog_data.operand[i])] = 1;
++	  }
+       }
+ 
+ 
+diff --git a/gcc/tlink.c b/gcc/tlink.c
+index ae68fb0..6ae24a8 100644
+--- a/gcc/tlink.c
++++ b/gcc/tlink.c
+@@ -495,6 +495,9 @@ recompile_files ()
+ {
+   file *f;
+ 
++  putenv ("COMPILER_PATH");
++  putenv ("LIBRARY_PATH");
++  
+   while ((f = file_pop ()) != NULL)
+     {
+       char *line, *command;
 diff --git a/gcc/unwind-dw2.c b/gcc/unwind-dw2.c
 index c1aa67f..a019877 100644
 --- a/gcc/unwind-dw2.c
