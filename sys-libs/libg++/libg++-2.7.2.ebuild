@@ -13,15 +13,24 @@ LICENSE=""
 SLOT="$(ver_cut 1-3 ${PV})"
 KEYWORDS="amd64 x86"
 
+case ${ARCH} in
+	amd64|x86)
+		TOOL_SLOT="i686-legacy"
+		;;
+	*)
+		TOOL_SLOT="invalid"
+		;;
+esac
+
 DEPEND="
 	=sys-devel/gcc-2.7.2.3
-	legacy-gcc/linux-headers:i686-legacy
-	legacy-gcc/glibc-headers:i686-legacy
-	legacy-gcc/binutils-wrapper:i686-legacy"
+	sys-kernel/linux-headers:${TOOL_SLOT}
+	sys-libs/glibc-headers:${TOOL_SLOT}
+	sys-devel/binutils-wrapper:${TOOL_SLOT}"
 RDEPEND="${DEPEND}"
 BDEPEND=""
 
-CHOST="i686-legacy-linux-gnu"
+CHOST="${TOOL_SLOT}-linux-gnu"
 
 CC="gcc-2.7.2"
 CXX="g++-2.7.2"

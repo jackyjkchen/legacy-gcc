@@ -5,7 +5,7 @@ EAPI=7
 
 DESCRIPTION=""
 HOMEPAGE=""
-SRC_URI="https://gcc.gnu.org/pub/gcc/old-releases/libg++/${P}.tar.bz2"
+SRC_URI="https://gcc.gnu.org/pub/gcc/old-releases/libstdc++/${P}.tar.bz2"
 
 inherit downgrade-arch-flags gnuconfig
 
@@ -13,31 +13,42 @@ LICENSE=""
 SLOT="$(ver_cut 1-3 ${PV})"
 KEYWORDS="amd64 x86"
 
+case ${ARCH} in
+	amd64|x86)
+		TOOL_SLOT="i686-legacy"
+		;;
+	*)
+		TOOL_SLOT="invalid"
+		;;
+esac
+
 DEPEND="
-	sys-devel/gcc:2.6.3
-	legacy-gcc/linux-headers:i686-legacy
-	legacy-gcc/glibc-headers:i686-legacy
-	legacy-gcc/binutils-wrapper:i686-legacy"
+	sys-devel/gcc:2.8.1
+	sys-kernel/linux-headers:${TOOL_SLOT}
+	sys-libs/glibc-headers:${TOOL_SLOT}
+	sys-devel/binutils-wrapper:${TOOL_SLOT}"
 RDEPEND="${DEPEND}"
 BDEPEND=""
 
-CHOST="i686-legacy-linux-gnu"
+CHOST="${TOOL_SLOT}-linux-gnu"
 
-CC="gcc-2.6.3"
-CXX="g++-2.6.3"
+CC="gcc-2.8.1"
+CXX="g++-2.8.1"
 
 src_prepare() {
 	default
 	gnuconfig_update
-	eapply "${FILESDIR}"/${PV}/00_libgxx-${PV}.patch || die
+	eapply "${FILESDIR}"/${PV}/00_libstdcxx-${PV}.patch || die
 }
 
 src_configure() {
-	downgrade_arch_flags 2.6.3
+	downgrade_arch_flags 2.8.1
 	local econfargs=(
 		--build=${CHOST}
 		--host=${CHOST}
 		--prefix=/usr
+		--enable-shared
+		--with-gxx-include-dir=/usr/lib/gcc-lib/${CHOST}/2.8.1/include/g++-v2
 	)
 
 	mkdir -p "${WORKDIR}"/build
@@ -52,16 +63,14 @@ src_configure() {
 
 src_compile() {
 	pushd "${WORKDIR}"/build > /dev/null
-	emake -j1 CC="${CC}" CXX="${CXX}" || die "failed to run make"
+	emake || die "failed to run make"
 	popd > /dev/null
 }
 
 src_install() {
 	pushd "${WORKDIR}"/build > /dev/null
 	emake -j1 DESTDIR="${ED}" install || die "failed to run make"
-	mkdir -p "${ED}"/usr/lib/gcc-lib/${CHOST}/2.6.3/include || die
-	mv -v "${ED}"/usr/lib/g++-include "${ED}"/usr/lib/gcc-lib/${CHOST}/2.6.3/include/g++ || die
-	mv -v "${ED}"/usr/lib/libstdc++.a "${ED}"/usr/lib/libg++.a "${ED}"/usr/lib/libiostream.a "${ED}"/usr/lib/gcc-lib/${CHOST}/2.6.3/ || die
-	rm -rfv "${ED}"/usr/lib/libiberty.a "${ED}"/usr/bin "${ED}"/usr/man "${ED}"/usr/${CHOST}
+	mv -v "${ED}"/usr/lib/libstdc++* "${ED}"/usr/lib/gcc-lib/${CHOST}/2.8.1/ || die
+	rm -rfv "${ED}"/usr/lib/libiberty.a "${ED}"/usr/${CHOST}
 	popd > /dev/null
 }

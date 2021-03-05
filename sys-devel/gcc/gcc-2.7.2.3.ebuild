@@ -3,17 +3,27 @@
 
 EAPI=6
 
-CBUILD='i686-legacy-linux-gnu'
+case ${ARCH} in
+	amd64|x86)
+		CC="gcc-2.95.3"
+		CXX="g++-2.95.3"
+		TOOL_SLOT="i686-legacy"
+		CHOST_x86="${TOOL_SLOT}-linux-gnu"
+		ABI='x86'
+		DEFAULT_ABI='x86'
+		ABI_X86='32'
+		CFLAGS_x86=""
+		;;
+	*)
+		;;
+esac
+
+CBUILD="${TOOL_SLOT}-linux-gnu"
 CHOST=${CBUILD}
-CHOST_x86=${CBUILD}
-ABI='x86'
-DEFAULT_ABI='x86'
-ABI_X86='32'
 AS="${CHOST}-as"
 LD="${CHOST}-ld"
 AR="${CHOST}-ar"
 RANLIB="${CHOST}-ranlib"
-CFLAGS_x86=""
 
 inherit toolchain
 
@@ -22,12 +32,9 @@ KEYWORDS="amd64 x86"
 RDEPEND=""
 DEPEND="${RDEPEND}
 	sys-devel/gcc:2.95.3
-	legacy-gcc/linux-headers:i686-legacy
-	legacy-gcc/glibc-headers:i686-legacy
-	legacy-gcc/binutils-wrapper:i686-legacy"
-
-CC="gcc-2.95.3"
-CXX="g++-2.95.3"
+	sys-kernel/linux-headers:${TOOL_SLOT}
+	sys-libs/glibc-headers:${TOOL_SLOT}
+	sys-devel/binutils-wrapper:${TOOL_SLOT}"
 
 src_prepare() {
 	toolchain_src_prepare

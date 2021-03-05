@@ -8,15 +8,23 @@ HOMEPAGE=""
 SRC_URI=""
 
 LICENSE=""
-SLOT="i${PV}-legacy"
 KEYWORDS="amd64 x86"
+case ${ARCH} in
+	amd64|x86)
+		TOOL_SLOT="i686-legacy"
+		;;
+	*)
+		TOOL_SLOT="invalid"
+		;;
+esac
+SLOT="${TOOL_SLOT}"
 
 DEPEND="sys-devel/binutils"
 RDEPEND="${DEPEND}"
 BDEPEND=""
 
 HOST_PREFIX="${CHOST}"
-TARGET_PREFIX="${SLOT}-linux-gnu"
+TARGET_PREFIX="${TOOL_SLOT}-linux-gnu"
 UNIX_PREFIX="/usr"
 REL_PATH="../.."
 

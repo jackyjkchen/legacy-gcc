@@ -10,17 +10,25 @@ SRC_URI="https://mirrors.ustc.edu.cn/gnu/glibc/glibc-${PV}.tar.bz2"
 inherit downgrade-arch-flags gnuconfig
 
 LICENSE=""
-SLOT="i686-legacy"
 KEYWORDS="amd64 x86"
+case ${ARCH} in
+	amd64|x86)
+		TOOL_SLOT="i686-legacy"
+		;;
+	*)
+		TOOL_SLOT="invalid"
+		;;
+esac
+SLOT="${TOOL_SLOT}"
 
 DEPEND="
 	sys-devel/gcc:3.4.6
-	legacy-gcc/linux-headers:i686-legacy
-	legacy-gcc/binutils-wrapper:i686-legacy"
+	sys-kernel/linux-headers:${TOOL_SLOT}
+	sys-devel/binutils-wrapper:${TOOL_SLOT}"
 RDEPEND="${DEPEND}"
 BDEPEND=""
 
-CHOST="${SLOT}-linux-gnu"
+CHOST="${TOOL_SLOT}-linux-gnu"
 
 case ${ARCH} in
 	amd64)
@@ -44,11 +52,6 @@ src_prepare() {
 
 src_configure() {
 	downgrade_arch_flags 3.4.6
-	cat <<-_EOF_ > config.cache || die
-libc_cv_forced_unwind=yes
-libc_cv_c_cleanup=yes
-libc_cv_386_tls=yes
-_EOF_
 	local econfargs=(
 		--build=${CHOST}
 		--host=${CHOST}
@@ -69,7 +72,7 @@ _EOF_
 		--without-gd
 		--enable-crypt
 		--disable-nscd
-		--disable-sanity-checks --cache-file=config.cache
+		--disable-sanity-checks
 	)
 
 	mkdir -p "${WORKDIR}"/build
@@ -77,7 +80,7 @@ _EOF_
 
 	echo "${S}"/configure "${econfargs[@]}"
 
-	"${S}"/configure "${econfargs[@]}" || die "failed to run configure"
+	"${S}"/configure "${econfargs[@]}" libc_cv_forced_unwind=yes libc_cv_c_cleanup=yes || die "failed to run configure"
 
 	popd > /dev/null
 }
