@@ -46,7 +46,7 @@ USE参数可使用equery u sys-devel/gcc:${slot}查询
 
 全部版本支持c语言
 
-2.6.3以上版本支持c++和objective-c
+2.5.8以上版本支持c++和objective-c
 
 4.1.2以上版本支持objective-c++
 

@@ -1,34 +1,32 @@
 diff --git a/Makefile.in b/Makefile.in
-index f7eda09..3d14368 100644
+index 6a271f2..2cf29b7 100644
 --- a/Makefile.in
 +++ b/Makefile.in
-@@ -55,7 +55,7 @@ INSTALL_DOSREL = install-dosrel-fake
+@@ -53,13 +53,13 @@ INSTALL_XFORM = $(INSTALL) -t='$(program_transform_name)'
  AS = as
  AR = ar
  AR_FLAGS = rc
 -CC = cc
 +CC = @CC@
  
- # Special variables passed down in EXTRA_GCC_FLAGS.  They are defined
- # here so that they can be overridden by Makefile fragments.
-@@ -70,7 +70,7 @@ LIBCFLAGS = $(CFLAGS)
- CFLAGS_FOR_TARGET = $(CFLAGS)
- LIBCFLAGS_FOR_TARGET = $(CFLAGS_FOR_TARGET)
+ # We don't specify -g -O because many compilers don't support -g -O,
+ # and/or -O is broken in and of itself.
+ CFLAGS = -g
  
 -CXX = gcc
 +CXX = @CXX@
  
- # Use -O2 to stress test the compiler.
- CXXFLAGS = -g -O2
-@@ -220,6 +220,7 @@ BASE_FLAGS_TO_PASS = \
+ # Use -O to stress test the compiler.
+ CXXFLAGS = -g -O
+@@ -207,6 +207,7 @@ BASE_FLAGS_TO_PASS = \
+ 	"CC_FOR_BUILD=$(CC_FOR_BUILD)" \
  	"CC_FOR_TARGET=$(CC_FOR_TARGET)" \
  	"CFLAGS=$(CFLAGS)" \
- 	"CFLAGS_FOR_TARGET=$(CFLAGS_FOR_TARGET)" \
 +	"DESTDIR=$(DESTDIR)" \
  	"CXX_FOR_BUILD=$(CXX_FOR_BUILD)" \
  	"CXXFLAGS=$(CXXFLAGS)" \
- 	"CXXFLAGS_FOR_TARGET=$(CXXFLAGS_FOR_TARGET)" \
-@@ -924,9 +925,9 @@ all-xiberty: all-gcc all-ld all-newlib
+ 	"CXX_FOR_TARGET=$(CXX_FOR_TARGET)" \
+@@ -854,9 +855,9 @@ all-xiberty: all-gcc all-newlib
  ### other supporting targets
  
  MAKEDIRS= \
@@ -42,61 +40,50 @@ index f7eda09..3d14368 100644
  .PHONY: install-dirs
  install-dirs:
 diff --git a/etc/Makefile.in b/etc/Makefile.in
-index bd84e44..9e2f445 100644
+index 3b57840..beff8d7 100644
 --- a/etc/Makefile.in
 +++ b/etc/Makefile.in
-@@ -44,17 +44,17 @@ DVIFILES = configure.dvi standards.dvi cfg-paper.dvi
+@@ -42,13 +42,13 @@ DVIFILES = configure.dvi standards.dvi cfg-paper.dvi
  all:
  
  install:  $(srcdir)/configure.man
 -	$(INSTALL_DATA) $(srcdir)/configure.man $(man1dir)/configure.1
 +	$(INSTALL_DATA) $(srcdir)/configure.man $(DESTDIR)$(man1dir)/configure.1
  
- uninstall:
--	cd $(infodir) && rm -f configure.info* standards.info* cfg-paper.info*
-+	cd $(DESTDIR)$(infodir) && rm -f configure.info* standards.info* cfg-paper.info*
- 
  info: $(INFOFILES)
  
- install-info: info
--	if test ! -f configure.info ; then cd $(srcdir); fi; \
-+	if test ! -f configure.info ; then cd $(DESTDIR)$(srcdir); fi; \
- 	for i in configure.info* standards.info* cfg-paper.info*; do \
--	  $(INSTALL_DATA) $$i $(infodir)/$$i; \
-+	  $(INSTALL_DATA) $$i $(DESTDIR)$(infodir)/$$i; \
+ install-info:
+ 	for i in *.info* ; do \
+-	  $(INSTALL_DATA) $$i $(infodir) ; \
++	  $(INSTALL_DATA) $$i $(DESTDIR)$(infodir) ; \
  	done
  
- dvi: $(DVIFILES)
+ dvi : $(DVIFILES)
 diff --git a/libg++/Makefile.in b/libg++/Makefile.in
-index 7f2776d..dbe5f10 100644
+index 5d1fe0e..5e16050 100644
 --- a/libg++/Makefile.in
 +++ b/libg++/Makefile.in
-@@ -176,8 +176,8 @@ installcheck: check
+@@ -154,14 +154,14 @@ installcheck: check
  
  .PHONY: install
  install:
--	@if [ -f $(gxx_includedir)/unistd.h ] ; then echo; \
--	  echo '*** You seem to have files in $(gxx_includedir)/g++-include left over'; \
-+	@if [ -f $(DESTDIR)$(gxx_includedir)/unistd.h ] ; then echo; \
-+	  echo '*** You seem to have files in $(DESTDIR)$(gxx_includedir)/g++-include left over'; \
- 	  echo '*** from an old release of libg++.  These must be removed.' \
- 	  echo '*** Please see $(srcdir)/README for more information.'; \
- 	  echo; \
-@@ -185,11 +185,11 @@ install:
- 	  true; \
- 	fi
- 	for FILE in $(BUILD_LIBS) ; do \
--		$(INSTALL_DATA) $$FILE $(INSTALLDIR)/$$FILE ; \
-+		$(INSTALL_DATA) $$FILE $(DESTDIR)$(INSTALLDIR)/$$FILE ; \
- 		if [ $$FILE = $(ARLIB) ] ; then \
--			$(RANLIB) $(INSTALLDIR)/$$FILE ; \
-+			$(RANLIB) $(DESTDIR)$(INSTALLDIR)/$$FILE ; \
- 		fi ; \
--		chmod a-x $(INSTALLDIR)/$$FILE ; \
-+		chmod a-x $(DESTDIR)$(INSTALLDIR)/$$FILE ; \
+-	$(INSTALL_DATA) $(TARGETLIB) $(INSTALLDIR)/$(TARGETLIB)
+-	$(RANLIB) $(INSTALLDIR)/$(TARGETLIB)
+-	chmod a-x $(INSTALLDIR)/$(TARGETLIB)
++	$(INSTALL_DATA) $(TARGETLIB) $(DESTDIR)$(INSTALLDIR)/$(TARGETLIB)
++	$(RANLIB) $(DESTDIR)$(INSTALLDIR)/$(TARGETLIB)
++	chmod a-x $(DESTDIR)$(INSTALLDIR)/$(TARGETLIB)
+ 	cd $(srcdir)/src; \
+ 	for FILE in *.h gen/*.ccP gen/*.hP; do \
+-		rm -f $(gxx_includedir)/$$FILE ; \
+-		$(INSTALL_DATA) $$FILE $(gxx_includedir)/$$FILE || exit 1; \
+-		chmod a-x,a+r $(gxx_includedir)/$$FILE ; \
++		rm -f $(DESTDIR)$(gxx_includedir)/$$FILE ; \
++		$(INSTALL_DATA) $$FILE $(DESTDIR)$(gxx_includedir)/$$FILE || exit 1; \
++		chmod a-x,a+r $(DESTDIR)$(gxx_includedir)/$$FILE ; \
  	done
- 	@for D in src genclass $(UTILS) ; do \
- 		if [ -d $$D ] ; then \
+ 	if [ "x$(GPERF)" != "x" ]; then \
+ 	  cd gperf ; $(MAKE) $(FLAGS_TO_PASS) install; \
 diff --git a/libg++/genclass/Makefile.in b/libg++/genclass/Makefile.in
 index c6a04f5..d73fe87 100644
 --- a/libg++/genclass/Makefile.in
@@ -108,12 +95,12 @@ index c6a04f5..d73fe87 100644
 -	$(INSTALL_PROGRAM) genclass $(bindir)/genclass
 +	$(INSTALL_PROGRAM) genclass $(DESTDIR)$(bindir)/genclass
 diff --git a/libg++/gperf/Makefile.in b/libg++/gperf/Makefile.in
-index ef41b75..6fd3e32 100644
+index 36453a1..5b2ba8d 100644
 --- a/libg++/gperf/Makefile.in
 +++ b/libg++/gperf/Makefile.in
 @@ -32,7 +32,7 @@ src_all:
  install:
- 	rootme=`pwd`/ ; export rootme ; cd src ; \
+ 	rootme=`pwd` ; export rootme ; cd src ; \
  		$(MAKE) $(FLAGS_TO_PASS) install
 -	$(INSTALL_DATA) $(srcdir)/gperf.1 $(man1dir)/gperf.1
 +	$(INSTALL_DATA) $(srcdir)/gperf.1 $(DESTDIR)$(man1dir)/gperf.1
@@ -121,15 +108,31 @@ index ef41b75..6fd3e32 100644
  distrib: force
  	cd ..; rm -f gperf.tar.Z; tar cvf gperf.tar gperf; compress gperf.tar;\
 diff --git a/libg++/gperf/src/Makefile.in b/libg++/gperf/src/Makefile.in
-index caa196f..38755a1 100644
+index 396ae65..d15ff5c 100644
 --- a/libg++/gperf/src/Makefile.in
 +++ b/libg++/gperf/src/Makefile.in
-@@ -32,4 +32,4 @@ $(TARGETPROG): $(OBJECTS)
+@@ -34,4 +34,4 @@ $(TARGETPROG): $(OBJECTS)
  
  .PHONY: install
  install: $(TARGETPROG)
 -	$(INSTALL_PROGRAM) $(TARGETPROG) $(bindir)/$(TARGETPROG)
 +	$(INSTALL_PROGRAM) $(TARGETPROG) $(DESTDIR)$(bindir)/$(TARGETPROG)
+diff --git a/libg++/gperf/src/std-err.cc b/libg++/gperf/src/std-err.cc
+index 98365c5..dd1cd67 100644
+--- a/libg++/gperf/src/std-err.cc
++++ b/libg++/gperf/src/std-err.cc
+@@ -73,10 +73,7 @@ Std_Err::report_error (char *format, ...)
+             case 'f' : fprintf (stderr, "%g", va_arg (argp, double)); break;
+             case 'n' : fputs (program_name ? program_name : "error", stderr); break;
+             case 'p' : 
+-              if (errno >= 0 && errno < sys_nerr) 
+-                fprintf (stderr, "%s: %s", va_arg (argp, char *), sys_errlist[errno]);
+-              else 
+-                fprintf (stderr, "<unknown error> %d", errno);
++                fprintf (stderr, "%s: %s", va_arg (argp, char *), strerror(errno));
+               break;
+             case 's' : fputs (va_arg (argp, char *), stderr); break;
+             }
 diff --git a/libg++/src/Intdouble.cc b/libg++/src/Intdouble.cc
 index 8db9061..6e7e5ac 100644
 --- a/libg++/src/Intdouble.cc
@@ -149,10 +152,10 @@ index 8db9061..6e7e5ac 100644
  // convert to a double 
  
 diff --git a/libg++/src/Makefile.in b/libg++/src/Makefile.in
-index 0f3f946..6fa3bd2 100644
+index 0af72e5..f468cd0 100644
 --- a/libg++/src/Makefile.in
 +++ b/libg++/src/Makefile.in
-@@ -43,7 +43,7 @@ OBJS =  AllocRing.o Obstack.o builtin.o \
+@@ -42,7 +42,7 @@ OBJS =  AllocRing.o Obstack.o builtin.o \
   Normal.o NegExp.o Weibull.o Erlang.o DiscUnif.o \
   Uniform.o Poisson.o HypGeom.o Geom.o Binomial.o \
   RNG.o ACG.o MLCG.o  RndInt.o  \
@@ -160,19 +163,7 @@ index 0f3f946..6fa3bd2 100644
 + Fix.o Fix16.o Fix24.o GetOpt.o $(EH_FILES) \
   new.o chr.o error.o gcd.o hash.o \
   lg.o fmtq.o ioob.o pow.o sqrt.o str.o timer.o \
-  math.o compare.o $(BIT_OBJS) \
-@@ -67,8 +67,8 @@ libgxx.list: $(OBJS)
- 
- install:
- 	for FILE in `(cd ${srcdir}; echo *.h gen/*.ccP gen/*.hP)`; do \
--		rm -f $(gxx_includedir)/$$FILE ; \
--		$(INSTALL_DATA) ${srcdir}/$$FILE $(gxx_includedir)/$$FILE \
-+		rm -f $(DESTDIR)$(gxx_includedir)/$$FILE ; \
-+		$(INSTALL_DATA) ${srcdir}/$$FILE $(DESTDIR)$(gxx_includedir)/$$FILE \
- 		  || exit 1; \
--		chmod a-x,a+r $(gxx_includedir)/$$FILE ; \
-+		chmod a-x,a+r $(DESTDIR)$(gxx_includedir)/$$FILE ; \
- 	done
+  math.o compare.o \
 diff --git a/libg++/src/SmplHist.cc b/libg++/src/SmplHist.cc
 index a1fcd15..3bad7aa 100644
 --- a/libg++/src/SmplHist.cc
@@ -216,18 +207,10 @@ index 461bea4..9f47dd0 100644
  // error handling
  
 diff --git a/libiberty/Makefile.in b/libiberty/Makefile.in
-index 75a4ec6..332842d 100644
+index 6923867..51b7f9b 100644
 --- a/libiberty/Makefile.in
 +++ b/libiberty/Makefile.in
-@@ -96,6 +96,7 @@ FLAGS_TO_PASS = \
- 	"CC=$(CC)" \
- 	"CFLAGS=$(CFLAGS)" \
- 	"LIBCFLAGS=$(LIBCFLAGS)" \
-+	"DESTDIR=$(DESTDIR)" \
- 	"EXTRA_OFILES=$(EXTRA_OFILES)" \
- 	"HDEFINES=$(HDEFINES)" \
- 	"INCDIR=$(INCDIR)" \
-@@ -150,14 +151,14 @@ INSTALL_DEST = libdir
+@@ -130,14 +130,14 @@ INSTALL_DEST = libdir
  install: install_to_$(INSTALL_DEST)
  
  install_to_libdir: all
@@ -249,18 +232,17 @@ index 75a4ec6..332842d 100644
  # The default configuration adds to libiberty all those functions that are
  # missing in libc.  More precisely, it includes whatever $(CC) fails to find.
 diff --git a/libio/Makefile.in b/libio/Makefile.in
-index d52a6f0..a4be7bb 100644
+index 036e089..0031bcf 100644
 --- a/libio/Makefile.in
 +++ b/libio/Makefile.in
-@@ -89,18 +89,18 @@ _G_config.h: ${srcdir}/gen-params
+@@ -81,14 +81,14 @@ _G_config.h: ${srcdir}/gen-params
  
+ USER_INCLUDES = *.h
  install:
- 	if [ "$(_G_CONFIG_H)" != "" ]; then \
--	  rm -f $(tooldir)/include/_G_config.h ; \
--	    $(INSTALL_DATA) _G_config.h $(tooldir)/include/_G_config.h || exit 1; \
-+	  rm -f $(DESTDIR)$(tooldir)/include/_G_config.h ; \
-+	    $(INSTALL_DATA) _G_config.h $(DESTDIR)$(tooldir)/include/_G_config.h || exit 1; \
- 	fi
+-	rm -f $(tooldir)/include/_G_config.h ; \
+-	  $(INSTALL_DATA) _G_config.h $(tooldir)/include/_G_config.h || exit 1;
++	rm -f $(DESTDIR)$(tooldir)/include/_G_config.h ; \
++	  $(INSTALL_DATA) _G_config.h $(DESTDIR)$(tooldir)/include/_G_config.h || exit 1;
  	cd $(srcdir); \
  	for FILE in $(USER_INCLUDES) ; do \
 -		rm -f $(gxx_includedir)/$$FILE ; \
@@ -276,14 +258,11 @@ index d52a6f0..a4be7bb 100644
 +	$(INSTALL_DATA) libiostream.a $(DESTDIR)$(INSTALLDIR)/libiostream.a
 +	$(RANLIB) $(DESTDIR)$(INSTALLDIR)/libiostream.a
 +	chmod a-x $(DESTDIR)$(INSTALLDIR)/libiostream.a
- 
- c++clean:
- 	rm -rf $(IOSTREAM_OBJECTS) _G_config.h
 diff --git a/libio/floatconv.c b/libio/floatconv.c
-index 912c283..23a904d 100644
+index 3009e36..55c6685 100644
 --- a/libio/floatconv.c
 +++ b/libio/floatconv.c
-@@ -1285,14 +1285,7 @@ _IO_strtod
+@@ -1282,14 +1282,7 @@ _IO_strtod
                          if (e1 > DBL_MAX_10_EXP) {
   ovfl:
                                  errno = ERANGE;
@@ -300,10 +279,10 @@ index 912c283..23a904d 100644
                                  }
                          if (e1 >>= 4) {
 diff --git a/libio/gen-params b/libio/gen-params
-index d01d718..59ea512 100755
+index e346344..76ee0bf 100755
 --- a/libio/gen-params
 +++ b/libio/gen-params
-@@ -285,8 +285,6 @@ done
+@@ -204,8 +204,6 @@ done
  
  cat <<!EOF!
  typedef ${clock_t-int /* default */} ${macro_prefix}clock_t;
@@ -312,19 +291,28 @@ index d01d718..59ea512 100755
  typedef ${gid_t-int /* default */} ${macro_prefix}gid_t;
  typedef ${ino_t-int /* default */} ${macro_prefix}ino_t;
  typedef ${mode_t-int /* default */} ${macro_prefix}mode_t;
-@@ -297,7 +295,6 @@ typedef ${pid_t-int /* default */} ${macro_prefix}pid_t;
- #define __PTRDIFF_TYPE__ ${ptrdiff_t-long int /* default */}
- #endif
- typedef __PTRDIFF_TYPE__ ${macro_prefix}ptrdiff_t;
+@@ -213,13 +211,15 @@ typedef ${nlink_t-int /* default */} ${macro_prefix}nlink_t;
+ typedef ${off_t-long /* default */} ${macro_prefix}off_t;
+ typedef ${pid_t-int /* default */} ${macro_prefix}pid_t;
+ typedef ${ptrdiff_t-long int /* default */} ${macro_prefix}ptrdiff_t;
 -typedef ${sigset_t-int /* default */} ${macro_prefix}sigset_t;
- #ifndef __SIZE_TYPE__
- #define __SIZE_TYPE__ ${size_t-unsigned long /* default */}
- #endif
+ typedef ${size_t-unsigned long /* default */} ${macro_prefix}size_t;
+ typedef ${time_t-int /* default */} ${macro_prefix}time_t;
+ typedef ${uid_t-int /* default */} ${macro_prefix}uid_t;
+ typedef ${wchar_t-int /* default */} ${macro_prefix}wchar_t;
+ typedef ${int32_t-int /* default */} ${macro_prefix}int32_t;
+ typedef ${uint32_t-unsigned int /* default */} ${macro_prefix}uint32_t;
++#ifdef __cplusplus
++typedef __wchar_t wchar_t;
++#endif
+ !EOF!
+ 
+ 
 diff --git a/libio/libio.h b/libio/libio.h
-index f108151..5206eba 100644
+index fbb4d7e..869c121 100644
 --- a/libio/libio.h
 +++ b/libio/libio.h
-@@ -30,8 +30,9 @@ the executable file might be covered by the GNU General Public License. */
+@@ -33,8 +33,9 @@ the executable file might be covered by the GNU General Public License. */
  
  #if 1
  #include <_G_config.h>
@@ -336,32 +324,3 @@ index f108151..5206eba 100644
  #define _IO_size_t _G_size_t
  #define _IO_ssize_t _G_ssize_t
  #define _IO_off_t _G_off_t
-diff --git a/libstdc++/Makefile.in b/libstdc++/Makefile.in
-index be45aa7..258a9fe 100644
---- a/libstdc++/Makefile.in
-+++ b/libstdc++/Makefile.in
-@@ -128,17 +128,17 @@ INCLUDES = $(HEADERS) *.h *I
- install:
- 	cd $(srcdir); \
- 	for FILE in $(INCLUDES) ; do \
--		rm -f $(gxx_includedir)/$$FILE ; \
--		$(INSTALL_DATA) $$FILE $(gxx_includedir)/$$FILE ; \
--		chmod a-x $(gxx_includedir)/$$FILE ; \
-+		rm -f $(DESTDIR)$(gxx_includedir)/$$FILE ; \
-+		$(INSTALL_DATA) $$FILE $(DESTDIR)$(gxx_includedir)/$$FILE ; \
-+		chmod a-x $(DESTDIR)$(gxx_includedir)/$$FILE ; \
- 	done
- 	for FILE in $(LIBS) ; do \
--		rm -f $(INSTALLDIR)/$$FILE ; \
--		$(INSTALL_DATA) $$FILE $(INSTALLDIR)/$$FILE ; \
-+		rm -f $(DESTDIR)$(INSTALLDIR)/$$FILE ; \
-+		$(INSTALL_DATA) $$FILE $(DESTDIR)$(INSTALLDIR)/$$FILE ; \
- 		if [ $$FILE = $(ARLIB) ] ; then \
--			$(RANLIB) $(INSTALLDIR)/$$FILE ; \
-+			$(RANLIB) $(DESTDIR)$(INSTALLDIR)/$$FILE ; \
- 		fi ; \
--		chmod a-x $(INSTALLDIR)/$$FILE ; \
-+		chmod a-x $(DESTDIR)$(INSTALLDIR)/$$FILE ; \
- 	done
- 
- .PHONY: force

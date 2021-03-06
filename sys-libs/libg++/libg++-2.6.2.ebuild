@@ -33,7 +33,7 @@ BDEPEND=""
 CHOST="${TOOL_SLOT}-linux-gnu"
 
 CC="gcc-2.6.3"
-CXX="g++-2.6.3"
+CXX="gcc-2.6.3"
 
 src_prepare() {
 	default
@@ -46,6 +46,7 @@ src_configure() {
 	local econfargs=(
 		--build=${CHOST}
 		--host=${CHOST}
+		--target=${CHOST}
 		--prefix=/usr
 	)
 
@@ -70,7 +71,7 @@ src_install() {
 	emake -j1 DESTDIR="${ED}" install || die "failed to run make"
 	mkdir -p "${ED}"/usr/lib/gcc-lib/${CHOST}/2.6.3/include || die
 	mv -v "${ED}"/usr/lib/g++-include "${ED}"/usr/lib/gcc-lib/${CHOST}/2.6.3/include/g++ || die
-	mv -v "${ED}"/usr/lib/libstdc++.a "${ED}"/usr/lib/libg++.a "${ED}"/usr/lib/libiostream.a "${ED}"/usr/lib/gcc-lib/${CHOST}/2.6.3/ || die
-	rm -rfv "${ED}"/usr/lib/libiberty.a "${ED}"/usr/bin "${ED}"/usr/man "${ED}"/usr/${CHOST}
+	mv -v "${ED}"/usr/lib/libstdc++.a "${ED}"/usr/lib/libg++.a "${ED}"/usr/lib/gcc-lib/${CHOST}/2.6.3/ || die
+	rm -rfv "${ED}"/usr/lib/lib* "${ED}"/usr/bin "${ED}"/usr/man "${ED}"/usr/${CHOST}
 	popd > /dev/null
 }

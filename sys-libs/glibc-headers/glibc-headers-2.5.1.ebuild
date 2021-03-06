@@ -55,6 +55,7 @@ src_configure() {
 	local econfargs=(
 		--build=${CHOST}
 		--host=${CHOST}
+		--target=${CHOST}
 		--enable-kernel=2.6.0
 		--with-headers=/usr/${CHOST}/include
 		--prefix=${ED}/usr/${CHOST}
