@@ -143,13 +143,15 @@ glibc-headers版本2.5.1，应用RHEL5的兼容性补丁并删除所有不兼容
 
 2.0-2.6.3：
 * 因不支持linux + ELF + libc6，新增支持代码
-* 使用2.7.2.3的stdarg.h和stddef.h，避免和宿主编译器的冲突
 
 2.0-2.5.8
 * 使用标准C的可变参数支持，替代gcc自带的非标准C版本，避免和宿主编译器的冲突
 
 2.0-2.3.3
 * 因gcc driver不支持系统路径之外引用headers和cpp cc1，引入支持，用于使用独立的i686-legacy-linux-gnu工具链
+
+2.0-2.2.2
+* fix stdarg.h以适配glibc
 
 2.0-2.1
 * 修复过时的头文件引用，修复造成coredump的gcc自身bug
