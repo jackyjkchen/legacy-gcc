@@ -1,5 +1,5 @@
 diff --git a/Makefile.in b/Makefile.in
-index 41fdbf3..ecc30c7 100644
+index 41fdbf3..d6d1534 100644
 --- a/Makefile.in
 +++ b/Makefile.in
 @@ -56,7 +56,7 @@ INSTALL_DOSREL = install-dosrel-fake
@@ -11,7 +11,7 @@ index 41fdbf3..ecc30c7 100644
  
  # Special variables passed down in EXTRA_GCC_FLAGS.  They are defined
  # here so that they can be overridden by Makefile fragments.
-@@ -73,7 +73,7 @@ LIBCFLAGS_FOR_TARGET = $(CFLAGS_FOR_TARGET)
+@@ -73,10 +73,10 @@ LIBCFLAGS_FOR_TARGET = $(CFLAGS_FOR_TARGET)
  PICFLAG = 
  PICFLAG_FOR_TARGET = 
  
@@ -19,7 +19,11 @@ index 41fdbf3..ecc30c7 100644
 +CXX = @CXX@
  
  # Use -O2 to stress test the compiler.
- CXXFLAGS = -g -O2
+-CXXFLAGS = -g -O2
++CXXFLAGS = -g -O2 -fvtable-thunks
+ LIBCXXFLAGS = $(CXXFLAGS) -fno-implicit-templates
+ CXXFLAGS_FOR_TARGET = $(CXXFLAGS)
+ LIBCXXFLAGS_FOR_TARGET = $(CXXFLAGS_FOR_TARGET) -fno-implicit-templates
 @@ -271,6 +271,7 @@ BASE_FLAGS_TO_PASS = \
  	"CC_FOR_TARGET=$(CC_FOR_TARGET)" \
  	"CFLAGS=$(CFLAGS)" \
@@ -66,7 +70,7 @@ index 699ada6..67a5acc 100644
  
  dvi: $(DVIFILES)
 diff --git a/libg++/Makefile.in b/libg++/Makefile.in
-index 4f6d7e0..deb7a54 100644
+index 4f6d7e0..054730a 100644
 --- a/libg++/Makefile.in
 +++ b/libg++/Makefile.in
 @@ -181,8 +181,8 @@ installcheck: check
@@ -200,9 +204,18 @@ index 1594fae..7a43d4c 100644
  
  # The default configuration adds to libiberty all those functions that are
 diff --git a/libio/Makefile.in b/libio/Makefile.in
-index c78639a..0634842 100644
+index c78639a..9b11abf 100644
 --- a/libio/Makefile.in
 +++ b/libio/Makefile.in
+@@ -52,7 +52,7 @@ IOSTREAM_OBJECTS = builtinbuf.o filebuf.o fstream.o \
+ # These files define _IO_read etc, which are just wrappers for read(2) etc.
+ # They need to be changed to use name-space-clean (e.g. __read) versions
+ # for each specific libc.
+-OSPRIM_OBJECTS = ioprims.o iostrerror.o cleanup.o
++OSPRIM_OBJECTS = ioprims.o iostrerror.o
+ 
+ LIBIOSTREAM_OBJECTS = $(IO_OBJECTS) $(IOSTREAM_OBJECTS) $(OSPRIM_OBJECTS)
+ LIBIO_OBJECTS = $(IO_OBJECTS) $(STDIO_WRAP_OBJECTS) $(OSPRIM_OBJECTS) stdfiles.o
 @@ -104,15 +104,15 @@ install:
  	rootme=`pwd`/ ; export rootme ; \
  	if [ -z "$(MULTISUBDIR)" ]; then \
@@ -224,6 +237,51 @@ index c78639a..0634842 100644
  	  done ; \
  	else true; \
  	fi
+diff --git a/libio/config/linux.mt b/libio/config/linux.mt
+index 25d29c5..a3bcd5b 100644
+--- a/libio/config/linux.mt
++++ b/libio/config/linux.mt
+@@ -6,9 +6,9 @@
+ # things just won't build with the bottom section uncommented.
+ 
+ # Comment this out to avoid including the stdio functions in libiostream.a:
+-LIBIOSTREAM_OBJECTS = $(IO_OBJECTS) $(IOSTREAM_OBJECTS) $(STDIO_WRAP_OBJECTS) $(OSPRIM_OBJECTS)
+-LIBIOSTREAM_DEP = $(LIBIOSTREAM_OBJECTS) stdio.list
+-LIBIOSTREAM_USE = $(LIBIOSTREAM_OBJECTS) `cat stdio.list`
++# LIBIOSTREAM_OBJECTS = $(IO_OBJECTS) $(IOSTREAM_OBJECTS) $(STDIO_WRAP_OBJECTS) $(OSPRIM_OBJECTS)
++# LIBIOSTREAM_DEP = $(LIBIOSTREAM_OBJECTS) stdio.list
++# LIBIOSTREAM_USE = $(LIBIOSTREAM_OBJECTS) `cat stdio.list`
+ 
+ # Comment the above and uncomment the below to use the code in the Linux libc:
+ # We have _G_config.h in /usr/include.
+@@ -16,7 +16,7 @@ LIBIOSTREAM_USE = $(LIBIOSTREAM_OBJECTS) `cat stdio.list`
+ 
+ # We have those in libc.a.
+ # IO_OBJECTS=
+-# STDIO_WRAP_OBJECTS=
++STDIO_WRAP_OBJECTS=
+ # OSPRIM_OBJECTS=
+ 
+ # We have the rest in /usr/include.
+diff --git a/libio/filedoalloc.c b/libio/filedoalloc.c
+index f838bb3..b5672b8 100644
+--- a/libio/filedoalloc.c
++++ b/libio/filedoalloc.c
+@@ -67,12 +67,14 @@ DEFUN(_IO_file_doallocate, (fp),
+   register char *p;
+   struct stat st;
+ 
++#if !defined(_LIBC) && !defined(__linux__)
+   /* If _IO_cleanup_registration_needed is non-zero, we should call the
+      function it points to.  This is to make sure _IO_cleanup gets called
+      on exit.  We call it from _IO_file_doallocate, since that is likely
+      to get called by any program that does buffered I/O. */
+   if (_IO_cleanup_registration_needed)
+     (*_IO_cleanup_registration_needed)();
++#endif
+   
+   if (fp->_fileno < 0 || _IO_SYSSTAT (fp, &st) < 0)
+     {
 diff --git a/libio/gen-params b/libio/gen-params
 index b6e51b0..35b0f13 100755
 --- a/libio/gen-params
