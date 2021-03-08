@@ -61,7 +61,7 @@ USE参数可使用equery u sys-devel/gcc:${slot}查询
 
 在非x86系统上，本overlay repo仍然可以使用，但支持的gcc版本不会像x86那么老，已测试平台支持的最低gcc按本如下：
 
-* alpha：gcc-3.4.6及以上（gcc-4.7.4有bug，bootstrap失败）
+* alpha：gcc-3.4.6及以上
 * arm64：gcc-4.8.5及以上
 * armel：gcc-4.1.2及以上
 * armhf：gcc-4.7.4及以上

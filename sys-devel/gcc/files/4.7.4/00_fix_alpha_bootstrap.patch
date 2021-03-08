@@ -1,0 +1,55 @@
+diff --git a/gcc/config/alpha/alpha.c b/gcc/config/alpha/alpha.c
+index 56517f372..22ec04266 100644
+--- a/gcc/config/alpha/alpha.c
++++ b/gcc/config/alpha/alpha.c
+@@ -246,6 +246,10 @@ alpha_option_override (void)
+   int const ct_size = ARRAY_SIZE (cpu_table);
+   int i;
+ 
++  /* If not -ffinite-math-only, enable -mieee*/
++  if (!flag_finite_math_only)
++    target_flags |= MASK_IEEE|MASK_IEEE_CONFORMANT;
++
+ #ifdef SUBTARGET_OVERRIDE_OPTIONS
+   SUBTARGET_OVERRIDE_OPTIONS;
+ #endif
+@@ -9442,7 +9446,7 @@ alpha_file_start (void)
+     fputs ("\t.set nomacro\n", asm_out_file);
+   if (TARGET_SUPPORT_ARCH | TARGET_BWX | TARGET_MAX | TARGET_FIX | TARGET_CIX)
+     {
+-      const char *arch;
++      const char *arch = NULL;
+ 
+       if (alpha_cpu == PROCESSOR_EV6 || TARGET_FIX || TARGET_CIX)
+ 	arch = "ev6";
+@@ -9452,10 +9456,9 @@ alpha_file_start (void)
+ 	arch = "ev56";
+       else if (alpha_cpu == PROCESSOR_EV5)
+ 	arch = "ev5";
+-      else
+-	arch = "ev4";
+ 
+-      fprintf (asm_out_file, "\t.arch %s\n", arch);
++      if (arch)
++        fprintf (asm_out_file, "\t.arch %s\n", arch);
+     }
+ }
+ 
+diff --git a/gcc/doc/invoke.texi b/gcc/doc/invoke.texi
+index bb5c2d0c4..fe57bd068 100644
+--- a/gcc/doc/invoke.texi
++++ b/gcc/doc/invoke.texi
+@@ -12263,6 +12263,13 @@ able to correctly support denormalized numbers and exceptional IEEE
+ values such as not-a-number and plus/minus infinity.  Other Alpha
+ compilers call this option @option{-ieee_with_no_inexact}.
+ 
++DEBIAN SPECIFIC: This option is on by default for alpha-linux-gnu, unless
++@option{-ffinite-math-only} (which is part of the @option{-ffast-math}
++set) is specified, because the software functions in the GNU libc math
++libraries generate denormalized numbers, NaNs, and infs (all of which
++will cause a programs to SIGFPE when it attempts to use the results without
++@option{-mieee}).
++
+ @item -mieee-with-inexact
+ @opindex mieee-with-inexact
+ This is like @option{-mieee} except the generated code also maintains

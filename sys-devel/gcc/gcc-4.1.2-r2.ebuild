@@ -30,5 +30,5 @@ src_prepare() {
 
 	epatch "${FILESDIR}"/4.1.2/gcc-4.1.0-fast-math-i386-Os-workaround.patch
 
-	eapply "${FILESDIR}"/4.1.2/9999_compat_new_mpfr.patch
+	eapply "${FILESDIR}"/4.1.2/00_compat_new_mpfr.patch
 }

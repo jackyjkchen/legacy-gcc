@@ -46,5 +46,7 @@ src_prepare() {
 
 	use vanilla && return 0
 
+	eapply "${FILESDIR}"/4.7.4/00_fix_alpha_bootstrap.patch
+
 	[[ ${CHOST} == ${CTARGET} ]] && epatch "${FILESDIR}"/gcc-spec-env.patch
 }
