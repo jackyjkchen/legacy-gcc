@@ -23,8 +23,8 @@ SLOT="${TOOL_SLOT}"
 
 DEPEND="
 	sys-devel/gcc:3.4.6
-	sys-kernel/linux-headers:${TOOL_SLOT}
-	sys-devel/binutils-wrapper:${TOOL_SLOT}"
+	legacy-gcc/linux-headers:${TOOL_SLOT}
+	legacy-gcc/binutils-wrapper:${TOOL_SLOT}"
 RDEPEND="${DEPEND}"
 BDEPEND=""
 
