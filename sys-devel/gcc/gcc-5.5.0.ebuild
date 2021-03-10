@@ -41,4 +41,6 @@ src_prepare() {
 	is_crosscompile && EPATCH_EXCLUDE+=" 05_all_gcc-spec-env.patch"
 
 	toolchain_src_prepare
+
+	eapply "${FILESDIR}"/4.7.4/00_fix-building-on-ppc64.patch
 }
