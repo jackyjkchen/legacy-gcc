@@ -32,9 +32,9 @@ KEYWORDS="amd64 x86"
 RDEPEND=""
 DEPEND="${RDEPEND}
 	sys-devel/gcc:3.4.6
-	sys-kernel/linux-headers:${TOOL_SLOT}
-	sys-libs/glibc-headers:${TOOL_SLOT}
-	sys-devel/binutils-wrapper:${TOOL_SLOT}"
+	legacy-gcc/linux-headers:${TOOL_SLOT}
+	legacy-gcc/glibc-headers:${TOOL_SLOT}
+	legacy-gcc/binutils-wrapper:${TOOL_SLOT}"
 
 src_prepare() {
 	toolchain_src_prepare

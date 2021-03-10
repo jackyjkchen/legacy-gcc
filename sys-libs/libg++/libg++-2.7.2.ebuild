@@ -24,9 +24,9 @@ esac
 
 DEPEND="
 	=sys-devel/gcc-2.7.2.3
-	sys-kernel/linux-headers:${TOOL_SLOT}
-	sys-libs/glibc-headers:${TOOL_SLOT}
-	sys-devel/binutils-wrapper:${TOOL_SLOT}"
+	legacy-gcc/linux-headers:${TOOL_SLOT}
+	legacy-gcc/glibc-headers:${TOOL_SLOT}
+	legacy-gcc/binutils-wrapper:${TOOL_SLOT}"
 RDEPEND="${DEPEND}"
 BDEPEND=""
 
