@@ -138,7 +138,7 @@ glibc-headers版本2.5.1，应用RHEL5的兼容性补丁并删除所有不兼容
 * 该版本以及更低版本，g++不能完整支持C++98标准，gcc不能完整支持C99标准
 
 2.0-2.8.1：
-* 将编译器内exit调用换成自定义版本，因为gcc 2.0-2.8.1的堆栈使用方式，在新版本glibc使用特定优化选项时使用glibc的exit()直接退出程序可能会coredump。
+* 由于gcc 2.0-2.8.1的堆栈对齐是32bit，在新版本glibc使用特定优化选项时使用glibc的exit()、mktemp()等函数会coredump，因此调整为128bit。
 
 2.0-2.7.2.3：
 * glibc已使用strerror替代sys_nerr/sys_errlist，适配gcc内相应代码
