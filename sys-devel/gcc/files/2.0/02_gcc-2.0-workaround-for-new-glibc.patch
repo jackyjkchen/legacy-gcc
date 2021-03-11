@@ -1,3 +1,254 @@
+diff --git a/calls.c b/calls.c
+index a43198c..48ff9c5 100644
+--- a/calls.c
++++ b/calls.c
+@@ -24,6 +24,10 @@ the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.  */
+ #include "expr.h"
+ #include "insn-flags.h"
+ 
++#if !defined PREFERRED_STACK_BOUNDARY && defined STACK_BOUNDARY
++#define PREFERRED_STACK_BOUNDARY STACK_BOUNDARY
++#endif
++
+ /* Decide whether a function's arguments should be processed
+    from first to last or from last to first.  */
+ 
+@@ -33,8 +37,8 @@ the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.  */
+ #endif
+ #endif
+ 
+-/* Like STACK_BOUNDARY but in units of bytes, not bits.  */
+-#define STACK_BYTES (STACK_BOUNDARY / BITS_PER_UNIT)
++/* Like PREFERRED_STACK_BOUNDARY but in units of bytes, not bits.  */
++#define STACK_BYTES (PREFERRED_STACK_BOUNDARY / BITS_PER_UNIT)
+ 
+ /* Data structure and subroutines used within expand_call.  */
+ 
+@@ -214,7 +218,7 @@ prepare_call_address (funexp, fndecl, use_insns)
+    macro RETURN_POPS_ARGS to determine whether this function pops its own args.
+ 
+    STACK_SIZE is the number of bytes of arguments on the stack,
+-   rounded up to STACK_BOUNDARY; zero if the size is variable.
++   rounded up to PREFERRED_STACK_BOUNDARY; zero if the size is variable.
+    This is both to put into the call insn and
+    to generate explicit popping code if necessary.
+ 
+@@ -921,8 +925,8 @@ expand_call (exp, target, ignore, modifier)
+       args_size.var = ARGS_SIZE_TREE (args_size);
+       args_size.constant = 0;
+ 
+-#ifdef STACK_BOUNDARY
+-      if (STACK_BOUNDARY != BITS_PER_UNIT)
++#ifdef PREFERRED_STACK_BOUNDARY 
++      if (PREFERRED_STACK_BOUNDARY != BITS_PER_UNIT)
+ 	args_size.var = round_up (args_size.var, STACK_BYTES);
+ #endif
+ 
+@@ -945,7 +949,7 @@ expand_call (exp, target, ignore, modifier)
+     }
+   else
+     {
+-#ifdef STACK_BOUNDARY
++#ifdef PREFERRED_STACK_BOUNDARY
+       args_size.constant = (((args_size.constant + (STACK_BYTES - 1))
+ 			     / STACK_BYTES) * STACK_BYTES);
+ #endif
+@@ -1187,7 +1191,7 @@ expand_call (exp, target, ignore, modifier)
+     }
+ 					       
+ #ifdef PUSH_ARGS_REVERSED
+-#ifdef STACK_BOUNDARY
++#ifdef PREFERRED_STACK_BOUNDARY
+   /* If we push args individually in reverse order, perform stack alignment
+      before the first push (the last arg).  */
+   if (argblock == 0)
+@@ -1317,7 +1321,7 @@ expand_call (exp, target, ignore, modifier)
+ 		       args_size.var != 0, fndecl);
+ 
+ #ifndef PUSH_ARGS_REVERSED
+-#ifdef STACK_BOUNDARY
++#ifdef PREFERRED_STACK_BOUNDARY
+   /* If we pushed args in forward order, perform stack alignment
+      after pushing the last arg.  */
+   if (argblock == 0)
+diff --git a/config/i386.c b/config/i386.c
+index cd81f69..2784508 100644
+--- a/config/i386.c
++++ b/config/i386.c
+@@ -589,6 +589,69 @@ emit_pic_move (operands, mode)
+   else
+     operands[1] = legitimize_pic_address (operands[1], temp);
+ }
++
++
++/* Print an integer constant expression in assembler syntax.  Addition
++   and subtraction are the only arithmetic that may appear in these
++   expressions.  FILE is the stdio stream to write to, X is the rtx, and
++   CODE is the operand print code from the output string.  */
++
++/* Compute the size of local storage taking into consideration the
++   desired stack alignment which is to be maintained.  Also determine
++   the number of registers saved below the local storage.  */
++
++HOST_WIDE_INT
++ix86_compute_frame_size (size, nregs_on_stack)
++     HOST_WIDE_INT size;
++     int *nregs_on_stack;
++{
++  int limit;
++  int nregs;
++  int regno;
++  int padding;
++  int pic_reg_used = flag_pic && (current_function_uses_pic_offset_table
++				  || current_function_uses_const_pool);
++  HOST_WIDE_INT total_size;
++
++  limit = frame_pointer_needed
++	  ? FRAME_POINTER_REGNUM : STACK_POINTER_REGNUM;
++
++  nregs = 0;
++
++  for (regno = limit - 1; regno >= 0; regno--)
++    if ((regs_ever_live[regno] && ! call_used_regs[regno])
++	|| (regno == PIC_OFFSET_TABLE_REGNUM && pic_reg_used))
++      nregs++;
++
++  padding = 0;
++  total_size = size + (nregs * UNITS_PER_WORD);
++
++#ifdef PREFERRED_STACK_BOUNDARY
++  {
++    int offset;
++    int preferred_alignment = PREFERRED_STACK_BOUNDARY / BITS_PER_UNIT;
++
++    offset = 4;
++    if (frame_pointer_needed)
++      offset += UNITS_PER_WORD;
++
++    total_size += offset;
++
++    padding = ((total_size + preferred_alignment - 1)
++	       & -preferred_alignment) - total_size;
++
++    if (padding < (((offset + preferred_alignment - 1)
++		    & -preferred_alignment) - offset))
++      padding += preferred_alignment;
++  }
++#endif
++
++  if (nregs_on_stack)
++    *nregs_on_stack = nregs;
++
++  return size + padding;
++}
++
+ 
+ /* This function generates the assembly code for function entry.
+    FILE is an stdio stream to output the code to.
+@@ -603,16 +666,18 @@ function_prologue (file, size)
+   int limit;
+   rtx xops[4];
+ 
++  HOST_WIDE_INT tsize = ix86_compute_frame_size (size, (int *)0);
++
+   xops[0] = stack_pointer_rtx;
+   xops[1] = frame_pointer_rtx;
+-  xops[2] = gen_rtx (CONST_INT, VOIDmode, size);
++  xops[2] = gen_rtx (CONST_INT, VOIDmode, tsize);
+   if (frame_pointer_needed)
+     {
+       output_asm_insn ("push%L1 %1", xops);
+       output_asm_insn (AS2 (mov%L0,%0,%1), xops);
+     }
+ 
+-  if (size)
++  if (tsize)
+     output_asm_insn (AS2 (sub%L0,%2,%0), xops);
+ 
+   /* Note If use enter it is NOT reversed args.
+@@ -695,6 +760,8 @@ function_epilogue (file, size)
+   int offset;
+   rtx xops[3];
+ 
++  HOST_WIDE_INT tsize = ix86_compute_frame_size (size, &nregs);
++
+   /* Compute the number of registers to pop */
+ 
+   limit = (frame_pointer_needed
+@@ -718,7 +785,7 @@ function_epilogue (file, size)
+      leal, this is faster.  For now restore multiple registers the old
+      way. */
+ 
+-  offset = -size - (nregs * UNITS_PER_WORD);
++  offset = -tsize - (nregs * UNITS_PER_WORD);
+ 
+   xops[2] = stack_pointer_rtx;
+ 
+@@ -764,11 +831,11 @@ function_epilogue (file, size)
+       else
+ 	output_asm_insn ("leave", xops);
+     }
+-  else if (size)
++  else if (tsize)
+     {
+       /* If there is no frame pointer, we must still release the frame. */
+ 
+-      xops[0] = gen_rtx (CONST_INT, VOIDmode, size);
++      xops[0] = gen_rtx (CONST_INT, VOIDmode, tsize);
+       output_asm_insn (AS2 (add%L2,%0,%2), xops);
+     }
+ 
+diff --git a/config/i386.h b/config/i386.h
+index 474061c..8a13928 100644
+--- a/config/i386.h
++++ b/config/i386.h
+@@ -123,6 +123,11 @@ extern int target_flags;
+ /* Boundary (in *bits*) on which stack pointer should be aligned.  */
+ #define STACK_BOUNDARY 32
+ 
++/* We want to keep the stack aligned to 128 bits when possible, for the
++   benefit of doubles and SSE __m128.  But the compiler can not rely on
++   the stack having this alignment.*/
++#define PREFERRED_STACK_BOUNDARY 128
++
+ /* Allocation boundary (in *bits*) for the code of a function.
+    For i486, we get better performance by aligning to a cache
+    line (i.e. 16 byte) boundary.  */
+diff --git a/explow.c b/explow.c
+index 03a46b4..5fe2c33 100644
+--- a/explow.c
++++ b/explow.c
+@@ -29,6 +29,10 @@ the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.  */
+ #include "insn-flags.h"
+ #include "insn-codes.h"
+ 
++#if !defined PREFERRED_STACK_BOUNDARY && defined STACK_BOUNDARY
++#define PREFERRED_STACK_BOUNDARY STACK_BOUNDARY
++#endif
++
+ /* Return an rtx for the sum of X and the integer C.  */
+ 
+ rtx
+@@ -662,8 +666,8 @@ rtx
+ round_push (size)
+      rtx size;
+ {
+-#ifdef STACK_BOUNDARY
+-  int align = STACK_BOUNDARY / BITS_PER_UNIT;
++#ifdef PREFERRED_STACK_BOUNDARY
++  int align = PREFERRED_STACK_BOUNDARY / BITS_PER_UNIT;
+   if (align == 1)
+     return size;
+   if (GET_CODE (size) == CONST_INT)
+@@ -681,7 +685,7 @@ round_push (size)
+ 			  gen_rtx (CONST_INT, VOIDmode, align),
+ 			  0, 1);
+     }
+-#endif /* STACK_BOUNDARY */
++#endif /* PREFERRED_STACK_BOUNDARY */
+   return size;
+ }
+ 
 diff --git a/gbl-ctors.h b/gbl-ctors.h
 index 2a9ea1f..7e585f9 100644
 --- a/gbl-ctors.h
@@ -16,64 +267,42 @@ index 2a9ea1f..7e585f9 100644
  #define ON_EXIT(FUNC,ARG) atexit ((FUNC))
  #endif
  #endif
-diff --git a/libgcc2.c b/libgcc2.c
-index ce693ed..ab9da01 100644
---- a/libgcc2.c
-+++ b/libgcc2.c
-@@ -1335,6 +1335,56 @@ exit (status)
+diff --git a/machmode.h b/machmode.h
+index 67bcb35..3dee214 100644
+--- a/machmode.h
++++ b/machmode.h
+@@ -33,6 +33,20 @@ the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.  */
+ #define MIN(X,Y) ((X) < (Y) ? (X) : (Y))
+ #define MAX(X,Y) ((X) > (Y) ? (X) : (Y))
  
- #else
- int _exit_dummy_decl = 0;	/* prevent compiler & linker warnings */
++/* Find the largest host integer type and set its size and type.  */
 +
-+/* workaround for gentoo new glibc*/
-+#include <stdio.h>
-+#include <errno.h>
++#ifndef HOST_BITS_PER_WIDE_INT
 +
-+static func_ptr *atexit_chain = 0;
-+static long atexit_chain_length = 0;
-+static volatile long last_atexit_chain_slot = -1;
++#if HOST_BITS_PER_LONG > HOST_BITS_PER_INT
++#define HOST_BITS_PER_WIDE_INT HOST_BITS_PER_LONG
++#define HOST_WIDE_INT long
++#else
++#define HOST_BITS_PER_WIDE_INT HOST_BITS_PER_INT
++#define HOST_WIDE_INT int
++#endif
 +
-+int atexit (func_ptr func)
-+{
-+  if (++last_atexit_chain_slot == atexit_chain_length)
-+    {
-+      atexit_chain_length += 32;
-+      if (atexit_chain)
-+	atexit_chain = (func_ptr *) realloc (atexit_chain, atexit_chain_length
-+					     * sizeof (func_ptr));
-+      else
-+	atexit_chain = (func_ptr *) malloc (atexit_chain_length
-+					    * sizeof (func_ptr));
-+      if (! atexit_chain)
-+	{
-+	  atexit_chain_length = 0;
-+	  last_atexit_chain_slot = -1;
-+	  errno = ENOMEM;
-+	  return (-1);
-+	}
-+    }
-+  atexit_chain[last_atexit_chain_slot] = func;
-+  return (0);
-+}
-+void
-+exit (int status)
-+{
-+  if (atexit_chain)
-+    {
-+      for ( ; last_atexit_chain_slot-- >= 0; )
-+	{
-+	  (*atexit_chain[last_atexit_chain_slot + 1]) ();
-+	  atexit_chain[last_atexit_chain_slot + 1] = 0;
-+	}
-+      free (atexit_chain);
-+      atexit_chain = 0;
-+    }
-+  fflush(stdout);
-+  fflush(stderr);
-+  _exit(status);
-+}
-+/* end workaround for gentoo new glibc*/
++#endif
 +
- #endif
+ /* Make an enum class that gives all the machine modes.  */
  
- #endif /* L_exit */
+ #define DEF_MACHMODE(SYM, NAME, TYPE, SIZE, UNIT, WIDER)  SYM,
+diff --git a/output.h b/output.h
+index 660ab01..eee1163 100644
+--- a/output.h
++++ b/output.h
+@@ -158,6 +158,9 @@ extern int flag_pic;
+ /* This is nonzero if the current function uses pic_offset_table_rtx.  */
+ extern int current_function_uses_pic_offset_table;
+ 
++/* This is nonzero if the current function uses the constant pool.  */
++extern int current_function_uses_const_pool;
++
+ /* The line number of the beginning of the current function.
+    sdbout.c needs this so that it can output relative linenumbers.  */
+ 

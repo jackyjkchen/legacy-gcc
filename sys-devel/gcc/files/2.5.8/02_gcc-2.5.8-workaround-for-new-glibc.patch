@@ -126,104 +126,13 @@ index f8566cd..a42e6d4 100644
       after pushing the last arg.  */
    if (argblock == 0)
 diff --git a/config/i386/i386.c b/config/i386/i386.c
-index 384cfb0..44dd26d 100644
+index 384cfb0..0554bfc 100644
 --- a/config/i386/i386.c
 +++ b/config/i386/i386.c
-@@ -42,11 +42,18 @@ the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.  */
-    even if the conditional was untrue.  */
- #endif
- 
-+#ifndef CHECK_STACK_LIMIT
-+#define CHECK_STACK_LIMIT -1
-+#endif
-+
- #define AT_BP(mode) (gen_rtx (MEM, (mode), frame_pointer_rtx))
- 
- extern FILE *asm_out_file;
- extern char *strcat ();
- 
-+static void ix86_epilogue PROTO((int));
-+static void ix86_prologue PROTO((int));
-+
- char *singlemove_string ();
- char *output_move_const_single ();
- char *output_fp_cc0_set ();
-@@ -845,7 +852,11 @@ emit_pic_move (operands, mode)
+@@ -845,6 +845,62 @@ emit_pic_move (operands, mode)
    else
      operands[1] = legitimize_pic_address (operands[1], temp);
  }
--
-+
-+static rtx pic_label_rtx;
-+static char pic_label_name [256];
-+static int pic_label_no = 0;
-+
- /* This function generates the assembly code for function entry.
-    FILE is an stdio stream to output the code to.
-    SIZE is an int: how many units of temporary storage to allocate. */
-@@ -854,24 +865,223 @@ void
- function_prologue (file, size)
-      FILE *file;
-      int size;
-+{
-+  if (TARGET_SCHEDULE_PROLOGUE)
-+    {
-+      pic_label_rtx = 0;
-+      return;
-+    }
-+  
-+  ix86_prologue (0);
-+}
-+
-+/* Expand the prologue into a bunch of separate insns. */
-+
-+void
-+ix86_expand_prologue ()
-+{
-+  if (! TARGET_SCHEDULE_PROLOGUE)
-+      return;
-+ 
-+  ix86_prologue (1);
-+}
-+
-+void
-+load_pic_register (do_rtl)
-+     int do_rtl;
-+{
-+  rtx xops[4];
-+
-+  xops[0] = pic_offset_table_rtx;
-+  xops[1] = gen_label_rtx ();
-+ 
-+  if (do_rtl)
-+  {
-+    /* We can't put a raw CODE_LABEL into the RTL, and we can't emit
-+     a new CODE_LABEL after reload, so we need a single pattern to
-+     emit the 3 necessary instructions.  */
-+    emit_insn (gen_prologue_get_pc_and_set_got (xops[0]));
-+  }
-+  else
-+  {
-+    output_asm_insn (AS1 (call,%P1), xops);
-+    ASM_OUTPUT_INTERNAL_LABEL (asm_out_file, "L", 
-+      CODE_LABEL_NUMBER (xops[1]));
-+    output_asm_insn (AS1 (pop%L0,%0), xops);
-+    output_asm_insn ("addl $_GLOBAL_OFFSET_TABLE_+[.-%P1],%0", xops);
-+  }
-+
-+  /* When -fpic, we must emit a scheduling barrier, so that the instruction
-+     that restores %ebx (which is PIC_OFFSET_TABLE_REGNUM), does not get
-+     moved before any instruction which implicitly uses the got.   */
-+
-+  if (do_rtl)
-+    emit_insn (gen_blockage ());
-+}
-+
-+
-+/* Print an integer constant expression in assembler syntax.  Addition
-+   and subtraction are the only arithmetic that may appear in these
-+   expressions.  FILE is the stdio stream to write to, X is the rtx, and
-+   CODE is the operand print code from the output string.  */
 +
 +/* Compute the size of local storage taking into consideration the
 +   desired stack alignment which is to be maintained.  Also determine
@@ -265,460 +174,90 @@ index 384cfb0..44dd26d 100644
 +      offset += UNITS_PER_WORD;
 +
 +    total_size += offset;
-+    
++
 +    padding = ((total_size + preferred_alignment - 1)
 +	       & -preferred_alignment) - total_size;
 +
 +    if (padding < (((offset + preferred_alignment - 1)
 +		    & -preferred_alignment) - offset))
 +      padding += preferred_alignment;
-+
-+    /* Don't bother aligning the stack of a leaf function
-+       which doesn't allocate any stack slots.  */
-+    if (size == 0 && current_function_is_leaf)
-+      padding = 0;
 +  }
 +#endif
-+
 +  if (nregs_on_stack)
 +    *nregs_on_stack = nregs;
 +
 +  return size + padding;
 +}
 +
-+static void
-+ix86_prologue (do_rtl)
-+     int do_rtl;
- {
-   register int regno;
-   int limit;
-   rtx xops[4];
+ 
+ /* This function generates the assembly code for function entry.
+    FILE is an stdio stream to output the code to.
+@@ -861,16 +917,18 @@ function_prologue (file, size)
    int pic_reg_used = flag_pic && (current_function_uses_pic_offset_table
  				  || current_function_uses_const_pool);
--
-+  HOST_WIDE_INT tsize = ix86_compute_frame_size (get_frame_size (), (int *)0);
-+  rtx insn;
-+  int cfa_offset = INCOMING_FRAME_SP_OFFSET, cfa_store_offset = cfa_offset;
-+  
+ 
++  HOST_WIDE_INT tsize = ix86_compute_frame_size (size, (int *)0);
++
    xops[0] = stack_pointer_rtx;
    xops[1] = frame_pointer_rtx;
 -  xops[2] = GEN_INT (size);
 +  xops[2] = GEN_INT (tsize);
-+
    if (frame_pointer_needed)
      {
--      output_asm_insn ("push%L1 %1", xops);
--      output_asm_insn (AS2 (mov%L0,%0,%1), xops);
-+      if (do_rtl)
-+	{
-+	  insn = emit_insn (gen_rtx (SET, VOIDmode,
-+				     gen_rtx (MEM, SImode,
-+					      gen_rtx (PRE_DEC, SImode,
-+						       stack_pointer_rtx)),
-+				     frame_pointer_rtx));
-+
-+	  RTX_FRAME_RELATED_P (insn) = 1;
-+	  insn = emit_move_insn (xops[1], xops[0]);
-+	  RTX_FRAME_RELATED_P (insn) = 1;
-+	}
-+
-+      else
-+	{
-+	  output_asm_insn ("push%L1 %1", xops); 
-+#ifdef INCOMING_RETURN_ADDR_RTX
-+ 	  if (dwarf2out_do_frame ())
-+ 	    {
-+ 	      char *l = dwarf2out_cfi_label ();
-+
-+ 	      cfa_store_offset += 4;
-+ 	      cfa_offset = cfa_store_offset;
-+ 	      dwarf2out_def_cfa (l, STACK_POINTER_REGNUM, cfa_offset);
-+ 	      dwarf2out_reg_save (l, FRAME_POINTER_REGNUM, - cfa_store_offset);
-+ 	    }
-+#endif
-+
-+	  output_asm_insn (AS2 (mov%L0,%0,%1), xops); 
-+#ifdef INCOMING_RETURN_ADDR_RTX
-+ 	  if (dwarf2out_do_frame ())
-+ 	    dwarf2out_def_cfa ("", FRAME_POINTER_REGNUM, cfa_offset);
-+#endif
-+	}
+       output_asm_insn ("push%L1 %1", xops);
+       output_asm_insn (AS2 (mov%L0,%0,%1), xops);
      }
  
 -  if (size)
--    output_asm_insn (AS2 (sub%L0,%2,%0), xops);
-+  if (tsize == 0)
-+    ;
-+  else if (! TARGET_STACK_PROBE || tsize < CHECK_STACK_LIMIT)
-+    {
-+      if (do_rtl)
-+	{
-+	  insn = emit_insn (gen_prologue_set_stack_ptr (xops[2]));
-+	  RTX_FRAME_RELATED_P (insn) = 1;
-+	}
-+      else 
-+	{
-+	  output_asm_insn (AS2 (sub%L0,%2,%0), xops);
-+#ifdef INCOMING_RETURN_ADDR_RTX
-+ 	  if (dwarf2out_do_frame ())
-+ 	    {
-+ 	      cfa_store_offset += tsize;
-+ 	      if (! frame_pointer_needed)
-+ 		{
-+ 		  cfa_offset = cfa_store_offset;
-+ 		  dwarf2out_def_cfa ("", STACK_POINTER_REGNUM, cfa_offset);
-+ 		}
-+ 	    }
-+#endif
-+	}
-+    }
-+  else 
-+    {
-+      xops[3] = gen_rtx (REG, SImode, 0);
-+      if (do_rtl)
-+      emit_move_insn (xops[3], xops[2]);
-+      else
-+	output_asm_insn (AS2 (mov%L0,%2,%3), xops);
-+
-+      xops[3] = gen_rtx (MEM, FUNCTION_MODE,
-+			 gen_rtx (SYMBOL_REF, Pmode, "_alloca"));
-+
-+      if (do_rtl)
-+	emit_call_insn (gen_rtx (CALL, VOIDmode, xops[3], const0_rtx));
-+      else
-+	output_asm_insn (AS1 (call,%P3), xops);
-+    }
++  if (tsize)
+     output_asm_insn (AS2 (sub%L0,%2,%0), xops);
  
    /* Note If use enter it is NOT reversed args.
-      This one is not reversed from intel!!
-@@ -882,39 +1092,69 @@ function_prologue (file, size)
-      output_asm_insn ("enter %2,%3", xops);
-      }
-      */
-+
-   limit = (frame_pointer_needed ? FRAME_POINTER_REGNUM : STACK_POINTER_REGNUM);
-   for (regno = limit - 1; regno >= 0; regno--)
-     if ((regs_ever_live[regno] && ! call_used_regs[regno])
- 	|| (regno == PIC_OFFSET_TABLE_REGNUM && pic_reg_used))
-       {
- 	xops[0] = gen_rtx (REG, SImode, regno);
--	output_asm_insn ("push%L0 %0", xops);
-+	if (do_rtl)
-+	  {
-+	    insn = emit_insn (gen_rtx (SET, VOIDmode,
-+				       gen_rtx (MEM, SImode,
-+						gen_rtx (PRE_DEC, SImode,
-+							 stack_pointer_rtx)),
-+				       xops[0]));
-+
-+	    RTX_FRAME_RELATED_P (insn) = 1;
-+	  }
-+	else
-+	  {
-+	    output_asm_insn ("push%L0 %0", xops);
-+#ifdef INCOMING_RETURN_ADDR_RTX
-+ 	    if (dwarf2out_do_frame ())
-+ 	      {
-+ 		char *l = dwarf2out_cfi_label ();
-+
-+ 		cfa_store_offset += 4;
-+ 		if (! frame_pointer_needed)
-+ 		  {
-+ 		    cfa_offset = cfa_store_offset;
-+ 		    dwarf2out_def_cfa (l, STACK_POINTER_REGNUM, cfa_offset);
-+ 		  }
-+
-+ 		dwarf2out_reg_save (l, regno, - cfa_store_offset);
-+ 	      }
-+#endif
-+ 	  }
-       }
- 
-   if (pic_reg_used)
--    {
--      xops[0] = pic_offset_table_rtx;
--      xops[1] = (rtx) gen_label_rtx ();
--
--      output_asm_insn (AS1 (call,%P1), xops);
--      ASM_OUTPUT_INTERNAL_LABEL (file, "L", CODE_LABEL_NUMBER (xops[1]));
--      output_asm_insn (AS1 (pop%L0,%0), xops);
--      output_asm_insn ("addl $_GLOBAL_OFFSET_TABLE_+[.-%P1],%0", xops);
--    }
-+    load_pic_register (do_rtl);
-+
-+  /* If we are profiling, make sure no instructions are scheduled before
-+     the call to mcount.  However, if -fpic, the above call will have
-+     done that.  */
-+  if ((profile_flag || profile_block_flag)
-+      && ! pic_reg_used && do_rtl)
-+    emit_insn (gen_blockage ());
- }
- 
- /* Return 1 if it is appropriate to emit `ret' instructions in the
-    body of a function.  Do this only if the epilogue is simple, needing a
-    couple of insns.  Prior to reloading, we can't tell how many registers
--   must be saved, so return 0 then.
-+   must be saved, so return 0 then.  Return 0 if there is no frame 
-+   marker to de-allocate.
- 
-    If NON_SAVING_SETJMP is defined and true, then it is not possible
-    for the epilogue to be simple, so return 0.  This is a special case
--   since NON_SAVING_SETJMP will not cause regs_ever_live to change until
--   final, but jump_optimize may need to know sooner if a `return' is OK.  */
-+   since NON_SAVING_SETJMP will not cause regs_ever_live to change
-+   until final, but jump_optimize may need to know sooner if a
-+   `return' is OK.  */
- 
- int
--simple_386_epilogue ()
-+ix86_can_use_return_insn_p ()
- {
-   int regno;
-   int nregs = 0;
-@@ -947,6 +1187,21 @@ void
- function_epilogue (file, size)
-      FILE *file;
-      int size;
-+{
-+    return;
-+}
-+
-+/* Restore function stack, frame, and registers. */ 
-+
-+void
-+ix86_expand_epilogue ()
-+{
-+  ix86_epilogue (1);
-+}
-+
-+static void
-+ix86_epilogue (do_rtl)
-+     int do_rtl;
- {
-   register int regno;
-   register int nregs, limit;
-@@ -954,12 +1209,11 @@ function_epilogue (file, size)
-   rtx xops[3];
+@@ -955,6 +1013,8 @@ function_epilogue (file, size)
    int pic_reg_used = flag_pic && (current_function_uses_pic_offset_table
  				  || current_function_uses_const_pool);
-+  HOST_WIDE_INT tsize = ix86_compute_frame_size (get_frame_size (), &nregs);
  
++  HOST_WIDE_INT tsize = ix86_compute_frame_size (size, (int *)0);
++
    /* Compute the number of registers to pop */
  
--  limit = (frame_pointer_needed
--	   ? FRAME_POINTER_REGNUM
--	   : STACK_POINTER_REGNUM);
-+  limit = (frame_pointer_needed ? FRAME_POINTER_REGNUM : STACK_POINTER_REGNUM);
- 
-   nregs = 0;
- 
-@@ -968,25 +1222,37 @@ function_epilogue (file, size)
- 	|| (regno == PIC_OFFSET_TABLE_REGNUM && pic_reg_used))
-       nregs++;
- 
--  /* sp is often  unreliable so we must go off the frame pointer,
--   */
-+  /* sp is often  unreliable so we must go off the frame pointer.
- 
--  /* In reality, we may not care if sp is unreliable, because we can
--     restore the register relative to the frame pointer.  In theory,
--     since each move is the same speed as a pop, and we don't need the
--     leal, this is faster.  For now restore multiple registers the old
--     way. */
-+     In reality, we may not care if sp is unreliable, because we can restore
-+     the register relative to the frame pointer.  In theory, since each move
-+     is the same speed as a pop, and we don't need the leal, this is faster.
-+     For now restore multiple registers the old way. */
+   limit = (frame_pointer_needed
+@@ -977,7 +1037,7 @@ function_epilogue (file, size)
+      leal, this is faster.  For now restore multiple registers the old
+      way. */
  
 -  offset = -size - (nregs * UNITS_PER_WORD);
-+  offset = - tsize - (nregs * UNITS_PER_WORD);
++  offset = -tsize - (nregs * UNITS_PER_WORD);
  
    xops[2] = stack_pointer_rtx;
  
-+  /* When -fpic, we must emit a scheduling barrier, so that the instruction
-+     that restores %ebx (which is PIC_OFFSET_TABLE_REGNUM), does not get
-+     moved before any instruction which implicitly uses the got.  This
-+     includes any instruction which uses a SYMBOL_REF or a LABEL_REF.
-+
-+     Alternatively, this could be fixed by making the dependence on the
-+     PIC_OFFSET_TABLE_REGNUM explicit in the RTL.  */
-+
-+  if (flag_pic || profile_flag || profile_block_flag)
-+    emit_insn (gen_blockage ());
-+
-   if (nregs > 1 || ! frame_pointer_needed)
-     {
-       if (frame_pointer_needed)
- 	{
--	  xops[0] = adj_offsettable_operand (AT_BP (Pmode), offset);
--	  output_asm_insn (AS2 (lea%L2,%0,%2), xops);
-+	  xops[0] = adj_offsettable_operand (AT_BP (QImode), offset);
-+	  if (do_rtl)
-+	    emit_insn (gen_movsi_lea (xops[2], XEXP (xops[0], 0)));
-+	  else
-+	    output_asm_insn (AS2 (lea%L2,%0,%2), xops);
- 	}
- 
-       for (regno = 0; regno < limit; regno++)
-@@ -994,9 +1260,14 @@ function_epilogue (file, size)
- 	    || (regno == PIC_OFFSET_TABLE_REGNUM && pic_reg_used))
- 	  {
- 	    xops[0] = gen_rtx (REG, SImode, regno);
--	    output_asm_insn ("pop%L0 %0", xops);
-+
-+	    if (do_rtl)
-+	      emit_insn (gen_pop (xops[0]));
-+	    else
-+	      output_asm_insn ("pop%L0 %0", xops);
- 	  }
-     }
-+
-   else
-     for (regno = 0; regno < limit; regno++)
-       if ((regs_ever_live[regno] && ! call_used_regs[regno])
-@@ -1004,30 +1275,62 @@ function_epilogue (file, size)
- 	{
- 	  xops[0] = gen_rtx (REG, SImode, regno);
- 	  xops[1] = adj_offsettable_operand (AT_BP (Pmode), offset);
--	  output_asm_insn (AS2 (mov%L0,%1,%0), xops);
-+
-+	  if (do_rtl)
-+	    emit_move_insn (xops[0], xops[1]);
-+	  else
-+	    output_asm_insn (AS2 (mov%L0,%1,%0), xops);
-+
- 	  offset += 4;
- 	}
- 
-   if (frame_pointer_needed)
-     {
--      /* On i486, mov & pop is faster than "leave". */
-+      /* If not an i386, mov & pop is faster than "leave". */
- 
--      if (TARGET_486)
-+      if (!TARGET_486)
- 	{
--	  xops[0] = frame_pointer_rtx;
--	  output_asm_insn (AS2 (mov%L2,%0,%2), xops);
--	  output_asm_insn ("pop%L0 %0", xops);
-+	  if (do_rtl)
-+	    emit_insn (gen_leave());
-+	  else
-+	    output_asm_insn ("leave", xops);
- 	}
+@@ -1021,11 +1081,11 @@ function_epilogue (file, size)
        else
--	output_asm_insn ("leave", xops);
-+	{
-+	  xops[0] = frame_pointer_rtx;
-+	  xops[1] = stack_pointer_rtx;
-+
-+	  if (do_rtl)
-+	    {
-+	      emit_insn (gen_epilogue_set_stack_ptr());
-+	      emit_insn (gen_pop (xops[0]));
-+	    }
-+	  else
-+	    {
-+	      output_asm_insn (AS2 (mov%L2,%0,%2), xops);
-+	      output_asm_insn ("pop%L0 %0", xops);
-+	    }
-+	}
+ 	output_asm_insn ("leave", xops);
      }
 -  else if (size)
-+
 +  else if (tsize)
      {
        /* If there is no frame pointer, we must still release the frame. */
-+      xops[0] = GEN_INT (tsize);
-+
-+      if (do_rtl)
-+	emit_insn (gen_rtx (SET, VOIDmode, xops[2],
-+			    gen_rtx (PLUS, SImode, xops[2], xops[0])));
-+      else
-+	output_asm_insn (AS2 (add%L2,%0,%2), xops);
-+    }
  
 -      xops[0] = GEN_INT (size);
--      output_asm_insn (AS2 (add%L2,%0,%2), xops);
-+#ifdef FUNCTION_BLOCK_PROFILER_EXIT
-+  if (profile_block_flag == 2)
-+    {
-+      FUNCTION_BLOCK_PROFILER_EXIT(file);
++      xops[0] = GEN_INT (tsize);
+       output_asm_insn (AS2 (add%L2,%0,%2), xops);
      }
-+#endif
  
-   if (current_function_pops_args && current_function_args_size)
-     {
-@@ -1041,15 +1344,36 @@ function_epilogue (file, size)
- 	{
- 	  /* ??? Which register to use here? */
- 	  xops[0] = gen_rtx (REG, SImode, 2);
--	  output_asm_insn ("pop%L0 %0", xops);
--	  output_asm_insn (AS2 (add%L2,%1,%2), xops);
--	  output_asm_insn ("jmp %*%0", xops);
-+
-+	  if (do_rtl)
-+	    {
-+	      emit_insn (gen_pop (xops[0]));
-+	      emit_insn (gen_rtx (SET, VOIDmode, xops[2],
-+				  gen_rtx (PLUS, SImode, xops[1], xops[2])));
-+	      emit_jump_insn (xops[0]);
-+	    }
-+	  else
-+	    {
-+	      output_asm_insn ("pop%L0 %0", xops);
-+	      output_asm_insn (AS2 (add%L2,%1,%2), xops);
-+	      output_asm_insn ("jmp %*%0", xops);
-+	    }
-+	}
-+      else 
-+	{
-+	  if (do_rtl)
-+	    emit_jump_insn (gen_return_pop_internal (xops[1]));
-+	  else
-+	    output_asm_insn ("ret %1", xops);
- 	}
--      else
--	  output_asm_insn ("ret %1", xops);
-     }
+@@ -1051,6 +1111,7 @@ function_epilogue (file, size)
    else
--    output_asm_insn ("ret", xops);
-+    {
-+      if (do_rtl)
-+	emit_jump_insn (gen_return_internal ());
-+      else
-+	output_asm_insn ("ret", xops);
-+    }
+     output_asm_insn ("ret", xops);
  }
++
  
  /* Print an integer constant expression in assembler syntax.  Addition
+    and subtraction are the only arithmetic that may appear in these
 diff --git a/config/i386/i386.h b/config/i386/i386.h
-index fcfc2df..45e0eb8 100644
+index fcfc2df..2a9fd9e 100644
 --- a/config/i386/i386.h
 +++ b/config/i386/i386.h
-@@ -51,6 +51,9 @@ the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.  */
- #define HALF_PIC_FINISH(STREAM)
- #endif
- 
-+#define MASK_SCHEDULE_PROLOGUE  000040000000    /* Emit prologue as rtl */
-+#define MASK_STACK_PROBE       000100000000    /* Enable stack probing */
-+
- /* Run-time compilation parameters selecting different hardware subsets.  */
- 
- extern int target_flags;
-@@ -90,6 +93,11 @@ extern int target_flags;
-    the 387 to be used, which is compatible with most calling conventions. */
- #define TARGET_FLOAT_RETURNS_IN_80387 (target_flags & 0200)
- 
-+/* Emit/Don't emit prologue as rtl */
-+#define TARGET_SCHEDULE_PROLOGUE (target_flags & MASK_SCHEDULE_PROLOGUE)
-+
-+#define TARGET_STACK_PROBE (target_flags & MASK_STACK_PROBE)
-+
- /* Macro to define tables used to set the flags.
-    This is a list in braces of pairs in braces,
-    each pair being { "NAME", VALUE }
-@@ -175,6 +183,11 @@ extern int target_flags;
+@@ -175,6 +175,11 @@ extern int target_flags;
  /* Boundary (in *bits*) on which stack pointer should be aligned.  */
  #define STACK_BOUNDARY 32
  
@@ -730,209 +269,6 @@ index fcfc2df..45e0eb8 100644
  /* Allocation boundary (in *bits*) for the code of a function.
     For i486, we get better performance by aligning to a cache
     line (i.e. 16 byte) boundary.  */
-@@ -1390,6 +1403,9 @@ number as al, and ax.
-  (n) == 7 ? 5 : \
-  (n) + 4)
- 
-+/* Before the prologue, the top of the frame is at 4(%esp).  */
-+#define INCOMING_FRAME_SP_OFFSET 4
-+
- /* This is how to output the definition of a user-level label named NAME,
-    such as the label on a static function or variable NAME.  */
- 
-diff --git a/config/i386/i386.md b/config/i386/i386.md
-index 5a87914..5224026 100644
---- a/config/i386/i386.md
-+++ b/config/i386/i386.md
-@@ -2168,7 +2168,7 @@
- 
- ;; addsi3 is faster, so put this after.
- 
--(define_insn ""
-+(define_insn "movsi_lea"
-   [(set (match_operand:SI 0 "register_operand" "=r")
-         (match_operand:QI 1 "address_operand" "p"))]
-   ""
-@@ -4829,23 +4829,120 @@
-   ""
-   "frstor %0")
- 
-+;; UNSPEC_VOLATILE is considered to use and clobber all hard registers and
-+;; all of memory.  This blocks insns from being moved across this point.
-+
-+(define_insn "blockage"
-+  [(unspec_volatile [(const_int 0)] 0)]
-+  ""
-+  "")
-+
- ;; Insn emitted into the body of a function to return from a function.
- ;; This is only done if the function's epilogue is known to be simple.
- ;; See comments for simple_386_epilogue in i386.c.
- 
--(define_insn "return"
-+(define_expand "return"
-   [(return)]
--  "simple_386_epilogue ()"
-+  "ix86_can_use_return_insn_p ()"
-+  "")
-+
-+(define_insn "return_internal"
-+  [(return)]
-+  "reload_completed"
-+  "ret")
-+
-+(define_insn "return_pop_internal"
-+  [(return)
-+   (use (match_operand:SI 0 "const_int_operand" ""))]
-+  "reload_completed"
-+  "ret %0")
-+
-+(define_insn "nop"
-+  [(const_int 0)]
-+  ""
-+  "nop")
-+
-+(define_expand "prologue"
-+  [(const_int 1)]
-+  ""
-+  "
-+{
-+  ix86_expand_prologue ();
-+  DONE;
-+}")
-+
-+;; The use of UNSPEC here is currently not necessary - a simple SET of ebp
-+;; to itself would be enough. But this way we are safe even if some optimizer
-+;; becomes too clever in the future.
-+(define_insn "prologue_set_stack_ptr"
-+  [(set (reg:SI 7)
-+	(minus:SI (reg:SI 7) (match_operand:SI 0 "immediate_operand" "i")))
-+   (set (reg:SI 6) (unspec:SI [(reg:SI 6)] 4))]
-+  ""
-   "*
- {
--  function_epilogue (asm_out_file, get_frame_size ());
-+  rtx xops [2];
-+
-+  xops[0] = operands[0];
-+  xops[1] = stack_pointer_rtx;
-+  output_asm_insn (AS2 (sub%L1,%0,%1), xops);
-   RET;
- }")
- 
--(define_insn "nop"
--  [(const_int 0)]
-+(define_insn "prologue_get_pc_and_set_got"
-+  [(unspec_volatile [(match_operand:SI 0 "" "")] 3)]
-   ""
--  "nop")
-+  "*
-+{
-+  operands[1] = gen_label_rtx ();
-+  output_asm_insn (AS1 (call,%P1), operands);
-+  ASM_OUTPUT_INTERNAL_LABEL (asm_out_file, \"L\",
-+			     CODE_LABEL_NUMBER (operands[1]));
-+  output_asm_insn (AS1 (pop%L0,%0), operands);
-+  output_asm_insn (\"addl $_GLOBAL_OFFSET_TABLE_+[.-%P1],%0\", operands);
-+  RET;
-+}")
-+
-+(define_expand "epilogue"
-+  [(const_int 1)]
-+  ""
-+  "
-+{
-+  ix86_expand_epilogue ();
-+  DONE;
-+}")
-+
-+(define_insn "epilogue_set_stack_ptr"
-+  [(set (reg:SI 7) (reg:SI 6))
-+	(clobber (reg:SI 6))]
-+  ""
-+  "*
-+{
-+  rtx xops [2];
-+
-+    xops[0] = frame_pointer_rtx;
-+    xops[1] = stack_pointer_rtx;
-+    output_asm_insn (AS2 (mov%L0,%0,%1), xops);
-+    RET;
-+}")
-+
-+(define_insn "leave"
-+  [(const_int 2)
-+      (clobber (reg:SI 6))
-+      (clobber (reg:SI 7))]
-+  ""
-+  "leave")
-+
-+(define_insn "pop"
-+  [(set (match_operand:SI 0 "register_operand" "r")
-+	(mem:SI (reg:SI 7)))
-+   (set (reg:SI 7) (plus:SI (reg:SI 7) (const_int 4)))]
-+  ""
-+  "*
-+{
-+    output_asm_insn (AS1 (pop%L0,%P0), operands);
-+    RET;
-+}")
- 
- (define_expand "movstrsi"
-   [(parallel [(set (match_operand:BLK 0 "memory_operand" "")
-diff --git a/explow.c b/explow.c
-index 7133815..4041ab1 100644
---- a/explow.c
-+++ b/explow.c
-@@ -29,6 +29,10 @@ the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.  */
- #include "insn-flags.h"
- #include "insn-codes.h"
- 
-+#if !defined PREFERRED_STACK_BOUNDARY && defined STACK_BOUNDARY
-+#define PREFERRED_STACK_BOUNDARY STACK_BOUNDARY
-+#endif
-+
- /* Return an rtx for the sum of X and the integer C.
- 
-    This function should be used via the `plus_constant' macro.  */
-@@ -667,8 +671,8 @@ rtx
- round_push (size)
-      rtx size;
- {
--#ifdef STACK_BOUNDARY
--  int align = STACK_BOUNDARY / BITS_PER_UNIT;
-+#ifdef PREFERRED_STACK_BOUNDARY
-+  int align = PREFERRED_STACK_BOUNDARY / BITS_PER_UNIT;
-   if (align == 1)
-     return size;
-   if (GET_CODE (size) == CONST_INT)
-@@ -683,7 +687,7 @@ round_push (size)
- 			    NULL_RTX, 1);
-       size = expand_mult (Pmode, size, GEN_INT (align), NULL_RTX, 1);
-     }
--#endif /* STACK_BOUNDARY */
-+#endif /* PREFERRED_STACK_BOUNDARY */
-   return size;
- }
- 
-diff --git a/function.c b/function.c
-index 3c19a51..bca5f36 100644
---- a/function.c
-+++ b/function.c
-@@ -127,6 +127,13 @@ int current_function_has_nonlocal_goto;
- 
- int current_function_contains_functions;
- 
-+/* Nonzero if function being compiled doesn't contain any calls
-+   (ignoring the prologue and epilogue).  This is set prior to
-+   local register allocation and is valid for the remaining
-+   compiler passes. */
-+
-+int current_function_is_leaf;
-+
- /* Nonzero if function being compiled can call alloca,
-    either as a subroutine or builtin.  */
- 
 diff --git a/gbl-ctors.h b/gbl-ctors.h
 index 13048ce..acbf7fb 100644
 --- a/gbl-ctors.h
@@ -969,68 +305,3 @@ index 6b58e0f..050c5ce 100644
  #define ON_EXIT(FUNC,ARG) on_exit ((FUNC), (ARG))
  #endif
  #endif
-diff --git a/output.h b/output.h
-index 4e6940e..13894c9 100644
---- a/output.h
-+++ b/output.h
-@@ -100,6 +100,13 @@ extern int current_function_has_nonlocal_label;
- 
- extern int current_function_contains_functions;
- 
-+/* Nonzero if function being compiled doesn't contain any calls
-+   (ignoring the prologue and epilogue).  This is set prior to
-+   local register allocation and is valid for the remaining
-+   compiler passes. */
-+
-+extern int current_function_is_leaf;
-+
- /* Nonzero if the current function returns a pointer type */
- 
- extern int current_function_returns_pointer;
-diff --git a/rtl.h b/rtl.h
-index 98f5ddc..617e31c 100644
---- a/rtl.h
-+++ b/rtl.h
-@@ -135,6 +135,10 @@ typedef struct rtx_def
-      In a REG, nonzero means this reg refers to the return value
-      of the current function.  */
-   unsigned integrated : 1;
-+  /* Nonzero if this rtx is related to the call frame, either changing how
-+     we compute the frame address or saving and restoring registers in
-+     the prologue and epilogue.  */
-+  unsigned frame_related : 1;
-   /* The first element of the operands of this rtx.
-      The number of operands and their types are controlled
-      by the `code' field, according to rtl.def.  */
-@@ -198,6 +202,7 @@ typedef struct rtx_def
- 
- #define RTX_INTEGRATED_P(RTX) ((RTX)->integrated)
- #define RTX_UNCHANGING_P(RTX) ((RTX)->unchanging)
-+#define RTX_FRAME_RELATED_P(RTX) ((RTX)->frame_related)
- 
- /* RTL vector.  These appear inside RTX's when there is a need
-    for a variable number of things.  The principle use is inside
-diff --git a/toplev.c b/toplev.c
-index 7acabf6..52db7d7 100644
---- a/toplev.c
-+++ b/toplev.c
-@@ -58,6 +58,7 @@ the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.  */
- #include "xcoffout.h"
- #endif
- 
-+#include "output.h"
- #include "bytecode.h"
- #include "bc-emit.h"
- 
-@@ -2702,6 +2703,11 @@ rest_of_compilation (decl)
- 	     fprintf (global_reg_dump_file, "\n;; Function %s\n\n",
- 		      IDENTIFIER_POINTER (DECL_NAME (decl))));
- 
-+  /* Determine if the current function is a leaf before running reload
-+     since this can impact optimizations done by the prologue and
-+     epilogue thus changing register elimination offsets.  */
-+  current_function_is_leaf = leaf_function_p ();
-+
-   /* Unless we did stupid register allocation,
-      allocate remaining pseudo-regs, then do the reload pass
-      fixing up any insns that are invalid.  */
