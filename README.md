@@ -15,20 +15,19 @@ legacy-gcc是一个gentoo的自定义overlay repo，启用该repo，可以在最
 emerge -a app-portage/layman
 wget https://raw.githubusercontent.com/jackyjkchen/legacy-gcc/master/etc/layman/overlays/legacy-gcc.xml \
      -O /etc/layman/overlays/legacy-gcc.xml
+echo 'sys-devel/gcc' >> /etc/portage/package.unmask
 layman -L
 layman -a legacy-gcc
 ```
 
 现在你可以安装旧版本gcc了，比如于1992年发布，本来不支持linux，也不支持elf文件格式的gcc-2.0，现在可以正常在最新的kernel+glibc运行环境下运行
 ```
-echo 'sys-devel/gcc' >> /etc/portage/package.unmask
 emerge -1a sys-devel/gcc:2.0
 ```
 
 亦可采用如下方式安装全套legacy-gcc（所有gcc版本），并启用c c++ objc objc++ fortran语言
 ```
 mkdir /etc/portage/sets /etc/portage/package.use
-echo 'sys-devel/gcc' >> /etc/portage/package.unmask
 wget https://raw.githubusercontent.com/jackyjkchen/legacy-gcc/master/etc/portage/sets/legacy-gcc \
      -O /etc/portage/sets/legacy-gcc
 wget https://raw.githubusercontent.com/jackyjkchen/legacy-gcc/master/etc/portage/package.use/legacy-gcc \
