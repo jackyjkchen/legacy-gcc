@@ -6,6 +6,24 @@ legacy-gcc是一个gentoo的自定义overlay repo，启用该repo，可以在最
 
 最新的两个gcc版本由gentoo官方repo支持，本repo不收录
 
+# 项目目标
+
+本项目旨在现代化的Linux运行时环境上可以原生的使用旧版本gcc，并且在修改量有限，保持原版本gcc核心特性的基础上。
+
+x86与非x86均为本项目的目标，x86目前进度较快，已经可以原生运行gcc-2.0版本，其他平台已在适配中。
+
+各平台目前支持情况如下：
+
+* x86：gcc-2.0版本及以上（原版gcc-2.7才支持基于linux+elf+glibc2的现代化环境，并且2.7和2.8版本还会因为栈边界对齐的原因coredump）
+* alpha：gcc-3.4.6及以上
+* arm64：gcc-4.8.5及以上
+* armel：gcc-4.1.2及以上
+* armhf：gcc-4.4.7及以上（原版gcc-4.7.4及以上才支持）
+* ppc：gcc-3.4.6及以上
+* ppc64：gcc-3.4.6及以上
+* ppc64le：gcc-4.8.5及以上
+* s390x：gcc-3.3.6及以上
+
 
 # 使用方法
 
@@ -54,22 +72,6 @@ USE参数可使用equery u sys-devel/gcc:${slot}查询
 2.95.3-3.4.6版本支持f77
 
 4.0.4以上版本支持f95/fortran
-
-
-# 非x86系统支持
-
-只有x86平台（包括amd64和i386）可以支持gcc-2.x的老版本。
-
-在非x86系统上，本overlay repo仍然可以使用，但支持的gcc版本不会像x86那么老，已测试平台支持的最低gcc按本如下：
-
-* alpha：gcc-3.4.6及以上
-* arm64：gcc-4.8.5及以上
-* armel：gcc-4.1.2及以上
-* armhf：gcc-4.4.7及以上
-* ppc：gcc-3.4.6及以上
-* ppc64：gcc-3.4.6及以上
-* ppc64le：gcc-4.8.5及以上
-* s390x：gcc-3.3.6及以上
 
 
 # 原理
