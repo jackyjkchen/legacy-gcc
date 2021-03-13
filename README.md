@@ -65,7 +65,7 @@ USE参数可使用equery u sys-devel/gcc:${slot}查询
 * alpha：gcc-3.4.6及以上
 * arm64：gcc-4.8.5及以上
 * armel：gcc-4.1.2及以上
-* armhf：gcc-4.7.4及以上
+* armhf：gcc-4.4.7及以上
 * ppc：gcc-3.4.6及以上
 * ppc64：gcc-3.4.6及以上
 * ppc64le：gcc-4.8.5及以上

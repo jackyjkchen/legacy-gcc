@@ -24,8 +24,11 @@ if [[ ${CATEGORY} != cross-* ]] ; then
 fi
 
 src_prepare() {
+	EPATCH_EXCLUDE+=" 30_all_gcc-4.4_arm_armv4-no-thumb-fix-link.patch 41_all_4.4.5-msabi.patch 93_all_gcc-4.4-cloog-dl.patch 96_all_arm-pr43440.patch"
 	toolchain_src_prepare
 	use vanilla && return 0
+
+	eapply "${FILESDIR}"/4.4.7/00_support-armhf.patch
 
 	sed -i 's/use_fixproto=yes/:/' gcc/config.gcc #PR33200
 }

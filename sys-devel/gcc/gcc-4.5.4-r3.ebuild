@@ -28,5 +28,7 @@ src_prepare() {
 
 	use vanilla && return 0
 
+	eapply "${FILESDIR}"/4.5.4/00_support-armhf.patch
+
 	sed -i 's/use_fixproto=yes/:/' gcc/config.gcc #PR33200
 }

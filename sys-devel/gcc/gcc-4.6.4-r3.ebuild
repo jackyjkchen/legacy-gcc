@@ -30,4 +30,8 @@ src_prepare() {
 	fi
 
 	toolchain_src_prepare
+
+	use vanilla && return 0
+
+	eapply "${FILESDIR}"/4.6.4/00_support-armhf.patch
 }
