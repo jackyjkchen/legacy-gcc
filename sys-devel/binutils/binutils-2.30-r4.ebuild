@@ -3,7 +3,7 @@
 
 EAPI=6
 
-inherit eutils libtool flag-o-matic gnuconfig multilib toolchain-funcs versionator
+inherit eutils libtool flag-o-matic gnuconfig multilib toolchain-funcs versionator downgrade-arch-flags
 
 DESCRIPTION="Tools necessary to build programs"
 HOMEPAGE="https://sourceware.org/binutils/"
@@ -67,7 +67,10 @@ DEPEND="${RDEPEND}
 	nls? ( sys-devel/gettext )
 	sys-devel/flex
 	virtual/yacc
+	sys-devel/gcc:4.9.4
 "
+CC="gcc-4.9.4"
+CXX="g++-4.9.4"
 
 RESTRICT="!test? ( test )"
 
@@ -145,6 +148,7 @@ toolchain-binutils_pkgversion() {
 }
 
 src_configure() {
+	downgrade_arch_flags 4.9.4
 	# Setup some paths
 	LIBPATH=/usr/$(get_libdir)/binutils/${CTARGET}/${BVER}
 	INCPATH=${LIBPATH}/include
