@@ -175,7 +175,7 @@ if [[ ${PN} != "kgcc64" && ${PN} != gcc-* ]] ; then
 	tc_version_is_at_least 3 && IUSE+=" doc hardened"
 	tc_version_is_at_least 3.1 && IUSE+=" multilib"
 	tc_version_is_between 3 7 && IUSE+=" awt gcj" TC_FEATURES+=(gcj)
-	tc_version_is_at_least 3.3 && IUSE+=" pgo"
+	tc_version_is_at_least 3.4 && IUSE+=" pgo"
 	tc_version_is_at_least 4.0 &&
 		IUSE+=" objc-gc" TC_FEATURES+=(objc-gc)
 	tc_version_is_at_least 4.1 && IUSE+=" libssp objc++"
@@ -194,7 +194,16 @@ if [[ ${PN} != "kgcc64" && ${PN} != gcc-* ]] ; then
 	tc_version_is_at_least 6.5 &&
 		IUSE+=" graphite" TC_FEATURES+=(graphite)
 	tc_version_is_between 4.9 8 && IUSE+=" cilk"
-	tc_version_is_at_least 4.9 && IUSE+=" ada +vtv"
+	tc_version_is_at_least 4.9 && IUSE+=" ada"
+
+	# Don't enable USE=vtv starting from gcc-10. Once gcc-10
+	# stable everywhere disable by default on older versions
+	# as well.
+	if tc_version_is_at_least 10; then
+		IUSE+=" vtv"
+	elif tc_version_is_at_least 4.9; then
+		IUSE+=" +vtv"
+	fi
 	tc_version_is_at_least 5.0 && IUSE+=" jit"
 	tc_version_is_between 5.0 9 && IUSE+=" mpx"
 	tc_version_is_at_least 6.0 && IUSE+=" +pie +ssp"
@@ -203,7 +212,14 @@ if [[ ${PN} != "kgcc64" && ${PN} != gcc-* ]] ; then
 	tc_version_is_at_least 8.0 &&
 		IUSE+=" systemtap" TC_FEATURES+=(systemtap)
 	tc_version_is_at_least 9.0 && IUSE+=" d"
-	tc_version_is_at_least 9.1 && IUSE+=" lto"
+	case ${CHOST} in
+	x86_64*|i[3456]86*)
+		tc_version_is_at_least 4.6 && IUSE+=" lto"
+		;;
+	*)
+		tc_version_is_at_least 9.1 && IUSE+=" lto"
+		;;
+	esac
 	tc_version_is_at_least 10 && IUSE+=" zstd" TC_FEATURES+=(zstd)
 	tc_version_is_at_least 11 && IUSE+=" valgrind" TC_FEATURES+=(valgrind)
 fi
@@ -966,7 +982,7 @@ toolchain_src_configure() {
 	fi
 
 	# Build compiler itself using LTO
-	if tc_version_is_at_least 9.1 && _tc_use_if_iuse lto ; then
+	if tc_version_is_at_least 4.6 && _tc_use_if_iuse lto ; then
 		confgcc+=( --with-build-config=bootstrap-lto )
 	fi
 
