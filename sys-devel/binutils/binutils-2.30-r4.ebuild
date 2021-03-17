@@ -101,6 +101,7 @@ src_prepare() {
 		tar -pxf ${FILESDIR}/binutils-${PATCH_BINUTILS_VER}-patches-${PATCH_VER}.tar.xz -C ${WORKDIR}/ || die
 		eapply "${WORKDIR}/patch"/*.patch
 	fi
+	eapply ${FILESDIR}/2.30/00_PR23919.patch
 
 	# This check should probably go somewhere else, like pkg_pretend.
 	if [[ ${CTARGET} == *-uclibc* ]] ; then
