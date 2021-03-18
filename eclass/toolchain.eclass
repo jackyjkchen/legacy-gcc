@@ -213,8 +213,11 @@ if [[ ${PN} != "kgcc64" && ${PN} != gcc-* ]] ; then
 		IUSE+=" systemtap" TC_FEATURES+=(systemtap)
 	tc_version_is_at_least 9.0 && IUSE+=" d"
 	case ${CHOST} in
-	x86_64*|i[3456]86*)
+	x86_64*)
 		tc_version_is_at_least 4.6 && IUSE+=" lto"
+		;;
+	i[3456]86*)
+		tc_version_is_at_least 4.7 && IUSE+=" lto"
 		;;
 	*)
 		tc_version_is_at_least 9.1 && IUSE+=" lto"
