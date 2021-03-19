@@ -1201,21 +1201,16 @@ toolchain_src_configure() {
 		if tc_version_is_at_least 4.8 && has x32 $(get_all_abis TARGET) ; then
 			confgcc+=( --with-abi=$(gcc-abi-map ${TARGET_DEFAULT_ABI}) )
 		fi
-		myarch=$(get-flag march)
 		mytune=$(get-flag mtune)
-		if [[ ${myarch} != "" ]] ; then
-			confgcc+=( --with-arch=${myarch})
-		fi
 		if [[ ${mytune} != "" ]] ; then
 			confgcc+=( --with-tune=${mytune})
 		fi
 		;;
 	x86)
-		myarch=$(get-flag march)
+		# Default arch for x86 is normally i386, lets give it a bump
+		# since glibc will do so based on CTARGET anyways
+		confgcc+=( --with-arch=${CTARGET%%-*} )
 		mytune=$(get-flag mtune)
-		if [[ ${myarch} != "" ]] ; then
-			confgcc+=( --with-arch=${myarch})
-		fi
 		if [[ ${mytune} != "" ]] ; then
 			confgcc+=( --with-tune=${mytune})
 		fi
