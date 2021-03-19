@@ -1205,7 +1205,7 @@ toolchain_src_configure() {
 	x86)
 		# Default arch for x86 is normally i386, lets give it a bump
 		# since glibc will do so based on CTARGET anyways
-		[[ tc_version_is_at_least 3.0 ]] && confgcc+=( --with-arch=${CTARGET%%-*} )
+		tc_version_is_at_least 3.0 && confgcc+=( --with-arch=${CTARGET%%-*} )
 		;;
 	hppa)
 		# Enable sjlj exceptions for backward compatibility on hppa
