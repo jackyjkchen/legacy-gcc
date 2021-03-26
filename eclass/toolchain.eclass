@@ -1679,11 +1679,6 @@ gcc_do_filter_flags() {
 				# https://bugs.gentoo.org/454426
 				append-ldflags -Wl,--no-relax
 				;;
-			sparc)
-				# temporary workaround for random ICEs reproduced by multiple users
-				# https://bugs.gentoo.org/457062
-				tc_version_is_between 4.6 4.8 && MAKEOPTS+=" -j1"
-				;;
 			*-macos)
 				# http://gcc.gnu.org/PR25127
 				tc_version_is_between 4.0 4.2 && \
