@@ -25,9 +25,12 @@ tc_version_is_between() {
 # Replace -m flags unsupported by the version being built with the best
 # available equivalent
 downgrade_arch_flags() {
+	local arch bver i isa myarch mytune rep ver
+
+	bver=${1}
 	case $(tc-arch) in
 	sparc)
-		if ! tc_version_is_at_least 3.1; then
+		if ! tc_version_is_at_least 3.1 ${bver} && [[ ${ABI} != "sparc64" ]]; then
 			filter-flags '-mcpu=*' '-mtune=*'
 			append-flags '-mcpu=v8'
 		fi
@@ -35,10 +38,6 @@ downgrade_arch_flags() {
 	*)
 		;;
 	esac
-
-	local arch bver i isa myarch mytune rep ver
-
-	bver=${1}
 	[[ $(tc-arch) != amd64 && $(tc-arch) != x86 ]] && return 0
 
 	myarch=$(get-flag march)

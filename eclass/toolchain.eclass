@@ -1243,6 +1243,12 @@ toolchain_src_configure() {
 		# Add --with-abi flags to set default ABI
 		confgcc+=( --with-abi=$(gcc-abi-map ${TARGET_DEFAULT_ABI}) )
 		;;
+	sparc)
+		if ! tc_version_is_at_least 3.1 && [[ ${ABI} != "sparc64" ]]; then
+			CFLAGS="${CFLAGS} -gstabs+"
+			CXXFLAGS="${CXXFLAGS} -gstabs+"
+		fi
+		;;
 	esac
 
 	# if the target can do biarch (-m32/-m64), enable it.  overhead should
@@ -1438,9 +1444,12 @@ toolchain_src_configure() {
 # Replace -m flags unsupported by the version being built with the best
 # available equivalent
 downgrade_arch_flags() {
+	local arch bver i isa myarch mytune rep ver
+
+	bver=${1:-${GCC_BRANCH_VER}}
 	case $(tc-arch) in
 	sparc)
-		if ! tc_version_is_at_least 3.1 && [[ ${ABI} != "sparc64" ]]; then
+		if ! tc_version_is_at_least 3.1 ${bver} && [[ ${ABI} != "sparc64" ]]; then
 			filter-flags '-mcpu=*' '-mtune=*'
 			append-flags '-mcpu=v8'
 		fi
@@ -1448,10 +1457,6 @@ downgrade_arch_flags() {
 	*)
 		;;
 	esac
-
-	local arch bver i isa myarch mytune rep ver
-
-	bver=${1:-${GCC_BRANCH_VER}}
 	# Don't perform downgrade if running gcc is older than ebuild's.
 	tc_version_is_at_least ${bver} $(gcc-version) || return 0
 	[[ $(tc-arch) != amd64 && $(tc-arch) != x86 ]] && return 0
