@@ -167,8 +167,16 @@ if [[ ${PN} != "kgcc64" && ${PN} != gcc-* ]] ; then
 	IUSE+=" debug +nptl" TC_FEATURES+=(nptl)
 	[[ -n ${PIE_VER} ]] && IUSE+=" nopie"
 	[[ -n ${SPECS_VER} ]] && IUSE+=" nossp"
+	tc_version_is_at_least 2.5 && IUSE+=" +cxx"
+	case $(tc-arch) in
+	alpha)
+		tc_version_is_at_least 3.1 && IUSE+=" objc"
+		;;
+	*)
+		tc_version_is_at_least 2.5 && IUSE+=" objc"
+		;;
+	esac
 	# fortran support appeared in 4.1, but 4.1 needs outdated mpfr
-	tc_version_is_at_least 2.5 && IUSE+=" +cxx objc"
 	tc_version_is_at_least 4.1 && IUSE+=" +fortran" TC_FEATURES+=(fortran)
 	tc_version_is_between 4.0 4.1 && IUSE+=" f95"
 	tc_version_is_between 2.9 4.0 && IUSE+=" f77"
@@ -212,11 +220,11 @@ if [[ ${PN} != "kgcc64" && ${PN} != gcc-* ]] ; then
 	tc_version_is_at_least 8.0 &&
 		IUSE+=" systemtap" TC_FEATURES+=(systemtap)
 	tc_version_is_at_least 9.0 && IUSE+=" d"
-	case ${CHOST} in
-	x86_64*)
+	case $(tc-arch) in
+	amd64)
 		tc_version_is_at_least 4.6 && IUSE+=" lto"
 		;;
-	i[3456]86*)
+	x86)
 		tc_version_is_at_least 4.7 && IUSE+=" lto"
 		;;
 	*)
@@ -1157,6 +1165,12 @@ toolchain_src_configure() {
 
 	local with_abi_map=()
 	case $(tc-arch) in
+	alpha)
+		if ! tc_version_is_at_least 3.1 ; then
+			CFLAGS="${CFLAGS} -gstabs+"
+			CXXFLAGS="${CXXFLAGS} -gstabs+"
+		fi
+		;;
 	arm)	#264534 #414395
 		local a arm_arch=${CTARGET%%-*}
 		# Remove trailing endian variations first: eb el be bl b l
@@ -1424,6 +1438,17 @@ toolchain_src_configure() {
 # Replace -m flags unsupported by the version being built with the best
 # available equivalent
 downgrade_arch_flags() {
+	case $(tc-arch) in
+	sparc)
+		if ! tc_version_is_at_least 3.1; then
+			filter-flags '-mcpu=*' '-mtune=*'
+			append-flags '-mcpu=v8'
+		fi
+		;;
+	*)
+		;;
+	esac
+
 	local arch bver i isa myarch mytune rep ver
 
 	bver=${1:-${GCC_BRANCH_VER}}

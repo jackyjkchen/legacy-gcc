@@ -8,10 +8,16 @@ HOMEPAGE=""
 SRC_URI=""
 
 LICENSE=""
-KEYWORDS="amd64 x86"
+KEYWORDS="alpha amd64 ppc sparc x86"
 case ${ARCH} in
 	amd64|x86)
 		TOOL_SLOT="i686-legacy"
+		;;
+	alpha|sparc)
+		TOOL_SLOT="${ARCH}-legacy"
+		;;
+	ppc)
+		TOOL_SLOT="powerpc-legacy"
 		;;
 	*)
 		TOOL_SLOT="invalid"
@@ -39,7 +45,6 @@ src_install() {
 	ln -sv ${HOST_PREFIX}-addr2line "${ED}"${UNIX_PREFIX}/bin/${TARGET_PREFIX}-addr2line || die
 	ln -sv ${HOST_PREFIX}-ar "${ED}"${UNIX_PREFIX}/bin/${TARGET_PREFIX}-ar || die
 	ln -sv ${HOST_PREFIX}-c++filt "${ED}"${UNIX_PREFIX}/bin/${TARGET_PREFIX}-c++filt || die
-	ln -sv ${HOST_PREFIX}-dwp "${ED}"${UNIX_PREFIX}/bin/${TARGET_PREFIX}-dwp || die
 	ln -sv ${HOST_PREFIX}-elfedit "${ED}"${UNIX_PREFIX}/bin/${TARGET_PREFIX}-elfedit || die
 	ln -sv ${HOST_PREFIX}-gprof "${ED}"${UNIX_PREFIX}/bin/${TARGET_PREFIX}-gprof || die
 	ln -sv ${HOST_PREFIX}-nm "${ED}"${UNIX_PREFIX}/bin/${TARGET_PREFIX}-nm || die
@@ -68,7 +73,7 @@ ${HOST_PREFIX}-ld.gold -m elf_i386 "\$@"
 _EOF_
 			chmod +x "${ED}"${UNIX_PREFIX}/bin/${TARGET_PREFIX}-ld.gold || die
 			;;
-		x86)
+		*)
 			ln -sv ${HOST_PREFIX}-as "${ED}"${UNIX_PREFIX}/bin/${TARGET_PREFIX}-as || die
 			ln -sv ${HOST_PREFIX}-ld "${ED}"${UNIX_PREFIX}/bin/${TARGET_PREFIX}-ld || die
 			ln -sv ${HOST_PREFIX}-ld.gold "${ED}"${UNIX_PREFIX}/bin/${TARGET_PREFIX}-ld.gold || die
@@ -80,7 +85,6 @@ _EOF_
 	ln -sv ${REL_PATH}/bin/${TARGET_PREFIX}-ar "${ED}"${UNIX_PREFIX}/${TARGET_PREFIX}/bin/ar || die
 	ln -sv ${REL_PATH}/bin/${TARGET_PREFIX}-as "${ED}"${UNIX_PREFIX}/${TARGET_PREFIX}/bin/as || die
 	ln -sv ${REL_PATH}/bin/${TARGET_PREFIX}-c++filt "${ED}"${UNIX_PREFIX}/${TARGET_PREFIX}/bin/c++filt || die
-	ln -sv ${REL_PATH}/bin/${TARGET_PREFIX}-dwp "${ED}"${UNIX_PREFIX}/${TARGET_PREFIX}/bin/dwp || die
 	ln -sv ${REL_PATH}/bin/${TARGET_PREFIX}-elfedit "${ED}"${UNIX_PREFIX}/${TARGET_PREFIX}/bin/elfedit || die
 	ln -sv ${REL_PATH}/bin/${TARGET_PREFIX}-gprof "${ED}"${UNIX_PREFIX}/${TARGET_PREFIX}/bin/gprof || die
 	ln -sv ${REL_PATH}/bin/${TARGET_PREFIX}-ld "${ED}"${UNIX_PREFIX}/${TARGET_PREFIX}/bin/ld || die

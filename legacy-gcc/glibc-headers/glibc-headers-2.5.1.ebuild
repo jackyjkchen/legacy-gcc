@@ -10,10 +10,20 @@ SRC_URI="https://mirrors.ustc.edu.cn/gnu/glibc/glibc-${PV}.tar.bz2"
 inherit downgrade-arch-flags gnuconfig
 
 LICENSE=""
-KEYWORDS="amd64 x86"
+KEYWORDS="alpha amd64 ppc sparc x86"
+CC="gcc-4.4.7"
+CXX="g++-4.4.7"
 case ${ARCH} in
 	amd64|x86)
+		CC="${CC} ${CFLAGS_x86}"
+		CXX="${CXX} ${CFLAGS_x86}"
 		TOOL_SLOT="i686-legacy"
+		;;
+	alpha|sparc)
+		TOOL_SLOT="${ARCH}-legacy"
+		;;
+	ppc)
+		TOOL_SLOT="powerpc-legacy"
 		;;
 	*)
 		TOOL_SLOT="invalid"
@@ -22,24 +32,13 @@ esac
 SLOT="${TOOL_SLOT}"
 
 DEPEND="
-	sys-devel/gcc:3.4.6
+	sys-devel/gcc:4.4.7
 	legacy-gcc/linux-headers:${TOOL_SLOT}
 	legacy-gcc/binutils-wrapper:${TOOL_SLOT}"
 RDEPEND="${DEPEND}"
 BDEPEND=""
 
 CHOST="${TOOL_SLOT}-linux-gnu"
-
-case ${ARCH} in
-	amd64)
-		CC="gcc-3.4.6 -m32"
-		CXX="g++-3.4.6 -m32"
-		;;
-	x86)
-		CC="gcc-3.4.6"
-		CXX="g++-3.4.6"
-		;;
-esac
 
 S=${WORKDIR}/glibc-${PV}
 
@@ -51,7 +50,7 @@ src_prepare() {
 }
 
 src_configure() {
-	downgrade_arch_flags 3.4.6
+	downgrade_arch_flags 4.4.7
 	local econfargs=(
 		--build=${CHOST}
 		--host=${CHOST}

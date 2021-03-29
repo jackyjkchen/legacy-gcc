@@ -38,6 +38,127 @@ index 5170cbe..1239dbe 100644
  	  mv -f dir.info.new dir.info ; \
  	else true ; \
  	fi
+diff --git a/boehm-gc/Makefile.am b/boehm-gc/Makefile.am
+index bf8ed3d..d39c7f8 100644
+--- a/boehm-gc/Makefile.am
++++ b/boehm-gc/Makefile.am
+@@ -37,7 +37,7 @@ solaris_threads.h stubborn.c typd_mlc.c version.h weakpointer.h
+ # linuxthread semaphore functions get linked:
+ libgcjgc_la_LIBADD = @addobjs@ $(THREADLIBS)
+ libgcjgc_la_DEPENDENCIES = @addobjs@
+-libgcjgc_la_LDFLAGS = -version-info 1:1:0 -rpath $(toolexeclibdir)
++libgcjgc_la_LDFLAGS = -ldl -version-info 1:1:0 -rpath $(toolexeclibdir)
+ 
+ EXTRA_libgcjgc_la_SOURCES = alpha_mach_dep.s mips_sgi_mach_dep.s \
+ mips_ultrix_mach_dep.s rs6000_mach_dep.s sparc_mach_dep.s \
+diff --git a/boehm-gc/Makefile.in b/boehm-gc/Makefile.in
+index f794685..dda33a8 100644
+--- a/boehm-gc/Makefile.in
++++ b/boehm-gc/Makefile.in
+@@ -125,7 +125,7 @@ solaris_threads.h stubborn.c typd_mlc.c version.h weakpointer.h
+ # linuxthread semaphore functions get linked:
+ libgcjgc_la_LIBADD = @addobjs@ $(THREADLIBS)
+ libgcjgc_la_DEPENDENCIES = @addobjs@
+-libgcjgc_la_LDFLAGS = -version-info 1:1:0 -rpath $(toolexeclibdir)
++libgcjgc_la_LDFLAGS = -ldl -version-info 1:1:0 -rpath $(toolexeclibdir)
+ 
+ EXTRA_libgcjgc_la_SOURCES = alpha_mach_dep.s mips_sgi_mach_dep.s \
+ mips_ultrix_mach_dep.s rs6000_mach_dep.s sparc_mach_dep.s \
+diff --git a/boehm-gc/dyn_load.c b/boehm-gc/dyn_load.c
+index ec909ca..5069256 100644
+--- a/boehm-gc/dyn_load.c
++++ b/boehm-gc/dyn_load.c
+@@ -26,6 +26,10 @@
+  * None of this is safe with dlclose and incremental collection.
+  * But then not much of anything is safe in the presence of dlclose.
+  */
++
++#ifndef _GNU_SOURCE
++# define _GNU_SOURCE
++#endif
+ #ifndef MACOS
+ #  include <sys/types.h>
+ #endif
+@@ -299,14 +303,68 @@ void GC_register_dynamic_libraries()
+ 
+ #if defined(LINUX) && defined(__ELF__) || defined(SCO_ELF)
+ 
++#include <elf.h>
++#include <link.h>
++
++# if defined(LINUX) \
++     && (__GLIBC__ > 2 || (__GLIBC__ == 2 && __GLIBC_MINOR__ > 2) \
++         || (__GLIBC__ == 2 && __GLIBC_MINOR__ == 2 && defined(DT_CONFIG)))
++
++#include <stddef.h>
++
++static int GC_register_dynlib_callback(info, size, ptr)
++     struct dl_phdr_info * info;
++     size_t size;
++     void * ptr;
++{
++  const ElfW(Phdr) * p;
++  char * start;
++  register int i;
++
++  /* Make sure struct dl_phdr_info is at least as big as we need.  */
++  if (size < offsetof (struct dl_phdr_info, dlpi_phnum)
++      + sizeof (info->dlpi_phnum))
++    return -1;
++
++  /* Skip the first object - it is the main program.  */
++  if (*(int *)ptr == 0)
++    {
++      *(int *)ptr = 1;
++      return 0;
++    }
++
++  p = info->dlpi_phdr;
++  for( i = 0; i < (int)(info->dlpi_phnum); ((i++),(p++)) ) {
++    switch( p->p_type ) {
++      case PT_LOAD:
++	{
++	  if( !(p->p_flags & PF_W) ) break;
++	  start = ((char *)(p->p_vaddr)) + info->dlpi_addr;
++	  GC_add_roots_inner(start, start + p->p_memsz, TRUE);
++	}
++      break;
++      default:
++	break;
++    }
++  }
++
++  return 0;
++}     
++
++void GC_register_dynamic_libraries()
++{
++  int tmp = 0;
++
++  dl_iterate_phdr(GC_register_dynlib_callback, &tmp);
++}
++
++#else /* !DL_ITERATE_PHDR */
++
+ /* Dynamic loading code for Linux running ELF. Somewhat tested on
+  * Linux/x86, untested but hopefully should work on Linux/Alpha. 
+  * This code was derived from the Solaris/ELF support. Thanks to
+  * whatever kind soul wrote that.  - Patrick Bridges */
+ 
+-#include <elf.h>
+-#include <link.h>
+-
+ /* Newer versions of Linux/Alpha and Linux/x86 define this macro.  We
+  * define it for those older versions that don't.  */
+ #  ifndef ElfW
+@@ -379,6 +437,7 @@ void GC_register_dynamic_libraries()
+     }
+ }
+ 
++#endif /* !DL_ITERATE_PHDR */
+ #endif
+ 
+ #if defined(IRIX5) || defined(USE_PROC_FOR_LIBRARIES)
 diff --git a/config-ml.in b/config-ml.in
 index 16885f9..3ad2d4b 100644
 --- a/config-ml.in
@@ -50,6 +171,46 @@ index 16885f9..3ad2d4b 100644
  				$(DO)); then \
  		  true; \
  		else \
+diff --git a/fastjar/configure b/fastjar/configure
+index 5e10283..7ced659 100755
+--- a/fastjar/configure
++++ b/fastjar/configure
+@@ -1963,9 +1963,12 @@ EOF
+ fi
+ 
+ 
+-ZDEPS='$(top_builddir)/../zlib/libz.a'
+-ZLIBS="$ZDEPS -L\$(here)/../zlib/$libsubdir"
+-ZINCS='-I$(top_srcdir)/../zlib'
++#ZDEPS='$(top_builddir)/../zlib/libz.a'
++#ZLIBS="$ZDEPS -L\$(here)/../zlib/$libsubdir"
++#ZINCS='-I$(top_srcdir)/../zlib'
++ZDEPS=
++ZLIBS=-lz
++ZINCS=
+ 
+ 
+ 
+diff --git a/fastjar/configure.in b/fastjar/configure.in
+index 73eff88..fdce9f6 100644
+--- a/fastjar/configure.in
++++ b/fastjar/configure.in
+@@ -38,9 +38,12 @@ dnl Check byte order
+ AC_C_BIGENDIAN
+ 
+ dnl Brain dead check for tree's zlib
+-ZDEPS='$(top_builddir)/../zlib/libz.a'
+-ZLIBS="$ZDEPS -L\$(here)/../zlib/$libsubdir"
+-ZINCS='-I$(top_srcdir)/../zlib'
++#ZDEPS='$(top_builddir)/../zlib/libz.a'
++#ZLIBS="$ZDEPS -L\$(here)/../zlib/$libsubdir"
++#ZINCS='-I$(top_srcdir)/../zlib'
++ZDEPS=
++ZLIBS=-lz
++ZINCS=
+ AC_SUBST(ZLIBS)
+ AC_SUBST(ZDEPS)
+ AC_SUBST(ZINCS)
 diff --git a/gcc/Makefile.in b/gcc/Makefile.in
 index 074e01e..89cd993 100644
 --- a/gcc/Makefile.in
@@ -438,6 +599,280 @@ index 074e01e..89cd993 100644
  #
  # These targets are for the dejagnu testsuites. The file site.exp
  # contains global variables that all the testsuites will use.
+diff --git a/gcc/config.in b/gcc/config.in
+index 6033b4f..9982b5a 100644
+--- a/gcc/config.in
++++ b/gcc/config.in
+@@ -449,6 +449,9 @@
+ /* Define if your assembler mis-optimizes .eh_frame data. */
+ #undef USE_AS_TRADITIONAL_FORMAT
+ 
++/* Define if your assembler supports marking sections with SHF_MERGE flag. */
++#undef HAVE_GAS_SHF_MERGE
++
+ /* Define if your assembler supports .register. */
+ #undef HAVE_AS_REGISTER_PSEUDO_OP
+ 
+diff --git a/gcc/config/alpha/elf.h b/gcc/config/alpha/elf.h
+index a77a643..0bff9a5 100644
+--- a/gcc/config/alpha/elf.h
++++ b/gcc/config/alpha/elf.h
+@@ -247,7 +247,15 @@ do {									\
+    includes this file.  */
+ 
+ #undef  EXTRA_SECTIONS
++#ifdef HAVE_GAS_SHF_MERGE
++#define EXTRA_SECTIONS in_const, in_ctors, in_dtors,			\
++  in_sbss, in_sdata, in_const_cst1, in_const_cst2, in_const_cst4,	\
++  in_const_cst8, in_const_cst16,					\
++  in_const_str1 = 256, in_const_str2 = 256 + 32,			\
++  in_const_str4 = 256 + 2*32, in_const_str8 = 256 + 3*32
++#else
+ #define EXTRA_SECTIONS in_const, in_ctors, in_dtors, in_sbss, in_sdata
++#endif
+ 
+ /* A default list of extra section function definitions.  For targets
+    that use additional sections (e.g. .tdesc) you should override this
+@@ -256,6 +264,8 @@ do {									\
+ #undef  EXTRA_SECTION_FUNCTIONS
+ #define EXTRA_SECTION_FUNCTIONS						\
+   CONST_SECTION_FUNCTION						\
++  CONST_STR_SECTION_FUNCTION						\
++  CONST_VAR_SECTION_FUNCTION						\
+   SECTION_FUNCTION_TEMPLATE(ctors_section, in_ctors, CTORS_SECTION_ASM_OP) \
+   SECTION_FUNCTION_TEMPLATE(dtors_section, in_dtors, DTORS_SECTION_ASM_OP) \
+   SECTION_FUNCTION_TEMPLATE(sbss_section, in_sbss, SBSS_SECTION_ASM_OP)	\
+@@ -269,6 +279,140 @@ extern void sdata_section		PARAMS ((void));
+ #undef  READONLY_DATA_SECTION
+ #define READONLY_DATA_SECTION() const_section ()
+ 
++#ifdef HAVE_GAS_SUBSECTION_ORDERING
++#define USE_GAS_SUBSECTION_ORDERING 1
++#else
++#define USE_GAS_SUBSECTION_ORDERING 0
++#endif
++
++#ifdef HAVE_GAS_SHF_MERGE
++#define CONST_STR_SECTION_FUNCTION					\
++extern void const_str_section PARAMS ((tree, unsigned HOST_WIDE_INT));	\
++									\
++void									\
++const_str_section (decl, align)						\
++     tree decl;								\
++     unsigned HOST_WIDE_INT align;					\
++{									\
++  enum in_section in;							\
++  enum machine_mode mode;						\
++  const char *str;							\
++  int i, j, len, unit;							\
++									\
++  if (flag_merge_constants						\
++      && USE_CONST_SECTION						\
++      && TREE_CODE (decl) == STRING_CST					\
++      && TREE_CODE (TREE_TYPE (decl)) == ARRAY_TYPE			\
++      && align <= 256)							\
++    {									\
++      mode = TYPE_MODE (TREE_TYPE (TREE_TYPE (decl)));			\
++      switch (GET_MODE_BITSIZE (mode))					\
++	{								\
++	case 8: in = in_const_str1; break;				\
++	case 16: in = in_const_str2; break;				\
++	case 32: in = in_const_str4; break;				\
++	case 64: in = in_const_str8; break;				\
++	default: in = no_section; break;				\
++	}								\
++      if (align < GET_MODE_BITSIZE (mode))				\
++	align = GET_MODE_BITSIZE (mode);				\
++      if (in != no_section)						\
++	{								\
++	  str = TREE_STRING_POINTER (decl);				\
++	  len = TREE_STRING_LENGTH (decl);				\
++	  unit = GET_MODE_SIZE (mode);					\
++	  /* Check for embedded NUL characters.  */			\
++	  for (i = 0; i < len; i += unit)				\
++	    {								\
++	      for (j = 0; j < unit; j++)				\
++		if (str [i + j] != '\0')				\
++		  break;						\
++	      if (j == unit)						\
++		break;							\
++	    }								\
++	  if (i == len - unit)						\
++	    {								\
++	      unit = GET_MODE_BITSIZE (mode) / 8;			\
++	      if (!i && GET_MODE_BITSIZE (mode) < align)		\
++		{							\
++		  /* A "" string with requested alignment greater than	\
++		     character size might cause a problem:		\
++		     if some other string required even bigger		\
++		     alignment than "", then linker might think the	\
++		     "" is just part of padding after some other string	\
++		     and not put it into the hash table initially.	\
++		     But this means "" could have smaller alignment	\
++		     than requested.  */				\
++		  if (USE_GAS_SUBSECTION_ORDERING)			\
++		    {							\
++		      fprintf (asm_out_file,				\
++"\t.section\t.rodata.str%d.%d,\"aMS\",@progbits,%d\n\t.subsection\t-1\n",\
++			       unit, (int) (align / 8), unit);		\
++		      in_section = in;					\
++		    }							\
++		  else							\
++		    const_section ();					\
++		  return;						\
++		}							\
++	      in = (enum in_section) ((int) in + align / 8);		\
++	      if (in_section != in)					\
++		{							\
++		  fprintf (asm_out_file,				\
++"\t.section\t.rodata.str%d.%d,\"aMS\",@progbits,%d\n",			\
++			   unit, (int) (align / 8), unit);		\
++		  in_section = in;					\
++		}							\
++	      return;							\
++	    }								\
++	}								\
++    }									\
++  const_section ();							\
++}
++
++#define CONST_VAR_SECTION_FUNCTION					\
++extern void const_var_section						\
++  PARAMS ((enum machine_mode, unsigned HOST_WIDE_INT));			\
++									\
++void									\
++const_var_section (mode, align)						\
++     enum machine_mode mode;						\
++     unsigned HOST_WIDE_INT align;					\
++{									\
++  if (flag_merge_constants && mode != VOIDmode && mode != BLKmode	\
++      && GET_MODE_BITSIZE (mode) <= align)				\
++    {									\
++      enum in_section in;						\
++									\
++      switch (align)							\
++	{								\
++	case 8: in = in_const_cst1; break;				\
++	case 16: in = in_const_cst2; break;				\
++	case 32: in = in_const_cst4; break;				\
++	case 64: in = in_const_cst8; break;				\
++	case 128: in = in_const_cst16; break;				\
++	default: in = no_section; break;				\
++	}								\
++      if (in_section != no_section)					\
++	{								\
++	  if (in_section != in)						\
++	    {								\
++	      fprintf (asm_out_file,					\
++"\t.section\t.rodata.cst%d,\"aM\",@progbits,%d\n",			\
++		       (int) (align / 8), (int) (align / 8));		\
++	      in_section = in;						\
++	    }								\
++	  return;							\
++	}								\
++    }									\
++  const_section ();							\
++}
++#else
++#define CONST_STR_SECTION_FUNCTION
++#define CONST_VAR_SECTION_FUNCTION
++#define const_str_section(DECL,ALIGN) const_section ()
++#define const_var_section(MODE,ALIGN) const_section ()
++#endif
++
+ #undef  CONST_SECTION_FUNCTION
+ #define CONST_SECTION_FUNCTION					\
+ void								\
+@@ -404,6 +548,8 @@ void FN ()					\
+ 	 {							\
+ 	   if (flag_writable_strings)				\
+ 	     SECNUM = 2;					\
++	   else							\
++	     SECNUM = 0x101;					\
+ 	 }							\
+        else if (TREE_CODE (DECL) == VAR_DECL)			\
+ 	 {							\
+@@ -415,6 +561,17 @@ void FN ()					\
+ 		    || TREE_SIDE_EFFECTS (DECL)			\
+ 		    || ! TREE_CONSTANT (DECL_INITIAL (DECL)))	\
+ 	     SECNUM = 2;					\
++	  else if (flag_merge_constants >= 2)			\
++	    {							\
++	      /* C and C++ don't allow different variables to	\
++		 share the same location.  -fmerge-all-constants\
++		 allows even that (at the expense of not	\
++		 conforming).  */				\
++	      if (TREE_CODE (DECL_INITIAL (DECL)) == STRING_CST)\
++		SECNUM = 0x201;					\
++	      else						\
++		SECNUM = 0x301;					\
++	    }							\
+ 	 }							\
+        else if (TREE_CODE (DECL) == CONSTRUCTOR)		\
+ 	 {							\
+@@ -426,7 +583,7 @@ void FN ()					\
+ 	 }							\
+ 								\
+        /* Select small data sections based on size.  */		\
+-       if (SECNUM >= 2)						\
++       if ((SECNUM & 0xff) >= 2)				\
+ 	 {							\
+ 	   int size = int_size_in_bytes (TREE_TYPE (DECL));	\
+ 	   if (size >= 0 && size <= g_switch_value)		\
+@@ -436,7 +593,7 @@ void FN ()					\
+    while (0)
+ 
+ #undef  SELECT_SECTION
+-#define SELECT_SECTION(DECL, RELOC)		\
++#define SELECT_SECTION(DECL, RELOC, ALIGN)	\
+   do						\
+     {						\
+       typedef void (*sec_fn) PARAMS ((void));	\
+@@ -454,7 +611,23 @@ void FN ()					\
+ 						\
+       DO_SELECT_SECTION (sec, DECL, RELOC);	\
+ 						\
+-      (*sec_functions[sec]) ();			\
++      switch (sec)				\
++	{					\
++	case 0x101:				\
++	  const_str_section (DECL, ALIGN);	\
++	  break;				\
++	case 0x201:				\
++	  const_str_section (DECL_INITIAL (DECL),\
++			     ALIGN);		\
++	  break;				\
++	case 0x301:				\
++	  const_var_section (DECL_MODE (DECL),	\
++			     ALIGN);		\
++	  break;				\
++	default:				\
++	  (*sec_functions[sec]) ();		\
++	  break;				\
++	}					\
+     }						\
+   while (0)
+ 
+@@ -486,7 +659,7 @@ void FN ()					\
+       STRIP_NAME_ENCODING (name, name);					\
+       nlen = strlen (name);						\
+ 									\
+-      prefix = prefixes[sec][DECL_ONE_ONLY(DECL)];			\
++      prefix = prefixes[sec & 0xff][DECL_ONE_ONLY(DECL)];		\
+       plen = strlen (prefix);						\
+ 									\
+       string = alloca (nlen + plen + 1);				\
+@@ -505,8 +678,8 @@ void FN ()					\
+    go into the const section.  */
+ 
+ #undef  SELECT_RTX_SECTION
+-#define SELECT_RTX_SECTION(MODE, RTX) \
+-   const_section()
++#define SELECT_RTX_SECTION(MODE, RTX, ALIGN) \
++   const_var_section((MODE), (ALIGN))
+ 
+ /* Define the strings used for the special svr4 .type and .size directives.
+    These strings generally do not vary from one system running svr4 to
 diff --git a/gcc/config/alpha/linux.h b/gcc/config/alpha/linux.h
 index e2a6e60..84d2657 100644
 --- a/gcc/config/alpha/linux.h
@@ -486,6 +921,337 @@ index 339e25c..d72f7de 100644
 +	  $(INSTALL_DATA) $${dir}/crtfini.o $(DESTDIR)$(libsubdir)/$${dir}/crtfini.o; \
 +	  chmod a-x $(DESTDIR)$(libsubdir)/$${dir}/crtfini.o; \
  	done
+diff --git a/gcc/config/arm/aof.h b/gcc/config/arm/aof.h
+index f10b7c4..b962126 100644
+--- a/gcc/config/arm/aof.h
++++ b/gcc/config/arm/aof.h
+@@ -55,7 +55,7 @@ Boston, MA 02111-1307, USA.  */
+ char *aof_text_section ();
+ #define TEXT_SECTION_ASM_OP aof_text_section ()
+ 
+-#define SELECT_RTX_SECTION(MODE,RTX) text_section ();
++#define SELECT_RTX_SECTION(MODE,RTX,ALIGN) text_section ();
+ 
+ char *aof_data_section ();
+ #define DATA_SECTION_ASM_OP aof_data_section ()
+diff --git a/gcc/config/arm/linux-elf.h b/gcc/config/arm/linux-elf.h
+index d5951d8..5922dda 100644
+--- a/gcc/config/arm/linux-elf.h
++++ b/gcc/config/arm/linux-elf.h
+@@ -150,7 +150,7 @@ const_section ()							\
+    section for output of DECL.  DECL is either a `VAR_DECL' node
+    or a constant of some sort.  RELOC indicates whether forming
+    the initial value of DECL requires link-time relocations.  */
+-#define SELECT_SECTION(DECL,RELOC)					\
++#define SELECT_SECTION(DECL,RELOC,ALIGN)				\
+ {									\
+   if (TREE_CODE (DECL) == STRING_CST)					\
+     {									\
+@@ -217,7 +217,7 @@ const_section ()							\
+    of constant in RTL.  The argument MODE is redundant except
+    in the case of a `const_int' rtx.  Currently, these always
+    go into the const section.  */
+-#define SELECT_RTX_SECTION(MODE,RTX) const_section ()
++#define SELECT_RTX_SECTION(MODE,RTX,ALIGN) const_section ()
+ 
+ /* On svr4, we *do* have support for the .init and .fini sections, and we
+    can put stuff in there to be executed before and after `main'.  We let
+diff --git a/gcc/config/avr/avr.h b/gcc/config/avr/avr.h
+index 96f2872..e2b27d5 100644
+--- a/gcc/config/avr/avr.h
++++ b/gcc/config/avr/avr.h
+@@ -2027,7 +2027,7 @@ progmem_section (void)							      \
+    If these items should be placed in the text section, this macro
+    should not be defined.  */
+ 
+-/* `SELECT_SECTION (EXP, RELOC)'
++/* `SELECT_SECTION (EXP, RELOC, ALIGN)'
+    A C statement or statements to switch to the appropriate section
+    for output of EXP.  You can assume that EXP is either a `VAR_DECL'
+    node or a constant of some sort.  RELOC indicates whether the
+@@ -2038,7 +2038,7 @@ progmem_section (void)							      \
+    Do not define this macro if you put all read-only variables and
+    constants in the read-only data section (usually the text section).  */
+ 
+-/* `SELECT_RTX_SECTION (MODE, RTX)'
++/* `SELECT_RTX_SECTION (MODE, RTX, ALIGN)'
+    A C statement or statements to switch to the appropriate section
+    for output of RTX in mode MODE.  You can assume that RTX is some
+    kind of constant in RTL.  The argument MODE is redundant except in
+diff --git a/gcc/config/c4x/c4x.h b/gcc/config/c4x/c4x.h
+index e6fee5d..49c43ed 100644
+--- a/gcc/config/c4x/c4x.h
++++ b/gcc/config/c4x/c4x.h
+@@ -2118,7 +2118,7 @@ dtors_section ()							\
+    or a constant of some sort.  RELOC indicates whether forming
+    the initial value of DECL requires link-time relocations.  */
+ 
+-#define SELECT_SECTION(DECL, RELOC)					\
++#define SELECT_SECTION(DECL, RELOC, ALIGN)				\
+ {									\
+   if (TREE_CODE (DECL) == STRING_CST)					\
+     {									\
+@@ -2163,7 +2163,7 @@ dtors_section ()							\
+    in the case of a `const_int' rtx.  Currently, these always
+    go into the const section.  */
+ 
+-#define SELECT_RTX_SECTION(MODE, RTX) const_section()
++#define SELECT_RTX_SECTION(MODE, RTX, ALIGN) const_section()
+ 
+ 
+ /* Overall Framework of an Assembler File.  */
+diff --git a/gcc/config/d30v/d30v.h b/gcc/config/d30v/d30v.h
+index 4832213..ff8ba4a 100644
+--- a/gcc/config/d30v/d30v.h
++++ b/gcc/config/d30v/d30v.h
+@@ -3951,7 +3951,7 @@ extern const char *d30v_branch_cost_string;
+    the read-only data section (usually the text section).
+ 
+    Defined in svr4.h.  */
+-/* #define SELECT_SECTION(EXP, RELOC) */
++/* #define SELECT_SECTION(EXP, RELOC, ALIGN) */
+ 
+ /* A C statement or statements to switch to the appropriate section for output
+    of RTX in mode MODE.  You can assume that RTX is some kind of constant in
+@@ -3963,7 +3963,7 @@ extern const char *d30v_branch_cost_string;
+    section.
+ 
+    Defined in svr4.h.  */
+-/* #define SELECT_RTX_SECTION(MODE, RTX) */
++/* #define SELECT_RTX_SECTION(MODE, RTX, ALIGN) */
+ 
+ /* Define this macro if jump tables (for `tablejump' insns) should be output in
+    the text section, along with the assembler instructions.  Otherwise, the
+diff --git a/gcc/config/elfos.h b/gcc/config/elfos.h
+index a955199..d2bffaf 100644
+--- a/gcc/config/elfos.h
++++ b/gcc/config/elfos.h
+@@ -286,7 +286,15 @@ Boston, MA 02111-1307, USA.  */
+    includes this file.  */
+ 
+ #undef  EXTRA_SECTIONS
++#ifdef HAVE_GAS_SHF_MERGE
++#define EXTRA_SECTIONS in_const, in_ctors, in_dtors,	\
++  in_const_cst1, in_const_cst2, in_const_cst4, 		\
++  in_const_cst8, in_const_cst16, in_const_str1 = 256,	\
++  in_const_str2 = 256 + 32, in_const_str4 = 256 + 2*32,	\
++  in_const_str8 = 256 + 3*32
++#else
+ #define EXTRA_SECTIONS in_const, in_ctors, in_dtors
++#endif
+ 
+ /* A default list of extra section function definitions.  For targets
+    that use additional sections (e.g. .tdesc) you should override this
+@@ -296,10 +304,146 @@ Boston, MA 02111-1307, USA.  */
+ #define EXTRA_SECTION_FUNCTIONS		\
+   CONST_SECTION_FUNCTION		\
+   CTORS_SECTION_FUNCTION		\
+-  DTORS_SECTION_FUNCTION
++  DTORS_SECTION_FUNCTION		\
++  CONST_STR_SECTION_FUNCTION		\
++  CONST_VAR_SECTION_FUNCTION
+ 
+ #define READONLY_DATA_SECTION() const_section ()
+ 
++#ifdef HAVE_GAS_SUBSECTION_ORDERING
++#define USE_GAS_SUBSECTION_ORDERING 1
++#else
++#define USE_GAS_SUBSECTION_ORDERING 0
++#endif
++
++#ifdef HAVE_GAS_SHF_MERGE
++#define CONST_STR_SECTION_FUNCTION					\
++extern void const_str_section PARAMS ((tree, unsigned HOST_WIDE_INT));	\
++									\
++void									\
++const_str_section (decl, align)						\
++     tree decl;								\
++     unsigned HOST_WIDE_INT align;					\
++{									\
++  enum in_section in;							\
++  enum machine_mode mode;						\
++  const char *str;							\
++  int i, j, len, unit;							\
++									\
++  if (flag_merge_constants						\
++      && USE_CONST_SECTION						\
++      && TREE_CODE (decl) == STRING_CST					\
++      && TREE_CODE (TREE_TYPE (decl)) == ARRAY_TYPE			\
++      && align <= 256)							\
++    {									\
++      mode = TYPE_MODE (TREE_TYPE (TREE_TYPE (decl)));			\
++      switch (GET_MODE_BITSIZE (mode))					\
++	{								\
++	case 8: in = in_const_str1; break;				\
++	case 16: in = in_const_str2; break;				\
++	case 32: in = in_const_str4; break;				\
++	case 64: in = in_const_str8; break;				\
++	default: in = no_section; break;				\
++	}								\
++      if (align < GET_MODE_BITSIZE (mode))				\
++	align = GET_MODE_BITSIZE (mode);				\
++      if (in != no_section)						\
++	{								\
++	  str = TREE_STRING_POINTER (decl);				\
++	  len = TREE_STRING_LENGTH (decl);				\
++	  unit = GET_MODE_SIZE (mode);					\
++	  /* Check for embedded NUL characters.  */			\
++	  for (i = 0; i < len; i += unit)				\
++	    {								\
++	      for (j = 0; j < unit; j++)				\
++		if (str [i + j] != '\0')				\
++		  break;						\
++	      if (j == unit)						\
++		break;							\
++	    }								\
++	  if (i == len - unit)						\
++	    {								\
++	      unit = GET_MODE_BITSIZE (mode) / 8;			\
++	      if (!i && GET_MODE_BITSIZE (mode) < align)		\
++		{							\
++		  /* A "" string with requested alignment greater than	\
++		     character size might cause a problem:		\
++		     if some other string required even bigger		\
++		     alignment than "", then linker might think the	\
++		     "" is just part of padding after some other string	\
++		     and not put it into the hash table initially.	\
++		     But this means "" could have smaller alignment	\
++		     than requested.  */				\
++		  if (USE_GAS_SUBSECTION_ORDERING)			\
++		    {							\
++		      fprintf (asm_out_file,				\
++"\t.section\t.rodata.str%d.%d,\"aMS\",@progbits,%d\n\t.subsection\t-1\n",\
++			       unit, (int) (align / 8), unit);		\
++		      in_section = in;					\
++		    }							\
++		  else							\
++		    const_section ();					\
++		  return;						\
++		}							\
++	      in = (enum in_section) ((int) in + align / 8);		\
++	      if (in_section != in)					\
++		{							\
++		  fprintf (asm_out_file,				\
++"\t.section\t.rodata.str%d.%d,\"aMS\",@progbits,%d\n",			\
++			   unit, (int) (align / 8), unit);		\
++		  in_section = in;					\
++		}							\
++	      return;							\
++	    }								\
++	}								\
++    }									\
++  const_section ();							\
++}
++
++#define CONST_VAR_SECTION_FUNCTION					\
++extern void const_var_section						\
++  PARAMS ((enum machine_mode, unsigned HOST_WIDE_INT));			\
++									\
++void									\
++const_var_section (mode, align)						\
++     enum machine_mode mode;						\
++     unsigned HOST_WIDE_INT align;					\
++{									\
++  if (flag_merge_constants && mode != VOIDmode && mode != BLKmode	\
++      && GET_MODE_BITSIZE (mode) <= align)				\
++    {									\
++      enum in_section in;						\
++									\
++      switch (align)							\
++	{								\
++	case 8: in = in_const_cst1; break;				\
++	case 16: in = in_const_cst2; break;				\
++	case 32: in = in_const_cst4; break;				\
++	case 64: in = in_const_cst8; break;				\
++	case 128: in = in_const_cst16; break;				\
++	default: in = no_section; break;				\
++	}								\
++      if (in_section != no_section)					\
++	{								\
++	  if (in_section != in)						\
++	    {								\
++	      fprintf (asm_out_file,					\
++"\t.section\t.rodata.cst%d,\"aM\",@progbits,%d\n",			\
++		       (int) (align / 8), (int) (align / 8));		\
++	      in_section = in;						\
++	    }								\
++	  return;							\
++	}								\
++    }									\
++  const_section ();							\
++}
++#else
++#define CONST_STR_SECTION_FUNCTION
++#define CONST_VAR_SECTION_FUNCTION
++#define const_str_section(DECL,ALIGN) const_section ()
++#define const_var_section(MODE,ALIGN) const_section ()
++#endif
++
+ #define CONST_SECTION_FUNCTION					\
+ void								\
+ const_section ()						\
+@@ -472,23 +616,26 @@ dtors_section ()						\
+ /* A C statement or statements to switch to the appropriate
+    section for output of RTX in mode MODE.  RTX is some kind
+    of constant in RTL.  The argument MODE is redundant except
+-   in the case of a `const_int' rtx.  Currently, these always
+-   go into the const section.  */
++   in the case of a `const_int' rtx.
++   If assembler supports SHF_MERGE sections, put it into
++   a .rodata.cstN section where N is size of the constant,
++   otherwise into const section.  */
+ 
+ #undef  SELECT_RTX_SECTION
+-#define SELECT_RTX_SECTION(MODE, RTX) const_section ()
++#define SELECT_RTX_SECTION(MODE, RTX, ALIGN)	\
++  const_var_section ((MODE), (ALIGN))
+ 
+ /* A C statement or statements to switch to the appropriate
+    section for output of DECL.  DECL is either a `VAR_DECL' node
+    or a constant of some sort.  RELOC indicates whether forming
+    the initial value of DECL requires link-time relocations.  */
+ 
+-#define SELECT_SECTION(DECL, RELOC)				\
++#define SELECT_SECTION(DECL, RELOC, ALIGN)			\
+ {								\
+   if (TREE_CODE (DECL) == STRING_CST)				\
+     {								\
+       if (! flag_writable_strings)				\
+-	const_section ();					\
++	const_str_section ((DECL), (ALIGN));			\
+       else							\
+ 	data_section ();					\
+     }								\
+@@ -500,8 +647,15 @@ dtors_section ()						\
+ 	  || (DECL_INITIAL (DECL) != error_mark_node		\
+ 	      && !TREE_CONSTANT (DECL_INITIAL (DECL))))		\
+ 	data_section ();					\
+-      else							\
++      else if (flag_merge_constants < 2)			\
++	/* C and C++ don't allow different variables to share	\
++	   the same location.  -fmerge-all-constants allows	\
++	   even that (at the expense of not conforming).  */	\
+ 	const_section ();					\
++      else if (TREE_CODE (DECL_INITIAL (DECL)) == STRING_CST)	\
++	const_str_section (DECL_INITIAL (DECL), (ALIGN));	\
++      else							\
++	const_var_section (DECL_MODE (DECL), (ALIGN));		\
+     }								\
+   else if (TREE_CODE (DECL) == CONSTRUCTOR)			\
+     {								\
+diff --git a/gcc/config/i386/dgux.h b/gcc/config/i386/dgux.h
+index 4914c5f..5d7a6aa 100644
+--- a/gcc/config/i386/dgux.h
++++ b/gcc/config/i386/dgux.h
+@@ -232,7 +232,7 @@ Boston, MA 02111-1307, USA.  */
+ 
+ /* Must use data section for relocatable constants when pic.  */
+ #undef SELECT_RTX_SECTION
+-#define SELECT_RTX_SECTION(MODE,RTX)            \
++#define SELECT_RTX_SECTION(MODE,RTX,ALIGN)      \
+ {                                               \
+   if (flag_pic && symbolic_operand (RTX, VOIDmode)) \
+     data_section ();                            \
 diff --git a/gcc/config/i386/linux.h b/gcc/config/i386/linux.h
 index aacf7eb..839bccc 100644
 --- a/gcc/config/i386/linux.h
@@ -502,6 +1268,250 @@ index aacf7eb..839bccc 100644
  	  struct ucontext uc;						\
  	} *rt_ = (CONTEXT)->cfa;					\
  	sc_ = (struct sigcontext *) &rt_->uc.uc_mcontext;		\
+diff --git a/gcc/config/i386/osfrose.h b/gcc/config/i386/osfrose.h
+index 138ef67..95a5075 100644
+--- a/gcc/config/i386/osfrose.h
++++ b/gcc/config/i386/osfrose.h
+@@ -571,7 +571,7 @@ while (0)
+    and select that section.  */
+ 
+ #undef	SELECT_RTX_SECTION
+-#define SELECT_RTX_SECTION(MODE, RTX)					\
++#define SELECT_RTX_SECTION(MODE, RTX, ALIGN)				\
+ do									\
+   {									\
+     if (MODE == Pmode && HALF_PIC_P () && HALF_PIC_ADDRESS_P (RTX))	\
+@@ -582,7 +582,7 @@ do									\
+ while (0)
+ 
+ #undef	SELECT_SECTION
+-#define SELECT_SECTION(DECL, RELOC)					\
++#define SELECT_SECTION(DECL, RELOC, ALIGN)				\
+ {									\
+   if (RELOC && HALF_PIC_P ())						\
+     data_section ();							\
+diff --git a/gcc/config/i386/sco5.h b/gcc/config/i386/sco5.h
+index 49031cf..72c4298 100644
+--- a/gcc/config/i386/sco5.h
++++ b/gcc/config/i386/sco5.h
+@@ -371,7 +371,7 @@ do {									\
+ 
+ /* Must use data section for relocatable constants when pic.  */
+ #undef SELECT_RTX_SECTION
+-#define SELECT_RTX_SECTION(MODE,RTX)					\
++#define SELECT_RTX_SECTION(MODE,RTX,ALIGN)				\
+ {									\
+   if (TARGET_ELF) {							\
+     if (flag_pic && symbolic_operand (RTX, VOIDmode))			\
+@@ -662,7 +662,7 @@ dtors_section ()							\
+    : 0))
+ 
+ #undef SELECT_SECTION
+-#define SELECT_SECTION(DECL,RELOC)					\
++#define SELECT_SECTION(DECL,RELOC,ALIGN)				\
+ {									\
+   if (TARGET_ELF && flag_pic && RELOC)					\
+      data_section ();							\
+diff --git a/gcc/config/i386/svr3gas.h b/gcc/config/i386/svr3gas.h
+index db4be5d..0de053c 100644
+--- a/gcc/config/i386/svr3gas.h
++++ b/gcc/config/i386/svr3gas.h
+@@ -231,7 +231,7 @@ dtors_section ()							\
+    or a constant of some sort.  RELOC indicates whether forming
+    the initial value of DECL requires link-time relocations.  */
+ 
+-#define SELECT_SECTION(DECL,RELOC)					\
++#define SELECT_SECTION(DECL,RELOC,ALIGN)				\
+ {									\
+   if (TREE_CODE (DECL) == STRING_CST)					\
+     {									\
+@@ -261,7 +261,7 @@ dtors_section ()							\
+    in the case of a `const_int' rtx.  Currently, these always
+    go into the const section.  */
+ 
+-#define SELECT_RTX_SECTION(MODE,RTX) const_section()
++#define SELECT_RTX_SECTION(MODE,RTX,ALIGN) const_section()
+ 
+ /* This is copied from i386/sysv3.h.  */
+ 
+diff --git a/gcc/config/ia64/sysv4.h b/gcc/config/ia64/sysv4.h
+index 99f561c..e98f20a 100644
+--- a/gcc/config/ia64/sysv4.h
++++ b/gcc/config/ia64/sysv4.h
+@@ -182,12 +182,12 @@ do {									\
+ /* We override svr4.h so that we can support the sdata section.  */
+ 
+ #undef SELECT_SECTION
+-#define SELECT_SECTION(DECL,RELOC)					\
++#define SELECT_SECTION(DECL,RELOC,ALIGN)				\
+ {									\
+   if (TREE_CODE (DECL) == STRING_CST)					\
+     {									\
+       if (! flag_writable_strings)					\
+-	const_section ();						\
++	const_str_section ((DECL), (ALIGN));				\
+       else								\
+ 	data_section ();						\
+     }									\
+@@ -196,13 +196,20 @@ do {									\
+       if (XSTR (XEXP (DECL_RTL (DECL), 0), 0)[0]			\
+ 	  == SDATA_NAME_FLAG_CHAR)					\
+         sdata_section ();						\
+-      /* ??? We need the extra ! RELOC check, because the default is to \
++      /* ??? We need the extra RELOC check, because the default is to	\
+ 	 only check RELOC if flag_pic is set, and we don't set flag_pic \
+ 	 (yet?).  */							\
+-      else if (DECL_READONLY_SECTION (DECL, RELOC) && ! (RELOC))	\
++      else if (!DECL_READONLY_SECTION (DECL, RELOC) || (RELOC))		\
++	data_section ();						\
++      else if (flag_merge_constants < 2)				\
++	/* C and C++ don't allow different variables to share		\
++	   the same location.  -fmerge-all-constants allows		\
++	   even that (at the expense of not conforming).  */		\
+ 	const_section ();						\
++      else if (TREE_CODE (DECL_INITIAL (DECL)) == STRING_CST)		\
++	const_str_section (DECL_INITIAL (DECL), (ALIGN));		\
+       else								\
+-	data_section ();						\
++	const_var_section (DECL_MODE (DECL), (ALIGN));			\
+     }									\
+   /* This could be a CONSTRUCTOR containing ADDR_EXPR of a VAR_DECL,	\
+      in which case we can't put it in a shared library rodata.  */	\
+@@ -216,7 +223,7 @@ do {									\
+ 
+ extern unsigned int ia64_section_threshold;
+ #undef SELECT_RTX_SECTION
+-#define SELECT_RTX_SECTION(MODE, RTX)					\
++#define SELECT_RTX_SECTION(MODE, RTX, ALIGN)				\
+ {									\
+   if (GET_MODE_SIZE (MODE) > 0						\
+       && GET_MODE_SIZE (MODE) <= ia64_section_threshold)		\
+@@ -224,11 +231,19 @@ extern unsigned int ia64_section_threshold;
+   else if (flag_pic && symbolic_operand ((RTX), (MODE)))		\
+     data_section ();							\
+   else									\
+-    const_section ();							\
++    const_var_section ((MODE), (ALIGN));				\
+ }
+ 
+ #undef EXTRA_SECTIONS
++#ifdef HAVE_GAS_SHF_MERGE
++#define EXTRA_SECTIONS in_const, in_ctors, in_dtors,			\
++  in_sdata, in_sbss, in_const_cst1, in_const_cst2, in_const_cst4,	\
++  in_const_cst8, in_const_cst16, 					\
++  in_const_str1 = 256, in_const_str2 = 256 + 32,			\
++  in_const_str4 = 256 + 2*32, in_const_str8 = 256 + 3*32
++#else
+ #define EXTRA_SECTIONS in_const, in_ctors, in_dtors, in_sdata, in_sbss
++#endif
+ 
+ #undef EXTRA_SECTION_FUNCTIONS
+ #define EXTRA_SECTION_FUNCTIONS						\
+@@ -236,7 +251,9 @@ extern unsigned int ia64_section_threshold;
+   CTORS_SECTION_FUNCTION						\
+   DTORS_SECTION_FUNCTION						\
+   SDATA_SECTION_FUNCTION						\
+-  SBSS_SECTION_FUNCTION
++  SBSS_SECTION_FUNCTION							\
++  CONST_STR_SECTION_FUNCTION						\
++  CONST_VAR_SECTION_FUNCTION
+ 
+ #define SDATA_SECTION_ASM_OP "\t.sdata"
+ 
+diff --git a/gcc/config/m32r/m32r.h b/gcc/config/m32r/m32r.h
+index 1dd4908..f5a3a08 100644
+--- a/gcc/config/m32r/m32r.h
++++ b/gcc/config/m32r/m32r.h
+@@ -1630,7 +1630,8 @@ sbss_section ()								\
+    or a constant of some sort.  RELOC indicates whether the initial value
+    of EXP requires link-time relocations.  */
+ #undef  SELECT_SECTION
+-#define SELECT_SECTION(EXP, RELOC) m32r_select_section ((EXP), (RELOC))
++#define SELECT_SECTION(EXP, RELOC, ALIGN) \
++  m32r_select_section ((EXP), (RELOC))
+ 
+ /* A C statement or statements to switch to the appropriate section for
+    output of RTX in mode MODE.  You can assume that RTX
+diff --git a/gcc/config/m68k/m68k.h b/gcc/config/m68k/m68k.h
+index 382edbf..e2c7cab 100644
+--- a/gcc/config/m68k/m68k.h
++++ b/gcc/config/m68k/m68k.h
+@@ -359,7 +359,7 @@ extern int target_flags;
+ /* This is how to align an instruction for optimal branching. */
+ #define LABEL_ALIGN_AFTER_BARRIER(LABEL) (m68k_align_jumps)
+ 
+-#define SELECT_RTX_SECTION(MODE, X)					\
++#define SELECT_RTX_SECTION(MODE, X, ALIGN)				\
+ {									\
+   if (!flag_pic)							\
+     readonly_data_section();						\
+diff --git a/gcc/config/m88k/dgux.h b/gcc/config/m88k/dgux.h
+index ab8e371..1d91168 100644
+--- a/gcc/config/m88k/dgux.h
++++ b/gcc/config/m88k/dgux.h
+@@ -294,7 +294,7 @@ func_ptr __DTOR_END__[1] = { (func_ptr) (-1) }
+ 
+ /* Must use data section for relocatable constants when pic.  */
+ #undef SELECT_RTX_SECTION
+-#define SELECT_RTX_SECTION(MODE,RTX)            \
++#define SELECT_RTX_SECTION(MODE,RTX,ALIGN)      \
+ {                                               \
+   if (flag_pic && symbolic_operand (RTX))       \
+     data_section ();                            \
+diff --git a/gcc/config/m88k/m88k.h b/gcc/config/m88k/m88k.h
+index 59c0f59..f357c99 100644
+--- a/gcc/config/m88k/m88k.h
++++ b/gcc/config/m88k/m88k.h
+@@ -2528,7 +2528,7 @@ sdata_section ()							\
+ 
+    For strings, the section is selected before the segment info is encoded.  */
+ #undef	SELECT_SECTION
+-#define SELECT_SECTION(DECL,RELOC)					\
++#define SELECT_SECTION(DECL,RELOC,ALIGN)				\
+ {									\
+   if (TREE_CODE (DECL) == STRING_CST)					\
+     {									\
+diff --git a/gcc/config/mcore/mcore-pe.h b/gcc/config/mcore/mcore-pe.h
+index 417271d..9b0614a 100644
+--- a/gcc/config/mcore/mcore-pe.h
++++ b/gcc/config/mcore/mcore-pe.h
+@@ -81,7 +81,7 @@ rdata_section ()						\
+    or a constant of some sort.  RELOC indicates whether forming
+    the initial value of DECL requires link-time relocations.  */
+ #undef  SELECT_SECTION
+-#define SELECT_SECTION(DECL, RELOC)					\
++#define SELECT_SECTION(DECL, RELOC, ALIGN)				\
+ {									\
+   if (TREE_CODE (DECL) == STRING_CST)					\
+     {									\
+@@ -111,7 +111,7 @@ rdata_section ()						\
+    in the case of a `const_int' rtx.  Currently, these always
+    go into the const section.  */
+ #undef  SELECT_RTX_SECTION
+-#define SELECT_RTX_SECTION(MODE, RTX) rdata_section ()
++#define SELECT_RTX_SECTION(MODE, RTX, ALIGN) rdata_section ()
+ 
+ #define MCORE_EXPORT_NAME(STREAM, NAME)			\
+   do							\
+diff --git a/gcc/config/mips/mips.h b/gcc/config/mips/mips.h
+index dc2f8a2..086b712 100644
+--- a/gcc/config/mips/mips.h
++++ b/gcc/config/mips/mips.h
+@@ -4530,10 +4530,12 @@ rdata_section ()							\
+    and select that section.  */
+ 
+ #undef SELECT_RTX_SECTION
+-#define SELECT_RTX_SECTION(MODE,RTX)	mips_select_rtx_section (MODE, RTX)
++#define SELECT_RTX_SECTION(MODE, RTX, ALIGN) \
++  mips_select_rtx_section (MODE, RTX)
+ 
+ #undef SELECT_SECTION
+-#define SELECT_SECTION(DECL, RELOC)	mips_select_section (DECL, RELOC)
++#define SELECT_SECTION(DECL, RELOC, ALIGN) \
++  mips_select_section (DECL, RELOC)
+ 
+ 
+ /* Store in OUTPUT a string (made with alloca) containing
 diff --git a/gcc/config/mips/t-iris6 b/gcc/config/mips/t-iris6
 index 33a4d40..52d4c27 100644
 --- a/gcc/config/mips/t-iris6
@@ -519,6 +1529,107 @@ index 33a4d40..52d4c27 100644
  SHLIB_MKMAP = $(srcdir)/mkmap-flat.awk
  SHLIB_MAPFILES = $(srcdir)/libgcc-std.ver 
  
+diff --git a/gcc/config/nextstep.h b/gcc/config/nextstep.h
+index 76e1a35..5d8b700 100644
+--- a/gcc/config/nextstep.h
++++ b/gcc/config/nextstep.h
+@@ -455,7 +455,7 @@ objc_section_init ()				\
+ #define READONLY_DATA_SECTION const_section
+ 
+ #undef	SELECT_SECTION
+-#define SELECT_SECTION(exp,reloc)				\
++#define SELECT_SECTION(exp,reloc,align)				\
+   do								\
+     {								\
+       if (TREE_CODE (exp) == STRING_CST)			\
+@@ -573,7 +573,7 @@ objc_section_init ()				\
+   while (0)
+ 
+ #undef	SELECT_RTX_SECTION
+-#define SELECT_RTX_SECTION(mode, rtx)					\
++#define SELECT_RTX_SECTION(mode, rtx, align)				\
+   do									\
+     {									\
+       if (GET_MODE_SIZE(mode) == 8)					\
+diff --git a/gcc/config/pa/pa.h b/gcc/config/pa/pa.h
+index 3faa01a..bb400b4 100644
+--- a/gcc/config/pa/pa.h
++++ b/gcc/config/pa/pa.h
+@@ -1450,7 +1450,7 @@ do { 									\
+    library.  Since we can't know at compile time if a symbol will be
+    satisfied by a shared library or main program we put any symbolic
+    constant into the normal data section.  */
+-#define SELECT_RTX_SECTION(MODE,RTX)	\
++#define SELECT_RTX_SECTION(MODE,RTX,ALIGN)	\
+   if (symbolic_operand (RTX, MODE))	\
+     data_section ();			\
+   else					\
+@@ -1460,7 +1460,7 @@ do { 									\
+    in the read-only data section to a symbol defined in a shared
+    library.  Therefore, expressions that might require a reloc can
+    not be placed in the read-only data section.  */
+-#define SELECT_SECTION(EXP,RELOC) \
++#define SELECT_SECTION(EXP,RELOC,ALIGN) \
+   if (TREE_CODE (EXP) == VAR_DECL \
+       && TREE_READONLY (EXP) \
+       && !TREE_THIS_VOLATILE (EXP) \
+diff --git a/gcc/config/romp/romp.h b/gcc/config/romp/romp.h
+index 1ba8769..dafb521 100644
+--- a/gcc/config/romp/romp.h
++++ b/gcc/config/romp/romp.h
+@@ -717,7 +717,7 @@ struct rt_cargs {int gregs, fregs; };
+ 
+    On ROMP, all constants are in the data area.  */
+ 
+-#define SELECT_RTX_SECTION(MODE, X)	data_section ()
++#define SELECT_RTX_SECTION(MODE, X, ALIGN)	data_section ()
+ 
+ /* This macro generates the assembly code for function entry.
+    FILE is a stdio stream to output the code to.
+diff --git a/gcc/config/rs6000/aix.h b/gcc/config/rs6000/aix.h
+index 6620551..0639c67 100644
+--- a/gcc/config/rs6000/aix.h
++++ b/gcc/config/rs6000/aix.h
+@@ -216,7 +216,7 @@ toc_section ()						\
+    On the RS/6000, we have a special section for all variables except those
+    that are static.  */
+ 
+-#define SELECT_SECTION(EXP,RELOC)			\
++#define SELECT_SECTION(EXP,RELOC,ALIGN)			\
+ {							\
+   if ((TREE_CODE (EXP) == STRING_CST			\
+        && ! flag_writable_strings)			\
+@@ -271,7 +271,7 @@ toc_section ()						\
+    However, if this is being placed in the TOC it must be output as a
+    toc entry.  */
+ 
+-#define SELECT_RTX_SECTION(MODE, X)			\
++#define SELECT_RTX_SECTION(MODE, X, ALIGN)		\
+ { if (ASM_OUTPUT_SPECIAL_POOL_ENTRY_P (X, MODE))	\
+     toc_section ();					\
+   else							\
+diff --git a/gcc/config/rs6000/sysv4.h b/gcc/config/rs6000/sysv4.h
+index eec89ed..3ad29a0 100644
+--- a/gcc/config/rs6000/sysv4.h
++++ b/gcc/config/rs6000/sysv4.h
+@@ -553,7 +553,7 @@ fini_section ()								\
+ 
+ /* Override elfos.h definition.  */
+ #undef	SELECT_RTX_SECTION
+-#define	SELECT_RTX_SECTION(MODE, X) rs6000_select_rtx_section (MODE, X)
++#define	SELECT_RTX_SECTION(MODE, X, ALIGN) rs6000_select_rtx_section (MODE, X)
+ 
+ /* A C statement or statements to switch to the appropriate
+    section for output of DECL.  DECL is either a `VAR_DECL' node
+@@ -562,7 +562,7 @@ fini_section ()								\
+ 
+ /* Override elfos.h definition.  */
+ #undef	SELECT_SECTION
+-#define	SELECT_SECTION(DECL, RELOC) rs6000_select_section (DECL, RELOC)
++#define	SELECT_SECTION(DECL, RELOC, ALIGN) rs6000_select_section (DECL, RELOC)
+ 
+ /* A C statement to build up a unique section name, expressed as a
+    STRING_CST node, and assign it to DECL_SECTION_NAME (decl).
 diff --git a/gcc/config/rs6000/t-aix43 b/gcc/config/rs6000/t-aix43
 index ceb8a69..a93e97f 100644
 --- a/gcc/config/rs6000/t-aix43
@@ -532,6 +1643,60 @@ index ceb8a69..a93e97f 100644
  SHLIB_LIBS = -lc `case @shlib_base_name@ in *pthread*) echo -lpthread ;; esac`
  SHLIB_MKMAP = $(srcdir)/mkmap-flat.awk
  SHLIB_MAPFILES = $(srcdir)/libgcc-std.ver
+diff --git a/gcc/config/sparc/sparc.h b/gcc/config/sparc/sparc.h
+index 4d6feac..1849af6 100644
+--- a/gcc/config/sparc/sparc.h
++++ b/gcc/config/sparc/sparc.h
+@@ -912,7 +912,7 @@ if (TARGET_ARCH64				\
+ #endif
+ 
+ /* This is defined differently for v9 in a cover file.  */
+-#define SELECT_SECTION(T,RELOC)						\
++#define SELECT_SECTION(T,RELOC,ALIGN)					\
+ {									\
+   if (TREE_CODE (T) == VAR_DECL)					\
+     {									\
+@@ -945,7 +945,7 @@ if (TARGET_ARCH64				\
+ /* Use text section for a constant
+    unless we need more alignment than that offers.  */
+ /* This is defined differently for v9 in a cover file.  */
+-#define SELECT_RTX_SECTION(MODE, X)		\
++#define SELECT_RTX_SECTION(MODE, X, ALIGN)	\
+ {						\
+   if (GET_MODE_BITSIZE (MODE) <= MAX_TEXT_ALIGN \
+       && ! (flag_pic && (symbolic_operand ((X), (MODE)) || SUNOS4_SHARED_LIBRARIES)))  \
+diff --git a/gcc/config/sparc/sysv4.h b/gcc/config/sparc/sysv4.h
+index 19b7f15..7290a47 100644
+--- a/gcc/config/sparc/sysv4.h
++++ b/gcc/config/sparc/sysv4.h
+@@ -79,7 +79,7 @@ Boston, MA 02111-1307, USA.  */
+ 
+ /* Must use data section for relocatable constants when pic.  */
+ #undef SELECT_RTX_SECTION
+-#define SELECT_RTX_SECTION(MODE,RTX)		\
++#define SELECT_RTX_SECTION(MODE,RTX,ALIGN)	\
+ {						\
+   if (flag_pic && symbolic_operand ((RTX), (MODE))) \
+     data_section ();				\
+diff --git a/gcc/config/svr3.h b/gcc/config/svr3.h
+index 5e732af..b36201c 100644
+--- a/gcc/config/svr3.h
++++ b/gcc/config/svr3.h
+@@ -341,7 +341,7 @@ dtors_section ()							\
+    or a constant of some sort.  RELOC indicates whether forming
+    the initial value of DECL requires link-time relocations.  */
+ 
+-#define SELECT_SECTION(DECL,RELOC)					\
++#define SELECT_SECTION(DECL,RELOC,ALIGN)				\
+ {									\
+   if (TREE_CODE (DECL) == STRING_CST)					\
+     {									\
+@@ -371,4 +371,4 @@ dtors_section ()							\
+    in the case of a `const_int' rtx.  Currently, these always
+    go into the const section.  */
+ 
+-#define SELECT_RTX_SECTION(MODE,RTX) const_section()
++#define SELECT_RTX_SECTION(MODE,RTX,ALIGN) const_section()
 diff --git a/gcc/config/t-slibgcc-elf-ver b/gcc/config/t-slibgcc-elf-ver
 index 9b17c56..9798e58 100644
 --- a/gcc/config/t-slibgcc-elf-ver
@@ -564,6 +1729,106 @@ index 83db1a9..5f428bf 100644
 +	$(LN_S) @shlib_base_name@.so.1 $$(DESTDIR)$$(slibdir)/@shlib_base_name@.so
  SHLIB_MKMAP = $(srcdir)/mkmap-symver.awk
  SHLIB_MAPFILES = $(srcdir)/libgcc-std.ver
+diff --git a/gcc/config/v850/v850.h b/gcc/config/v850/v850.h
+index 3c364b8..95a98d7 100644
+--- a/gcc/config/v850/v850.h
++++ b/gcc/config/v850/v850.h
+@@ -1181,7 +1181,7 @@ zbss_section ()								\
+    Do not define this macro if you put all read-only variables and
+    constants in the read-only data section (usually the text section).  */
+ #undef  SELECT_SECTION
+-#define SELECT_SECTION(EXP, RELOC)					\
++#define SELECT_SECTION(EXP, RELOC, ALIGN)				\
+ do {									\
+   if (TREE_CODE (EXP) == VAR_DECL)					\
+     {									\
+@@ -1244,7 +1244,7 @@ do {									\
+ 
+    Do not define this macro if you put all constants in the read-only
+    data section.  */
+-/* #define SELECT_RTX_SECTION(MODE, RTX) */
++/* #define SELECT_RTX_SECTION(MODE, RTX, ALIGN) */
+ 
+ /* Output at beginning/end of assembler file.  */
+ #undef ASM_FILE_START
+diff --git a/gcc/config/vax/vms.h b/gcc/config/vax/vms.h
+index 08e7453..43129b7 100644
+--- a/gcc/config/vax/vms.h
++++ b/gcc/config/vax/vms.h
+@@ -246,7 +246,7 @@ const_section ()					\
+    Since this macro is used in a number of places, we must also be able
+    to decide where to place string constants.  */
+ 
+-#define SELECT_SECTION(T,RELOC)						\
++#define SELECT_SECTION(T,RELOC,ALIGN)					\
+ {									\
+   if (TREE_CODE (T) == VAR_DECL)					\
+     {									\
+diff --git a/gcc/configure b/gcc/configure
+index f84c89e..19d1984 100755
+--- a/gcc/configure
++++ b/gcc/configure
+@@ -6558,6 +6558,29 @@ EOF
+ fi
+ echo "$ac_t""$gcc_cv_as_eh_frame" 1>&6
+ 
++echo $ac_n "checking assembler section merging support""... $ac_c" 1>&6
++echo "configure:6569: checking assembler section merging support" >&5
++gcc_cv_as_shf_merge=no
++if test x$gcc_cv_gas_major_version != x -a x$gcc_cv_gas_minor_version != x; then
++  if test "$gcc_cv_gas_major_version" -eq 2 -a "$gcc_cv_gas_minor_version" -ge 12 -o "$gcc_cv_gas_major_version" -gt 2 && grep 'obj_format = elf' ../gas/Makefile > /dev/null; then
++    gcc_cv_as_subsections="working SHF_MERGE support"
++  fi
++elif test x$gcc_cv_as != x; then
++	# Check if we support SHF_MERGE sections
++	echo '.section .rodata.str, "aMS", @progbits, 1' > conftest.s
++	if $gcc_cv_as -o conftest.o conftest.s > /dev/null 2>&1; then
++		gcc_cv_as_shf_merge=yes
++	fi
++	rm -f conftest.s conftest.o
++fi
++if test x"$gcc_cv_as_shf_merge" = xyes; then
++	cat >> confdefs.h <<\EOF
++#define HAVE_GAS_SHF_MERGE 1
++EOF
++
++fi
++echo "$ac_t""$gcc_cv_as_shf_merge" 1>&6
++
+ case "$target" in 
+   sparc*-*-*)
+     echo $ac_n "checking assembler .register pseudo-op support""... $ac_c" 1>&6
+diff --git a/gcc/configure.in b/gcc/configure.in
+index 9d0e768..2315e5a 100644
+--- a/gcc/configure.in
++++ b/gcc/configure.in
+@@ -1424,6 +1424,26 @@ EOF
+ fi
+ AC_MSG_RESULT($gcc_cv_as_eh_frame)
+ 
++AC_MSG_CHECKING(assembler section merging support)
++gcc_cv_as_shf_merge=no
++if test x$gcc_cv_gas_major_version != x -a x$gcc_cv_gas_minor_version != x; then
++  if test "$gcc_cv_gas_major_version" -eq 2 -a "$gcc_cv_gas_minor_version" -ge 12 -o "$gcc_cv_gas_major_version" -gt 2 && grep 'obj_format = elf' ../gas/Makefile > /dev/null; then
++    gcc_cv_as_subsections="working SHF_MERGE support"
++  fi
++elif test x$gcc_cv_as != x; then
++	# Check if we support SHF_MERGE sections
++	echo '.section .rodata.str, "aMS", @progbits, 1' > conftest.s
++	if $gcc_cv_as -o conftest.o conftest.s > /dev/null 2>&1; then
++		gcc_cv_as_shf_merge=yes
++	fi
++	rm -f conftest.s conftest.o
++fi
++if test x"$gcc_cv_as_shf_merge" = xyes; then
++	AC_DEFINE(HAVE_GAS_SHF_MERGE, 1,
++[Define if your assembler supports marking sections with SHF_MERGE flag.])
++fi
++AC_MSG_RESULT($gcc_cv_as_shf_merge)
++
+ case "$target" in 
+   sparc*-*-*)
+     AC_CACHE_CHECK([assembler .register pseudo-op support],
 diff --git a/gcc/cp/Make-lang.in b/gcc/cp/Make-lang.in
 index c6afa0b..75c87de 100644
 --- a/gcc/cp/Make-lang.in
@@ -671,6 +1936,19 @@ index c6afa0b..75c87de 100644
  #
  # Clean hooks:
  # A lot of the ancillary files are deleted by the main makefile.
+diff --git a/gcc/cp/cvt.c b/gcc/cp/cvt.c
+index c03090c..9c9325a 100644
+--- a/gcc/cp/cvt.c
++++ b/gcc/cp/cvt.c
+@@ -800,7 +800,7 @@ ocp_convert (type, expr, convtype, flags)
+ 	  else if (TREE_CODE (expr) == ADDR_EXPR 
+ 		   && TREE_CODE (TREE_OPERAND (expr, 0)) == FUNCTION_DECL)
+ 	    fn = TREE_OPERAND (expr, 0);
+-	  if (fn)
++	  if (fn && !DECL_WEAK (fn))
+ 	    cp_warning ("the address of `%D', will always be `true'", fn);
+ 	  return cp_truthvalue_conversion (e);
+ 	}
 diff --git a/gcc/cp/optimize.c b/gcc/cp/optimize.c
 index 76a57d0..aa36eb8 100644
 --- a/gcc/cp/optimize.c
@@ -750,6 +2028,80 @@ index fd32b4a..a629eb1 100644
  	  current_sym_value = DBX_REGISTER_NUMBER (REGNO (XEXP (home, 0)));
  	}
        else
+diff --git a/gcc/doc/invoke.texi b/gcc/doc/invoke.texi
+index 437acac..1739591 100644
+--- a/gcc/doc/invoke.texi
++++ b/gcc/doc/invoke.texi
+@@ -265,8 +265,8 @@ in the following sections.
+ -fexpensive-optimizations  -ffast-math  -ffloat-store @gol
+ -fforce-addr  -fforce-mem  -ffunction-sections  -fgcse  @gol
+ -finline-functions  -finline-limit=@var{n}  -fkeep-inline-functions @gol
+--fkeep-static-consts  -fmove-all-movables @gol
+--fno-default-inline  -fno-defer-pop @gol
++-fkeep-static-consts  -fmerge-constants  -fmerge-all-constants @gol
++-fmove-all-movables  -fno-default-inline  -fno-defer-pop @gol
+ -fno-function-cse  -fno-guess-branch-probability @gol
+ -fno-inline  -fno-math-errno  -fno-peephole  -fno-peephole2 @gol
+ -fomit-frame-pointer  -foptimize-register-move @gol
+@@ -3332,6 +3332,23 @@ GCC enables this option by default.  If you want to force the compiler to
+ check if the variable was referenced, regardless of whether or not
+ optimization is turned on, use the @option{-fno-keep-static-consts} option.
+ 
++@item -fmerge-constants
++Attempt to merge identical constants (string constants and floating point
++constants) accross compilation units.
++
++This option is default for optimized compilation if assembler and linker
++support it.  Use @samp{-fno-merge-constants} to inhibit this behaviour.
++
++@item -fmerge-all-constants
++Attempt to merge identical constants and identical variables.
++
++This option implies @samp{-fmerge-constants}.  In addition to
++@samp{-fmerge-constants} this considers e.g. even constant initialized
++arrays or initialized constant variables with integral or floating point
++types.  Languages like C or C++ require each non-automatic variable to
++have distinct location, so using this option will result in non-conforming
++behaviour.
++
+ @item -fno-function-cse
+ @opindex fno-function-cse
+ Do not put function addresses in registers; make each instruction that
+diff --git a/gcc/doc/tm.texi b/gcc/doc/tm.texi
+index 4daa739..5750c67 100644
+--- a/gcc/doc/tm.texi
++++ b/gcc/doc/tm.texi
+@@ -5467,25 +5467,26 @@ If these items should be placed in the text section, this macro should
+ not be defined.
+ 
+ @findex SELECT_SECTION
+-@item SELECT_SECTION (@var{exp}, @var{reloc})
++@item SELECT_SECTION (@var{exp}, @var{reloc}, @var{align})
+ A C statement or statements to switch to the appropriate section for
+ output of @var{exp}.  You can assume that @var{exp} is either a
+ @code{VAR_DECL} node or a constant of some sort.  @var{reloc}
+ indicates whether the initial value of @var{exp} requires link-time
+ relocations.  Select the section by calling @code{text_section} or one
+-of the alternatives for other sections.
++of the alternatives for other sections.  @var{align} is the constant
++alignment in bits.
+ 
+ Do not define this macro if you put all read-only variables and
+ constants in the read-only data section (usually the text section).
+ 
+ @findex SELECT_RTX_SECTION
+-@item SELECT_RTX_SECTION (@var{mode}, @var{rtx})
++@item SELECT_RTX_SECTION (@var{mode}, @var{rtx}, @var{align})
+ A C statement or statements to switch to the appropriate section for
+ output of @var{rtx} in mode @var{mode}.  You can assume that @var{rtx}
+ is some kind of constant in RTL@.  The argument @var{mode} is redundant
+ except in the case of a @code{const_int} rtx.  Select the section by
+ calling @code{text_section} or one of the alternatives for other
+-sections.
++sections.  @var{align} is the constant alignment in bits.
+ 
+ Do not define this macro if you put all constants in the read-only
+ data section.
 diff --git a/gcc/expr.c b/gcc/expr.c
 index 033eb70..6a5dbd5 100644
 --- a/gcc/expr.c
@@ -929,6 +2281,18 @@ index 62f05a0..d23f4a7 100644
  #
  # Clean hooks:
  # A lot of the ancillary files are deleted by the main makefile.
+diff --git a/gcc/f/com.c b/gcc/f/com.c
+index 58b6a2f..a00dc97 100644
+--- a/gcc/f/com.c
++++ b/gcc/f/com.c
+@@ -14721,6 +14721,7 @@ ffe_init_options ()
+   flag_move_all_movables = 1;
+   flag_reduce_all_givs = 1;
+   flag_argument_noalias = 2;
++  flag_merge_constants = 2;
+   flag_errno_math = 0;
+   flag_complex_divide_method = 1;
+ }
 diff --git a/gcc/f/com.h b/gcc/f/com.h
 index d0dfe8f..09c04d7 100644
 --- a/gcc/f/com.h
@@ -942,6 +2306,57 @@ index d0dfe8f..09c04d7 100644
  ffeinfoKindtype ffecom_gfrt_kindtype (ffecomGfrt ix);
  void ffecom_init_0 (void);
  void ffecom_init_2 (void);
+diff --git a/gcc/flags.h b/gcc/flags.h
+index a9c72f2..d26cc81 100644
+--- a/gcc/flags.h
++++ b/gcc/flags.h
+@@ -544,6 +544,11 @@ extern int flag_bounded_pointers;
+    For CHILL: defaults to off.  */
+ extern int flag_bounds_check;
+ 
++/* This will attempt to merge constant section constants, if 1 only
++   string constants and constants from constant pool, if 2 also constant
++   variables.  */
++extern int flag_merge_constants;
++
+ /* If one, renumber instruction UIDs to reduce the number of
+    unused UIDs if there are a lot of instructions.  If greater than
+    one, unconditionally renumber instruction UIDs.  */
+diff --git a/gcc/function.c b/gcc/function.c
+index a842ef1..f91b9b6 100644
+--- a/gcc/function.c
++++ b/gcc/function.c
+@@ -4329,16 +4329,25 @@ assign_parms (fndecl)
+       tree passed_type = DECL_ARG_TYPE (parm);
+       tree nominal_type = TREE_TYPE (parm);
+       int pretend_named;
++      int last_named = 0, named_arg;
+ 
+-      /* Set LAST_NAMED if this is last named arg before some
++      /* Set LAST_NAMED if this is last named arg before last
+ 	 anonymous args.  */
+-      int last_named = ((TREE_CHAIN (parm) == 0
+-			 || DECL_NAME (TREE_CHAIN (parm)) == 0)
+-			&& (stdarg || current_function_varargs));
++      if (stdarg || current_function_varargs)
++	{
++	  tree tem;
++
++	  for (tem = TREE_CHAIN (parm); tem; tem = TREE_CHAIN (tem))
++	    if (DECL_NAME (tem))
++	      break;
++
++	  if (tem == 0)
++	    last_named = 1;
++	}
+       /* Set NAMED_ARG if this arg should be treated as a named arg.  For
+ 	 most machines, if this is a varargs/stdarg function, then we treat
+ 	 the last named arg as if it were anonymous too.  */
+-      int named_arg = STRICT_ARGUMENT_NAMING ? 1 : ! last_named;
++      named_arg = STRICT_ARGUMENT_NAMING ? 1 : ! last_named;
+ 
+       if (TREE_TYPE (parm) == error_mark_node
+ 	  /* This can happen after weird syntax errors
 diff --git a/gcc/genrecog.c b/gcc/genrecog.c
 index 2856fe6..3a31381 100644
 --- a/gcc/genrecog.c
@@ -1194,6 +2609,45 @@ index ae68fb0..6ae24a8 100644
    while ((f = file_pop ()) != NULL)
      {
        char *line, *command;
+diff --git a/gcc/toplev.c b/gcc/toplev.c
+index bfe0cc2..bf512bd 100644
+--- a/gcc/toplev.c
++++ b/gcc/toplev.c
+@@ -878,6 +878,11 @@ int flag_bounded_pointers = 0;
+    For CHILL: defaults to off.  */
+ int flag_bounds_check = 0;
+ 
++/* This will attempt to merge constant section constants, if 1 only
++   string constants and constants from constant pool, if 2 also constant
++   variables.  */
++int flag_merge_constants = 1;
++
+ /* If one, renumber instruction UIDs to reduce the number of
+    unused UIDs if there are a lot of instructions.  If greater than
+    one, unconditionally renumber instruction UIDs.  */
+@@ -1115,6 +1120,10 @@ lang_independent_options f_options[] =
+    N_("Align all labels") },
+   {"align-functions", &align_functions, 0,
+    N_("Align the start of functions") },
++  {"merge-constants", &flag_merge_constants, 1,
++   N_("Attempt to merge identical constants accross compilation units") },
++  {"merge-all-constants", &flag_merge_constants, 2,
++   N_("Attempt to merge identical constants and constant variables") },
+   {"check-memory-usage", &flag_check_memory_usage, 1,
+    N_("Generate code to check every memory access") },
+   {"prefix-function-name", &flag_prefix_function_name, 1,
+@@ -4739,6 +4748,11 @@ main (argc, argv)
+ 	}
+     }
+ 
++  if (!optimize)
++    {
++      flag_merge_constants = 0;
++    }
++
+   if (optimize >= 1)
+     {
+       flag_defer_pop = 1;
 diff --git a/gcc/unwind-dw2.c b/gcc/unwind-dw2.c
 index c1aa67f..a019877 100644
 --- a/gcc/unwind-dw2.c
@@ -1216,6 +2670,62 @@ index c1aa67f..a019877 100644
      }
  
    fs->pc = context->bases.func;
+diff --git a/gcc/varasm.c b/gcc/varasm.c
+index 60e7e47..6f7f75a 100644
+--- a/gcc/varasm.c
++++ b/gcc/varasm.c
+@@ -452,7 +452,7 @@ variable_section (decl, reloc)
+ 	 for them.  */
+ 
+ #ifdef SELECT_SECTION
+-      SELECT_SECTION (decl, reloc);
++      SELECT_SECTION (decl, reloc, DECL_ALIGN (decl));
+ #else
+       if (DECL_READONLY_SECTION (decl, reloc))
+ 	readonly_data_section ();
+@@ -3230,13 +3230,19 @@ output_constant_def_contents (exp, reloc, labelno)
+ {
+   int align;
+ 
++  /* Align the location counter as required by EXP's data type.  */
++  align = TYPE_ALIGN (TREE_TYPE (exp));
++#ifdef CONSTANT_ALIGNMENT
++  align = CONSTANT_ALIGNMENT (exp, align);
++#endif
++
+   if (IN_NAMED_SECTION (exp))
+     named_section (exp, NULL, reloc);
+   else
+     {
+       /* First switch to text section, except for writable strings.  */
+ #ifdef SELECT_SECTION
+-      SELECT_SECTION (exp, reloc);
++      SELECT_SECTION (exp, reloc, align);
+ #else
+       if (((TREE_CODE (exp) == STRING_CST) && flag_writable_strings)
+ 	  || (flag_pic && reloc))
+@@ -3246,12 +3252,6 @@ output_constant_def_contents (exp, reloc, labelno)
+ #endif
+     }
+ 
+-  /* Align the location counter as required by EXP's data type.  */
+-  align = TYPE_ALIGN (TREE_TYPE (exp));
+-#ifdef CONSTANT_ALIGNMENT
+-  align = CONSTANT_ALIGNMENT (exp, align);
+-#endif
+-
+   if (align > BITS_PER_UNIT)
+     ASM_OUTPUT_ALIGN (asm_out_file, floor_log2 (align / BITS_PER_UNIT));
+ 
+@@ -3822,7 +3822,7 @@ output_constant_pool (fnname, fndecl)
+ 
+       /* First switch to correct section.  */
+ #ifdef SELECT_RTX_SECTION
+-      SELECT_RTX_SECTION (pool->mode, x);
++      SELECT_RTX_SECTION (pool->mode, x, pool->align * BITS_PER_UNIT);
+ #else
+       readonly_data_section ();
+ #endif
 diff --git a/libf2c/Makefile.in b/libf2c/Makefile.in
 index 9075360..fbf3e21 100644
 --- a/libf2c/Makefile.in
@@ -1286,6 +2796,105 @@ index cd61011..ee1c032 100644
  	@$(MULTIDO) $(FLAGS_TO_PASS) multi-do DO=install
  
  # needed-list is used by libstdc++.  NEEDED is the list of functions
+diff --git a/libjava/Makefile.am b/libjava/Makefile.am
+index a0cae95..599735f 100644
+--- a/libjava/Makefile.am
++++ b/libjava/Makefile.am
+@@ -142,7 +142,7 @@ libgcj_la_LIBADD = $(javao_files) $(c_files) $(GCOBJS) \
+ 	$(THREADOBJS)
+ # Include THREADLIBS here to ensure that the correct version of
+ # certain linuxthread functions get linked:
+-libgcj_la_LDFLAGS = -rpath $(toolexeclibdir) $(THREADLIBS) $(LIBLTDL) \
++libgcj_la_LDFLAGS = -rpath $(toolexeclibdir) $(GCLIBS) $(THREADLIBS) -lz $(LIBLTDL) \
+ ## The mysterious backslash is consumed by make.
+ 	-version-info `grep -v '^\#' $(srcdir)/libtool-version`
+ libgcj_la_LINK = $(LIBLINK)
+@@ -428,7 +428,7 @@ EXTRA_jv_convert_SOURCES = $(convert_source_files)
+ ## need this because we are explicitly using libtool to link using the
+ ## `.la' file.
+ jv_convert_LDFLAGS = --main=gnu.gcj.convert.Convert \
+-	-rpath $(toolexeclibdir) -shared-libgcc
++	-shared-libgcc
+ jv_convert_LINK = $(GCJLINK)
+ ## We explicitly link in the libraries we need.  This way we don't
+ ## need -nodefaultlibs, so we can still rely on gcj picking up the
+@@ -436,7 +436,7 @@ jv_convert_LINK = $(GCJLINK)
+ ## We need the -L so that gcj can find libgcj with `-lgcj'.
+ ## FIXME: should be _libs on some systems.
+ jv_convert_LDADD = $(convert_source_files:.java=.lo) libgcj.la \
+-	$(GCLIBS) $(THREADLIBS) $(ZLIBS) -L$(here)/.libs
++	$(GCLIBS) $(THREADLIBS) -lz -L$(here)/.libs
+ ## Depend on the spec file to make sure it is up to date before
+ ## linking this program.
+ jv_convert_DEPENDENCIES = $(convert_source_files:.java=.lo) \
+@@ -446,14 +446,14 @@ gij_SOURCES = gij.cc
+ ## We need -nodefaultlibs because we want to avoid gcj's `-lgcj'.  We
+ ## need this because we are explicitly using libtool to link using the
+ ## `.la' file.
+-gij_LDFLAGS = -rpath $(toolexeclibdir) -shared-libgcc
++gij_LDFLAGS = -shared-libgcc
+ gij_LINK = $(GCJLINK)
+ ## We explicitly link in the libraries we need.  This way we don't
+ ## need -nodefaultlibs, so we can still rely on gcj picking up the
+ ## system libraries we need (via the specs file).
+ ## We need the -L so that gcj can find libgcj with `-lgcj'.
+ ## FIXME: should be _libs on some systems.
+-gij_LDADD = libgcj.la $(GCLIBS) $(THREADLIBS) $(ZLIBS) -L$(here)/.libs
++gij_LDADD = libgcj.la $(GCLIBS) $(THREADLIBS) -lz -L$(here)/.libs
+ ## Depend on the spec file to make sure it is up to date before
+ ## linking this program.
+ gij_DEPENDENCIES = $(GCDEPS) $(THREADDEPS) $(ZDEPS) libgcj.la libgcj.spec
+diff --git a/libjava/Makefile.in b/libjava/Makefile.in
+index f3328fc..7a3f195 100644
+--- a/libjava/Makefile.in
++++ b/libjava/Makefile.in
+@@ -221,7 +221,7 @@ libgcj_la_LIBADD = $(javao_files) $(c_files) $(GCOBJS) \
+ 
+ # Include THREADLIBS here to ensure that the correct version of
+ # certain linuxthread functions get linked:
+-libgcj_la_LDFLAGS = -rpath $(toolexeclibdir) $(THREADLIBS) $(LIBLTDL) \
++libgcj_la_LDFLAGS = -rpath $(toolexeclibdir) $(GCLIBS) $(THREADLIBS) -lz $(LIBLTDL) \
+ 	-version-info `grep -v '^\#' $(srcdir)/libtool-version`
+ 
+ libgcj_la_LINK = $(LIBLINK)
+@@ -261,20 +261,20 @@ CONVERT_DIR = gnu/gcj/convert
+ jv_convert_SOURCES = 
+ EXTRA_jv_convert_SOURCES = $(convert_source_files)
+ jv_convert_LDFLAGS = --main=gnu.gcj.convert.Convert \
+-	-rpath $(toolexeclibdir) -shared-libgcc
++	-shared-libgcc
+ 
+ jv_convert_LINK = $(GCJLINK)
+ jv_convert_LDADD = $(convert_source_files:.java=.lo) libgcj.la \
+-	$(GCLIBS) $(THREADLIBS) $(ZLIBS) -L$(here)/.libs
++	$(GCLIBS) $(THREADLIBS) -lz -L$(here)/.libs
+ 
+ jv_convert_DEPENDENCIES = $(convert_source_files:.java=.lo) \
+ 	$(GCDEPS) $(THREADDEPS) $(ZDEPS) libgcj.la libgcj.spec
+ 
+ 
+ gij_SOURCES = gij.cc
+-gij_LDFLAGS = -rpath $(toolexeclibdir) -shared-libgcc
++gij_LDFLAGS = -shared-libgcc
+ gij_LINK = $(GCJLINK)
+-gij_LDADD = libgcj.la $(GCLIBS) $(THREADLIBS) $(ZLIBS) -L$(here)/.libs
++gij_LDADD = libgcj.la $(GCLIBS) $(THREADLIBS) -lz -L$(here)/.libs
+ gij_DEPENDENCIES = $(GCDEPS) $(THREADDEPS) $(ZDEPS) libgcj.la libgcj.spec
+ 
+ gen_from_JIS_SOURCES = 
+diff --git a/libjava/libgcj.spec.in b/libjava/libgcj.spec.in
+index 54ef9fe..43e425a 100644
+--- a/libjava/libgcj.spec.in
++++ b/libjava/libgcj.spec.in
+@@ -4,7 +4,7 @@
+ # to link with libgcj.
+ #
+ %rename lib liborig
+-*lib: -lgcj -lm @LIBICONV@ @GCSPEC@ @THREADSPEC@ @ZLIBSPEC@ @SYSTEMSPEC@ %(libgcc) %(liborig)
++*lib: -lgcj -lm @LIBICONV@ @GCSPEC@ @THREADSPEC@ -lz @SYSTEMSPEC@ %(libgcc) %(liborig)
+ 
+ *jc1:  @DIVIDESPEC@ @JC1GCSPEC@ @EXCEPTIONSPEC@
+ 
 diff --git a/libobjc/Makefile.in b/libobjc/Makefile.in
 index aed5f11..b9bc759 100644
 --- a/libobjc/Makefile.in
@@ -1328,7 +2937,7 @@ index aed5f11..b9bc759 100644
  
  check uninstall install-strip dist installcheck installdirs:
 diff --git a/libstdc++-v3/config/c_locale_gnu.cc b/libstdc++-v3/config/c_locale_gnu.cc
-index 4013941..69b3c9f 100644
+index 4013941..313b863 100644
 --- a/libstdc++-v3/config/c_locale_gnu.cc
 +++ b/libstdc++-v3/config/c_locale_gnu.cc
 @@ -37,6 +37,12 @@
@@ -1344,6 +2953,17 @@ index 4013941..69b3c9f 100644
  namespace std 
  {
    void
+@@ -101,8 +107,8 @@ namespace std
+       else
+ 	{
+ 	  // Named locale.
+-	  _M_decimal_point = reinterpret_cast<wchar_t>(__nl_langinfo_l(_NL_NUMERIC_DECIMAL_POINT_WC, __cloc));
+-	  _M_thousands_sep = reinterpret_cast<wchar_t>(__nl_langinfo_l(_NL_NUMERIC_THOUSANDS_SEP_WC,__cloc));
++	  _M_decimal_point = static_cast<wchar_t>(((union { const char *__s; unsigned int __w; }){ __s: __nl_langinfo_l(_NL_NUMERIC_DECIMAL_POINT_WC, __cloc)}).__w);
++	  _M_thousands_sep = static_cast<wchar_t>(((union { const char *__s; unsigned int __w; }){ __s: __nl_langinfo_l(_NL_NUMERIC_THOUSANDS_SEP_WC, __cloc)}).__w);
+ 	  _M_grouping = __nl_langinfo_l(GROUPING, __cloc);
+ 	}
+       // NB: There is no way to extact this info from posix locales.
 diff --git a/libstdc++-v3/config/os/gnu-linux/bits/ctype_noninline.h b/libstdc++-v3/config/os/gnu-linux/bits/ctype_noninline.h
 index 0013c5b..4a1ed1b 100644
 --- a/libstdc++-v3/config/os/gnu-linux/bits/ctype_noninline.h
