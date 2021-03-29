@@ -1244,7 +1244,7 @@ toolchain_src_configure() {
 		confgcc+=( --with-abi=$(gcc-abi-map ${TARGET_DEFAULT_ABI}) )
 		;;
 	sparc)
-		if ! tc_version_is_at_least 3.1 && [[ ${ABI} != "sparc64" ]]; then
+		if ! tc_version_is_at_least 3.1 && [[ ${ABI} == "sparc64" ]]; then
 			CFLAGS="${CFLAGS} -gstabs+"
 			CXXFLAGS="${CXXFLAGS} -gstabs+"
 		fi
