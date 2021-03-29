@@ -1440,7 +1440,7 @@ toolchain_src_configure() {
 downgrade_arch_flags() {
 	case $(tc-arch) in
 	sparc)
-		if ! tc_version_is_at_least 3.1; then
+		if ! tc_version_is_at_least 3.1 && [[ ${ABI} != "sparc64" ]]; then
 			filter-flags '-mcpu=*' '-mtune=*'
 			append-flags '-mcpu=v8'
 		fi
@@ -1835,7 +1835,7 @@ gcc_do_make() {
 	else
 		if tc_version_is_at_least 3.3 && _tc_use_if_iuse pgo; then
 			GCC_MAKE_TARGET=${GCC_MAKE_TARGET-profiledbootstrap}
-		elif tc_version_is_at_least 2.9 ; then
+		elif tc_version_is_at_least 3.1 ; then
 			GCC_MAKE_TARGET=${GCC_MAKE_TARGET-bootstrap-lean}
 		else
 			GCC_MAKE_TARGET=${GCC_MAKE_TARGET-bootstrap}

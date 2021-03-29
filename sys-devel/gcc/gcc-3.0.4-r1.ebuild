@@ -16,11 +16,21 @@ case ${ARCH} in
 		ABI_X86='32'
 		CFLAGS_x86=""
 		;;
-	alpha|sparc)
+	alpha)
 		TOOL_SLOT="${ARCH}-legacy"
 		;;
 	ppc)
 		TOOL_SLOT="powerpc-legacy"
+		;;
+	s390)
+		TOOL_SLOT="s390x-legacy"
+		;;
+	sparc)
+		if [[ ${ABI} == "sparc64" ]]; then
+			TOOL_SLOT="sparc64-legacy"
+		else
+			TOOL_SLOT="sparc-legacy"
+		fi
 		;;
 	*)
 		;;
@@ -35,7 +45,7 @@ RANLIB="${CHOST}-ranlib"
 
 inherit toolchain
 
-KEYWORDS="alpha amd64 ppc sparc x86"
+KEYWORDS="alpha amd64 ppc s390 sparc x86"
 
 RDEPEND=""
 DEPEND="${RDEPEND}
