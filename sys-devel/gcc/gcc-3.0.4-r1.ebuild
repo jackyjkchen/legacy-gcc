@@ -23,11 +23,11 @@ case ${ARCH} in
 		TOOL_SLOT="powerpc-legacy"
 		;;
 	s390)
-		TOOL_SLOT="s390x-legacy"
+		TOOL_SLOT="host"
 		;;
 	sparc)
 		if [[ ${ABI} == "sparc64" ]]; then
-			TOOL_SLOT="sparc64-legacy"
+			TOOL_SLOT="host"
 		else
 			TOOL_SLOT="sparc-legacy"
 		fi
@@ -36,12 +36,18 @@ case ${ARCH} in
 		;;
 esac
 
-CBUILD="${TOOL_SLOT}-linux-gnu"
-CHOST=${CBUILD}
-AS="${CHOST}-as"
-LD="${CHOST}-ld"
-AR="${CHOST}-ar"
-RANLIB="${CHOST}-ranlib"
+if [[ ${TOOL_SLOT} != "host" ]]; then
+	CBUILD="${TOOL_SLOT}-linux-gnu"
+	CHOST=${CBUILD}
+	AS="${CHOST}-as"
+	LD="${CHOST}-ld"
+	AR="${CHOST}-ar"
+	RANLIB="${CHOST}-ranlib"
+	LEGACY_DEPEND="
+		legacy-gcc/linux-headers:${TOOL_SLOT}
+		legacy-gcc/glibc-headers:${TOOL_SLOT}
+		legacy-gcc/binutils-wrapper:${TOOL_SLOT}"
+fi
 
 inherit toolchain
 
@@ -50,14 +56,12 @@ KEYWORDS="alpha amd64 ppc s390 sparc x86"
 RDEPEND=""
 DEPEND="${RDEPEND}
 	sys-devel/gcc:3.4.6
-	legacy-gcc/linux-headers:${TOOL_SLOT}
-	legacy-gcc/glibc-headers:${TOOL_SLOT}
-	legacy-gcc/binutils-wrapper:${TOOL_SLOT}"
+	${LEGACY_DEPEND}"
 
 src_prepare() {
 	toolchain_src_prepare
 	eapply "${FILESDIR}"/${PV}/00_gcc-${PV}.patch
-	eapply "${FILESDIR}"/${PV}/01_workaround-for-legacy-glibc-in-non-system-dir.patch
+	[[ ${TOOL_SLOT} != "host" ]] && eapply "${FILESDIR}"/${PV}/01_workaround-for-legacy-glibc-in-non-system-dir.patch
 }
 
 src_install() {
