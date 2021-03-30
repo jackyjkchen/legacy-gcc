@@ -7,10 +7,19 @@ PATCH_VER="3"
 UCLIBC_VER="1.1"
 HTB_VER="1.00-r2"
 
+case ${ARCH} in
+	ppc64)
+		CFLAGS_ppc64=""
+		CFLAGS_ppc=""
+		;;
+	*)
+		;;
+esac
+
 inherit toolchain
 
 # ia64 - broken static handling; USE=static emerge busybox
-KEYWORDS="alpha amd64 ppc s390 sparc x86"
+KEYWORDS="alpha amd64 ppc ppc64 s390 sparc x86"
 
 # NOTE: we SHOULD be using at least binutils 2.15.90.0.1 everywhere for proper
 # .eh_frame ld optimisation and symbol visibility support, but it hasnt been

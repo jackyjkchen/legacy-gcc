@@ -438,6 +438,19 @@ index 074e01e..89cd993 100644
  #
  # These targets are for the dejagnu testsuites. The file site.exp
  # contains global variables that all the testsuites will use.
+diff --git a/gcc/config.gcc b/gcc/config.gcc
+index 0733dce..9e2db9b 100644
+--- a/gcc/config.gcc
++++ b/gcc/config.gcc
+@@ -3009,7 +3009,7 @@ s390x-*-linux*)
+ 	xm_file=s390/xm-s390x.h
+ 	md_file=s390/s390.md
+ 	out_file=s390/s390.c
+-	tmake_file="t-slibgcc-elf-ver t-linux s390/t-linux"
++	tmake_file="t-slibgcc-elf-ver t-linux s390/t-linux s390/t-linux64"
+ 	xmake_file=x-linux
+ 	extra_parts="crtbegin.o crtend.o crtbeginS.o crtendS.o"
+ 	if test x$enable_threads = xyes; then
 diff --git a/gcc/config/alpha/linux.h b/gcc/config/alpha/linux.h
 index e2a6e60..84d2657 100644
 --- a/gcc/config/alpha/linux.h
@@ -532,6 +545,33 @@ index ceb8a69..a93e97f 100644
  SHLIB_LIBS = -lc `case @shlib_base_name@ in *pthread*) echo -lpthread ;; esac`
  SHLIB_MKMAP = $(srcdir)/mkmap-flat.awk
  SHLIB_MAPFILES = $(srcdir)/libgcc-std.ver
+diff --git a/gcc/config/s390/libgcc-glibc.ver b/gcc/config/s390/libgcc-glibc.ver
+new file mode 100644
+index 0000000..9a42151
+--- /dev/null
++++ b/gcc/config/s390/libgcc-glibc.ver
+@@ -0,0 +1,21 @@
++# In order to work around the very problems that force us to now generally
++# create a libgcc.so, glibc reexported a number of routines from libgcc.a.
++# By now choosing the same version tags for these specific routines, we
++# maintain enough binary compatibility to allow future versions of glibc
++# to defer implementation of these routines to libgcc.so via DT_AUXILIARY.
++
++# Note that we cannot use the default libgcc-glibc.ver file on s390x,
++# because GLIBC_2.0 does not exist on this architecture, as the first 
++# ever glibc release on the platform was GLIBC_2.2.
++
++%inherit GCC_3.0 GLIBC_2.2
++GLIBC_2.2 {
++  __register_frame
++  __register_frame_table
++  __deregister_frame
++  __register_frame_info
++  __deregister_frame_info
++  __frame_state_for
++  __register_frame_info_table
++}
++
 diff --git a/gcc/config/s390/linux64.h b/gcc/config/s390/linux64.h
 index 1a86715..fad88cc 100644
 --- a/gcc/config/s390/linux64.h
@@ -552,6 +592,63 @@ index 1a86715..fad88cc 100644
  
  #undef	LINK_SPEC
  #ifdef CROSS_COMPILE
+diff --git a/gcc/config/s390/t-linux64 b/gcc/config/s390/t-linux64
+new file mode 100644
+index 0000000..d5a9278
+--- /dev/null
++++ b/gcc/config/s390/t-linux64
+@@ -0,0 +1,3 @@
++# Override t-slibgcc-elf-ver to export some libgcc symbols with
++# the symbol versions that glibc used.
++SHLIB_MAPFILES = $(srcdir)/libgcc-std.ver $(srcdir)/config/s390/libgcc-glibc.ver
+diff --git a/gcc/config/sparc/libgcc-sparc-glibc.ver b/gcc/config/sparc/libgcc-sparc-glibc.ver
+new file mode 100644
+index 0000000..e3ba0bb
+--- /dev/null
++++ b/gcc/config/sparc/libgcc-sparc-glibc.ver
+@@ -0,0 +1,28 @@
++# In order to work around the very problems that force us to now generally
++# create a libgcc.so, glibc reexported a number of routines from libgcc.a.
++# By now choosing the same version tags for these specific routines, we
++# maintain enough binary compatibility to allow future versions of glibc
++# to defer implementation of these routines to libgcc.so via DT_AUXILIARY.
++
++%ifdef __arch64__
++%define GLIBC_VER GLIBC_2.2
++%else
++%define GLIBC_VER GLIBC_2.0
++%endif
++%inherit GCC_3.0 GLIBC_VER
++GLIBC_VER {
++  # Sampling of DImode arithmetic used by (at least) i386 and m68k.
++  __divdi3
++  __moddi3
++  __udivdi3
++  __umoddi3
++
++  # Exception handling support functions used by most everyone.
++  __register_frame
++  __register_frame_table
++  __deregister_frame
++  __register_frame_info
++  __deregister_frame_info
++  __frame_state_for
++  __register_frame_info_table
++}
+diff --git a/gcc/config/sparc/t-linux64 b/gcc/config/sparc/t-linux64
+index 2a3ec4b..a18e1f1 100644
+--- a/gcc/config/sparc/t-linux64
++++ b/gcc/config/sparc/t-linux64
+@@ -8,3 +8,9 @@ LIBGCC = stmp-multilib
+ INSTALL_LIBGCC = install-multilib
+ 
+ EXTRA_MULTILIB_PARTS=crtbegin.o crtend.o crtbeginS.o crtendS.o
++
++# Override t-slibgcc-elf-ver to export some libgcc symbols with
++# the symbol versions that glibc used.
++# Avoid the t-linux version file.
++SHLIB_MAPFILES = $(srcdir)/libgcc-std.ver \
++		 $(srcdir)/config/sparc/libgcc-sparc-glibc.ver
 diff --git a/gcc/config/t-slibgcc-elf-ver b/gcc/config/t-slibgcc-elf-ver
 index 9b17c56..9798e58 100644
 --- a/gcc/config/t-slibgcc-elf-ver

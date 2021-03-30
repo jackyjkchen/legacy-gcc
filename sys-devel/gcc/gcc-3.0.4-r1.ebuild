@@ -23,16 +23,17 @@ case ${ARCH} in
 		TOOL_SLOT="powerpc-legacy"
 		;;
 	s390)
-		TOOL_SLOT="host"
+		TOOL_SLOT="s390x-legacy"
 		;;
 	sparc)
 		if [[ ${ABI} == "sparc64" ]]; then
-			TOOL_SLOT="host"
+			TOOL_SLOT="sparc64-legacy"
 		else
 			TOOL_SLOT="sparc-legacy"
 		fi
 		;;
 	*)
+		TOOL_SLOT="host"
 		;;
 esac
 
