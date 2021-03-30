@@ -516,7 +516,7 @@ toolchain_src_unpack() {
 
 	default_src_unpack
 	tc_version_is_at_least 9 || unpack_gcc_patchset
-	tc_version_is_at_least 3.2 || git_init_src
+	tc_version_is_at_least 3.3 || git_init_src
 }
 
 #---->> src_prepare <<----
@@ -1453,6 +1453,12 @@ downgrade_arch_flags() {
 
 	bver=${1:-${GCC_BRANCH_VER}}
 	case $(tc-arch) in
+	alpha)
+		if ! tc_version_is_at_least 3.0 ; then
+			filter-flags '-mcpu=*' '-mtune=*'
+			append-flags '-mcpu=ev6'
+		fi
+		;;
 	sparc)
 		if ! tc_version_is_at_least 3.1 ${bver} && [[ ${ABI} != "sparc64" ]]; then
 			filter-flags '-mcpu=*' '-mtune=*'
