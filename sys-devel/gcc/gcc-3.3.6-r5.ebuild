@@ -7,15 +7,6 @@ PATCH_VER="3"
 UCLIBC_VER="1.1"
 HTB_VER="1.00-r2"
 
-case ${ARCH} in
-	ppc64)
-		CFLAGS_ppc64=""
-		CFLAGS_ppc=""
-		;;
-	*)
-		;;
-esac
-
 inherit toolchain
 
 # ia64 - broken static handling; USE=static emerge busybox

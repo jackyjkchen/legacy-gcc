@@ -1238,6 +1238,11 @@ toolchain_src_configure() {
 		# https://bugs.gentoo.org/704784
 		# https://gcc.gnu.org/PR93157
 		[[ ${CTARGET} == powerpc64-*-musl ]] && confgcc+=( --with-abi=elfv2 )
+		# <gcc-3.4 not support -m64
+		if ! tc_version_is_at_least 3.4; then
+			CFLAGS_ppc64=""
+			CFLAGS_ppc=""
+		fi
 		;;
 	riscv)
 		# Add --with-abi flags to set default ABI

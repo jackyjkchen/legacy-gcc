@@ -1136,6 +1136,83 @@ index 52c3fd9..1c92449 100644
 +        rm -f $$(DESTDIR)$$(slibdir)/$(SHLIB_NAME); \
 +        $(LN_S) $(SHLIB_SONAME) $$(DESTDIR)$$(slibdir)/$(SHLIB_NAME)
  
+diff --git a/gcc/config/rs6000/linux64.h b/gcc/config/rs6000/linux64.h
+index f84e1e3..79f7455 100644
+--- a/gcc/config/rs6000/linux64.h
++++ b/gcc/config/rs6000/linux64.h
+@@ -141,11 +141,11 @@ Boston, MA 02111-1307, USA.  */
+ #ifndef CROSS_COMPILE
+ #define LINK_OS_LINUX_SPEC "-m elf64ppc %{!shared: %{!static: \
+   %{rdynamic:-export-dynamic} \
+-  %{!dynamic-linker:-dynamic-linker /lib64/ld.so.1}}}"
++  %{!dynamic-linker:-dynamic-linker /lib64/ld64.so.1}}}"
+ #else
+ #define LINK_OS_LINUX_SPEC "-m elf64ppc %{!shared: %{!static: \
+   %{rdynamic:-export-dynamic} \
+-  %{!dynamic-linker:-dynamic-linker ld.so.1}}}"
++  %{!dynamic-linker:-dynamic-linker ld64.so.1}}}"
+ #endif
+ 
+ #ifndef CROSS_COMPILE
+@@ -198,6 +198,18 @@ Boston, MA 02111-1307, USA.  */
+ #undef  RS6000_MCOUNT
+ #define RS6000_MCOUNT "_mcount"
+ 
++#ifdef __powerpc64__
++/* _init and _fini functions are built from bits spread across many
++   object files, each potentially with a different TOC pointer.  For
++   that reason, place a nop after the call so that the linker can
++   restore the TOC pointer if a TOC adjusting call stub is needed.  */
++#define CRT_CALL_STATIC_FUNCTION(SECTION_OP, FUNC)	\
++  asm (SECTION_OP "\n"					\
++"	bl ." #FUNC "\n"				\
++"	nop\n"						\
++"	.previous");
++#endif
++
+ /* FP save and restore routines.  */
+ #undef  SAVE_FP_PREFIX
+ #define SAVE_FP_PREFIX "._savef"
+diff --git a/gcc/config/rs6000/rs6000.md b/gcc/config/rs6000/rs6000.md
+index 5188ce5..d84d1a4 100644
+--- a/gcc/config/rs6000/rs6000.md
++++ b/gcc/config/rs6000/rs6000.md
+@@ -7718,7 +7718,7 @@
+    mt%0 %1
+    mt%0 %1
+    mt%0 %1
+-   cror 0,0,0"
++   {cror 0,0,0|nop}"
+   [(set_attr "type" "*,*,load,store,*,*,*,*,*,*,mtjmpr,*,*")
+    (set_attr "length" "4,4,4,4,4,4,8,4,4,4,4,4,4")])
+ 
+@@ -7784,7 +7784,7 @@
+    mf%1 %0
+    mt%0 %1
+    mt%0 %1
+-   cror 0,0,0"
++   {cror 0,0,0|nop}"
+   [(set_attr "type" "*,load,store,*,*,*,mtjmpr,*")])
+ 
+ (define_expand "movqi"
+@@ -7806,7 +7806,7 @@
+    mf%1 %0
+    mt%0 %1
+    mt%0 %1
+-   cror 0,0,0"
++   {cror 0,0,0|nop}"
+   [(set_attr "type" "*,load,store,*,*,*,mtjmpr,*")])
+ 
+ ;; Here is how to move condition codes around.  When we store CC data in
+@@ -8458,7 +8458,7 @@
+    stfd%U0%X0 %1,%0
+    mf%1 %0
+    mt%0 %1
+-   cror 0,0,0"
++   {cror 0,0,0|nop}"
+   [(set_attr "type" "*,load,store,*,*,*,*,fp,fpload,fpstore,*,mtjmpr,*")
+    (set_attr "length" "4,4,4,4,4,20,4,4,4,4,4,4,4")])
+ 
 diff --git a/gcc/config/rs6000/t-aix43 b/gcc/config/rs6000/t-aix43
 index 7be8ebc..9bbfe00 100644
 --- a/gcc/config/rs6000/t-aix43
