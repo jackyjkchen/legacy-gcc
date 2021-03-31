@@ -176,6 +176,10 @@ if [[ ${PN} != "kgcc64" && ${PN} != gcc-* ]] ; then
 		tc_version_is_at_least 3.3 && IUSE+=" +cxx"
 		tc_version_is_at_least 2.5 && IUSE+=" objc"
 		;;
+	sparc)
+		tc_version_is_at_least 2.9 && IUSE+=" +cxx"
+		tc_version_is_at_least 2.5 && IUSE+=" objc"
+		;;
 	*)
 		tc_version_is_at_least 2.5 && IUSE+=" +cxx"
 		tc_version_is_at_least 2.5 && IUSE+=" objc"

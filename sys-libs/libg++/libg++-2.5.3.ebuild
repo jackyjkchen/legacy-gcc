@@ -18,7 +18,6 @@ case ${ARCH} in
 		TOOL_SLOT="i686-legacy"
 		;;
 	*)
-		TOOL_SLOT="invalid"
 		;;
 esac
 

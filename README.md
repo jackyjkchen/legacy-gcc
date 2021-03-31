@@ -19,12 +19,12 @@ x86与非x86均为本项目的目标，x86目前进度较快，已经可以原�
 * arm64：gcc-4.8.5及以上
 * armel：gcc-4.1.2及以上
 * armhf：gcc-4.4.7及以上
-* ppc：gcc-2.95.3及以上
+* ppc：gcc-2.8.1及以上
 * ppc64：gcc-3.1.1及以上
 * ppc64le：gcc-4.8.5及以上
 * riscv：gcc-7.5.0以及上
 * s390x：gcc-3.0.4及以上
-* sparc：gcc-2.95.3及以上
+* sparc：gcc-2.8.1及以上
 * sparc64：gcc-3.0.4及以上
 
 

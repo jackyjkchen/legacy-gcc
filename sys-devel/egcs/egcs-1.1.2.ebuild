@@ -3,16 +3,22 @@
 
 EAPI=6
 
+CC="gcc-2.95.3"
+CXX="g++-2.95.3"
 case ${ARCH} in
 	amd64|x86)
-		CC="gcc-2.95.3"
-		CXX="g++-2.95.3"
 		TOOL_SLOT="i686-legacy"
 		CHOST_x86="${TOOL_SLOT}-linux-gnu"
 		ABI='x86'
 		DEFAULT_ABI='x86'
 		ABI_X86='32'
 		CFLAGS_x86=""
+		;;
+	ppc)
+		TOOL_SLOT="powerpc-legacy"
+		;;
+	sparc)
+		TOOL_SLOT="sparc-legacy"
 		;;
 	*)
 		;;
@@ -27,7 +33,7 @@ RANLIB="${CHOST}-ranlib"
 
 inherit toolchain
 
-KEYWORDS="amd64 x86"
+KEYWORDS="amd64 ppc sparc x86"
 
 RDEPEND=""
 DEPEND="${RDEPEND}
