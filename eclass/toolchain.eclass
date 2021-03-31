@@ -1895,7 +1895,7 @@ gcc_do_make() {
 
 	pushd "${WORKDIR}"/build >/dev/null
 
-	if tc_version_is_at_least 2.8 ; then
+	if tc_version_is_at_least 2.9 ; then
 		emake \
 			LDFLAGS="${LDFLAGS}" \
 			STAGE1_CFLAGS="${STAGE1_CFLAGS}" \
@@ -1904,9 +1904,13 @@ gcc_do_make() {
 			${GCC_MAKE_TARGET} \
 			|| die "emake failed with ${GCC_MAKE_TARGET}"
 	else
+		LANGUAGES="c gcov"
+		_tc_use_if_iuse cxx && LANGUAGES+=" c++"
+		_tc_use_if_iuse objc && LANGUAGES+=" objective-c"
 		emake \
 			CC="${CC}" \
 			CXX="${CXX}" \
+			LANGUAGES="${LANGUAGES}" \
 			LDFLAGS="${LDFLAGS}" \
 			STAGE1_CFLAGS="${STAGE1_CFLAGS}" \
 			LIBPATH="${LIBPATH}" \
@@ -1989,7 +1993,11 @@ toolchain_src_install() {
 	done < <(find gcc/include*/ -name '*.h')
 
 	# Do the 'make install' from the build directory
-	S="${WORKDIR}"/build emake -j1 DESTDIR="${D}" install || die
+	if tc_version_is_at_least 2.9 ; then
+		S="${WORKDIR}"/build emake -j1 DESTDIR="${D}" install || die
+	else
+		S="${WORKDIR}"/build emake CC="${CC}" CXX="${CXX}" LANGUAGES="${LANGUAGES}" -j1 DESTDIR="${D}" install || die
+	fi
 
 	# Punt some tools which are really only useful while building gcc
 	find "${ED}" -name install-tools -prune -type d -exec rm -rf "{}" \;
