@@ -167,12 +167,17 @@ if [[ ${PN} != "kgcc64" && ${PN} != gcc-* ]] ; then
 	IUSE+=" debug +nptl" TC_FEATURES+=(nptl)
 	[[ -n ${PIE_VER} ]] && IUSE+=" nopie"
 	[[ -n ${SPECS_VER} ]] && IUSE+=" nossp"
-	tc_version_is_at_least 2.5 && IUSE+=" +cxx"
 	case $(tc-arch) in
 	alpha)
+		tc_version_is_at_least 2.5 && IUSE+=" +cxx"
 		tc_version_is_at_least 3.1 && IUSE+=" objc"
 		;;
+	ppc64)
+		tc_version_is_at_least 3.3 && IUSE+=" +cxx"
+		tc_version_is_at_least 2.5 && IUSE+=" objc"
+		;;
 	*)
+		tc_version_is_at_least 2.5 && IUSE+=" +cxx"
 		tc_version_is_at_least 2.5 && IUSE+=" objc"
 		;;
 	esac
