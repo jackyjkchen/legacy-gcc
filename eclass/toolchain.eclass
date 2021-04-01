@@ -169,26 +169,29 @@ if [[ ${PN} != "kgcc64" && ${PN} != gcc-* ]] ; then
 	[[ -n ${SPECS_VER} ]] && IUSE+=" nossp"
 	case $(tc-arch) in
 	alpha)
-		tc_version_is_at_least 2.5 && IUSE+=" +cxx"
+		tc_version_is_at_least 3.0 && IUSE+=" +cxx"
 		tc_version_is_at_least 3.1 && IUSE+=" objc"
+		tc_version_is_between 3.0 4.0 && IUSE+=" f77"
 		;;
 	ppc64)
 		tc_version_is_at_least 3.3 && IUSE+=" +cxx"
 		tc_version_is_at_least 2.5 && IUSE+=" objc"
+		tc_version_is_between 2.9 4.0 && IUSE+=" f77"
 		;;
 	sparc)
 		tc_version_is_at_least 2.9 && IUSE+=" +cxx"
 		tc_version_is_at_least 2.5 && IUSE+=" objc"
+		tc_version_is_between 2.9 4.0 && IUSE+=" f77"
 		;;
 	*)
 		tc_version_is_at_least 2.5 && IUSE+=" +cxx"
 		tc_version_is_at_least 2.5 && IUSE+=" objc"
+		tc_version_is_between 2.9 4.0 && IUSE+=" f77"
 		;;
 	esac
 	# fortran support appeared in 4.1, but 4.1 needs outdated mpfr
 	tc_version_is_at_least 4.1 && IUSE+=" +fortran" TC_FEATURES+=(fortran)
 	tc_version_is_between 4.0 4.1 && IUSE+=" f95"
-	tc_version_is_between 2.9 4.0 && IUSE+=" f77"
 	tc_version_is_at_least 3 && IUSE+=" doc hardened"
 	tc_version_is_at_least 3.1 && IUSE+=" multilib"
 	tc_version_is_between 3 7 && IUSE+=" awt gcj" TC_FEATURES+=(gcj)
