@@ -14,6 +14,9 @@ case ${ARCH} in
 		ABI_X86='32'
 		CFLAGS_x86=""
 		;;
+	alpha)
+		TOOL_SLOT="${ARCH}-legacy"
+		;;
 	ppc)
 		TOOL_SLOT="powerpc-legacy"
 		;;
@@ -33,7 +36,7 @@ RANLIB="${CHOST}-ranlib"
 
 inherit toolchain
 
-KEYWORDS="amd64 ppc sparc x86"
+KEYWORDS="alpha amd64 ppc sparc x86"
 
 RDEPEND=""
 DEPEND="${RDEPEND}

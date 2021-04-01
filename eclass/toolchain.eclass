@@ -169,26 +169,23 @@ if [[ ${PN} != "kgcc64" && ${PN} != gcc-* ]] ; then
 	[[ -n ${SPECS_VER} ]] && IUSE+=" nossp"
 	case $(tc-arch) in
 	alpha)
-		tc_version_is_at_least 3.0 && IUSE+=" +cxx"
-		tc_version_is_at_least 3.1 && IUSE+=" objc"
-		tc_version_is_between 3.0 4.0 && IUSE+=" f77"
+		tc_version_is_at_least 2.9 && IUSE+=" +cxx"
+		(tc_version_is_at_least 3.1 || tc_version_is_between 2.9 3.0) && IUSE+=" objc"
 		;;
 	ppc64)
 		tc_version_is_at_least 3.3 && IUSE+=" +cxx"
-		tc_version_is_at_least 2.5 && IUSE+=" objc"
-		tc_version_is_between 2.9 4.0 && IUSE+=" f77"
+		tc_version_is_at_least 3.1 && IUSE+=" objc"
 		;;
 	sparc)
 		tc_version_is_at_least 2.9 && IUSE+=" +cxx"
-		tc_version_is_at_least 2.5 && IUSE+=" objc"
-		tc_version_is_between 2.9 4.0 && IUSE+=" f77"
+		tc_version_is_at_least 2.8 && IUSE+=" objc"
 		;;
 	*)
 		tc_version_is_at_least 2.5 && IUSE+=" +cxx"
 		tc_version_is_at_least 2.5 && IUSE+=" objc"
-		tc_version_is_between 2.9 4.0 && IUSE+=" f77"
 		;;
 	esac
+	tc_version_is_between 2.9 4.0 && IUSE+=" f77"
 	# fortran support appeared in 4.1, but 4.1 needs outdated mpfr
 	tc_version_is_at_least 4.1 && IUSE+=" +fortran" TC_FEATURES+=(fortran)
 	tc_version_is_between 4.0 4.1 && IUSE+=" f95"
@@ -1466,7 +1463,10 @@ downgrade_arch_flags() {
 	bver=${1:-${GCC_BRANCH_VER}}
 	case $(tc-arch) in
 	alpha)
-		if ! tc_version_is_at_least 3.0 ; then
+		if ! tc_version_is_at_least 2.9 ${bver}; then
+			filter-flags '-mcpu=*' '-mtune=*'
+			append-flags '-mcpu=ev5'
+		elif ! tc_version_is_at_least 3.0 ${bver}; then
 			filter-flags '-mcpu=*' '-mtune=*'
 			append-flags '-mcpu=ev6'
 		fi

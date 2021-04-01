@@ -17,6 +17,8 @@ case ${ARCH} in
 		CFLAGS_x86=""
 		;;
 	alpha)
+		CFLAGS="${CFLAGS} -Wl,-no-relax"
+		CXXFLAGS="${CXXFLAGS} -Wl,-no-relax"
 		TOOL_SLOT="${ARCH}-legacy"
 		;;
 	ppc)

@@ -30,7 +30,10 @@ downgrade_arch_flags() {
 	bver=${1}
 	case $(tc-arch) in
 	alpha)
-		if ! tc_version_is_at_least 3.0 ; then
+		if ! tc_version_is_at_least 2.9 ${bver}; then
+			filter-flags '-mcpu=*' '-mtune=*'
+			append-flags '-mcpu=ev5'
+		elif ! tc_version_is_at_least 3.0 ${bver}; then
 			filter-flags '-mcpu=*' '-mtune=*'
 			append-flags '-mcpu=ev6'
 		fi
