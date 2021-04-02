@@ -3,6 +3,8 @@
 
 EAPI=6
 
+PATCH_VER="1.4"
+
 CC="gcc-3.4.6"
 CXX="g++-3.4.6"
 case ${ARCH} in
@@ -18,7 +20,7 @@ case ${ARCH} in
 		;;
 	alpha)
 		CFLAGS="${CFLAGS} -Wl,-no-relax"
-		CXXFLAGS="${CXXFLAGS} -Wl,-no-relax"
+		CXXFLAGS="${CFLAGS} -Wl,-no-relax"
 		TOOL_SLOT="${ARCH}-legacy"
 		;;
 	ppc)
@@ -50,9 +52,11 @@ DEPEND="${RDEPEND}
 	legacy-gcc/binutils-wrapper:${TOOL_SLOT}"
 
 src_prepare() {
+	EPATCH_EXCLUDE+=" 10_alpha_new-atexit.patch"
 	toolchain_src_prepare
 	eapply "${FILESDIR}"/${PV}/00_gcc-${PV}.patch
 	eapply "${FILESDIR}"/${PV}/01_workaround-for-legacy-glibc-in-non-system-dir.patch
+	eapply "${FILESDIR}"/${PV}/02_fix-patchset.patch
 }
 
 src_install() {
