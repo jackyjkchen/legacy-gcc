@@ -39,9 +39,13 @@ downgrade_arch_flags() {
 		fi
 		;;
 	sparc)
-		if ! tc_version_is_at_least 3.1 ${bver} && [[ ${ABI} != "sparc64" ]]; then
+		if ! tc_version_is_at_least 3.1 ${bver} ; then
 			filter-flags '-mcpu=*' '-mtune=*'
-			append-flags '-mcpu=v8'
+			if [[ ${ABI} == "sparc64" ]]; then
+				append-flags '-mcpu=v9'
+			else
+				append-flags '-mcpu=v8'
+			fi
 		fi
 		;;
 	*)

@@ -177,7 +177,11 @@ if [[ ${PN} != "kgcc64" && ${PN} != gcc-* ]] ; then
 		tc_version_is_at_least 3.1 && IUSE+=" objc"
 		;;
 	sparc)
-		tc_version_is_at_least 2.9 && IUSE+=" +cxx"
+		if [[ ${ABI} == "sparc64" ]]; then
+			tc_version_is_at_least 3.0 && IUSE+=" +cxx"
+		else
+			tc_version_is_at_least 2.9 && IUSE+=" +cxx"
+		fi
 		tc_version_is_at_least 2.8 && IUSE+=" objc"
 		;;
 	*)
@@ -1259,6 +1263,7 @@ toolchain_src_configure() {
 		;;
 	sparc)
 		if ! tc_version_is_at_least 3.1 && [[ ${ABI} == "sparc64" ]]; then
+			STAGE1_CFLAGS="${CFLAGS} -gstabs+"
 			CFLAGS="${CFLAGS} -gstabs+"
 			CXXFLAGS="${CXXFLAGS} -gstabs+"
 		fi
@@ -1472,9 +1477,13 @@ downgrade_arch_flags() {
 		fi
 		;;
 	sparc)
-		if ! tc_version_is_at_least 3.1 ${bver} && [[ ${ABI} != "sparc64" ]]; then
+		if ! tc_version_is_at_least 3.1 ${bver} ; then
 			filter-flags '-mcpu=*' '-mtune=*'
-			append-flags '-mcpu=v8'
+			if [[ ${ABI} == "sparc64" ]]; then
+				append-flags '-mcpu=v9'
+			else
+				append-flags '-mcpu=v8'
+			fi
 		fi
 		;;
 	*)

@@ -21,7 +21,11 @@ case ${ARCH} in
 		TOOL_SLOT="powerpc-legacy"
 		;;
 	sparc)
-		TOOL_SLOT="sparc-legacy"
+		if [[ ${ABI} == "sparc64" ]]; then
+			TOOL_SLOT="sparc64-legacy"
+		else
+			TOOL_SLOT="sparc-legacy"
+		fi
 		;;
 	*)
 		;;
@@ -49,6 +53,9 @@ src_prepare() {
 	toolchain_src_prepare
 	eapply "${FILESDIR}"/${PV}/00_egcs-${PV}.patch
 	eapply "${FILESDIR}"/${PV}/01_workaround-for-new-glibc.patch
+	if ! _tc_use_if_iuse cxx; then
+		rm -r libstdc++ libio || die
+	fi
 }
 
 src_install() {

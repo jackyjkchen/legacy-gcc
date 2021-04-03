@@ -27,7 +27,11 @@ case ${ARCH} in
 		TOOL_SLOT="powerpc-legacy"
 		;;
 	sparc)
-		TOOL_SLOT="sparc-legacy"
+		if [[ ${ABI} == "sparc64" ]]; then
+			TOOL_SLOT="sparc64-legacy"
+		else
+			TOOL_SLOT="sparc-legacy"
+		fi
 		;;
 	*)
 		;;
@@ -57,6 +61,7 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/00_gcc-${PV}.patch
 	eapply "${FILESDIR}"/${PV}/01_workaround-for-legacy-glibc-in-non-system-dir.patch
 	eapply "${FILESDIR}"/${PV}/02_fix-patchset.patch
+	[[ ${TOOL_SLOT} == "sparc64-legacy" ]] && eapply "${FILESDIR}"/${PV}/03_workaround-for-sparc64.patch
 }
 
 src_install() {
