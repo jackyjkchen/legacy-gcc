@@ -54,7 +54,13 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/00_egcs-${PV}.patch
 	eapply "${FILESDIR}"/${PV}/01_workaround-for-new-glibc.patch
 	if ! _tc_use_if_iuse cxx; then
-		rm -r libstdc++ libio || die
+		rm -r libstdc++ libio gcc/cp || die
+	fi
+	if ! _tc_use_if_iuse objc; then
+		rm -r gcc/objc || die
+	fi
+	if ! _tc_use_if_iuse f77; then
+		rm -r libf2c gcc/f || die
 	fi
 }
 
