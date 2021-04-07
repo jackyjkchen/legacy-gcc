@@ -546,21 +546,29 @@ index 2f13dcb..f8566cd 100644
    /* If this kind of value comes back in memory,
       decide where in memory it should come back.  */
 diff --git a/cccp.c b/cccp.c
-index 77ecb76..97651a2 100644
+index 77ecb76..80e3e74 100644
 --- a/cccp.c
 +++ b/cccp.c
-@@ -79,6 +79,7 @@ typedef unsigned char U_CHAR;
+@@ -79,8 +79,12 @@ typedef unsigned char U_CHAR;
  
  #ifndef VMS
  #ifndef USG
-+#include <time.h>
- #include <sys/time.h>		/* for __DATE__ and __TIME__ */
- #include <sys/resource.h>
+-#include <sys/time.h>		/* for __DATE__ and __TIME__ */
+-#include <sys/resource.h>
++#ifndef RLIMIT_STACK
++# include <time.h>
++#else
++# include <sys/time.h>
++# include <sys/resource.h>
++#endif
  #else
-@@ -186,12 +187,16 @@ extern char *getenv ();
+ #include <time.h>
+ #include <fcntl.h>
+@@ -185,13 +189,16 @@ void warning ();
+ extern char *getenv ();
  extern FILE *fdopen ();
  extern char *version_string;
- extern struct tm *localtime ();
+-extern struct tm *localtime ();
 +#ifndef HAVE_STRERROR
  extern int sys_nerr;
  #if defined(bsd4_4)
@@ -574,7 +582,17 @@ index 77ecb76..97651a2 100644
  extern int parse_escape ();
  
  #ifndef errno
-@@ -8015,6 +8020,27 @@ change_newlines (start, length)
+@@ -3812,8 +3819,8 @@ special_symbol (hp, op)
+ 
+   case T_DATE:
+   case T_TIME:
+-    buf = (char *) alloca (20);
+     timebuf = timestamp ();
++    buf = (char *) alloca (20);
+     if (hp->type == T_DATE)
+       sprintf (buf, "\"%s %2d %4d\"", monthnames[timebuf->tm_mon],
+ 	      timebuf->tm_mday, timebuf->tm_year + 1900);
+@@ -8015,6 +8022,27 @@ change_newlines (start, length)
    return obp - start;
  }
  
@@ -602,7 +620,7 @@ index 77ecb76..97651a2 100644
  /*
   * error - print error message and increment count of errors.
   */
-@@ -8062,10 +8088,7 @@ error_from_errno (name)
+@@ -8062,10 +8090,7 @@ error_from_errno (name)
    if (ip != NULL)
      fprintf (stderr, "%s:%d: ", ip->nominal_fname, ip->lineno);
  
@@ -614,7 +632,7 @@ index 77ecb76..97651a2 100644
  
    errors++;
  }
-@@ -9018,10 +9041,7 @@ perror_with_name (name)
+@@ -9018,10 +9043,7 @@ perror_with_name (name)
       char *name;
  {
    fprintf (stderr, "%s: ", progname);
