@@ -1917,7 +1917,7 @@ gcc_do_make() {
 			|| die "emake failed with ${GCC_MAKE_TARGET}"
 	else
 		LANGUAGES="c"
-		tc_version_is_at_least 2.7 && LANGUAGES+=" gcov"
+		tc_version_is_at_least 2.8 && LANGUAGES+=" gcov"
 		_tc_use_if_iuse cxx && LANGUAGES+=" c++"
 		_tc_use_if_iuse objc && LANGUAGES+=" objective-c"
 		emake \
