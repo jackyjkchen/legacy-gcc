@@ -22,7 +22,7 @@ case ${ARCH} in
 esac
 
 DEPEND="
-	sys-devel/gcc:2.5.8[cxx]
+	sys-devel/gcc:2.4.5[cxx]
 	legacy-gcc/linux-headers:${TOOL_SLOT}
 	legacy-gcc/glibc-headers:${TOOL_SLOT}
 	legacy-gcc/binutils-wrapper:${TOOL_SLOT}"
@@ -31,8 +31,8 @@ BDEPEND=""
 
 CHOST="${TOOL_SLOT}-linux-gnu"
 
-CC="gcc-2.5.8"
-CXX="gcc-2.5.8"
+CC="gcc-2.4.5"
+CXX="gcc-2.4.5"
 
 src_prepare() {
 	default
@@ -41,9 +41,8 @@ src_prepare() {
 }
 
 src_configure() {
-	downgrade_arch_flags 2.5.8
+	downgrade_arch_flags 2.4.5
 	local econfargs=(
-		--build=${CHOST}
 		--host=${CHOST}
 		--target=${CHOST}
 		--prefix=/usr
@@ -68,9 +67,9 @@ src_compile() {
 src_install() {
 	pushd "${WORKDIR}"/build > /dev/null
 	emake -j1 DESTDIR="${ED}" install || die "failed to run make"
-	mkdir -p "${ED}"/usr/lib/gcc-lib/${CHOST}/2.5.8/include || die
-	mv -v "${ED}"/usr/lib/g++-include "${ED}"/usr/lib/gcc-lib/${CHOST}/2.5.8/include/g++ || die
-	mv -v "${ED}"/usr/lib/libg++.a "${ED}"/usr/lib/gcc-lib/${CHOST}/2.5.8/ || die
+	mkdir -p "${ED}"/usr/lib/gcc-lib/${CHOST}/2.4.5/include || die
+	mv -v "${ED}"/usr/lib/g++-include "${ED}"/usr/lib/gcc-lib/${CHOST}/2.4.5/include/g++ || die
+	mv -v "${ED}"/usr/lib/libg++.a "${ED}"/usr/lib/gcc-lib/${CHOST}/2.4.5/ || die
 	rm -rfv "${ED}"/usr/lib/lib* "${ED}"/usr/bin "${ED}"/usr/man "${ED}"/usr/${CHOST}
 	popd > /dev/null
 }

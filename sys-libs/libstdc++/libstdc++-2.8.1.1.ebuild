@@ -25,7 +25,7 @@ case ${ARCH} in
 esac
 
 DEPEND="
-	sys-devel/gcc:2.8.1
+	sys-devel/gcc:2.8.1[cxx]
 	legacy-gcc/linux-headers:${TOOL_SLOT}
 	legacy-gcc/glibc-headers:${TOOL_SLOT}
 	legacy-gcc/binutils-wrapper:${TOOL_SLOT}"
