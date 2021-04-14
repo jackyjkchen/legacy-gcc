@@ -1,5 +1,5 @@
 diff --git a/Makefile.in b/Makefile.in
-index f3bfd88..bb1b5c9 100644
+index f3bfd88..23b7721 100644
 --- a/Makefile.in
 +++ b/Makefile.in
 @@ -32,7 +32,7 @@
@@ -65,11 +65,11 @@ index f3bfd88..bb1b5c9 100644
 +
 +crtbeginS.o:	crtstuff.c $(GCC_PASSES) $(CONFIG_H) gbl-ctors.h
 +	$(GCC_FOR_TARGET) $(GCC_CFLAGS) $(INCLUDES) -DCRT_BEGIN -fPIC \
-+	  -finhibit-size-directive -g0 -c $(srcdir)/crtstuff.c -o crtbeginS.o
++	-DCRTSTUFFS_O  -finhibit-size-directive -g0 -c $(srcdir)/crtstuff.c -o crtbeginS.o
 +
 +crtendS.o:	crtstuff.c $(GCC_PASSES) $(CONFIG_H) gbl-ctors.h
 +	$(GCC_FOR_TARGET) $(GCC_CFLAGS) $(INCLUDES) -DCRT_END -fPIC \
-+	  -finhibit-size-directive -g0 -c $(srcdir)/crtstuff.c -o crtendS.o
++	-DCRTSTUFFS_O  -finhibit-size-directive -g0 -c $(srcdir)/crtstuff.c -o crtendS.o
 +
  
  # Compiling object files from source files.
@@ -2060,7 +2060,7 @@ index 14b755c..bd99631 100755
  if [ -f ${srcdir}/config/${tmake_file} ]
  then
 diff --git a/crtstuff.c b/crtstuff.c
-index 9b91e6c..d15a863 100644
+index 9b91e6c..0a30340 100644
 --- a/crtstuff.c
 +++ b/crtstuff.c
 @@ -1,9 +1,9 @@
@@ -2098,7 +2098,7 @@ index 9b91e6c..d15a863 100644
  
     This file must be compiled with gcc.  */
  
-@@ -52,40 +55,116 @@ the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.  */
+@@ -52,40 +55,147 @@ the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.  */
  
  #include "tm.h"
  
@@ -2150,6 +2150,31 @@ index 9b91e6c..d15a863 100644
  
 +#ifdef OBJECT_FORMAT_ELF
 +
++/* Declare the __dso_handle variable.  It should have a unique value
++   in every shared-object; in a main program its value is zero.  The
++   object should in any case be protected.  This means the instance
++   in one DSO or the main program is not used in another object.  The
++   dynamic linker takes care of this.  */
++
++/* XXX Ideally the following should be implemented using
++   __attribute__ ((__visibility__ ("hidden")))
++   but the __attribute__ support is not yet there.  */
++#define HAVE_GAS_HIDDEN 1
++#ifdef HAVE_GAS_HIDDEN
++asm (".hidden\t__dso_handle");
++#endif
++
++#ifdef CRTSTUFFS_O
++void *__dso_handle = &__dso_handle;
++#else
++void *__dso_handle = 0;
++#endif
++
++/* The __cxa_finalize function may not be available so we use only a
++   weak declaration.  */
++extern void __cxa_finalize (void *);
++
++/* Run all the global destructors on exit from the program.  */
 +/* Run all the global destructors on exit from the program.  */
 + 
 +/* Some systems place the number of pointers in the first word of the
@@ -2169,6 +2194,12 @@ index 9b91e6c..d15a863 100644
 +__do_global_dtors_aux ()
 +{
 +  func_ptr *p;
++
++#ifdef CRTSTUFFS_O
++  if (__cxa_finalize)
++    __cxa_finalize (__dso_handle);
++#endif
++
 +  for (p = __DTOR_LIST__ + 1; *p; p++)
 +    (*p) ();
 +}
@@ -2225,7 +2256,7 @@ index 9b91e6c..d15a863 100644
  #ifdef INIT_SECTION_PREAMBLE
    INIT_SECTION_PREAMBLE;
  #endif
-@@ -98,30 +177,46 @@ asm (INIT_SECTION_ASM_OP);	/* cc1 doesn't know that we are switching! */
+@@ -98,30 +208,46 @@ asm (INIT_SECTION_ASM_OP);	/* cc1 doesn't know that we are switching! */
  static void
  __do_global_ctors_aux ()	/* prologue goes in .init section */
  {
@@ -2274,7 +2305,7 @@ index 9b91e6c..d15a863 100644
  #endif
  
  #endif /* defined(CRT_BEGIN) */
-@@ -130,17 +225,66 @@ func_ptr __DTOR_LIST__[1] = { (func_ptr) (-1) };
+@@ -130,17 +256,66 @@ func_ptr __DTOR_LIST__[1] = { (func_ptr) (-1) };
  
  #ifdef INIT_SECTION_ASM_OP
  
@@ -2283,7 +2314,13 @@ index 9b91e6c..d15a863 100644
 -   such a thing) so that we can properly perform the construction of
 -   file-scope static-storage C++ objects within shared libraries.
 +#ifdef OBJECT_FORMAT_ELF
-+
+ 
+-   This must be virtually identical to the one above so that we can
+-   insure that the function prologue from the one above works correctly
+-   with the epilogue from this one.  (They will both go into the .init
+-   section as the first and last things (respectively) that the linker
+-   will put in that section.)
+-*/
 +static func_ptr __CTOR_END__[1];
 +static void
 +__do_global_ctors_aux ()
@@ -2321,13 +2358,7 @@ index 9b91e6c..d15a863 100644
 +}
 +
 +#else  /* OBJECT_FORMAT_ELF */
- 
--   This must be virtually identical to the one above so that we can
--   insure that the function prologue from the one above works correctly
--   with the epilogue from this one.  (They will both go into the .init
--   section as the first and last things (respectively) that the linker
--   will put in that section.)
--*/
++
 +/* Stick the real initialization code, followed by a normal sort of
 +   function epilogue at the very end of the .init section for this
 +   entire root executable file or for this entire shared library file.
@@ -2351,7 +2382,7 @@ index 9b91e6c..d15a863 100644
  
  static void
  __do_global_ctors_aux ()	/* prologue goes in .text section */
-@@ -150,23 +294,31 @@ __do_global_ctors_aux ()	/* prologue goes in .text section */
+@@ -150,23 +325,31 @@ __do_global_ctors_aux ()	/* prologue goes in .text section */
    ON_EXIT (__do_global_dtors, 0);
  }				/* epilogue and body go in .init section */
  

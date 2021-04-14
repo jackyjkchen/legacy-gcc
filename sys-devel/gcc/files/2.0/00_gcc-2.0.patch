@@ -1,5 +1,5 @@
 diff --git a/Makefile.in b/Makefile.in
-index 73a7734..f7b8ae6 100644
+index 73a7734..706fdb3 100644
 --- a/Makefile.in
 +++ b/Makefile.in
 @@ -29,7 +29,7 @@
@@ -84,11 +84,11 @@ index 73a7734..f7b8ae6 100644
 +
 +crtbeginS.o:	crtstuff.c $(GCC_PASSES) $(CONFIG_H) gbl-ctors.h
 +	$(GCC_FOR_TARGET) $(GCC_CFLAGS) $(INCLUDES) -DCRT_BEGIN -fPIC \
-+	  -finhibit-size-directive -g0 -c $(srcdir)/crtstuff.c -o crtbeginS.o
++	-DCRTSTUFFS_O -finhibit-size-directive -g0 -c $(srcdir)/crtstuff.c -o crtbeginS.o
 +
 +crtendS.o:	crtstuff.c $(GCC_PASSES) $(CONFIG_H) gbl-ctors.h
 +	$(GCC_FOR_TARGET) $(GCC_CFLAGS) $(INCLUDES) -DCRT_END -fPIC \
-+	  -finhibit-size-directive -g0 -c $(srcdir)/crtstuff.c -o crtendS.o
++	-DCRTSTUFFS_O  -finhibit-size-directive -g0 -c $(srcdir)/crtstuff.c -o crtendS.o
 +
  
  # Compiling object files from source files.
@@ -2135,7 +2135,7 @@ index 25660fd..e8b6d8b 100755
  if [ -f ${srcdir}/config/${tmake_file} ]
  then
 diff --git a/crtstuff.c b/crtstuff.c
-index c72c391..d15a863 100644
+index c72c391..0a30340 100644
 --- a/crtstuff.c
 +++ b/crtstuff.c
 @@ -1,9 +1,9 @@
@@ -2173,7 +2173,7 @@ index c72c391..d15a863 100644
  
     This file must be compiled with gcc.  */
  
-@@ -52,52 +55,169 @@ the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.  */
+@@ -52,52 +55,200 @@ the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.  */
  
  #include "tm.h"
  
@@ -2228,6 +2228,31 @@ index c72c391..d15a863 100644
 -static void force_to_text () { }
 +#ifdef OBJECT_FORMAT_ELF
 +
++/* Declare the __dso_handle variable.  It should have a unique value
++   in every shared-object; in a main program its value is zero.  The
++   object should in any case be protected.  This means the instance
++   in one DSO or the main program is not used in another object.  The
++   dynamic linker takes care of this.  */
++
++/* XXX Ideally the following should be implemented using
++   __attribute__ ((__visibility__ ("hidden")))
++   but the __attribute__ support is not yet there.  */
++#define HAVE_GAS_HIDDEN 1
++#ifdef HAVE_GAS_HIDDEN
++asm (".hidden\t__dso_handle");
++#endif
++
++#ifdef CRTSTUFFS_O
++void *__dso_handle = &__dso_handle;
++#else
++void *__dso_handle = 0;
++#endif
++
++/* The __cxa_finalize function may not be available so we use only a
++   weak declaration.  */
++extern void __cxa_finalize (void *);
++
++/* Run all the global destructors on exit from the program.  */
 +/* Run all the global destructors on exit from the program.  */
 + 
 +/* Some systems place the number of pointers in the first word of the
@@ -2247,6 +2272,12 @@ index c72c391..d15a863 100644
 +__do_global_dtors_aux ()
 +{
 +  func_ptr *p;
++
++#ifdef CRTSTUFFS_O
++  if (__cxa_finalize)
++    __cxa_finalize (__dso_handle);
++#endif
++
 +  for (p = __DTOR_LIST__ + 1; *p; p++)
 +    (*p) ();
 +}
@@ -2351,7 +2382,7 @@ index c72c391..d15a863 100644
  
  #endif /* defined(CRT_BEGIN) */
  
-@@ -105,34 +225,100 @@ func_ptr __DTOR_LIST__[1] = { (func_ptr) (-1) };
+@@ -105,34 +256,100 @@ func_ptr __DTOR_LIST__[1] = { (func_ptr) (-1) };
  
  #ifdef INIT_SECTION_ASM_OP
  
@@ -2360,13 +2391,7 @@ index c72c391..d15a863 100644
 -   such a thing) so that we can properly perform the construction of
 -   file-scope static-storage C++ objects within shared libraries.
 +#ifdef OBJECT_FORMAT_ELF
- 
--   This must be virtually identical to the one above so that we can
--   insure that the function prologue from the one above works correctly
--   with the epilogue from this one.  (They will both go into the .init
--   section as the first and last things (respectively) that the linker
--   will put in that section.)
--*/
++
 +static func_ptr __CTOR_END__[1];
 +static void
 +__do_global_ctors_aux ()
@@ -2375,10 +2400,9 @@ index c72c391..d15a863 100644
 +  for (p = __CTOR_END__ - 1; *p != (func_ptr) -1; p--)
 +    (*p) ();
 +}
- 
++
 +/* Stick a call to __do_global_ctors_aux into the .init section.  */
- static void
--__do_global_ctors ()		/* prologue goes in .text section */
++static void
 +init_dummy ()
 +{
 +  asm (INIT_SECTION_ASM_OP);
@@ -2405,7 +2429,13 @@ index c72c391..d15a863 100644
 +}
 +
 +#else  /* OBJECT_FORMAT_ELF */
-+
+ 
+-   This must be virtually identical to the one above so that we can
+-   insure that the function prologue from the one above works correctly
+-   with the epilogue from this one.  (They will both go into the .init
+-   section as the first and last things (respectively) that the linker
+-   will put in that section.)
+-*/
 +/* Stick the real initialization code, followed by a normal sort of
 +   function epilogue at the very end of the .init section for this
 +   entire root executable file or for this entire shared library file.
@@ -2426,8 +2456,9 @@ index c72c391..d15a863 100644
 +   include setup operations for very primitive things (e.g. initializing
 +   the state of the floating-point coprocessor, etc.) which should be done
 +   before we start to execute any of the user's code. */
-+
-+static void
+ 
+ static void
+-__do_global_ctors ()		/* prologue goes in .text section */
 +__do_global_ctors_aux ()	/* prologue goes in .text section */
  {
    asm (INIT_SECTION_ASM_OP);

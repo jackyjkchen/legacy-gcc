@@ -1,3 +1,52 @@
+diff --git a/crtstuff.c b/crtstuff.c
+index 8bd3b1a..b795a72 100644
+--- a/crtstuff.c
++++ b/crtstuff.c
+@@ -101,6 +101,31 @@ typedef void (*func_ptr) (void);
+ 
+ #ifdef OBJECT_FORMAT_ELF
+ 
++/* Declare the __dso_handle variable.  It should have a unique value
++   in every shared-object; in a main program its value is zero.  The
++   object should in any case be protected.  This means the instance
++   in one DSO or the main program is not used in another object.  The
++   dynamic linker takes care of this.  */
++
++/* XXX Ideally the following should be implemented using
++   __attribute__ ((__visibility__ ("hidden")))
++   but the __attribute__ support is not yet there.  */
++#define HAVE_GAS_HIDDEN 1
++#ifdef HAVE_GAS_HIDDEN
++asm (".hidden\t__dso_handle");
++#endif
++
++#ifdef CRTSTUFFS_O
++void *__dso_handle = &__dso_handle;
++#else
++void *__dso_handle = 0;
++#endif
++
++/* The __cxa_finalize function may not be available so we use only a
++   weak declaration.  */
++extern void __cxa_finalize (void *);
++
++/* Run all the global destructors on exit from the program.  */
+ /* Run all the global destructors on exit from the program.  */
+  
+ /* Some systems place the number of pointers in the first word of the
+@@ -120,6 +145,12 @@ static void
+ __do_global_dtors_aux ()
+ {
+   func_ptr *p;
++
++#ifdef CRTSTUFFS_O
++  if (__cxa_finalize)
++    __cxa_finalize (__dso_handle);
++#endif
++
+   for (p = __DTOR_LIST__ + 1; *p; p++)
+     (*p) ();
+ }
 diff --git a/Makefile.in b/Makefile.in
 index 7ab05ff..5e18770 100644
 --- a/Makefile.in
@@ -37,6 +86,20 @@ index 7ab05ff..5e18770 100644
  	"GCC_FOR_TARGET=$(GCC_FOR_TARGET)" \
  	"LDFLAGS=$(LDFLAGS)" \
  	"LEX=$(LEX)" \
+@@ -1034,11 +1034,11 @@ crtbeginS.o crtendS.o: stamp-crtS ; @true
+ 
+ stamp-crtS:	stamp-crt crtstuff.c $(GCC_PASSES) $(CONFIG_H) gbl-ctors.h
+ 	$(GCC_FOR_TARGET) $(GCC_CFLAGS) $(INCLUDES) $(CRTSTUFF_T_CFLAGS) \
+-	  -DCRT_BEGIN -finhibit-size-directive -fno-inline-functions \
++	  -DCRT_BEGIN -DCRTSTUFFS_O -finhibit-size-directive -fno-inline-functions \
+ 	  -g0 -c $(srcdir)/crtstuff.c -fPIC
+ 	mv crtstuff$(objext) crtbeginS$(objext)
+ 	$(GCC_FOR_TARGET) $(GCC_CFLAGS) $(INCLUDES) $(CRTSTUFF_T_CFLAGS) \
+-	  -DCRT_END -finhibit-size-directive -fno-inline-functions \
++	  -DCRT_END -DCRTSTUFFS_O -finhibit-size-directive -fno-inline-functions \
+ 	  -g0 -c $(srcdir)/crtstuff.c -fPIC
+ 	mv crtstuff$(objext) crtendS$(objext)
+ 	touch stamp-crtS
 @@ -2040,179 +2041,179 @@ install-float-h-cross: install-dir
  #	if [ -f enquire ] ; then true; else false; fi
  # Note: don't use -.  We should fail right away if enquire was not made.
