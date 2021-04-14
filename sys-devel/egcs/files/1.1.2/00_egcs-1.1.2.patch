@@ -1148,6 +1148,62 @@ index 7c7768f..a5b2f5f 100644
  int
  is_aggr_type_2 (t1, t2)
       tree t1, t2;
+diff --git a/gcc/crtstuff.c b/gcc/crtstuff.c
+index a1b9ef8..1da17dc 100644
+--- a/gcc/crtstuff.c
++++ b/gcc/crtstuff.c
+@@ -144,6 +144,30 @@ typedef void (*func_ptr) (void);
+ 
+ #ifdef OBJECT_FORMAT_ELF
+ 
++/* Declare the __dso_handle variable.  It should have a unique value
++   in every shared-object; in a main program its value is zero.  The
++   object should in any case be protected.  This means the instance
++   in one DSO or the main program is not used in another object.  The
++   dynamic linker takes care of this.  */
++
++/* XXX Ideally the following should be implemented using
++   __attribute__ ((__visibility__ ("hidden")))
++   but the __attribute__ support is not yet there.  */
++#define HAVE_GAS_HIDDEN 1
++#ifdef HAVE_GAS_HIDDEN
++asm (".hidden\t__dso_handle");
++#endif
++
++#ifdef CRTSTUFFS_O
++void *__dso_handle = &__dso_handle;
++#else
++void *__dso_handle = 0;
++#endif
++
++/* The __cxa_finalize function may not be available so we use only a
++   weak declaration.  */
++extern void __cxa_finalize (void *) TARGET_ATTRIBUTE_WEAK;
++
+ /* Run all the global destructors on exit from the program.  */
+  
+ /* Some systems place the number of pointers in the first word of the
+@@ -174,6 +198,11 @@ __do_global_dtors_aux ()
+   if (completed)
+     return;
+ 
++#ifdef CRTSTUFFS_O
++  if (__cxa_finalize)
++    __cxa_finalize (__dso_handle);
++#endif
++
+   while (*p)
+     {
+       p++;
+@@ -393,7 +422,7 @@ init_dummy ()
+    section. We accomplish it by making a dummy call here. This
+    code is never reached.  */
+  
+-#if defined(__linux__) && defined(__PIC__) && defined(__i386__)
++#if defined(__linux__) && defined(__PIC__) && defined(__i386__) && defined (USE_GNULIBC_1)
+   {
+     extern void *___brk_addr;
+     extern char **__environ;
 diff --git a/gcc/f/Make-lang.in b/gcc/f/Make-lang.in
 index 38712fd..a2d9a50 100644
 --- a/gcc/f/Make-lang.in

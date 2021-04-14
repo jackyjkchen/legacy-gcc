@@ -73,7 +73,7 @@ downgrade_arch_flags() {
 
 	# "added" "arch" "replacement"
 	local archlist=(
-		11  znver3 znver2
+		10  znver3 znver2
 		10  tigerlake icelake-server
 		10  cooperlake cascadelake
 		9   znver2 znver1

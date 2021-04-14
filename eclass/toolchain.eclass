@@ -1279,6 +1279,9 @@ toolchain_src_configure() {
 	amd64|x86) tc_version_is_at_least 4.3 && confgcc+=( --enable-targets=all ) ;;
 	esac
 
+	tc_version_is_between 2.7 3.1 && \ 
+		confgcc+=( --enable-version-specific-runtime-libs )
+
 	# On Darwin we need libdir to be set in order to get correct install names
 	# for things like libobjc-gnu, libgcj and libfortran.  If we enable it on
 	# non-Darwin we screw up the behaviour this eclass relies on.  We in
@@ -1513,7 +1516,7 @@ downgrade_arch_flags() {
 
 	# "added" "arch" "replacement"
 	local archlist=(
-		11  znver3 znver2
+		10  znver3 znver2
 		10  tigerlake icelake-server
 		10  cooperlake cascadelake
 		9   znver2 znver1
@@ -2201,10 +2204,6 @@ toolchain_src_install() {
 # when installing gcc, it dumps internal libraries into /usr/lib
 # instead of the private gcc lib path
 gcc_movelibs() {
-	if tc_version_is_between 2 3.1 ; then
-		mv "${ED}"/usr/lib/lib* "${ED}${LIBPATH}"
-		return 0
-	fi
 	# older versions of gcc did not support --print-multi-os-directory
 	tc_version_is_at_least 3.1 || return 0
 
