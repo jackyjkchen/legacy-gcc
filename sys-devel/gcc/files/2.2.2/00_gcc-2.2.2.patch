@@ -1,5 +1,5 @@
 diff --git a/Makefile.in b/Makefile.in
-index 4ce5c7a..9af50cf 100644
+index 4ce5c7a..66e0579 100644
 --- a/Makefile.in
 +++ b/Makefile.in
 @@ -50,7 +50,7 @@ T_CFLAGS =
@@ -95,6 +95,15 @@ index 4ce5c7a..9af50cf 100644
  
  rtl.o : rtl.c $(CONFIG_H) $(RTL_H)
  
+@@ -828,7 +849,7 @@ reload1.o : reload1.c $(CONFIG_H) $(RTL_H) flags.h expr.h \
+    reload.h regs.h hard-reg-set.h insn-config.h insn-flags.h insn-codes.h \
+    basic-block.h recog.h output.h
+ caller-save.o : caller-save.c $(CONFIG_H) $(RTL_H) flags.h \
+-   regs.h hard-reg-set.h insn-config.h basic-block.h recog.h reload.h expr.h
++   regs.h hard-reg-set.h insn-codes.h insn-config.h basic-block.h recog.h reload.h expr.h
+ reorg.o : reorg.c $(CONFIG_H) $(RTL_H) conditions.h hard-reg-set.h \
+    basic-block.h regs.h insn-config.h insn-attr.h insn-flags.h recog.h \
+    flags.h output.h
 @@ -1101,8 +1122,10 @@ cccp.o: cccp.c $(CONFIG_H) pcp.h version.c
  	$(CC) $(ALL_CFLAGS) $(ALL_CPPFLAGS) $(INCLUDES) \
  	  -DGCC_INCLUDE_DIR=\"$(libsubdir)/include\" \
@@ -371,11 +380,13 @@ index 4ce5c7a..9af50cf 100644
 +	chmod a-x $(DESTDIR)$(libsubdir)/include/float.h
  
  # Install limits.h, optionally inheriting from the standard system version.
- install-limits-h: limits.h limitx.h install-dir
+-install-limits-h: limits.h limitx.h install-dir
 -	-rm -f $(libsubdir)/include/limits.h tmp-limits.h
++install-limits-h: limits.h limitx.h limity.h install-dir
 +	-rm -f $(DESTDIR)$(libsubdir)/include/limits.h tmp-limits.h
  	if [ -f /usr/include/limits.h ] ; then \
- 	  cat $(srcdir)/limitx.h $(srcdir)/limits.h > tmp-limits.h; \
+-	  cat $(srcdir)/limitx.h $(srcdir)/limits.h > tmp-limits.h; \
++	  cat $(srcdir)/limitx.h $(srcdir)/limits.h $(srcdir)/limity.h > tmp-limits.h; \
  	else \
  	  cat $(srcdir)/limits.h > tmp-limits.h; \
  	fi
@@ -498,6 +509,22 @@ index 4ce5c7a..9af50cf 100644
  
  # These exist for maintenance purposes.
  
+diff --git a/c++ b/c++
+index af9de14..cb7fbfb 100755
+--- a/c++
++++ b/c++
+@@ -67,10 +67,4 @@ then
+   exit 1
+ fi
+ 
+-progname=`echo $0 |sed -e 's|/[^/]*$|/gcc|'`
+-if [ -f ${progname} ]
+-then
+-exec ${progname} $newargs $library
+-else
+-exec gcc $newargs $library
+-fi
++exec gcc-2.2.2 $newargs $library
 diff --git a/cccp.c b/cccp.c
 index 1a44d41..fad9756 100644
 --- a/cccp.c
@@ -2414,6 +2441,23 @@ index b77b548..9a162b1 100644
    buf[0] = '%';
  
    while (c = *p++)
+diff --git a/g++ b/g++
+index af9de14..d58635b 100755
+--- a/g++
++++ b/g++
+@@ -67,10 +67,5 @@ then
+   exit 1
+ fi
+ 
+-progname=`echo $0 |sed -e 's|/[^/]*$|/gcc|'`
+-if [ -f ${progname} ]
+-then
+-exec ${progname} $newargs $library
+-else
+-exec gcc $newargs $library
+-fi
++exec gcc-2.2.2 $newargs $library
++
 diff --git a/gcc.c b/gcc.c
 index 33245fe..6b68cc3 100644
 --- a/gcc.c
@@ -2799,7 +2843,7 @@ index 0c00311..f9fc024 100644
  
  #define va_arg(AP, TYPE)						\
 diff --git a/gstddef.h b/gstddef.h
-index 8f3ac5e..4601547 100644
+index 8f3ac5e..c36f16c 100644
 --- a/gstddef.h
 +++ b/gstddef.h
 @@ -1,5 +1,6 @@
@@ -2916,26 +2960,19 @@ index 8f3ac5e..4601547 100644
  #ifndef _WCHAR_T
  #ifndef _T_WCHAR_
  #ifndef _T_WCHAR
-@@ -114,11 +146,14 @@ typedef __SIZE_TYPE__ size_t;
+@@ -114,11 +146,7 @@ typedef __SIZE_TYPE__ size_t;
  #ifndef __WCHAR_TYPE__
  #define __WCHAR_TYPE__ int
  #endif
 -/* Define this type if we are doing the whole job,
 -   or if we want this type in particular.  */
 -#if defined (_STDDEF_H) || defined (__need_wchar_t)
-+#ifdef __GNUG__
-+/* In C++, wchar_t is a distinct basic type,
-+   and we can expect __wchar_t to be defined by cc1plus.  */
-+typedef __wchar_t wchar_t;
-+#else
-+/* In C, cpp tells us which type to make an alias for.  */
  typedef __WCHAR_TYPE__ wchar_t;
 -#endif /* <stddef.h> or __need_wchar_t.  */
-+#endif
  #endif
  #endif
  #endif
-@@ -127,6 +162,21 @@ typedef __WCHAR_TYPE__ wchar_t;
+@@ -127,6 +155,21 @@ typedef __WCHAR_TYPE__ wchar_t;
  #endif
  #endif
  #undef	__need_wchar_t
@@ -2957,7 +2994,7 @@ index 8f3ac5e..4601547 100644
  
  #endif /* __sys_stdtypes_h */
  
-@@ -145,5 +195,7 @@ typedef __WCHAR_TYPE__ wchar_t;
+@@ -145,5 +188,7 @@ typedef __WCHAR_TYPE__ wchar_t;
  #define offsetof(TYPE, MEMBER) ((size_t) &((TYPE *)0)->MEMBER)
  
  #endif /* _STDDEF_H was defined this time */
@@ -2968,6 +3005,34 @@ index 8f3ac5e..4601547 100644
 diff --git a/install.sh b/install.sh
 old mode 100644
 new mode 100755
+diff --git a/limitx.h b/limitx.h
+index d261e94..76525b9 100644
+--- a/limitx.h
++++ b/limitx.h
+@@ -1,5 +1,12 @@
+ /* This administrivia gets added to the beginning of limits.h
+    if the system has its own version of limits.h.  */
+ 
+-#include_next <limits.h>
++/* We use _GCC_LIMITS_H_ because we want this not to match
++   any macros that the system's limits.h uses for its own purposes.  */
++#ifndef _GCC_LIMITS_H_  /* Terminated in limity.h.  */
++#define _GCC_LIMITS_H_
+ 
++#ifndef _LIBC_LIMITS_H_
++/* Use <...> so that we find syslimits.h only in system include dirs.  */
++#include_next <limits.h>
++#endif
+diff --git a/limity.h b/limity.h
+new file mode 100644
+index 0000000..5492553
+--- /dev/null
++++ b/limity.h
+@@ -0,0 +1,4 @@
++/* This administrivia gets added to the end of limits.h
++   if the system has its own version of limits.h.  */
++
++#endif /* not _GCC_LIMITS_H_ */
 diff --git a/output.h b/output.h
 index 303b1da..eee1163 100644
 --- a/output.h

@@ -1,53 +1,5 @@
-diff --git a/crtstuff.c b/crtstuff.c
-index 0a5aedd..0d48a56 100644
---- a/crtstuff.c
-+++ b/crtstuff.c
-@@ -105,6 +105,30 @@ typedef void (*func_ptr) (void);
- 
- #ifdef OBJECT_FORMAT_ELF
- 
-+/* Declare the __dso_handle variable.  It should have a unique value
-+   in every shared-object; in a main program its value is zero.  The
-+   object should in any case be protected.  This means the instance
-+   in one DSO or the main program is not used in another object.  The
-+   dynamic linker takes care of this.  */
-+
-+/* XXX Ideally the following should be implemented using
-+   __attribute__ ((__visibility__ ("hidden")))
-+   but the __attribute__ support is not yet there.  */
-+#define HAVE_GAS_HIDDEN 1
-+#ifdef HAVE_GAS_HIDDEN
-+asm (".hidden\t__dso_handle");
-+#endif
-+
-+#ifdef CRTSTUFFS_O
-+void *__dso_handle = &__dso_handle;
-+#else
-+void *__dso_handle = 0;
-+#endif
-+
-+/* The __cxa_finalize function may not be available so we use only a
-+   weak declaration.  */
-+extern void __cxa_finalize (void *);
-+
- /* Run all the global destructors on exit from the program.  */
-  
- /* Some systems place the number of pointers in the first word of the
-@@ -130,6 +154,12 @@ static void
- __do_global_dtors_aux ()
- {
-   static func_ptr *p = __DTOR_LIST__ + 1;
-+
-+#ifdef CRTSTUFFS_O
-+  if (__cxa_finalize)
-+    __cxa_finalize (__dso_handle);
-+#endif
-+
-   while (*p)
-     {
-       p++;
 diff --git a/Makefile.in b/Makefile.in
-index 80ee04a..08132c0 100644
+index 80ee04a..bddfe13 100644
 --- a/Makefile.in
 +++ b/Makefile.in
 @@ -102,7 +102,7 @@ RANLIB_TEST = [ -f /usr/bin/ranlib -o -f /bin/ranlib ]
@@ -67,7 +19,7 @@ index 80ee04a..08132c0 100644
  	"CLIB=$(CLIB)" \
  	"GCC_FOR_TARGET=$(GCC_FOR_TARGET)" \
  	"LDFLAGS=$(LDFLAGS)" \
-@@ -1154,11 +1154,11 @@ crtbeginS.o crtendS.o: s-crtS ; @true
+@@ -1153,11 +1154,11 @@ crtbeginS.o crtendS.o: s-crtS ; @true
  s-crtS: crtstuff.c $(GCC_PASSES) $(CONFIG_H) \
    defaults.h frame.h gbl-ctors.h
  	$(GCC_FOR_TARGET) $(GCC_CFLAGS) $(INCLUDES) $(CRTSTUFF_T_CFLAGS_S) \
@@ -81,6 +33,44 @@ index 80ee04a..08132c0 100644
  	  -g0 -c $(srcdir)/crtstuff.c -o crtendS$(objext)
  	touch s-crtS
  
+@@ -1319,14 +1320,14 @@ dbxout.o : dbxout.c $(CONFIG_H) $(TREE_H) $(RTL_H) flags.h regs.h \
+    insn-config.h reload.h gstab.h xcoffout.h defaults.h output.h
+ sdbout.o : sdbout.c $(CONFIG_H) $(TREE_H) $(RTL_H) flags.h except.h \
+    function.h expr.h output.h hard-reg-set.h regs.h defaults.h real.h \
+-   insn-config.h bytecode.h obstack.h xcoffout.h c-pragma.h
++   insn-config.h insn-codes.h bytecode.h obstack.h xcoffout.h c-pragma.h
+ dwarfout.o : dwarfout.c $(CONFIG_H) $(TREE_H) $(RTL_H) dwarf.h flags.h \
+    insn-config.h reload.h output.h defaults.h
+ dwarf2out.o : dwarf2out.c $(CONFIG_H) $(TREE_H) $(RTL_H) dwarf2.h flags.h \
+-   insn-config.h reload.h output.h defaults.h hard-reg-set.h regs.h expr.h
++   insn-config.h insn-codes.h reload.h output.h defaults.h hard-reg-set.h regs.h expr.h
+ xcoffout.o : xcoffout.c $(CONFIG_H) $(TREE_H) $(RTL_H) xcoffout.h flags.h
+ emit-rtl.o : emit-rtl.c $(CONFIG_H) $(RTL_H) $(TREE_H) flags.h except.h \
+-   function.h regs.h insn-config.h $(RECOG_H) real.h expr.h obstack.h \
++   function.h regs.h insn-config.h insn-codes.h $(RECOG_H) real.h expr.h obstack.h \
+    bytecode.h bc-opcode.h bc-typecd.h bc-typecd.def bc-optab.h bc-emit.h \
+    bc-opname.h hard-reg-set.h
+ real.o : real.c $(CONFIG_H) $(TREE_H)
+@@ -1337,16 +1338,16 @@ integrate.o : integrate.c $(CONFIG_H) $(RTL_H) $(TREE_H) flags.h integrate.h \
+    bytecode.h output.h $(RECOG_H) except.h
+ 
+ jump.o : jump.c $(CONFIG_H) $(RTL_H) flags.h hard-reg-set.h regs.h \
+-   insn-config.h insn-flags.h $(RECOG_H) expr.h real.h except.h
++   insn-config.h insn-codes.h insn-flags.h $(RECOG_H) expr.h real.h except.h
+ stupid.o : stupid.c $(CONFIG_H) $(RTL_H) regs.h hard-reg-set.h flags.h
+ 
+ cse.o : cse.c $(CONFIG_H) $(RTL_H) regs.h hard-reg-set.h flags.h real.h \
+-   insn-config.h $(RECOG_H) expr.h
++   insn-config.h insn-codes.h $(RECOG_H) expr.h
+ profile.o : profile.c $(CONFIG_H) $(RTL_H) flags.h insn-flags.h gcov-io.h \
+    $(TREE_H) output.h regs.h
+ loop.o : loop.c $(CONFIG_H) $(RTL_H) flags.h loop.h insn-config.h \
+    insn-flags.h insn-codes.h regs.h hard-reg-set.h $(RECOG_H) expr.h real.h
+-unroll.o : unroll.c $(CONFIG_H) $(RTL_H) insn-config.h integrate.h regs.h \
++unroll.o : unroll.c $(CONFIG_H) $(RTL_H) insn-config.h insn-codes.h integrate.h regs.h \
+    $(RECOG_H) flags.h expr.h loop.h
+ flow.o : flow.c $(CONFIG_H) $(RTL_H) flags.h insn-config.h \
+    $(BASIC_BLOCK_H) regs.h hard-reg-set.h output.h
 @@ -2169,186 +2170,186 @@ install-float-h-cross: installdirs
  #	if [ -f enquire ] ; then true; else false; fi
  # Note: don't use -.  We should fail right away if enquire was not made.
@@ -567,6 +557,54 @@ index 9007bf2..d3587e7 100644
  
  # This is used instead of ALL_CFLAGS when compiling with GCC_FOR_TARGET.
  # It omits XCFLAGS, and specifies -B./.
+diff --git a/crtstuff.c b/crtstuff.c
+index 0a5aedd..136c74f 100644
+--- a/crtstuff.c
++++ b/crtstuff.c
+@@ -105,6 +105,30 @@ typedef void (*func_ptr) (void);
+ 
+ #ifdef OBJECT_FORMAT_ELF
+ 
++/* Declare the __dso_handle variable.  It should have a unique value
++   in every shared-object; in a main program its value is zero.  The
++   object should in any case be protected.  This means the instance
++   in one DSO or the main program is not used in another object.  The
++   dynamic linker takes care of this.  */
++
++/* XXX Ideally the following should be implemented using
++   __attribute__ ((__visibility__ ("hidden")))
++   but the __attribute__ support is not yet there.  */
++#define HAVE_GAS_HIDDEN 1
++#ifdef HAVE_GAS_HIDDEN
++asm (".hidden\t__dso_handle");
++#endif
++
++#ifdef CRTSTUFFS_O
++void *__dso_handle = &__dso_handle;
++#else
++void *__dso_handle = 0;
++#endif
++
++/* The __cxa_finalize function may not be available so we use only a
++   weak declaration.  */
++extern void __cxa_finalize (void *);
++
+ /* Run all the global destructors on exit from the program.  */
+  
+ /* Some systems place the number of pointers in the first word of the
+@@ -130,6 +154,12 @@ static void
+ __do_global_dtors_aux ()
+ {
+   static func_ptr *p = __DTOR_LIST__ + 1;
++
++#ifdef CRTSTUFFS_O
++  if (__cxa_finalize)
++    __cxa_finalize (__dso_handle);
++#endif
++
+   while (*p)
+     {
+       p++;
 diff --git a/objc/Make-lang.in b/objc/Make-lang.in
 index 4dbb041..f189e8d 100644
 --- a/objc/Make-lang.in

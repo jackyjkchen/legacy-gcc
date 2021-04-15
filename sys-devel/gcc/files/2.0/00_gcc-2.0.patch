@@ -1,5 +1,5 @@
 diff --git a/Makefile.in b/Makefile.in
-index 73a7734..706fdb3 100644
+index 73a7734..888819c 100644
 --- a/Makefile.in
 +++ b/Makefile.in
 @@ -50,7 +50,7 @@ T_CFLAGS =
@@ -106,6 +106,15 @@ index 73a7734..706fdb3 100644
  
  rtl.o : rtl.c $(CONFIG_H) $(RTL_H)
  
+@@ -760,7 +779,7 @@ reload1.o : reload1.c $(CONFIG_H) $(RTL_H) flags.h expr.h \
+    reload.h regs.h hard-reg-set.h insn-config.h insn-flags.h insn-codes.h \
+    basic-block.h recog.h output.h
+ caller-save.o : caller-save.c $(CONFIG_H) $(RTL_H) flags.h \
+-   regs.h hard-reg-set.h insn-config.h basic-block.h recog.h reload.h expr.h
++   regs.h hard-reg-set.h insn-codes.h insn-config.h basic-block.h recog.h reload.h expr.h
+ reorg.o : reorg.c $(CONFIG_H) $(RTL_H) conditions.h hard-reg-set.h \
+    basic-block.h regs.h insn-config.h insn-attr.h insn-flags.h recog.h \
+    flags.h output.h
 @@ -1021,8 +1040,10 @@ cccp.o: cccp.c $(CONFIG_H) pcp.h version.c
  	$(CC) $(ALL_CFLAGS) $(ALL_CPPFLAGS) $(INCLUDES) \
            -DGCC_INCLUDE_DIR=\"$(libsubdir)/include\" \
@@ -352,11 +361,13 @@ index 73a7734..706fdb3 100644
 +	chmod a-x $(DESTDIR)$(libsubdir)/include/float.h
  
  # Install limits.h, optionally inheriting from the standard system version.
- install-limits-h: limits.h limitx.h
+-install-limits-h: limits.h limitx.h
 -	-rm -f $(libsubdir)/include/limits.h tmp-limits.h
++install-limits-h: limits.h limitx.h limity.h
 +	-rm -f $(DESTDIR)$(libsubdir)/include/limits.h tmp-limits.h
  	if [ -f /usr/include/limits.h ] ; then \
- 	  cat $(srcdir)/limitx.h $(srcdir)/limits.h > tmp-limits.h; \
+-	  cat $(srcdir)/limitx.h $(srcdir)/limits.h > tmp-limits.h; \
++	  cat $(srcdir)/limitx.h $(srcdir)/limits.h $(srcdir)/limity.h > tmp-limits.h; \
  	else \
  	  cat $(srcdir)/limits.h > tmp-limits.h; \
  	fi
@@ -471,6 +482,22 @@ index 73a7734..706fdb3 100644
  
  # These exist for maintenance purposes.
  
+diff --git a/c++ b/c++
+index db72410..48c445a 100755
+--- a/c++
++++ b/c++
+@@ -66,10 +66,4 @@ then
+   exit 1
+ fi
+ 
+-progname=`echo $0 |sed -e 's|/[^/]*$|/gcc|'`
+-if [ -f ${progname} ]
+-then
+-exec ${progname} $newargs $library
+-else
+-exec gcc $newargs $library
+-fi
++exec gcc-2.1 $newargs $library
 diff --git a/cccp.c b/cccp.c
 index 5ecc219..d2d63b9 100644
 --- a/cccp.c
@@ -2702,6 +2729,22 @@ index 7fbe8ce..cec09e9 100644
    buf[0] = '%';
  
    while (c = *p++)
+diff --git a/g++ b/g++
+index db72410..48c445a 100755
+--- a/g++
++++ b/g++
+@@ -66,10 +66,4 @@ then
+   exit 1
+ fi
+ 
+-progname=`echo $0 |sed -e 's|/[^/]*$|/gcc|'`
+-if [ -f ${progname} ]
+-then
+-exec ${progname} $newargs $library
+-else
+-exec gcc $newargs $library
+-fi
++exec gcc-2.1 $newargs $library
 diff --git a/gcc.c b/gcc.c
 index 98e103d..faf254a 100644
 --- a/gcc.c
@@ -3031,6 +3074,34 @@ index 1382168..18b6042 100644
  #define va_end(AP)
  
  #define va_arg(AP, TYPE)						\
+diff --git a/limitx.h b/limitx.h
+index d261e94..76525b9 100644
+--- a/limitx.h
++++ b/limitx.h
+@@ -1,5 +1,12 @@
+ /* This administrivia gets added to the beginning of limits.h
+    if the system has its own version of limits.h.  */
+ 
+-#include_next <limits.h>
++/* We use _GCC_LIMITS_H_ because we want this not to match
++   any macros that the system's limits.h uses for its own purposes.  */
++#ifndef _GCC_LIMITS_H_  /* Terminated in limity.h.  */
++#define _GCC_LIMITS_H_
+ 
++#ifndef _LIBC_LIMITS_H_
++/* Use <...> so that we find syslimits.h only in system include dirs.  */
++#include_next <limits.h>
++#endif
+diff --git a/limity.h b/limity.h
+new file mode 100644
+index 0000000..5492553
+--- /dev/null
++++ b/limity.h
+@@ -0,0 +1,4 @@
++/* This administrivia gets added to the end of limits.h
++   if the system has its own version of limits.h.  */
++
++#endif /* not _GCC_LIMITS_H_ */
 diff --git a/output.h b/output.h
 index edf68ff..660ab01 100644
 --- a/output.h

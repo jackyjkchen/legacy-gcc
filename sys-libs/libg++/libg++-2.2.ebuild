@@ -22,7 +22,7 @@ case ${ARCH} in
 esac
 
 DEPEND="
-	sys-devel/gcc:2.3.3[cxx]
+	sys-devel/gcc:2.2.2[cxx]
 	legacy-gcc/linux-headers:${TOOL_SLOT}
 	legacy-gcc/glibc-headers:${TOOL_SLOT}
 	legacy-gcc/binutils-wrapper:${TOOL_SLOT}"
@@ -31,8 +31,8 @@ BDEPEND=""
 
 CHOST="${TOOL_SLOT}-linux-gnu"
 
-CC="gcc-2.3.3"
-CXX="gcc-2.3.3"
+CC="gcc-2.2.2"
+CXX="gcc-2.2.2"
 
 src_prepare() {
 	default
@@ -41,7 +41,7 @@ src_prepare() {
 }
 
 src_configure() {
-	downgrade_arch_flags 2.3.3
+	downgrade_arch_flags 2.2.2
 	local econfargs=(
 		--host=${CHOST}
 		--target=${CHOST}
@@ -67,9 +67,9 @@ src_compile() {
 src_install() {
 	pushd "${WORKDIR}"/build > /dev/null
 	emake -j1 DESTDIR="${ED}" install || die "failed to run make"
-	mkdir -p "${ED}"/usr/lib/gcc-lib/${CHOST}/2.3.3/include || die
-	mv -v "${ED}"/usr/lib/g++-include "${ED}"/usr/lib/gcc-lib/${CHOST}/2.3.3/include/g++ || die
-	mv -v "${ED}"/usr/lib/libg++.a "${ED}"/usr/lib/gcc-lib/${CHOST}/2.3.3/ || die
+	mkdir -p "${ED}"/usr/lib/gcc-lib/${CHOST}/2.2.2/include || die
+	mv -v "${ED}"/usr/lib/g++-include "${ED}"/usr/lib/gcc-lib/${CHOST}/2.2.2/include/g++ || die
+	mv -v "${ED}"/usr/lib/libg++.a "${ED}"/usr/lib/gcc-lib/${CHOST}/2.2.2/ || die
 	rm -rfv "${ED}"/usr/lib/lib* "${ED}"/usr/bin "${ED}"/usr/man "${ED}"/usr/${CHOST}
 	popd > /dev/null
 }
