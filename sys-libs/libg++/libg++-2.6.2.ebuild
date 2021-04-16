@@ -71,6 +71,6 @@ src_install() {
 	mkdir -p "${ED}"/usr/lib/gcc-lib/${CHOST}/2.6.3/include || die
 	mv -v "${ED}"/usr/lib/g++-include "${ED}"/usr/lib/gcc-lib/${CHOST}/2.6.3/include/g++ || die
 	mv -v "${ED}"/usr/lib/libstdc++.a "${ED}"/usr/lib/libg++.a "${ED}"/usr/lib/gcc-lib/${CHOST}/2.6.3/ || die
-	rm -rfv "${ED}"/usr/lib/lib* "${ED}"/usr/bin "${ED}"/usr/man "${ED}"/usr/${CHOST}
+	rm -rfv "${ED}"/usr/lib/lib* "${ED}"/usr/lib/doc "${ED}"/usr/bin "${ED}"/usr/include "${ED}"/usr/man "${ED}"/usr/${CHOST}
 	popd > /dev/null
 }
