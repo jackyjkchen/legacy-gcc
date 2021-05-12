@@ -119,11 +119,11 @@ gcc的历史很久远，对可执行文件格式和CPU架构的支持发生过�
 
 该组gcc工具链调整为i686-legacy-linux-gnu，依赖如下三个软件包（自动依赖，无须手工安装）
 
-sys-devel/binutils-wrapper:i686-legacy
+legacy-gcc/binutils-wrapper:i686-legacy
 
-sys-kernel/linux-headers:i686-legacy
+legacy-gcc/linux-headers:i686-legacy
 
-sys-libs/glibc-headers:i686-legacy
+legacy-gcc/glibc-headers:i686-legacy
 
 binutils-wrapper利用x86-64版本binutils的multiarch能力，大部分直接软链接到系统版本即可使用，as和ld则通过指定参数支持32位
 
@@ -166,8 +166,3 @@ glibc-headers版本2.5.1，应用RHEL5的兼容性补丁并删除所有不兼容
 # 是否影响gentoo的全局FLAGS优化？
 
 低版本gcc确实会对march等优化选项有限制，不过用户放心，本项目提供了完善的gcc flags降级机制，任意x86的march、mtune选项均可自动安全降级。[参见](https://github.com/jackyjkchen/legacy-gcc/blob/master/eclass/downgrade-arch-flags.eclass)
-
-
-# TODO
-
-gcc-1.42，他代码结构非常古老和gcc-2.x有大量结构上的差异，预期会有一定修改量
