@@ -79,6 +79,8 @@ USE参数可使用equery u sys-devel/gcc:${slot}查询
 
 # 原理
 
+本章多处描述以x86平台为例，对于非x86平台情况略有差异但类似。
+
 gcc的历史很久远，对可执行文件格式和CPU架构的支持发生过大量变化，比如：
 
 * gcc-2.3，开始支持Linux目标
@@ -129,7 +131,7 @@ binutils-wrapper利用x86-64版本binutils的multiarch能力，大部分直接�
 
 linux-headers版本2.6.32.71，方便传统组gcc能调用kernel 2.6+版本的现代系统调用（如epoll）
 
-glibc-headers版本2.5.1，应用RHEL5的兼容性补丁并删除所有不兼容gcc-2.4及以下版本的GNU扩展__attribute__ ((__const))
+glibc-headers版本2.5.1，应用RHEL5的兼容性补丁并删除所有不兼容gcc-2.4及以下版本的GNU扩展如__attribute__ ((__const))
 
 各版本gcc主要修改点
 
