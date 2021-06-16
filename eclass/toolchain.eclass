@@ -1479,6 +1479,20 @@ downgrade_arch_flags() {
 			append-flags '-mcpu=ev6'
 		fi
 		;;
+	mips)
+   		if ! tc_version_is_at_least 4.4 ${bver} ; then
+			filter-flags '-march=*' '-mtune=*'
+			if ! tc_version_is_at_least 3.3 ${bver} ; then
+				append-flags '-mips4'
+			else
+				if [[ ${ABI} == "n64" || ${ABI} == "n32" ]]; then
+					append-flags '-march=mips64' '-mtune=mips64'
+				else
+					append-flags '-march=mips32' '-mtune=mips32'
+				fi
+			fi
+        fi
+        ;;
 	sparc)
 		if ! tc_version_is_at_least 3.1 ${bver} ; then
 			filter-flags '-mcpu=*' '-mtune=*'
