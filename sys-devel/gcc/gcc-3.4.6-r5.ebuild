@@ -47,4 +47,6 @@ src_prepare() {
 			fi
 			;;
 	esac
+
+	[[ ${ARCH} == "mips" ]] && eapply "${FILESDIR}"/3.4.6/00_mips_default_n64_abi.patch
 }

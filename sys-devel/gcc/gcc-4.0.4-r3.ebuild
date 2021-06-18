@@ -16,3 +16,11 @@ DEPEND="${RDEPEND}
 	>=sys-devel/binutils-2.15.94"
 CC="gcc-4.4.7"
 CXX="g++-4.4.7"
+
+src_prepare() {
+	toolchain_src_prepare
+
+	use vanilla && return 0
+
+	[[ ${ARCH} == "mips" ]] && eapply "${FILESDIR}"/4.0.4/00_mips_default_n64_abi.patch
+}

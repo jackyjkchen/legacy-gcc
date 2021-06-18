@@ -1917,7 +1917,7 @@ gcc_do_make() {
 	else
 		# we only want to use the system's CFLAGS if not building a
 		# cross-compiler.
-		BOOT_CFLAGS=${BOOT_CFLAGS-"$(get_abi_CFLAGS ${TARGET_DEFAULT_ABI}) ${CFLAGS}"}
+		BOOT_CFLAGS=${BOOT_CFLAGS-"${CFLAGS}"}
 	fi
 
 	einfo "Compiling ${PN} (${GCC_MAKE_TARGET})..."
