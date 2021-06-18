@@ -8,7 +8,7 @@ UCLIBC_VER="1.0"
 
 inherit toolchain
 
-KEYWORDS="alpha amd64 arm hppa ia64 m68k ppc ppc64 s390 sparc x86"
+KEYWORDS="alpha amd64 arm hppa ia64 m68k mips ppc ppc64 s390 sparc x86"
 
 RDEPEND=""
 DEPEND="${RDEPEND}
@@ -18,3 +18,11 @@ DEPEND="${RDEPEND}
 	>=sys-devel/binutils-2.15.94"
 CC="gcc-4.4.7"
 CXX="g++-4.4.7"
+
+src_prepare() {
+	toolchain_src_prepare
+
+	use vanilla && return 0
+
+	[[ ${ARCH} == "mips" ]] && eapply "${FILESDIR}"/4.2.4/00_mips_default_n64_abi.patch
+}

@@ -30,5 +30,7 @@ src_prepare() {
 
 	eapply "${FILESDIR}"/4.4.7/00_support-armhf.patch
 
+	[[ ${ARCH} == "mips" ]] && eapply "${FILESDIR}"/4.4.7/01_mips_default_n64_abi.patch
+
 	sed -i 's/use_fixproto=yes/:/' gcc/config.gcc #PR33200
 }

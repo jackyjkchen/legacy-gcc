@@ -47,4 +47,6 @@ src_prepare() {
 	use vanilla && return 0
 	# Use -r1 for newer pieapplyet that use DRIVER_SELF_SPECS for the hardened specs.
 	[[ ${CHOST} == ${CTARGET} ]] && epatch "${FILESDIR}"/gcc-spec-env-r1.patch
+
+	[[ ${ARCH} == "mips" ]] && eapply "${FILESDIR}"/4.9.4/00_mips_default_n64_abi.patch
 }
