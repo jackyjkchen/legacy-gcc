@@ -48,7 +48,7 @@ src_prepare() {
 
 	[[ ${ARCH} == "alpha" ]] && eapply "${FILESDIR}"/4.7.4/00_fix_alpha_bootstrap.patch
 
-	[[ ${ARCH} == "mips" ]] && eapply "${FILESDIR}"/4.7.4/01_mips_default_n64_abi.patch
+	[[ ${ARCH} == "mips" ]] && eapply "${FILESDIR}"/4.7.4/01_mips64el_default_n64_abi.patch
 
 	[[ ${CHOST} == ${CTARGET} ]] && epatch "${FILESDIR}"/gcc-spec-env.patch
 }

@@ -32,5 +32,5 @@ src_prepare() {
 
 	eapply "${FILESDIR}"/4.1.2/00_compat_new_mpfr.patch
 
-	[[ ${ARCH} == "mips" ]] && eapply "${FILESDIR}"/4.1.2/01_mips_default_n64_abi.patch
+	[[ ${ARCH} == "mips" ]] && eapply "${FILESDIR}"/4.1.2/01_mips64el_default_n64_abi.patch
 }
