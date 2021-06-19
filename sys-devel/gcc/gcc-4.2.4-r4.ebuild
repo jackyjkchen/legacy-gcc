@@ -20,6 +20,7 @@ CC="gcc-4.4.7"
 CXX="g++-4.4.7"
 
 src_prepare() {
+	EPATCH_EXCLUDE+=" 91_all_mips-ip28_cache_barriers-v4.patch"
 	toolchain_src_prepare
 
 	use vanilla && return 0
