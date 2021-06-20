@@ -14,13 +14,14 @@ x86与非x86均为本项目的目标，x86目前进度较快，已经可以原�
 
 各平台目前支持情况如下：
 
-* amd64：gcc-3.1.1及以上
 * x86：gcc-2.0及以上
+* amd64：gcc-3.1.1及以上
 * alpha：gcc-2.8.1及以上
 * aarch64：gcc-4.8.5及以上
 * armel：gcc-4.1.2及以上
 * armhf：gcc-4.4.7及以上
-* mips64el：gcc-4.0.4及以上
+* mipsel：gcc-3.3.6及以上
+* mips64el：gcc-3.3.6及以上
 * ppc：gcc-2.8.1及以上
 * ppc64：gcc-3.1.1及以上
 * ppc64le：gcc-4.8.5及以上
@@ -29,6 +30,7 @@ x86与非x86均为本项目的目标，x86目前进度较快，已经可以原�
 * sparc：gcc-2.8.1及以上
 * sparc64：gcc-2.95.3及以上
 
+其中amd64/x86，mips64el/mipsel已测试支持multilib。
 
 # 使用方法
 

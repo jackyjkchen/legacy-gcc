@@ -1,0 +1,200 @@
+diff --git a/gcc/config.gcc b/gcc/config.gcc
+index 7b242e9..04f2254 100644
+--- a/gcc/config.gcc
++++ b/gcc/config.gcc
+@@ -1883,6 +1883,21 @@ mips*-*-netbsd*)			# NetBSD/mips, either endian.
+ 	tm_file="elfos.h ${tm_file} mips/netbsd.h"
+ 	tmake_file="${tmake_file} mips/t-netbsd"
+ 	;;
++mips64*-*-linux*)
++	tm_file="dbxelf.h elfos.h svr4.h linux.h ${tm_file} mips/linux.h mips/linux64.h"
++	tmake_file="t-slibgcc-elf-ver t-linux mips/t-linux64"
++
++	# This default ABI is a partial lie: t-linux64 overrides the
++	# DRIVER_SELF_SPEC that sets the default abi, in the spec file
++	# that is installed.  What GCC thinks of as the default must
++	# remain as ABI_32 such that the SONAMEs of the libgcc shared
++	# libraries remain compatible with those of mips-linux-gnu.
++	tm_defines="MIPS_ISA_DEFAULT=64 MIPS_ABI_DEFAULT=ABI_64"
++	target_cpu_default="MASK_ABICALLS|MASK_FLOAT64|MASK_64BIT"
++	extra_parts="crtbegin.o crtbeginS.o crtbeginT.o crtend.o crtendS.o"
++	gnu_ld=yes
++	gas=yes
++	;;
+ mips*-*-linux*)				# Linux MIPS, either endian.
+         tm_file="dbxelf.h elfos.h svr4.h linux.h ${tm_file} mips/linux.h"
+ 	case $machine in
+diff --git a/gcc/config/mips/linux64.h b/gcc/config/mips/linux64.h
+new file mode 100644
+index 0000000..4fce404
+--- /dev/null
++++ b/gcc/config/mips/linux64.h
+@@ -0,0 +1,76 @@
++/* Definitions for MIPS running Linux-based GNU systems with ELF format
++   using n32/64 abi.
++   Copyright 2002, 2003 Free Software Foundation, Inc.
++
++This file is part of GCC.
++
++GCC is free software; you can redistribute it and/or modify
++it under the terms of the GNU General Public License as published by
++the Free Software Foundation; either version 2, or (at your option)
++any later version.
++
++GCC is distributed in the hope that it will be useful,
++but WITHOUT ANY WARRANTY; without even the implied warranty of
++MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++GNU General Public License for more details.
++
++You should have received a copy of the GNU General Public License
++along with GCC; see the file COPYING.  If not, write to
++the Free Software Foundation, 59 Temple Place - Suite 330,
++Boston, MA 02111-1307, USA.  */
++
++#define DRIVER_SELF_SPECS \
++"%{!EB:%{!meb:-EL}} %{EB|meb:-EB}", \
++"%{mabi-fake-default:%{!mabi=*:-mabi=32}}", \
++"%{!mabi=*:-mabi=64}", \
++"%{!mips*:%{!march=*:%{mabi=32:-mips1}%{mabi=n32|mabi=64:-mips3}}}"
++
++#undef SUBTARGET_ASM_SPEC
++#define SUBTARGET_ASM_SPEC "\
++%{!fno-PIC:%{!fno-pic:-KPIC}} \
++%{fno-PIC:-non_shared} %{fno-pic:-non_shared} \
++%{mabi=64:-64} %{mabi=n32:-n32}"
++
++#undef LIB_SPEC
++#define LIB_SPEC "\
++%{shared: -lc} \
++%{!static: \
++ %{mabi=n32:-rpath-link %R/lib32:%R/usr/lib32} \
++ %{mabi=64:-rpath-link %R/lib64:%R/usr/lib64} \
++ %{mabi=32:-rpath-link %R/lib:%R/usr/lib}} \
++%{!shared: %{pthread:-lpthread} \
++  %{profile:-lc_p} %{!profile: -lc}}"
++
++#undef LINK_SPEC
++#define LINK_SPEC "\
++%{G*} %{EB} %{EL} %{mips1} %{mips2} %{mips3} %{mips4} \
++%{bestGnum} %{shared} %{non_shared} \
++%{call_shared} %{no_archive} %{exact_version} \
++ %(endian_spec) \
++  %{!shared: \
++    %{!ibcs: \
++      %{!static: \
++        %{rdynamic:-export-dynamic} \
++        %{!dynamic-linker: \
++	  %{mabi=n32: -dynamic-linker /lib32/ld.so.1} \
++	  %{mabi=64: -dynamic-linker /lib64/ld.so.1} \
++	  %{mabi=32: -dynamic-linker /lib/ld.so.1}}} \
++      %{static:-static}}} \
++%{mabi=n32:-melf32%{EB:b}%{EL:l}tsmipn32} \
++%{mabi=64:-melf64%{EB:b}%{EL:l}tsmip} \
++%{mabi=32:-melf32%{EB:b}%{EL:l}tsmip}"
++
++#undef LOCAL_LABEL_PREFIX
++#define LOCAL_LABEL_PREFIX ((mips_abi == ABI_32 || mips_abi == ABI_O64) \
++			    ? "$" : ".")
++
++/* The size in bytes of a DWARF field indicating an offset or length
++   relative to a debug info section, specified to be 4 bytes in the DWARF-2
++   specification.  The SGI/MIPS ABI defines it to be the same as PTR_SIZE.  */
++#define DWARF_OFFSET_SIZE PTR_SIZE
++
++/* GNU/Linux doesn't use the same floating-point format that IRIX uses
++   for long double.  There's no need to override this here, since
++   ieee_quad_format is the default, but let's put this here to make
++   sure nobody thinks we just forgot to set it to something else.  */
++#define MIPS_TFMODE_FORMAT mips_quad_format
+diff --git a/gcc/config/mips/mips.h b/gcc/config/mips/mips.h
+index ad05be5..d882cc0 100644
+--- a/gcc/config/mips/mips.h
++++ b/gcc/config/mips/mips.h
+@@ -719,11 +719,6 @@ extern void		sbss_section PARAMS ((void));
+ #  endif
+ #endif
+ 
+-#ifndef MULTILIB_DEFAULTS
+-#define MULTILIB_DEFAULTS \
+-    { MULTILIB_ENDIAN_DEFAULT, MULTILIB_ISA_DEFAULT, MULTILIB_ABI_DEFAULT }
+-#endif
+-
+ /* We must pass -EL to the linker by default for little endian embedded
+    targets using linker scripts with a OUTPUT_FORMAT line.  Otherwise, the
+    linker will default to using big-endian output files.  The OUTPUT_FORMAT
+@@ -1006,6 +1001,11 @@ extern int mips_abi;
+ #define ASM_ABI_DEFAULT_SPEC ""
+ #endif
+ 
++#ifndef MULTILIB_DEFAULTS
++#define MULTILIB_DEFAULTS \
++    { MULTILIB_ENDIAN_DEFAULT, MULTILIB_ISA_DEFAULT, MULTILIB_ABI_DEFAULT }
++#endif
++
+ /* Only ELF targets can switch the ABI.  */
+ #ifndef OBJECT_FORMAT_ELF
+ #undef ASM_ABI_DEFAULT_SPEC
+diff --git a/gcc/config/mips/t-linux64 b/gcc/config/mips/t-linux64
+new file mode 100644
+index 0000000..1896f49
+--- /dev/null
++++ b/gcc/config/mips/t-linux64
+@@ -0,0 +1,19 @@
++MULTILIB_OPTIONS = mabi=n32/mabi=32/mabi=64
++MULTILIB_DIRNAMES = n32 32 64
++MULTILIB_OSDIRNAMES = ../lib32 ../lib ../lib64
++
++EXTRA_MULTILIB_PARTS=crtbegin.o crtend.o crtbeginS.o crtendS.o crtbeginT.o
++
++LIB2FUNCS_EXTRA = $(srcdir)/config/mips/_tilib.c
++
++TPBIT = tp-bit.c
++
++tp-bit.c: $(srcdir)/config/fp-bit.c
++	echo '#ifdef __MIPSEL__' > tp-bit.c
++	echo '# define FLOAT_BIT_ORDER_MISMATCH' >> tp-bit.c
++	echo '#endif' >> tp-bit.c
++	echo '#if __LDBL_MANT_DIG__ == 113' >> tp-bit.c
++	echo '#define QUIET_NAN_NEGATED' >> dp-bit.c
++	echo '# define TFLOAT' >> tp-bit.c
++	cat $(srcdir)/config/fp-bit.c >> tp-bit.c
++	echo '#endif' >> tp-bit.c
+diff --git a/gcc/real.c b/gcc/real.c
+index f775226..cd2bab6 100644
+--- a/gcc/real.c
++++ b/gcc/real.c
+@@ -3586,6 +3586,22 @@ const struct real_format ieee_quad_format =
+     true,
+     true
+   };
++
++const struct real_format mips_quad_format =
++  {
++    encode_ieee_quad,
++    decode_ieee_quad,
++    2,
++    1,
++    113,
++    -16381,
++    16384,
++    true,
++    true,
++    true,
++    true,
++    false
++  };
+ 
+ /* Descriptions of VAX floating point formats can be found beginning at
+ 
+diff --git a/gcc/real.h b/gcc/real.h
+index 7568a9e..9aef861 100644
+--- a/gcc/real.h
++++ b/gcc/real.h
+@@ -225,6 +225,7 @@ extern const struct real_format ieee_extended_intel_96_round_53_format;
+ extern const struct real_format ieee_extended_intel_128_format;
+ extern const struct real_format ibm_extended_format;
+ extern const struct real_format ieee_quad_format;
++extern const struct real_format mips_quad_format;
+ extern const struct real_format vax_f_format;
+ extern const struct real_format vax_d_format;
+ extern const struct real_format vax_g_format;

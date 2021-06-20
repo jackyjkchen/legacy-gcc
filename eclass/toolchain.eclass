@@ -1220,7 +1220,7 @@ toolchain_src_configure() {
 		;;
 	mips)
 		# Add --with-abi flags to set default ABI
-		confgcc+=( --with-abi=$(gcc-abi-map ${TARGET_DEFAULT_ABI}) )
+		tc_version_is_at_least 3.4 && confgcc+=( --with-abi=$(gcc-abi-map ${TARGET_DEFAULT_ABI}) )
 		;;
 	amd64)
 		# drop the older/ABI checks once this get's merged into some
