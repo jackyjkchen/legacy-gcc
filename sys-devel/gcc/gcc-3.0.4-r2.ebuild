@@ -19,6 +19,11 @@ case ${ARCH} in
 	alpha)
 		TOOL_SLOT="${ARCH}-legacy"
 		;;
+	mips)
+		CC="${CC} ${CFLAGS_o32}"
+		CXX="${CXX} ${CFLAGS_o32}"
+		TOOL_SLOT="${PROFILE_ARCH/64/}-legacy"
+		;;
 	ppc)
 		TOOL_SLOT="powerpc-legacy"
 		;;
@@ -52,7 +57,7 @@ fi
 
 inherit toolchain
 
-KEYWORDS="alpha amd64 ppc s390 sparc x86"
+KEYWORDS="alpha amd64 mips ppc s390 sparc x86"
 
 RDEPEND=""
 DEPEND="${RDEPEND}
