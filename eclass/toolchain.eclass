@@ -1481,9 +1481,9 @@ downgrade_arch_flags() {
 		;;
 	mips)
    		if ! tc_version_is_at_least 4.4 ${bver} ; then
-			filter-flags '-march=*' '-mtune=*'
+			filter-flags '-march=*' '-mtune=*' '-mips*'
 			if ! tc_version_is_at_least 3.3 ${bver} ; then
-				append-flags '-mips4'
+				append-flags '-mips2'
 			else
 				if [[ ${ABI} == "n64" || ${ABI} == "n32" ]]; then
 					append-flags '-march=mips64' '-mtune=mips64'

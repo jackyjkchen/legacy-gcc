@@ -8,13 +8,16 @@ HOMEPAGE=""
 SRC_URI="https://mirrors.ustc.edu.cn/kernel.org/linux/kernel/v2.6/longterm/v2.6.32/linux-${PV}.tar.xz"
 
 LICENSE=""
-KEYWORDS="alpha amd64 ppc s390 sparc x86"
+KEYWORDS="alpha amd64 mips ppc s390 sparc x86"
 case ${ARCH} in
 	amd64|x86)
 		TOOL_SLOT="i686-legacy"
 		;;
 	alpha)
 		TOOL_SLOT="${ARCH}-legacy"
+		;;
+	mips)
+		TOOL_SLOT="${PROFILE_ARCH/64/}-legacy"
 		;;
 	ppc)
 		TOOL_SLOT="powerpc-legacy"

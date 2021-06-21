@@ -5,12 +5,13 @@ EAPI=7
 
 DESCRIPTION=""
 HOMEPAGE=""
-SRC_URI="https://mirrors.ustc.edu.cn/gnu/glibc/glibc-${PV}.tar.bz2"
+SRC_URI="https://mirrors.ustc.edu.cn/gnu/glibc/glibc-${PV}.tar.bz2
+		https://mirrors.ustc.edu.cn/gnu/glibc/glibc-ports-2.5.tar.bz2"
 
 inherit downgrade-arch-flags gnuconfig
 
 LICENSE=""
-KEYWORDS="alpha amd64 ppc s390 sparc x86"
+KEYWORDS="alpha amd64 mips ppc s390 sparc x86"
 CC="gcc-4.4.7"
 CXX="g++-4.4.7"
 case ${ARCH} in
@@ -21,6 +22,9 @@ case ${ARCH} in
 		;;
 	alpha)
 		TOOL_SLOT="${ARCH}-legacy"
+		;;
+	mips)
+		TOOL_SLOT="${PROFILE_ARCH/64/}-legacy"
 		;;
 	ppc)
 		TOOL_SLOT="powerpc-legacy"
@@ -57,6 +61,9 @@ src_prepare() {
 	gnuconfig_update
 	eapply "${FILESDIR}"/${PV}/00_glibc-${PV}.patch || die
 	eapply "${FILESDIR}"/${PV}/01_glibc-${PV}-workaround-for-old-gcc.patch || die
+	pushd "${WORKDIR}"/glibc-ports-2.5 > /dev/null
+	eapply "${FILESDIR}"/${PV}/02_glibc-ports-workaround-for-old-gcc.patch || die
+	popd > /dev/null
 }
 
 src_configure() {
@@ -70,7 +77,7 @@ src_configure() {
 		--prefix=${ED}/usr/${CHOST}
 		--enable-shared
 		--enable-nptl
-		--enable-add-ons
+		--enable-add-ons=nptl,../glibc-ports-2.5
 		--with-tls
 		--with-__thread
 		--enable-sim

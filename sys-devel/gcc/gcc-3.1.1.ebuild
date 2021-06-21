@@ -20,5 +20,5 @@ CXX="g++-3.4.6"
 
 src_prepare() {
 	toolchain_src_prepare
-	eapply "${FILESDIR}"/3.1.1/00_gcc-3.1.1.patch
+	eapply "${FILESDIR}"/${PV}/00_gcc-${PV}.patch
 }

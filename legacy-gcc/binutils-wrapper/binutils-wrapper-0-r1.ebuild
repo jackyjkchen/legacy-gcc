@@ -8,13 +8,16 @@ HOMEPAGE=""
 SRC_URI=""
 
 LICENSE=""
-KEYWORDS="alpha amd64 ppc s390 sparc x86"
+KEYWORDS="alpha amd64 mips ppc s390 sparc x86"
 case ${ARCH} in
 	amd64|x86)
 		TOOL_SLOT="i686-legacy"
 		;;
 	alpha)
 		TOOL_SLOT="${ARCH}-legacy"
+		;;
+	mips)
+		TOOL_SLOT="${PROFILE_ARCH/64/}-legacy"
 		;;
 	ppc)
 		TOOL_SLOT="powerpc-legacy"
@@ -66,20 +69,34 @@ src_install() {
 	ln -sv ${HOST_PREFIX}-strings "${ED}"${UNIX_PREFIX}/bin/${TARGET_PREFIX}-strings || die
 	ln -sv ${HOST_PREFIX}-strip "${ED}"${UNIX_PREFIX}/bin/${TARGET_PREFIX}-strip || die
 	case ${ARCH} in
-		amd64)
+		amd64|mips)
+			case ${TOOL_SLOT} in
+				i686-legacy)
+					AS_PARAMS="--32"
+					LD_PARAMS="-m elf_i386"
+					;;
+				mipsel-legacy)
+					AS_PARAMS="-EL -mabi=32"
+					LD_PARAMS="-EL -melf32ltsmip"
+					;;
+				mips-legacy)
+					AS_PARAMS="-EB -mabi=32"
+					LD_PARAMS="-EL -melf32btsmip"
+					;;
+			esac
 			cat <<-_EOF_ > "${ED}${UNIX_PREFIX}/bin/${TARGET_PREFIX}-as" || die
 #!/bin/sh
-${HOST_PREFIX}-as --32 "\$@"
+${HOST_PREFIX}-as ${AS_PARAMS} "\$@"
 _EOF_
 			chmod +x "${ED}"${UNIX_PREFIX}/bin/${TARGET_PREFIX}-as || die
 			cat <<-_EOF_ > "${ED}${UNIX_PREFIX}/bin/${TARGET_PREFIX}-ld" || die
 #!/bin/sh
-${HOST_PREFIX}-ld -m elf_i386 "\$@"
+${HOST_PREFIX}-ld ${LD_PARAMS} "\$@"
 _EOF_
 			chmod +x "${ED}"${UNIX_PREFIX}/bin/${TARGET_PREFIX}-ld || die
 			cat <<-_EOF_ > "${ED}${UNIX_PREFIX}/bin/${TARGET_PREFIX}-ld.gold" || die
 #!/bin/sh
-${HOST_PREFIX}-ld.gold -m elf_i386 "\$@"
+${HOST_PREFIX}-ld.gold ${LD_PARAMS} "\$@"
 _EOF_
 			chmod +x "${ED}"${UNIX_PREFIX}/bin/${TARGET_PREFIX}-ld.gold || die
 			;;
