@@ -23,6 +23,11 @@ case ${ARCH} in
 		CXXFLAGS="${CFLAGS} -Wl,-no-relax"
 		TOOL_SLOT="${ARCH}-legacy"
 		;;
+	mips)
+		CC="${CC} ${CFLAGS_o32}"
+		CXX="${CXX} ${CFLAGS_o32}"
+		TOOL_SLOT="${PROFILE_ARCH/64/}-legacy"
+		;;
 	ppc)
 		TOOL_SLOT="powerpc-legacy"
 		;;
@@ -46,7 +51,7 @@ RANLIB="${CHOST}-ranlib"
 
 inherit toolchain
 
-KEYWORDS="alpha amd64 ppc sparc x86"
+KEYWORDS="alpha amd64 mips ppc sparc x86"
 
 RDEPEND=""
 DEPEND="${RDEPEND}
@@ -57,6 +62,8 @@ DEPEND="${RDEPEND}
 
 src_prepare() {
 	EPATCH_EXCLUDE+=" 10_alpha_new-atexit.patch"
+	[[ ${ARCH} != "m68k" ]] && EPATCH_EXCLUDE+=" 42_all_debian-m68k-md.patch 42_all_debian-gcc-m68k-pic.patch 42_all_debian-m68k-reload.patch"
+	[[ ${ARCH} != "avr" ]] && EPATCH_EXCLUDE+=" 41_all_debian-gcc-core-2.95.2-avr-1.1.patch"
 	toolchain_src_prepare
 	eapply "${FILESDIR}"/${PV}/00_gcc-${PV}.patch
 	eapply "${FILESDIR}"/${PV}/01_workaround-for-legacy-glibc-in-non-system-dir.patch
