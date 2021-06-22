@@ -50,5 +50,5 @@ src_prepare() {
 
 	[[ ${ARCH} == "mips" ]] && eapply "${FILESDIR}"/4.7.4/01_mips64el_default_n64_abi.patch
 
-	[[ ${CHOST} == ${CTARGET} ]] && epatch "${FILESDIR}"/gcc-spec-env.patch
+	[[ ${CHOST} == ${CTARGET} ]] && [[ ${DEFAULT_ABI} == "n64" ]] && epatch "${FILESDIR}"/gcc-spec-env.patch
 }
