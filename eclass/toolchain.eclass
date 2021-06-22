@@ -1279,8 +1279,7 @@ toolchain_src_configure() {
 	amd64|x86) tc_version_is_at_least 4.3 && confgcc+=( --enable-targets=all ) ;;
 	esac
 
-	tc_version_is_between 2.7 3.1 && \ 
-		confgcc+=( --enable-version-specific-runtime-libs )
+	tc_version_is_between 2.7 3.1 && confgcc+=( --enable-version-specific-runtime-libs )
 
 	# On Darwin we need libdir to be set in order to get correct install names
 	# for things like libobjc-gnu, libgcj and libfortran.  If we enable it on
