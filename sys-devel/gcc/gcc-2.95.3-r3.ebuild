@@ -51,7 +51,7 @@ RANLIB="${CHOST}-ranlib"
 
 inherit toolchain
 
-KEYWORDS="alpha amd64 mips ppc sparc x86"
+KEYWORDS="alpha amd64 mips ppc s390 sparc x86"
 
 RDEPEND=""
 DEPEND="${RDEPEND}
