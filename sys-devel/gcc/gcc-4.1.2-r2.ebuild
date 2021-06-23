@@ -26,11 +26,11 @@ src_prepare() {
 	use vanilla && return 0
 
 	# Fix cross-compiling
-	epatch "${FILESDIR}"/4.1.2/gcc-4.1.0-cross-compile.patch
+	epatch "${FILESDIR}"/${PV}/gcc-4.1.0-cross-compile.patch
 
-	epatch "${FILESDIR}"/4.1.2/gcc-4.1.0-fast-math-i386-Os-workaround.patch
+	epatch "${FILESDIR}"/${PV}/gcc-4.1.0-fast-math-i386-Os-workaround.patch
 
-	eapply "${FILESDIR}"/4.1.2/00_compat_new_mpfr.patch
+	eapply "${FILESDIR}"/${PV}/00_compat_new_mpfr.patch
 
-	[[ ${ARCH} == "mips" ]] && [[ ${DEFAULT_ABI} == "n64" ]] && eapply "${FILESDIR}"/4.1.2/01_mips64_default_n64_abi.patch
+	[[ ${ARCH} == "mips" ]] && [[ ${DEFAULT_ABI} == "n64" ]] && eapply "${FILESDIR}"/${PV}/01_mips64_default_n64_abi.patch
 }

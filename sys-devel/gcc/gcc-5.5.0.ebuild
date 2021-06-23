@@ -42,5 +42,5 @@ src_prepare() {
 
 	toolchain_src_prepare
 
-	eapply "${FILESDIR}"/5.5.0/00_fix-building-on-ppc64.patch
+	eapply "${FILESDIR}"/${PV}/00_fix-building-on-ppc64.patch
 }

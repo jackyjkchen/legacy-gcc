@@ -29,7 +29,8 @@ src_prepare() {
 	# libffi to install with USE="objc", even though it normally only installs
 	# if you attempt to build gcj.
 	if use objc && ! use gcj ; then
-		[[ ${ARCH} != "mips" ]] && epatch "${FILESDIR}"/3.3.6/libffi-without-libgcj.patch
+		[[ ${ARCH} != "mips" ]] && epatch "${FILESDIR}"/${PV}/libffi-without-libgcj.patch
 	fi
-	[[ ${ARCH} == "mips" ]] && eapply "${FILESDIR}"/3.3.6/00_support_mips64.patch
+	[[ ${ARCH} == "mips" ]] && eapply "${FILESDIR}"/${PV}/00_support_mips64.patch
+	[[ ${ARCH} == "mips" ]] && [[ ${DEFAULT_ABI} == "n32" ]] && eapply "${FILESDIR}"/${PV}/01_mips64_default_n32_abi.patch
 }
