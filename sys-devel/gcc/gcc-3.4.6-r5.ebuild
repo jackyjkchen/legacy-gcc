@@ -48,5 +48,6 @@ src_prepare() {
 			;;
 	esac
 
-	[[ ${ARCH} == "mips" ]] && eapply "${FILESDIR}"/3.4.6/00_mips64el_default_n64_abi.patch
+	[[ ${ARCH} == "mips" ]] && eapply "${FILESDIR}"/3.4.6/00_backport_mips_t-linux64.patch
+	[[ ${ARCH} == "mips" ]] && [[ ${DEFAULT_ABI} == "n64" ]] && eapply "${FILESDIR}"/3.4.6/01_mips64_default_n64_abi.patch
 }

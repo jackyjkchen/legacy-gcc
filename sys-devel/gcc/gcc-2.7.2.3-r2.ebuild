@@ -14,15 +14,6 @@ case ${ARCH} in
 		ABI_X86='32'
 		CFLAGS_x86=""
 		;;
-	alpha)
-		TOOL_SLOT="${ARCH}-legacy"
-		;;
-	ppc)
-		TOOL_SLOT="powerpc-legacy"
-		;;
-	sparc)
-		TOOL_SLOT="sparc-legacy"
-		;;
 	*)
 		;;
 esac
@@ -36,7 +27,7 @@ RANLIB="${CHOST}-ranlib"
 
 inherit toolchain
 
-KEYWORDS="alpha amd64 ppc sparc x86"
+KEYWORDS="amd64 x86"
 
 RDEPEND=""
 DEPEND="${RDEPEND}
@@ -46,15 +37,16 @@ DEPEND="${RDEPEND}
 	legacy-gcc/binutils-wrapper:${TOOL_SLOT}"
 
 src_prepare() {
-	toolchain_src_prepare
 	eapply "${FILESDIR}"/${PV}/00_gcc-${PV}.patch
-	eapply "${FILESDIR}"/${PV}/01_gcc-${PV}-workaround-for-new-glibc.patch
+	eapply "${FILESDIR}"/${PV}/01_gcc-${PV}-gentoo-install-path.patch
+	eapply "${FILESDIR}"/${PV}/02_gcc-${PV}-workaround-for-new-glibc.patch
+	toolchain_src_prepare
 }
 
 src_install() {
 	toolchain_src_install
 	mkdir -p ${ED}/etc/ld.so.conf.d/ || die
-	cat <<-_EOF_ > "${ED}"/etc/ld.so.conf.d/09-${CHOST}-gcc-${SLOT}.conf || die
+	cat <<-_EOF_ > "${ED}"/etc/ld.so.conf.d/14-${CHOST}-gcc-${SLOT}.conf || die
 /usr/lib/gcc-lib/${CHOST}/${PV}
 _EOF_
 }

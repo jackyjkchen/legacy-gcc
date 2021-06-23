@@ -37,8 +37,8 @@ DEPEND="${RDEPEND}
 	legacy-gcc/binutils-wrapper:${TOOL_SLOT}"
 
 src_prepare() {
-	toolchain_src_prepare
 	eapply "${FILESDIR}"/${PV}/00_gcc-${PV}.patch
 	eapply "${FILESDIR}"/${PV}/01_gcc-${PV}-gentoo-install-path.patch
 	eapply "${FILESDIR}"/${PV}/02_gcc-${PV}-workaround-for-new-glibc.patch
+	toolchain_src_prepare
 }

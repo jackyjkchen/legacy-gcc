@@ -31,5 +31,5 @@ src_prepare() {
 	if use objc && ! use gcj ; then
 		[[ ${ARCH} != "mips" ]] && epatch "${FILESDIR}"/3.3.6/libffi-without-libgcj.patch
 	fi
-	[[ ${ARCH} == "mips" ]] && eapply "${FILESDIR}"/3.3.6/00_support_mips64el.patch
+	[[ ${ARCH} == "mips" ]] && eapply "${FILESDIR}"/3.3.6/00_support_mips64.patch
 }
