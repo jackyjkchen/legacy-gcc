@@ -33,11 +33,11 @@ src_prepare() {
 	# libffi to install with USE="objc", even though it normally only installs
 	# if you attempt to build gcj.
 	if use objc && ! use gcj ; then
-		[[ ${ARCH} != "mips" ]] && epatch "${FILESDIR}"/3.4.6/libffi-without-libgcj.patch
+		[[ ${ARCH} != "mips" ]] && epatch "${FILESDIR}"/${PV}/libffi-without-libgcj.patch
 	fi
 
 	# Fix cross-compiling
-	epatch "${FILESDIR}"/3.4.6/gcc-3.4.4-cross-compile.patch
+	epatch "${FILESDIR}"/${PV}/gcc-3.4.4-cross-compile.patch
 
 	# Arch stuff
 	case $(tc-arch) in

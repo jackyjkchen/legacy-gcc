@@ -20,7 +20,9 @@ x86与非x86均为本项目的目标，x86目前进度较快，已经可以原�
 * aarch64：gcc-4.8.5及以上
 * armel：gcc-4.1.2及以上
 * armhf：gcc-4.4.7及以上
+* mips：gcc-2.95.3及以上
 * mipsel：gcc-2.95.3及以上
+* mips64：gcc-3.3.6及以上
 * mips64el：gcc-3.3.6及以上
 * ppc：gcc-2.8.1及以上
 * ppc64：gcc-3.1.1及以上
