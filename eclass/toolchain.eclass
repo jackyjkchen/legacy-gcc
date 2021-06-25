@@ -1908,6 +1908,8 @@ gcc_do_make() {
 	elif [[ $(gcc-version) == "3.4" && ${GCC_BRANCH_VER} == "3.4" ]] && gcc-specs-ssp ; then
 		# See bug #79852
 		STAGE1_CFLAGS=${STAGE1_CFLAGS-"-O2"}
+	else
+		STAGE1_CFLAGS=${STAGE1_CFLAGS-"-O2 -pipe"}
 	fi
 
 	if is_crosscompile; then
@@ -1928,7 +1930,7 @@ gcc_do_make() {
 	if tc_version_is_at_least 2.9 ; then
 		emake \
 			LDFLAGS="${LDFLAGS}" \
-			STAGE1_CFLAGS="${STAGE1_CFLAGS}" \
+
 			LIBPATH="${LIBPATH}" \
 			BOOT_CFLAGS="${BOOT_CFLAGS}" \
 			${GCC_MAKE_TARGET} \
