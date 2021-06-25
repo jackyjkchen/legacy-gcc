@@ -1905,9 +1905,6 @@ gcc_do_make() {
 
 	if [[ ${GCC_MAKE_TARGET} == "all" ]] ; then
 		STAGE1_CFLAGS=${STAGE1_CFLAGS-"${CFLAGS}"}
-	elif [[ $(gcc-version) == "3.4" && ${GCC_BRANCH_VER} == "3.4" ]] && gcc-specs-ssp ; then
-		# See bug #79852
-		STAGE1_CFLAGS=${STAGE1_CFLAGS-"-O2"}
 	else
 		STAGE1_CFLAGS=${STAGE1_CFLAGS-"${CFLAGS}"}
 	fi
