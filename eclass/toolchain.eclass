@@ -1263,7 +1263,6 @@ toolchain_src_configure() {
 		;;
 	sparc)
 		if ! tc_version_is_at_least 3.1 && [[ ${ABI} == "sparc64" ]]; then
-			STAGE1_CFLAGS="${CFLAGS} -gstabs+"
 			CFLAGS="${CFLAGS} -gstabs+"
 			CXXFLAGS="${CXXFLAGS} -gstabs+"
 		fi
@@ -1905,6 +1904,8 @@ gcc_do_make() {
 
 	if [[ ${GCC_MAKE_TARGET} == "all" ]] ; then
 		STAGE1_CFLAGS=${STAGE1_CFLAGS-"${CFLAGS}"}
+	elif [[ ${GCC_BRANCH_VER} == "3.0" ]] ; then
+		STAGE1_CFLAGS=
 	else
 		STAGE1_CFLAGS=${STAGE1_CFLAGS-"${CFLAGS}"}
 	fi
