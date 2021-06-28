@@ -32,5 +32,5 @@ src_prepare() {
 		[[ ${ARCH} != "mips" ]] && epatch "${FILESDIR}"/${PV}/libffi-without-libgcj.patch
 	fi
 	[[ ${ARCH} == "mips" ]] && eapply "${FILESDIR}"/${PV}/00_support_mips64.patch
-	[[ ${ARCH} == "mips" ]] && [[ ${DEFAULT_ABI} == "n32" ]] && eapply "${FILESDIR}"/${PV}/01_mips64_default_n32_abi.patch
+	[[ ${ARCH} == "mips" && ${DEFAULT_ABI} == "n32" ]] && eapply "${FILESDIR}"/${PV}/01_mips64_default_n32_abi.patch
 }

@@ -53,7 +53,7 @@ src_install() {
 	toolchain_src_install
 	if [[ ${TOOL_SLOT} != "host" ]]; then
 		mkdir -p ${ED}/etc/ld.so.conf.d/ || die
-		cat <<-_EOF_ > "${ED}"/etc/ld.so.conf.d/08-${CHOST}-gcc-${PV}.conf || die
+		cat <<-_EOF_ > "${ED}"/etc/ld.so.conf.d/09-${CHOST}-gcc-${PV}.conf || die
 /usr/lib/gcc-lib/${CHOST}/${PV}
 _EOF_
 	fi

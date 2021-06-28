@@ -22,5 +22,5 @@ src_prepare() {
 
 	use vanilla && return 0
 
-	[[ ${ARCH} == "mips" ]] && [[ ${DEFAULT_ABI} == "n64" ]] && eapply "${FILESDIR}"/${PV}/00_mips64_default_n64_abi.patch
+	[[ ${ARCH} == "mips" && ${DEFAULT_ABI} == "n64" ]] && eapply "${FILESDIR}"/${PV}/00_mips64_default_n64_abi.patch
 }

@@ -81,7 +81,7 @@ src_install() {
 					;;
 				mips-legacy)
 					AS_PARAMS="-EB -mabi=32"
-					LD_PARAMS="-EL -melf32btsmip"
+					LD_PARAMS="-EB -melf32btsmip"
 					;;
 			esac
 			cat <<-_EOF_ > "${ED}${UNIX_PREFIX}/bin/${TARGET_PREFIX}-as" || die

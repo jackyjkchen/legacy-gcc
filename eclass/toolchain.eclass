@@ -1263,7 +1263,6 @@ toolchain_src_configure() {
 		;;
 	sparc)
 		if ! tc_version_is_at_least 3.1 && [[ ${ABI} == "sparc64" ]]; then
-			STAGE1_CFLAGS="${CFLAGS} -gstabs+"
 			CFLAGS="${CFLAGS} -gstabs+"
 			CXXFLAGS="${CXXFLAGS} -gstabs+"
 		fi
@@ -1483,11 +1482,13 @@ downgrade_arch_flags() {
 			filter-flags '-march=*' '-mtune=*' '-mips*'
 			if ! tc_version_is_at_least 3.3 ${bver} ; then
 				append-flags '-mips2'
+			elif ! tc_version_is_at_least 3.4 ${bver} ; then
+				append-flags '-mips32'
 			else
 				if [[ ${ABI} == "n64" || ${ABI} == "n32" ]]; then
 					append-flags '-march=mips64' '-mtune=mips64'
 				else
-					append-flags '-march=mips32' '-mtune=mips32'
+					append-flags '-march=mips32r2' '-mtune=mips32r2'
 				fi
 			fi
         fi
@@ -1903,9 +1904,10 @@ gcc_do_make() {
 
 	if [[ ${GCC_MAKE_TARGET} == "all" ]] ; then
 		STAGE1_CFLAGS=${STAGE1_CFLAGS-"${CFLAGS}"}
-	elif [[ $(gcc-version) == "3.4" && ${GCC_BRANCH_VER} == "3.4" ]] && gcc-specs-ssp ; then
-		# See bug #79852
-		STAGE1_CFLAGS=${STAGE1_CFLAGS-"-O2"}
+	elif [[ ${GCC_BRANCH_VER} == "3.0" ]] ; then
+		STAGE1_CFLAGS=
+	else
+		STAGE1_CFLAGS=${STAGE1_CFLAGS-"${CFLAGS}"}
 	fi
 
 	if is_crosscompile; then
