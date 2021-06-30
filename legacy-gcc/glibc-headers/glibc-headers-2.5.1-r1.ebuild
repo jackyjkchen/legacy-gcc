@@ -63,6 +63,7 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/01_glibc-${PV}-workaround-for-old-gcc.patch || die
 	pushd "${WORKDIR}"/glibc-ports-2.5 > /dev/null
 	eapply "${FILESDIR}"/${PV}/02_glibc-ports-workaround-for-old-gcc.patch || die
+	[[ ${ARCH} != "avr" ]] && eapply "${FILESDIR}"/${PV}/03_glibc-ports-m68k-nptl-headers.patch || die
 	popd > /dev/null
 }
 
