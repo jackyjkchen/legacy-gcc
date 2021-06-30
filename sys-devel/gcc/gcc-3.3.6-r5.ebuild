@@ -10,7 +10,7 @@ HTB_VER="1.00-r2"
 inherit toolchain
 
 # ia64 - broken static handling; USE=static emerge busybox
-KEYWORDS="alpha amd64 mips ppc ppc64 s390 sparc x86"
+KEYWORDS="alpha amd64 m68k mips ppc ppc64 s390 sparc x86"
 
 # NOTE: we SHOULD be using at least binutils 2.15.90.0.1 everywhere for proper
 # .eh_frame ld optimisation and symbol visibility support, but it hasnt been

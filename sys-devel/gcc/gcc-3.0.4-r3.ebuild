@@ -16,7 +16,7 @@ case ${ARCH} in
 		ABI_X86='32'
 		CFLAGS_x86=""
 		;;
-	alpha)
+	alpha|m68k)
 		TOOL_SLOT="${ARCH}-legacy"
 		;;
 	mips)
@@ -57,7 +57,7 @@ fi
 
 inherit toolchain
 
-KEYWORDS="alpha amd64 mips ppc s390 sparc x86"
+KEYWORDS="alpha amd64 m68k mips ppc s390 sparc x86"
 
 RDEPEND=""
 DEPEND="${RDEPEND}
