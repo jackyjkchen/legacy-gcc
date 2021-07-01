@@ -102,7 +102,7 @@ fi
 
 PREFIX=${TOOLCHAIN_PREFIX:-${EPREFIX}/usr}
 
-if tc_version_is_at_least 3.4.0 ; then
+if tc_version_is_at_least 3.4 ; then
 	LIBPATH=${TOOLCHAIN_LIBPATH:-${PREFIX}/lib/gcc/${CTARGET}/${GCC_PV}}
 else
 	LIBPATH=${TOOLCHAIN_LIBPATH:-${PREFIX}/lib/gcc-lib/${CTARGET}/${GCC_PV}}
@@ -1889,7 +1889,7 @@ gcc_do_make() {
 	else
 		if tc_version_is_at_least 3.3 && _tc_use_if_iuse pgo; then
 			GCC_MAKE_TARGET=${GCC_MAKE_TARGET-profiledbootstrap}
-		elif tc_version_is_at_least 3.1 ; then
+		elif [[ $(tc-arch) != "sh" ]] && tc_version_is_at_least 3.1 ; then
 			GCC_MAKE_TARGET=${GCC_MAKE_TARGET-bootstrap-lean}
 		else
 			GCC_MAKE_TARGET=${GCC_MAKE_TARGET-bootstrap}

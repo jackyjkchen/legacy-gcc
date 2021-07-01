@@ -11,11 +11,14 @@ inherit downgrade-arch-flags gnuconfig
 
 LICENSE=""
 SLOT="$(ver_cut 1-3 ${PV})"
-KEYWORDS="amd64 ppc x86"
+KEYWORDS="amd64 m68k ppc x86"
 
 case ${ARCH} in
 	amd64|x86)
 		TOOL_SLOT="i686-legacy"
+		;;
+	m68k)
+		TOOL_SLOT="${ARCH}-legacy"
 		;;
 	ppc)
 		TOOL_SLOT="powerpc-legacy"

@@ -23,6 +23,9 @@ case ${ARCH} in
 		CXXFLAGS="${CFLAGS} -Wl,-no-relax"
 		TOOL_SLOT="${ARCH}-legacy"
 		;;
+	m68k)
+		TOOL_SLOT="${ARCH}-legacy"
+		;;
 	mips)
 		CC="${CC} ${CFLAGS_o32}"
 		CXX="${CXX} ${CFLAGS_o32}"
@@ -51,7 +54,7 @@ RANLIB="${CHOST}-ranlib"
 
 inherit toolchain
 
-KEYWORDS="alpha amd64 mips ppc s390 sparc x86"
+KEYWORDS="alpha amd64 m68k mips ppc s390 sparc x86"
 
 RDEPEND=""
 DEPEND="${RDEPEND}
