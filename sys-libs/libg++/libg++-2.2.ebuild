@@ -66,7 +66,7 @@ src_compile() {
 
 src_install() {
 	pushd "${WORKDIR}"/build > /dev/null
-	emake -j1 DESTDIR="${ED}" install || die "failed to run make"
+	emake -j1 DESTDIR="${ED}" install || die "failed to run make install"
 	mkdir -p "${ED}"/usr/lib/gcc-lib/${CHOST}/2.2.2/include || die
 	mv -v "${ED}"/usr/lib/g++-include "${ED}"/usr/lib/gcc-lib/${CHOST}/2.2.2/include/g++ || die
 	mv -v "${ED}"/usr/lib/libg++.a "${ED}"/usr/lib/gcc-lib/${CHOST}/2.2.2/ || die

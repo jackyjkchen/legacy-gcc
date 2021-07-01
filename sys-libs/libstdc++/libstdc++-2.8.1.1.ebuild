@@ -75,7 +75,7 @@ src_compile() {
 
 src_install() {
 	pushd "${WORKDIR}"/build > /dev/null
-	emake -j1 DESTDIR="${ED}" install || die "failed to run make"
+	emake -j1 DESTDIR="${ED}" install || die "failed to run make install"
 	mv -v "${ED}"/usr/lib/libstdc++* "${ED}"/usr/lib/gcc-lib/${CHOST}/2.8.1/ || die
 	rm -rfv "${ED}"/usr/lib/libiberty.a "${ED}"/usr/${CHOST}
 	popd > /dev/null

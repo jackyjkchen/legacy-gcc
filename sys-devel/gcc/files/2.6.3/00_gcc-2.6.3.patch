@@ -1,5 +1,5 @@
 diff --git a/Makefile.in b/Makefile.in
-index cdfcba0..5c61a73 100644
+index cdfcba0..e209169 100644
 --- a/Makefile.in
 +++ b/Makefile.in
 @@ -55,7 +55,7 @@ T_CFLAGS =
@@ -91,7 +91,7 @@ index cdfcba0..5c61a73 100644
 +	-if [ -d $(DESTDIR)$(includedir) ] ; then true ; else mkdir -p $(DESTDIR)$(includedir) ; fi
 +	-if [ -d $(DESTDIR)$(tooldir) ] ; then true ; else mkdir -p $(DESTDIR)$(tooldir) ; fi
 +	-if [ -d $(DESTDIR)$(assertdir) ] ; then true ; else mkdir -p $(DESTDIR)$(assertdir) ; fi
-+	-if [ -d $(infodir) ] ; then true ; else mkdir -p $(DESTDIR)$(infodir) ; fi
++	-if [ -d $(DESTDIR)$(infodir) ] ; then true ; else mkdir -p $(DESTDIR)$(infodir) ; fi
  # We don't use mkdir -p to create the parents of mandir,
  # because some systems don't support it.
  # Instead, we use this technique to create the immediate parent of mandir.
@@ -474,6 +474,88 @@ index 0000000..7e46c68
 +
 +/* Get perform_* macros to build libgcc.a.  */
 +#include "i386/perform.h"
+diff --git a/config/i386/linux-oldld.h b/config/i386/linux-oldld.h
+new file mode 100644
+index 0000000..c3066ba
+--- /dev/null
++++ b/config/i386/linux-oldld.h
+@@ -0,0 +1,76 @@
++/* Definitions for Intel 386 running Linux with pre-BFD a.out linkers
++   Copyright (C) 1995 Free Software Foundation, Inc.
++   Contributed by Michael Meissner (meissner@cygnus.com)
++
++This file is part of GNU CC.
++
++GNU CC is free software; you can redistribute it and/or modify
++it under the terms of the GNU General Public License as published by
++the Free Software Foundation; either version 2, or (at your option)
++any later version.
++
++GNU CC is distributed in the hope that it will be useful,
++but WITHOUT ANY WARRANTY; without even the implied warranty of
++MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++GNU General Public License for more details.
++
++You should have received a copy of the GNU General Public License
++along with GNU CC; see the file COPYING.  If not, write to
++the Free Software Foundation, 59 Temple Place - Suite 330,
++Boston, MA 02111-1307, USA.  */
++
++/* This is tested by i386/gas.h.  */
++#define YES_UNDERSCORES
++
++#include <i386/gstabs.h>
++#include <linux-aout.h>	/* some common stuff */
++
++/* Specify predefined symbols in preprocessor.  */
++
++#undef CPP_PREDEFINES
++#define CPP_PREDEFINES "-Dunix -Di386 -Dlinux -Asystem(unix) -Asystem(posix) -Acpu(i386) -Amachine(i386)"
++
++#undef CPP_SPEC
++#if TARGET_CPU_DEFAULT == 2
++#define CPP_SPEC "%{fPIC:-D__PIC__ -D__pic__} %{fpic:-D__PIC__ -D__pic__} %{!m386:-D__i486__} %{posix:-D_POSIX_SOURCE}"
++#else
++#define CPP_SPEC "%{fPIC:-D__PIC__ -D__pic__} %{fpic:-D__PIC__ -D__pic__} %{m486:-D__i486__} %{posix:-D_POSIX_SOURCE}"
++#endif
++
++#undef SIZE_TYPE
++#define SIZE_TYPE "unsigned int"
++
++#undef PTRDIFF_TYPE
++#define PTRDIFF_TYPE "int"
++
++#undef WCHAR_TYPE
++#define WCHAR_TYPE "long int"
++
++#undef WCHAR_TYPE_SIZE
++#define WCHAR_TYPE_SIZE BITS_PER_WORD
++
++/* Don't default to pcc-struct-return, because gcc is the only compiler,
++   and we want to retain compatibility with older gcc versions.  */
++#define DEFAULT_PCC_STRUCT_RETURN 0
++
++#undef LIB_SPEC
++
++#if 1
++/* We no longer link with libc_p.a or libg.a by default. If you
++ * want to profile or debug the Linux C library, please add
++ * -lc_p or -ggdb to LDFLAGS at the link time, respectively.
++ */
++#define LIB_SPEC \
++"%{mieee-fp:-lieee} %{p:-lgmon} %{pg:-lgmon} %{!ggdb:-lc} %{ggdb:-lg}"
++#else    
++#define LIB_SPEC \
++"%{mieee-fp:-lieee} %{p:-lgmon -lc_p} %{pg:-lgmon -lc_p} \
++ %{!p:%{!pg:%{!g*:-lc} %{g*:-lg -static}}}" 
++#endif
++
++
++#undef LINK_SPEC
++#define LINK_SPEC ""
++
++/* Get perform_* macros to build libgcc.a.  */
++#include <i386/perform.h>
 diff --git a/config/i386/linux.h b/config/i386/linux.h
 index a28fbef..92207d1 100644
 --- a/config/i386/linux.h
@@ -1771,6 +1853,29 @@ index 0000000..843fa1b
 +CRTSTUFF_T_CFLAGS_S = -fPIC
 +# Compile libgcc2.a with pic.
 +TARGET_LIBGCC2_CFLAGS = -fPIC
+diff --git a/config/t-linux-gnulibc1 b/config/t-linux-gnulibc1
+new file mode 100644
+index 0000000..e2be684
+--- /dev/null
++++ b/config/t-linux-gnulibc1
+@@ -0,0 +1,13 @@
++# We are building for the Linux C library 5.
++T_CFLAGS = -DUSE_GNULIBC_1
++
++# Don't run fixproto
++STMP_FIXPROTO =
++
++# Don't install "assert.h" in gcc. We use the one in glibc.
++INSTALL_ASSERT_H =
++
++# Compile crtbeginS.o and crtendS.o with pic.
++CRTSTUFF_T_CFLAGS_S = -fPIC
++# Compile libgcc2.a with pic.
++TARGET_LIBGCC2_CFLAGS = -fPIC
+diff --git a/config/i386/x-linux b/config/x-linux
+similarity index 100%
+rename from config/i386/x-linux
+rename to config/x-linux
 diff --git a/config/xm-linux.h b/config/xm-linux.h
 new file mode 100644
 index 0000000..a842299
@@ -1820,49 +1925,68 @@ index 0000000..a842299
 +#undef index
 +#undef rindex
 diff --git a/configure b/configure
-index 1f0106d..db2899a 100755
+index 1f0106d..1ed5de3 100755
 --- a/configure
 +++ b/configure
-@@ -756,17 +756,6 @@ for machine in $canon_build $canon_host $canon_target; do
- 		fixincludes=Makefile.in
- 		xmake_file=x-netbsd
- 		;;
--	i[345]86-*-gnu*)
--		cpu_type=i386
--		xm_file=i386/xm-gnu.h
--		tm_file=i386/gnu.h
--		tmake_file=t-libc-ok
--		# GNU tools are the only tools.
--		gnu_ld=yes
--		gas=yes
--		# On GNU, the headers are already okay.
--		fixincludes=Makefile.in
--		;;
- 	i[345]86-*-isc*)		# 80386 running ISC system
- 		cpu_type=i386
- 		xm_file=i386/xm-isc.h
-@@ -790,15 +779,17 @@ for machine in $canon_build $canon_host $canon_target; do
+@@ -790,18 +790,47 @@ for machine in $canon_build $canon_host $canon_target; do
  		install_headers_dir=install-headers-cpio
  		broken_install=yes
  		;;
 -	i[345]86-*-linux*)		# Intel 80386's running Linux
-+	i[3456]86-*-linux*)		# Intel 80386's running Linux
- 		cpu_type=i386
+-		cpu_type=i386
++	i[3456]86-*-linux*oldld*)	# Intel 80386's running GNU/Linux
++		cpu_type=i386		# with a.out format using pre BFD linkers
  		xm_file=i386/xm-linux.h
- 		xmake_file=i386/x-linux
-                 if [ x$elf = xyes ]
- 		then
+-		xmake_file=i386/x-linux
+-                if [ x$elf = xyes ]
+-		then
 -			tm_file=i386/linuxelf.h
 -		else
- 			tm_file=i386/linux.h
-+			tmake_file=t-linux
-+			extra_parts="crtbegin.o crtend.o crtbeginS.o crtendS.o"
-+		else
-+			tm_file=i386/linux-aout.h
- 		fi
- 		fixincludes=Makefile.in #On Linux, the headers are ok already.
+-			tm_file=i386/linux.h
+-		fi
+-		fixincludes=Makefile.in #On Linux, the headers are ok already.
++		xmake_file=x-linux
++		tm_file=i386/linux-oldld.h
++		fixincludes=Makefile.in # The headers are ok already.
++		broken_install=yes
++		gnu_ld=yes
++		;;
++	i[3456]86-*-linux*aout*)		# Intel 80386's running GNU/Linux
++		cpu_type=i386		# with a.out format
++		xm_file=i386/xm-linux.h
++		xmake_file=x-linux
++		tm_file=i386/linux-aout.h
++		fixincludes=Makefile.in # The headers are ok already.
++		broken_install=yes
++		gnu_ld=yes
++		;;
++	i[3456]86-*-linux*gnulibc1)	# Intel 80386's running GNU/Linux
++		cpu_type=i386		# with ELF format, using GNU libc v1.
++		xm_file=i386/xm-linux.h
++		xmake_file=x-linux
++		tmake_file=t-linux-gnulibc1
++		tm_file=i386/linux.h
++		fixincludes=Makefile.in # The headers are ok already.
  		broken_install=yes
-@@ -1254,6 +1245,37 @@ for machine in $canon_build $canon_host $canon_target; do
++		gnu_ld=yes
++		extra_parts="crtbegin.o crtbeginS.o crtend.o crtendS.o"
++		;;
++	i[3456]86-*-linux*)		# Intel 80386's running GNU/Linux
++		cpu_type=i386		# with ELF format
++		xm_file=i386/xm-linux.h
++		xmake_file=x-linux
++		tmake_file=t-linux
++		tm_file=i386/linux.h
++		fixincludes=Makefile.in # The headers are ok already.
++		broken_install=yes
++		gnu_ld=yes
++		# GNU libc version 2 does not supply these;
++		# we want them from GCC.
++		extra_parts="crtbegin.o crtbeginS.o crtend.o crtendS.o"
+ 		;;
+ 	i[345]86-*-lynxos*)
+ 		cpu_type=i386
+@@ -1254,6 +1283,37 @@ for machine in $canon_build $canon_host $canon_target; do
  		tmake_file=t-svr4
  		header_files=math-68881.h
  		;;

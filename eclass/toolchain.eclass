@@ -1416,10 +1416,6 @@ toolchain_src_configure() {
 		)
 	fi
 
-	if tc_version_is_between 2.5 2.7 ; then
-		confgcc+=( --with-elf )
-	fi
-
 	# Disable gcc info regeneration -- it ships with generated info pages
 	# already.  Our custom version/urls/etc... trigger it.  #464008
 	export gcc_cv_prog_makeinfo_modern=no

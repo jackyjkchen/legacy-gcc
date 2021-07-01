@@ -735,6 +735,88 @@ index 0000000..7e46c68
 +
 +/* Get perform_* macros to build libgcc.a.  */
 +#include "i386/perform.h"
+diff --git a/config/i386/linux-oldld.h b/config/i386/linux-oldld.h
+new file mode 100644
+index 0000000..c3066ba
+--- /dev/null
++++ b/config/i386/linux-oldld.h
+@@ -0,0 +1,76 @@
++/* Definitions for Intel 386 running Linux with pre-BFD a.out linkers
++   Copyright (C) 1995 Free Software Foundation, Inc.
++   Contributed by Michael Meissner (meissner@cygnus.com)
++
++This file is part of GNU CC.
++
++GNU CC is free software; you can redistribute it and/or modify
++it under the terms of the GNU General Public License as published by
++the Free Software Foundation; either version 2, or (at your option)
++any later version.
++
++GNU CC is distributed in the hope that it will be useful,
++but WITHOUT ANY WARRANTY; without even the implied warranty of
++MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++GNU General Public License for more details.
++
++You should have received a copy of the GNU General Public License
++along with GNU CC; see the file COPYING.  If not, write to
++the Free Software Foundation, 59 Temple Place - Suite 330,
++Boston, MA 02111-1307, USA.  */
++
++/* This is tested by i386/gas.h.  */
++#define YES_UNDERSCORES
++
++#include <i386/gstabs.h>
++#include <linux-aout.h>	/* some common stuff */
++
++/* Specify predefined symbols in preprocessor.  */
++
++#undef CPP_PREDEFINES
++#define CPP_PREDEFINES "-Dunix -Di386 -Dlinux -Asystem(unix) -Asystem(posix) -Acpu(i386) -Amachine(i386)"
++
++#undef CPP_SPEC
++#if TARGET_CPU_DEFAULT == 2
++#define CPP_SPEC "%{fPIC:-D__PIC__ -D__pic__} %{fpic:-D__PIC__ -D__pic__} %{!m386:-D__i486__} %{posix:-D_POSIX_SOURCE}"
++#else
++#define CPP_SPEC "%{fPIC:-D__PIC__ -D__pic__} %{fpic:-D__PIC__ -D__pic__} %{m486:-D__i486__} %{posix:-D_POSIX_SOURCE}"
++#endif
++
++#undef SIZE_TYPE
++#define SIZE_TYPE "unsigned int"
++
++#undef PTRDIFF_TYPE
++#define PTRDIFF_TYPE "int"
++
++#undef WCHAR_TYPE
++#define WCHAR_TYPE "long int"
++
++#undef WCHAR_TYPE_SIZE
++#define WCHAR_TYPE_SIZE BITS_PER_WORD
++
++/* Don't default to pcc-struct-return, because gcc is the only compiler,
++   and we want to retain compatibility with older gcc versions.  */
++#define DEFAULT_PCC_STRUCT_RETURN 0
++
++#undef LIB_SPEC
++
++#if 1
++/* We no longer link with libc_p.a or libg.a by default. If you
++ * want to profile or debug the Linux C library, please add
++ * -lc_p or -ggdb to LDFLAGS at the link time, respectively.
++ */
++#define LIB_SPEC \
++"%{mieee-fp:-lieee} %{p:-lgmon} %{pg:-lgmon} %{!ggdb:-lc} %{ggdb:-lg}"
++#else    
++#define LIB_SPEC \
++"%{mieee-fp:-lieee} %{p:-lgmon -lc_p} %{pg:-lgmon -lc_p} \
++ %{!p:%{!pg:%{!g*:-lc} %{g*:-lg -static}}}" 
++#endif
++
++
++#undef LINK_SPEC
++#define LINK_SPEC ""
++
++/* Get perform_* macros to build libgcc.a.  */
++#include <i386/perform.h>
 diff --git a/config/i386/linux.h b/config/i386/linux.h
 index 5018bfc..92207d1 100644
 --- a/config/i386/linux.h
@@ -1267,6 +1349,492 @@ index 0000000..c82cfe2
 +#undef	ENDFILE_SPEC
 +#define ENDFILE_SPEC \
 +  "%{!shared:crtend.o%s} %{shared:crtendS.o%s} crtn.o%s"
+diff --git a/config/m68k/linux-aout.h b/config/m68k/linux-aout.h
+new file mode 100644
+index 0000000..980d08f
+--- /dev/null
++++ b/config/m68k/linux-aout.h
+@@ -0,0 +1,75 @@
++/* Definitions for Motorola m68k running Linux
++   Copyright (C) 1995 Free Software Foundation, Inc.
++
++This file is part of GNU CC.
++
++GNU CC is free software; you can redistribute it and/or modify
++it under the terms of the GNU General Public License as published by
++the Free Software Foundation; either version 1, or (at your option)
++any later version.
++
++GNU CC is distributed in the hope that it will be useful,
++but WITHOUT ANY WARRANTY; without even the implied warranty of
++MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++GNU General Public License for more details.
++
++You should have received a copy of the GNU General Public License
++along with GNU CC; see the file COPYING.  If not, write to
++the Free Software Foundation, 59 Temple Place - Suite 330,
++Boston, MA 02111-1307, USA.  */
++
++#include <m68k/m68k.h>
++#include <linux-aout.h>
++
++/* 68020 with 68881 */
++#define TARGET_DEFAULT 7
++
++#define DBX_DEBUGGING_INFO
++
++#define CPP_PREDEFINES \
++  "-Dunix -Dmc68000 -Dmc68020 -Dlinux -Asystem(unix) -Asystem(posix) -Acpu(m68k) -Amachine(m68k)"
++
++#undef CPP_SPEC
++#if TARGET_DEFAULT & 2
++#define CPP_SPEC \
++  "%{!msoft-float:-D__HAVE_68881__} %{posix:-D_POSIX_SOURCE}"
++#else
++#define CPP_SPEC \
++  "%{m68881:-D__HAVE_68881__} %{posix:-D_POSIX_SOURCE}"
++#endif
++
++#undef SUBTARGET_SWITCHES
++#define SUBTARGET_SWITCHES	{"ieee-fp", 0},
++
++#undef ASM_SPEC
++#define ASM_SPEC \
++  "%{m68030} %{m68040} %{fpic:-k} %{fPIC:-k}"
++
++#undef LIB_SPEC
++#if 1
++/* We no longer link with libc_p.a or libg.a by default.  If you want
++   to profile or debug the Linux C library, please add -lc_p or -ggdb
++   to LDFLAGS at the link time, respectively.  */
++#define LIB_SPEC \
++  "%{mieee-fp:-lieee} %{p:-lgmon} %{pg:-lgmon} %{!ggdb:-lc} %{ggdb:-lg}"
++#else
++#define LIB_SPEC \
++  "%{mieee-fp:-lieee} %{p:-lgmon -lc_p} %{pg:-lgmon -lc_p} %{!p:%{!pg:%{!g*:-lc} %{g*:-lg}}}"
++#endif
++
++/* We want to pass -v to linker */
++#undef LINK_SPEC
++#define LINK_SPEC	"-m m68klinux %{v:-dll-verbose}"
++
++#define SIZE_TYPE "unsigned int"
++#define PTRDIFF_TYPE "int"
++
++/* Generate calls to memcpy, memcmp and memset.  */
++#define TARGET_MEM_FUNCTIONS
++
++/* Don't default to pcc-struct-return, because gcc is the only compiler.  */
++#undef PCC_STATIC_STRUCT_RETURN
++#define DEFAULT_PCC_STRUCT_RETURN 0
++
++/* Allow folding division by zero.  */
++#define REAL_INFINITY
+diff --git a/config/m68k/linux.h b/config/m68k/linux.h
+new file mode 100644
+index 0000000..d5ad0ad
+--- /dev/null
++++ b/config/m68k/linux.h
+@@ -0,0 +1,354 @@
++/* Definitions for Motorola 68k running Linux with ELF format.
++   Copyright (C) 1995 Free Software Foundation, Inc.
++
++This file is part of GNU CC.
++
++GNU CC is free software; you can redistribute it and/or modify
++it under the terms of the GNU General Public License as published by
++the Free Software Foundation; either version 1, or (at your option)
++any later version.
++
++GNU CC is distributed in the hope that it will be useful,
++but WITHOUT ANY WARRANTY; without even the implied warranty of
++MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++GNU General Public License for more details.
++
++You should have received a copy of the GNU General Public License
++along with GNU CC; see the file COPYING.  If not, write to
++the Free Software Foundation, 59 Temple Place - Suite 330,
++Boston, MA 02111-1307, USA.  */
++
++#define LINUX_DEFAULT_ELF
++#define MOTOROLA		/* Use Motorola syntax */
++#define USE_GAS			/* But GAS wants jbsr instead of jsr */
++
++#include <m68k/m68k.h>
++#include <linux.h>		/* some common stuff */
++
++#undef TARGET_VERSION
++#define TARGET_VERSION fprintf (stderr, " (68k Linux/ELF)");
++
++/* 68020 with 68881 */
++#define TARGET_DEFAULT 7
++
++/* for 68k machines this only needs to be TRUE for the 68000 */
++
++#undef STRICT_ALIGNMENT     
++#define STRICT_ALIGNMENT 0
++
++#undef SUBTARGET_SWITCHES
++#define SUBTARGET_SWITCHES	{"ieee-fp", 0},
++
++/* Here are four prefixes that are used by asm_fprintf to
++   facilitate customization for alternate assembler syntaxes.
++   Machines with no likelihood of an alternate syntax need not
++   define these and need not use asm_fprintf.  */
++
++/* The prefix for register names.  Note that REGISTER_NAMES
++   is supposed to include this prefix. Also note that this is NOT an
++   fprintf format string, it is a literal string */
++
++#undef REGISTER_PREFIX
++#define REGISTER_PREFIX "%"
++
++/* The prefix for local (compiler generated) labels.
++   These labels will not appear in the symbol table. */
++
++#undef LOCAL_LABEL_PREFIX
++#define LOCAL_LABEL_PREFIX "."
++
++/* The prefix to add to user-visible assembler symbols. */
++
++#undef USER_LABEL_PREFIX
++#define USER_LABEL_PREFIX ""
++
++/* How to refer to registers in assembler output.
++   This sequence is indexed by compiler's hard-register-number.
++   Motorola format uses different register names than defined in m68k.h. */
++
++#undef REGISTER_NAMES
++
++#ifndef SUPPORT_SUN_FPA
++
++#define REGISTER_NAMES \
++{"%d0", "%d1", "%d2", "%d3", "%d4", "%d5", "%d6", "%d7", \
++ "%a0", "%a1", "%a2", "%a3", "%a4", "%a5", "%a6", "%sp", \
++ "%fp0", "%fp1", "%fp2", "%fp3", "%fp4", "%fp5", "%fp6", "%fp7" }
++
++#else /* SUPPORTED_SUN_FPA */
++
++#define REGISTER_NAMES \
++{"%d0", "%d1", "%d2", "%d3", "%d4", "%d5", "%d6", "%d7", \
++ "%a0", "%a1", "%a2", "%a3", "%a4", "%a5", "%a6", "%sp", \
++ "%fp0", "%fp1", "%fp2", "%fp3", "%fp4", "%fp5", "%fp6", "%fp7", \
++ "%fpa0", "%fpa1", "%fpa2", "%fpa3", "%fpa4", "%fpa5", "%fpa6", "%fpa7", \
++ "%fpa8", "%fpa9", "%fpa10","%fpa11","%fpa12","%fpa13","%fpa14","%fpa15", \
++ "%fpa16","%fpa17","%fpa18","%fpa19","%fpa20","%fpa21","%fpa22","%fpa23", \
++ "%fpa24","%fpa25","%fpa26","%fpa27","%fpa28","%fpa29","%fpa30","%fpa31" }
++
++#endif /* defined SUPPORT_SUN_FPA */
++
++#undef SIZE_TYPE
++#define SIZE_TYPE "unsigned int"
++ 
++#undef PTRDIFF_TYPE
++#define PTRDIFF_TYPE "int"
++  
++#undef WCHAR_TYPE
++#define WCHAR_TYPE "long int"
++   
++#undef WCHAR_TYPE_SIZE
++#define WCHAR_TYPE_SIZE BITS_PER_WORD
++
++#undef ASM_SPEC
++#define ASM_SPEC "%{m68030} %{m68040} %{fpic:-k} %{fPIC:-k}"
++
++#define CPP_PREDEFINES \
++  "-D__ELF__ -Dunix -Dmc68000 -Dmc68020 -Dlinux -Asystem(unix) -Asystem(posix) -Acpu(m68k) -Amachine(m68k)"
++
++#undef CPP_SPEC
++#ifdef USE_GNULIBC_1
++#if TARGET_DEFAULT & 2
++#define CPP_SPEC \
++  "%{fPIC:-D__PIC__ -D__pic__} %{fpic:-D__PIC__ -D__pic__} %{!msoft-float:-D__HAVE_68881__} %{posix:-D_POSIX_SOURCE}"
++#else
++#define CPP_SPEC \
++  "%{fPIC:-D__PIC__ -D__pic__} %{fpic:-D__PIC__ -D__pic__} %{m68881:-D__HAVE_68881__} %{posix:-D_POSIX_SOURCE}"
++#endif
++#else /* not USE_GNULIBC_1 */
++#if TARGET_DEFAULT & 2
++#define CPP_SPEC \
++  "%{fPIC:-D__PIC__ -D__pic__} %{fpic:-D__PIC__ -D__pic__} %{!msoft-float:-D__HAVE_68881__} %{posix:-D_POSIX_SOURCE} %{pthread:-D_REENTRANT}"
++#else
++#define CPP_SPEC \
++  "%{fPIC:-D__PIC__ -D__pic__} %{fpic:-D__PIC__ -D__pic__} %{m68881:-D__HAVE_68881__} %{posix:-D_POSIX_SOURCE} %{pthread:-D_REENTRANT}"
++#endif
++#endif
++
++#undef LIBGCC_SPEC
++#define LIBGCC_SPEC "-lgcc"
++
++#undef	LIB_SPEC
++#ifdef USE_GNULIBC_1
++#if 1
++/* We no longer link with libc_p.a or libg.a by default.  If you want
++   to profile or debug the Linux C library, please add -lc_p or -ggdb
++   to LDFLAGS at the link time, respectively.  */
++#define LIB_SPEC \
++  "%{!shared:%{!symbolic: %{mieee-fp:-lieee} %{p:-lgmon} %{pg:-lgmon} \
++     %{!ggdb:-lc} %{ggdb:-lg}}}"
++#else
++#define LIB_SPEC \
++  "%{!shared:%{!symbolic: \
++     %{mieee-fp:-lieee} %{p:-lgmon -lc_p} %{pg:-lgmon -lc_p} \
++     %{!p:%{!pg:%{!g*:-lc} %{g*:-lg}}}}}"
++#endif
++#else
++#define LIB_SPEC \
++  "%{!shared: %{mieee-fp:-lieee} %{pthread:-lpthread} \
++	%{profile:-lc_p} %{!profile: -lc}}"
++#endif /* not USE_GNULIBC_1 */
++
++/* Provide a LINK_SPEC appropriate for Linux.  Here we provide support
++   for the special GCC options -static and -shared, which allow us to
++   link things in one of these three modes by applying the appropriate
++   combinations of options at link-time.  We like to support here for
++   as many of the other GNU linker options as possible.  But I don't
++   have the time to search for those flags.  I am sure how to add
++   support for -soname shared_object_name. H.J.
++
++   I took out %{v:%{!V:-V}}.  It is too much :-(.  They can use
++   -Wl,-V.
++
++   When the -shared link option is used a final link is not being
++   done.  */
++
++/* If ELF is the default format, we should not use /lib/elf. */
++
++#undef	LINK_SPEC
++#ifdef USE_GNULIBC_1
++#ifndef LINUX_DEFAULT_ELF
++#define LINK_SPEC "-m m68kelf %{shared} %{symbolic:-shared -Bsymbolic} \
++  %{!shared:%{!symbolic: \
++    %{!static: \
++      %{rdynamic:-export-dynamic} \
++      %{!dynamic-linker*:-dynamic-linker /lib/elf/ld-linux.so.1} \
++      %{!rpath*:-rpath /lib/elf/}} %{static}}}"
++#else
++#define LINK_SPEC "-m m68kelf %{shared} %{symbolic:-shared -Bsymbolic} \
++  %{!shared:%{!symbolic: \
++    %{!static: \
++      %{rdynamic:-export-dynamic} \
++      %{!dynamic-linker*:-dynamic-linker /lib/ld-linux.so.1}} \
++    %{static}}}"
++#endif
++#else /* not USE_GNULIBC_1 */
++#define LINK_SPEC "-m m68kelf %{shared} \
++  %{!shared: \
++    %{!static: \
++      %{rdynamic:-export-dynamic} \
++      %{!dynamic-linker*:-dynamic-linker /lib/ld.so.1}} \
++    %{static}}"
++#endif /* not USE_GNULIBC_1 */
++
++
++/* For compatibility with linux/a.out */
++
++#undef PCC_BITFIELD_TYPE_MATTERS
++
++/* Currently, JUMP_TABLES_IN_TEXT_SECTION must be defined in order to
++   keep switch tables in the text section.  */
++   
++#define JUMP_TABLES_IN_TEXT_SECTION 1
++
++/* Use the default action for outputting the case label.  */
++#undef ASM_OUTPUT_CASE_LABEL
++
++#define ASM_RETURN_CASE_JUMP \
++  return "jmp (2,%%pc,%0.w)"
++
++/* This is how to output an assembler line that says to advance the
++   location counter to a multiple of 2**LOG bytes.  */
++
++#undef ASM_OUTPUT_ALIGN
++#define ASM_OUTPUT_ALIGN(FILE,LOG)				\
++  if ((LOG) > 0)						\
++    fprintf ((FILE), "\t%s \t%u\n", ALIGN_ASM_OP, 1 << (LOG));
++
++/* Output assembler code to FILE to increment profiler label # LABELNO
++   for profiling a function entry.  */
++
++#undef FUNCTION_PROFILER
++#define FUNCTION_PROFILER(FILE, LABELNO) \
++{									\
++  asm_fprintf (FILE, "\tlea (%LLP%d,%Rpc),%Ra1\n", (LABELNO));		\
++  if (flag_pic)								\
++    fprintf (FILE, "\tbsr.l _mcount@PLTPC\n");				\
++  else									\
++    fprintf (FILE, "\tjbsr _mcount\n");					\
++}
++
++/* How to renumber registers for dbx and gdb.
++   On the Sun-3, the floating point registers have numbers
++   18 to 25, not 16 to 23 as they do in the compiler.  */
++
++#define DBX_REGISTER_NUMBER(REGNO) ((REGNO) < 16 ? (REGNO) : (REGNO) + 2)
++
++/* Do not break .stabs pseudos into continuations.  */
++
++#define DBX_CONTIN_LENGTH 0
++
++/* Allow folding division by zero.  */
++#define REAL_INFINITY
++
++/* 1 if N is a possible register number for a function value.  For
++   m68k/SVR4 allow d0, a0, or fp0 as return registers, for integral,
++   pointer, or floating types, respectively.  Reject fp0 if not using
++   a 68881 coprocessor.  */
++
++#undef FUNCTION_VALUE_REGNO_P
++#define FUNCTION_VALUE_REGNO_P(N) \
++  ((N) == 0 || (N) == 8 || (TARGET_68881 && (N) == 16))
++
++/* Define this to be true when FUNCTION_VALUE_REGNO_P is true for
++   more than one register.  */
++
++#undef NEEDS_UNTYPED_CALL
++#define NEEDS_UNTYPED_CALL 1
++
++/* Define how to generate (in the callee) the output value of a
++   function and how to find (in the caller) the value returned by a
++   function.  VALTYPE is the data type of the value (as a tree).  If
++   the precise function being called is known, FUNC is its
++   FUNCTION_DECL; otherwise, FUNC is 0.  For m68k/SVR4 generate the
++   result in d0, a0, or fp0 as appropriate. */
++   
++#undef FUNCTION_VALUE
++#define FUNCTION_VALUE(VALTYPE, FUNC)					\
++  (TREE_CODE (VALTYPE) == REAL_TYPE && TARGET_68881			\
++   ? gen_rtx (REG, TYPE_MODE (VALTYPE), 16)				\
++   : (POINTER_TYPE_P (VALTYPE)						\
++      ? gen_rtx (REG, TYPE_MODE (VALTYPE), 8)				\
++      : gen_rtx (REG, TYPE_MODE (VALTYPE), 0)))
++
++/* For compatibility with the large body of existing code which does
++   not always properly declare external functions returning pointer
++   types, the m68k/SVR4 convention is to copy the value returned for
++   pointer functions from a0 to d0 in the function epilogue, so that
++   callers that have neglected to properly declare the callee can
++   still find the correct return value.  */
++
++extern int current_function_returns_pointer;
++#define FUNCTION_EXTRA_EPILOGUE(FILE, SIZE)				\
++do {									\
++  if ((current_function_returns_pointer) && 				\
++      ! find_equiv_reg (0, get_last_insn (), 0, 0, 0, 8, Pmode))	\
++    asm_fprintf (FILE, "\tmove.l %Ra0,%Rd0\n");				\
++} while (0);
++
++/* Define how to find the value returned by a library function
++   assuming the value has mode MODE.
++   For m68k/SVR4 look for integer values in d0, pointer values in d0
++   (returned in both d0 and a0), and floating values in fp0.  */
++
++#undef LIBCALL_VALUE
++#define LIBCALL_VALUE(MODE)						\
++  ((((MODE) == SFmode || (MODE) == DFmode || (MODE) == XFmode)		\
++    && TARGET_68881)							\
++   ? gen_rtx (REG, (MODE), 16)						\
++   : gen_rtx (REG, (MODE), 0))
++
++/* In m68k svr4, a symbol_ref rtx can be a valid PIC operand if it is
++   an operand of a function call. */
++#undef LEGITIMATE_PIC_OPERAND_P
++#define LEGITIMATE_PIC_OPERAND_P(X)	\
++  (! symbolic_operand (X, VOIDmode))
++
++/* Turn off function cse if we are doing PIC. We always want function
++   call to be done as `bsr foo@PLTPC', so it will force the assembler
++   to create the PLT entry for `foo'.  Doing function cse will cause
++   the address of `foo' to be loaded into a register, which is exactly
++   what we want to avoid when we are doing PIC on svr4 m68k.  */
++#undef SUBTARGET_OVERRIDE_OPTIONS
++#define SUBTARGET_OVERRIDE_OPTIONS \
++  if (flag_pic) flag_no_function_cse = 1;
++
++/* For m68k SVR4, structures are returned using the reentrant
++   technique. */
++#undef PCC_STATIC_STRUCT_RETURN
++#define DEFAULT_PCC_STRUCT_RETURN 0
++
++/* Finalize the trampoline by flushing the insn cache.  */
++
++#undef FINALIZE_TRAMPOLINE
++#define FINALIZE_TRAMPOLINE(TRAMP)					\
++  emit_library_call (gen_rtx (SYMBOL_REF, Pmode, "__clear_cache"),	\
++		     0, VOIDmode, 2, TRAMP, Pmode,			\
++		     plus_constant (TRAMP, TRAMPOLINE_SIZE), Pmode);
++
++/* Clear the instruction cache from `beg' to `end'.  This makes an
++   inline system call to SYS_cacheflush.  The arguments are as
++   follows:
++
++	cacheflush (addr, scope, cache, len)
++
++   addr	  - the start address for the flush
++   scope  - the scope of the flush (see the cpush insn)
++   cache  - which cache to flush (see the cpush insn)
++   len    - a factor relating to the number of flushes to perform:
++   	    len/16 lines, or len/4096 pages.  */
++
++#define CLEAR_INSN_CACHE(BEG, END)					\
++{									\
++  register unsigned long _beg __asm ("%d1") = (unsigned long) (BEG);	\
++  unsigned long _end = (unsigned long) (END);				\
++  register unsigned long _len __asm ("%d4") = (_end - _beg + 32);	\
++  __asm __volatile							\
++    ("move%.l %#123, %/d0\n\t"	/* system call nr */			\
++     "move%.l %#1, %/d2\n\t"	/* clear lines */			\
++     "move%.l %#3, %/d3\n\t"	/* insn+data caches */			\
++     "trap %#0"								\
++     : /* no outputs */							\
++     : "d" (_beg), "d" (_len)						\
++     : "%d0", "%d2", "%d3");						\
++}
+diff --git a/config/m68k/t-linux b/config/m68k/t-linux
+new file mode 100644
+index 0000000..28a946c
+--- /dev/null
++++ b/config/m68k/t-linux
+@@ -0,0 +1,10 @@
++# Don't make libgcc1.a
++LIBGCC1 =
++CROSS_LIBGCC1 =
++# On Linux we can print long double
++ENQUIRE_CFLAGS = -DNO_MEM -O0
++# Don't install "assert.h" in gcc. We use the one in glibc.
++INSTALL_ASSERT_H =
++
++# Compile libgcc2.a with pic.
++TARGET_LIBGCC2_CFLAGS = -fPIC
+diff --git a/config/m68k/t-linux-gnulibc1 b/config/m68k/t-linux-gnulibc1
+new file mode 100644
+index 0000000..32e62a6
+--- /dev/null
++++ b/config/m68k/t-linux-gnulibc1
+@@ -0,0 +1,13 @@
++# We are building for the Linux C library 5.
++T_CFLAGS = -DUSE_GNULIBC_1
++
++# Don't make libgcc1.a
++LIBGCC1 =
++CROSS_LIBGCC1 =
++# On Linux we can print long double
++ENQUIRE_CFLAGS = -DNO_MEM -O0
++# Don't install "assert.h" in gcc. We use the one in glibc.
++INSTALL_ASSERT_H =
++
++# Compile libgcc2.a with pic.
++TARGET_LIBGCC2_CFLAGS = -fPIC
+diff --git a/config/m68k/xm-linux.h b/config/m68k/xm-linux.h
+new file mode 100644
+index 0000000..3b10506
+--- /dev/null
++++ b/config/m68k/xm-linux.h
+@@ -0,0 +1,4 @@
++/* Configuration for GCC for Motorola m68k running Linux. */
++
++#include <m68k/xm-m68k.h>
++#include <xm-linux.h>
 diff --git a/config/svr4.h b/config/svr4.h
 index 64fa031..b88a2df 100644
 --- a/config/svr4.h
@@ -1573,6 +2141,29 @@ index 0000000..843fa1b
 +CRTSTUFF_T_CFLAGS_S = -fPIC
 +# Compile libgcc2.a with pic.
 +TARGET_LIBGCC2_CFLAGS = -fPIC
+diff --git a/config/t-linux-gnulibc1 b/config/t-linux-gnulibc1
+new file mode 100644
+index 0000000..e2be684
+--- /dev/null
++++ b/config/t-linux-gnulibc1
+@@ -0,0 +1,13 @@
++# We are building for the Linux C library 5.
++T_CFLAGS = -DUSE_GNULIBC_1
++
++# Don't run fixproto
++STMP_FIXPROTO =
++
++# Don't install "assert.h" in gcc. We use the one in glibc.
++INSTALL_ASSERT_H =
++
++# Compile crtbeginS.o and crtendS.o with pic.
++CRTSTUFF_T_CFLAGS_S = -fPIC
++# Compile libgcc2.a with pic.
++TARGET_LIBGCC2_CFLAGS = -fPIC
+diff --git a/config/i386/x-linux b/config/x-linux
+similarity index 100%
+rename from config/i386/x-linux
+rename to config/x-linux
 diff --git a/config/xm-linux.h b/config/xm-linux.h
 new file mode 100644
 index 0000000..a842299
@@ -1622,7 +2213,7 @@ index 0000000..a842299
 +#undef index
 +#undef rindex
 diff --git a/configure b/configure
-index 0791b18..91eda4a 100755
+index 0791b18..cd62c6e 100755
 --- a/configure
 +++ b/configure
 @@ -277,6 +277,7 @@ for machine in $canon_build $canon_host $canon_target; do
@@ -1633,32 +2224,97 @@ index 0791b18..91eda4a 100755
  	# Set this to force installation and use of collect2.
  	use_collect2=
  	# Set this to override the default target model.
-@@ -453,13 +454,23 @@ for machine in $canon_build $canon_host $canon_target; do
+@@ -453,13 +454,47 @@ for machine in $canon_build $canon_host $canon_target; do
  		tm_file=i386/sun.h
  		use_collect2=yes
  		;;
 -	i[34]86-*-linux*)               # Intel 80386's running Linux
-+	i[3456]86-*-linux*aout)         # Intel 80386's running Linux
- 		cpu_type=i386
- 		xm_file=i386/xm-linux.h
- 		xmake_file=i386/x-linux
-+		tm_file=i386/linux-aout.h
-+		fixincludes=Makefile.in #On Linux, the headers are ok already.
-+		broken_install=yes
-+		;;
-+	i[3456]86-*-linux*)             # Intel 80386's running Linux
-+		cpu_type=i386           # with ELF support
+-		cpu_type=i386
++	i[3456]86-*-linux*oldld*)	# Intel 80386's running GNU/Linux
++		cpu_type=i386		# with a.out format using pre BFD linkers
 +		xm_file=i386/xm-linux.h
-+		xmake_file=i386/x-linux
- 		tm_file=i386/linux.h
++		xmake_file=x-linux
++		tm_file=i386/linux-oldld.h
++		fixincludes=Makefile.in # The headers are ok already.
++		broken_install=yes
++		gnu_ld=yes
++		;;
++	i[3456]86-*-linux*aout*)		# Intel 80386's running GNU/Linux
++		cpu_type=i386		# with a.out format
++		xm_file=i386/xm-linux.h
++		xmake_file=x-linux
++		tm_file=i386/linux-aout.h
++		fixincludes=Makefile.in # The headers are ok already.
++		broken_install=yes
++		gnu_ld=yes
++		;;
++	i[3456]86-*-linux*gnulibc1)	# Intel 80386's running GNU/Linux
++		cpu_type=i386		# with ELF format, using GNU libc v1.
++		xm_file=i386/xm-linux.h
++		xmake_file=x-linux
++		tmake_file=t-linux-gnulibc1
++		tm_file=i386/linux.h
++		fixincludes=Makefile.in # The headers are ok already.
++		broken_install=yes
++		gnu_ld=yes
++		extra_parts="crtbegin.o crtbeginS.o crtend.o crtendS.o"
++		;;
++	i[3456]86-*-linux*)		# Intel 80386's running GNU/Linux
++		cpu_type=i386		# with ELF format
+ 		xm_file=i386/xm-linux.h
+-		xmake_file=i386/x-linux
++		xmake_file=x-linux
 +		tmake_file=t-linux
- 		fixincludes=Makefile.in #On Linux, the headers are ok already.
+ 		tm_file=i386/linux.h
+-		fixincludes=Makefile.in #On Linux, the headers are ok already.
++		fixincludes=Makefile.in # The headers are ok already.
  		broken_install=yes
-+		extra_parts="crtbegin.o crtend.o crtbeginS.o crtendS.o"
++		gnu_ld=yes
++		# GNU libc version 2 does not supply these;
++		# we want them from GCC.
++		extra_parts="crtbegin.o crtbeginS.o crtend.o crtendS.o"
  		;;
  	i486-ncr-sysv4*)		# NCR 3000 - i486 running system V.4
  		cpu_type=i386
-@@ -1511,6 +1522,17 @@ else
+@@ -742,6 +777,37 @@ for machine in $canon_build $canon_host $canon_target; do
+ 		tmake_file=t-svr3
+ 		header_files=math-68881.h
+ 		;;
++	m68k-*-linux*aout*)		# Motorola m68k's running GNU/Linux
++		xm_file=m68k/xm-linux.h	# with a.out format
++		xmake_file=x-linux
++		tm_file=m68k/linux-aout.h
++		tmake_file=m68k/t-linux
++		fixincludes=Makefile.in # The headers are ok already.
++		extra_headers=math-68881.h
++		gnu_ld=yes
++		;;
++	m68k-*-linux*libc1)		# Motorola m68k's running GNU/Linux
++		xm_file=m68k/xm-linux.h	# with ELF format, using GNU libc v1.
++		xmake_file=x-linux
++		tm_file=m68k/linux.h
++		tmake_file=m68k/t-linux-gnulibc1
++		fixincludes=Makefile.in # The headers are ok already.
++		extra_headers=math-68881.h
++		gnu_ld=yes
++		extra_parts="crtbegin.o crtend.o"
++		;;
++	m68k-*-linux*)			# Motorola m68k's running GNU/Linux
++		xm_file=m68k/xm-linux.h	# with ELF format
++		xmake_file=x-linux
++		tm_file=m68k/linux.h
++		tmake_file=m68k/t-linux
++		fixincludes=Makefile.in # The headers are ok already.
++		extra_headers=math-68881.h
++		gnu_ld=yes
++		# GNU libc version 2 does not supply these;
++		# we want them from GCC.
++		extra_parts="crtbegin.o crtend.o"
++		;;
+ 	m68000-sun-sunos3*)
+ 		cpu_type=m68k
+ 		tm_file=m68k/sun2.h
+@@ -1511,6 +1577,17 @@ else
  	mv Makefile.xx Makefile.tem
  fi
  
@@ -2616,10 +3272,22 @@ index 96a399f..875890b 100644
    length = tree_code_length[(int) code];
  
 diff --git a/tree.h b/tree.h
-index 556dac0..bfed558 100644
+index 556dac0..31000a2 100644
 --- a/tree.h
 +++ b/tree.h
-@@ -965,6 +965,17 @@ union tree_node
+@@ -220,6 +220,11 @@ struct tree_common
+   (TREE_CODE (TYPE) == REAL_TYPE	\
+    || (TREE_CODE (TYPE) == COMPLEX_TYPE \
+        && TREE_CODE (TREE_TYPE (TYPE)) == REAL_TYPE))
++
++/* Nonzero if TYPE represents a pointer type.  */
++
++#define POINTER_TYPE_P(TYPE) \
++  (TREE_CODE (TYPE) == POINTER_TYPE || TREE_CODE (TYPE) == REFERENCE_TYPE)
+ 
+ /* Define many boolean fields that all tree nodes have.  */
+ 
+@@ -965,6 +970,17 @@ union tree_node
  #endif
  #endif
  
@@ -2637,7 +3305,7 @@ index 556dac0..bfed558 100644
  
  #define NULL_TREE (tree) NULL
  
-@@ -1054,19 +1065,9 @@ extern tree get_identifier		PROTO((char *));
+@@ -1054,19 +1070,9 @@ extern tree get_identifier		PROTO((char *));
  #define build_int_2(LO,HI)  \
    build_int_2_wide ((HOST_WIDE_INT) (LO), (HOST_WIDE_INT) (HI))
  
