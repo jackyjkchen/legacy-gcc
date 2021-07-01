@@ -14,6 +14,9 @@ case ${ARCH} in
 		ABI_X86='32'
 		CFLAGS_x86=""
 		;;
+	m68k)
+		TOOL_SLOT="${ARCH}-legacy"
+		;;
 	*)
 		;;
 esac
@@ -29,7 +32,7 @@ EXTRA_ECONF="--gxx-include-dir=/usr/lib/gcc-lib/${CHOST}/${PV}/include/g++"
 
 inherit toolchain
 
-KEYWORDS="amd64 x86"
+KEYWORDS="amd64 m68k x86"
 
 RDEPEND=""
 DEPEND="${RDEPEND}

@@ -1768,7 +1768,7 @@ gcc_do_filter_flags() {
 
 	strip-unsupported-flags
 
-	if ! tc_version_is_at_least 2.8 ${bver} ; then
+	if [[ $(tc-arch) == amd64 || $(tc-arch) == x86 ]] && ! tc_version_is_at_least 2.8 ${bver} ; then
 		filter-flags '-mtune=*' '-march=*' '-mcpu=*' '-m*' '-mno-*'
 		append-cflags -m486
 		return 0
