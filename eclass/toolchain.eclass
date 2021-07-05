@@ -1119,6 +1119,7 @@ toolchain_src_configure() {
 		*)
 			confgcc+=( --enable-threads=posix ) ;;
 		esac
+		tc_version_is_between 4.1 4.2 && confgcc+=( --enable-bootstrap=yes )
 	fi
 
 	# __cxa_atexit is "essential for fully standards-compliant handling of
@@ -1885,7 +1886,7 @@ gcc_do_make() {
 	else
 		if tc_version_is_at_least 3.3 && _tc_use_if_iuse pgo; then
 			GCC_MAKE_TARGET=${GCC_MAKE_TARGET-profiledbootstrap}
-		elif [[ $(tc-arch) != "sh" ]] && tc_version_is_at_least 3.1 ; then
+		elif [[ $(tc-arch) != "sh" ]] && tc_version_is_at_least 4.2 ; then
 			GCC_MAKE_TARGET=${GCC_MAKE_TARGET-bootstrap-lean}
 		else
 			GCC_MAKE_TARGET=${GCC_MAKE_TARGET-bootstrap}

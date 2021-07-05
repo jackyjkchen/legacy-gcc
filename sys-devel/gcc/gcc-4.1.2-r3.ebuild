@@ -9,7 +9,7 @@ D_VER="0.24"
 
 inherit toolchain
 
-KEYWORDS="alpha amd64 arm hppa ia64 m68k mips ppc ppc64 s390 sparc x86"
+KEYWORDS="alpha amd64 arm hppa ia64 m68k mips ppc ppc64 s390 sh sparc x86"
 
 RDEPEND=""
 DEPEND="${RDEPEND}
@@ -33,4 +33,5 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/00_compat_new_mpfr.patch
 
 	[[ ${ARCH} == "mips" && ${DEFAULT_ABI} == "n64" ]] && eapply "${FILESDIR}"/${PV}/01_mips64_default_n64_abi.patch
+	[[ ${CHOST} == ${CTARGET} ]] && eapply "${FILESDIR}"/${PV}/02_workaround-for-bootstrap-libs.patch
 }

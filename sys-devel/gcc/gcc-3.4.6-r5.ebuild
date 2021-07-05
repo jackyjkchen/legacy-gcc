@@ -20,11 +20,11 @@ KEYWORDS="alpha amd64 arm ia64 m68k mips ppc ppc64 s390 sparc x86"
 # well tested in gentoo on any arch other than amd64!!
 RDEPEND=""
 DEPEND="${RDEPEND}
-	sys-devel/gcc:4.4.7
+	sys-devel/gcc:4.1.2
 	>=sys-devel/binutils-2.14.90.0.8-r1
 	amd64? ( >=sys-devel/binutils-2.15.90.0.1.1-r1 )"
-CC="gcc-4.4.7"
-CXX="g++-4.4.7"
+CC="gcc-4.1.2"
+CXX="g++-4.1.2"
 
 src_prepare() {
 	toolchain_src_prepare

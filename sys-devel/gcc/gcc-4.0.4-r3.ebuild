@@ -12,10 +12,10 @@ KEYWORDS="alpha amd64 arm hppa ia64 m68k mips ppc ppc64 s390 sparc x86"
 
 RDEPEND=""
 DEPEND="${RDEPEND}
-	sys-devel/gcc:4.4.7
+	sys-devel/gcc:4.1.2
 	>=sys-devel/binutils-2.15.94"
-CC="gcc-4.4.7"
-CXX="g++-4.4.7"
+CC="gcc-4.1.2"
+CXX="g++-4.1.2"
 
 src_prepare() {
 	toolchain_src_prepare
