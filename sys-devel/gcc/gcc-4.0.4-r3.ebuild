@@ -8,7 +8,7 @@ UCLIBC_VER="1.0"
 
 inherit toolchain
 
-KEYWORDS="alpha amd64 arm hppa ia64 m68k mips ppc ppc64 s390 sparc x86"
+KEYWORDS="alpha amd64 arm hppa ia64 m68k mips ppc ppc64 s390 sh sparc x86"
 
 RDEPEND=""
 DEPEND="${RDEPEND}
@@ -23,4 +23,5 @@ src_prepare() {
 	use vanilla && return 0
 
 	[[ ${ARCH} == "mips" && ${DEFAULT_ABI} == "n64" ]] && eapply "${FILESDIR}"/${PV}/00_mips64_default_n64_abi.patch
+	[[ ${ARCH} == "sh" ]] && eapply "${FILESDIR}"/${PV}/01_sh4_workaround_fixproto_core.patch
 }

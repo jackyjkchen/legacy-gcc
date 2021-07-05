@@ -10,7 +10,7 @@ HTB_VER="1.00-r2"
 inherit toolchain
 
 # ia64 - broken static handling; USE=static emerge busybox
-KEYWORDS="alpha amd64 m68k mips ppc ppc64 s390 sparc x86"
+KEYWORDS="alpha amd64 m68k mips ppc ppc64 s390 sh sparc x86"
 
 # NOTE: we SHOULD be using at least binutils 2.15.90.0.1 everywhere for proper
 # .eh_frame ld optimisation and symbol visibility support, but it hasnt been
@@ -33,4 +33,5 @@ src_prepare() {
 	fi
 	[[ ${ARCH} == "mips" ]] && eapply "${FILESDIR}"/${PV}/00_support_mips64.patch
 	[[ ${ARCH} == "mips" && ${DEFAULT_ABI} == "n32" ]] && eapply "${FILESDIR}"/${PV}/01_mips64_default_n32_abi.patch
+	[[ ${ARCH} == "sh" ]] && eapply "${FILESDIR}"/${PV}/02_fix_for_sh4_install.patch
 }
