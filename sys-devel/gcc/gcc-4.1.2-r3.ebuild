@@ -33,5 +33,5 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/00_compat_new_mpfr.patch
 
 	[[ ${ARCH} == "mips" && ${DEFAULT_ABI} == "n64" ]] && eapply "${FILESDIR}"/${PV}/01_mips64_default_n64_abi.patch
-	[[ ${CHOST} == ${CTARGET} ]] && eapply "${FILESDIR}"/${PV}/02_workaround-for-bootstrap-libs.patch
+	[[ ${ARCH} == "sh" ]] && eapply "${FILESDIR}"/${PV}/02_sh4_fix_build_by_gcc42_and_up.patch
 }

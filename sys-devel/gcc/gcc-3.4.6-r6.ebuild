@@ -10,6 +10,19 @@ HTB_VER="1.00.1"
 HTB_GCC_VER="3.4.4"
 D_VER="0.24"
 
+case ${ARCH} in
+	sh)
+		CC="gcc-4.1.2"
+		CXX="g++-4.1.2"
+		STAGE1_GCC="sys-devel/gcc:4.1.2"
+		;;
+	*)
+		CC="gcc-4.4.7"
+		CXX="g++-4.4.7"
+		STAGE1_GCC="sys-devel/gcc:4.4.7"
+		;;
+esac
+
 inherit toolchain
 
 KEYWORDS="alpha amd64 arm ia64 m68k mips ppc ppc64 s390 sh sparc x86"
@@ -20,11 +33,9 @@ KEYWORDS="alpha amd64 arm ia64 m68k mips ppc ppc64 s390 sh sparc x86"
 # well tested in gentoo on any arch other than amd64!!
 RDEPEND=""
 DEPEND="${RDEPEND}
-	sys-devel/gcc:4.1.2
+	${STAGE1_GCC}
 	>=sys-devel/binutils-2.14.90.0.8-r1
 	amd64? ( >=sys-devel/binutils-2.15.90.0.1.1-r1 )"
-CC="gcc-4.1.2"
-CXX="g++-4.1.2"
 
 src_prepare() {
 	toolchain_src_prepare
