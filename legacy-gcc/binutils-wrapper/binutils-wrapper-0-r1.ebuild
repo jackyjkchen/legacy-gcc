@@ -8,12 +8,12 @@ HOMEPAGE=""
 SRC_URI=""
 
 LICENSE=""
-KEYWORDS="alpha amd64 m68k mips ppc s390 sparc x86"
+KEYWORDS="alpha amd64 m68k mips ppc s390 sh sparc x86"
 case ${ARCH} in
 	amd64|x86)
 		TOOL_SLOT="i686-legacy"
 		;;
-	alpha|m68k)
+	alpha|m68k|sh)
 		TOOL_SLOT="${ARCH}-legacy"
 		;;
 	mips)
@@ -103,7 +103,9 @@ _EOF_
 		*)
 			ln -sv ${HOST_PREFIX}-as "${ED}"${UNIX_PREFIX}/bin/${TARGET_PREFIX}-as || die
 			ln -sv ${HOST_PREFIX}-ld "${ED}"${UNIX_PREFIX}/bin/${TARGET_PREFIX}-ld || die
-			ln -sv ${HOST_PREFIX}-ld.gold "${ED}"${UNIX_PREFIX}/bin/${TARGET_PREFIX}-ld.gold || die
+			if [[ -f ${HOST_PREFIX}-ld.gold ]]; then
+				ln -sv ${HOST_PREFIX}-ld.gold "${ED}"${UNIX_PREFIX}/bin/${TARGET_PREFIX}-ld.gold || die
+			fi
 			;;
 	esac
 	ln -sv ${TARGET_PREFIX}-ld "${ED}"${UNIX_PREFIX}/bin/${TARGET_PREFIX}-ld.bfd || die
@@ -116,7 +118,9 @@ _EOF_
 	ln -sv ${REL_PATH}/bin/${TARGET_PREFIX}-gprof "${ED}"${UNIX_PREFIX}/${TARGET_PREFIX}/bin/gprof || die
 	ln -sv ${REL_PATH}/bin/${TARGET_PREFIX}-ld "${ED}"${UNIX_PREFIX}/${TARGET_PREFIX}/bin/ld || die
 	ln -sv ${REL_PATH}/bin/${TARGET_PREFIX}-ld.bfd "${ED}"${UNIX_PREFIX}/${TARGET_PREFIX}/bin/ld.bfd || die
-	ln -sv ${REL_PATH}/bin/${TARGET_PREFIX}-ld.gold "${ED}"${UNIX_PREFIX}/${TARGET_PREFIX}/bin/ld.gold || die
+	if [[ -f ${REL_PATH}/bin/${TARGET_PREFIX}-ld.gold ]]; then
+		ln -sv ${REL_PATH}/bin/${TARGET_PREFIX}-ld.gold "${ED}"${UNIX_PREFIX}/${TARGET_PREFIX}/bin/ld.gold || die
+	fi
 	ln -sv ${REL_PATH}/bin/${TARGET_PREFIX}-nm "${ED}"${UNIX_PREFIX}/${TARGET_PREFIX}/bin/nm || die
 	ln -sv ${REL_PATH}/bin/${TARGET_PREFIX}-objcopy "${ED}"${UNIX_PREFIX}/${TARGET_PREFIX}/bin/objcopy || die
 	ln -sv ${REL_PATH}/bin/${TARGET_PREFIX}-objdump "${ED}"${UNIX_PREFIX}/${TARGET_PREFIX}/bin/objdump || die

@@ -11,7 +11,7 @@ SRC_URI="https://mirrors.ustc.edu.cn/gnu/glibc/glibc-${PV}.tar.bz2
 inherit downgrade-arch-flags gnuconfig
 
 LICENSE=""
-KEYWORDS="alpha amd64 m68k mips ppc s390 sparc x86"
+KEYWORDS="alpha amd64 m68k mips ppc s390 sh sparc x86"
 CC="gcc-4.4.7"
 CXX="g++-4.4.7"
 case ${ARCH} in
@@ -20,7 +20,7 @@ case ${ARCH} in
 		CXX="${CXX} ${CFLAGS_x86}"
 		TOOL_SLOT="i686-legacy"
 		;;
-	alpha|m68k)
+	alpha|m68k|sh)
 		TOOL_SLOT="${ARCH}-legacy"
 		;;
 	mips)
@@ -59,11 +59,11 @@ S=${WORKDIR}/glibc-${PV}
 src_prepare() {
 	default
 	gnuconfig_update
-	eapply "${FILESDIR}"/${PV}/00_glibc-${PV}.patch || die
-	eapply "${FILESDIR}"/${PV}/01_glibc-${PV}-workaround-for-old-gcc.patch || die
+	eapply "${FILESDIR}"/${PV}/00_glibc-${PV}.patch
+	eapply "${FILESDIR}"/${PV}/01_glibc-${PV}-workaround-for-old-gcc.patch
 	pushd "${WORKDIR}"/glibc-ports-2.5 > /dev/null
-	eapply "${FILESDIR}"/${PV}/02_glibc-ports-workaround-for-old-gcc.patch || die
-	[[ ${ARCH} == "m68k" ]] && eapply "${FILESDIR}"/${PV}/03_glibc-ports-m68k-nptl-headers.patch || die
+	eapply "${FILESDIR}"/${PV}/02_glibc-ports-workaround-for-old-gcc.patch
+	[[ ${ARCH} == "m68k" ]] && eapply "${FILESDIR}"/${PV}/03_glibc-ports-m68k-nptl-headers.patch
 	popd > /dev/null
 }
 
