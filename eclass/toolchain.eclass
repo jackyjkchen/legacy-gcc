@@ -143,7 +143,7 @@ RESTRICT="!test? ( test )"
 
 tc_supports_dostrip() {
 	case ${EAPI:-0} in
-		5*|6) return 0 ;;
+		5*|6) return 1 ;;
 		7) return 0 ;;
 		*) die "Update apply_patches() for ${EAPI}." ;;
 	esac

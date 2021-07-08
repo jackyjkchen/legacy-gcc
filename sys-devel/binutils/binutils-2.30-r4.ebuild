@@ -3,12 +3,12 @@
 
 EAPI=6
 
-inherit eutils libtool flag-o-matic gnuconfig multilib toolchain-funcs versionator downgrade-arch-flags
+inherit eapi7-ver eutils libtool flag-o-matic gnuconfig multilib toolchain-funcs versionator downgrade-arch-flags
 
 DESCRIPTION="Tools necessary to build programs"
 HOMEPAGE="https://sourceware.org/binutils/"
 LICENSE="GPL-3+"
-IUSE="+cxx doc multitarget +nls static-libs test"
+IUSE="+cxx doc +gold multitarget +nls static-libs test"
 
 # Variables that can be set here:
 # PATCH_VER          - the patchset version
@@ -67,11 +67,7 @@ DEPEND="${RDEPEND}
 	nls? ( sys-devel/gettext )
 	sys-devel/flex
 	virtual/yacc
-	sys-devel/gcc:4.9.4
 "
-CC="gcc-4.9.4"
-CXX="g++-4.9.4"
-
 RESTRICT="!test? ( test )"
 
 if is_cross ; then
@@ -179,8 +175,11 @@ src_configure() {
 	local myconf=()
 
 	# enable gold (installed as ld.gold) and ld's plugin architecture
-	if use cxx ; then
+	if use gold ; then
 		myconf+=( --enable-gold )
+	fi
+
+	if use cxx ; then
 		myconf+=( --enable-plugins )
 	fi
 
