@@ -54,6 +54,8 @@ if [[ ${CTARGET} == ${CHOST} ]] ; then
 fi
 is_cross() { [[ ${CHOST} != ${CTARGET} ]] ; }
 
+CC="gcc-4.4.7"
+CXX="g++-4.4.7"
 #
 # The dependencies
 #
@@ -62,6 +64,7 @@ RDEPEND="
 	sys-libs/zlib
 "
 DEPEND="${RDEPEND}
+	sys-devel/gcc:4.4.7
 	doc? ( sys-apps/texinfo )
 	test? ( dev-util/dejagnu )
 	nls? ( sys-devel/gettext )
