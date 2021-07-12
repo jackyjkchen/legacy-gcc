@@ -21,11 +21,7 @@ case ${ARCH} in
 		TOOL_SLOT="powerpc-legacy"
 		;;
 	sparc)
-		if [[ ${ABI} == "sparc64" ]]; then
-			TOOL_SLOT="sparc64-legacy"
-		else
-			TOOL_SLOT="sparc-legacy"
-		fi
+		TOOL_SLOT="sparc-legacy"
 		;;
 	*)
 		;;

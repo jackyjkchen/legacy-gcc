@@ -177,11 +177,7 @@ if [[ ${PN} != "kgcc64" && ${PN} != gcc-* ]] ; then
 		tc_version_is_at_least 3.1 && IUSE+=" objc"
 		;;
 	sparc)
-		if [[ ${ABI} == "sparc64" ]]; then
-			tc_version_is_at_least 3.0 && IUSE+=" +cxx"
-		else
-			tc_version_is_at_least 2.9 && IUSE+=" +cxx"
-		fi
+		tc_version_is_at_least 2.9 && IUSE+=" +cxx"
 		tc_version_is_at_least 2.8 && IUSE+=" objc"
 		;;
 	*)
@@ -2020,7 +2016,9 @@ toolchain_src_install() {
 	done < <(find gcc/include*/ -name '*.h')
 
 	# Do the 'make install' from the build directory
-	if tc_version_is_at_least 2.9 ; then
+	if tc_version_is_at_least 5 ; then
+		S="${WORKDIR}"/build emake DESTDIR="${D}" install || die
+	elif tc_version_is_at_least 2.9 ; then
 		S="${WORKDIR}"/build emake -j1 DESTDIR="${D}" install || die
 	else
 		S="${WORKDIR}"/build emake CC="${CC}" CXX="${CXX}" LANGUAGES="${LANGUAGES}" -j1 DESTDIR="${D}" install || die

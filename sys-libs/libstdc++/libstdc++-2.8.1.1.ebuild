@@ -11,7 +11,7 @@ inherit downgrade-arch-flags gnuconfig
 
 LICENSE=""
 SLOT="$(ver_cut 1-3 ${PV})"
-KEYWORDS="amd64 m68k ppc x86"
+KEYWORDS="amd64 m68k ppc sparc x86"
 
 case ${ARCH} in
 	amd64|x86)
@@ -22,6 +22,9 @@ case ${ARCH} in
 		;;
 	ppc)
 		TOOL_SLOT="powerpc-legacy"
+		;;
+	sparc)
+		TOOL_SLOT="sparc-legacy"
 		;;
 	*)
 		;;

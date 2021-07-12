@@ -26,11 +26,7 @@ case ${ARCH} in
 		TOOL_SLOT="s390x-legacy"
 		;;
 	sparc)
-		if [[ ${ABI} == "sparc64" ]]; then
-			TOOL_SLOT="sparc64-legacy"
-		else
-			TOOL_SLOT="sparc-legacy"
-		fi
+		TOOL_SLOT="sparc-legacy"
 		;;
 	*)
 		TOOL_SLOT="invalid"
@@ -69,7 +65,7 @@ src_install() {
 	ln -sv ${HOST_PREFIX}-strings "${ED}"${UNIX_PREFIX}/bin/${TARGET_PREFIX}-strings || die
 	ln -sv ${HOST_PREFIX}-strip "${ED}"${UNIX_PREFIX}/bin/${TARGET_PREFIX}-strip || die
 	case ${ARCH} in
-		amd64|mips)
+		amd64|mips|sparc)
 			case ${TOOL_SLOT} in
 				i686-legacy)
 					AS_PARAMS="--32"
@@ -83,6 +79,10 @@ src_install() {
 					AS_PARAMS="-EB -mabi=32"
 					LD_PARAMS="-EB -melf32btsmip"
 					;;
+				sparc-legacy)
+					AS_PARAMS="-32"
+					LD_PARAMS="-m elf32_sparc"
+					;;
 			esac
 			cat <<-_EOF_ > "${ED}${UNIX_PREFIX}/bin/${TARGET_PREFIX}-as" || die
 #!/bin/sh
@@ -94,16 +94,18 @@ _EOF_
 ${HOST_PREFIX}-ld ${LD_PARAMS} "\$@"
 _EOF_
 			chmod +x "${ED}"${UNIX_PREFIX}/bin/${TARGET_PREFIX}-ld || die
-			cat <<-_EOF_ > "${ED}${UNIX_PREFIX}/bin/${TARGET_PREFIX}-ld.gold" || die
+			if [[ -f ${UNIX_PREFIX}/bin/${HOST_PREFIX}-ld.gold ]]; then
+				cat <<-_EOF_ > "${ED}${UNIX_PREFIX}/bin/${TARGET_PREFIX}-ld.gold" || die
 #!/bin/sh
 ${HOST_PREFIX}-ld.gold ${LD_PARAMS} "\$@"
 _EOF_
-			chmod +x "${ED}"${UNIX_PREFIX}/bin/${TARGET_PREFIX}-ld.gold || die
+				chmod +x "${ED}"${UNIX_PREFIX}/bin/${TARGET_PREFIX}-ld.gold || die
+			fi
 			;;
 		*)
 			ln -sv ${HOST_PREFIX}-as "${ED}"${UNIX_PREFIX}/bin/${TARGET_PREFIX}-as || die
 			ln -sv ${HOST_PREFIX}-ld "${ED}"${UNIX_PREFIX}/bin/${TARGET_PREFIX}-ld || die
-			if [[ -f ${HOST_PREFIX}-ld.gold ]]; then
+			if [[ -f ${UNIX_PREFIX}/bin/${HOST_PREFIX}-ld.gold ]]; then
 				ln -sv ${HOST_PREFIX}-ld.gold "${ED}"${UNIX_PREFIX}/bin/${TARGET_PREFIX}-ld.gold || die
 			fi
 			;;
@@ -118,8 +120,8 @@ _EOF_
 	ln -sv ${REL_PATH}/bin/${TARGET_PREFIX}-gprof "${ED}"${UNIX_PREFIX}/${TARGET_PREFIX}/bin/gprof || die
 	ln -sv ${REL_PATH}/bin/${TARGET_PREFIX}-ld "${ED}"${UNIX_PREFIX}/${TARGET_PREFIX}/bin/ld || die
 	ln -sv ${REL_PATH}/bin/${TARGET_PREFIX}-ld.bfd "${ED}"${UNIX_PREFIX}/${TARGET_PREFIX}/bin/ld.bfd || die
-	if [[ -f ${REL_PATH}/bin/${TARGET_PREFIX}-ld.gold ]]; then
-		ln -sv ${REL_PATH}/bin/${TARGET_PREFIX}-ld.gold "${ED}"${UNIX_PREFIX}/${TARGET_PREFIX}/bin/ld.gold || die
+	if [[ -f ${UNIX_PREFIX}/bin/${TARGET_PREFIX}-ld.gold ]]; then
+		ln -sv "${ED}"${UNIX_PREFIX}/bin/${TARGET_PREFIX}-ld.gold "${ED}"${UNIX_PREFIX}/${TARGET_PREFIX}/bin/ld.gold || die
 	fi
 	ln -sv ${REL_PATH}/bin/${TARGET_PREFIX}-nm "${ED}"${UNIX_PREFIX}/${TARGET_PREFIX}/bin/nm || die
 	ln -sv ${REL_PATH}/bin/${TARGET_PREFIX}-objcopy "${ED}"${UNIX_PREFIX}/${TARGET_PREFIX}/bin/objcopy || die

@@ -31,11 +31,9 @@ case ${ARCH} in
 		TOOL_SLOT="s390x-legacy"
 		;;
 	sparc)
-		if [[ ${ABI} == "sparc64" ]]; then
-			TOOL_SLOT="sparc64-legacy"
-		else
-			TOOL_SLOT="sparc-legacy"
-		fi
+		CC="${CC} ${CFLAGS_sparc32}"
+		CXX="${CXX} ${CFLAGS_sparc32}"
+		TOOL_SLOT="sparc-legacy"
 		;;
 	*)
 		TOOL_SLOT="host"
