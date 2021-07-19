@@ -30,6 +30,10 @@ DEPEND="${RDEPEND}
 
 if [[ ${CATEGORY} != cross-* ]] ; then
 	PDEPEND="${PDEPEND} elibc_glibc? ( >=sys-libs/glibc-2.8 )"
+else
+	DEPEND="${DEPEND} sys-devel/gcc:4.9.4"
+	CC="gcc-4.9.4"
+	CXX="g++-4.9.4"
 fi
 
 src_prepare() {

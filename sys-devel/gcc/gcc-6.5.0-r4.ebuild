@@ -16,4 +16,8 @@ DEPEND="${RDEPEND}
 
 if [[ ${CATEGORY} != cross-* ]] ; then
 	PDEPEND="${PDEPEND} elibc_glibc? ( >=sys-libs/glibc-2.13 )"
+else
+	DEPEND="${DEPEND} sys-devel/gcc:6.5.0"
+	CC="gcc-6.5.0"
+	CXX="g++-6.5.0"
 fi

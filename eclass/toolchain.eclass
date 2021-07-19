@@ -149,7 +149,7 @@ tc_supports_dostrip() {
 	esac
 }
 
-tc_supports_dostrip || RESTRICT+=" strip" # cross-compilers need controlled stripping
+is_crosscompile && RESTRICT+=" strip" # cross-compilers need controlled stripping
 
 TC_FEATURES=()
 
@@ -2091,14 +2091,17 @@ toolchain_src_install() {
 		fi
 	fi
 
-	if is_crosscompile && tc_supports_dostrip ; then
+	if is_crosscompile; then
 		if [[ ${CTARGET} == 'avr' ]] ; then
 			find ${D}${LIBPATH} | grep "\.a"| xargs ${CTARGET}-strip -d
 		else
 			${CTARGET}-strip -d ${D}${LIBPATH}/{*.a,*.o,32/*.a,32/*.o,n32/*.o,n32/*.a}
 			${CTARGET}-strip -s ${D}${LIBPATH}/{*.so*,32/*.so*,n32/*.so*,*.dll,32/*.dll}
 		fi
-		strip -s "${D}${LIBPATH}/plugin/*.so*"
+		${CHOST}-strip -s ${D}${BINPATH}/*
+		${CHOST}-strip -s ${D}${HOSTLIBPATH}/*
+		${CHOST}-strip -s ${D}${PREFIX}/libexec/gcc/${CTARGET}/${GCC_PV}/{*,plugin/*}
+		${CHOST}-strip -s ${D}${LIBPATH}/plugin/*.so*
 	fi
 
 	cd "${S}"
