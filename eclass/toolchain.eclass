@@ -1,13 +1,13 @@
-# Copyright 1999-2020 Gentoo Authors
+# Copyright 1999-2021 Gentoo Authors
 # Distributed under the terms of the GNU General Public License v2
 
 # Maintainer: Toolchain Ninjas <toolchain@gentoo.org>
-# @SUPPORTED_EAPIS: 5 6 7
+# @SUPPORTED_EAPIS: 5 6 7 8
 
 DESCRIPTION="The GNU Compiler Collection"
 HOMEPAGE="https://gcc.gnu.org/"
 
-inherit eutils fixheadtails flag-o-matic gnuconfig libtool multilib pax-utils toolchain-funcs prefix
+inherit fixheadtails flag-o-matic gnuconfig libtool multilib pax-utils toolchain-funcs prefix
 
 tc_is_live() {
 	[[ ${PV} == *9999* ]]
@@ -27,11 +27,11 @@ fi
 
 FEATURES=${FEATURES/multilib-strict/}
 
-case ${EAPI:-0} in
-	0|1|2|3|4*) die "Need to upgrade to at least EAPI=5" ;;
-	5*|6) inherit eapi7-ver ;;
-	7) ;;
-	*) die "I don't speak EAPI ${EAPI}." ;;
+case ${EAPI} in
+	5|6) inherit eapi7-ver eutils ;;
+	7) inherit eutils ;;
+	8) ;;
+	*) die "${ECLASS}: EAPI ${EAPI:-0} not supported" ;;
 esac
 
 EXPORT_FUNCTIONS pkg_pretend pkg_setup src_unpack src_prepare src_configure \
@@ -142,9 +142,9 @@ IUSE="test vanilla +nls"
 RESTRICT="!test? ( test )"
 
 tc_supports_dostrip() {
-	case ${EAPI:-0} in
-		5*|6) return 0 ;;
-		7) return 0 ;;
+	case ${EAPI} in
+		5|6) return 0 ;;
+		7|8) return 0 ;;
 		*) die "Update apply_patches() for ${EAPI}." ;;
 	esac
 }
@@ -158,12 +158,6 @@ tc_has_feature() {
 }
 
 if [[ ${PN} != "kgcc64" && ${PN} != gcc-* ]] ; then
-	# --enable-altivec was dropped before gcc-4. We don't set it.
-	# We drop USE=altivec for newer gccs only to avoid rebuilds
-	# for most stable users. Once gcc-10 is stable we can drop it.
-	if ! tc_version_is_at_least 10; then
-		IUSE+=" altivec"
-	fi
 	IUSE+=" debug +nptl" TC_FEATURES+=(nptl)
 	[[ -n ${PIE_VER} ]] && IUSE+=" nopie"
 	[[ -n ${SPECS_VER} ]] && IUSE+=" nossp"
@@ -201,7 +195,7 @@ if [[ ${PN} != "kgcc64" && ${PN} != gcc-* ]] ; then
 	tc_version_is_at_least 4.7 && IUSE+=" go"
 	# sanitizer support appeared in gcc-4.8, but <gcc-5 does not
 	# support modern glibc.
-	tc_version_is_at_least 5 && IUSE+=" +sanitize"
+	tc_version_is_at_least 5 && IUSE+=" +sanitize"  TC_FEATURES+=(sanitize)
 	# Note:
 	#   <gcc-4.8 supported graphite, it required forked ppl
 	#     versions which we dropped.  Since graphite was also experimental in
@@ -212,15 +206,8 @@ if [[ ${PN} != "kgcc64" && ${PN} != gcc-* ]] ; then
 		IUSE+=" graphite" TC_FEATURES+=(graphite)
 	tc_version_is_between 4.9 8 && IUSE+=" cilk"
 	tc_version_is_at_least 4.9 && IUSE+=" ada"
+	tc_version_is_at_least 4.9 && IUSE+=" vtv"
 
-	# Don't enable USE=vtv starting from gcc-10. Once gcc-10
-	# stable everywhere disable by default on older versions
-	# as well.
-	if tc_version_is_at_least 10; then
-		IUSE+=" vtv"
-	elif tc_version_is_at_least 4.9; then
-		IUSE+=" +vtv"
-	fi
 	tc_version_is_at_least 5.0 && IUSE+=" jit"
 	tc_version_is_between 5.0 9 && IUSE+=" mpx"
 	tc_version_is_at_least 6.0 && IUSE+=" +pie +ssp"
@@ -293,18 +280,29 @@ BDEPEND="
 DEPEND="${RDEPEND}"
 
 if tc_has_feature gcj ; then
-	GCJ_DEPS=">=media-libs/libart_lgpl-2.1"
-	GCJ_GTK_DEPS="
-		x11-base/xorg-proto
-		x11-libs/libXt
-		x11-libs/libX11
-		x11-libs/libXtst
-		=x11-libs/gtk+-2*
-		virtual/pkgconfig
+	DEPEND+="
+		gcj? (
+			awt? (
+				x11-base/xorg-proto
+				x11-libs/libXt
+				x11-libs/libX11
+				x11-libs/libXtst
+				=x11-libs/gtk+-2*
+				x11-libs/pango
+				virtual/pkgconfig
+			)
+			>=media-libs/libart_lgpl-2.1
+			app-arch/zip
+			app-arch/unzip
+		)
 	"
-	tc_version_is_at_least 3.4 && GCJ_GTK_DEPS+=" x11-libs/pango"
-	tc_version_is_at_least 4.2 && GCJ_DEPS+=" app-arch/zip app-arch/unzip"
-	DEPEND+=" gcj? ( awt? ( ${GCJ_GTK_DEPS} ) ${GCJ_DEPS} )"
+fi
+
+if tc_has_feature sanitize ; then
+	# libsanitizer relies on 'crypt.h' to be present
+	# on target. glibc user to provide it unconditionally.
+	# Nowadays it's a standalone library: #802648
+	DEPEND+=" sanitize? ( virtual/libcrypt )"
 fi
 
 if tc_has_feature systemtap ; then
@@ -320,8 +318,8 @@ if tc_has_feature valgrind; then
 	BDEPEND+=" valgrind? ( dev-util/valgrind )"
 fi
 
-case ${EAPI:-0} in
-	5*|6) DEPEND+=" ${BDEPEND}" ;;
+case ${EAPI} in
+	5|6) DEPEND+=" ${BDEPEND}" ;;
 esac
 
 PDEPEND=">=sys-devel/gcc-config-2.3"
@@ -537,11 +535,11 @@ tc_apply_patches() {
 
 	einfo "$1"; shift
 
-	case ${EAPI:-0} in
+	case ${EAPI} in
 		# Note: even for EAPI=6 we used 'epatch' semantics. To avoid
 		# breaking existing ebuilds use 'eapply' only in EAPI=7 or later.
-		5*|6) epatch "$@" ;;
-		7) eapply "$@" ;;
+		5|6) epatch "$@" ;;
+		7|8) eapply "$@" ;;
 		*) die "Update apply_patches() for ${EAPI}." ;;
 	esac
 }
@@ -558,9 +556,9 @@ toolchain_src_prepare() {
 		BRANDING_GCC_PKGVERSION="${BRANDING_GCC_PKGVERSION}, commit ${EGIT_VERSION}"
 	fi
 
-	case ${EAPI:-0} in
-		5*) epatch_user;;
-		6|7) eapply_user ;;
+	case ${EAPI} in
+		5) epatch_user;;
+		6|7|8) eapply_user ;;
 		*) die "Update toolchain_src_prepare() for ${EAPI}." ;;
 	esac
 
@@ -2094,7 +2092,6 @@ toolchain_src_install() {
 	fi
 
 	if is_crosscompile && tc_supports_dostrip ; then
-		dostrip -x "${LIBPATH}"
 		if [[ ${CTARGET} == 'avr' ]] ; then
 			find ${D}${LIBPATH} | grep "\.a"| xargs ${CTARGET}-strip -d
 		else
