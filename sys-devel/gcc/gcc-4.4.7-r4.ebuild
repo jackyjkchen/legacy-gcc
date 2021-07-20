@@ -12,15 +12,20 @@ KEYWORDS="alpha amd64 arm hppa ia64 m68k mips ppc ppc64 s390 sh sparc x86"
 
 RDEPEND=""
 DEPEND="${RDEPEND}
-	sys-devel/gcc:4.9.4
 	elibc_glibc? ( >=sys-libs/glibc-2.8 )
 	ppc? ( >=sys-devel/binutils-2.17 )
 	ppc64? ( >=sys-devel/binutils-2.17 )
 	>=sys-devel/binutils-2.15.94"
-CC="gcc-4.9.4"
-CXX="g++-4.9.4"
+
 if [[ ${CATEGORY} != cross-* ]] ; then
 	PDEPEND="${PDEPEND} elibc_glibc? ( >=sys-libs/glibc-2.8 )"
+	DEPEND="${DEPEND} sys-devel/gcc:4.9.4"
+	CC="gcc-4.9.4"
+	CXX="g++-4.9.4"
+else
+	DEPEND="${DEPEND} sys-devel/gcc:4.4.7"
+	CC="gcc-4.4.7"
+	CXX="g++-4.4.7"
 fi
 
 src_prepare() {
