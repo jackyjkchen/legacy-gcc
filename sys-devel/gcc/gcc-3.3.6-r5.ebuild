@@ -17,10 +17,17 @@ KEYWORDS="alpha amd64 m68k mips ppc ppc64 s390 sh sparc x86"
 # well tested in gentoo on any arch other than amd64!!
 RDEPEND=">=sys-devel/binutils-2.14.90.0.6-r1"
 DEPEND="${RDEPEND}
-	sys-devel/gcc:3.4.6
 	amd64? ( >=sys-devel/binutils-2.15.90.0.1.1-r1 )"
-CC="gcc-3.4.6"
-CXX="g++-3.4.6"
+
+if is_crosscompile ; then
+	DEPEND="${DEPEND} sys-devel/gcc:3.3.6"
+	CC="gcc-3.3.6"
+	CXX="g++-3.3.6"
+else
+	DEPEND="${DEPEND} sys-devel/gcc:3.4.6"
+	CC="gcc-3.4.6"
+	CXX="g++-3.4.6"
+fi
 
 src_prepare() {
 	toolchain_src_prepare

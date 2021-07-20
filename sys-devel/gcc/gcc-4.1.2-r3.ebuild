@@ -13,12 +13,19 @@ KEYWORDS="alpha amd64 arm hppa ia64 m68k mips ppc ppc64 s390 sh sparc x86"
 
 RDEPEND=""
 DEPEND="${RDEPEND}
-	sys-devel/gcc:4.4.7
 	ppc? ( >=sys-devel/binutils-2.17 )
 	ppc64? ( >=sys-devel/binutils-2.17 )
 	>=sys-devel/binutils-2.15.94"
-CC="gcc-4.4.7"
-CXX="g++-4.4.7"
+
+if is_crosscompile ; then
+	DEPEND="${DEPEND} sys-devel/gcc:4.1.2"
+	CC="gcc-4.1.2"
+	CXX="g++-4.1.2"
+else
+	DEPEND="${DEPEND} sys-devel/gcc:4.4.7"
+	CC="gcc-4.4.7"
+	CXX="g++-4.4.7"
+fi
 
 src_prepare() {
 	toolchain_src_prepare

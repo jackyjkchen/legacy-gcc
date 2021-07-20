@@ -13,11 +13,11 @@ fi
 
 inherit flag-o-matic autotools versionator eutils
 
-MY_P="mingwrt-$(version_format_string '$1.$2.$3')-mingw32"
 DESCRIPTION="Free Win32 runtime and import library definitions"
 HOMEPAGE="http://www.mingw.org/"
 # https://sourceforge.net/projects/mingw/files/MinGW/Base/mingw-rt/
-SRC_URI="mirror://sourceforge/mingw/${MY_P}-src.tar.xz"
+SRC_URI="mirror://sourceforge/mingw/mingwrt-${PV}-mingw32-src.tar.xz
+		mirror://sourceforge/mingw/w32api-${PV}-mingw32-src.tar.xz"
 
 LICENSE="BSD"
 SLOT="0"
@@ -51,25 +51,23 @@ src_prepare() {
 }
 
 src_configure() {
-	just_headers && return 0
-
 	CHOST=${CTARGET} strip-unsupported-flags
 	econf \
 		--host=${CTARGET} \
-		--with-w32api-srcdir="/usr/${CTARGET}/usr"
+		--prefix="/usr/${CTARGET}/usr"
+}
+
+src_compile() {
+	just_headers && return 0
+	emake -j1 || die
 }
 
 src_install() {
 	if just_headers ; then
-		insinto /usr/${CTARGET}/usr/include
-		doins -r include/* || die
+		emake install-headers DESTDIR="${D}" || die
 	else
-		local insdir
-		is_crosscompile \
-			&& insdir="${D}/usr/${CTARGET}" \
-			|| insdir="${D}"
-		emake install DESTDIR="${insdir}" || die
-		rm -rf "${insdir}"/usr/doc
+		emake install DESTDIR="${D}" || die
+		rm -rf "${D}"/usr/${CTARGET}/usr/doc
 		docinto ${CTARGET} # Avoid collisions with other cross-compilers.
 		dodoc CONTRIBUTORS ChangeLog README TODO readme.txt
 	fi

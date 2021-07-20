@@ -13,11 +13,11 @@ fi
 
 inherit eutils flag-o-matic
 
-MY_P="${P}-mingw32"
 DESCRIPTION="Free Win32 runtime and import library definitions"
 HOMEPAGE="http://www.mingw.org/"
 # https://sourceforge.net/projects/mingw/files/MinGW/Base/w32api/
-SRC_URI="mirror://sourceforge/mingw/${MY_P}-src.tar.xz"
+SRC_URI="mirror://sourceforge/mingw/${P}-mingw32-src.tar.xz
+		mirror://sourceforge/mingw/mingwrt-${PV}-mingw32-src.tar.xz"
 
 LICENSE="BSD"
 SLOT="0"
@@ -40,20 +40,22 @@ pkg_setup() {
 	fi
 }
 
-src_compile() {
-	just_headers && return 0
 
+src_configure() {
 	CHOST=${CTARGET} strip-unsupported-flags
 	econf \
 		--host=${CTARGET} \
 		--prefix=/usr/${CTARGET}/usr
+}
+
+src_compile() {
+	just_headers && return 0
 	emake || die
 }
 
 src_install() {
 	if just_headers ; then
-		insinto /usr/${CTARGET}/usr/include
-		doins -r include/* || die
+		emake install-headers DESTDIR="${D}" || die
 	else
 		emake install DESTDIR="${D}" || die
 		dodoc CONTRIBUTIONS ChangeLog README.w32api TODO
