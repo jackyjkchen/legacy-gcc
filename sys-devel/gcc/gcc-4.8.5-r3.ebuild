@@ -53,4 +53,6 @@ src_prepare() {
 	[[ ${CHOST} == ${CTARGET} ]] && epatch "${FILESDIR}"/gcc-spec-env-r1.patch
 
 	[[ ${ARCH} == "mips" && ${DEFAULT_ABI} == "n64" ]] && eapply "${FILESDIR}"/${PV}/00_mips64_default_n64_abi.patch
+
+	eapply "${FILESDIR}"/${PV}/01_fix_for_mingw.patch
 }
