@@ -1342,6 +1342,777 @@ index 0000000..c82cfe2
 +#undef	ENDFILE_SPEC
 +#define ENDFILE_SPEC \
 +  "%{!shared:crtend.o%s} %{shared:crtendS.o%s} crtn.o%s"
+diff --git a/config/m68k.c b/config/m68k.c
+index 9fcef3d..cca5ef1 100644
+--- a/config/m68k.c
++++ b/config/m68k.c
+@@ -44,6 +44,10 @@ enum reg_class regno_reg_class[]
+ 
+ #endif /* defined SUPPORT_SUN_FPA */
+ 
++/* This flag is used to communicate between movhi and ASM_OUTPUT_CASE_END,
++   if SGS_SWITCH_TABLE.  */
++int switch_table_difference_label_flag;
++
+ static rtx find_addr_reg ();
+ rtx legitimize_pic_address ();
+ 
+@@ -176,6 +180,11 @@ output_function_prologue (stream, size)
+       mask &= ~ (1 << (15 - FRAME_POINTER_REGNUM));
+       num_saved_regs--;
+     }
++
++#if NEED_PROBE
++  fprintf (stream, "\ttstl sp@(%d)\n", NEED_PROBE - num_saved_regs * 4);
++#endif
++
+   if (num_saved_regs <= 2)
+     {
+       /* Store each separately in the same order moveml uses.
+@@ -1246,10 +1255,9 @@ int
+ standard_68881_constant_p (x)
+      rtx x;
+ {
+-  union {double d; int i[2];} u;
+   register double d;
+ 
+-  /* fmovecr must be emulated on the 68040, so it shoudn't be used at all. */
++  /* fmovecr must be emulated on the 68040, so it shouldn't be used at all. */
+   if (TARGET_68040)
+     return 0;
+ 
+@@ -1258,14 +1266,7 @@ standard_68881_constant_p (x)
+     return 0;
+ #endif
+ 
+-#ifdef HOST_WORDS_BIG_ENDIAN
+-  u.i[0] = CONST_DOUBLE_LOW (x);
+-  u.i[1] = CONST_DOUBLE_HIGH (x);
+-#else
+-  u.i[0] = CONST_DOUBLE_HIGH (x);
+-  u.i[1] = CONST_DOUBLE_LOW (x);
+-#endif 
+-  d = u.d;
++  REAL_VALUE_FROM_CONST_DOUBLE (d, x);
+ 
+   if (d == 0)
+     return 0x0f;
+@@ -1297,7 +1298,6 @@ int
+ floating_exact_log2 (x)
+      rtx x;
+ {
+-  union {double d; int i[2];} u;
+   register double d, d1;
+   int i;
+ 
+@@ -1306,14 +1306,7 @@ floating_exact_log2 (x)
+     return 0;
+ #endif
+ 
+-#ifdef HOST_WORDS_BIG_ENDIAN
+-  u.i[0] = CONST_DOUBLE_LOW (x);
+-  u.i[1] = CONST_DOUBLE_HIGH (x);
+-#else
+-  u.i[0] = CONST_DOUBLE_HIGH (x);
+-  u.i[1] = CONST_DOUBLE_LOW (x);
+-#endif 
+-  d = u.d;
++  REAL_VALUE_FROM_CONST_DOUBLE (d, x);
+ 
+   if (! (d > 0))
+     return 0;
+@@ -1357,7 +1350,6 @@ int
+ standard_sun_fpa_constant_p (x)
+      rtx x;
+ {
+-  union {double d; int i[2];} u;
+   register double d;
+ 
+ #if HOST_FLOAT_FORMAT != TARGET_FLOAT_FORMAT
+@@ -1365,10 +1357,7 @@ standard_sun_fpa_constant_p (x)
+     return 0;
+ #endif
+ 
+-
+-  u.i[0] = CONST_DOUBLE_LOW (x);
+-  u.i[1] = CONST_DOUBLE_HIGH (x);
+-  d = u.d;
++  REAL_VALUE_FROM_CONST_DOUBLE (d, x);
+ 
+   if (d == 0.0)
+     return 0x200;		/* 0 once 0x1ff is anded with it */
+@@ -1610,17 +1599,17 @@ print_operand (file, op, letter)
+ #endif
+   else if (GET_CODE (op) == CONST_DOUBLE && GET_MODE (op) == SFmode)
+     {
+-      union { double d; int i[2]; } u;
++      double d;
+       union { float f; int i; } u1;
+-      PRINT_OPERAND_EXTRACT_FLOAT (op);
+-      u1.f = u.d;
++      REAL_VALUE_FROM_CONST_DOUBLE (d, op);
++      u1.f = d;
+       PRINT_OPERAND_PRINT_FLOAT (letter, file);
+     }
+   else if (GET_CODE (op) == CONST_DOUBLE && GET_MODE (op) != DImode)
+     {
+-      union { double d; int i[2]; } u;
+-      PRINT_OPERAND_EXTRACT_FLOAT (op);
+-      ASM_OUTPUT_DOUBLE_OPERAND (file, u.d);
++      double d;
++      REAL_VALUE_FROM_CONST_DOUBLE (d, op);
++      ASM_OUTPUT_DOUBLE_OPERAND (file, d);
+     }
+   else
+     {
+@@ -1782,7 +1771,7 @@ print_operand_address (file, addr)
+ 	    ireg = reg2;
+ 	  }
+ 	if (ireg != 0 && breg == 0 && GET_CODE (addr) == LABEL_REF
+- 	  && ! (flag_pic && ireg == pic_offset_table_rtx))
++	    && ! (flag_pic && ireg == pic_offset_table_rtx))
+ 	  {
+ 	    int scale = 1;
+ 	    if (GET_CODE (ireg) == MULT)
+@@ -1798,7 +1787,7 @@ print_operand_address (file, addr)
+ 			     CODE_LABEL_NUMBER (XEXP (addr, 0)),
+ 			     reg_names[REGNO (XEXP (ireg, 0))]);
+ #else
+-		asm_fprintf (file, "%LL%d-%LLI%d-2.b(%Rpc,%s.w",
++		asm_fprintf (file, "%LL%d-%LLI%d.b(%Rpc,%s.w",
+ 			     CODE_LABEL_NUMBER (XEXP (addr, 0)),
+ 			     CODE_LABEL_NUMBER (XEXP (addr, 0)),
+ 			     reg_names[REGNO (XEXP (ireg, 0))]);
+@@ -1818,7 +1807,7 @@ print_operand_address (file, addr)
+ 			     CODE_LABEL_NUMBER (XEXP (addr, 0)),
+ 			     reg_names[REGNO (ireg)]);
+ #else
+-		asm_fprintf (file, "%LL%d-%LLI%d-2.b(%Rpc,%s.l",
++		asm_fprintf (file, "%LL%d-%LLI%d.b(%Rpc,%s.l",
+ 			     CODE_LABEL_NUMBER (XEXP (addr, 0)),
+ 			     CODE_LABEL_NUMBER (XEXP (addr, 0)),
+ 			     reg_names[REGNO (ireg)]);
+@@ -1842,7 +1831,7 @@ print_operand_address (file, addr)
+ 	    break;
+ 	  }
+ 	if (breg != 0 && ireg == 0 && GET_CODE (addr) == LABEL_REF
+- 	  && ! (flag_pic && breg == pic_offset_table_rtx))
++	    && ! (flag_pic && breg == pic_offset_table_rtx))
+ 	  {
+ #ifdef MOTOROLA
+ #ifdef SGS
+@@ -1850,7 +1839,7 @@ print_operand_address (file, addr)
+ 			 CODE_LABEL_NUMBER (XEXP (addr, 0)),
+ 			 reg_names[REGNO (breg)]);
+ #else
+-	    asm_fprintf (file, "%LL%d-%LLI%d-2.b(%Rpc,%s.l",
++	    asm_fprintf (file, "%LL%d-%LLI%d.b(%Rpc,%s.l",
+ 			 CODE_LABEL_NUMBER (XEXP (addr, 0)),
+ 			 CODE_LABEL_NUMBER (XEXP (addr, 0)),
+ 			 reg_names[REGNO (breg)]);
+@@ -1880,9 +1869,9 @@ print_operand_address (file, addr)
+ 	      {
+ 		output_addr_const (file, addr);
+ 	        if ((flag_pic == 1) && (breg == pic_offset_table_rtx))
+-	          fprintf (file, ":w");
++	          fprintf (file, ".w");
+ 	        if ((flag_pic == 2) && (breg == pic_offset_table_rtx))
+-	          fprintf (file, ":l");
++	          fprintf (file, ".l");
+ 	      }
+ 	    fprintf (file, "(%s", reg_names[REGNO (breg)]);
+ 	    if (ireg != 0)
+@@ -1937,7 +1926,7 @@ print_operand_address (file, addr)
+ 	    break;
+ 	  }
+ 	else if (reg1 != 0 && GET_CODE (addr) == LABEL_REF
+- 	       && ! (flag_pic && reg1 == pic_offset_table_rtx))	
++		 && ! (flag_pic && reg1 == pic_offset_table_rtx))	
+ 	  {
+ #ifdef MOTOROLA
+ #ifdef SGS
+@@ -1945,7 +1934,7 @@ print_operand_address (file, addr)
+ 			 CODE_LABEL_NUMBER (XEXP (addr, 0)),
+ 			 reg_names[REGNO (reg1)]);
+ #else
+-	    asm_fprintf (file, "%LL%d-%LLI%d-2.b(%Rpc,%s.l)",
++	    asm_fprintf (file, "%LL%d-%LLI%d.b(%Rpc,%s.l)",
+ 			 CODE_LABEL_NUMBER (XEXP (addr, 0)),
+ 			 CODE_LABEL_NUMBER (XEXP (addr, 0)),
+ 			 reg_names[REGNO (reg1)]);
+diff --git a/config/m68k.h b/config/m68k.h
+index d1266f1..0ae5425 100644
+--- a/config/m68k.h
++++ b/config/m68k.h
+@@ -81,14 +81,15 @@ extern int target_flags;
+ /* Compile (actually, link) for Sun SKY board.  */
+ #define TARGET_SKY (target_flags & 0200)
+ 
+-/* Optimize for 68040.
++/* Optimize for 68040, but still allow execution on 68020
++   (-m68020-40 or -m68040).
+    The 68040 will execute all 68030 and 68881/2 instructions, but some
+    of them must be emulated in software by the OS.  When TARGET_68040 is
+    turned on, these instructions won't be used.  This code will still
+    run on a 68030 and 68881/2. */
+-#define TARGET_68040 (target_flags & 0400)
++#define TARGET_68040 (target_flags & 01400)
+ 
+-/* Support 68040 fp instructions.  */
++/* Use the 68040-only fp instructions (-m68040).  */
+ #define TARGET_68040_ONLY (target_flags & 01000)
+ 
+ /* Macro to define tables used to set the flags.
+@@ -114,10 +115,10 @@ extern int target_flags;
+     { "nofpa", -0100},				\
+     { "sky", 0200},				\
+     { "nosky", -0200},				\
+-    { "68040", 0407},				\
++    { "68020-40", 0407},				\
+     { "68030", -01400},				\
+     { "68030", 7},				\
+-    { "68040-only", 01000},			\
++    { "68040", 01007},			\
+     { "", TARGET_DEFAULT}}
+ /* TARGET_DEFAULT is defined in sun*.h and isi.h, etc.  */
+ 
+@@ -1127,8 +1128,15 @@ __transfer_from_trampoline ()					\
+ #define GO_IF_NONINDEXED_ADDRESS(X, ADDR)  \
+ { if (INDIRECTABLE_1_ADDRESS_P (X)) goto ADDR; }
+ 
+-#define GO_IF_INDEXABLE_BASE(X, ADDR)	\
+-{ if (GET_CODE (X) == LABEL_REF) goto ADDR;				\
++/* Only labels on dispatch tables are valid for indexing from.  */
++#define GO_IF_INDEXABLE_BASE(X, ADDR)				\
++{ rtx temp;							\
++  if (GET_CODE (X) == LABEL_REF					\
++      && (temp = next_nonnote_insn (XEXP (X, 0))) != 0		\
++      && GET_CODE (temp) == JUMP_INSN				\
++      && (GET_CODE (PATTERN (temp)) == ADDR_VEC			\
++	  || GET_CODE (PATTERN (temp)) == ADDR_DIFF_VEC))	\
++    goto ADDR;							\
+   if (GET_CODE (X) == REG && REG_OK_FOR_BASE_P (X)) goto ADDR; }
+ 
+ #define GO_IF_INDEXING(X, ADDR)	\
+diff --git a/config/m68k.md b/config/m68k.md
+index 49da7f1..4713213 100644
+--- a/config/m68k.md
++++ b/config/m68k.md
+@@ -656,8 +656,8 @@
+ 
+ ;This is never used.
+ ;(define_insn "swapsi"
+-;  [(set (match_operand:SI 0 "general_operand" "r")
+-;	(match_operand:SI 1 "general_operand" "r"))
++;  [(set (match_operand:SI 0 "general_operand" "+r")
++;	(match_operand:SI 1 "general_operand" "+r"))
+ ;   (set (match_dup 1) (match_dup 0))]
+ ;  ""
+ ;  "exg %1,%0")
+@@ -2537,10 +2537,17 @@
+   "TARGET_68881"
+   "*
+ {
++#ifdef FSGLMUL_USE_S
++  if (REG_P (operands[2]) && ! DATA_REG_P (operands[2]))
++    return (TARGET_68040_ONLY
++	    ? \"fsmul%.s %2,%0\"
++	    : \"fsglmul%.s %2,%0\");
++#else
+   if (REG_P (operands[2]) && ! DATA_REG_P (operands[2]))
+     return (TARGET_68040_ONLY
+ 	    ? \"fsmul%.x %2,%0\"
+ 	    : \"fsglmul%.x %2,%0\");
++#endif
+   return (TARGET_68040_ONLY
+ 	  ? \"fsmul%.s %f2,%0\"
+ 	  : \"fsglmul%.s %f2,%0\");
+@@ -3624,7 +3631,7 @@
+ ; than an odd byte aligned bit field instruction.
+ ;
+ (define_insn ""
+-  [(set (zero_extract:SI (match_operand:QI 0 "nonimmediate_operand" "o")
++  [(set (zero_extract:SI (match_operand:QI 0 "nonimmediate_operand" "+o")
+ 			 (match_operand:SI 1 "immediate_operand" "i")
+ 			 (match_operand:SI 2 "immediate_operand" "i"))
+ 	(match_operand:SI 3 "general_operand" "rmi"))]
+@@ -4729,7 +4736,7 @@
+ {
+   operands[0] = gen_rtx (PLUS, SImode, stack_pointer_rtx,
+ 			 gen_rtx (CONST_INT, VOIDmode, NEED_PROBE));
+-  return \"tstl %0\";
++  return \"tstl %a0\";
+ }")
+ 
+ ;; Used for frameless functions which save no regs and allocate no locals.
+@@ -4745,15 +4752,9 @@
+ }")
+ 
+ (define_insn "indirect_jump"
+-  [(set (pc) (match_operand:SI 0 "register_operand" "a"))]
++  [(set (pc) (match_operand:SI 0 "address_operand" "p"))]
+   ""
+-  "*
+-#ifdef MOTOROLA
+-  return \"jmp (%0)\";
+-#else
+-  return \"jmp %0@\";
+-#endif
+-")
++  "jmp %a0")
+ 
+ ;; This should not be used unless the add/sub insns can't be.
+ 
+@@ -4770,7 +4771,7 @@
+ 
+ (define_peephole
+   [(set (reg:SI 15) (plus:SI (reg:SI 15) (const_int 4)))
+-   (set (match_operand:DF 0 "register_operand" "f")
++   (set (match_operand:DF 0 "register_operand" "=f")
+ 	(match_operand:DF 1 "register_operand" "ad"))]
+   "FP_REG_P (operands[0]) && ! FP_REG_P (operands[1])"
+   "*
+diff --git a/config/m68klinux-aout.h b/config/m68klinux-aout.h
+new file mode 100644
+index 0000000..5046d45
+--- /dev/null
++++ b/config/m68klinux-aout.h
+@@ -0,0 +1,75 @@
++/* Definitions for Motorola m68k running Linux
++   Copyright (C) 1995 Free Software Foundation, Inc.
++
++This file is part of GNU CC.
++
++GNU CC is free software; you can redistribute it and/or modify
++it under the terms of the GNU General Public License as published by
++the Free Software Foundation; either version 1, or (at your option)
++any later version.
++
++GNU CC is distributed in the hope that it will be useful,
++but WITHOUT ANY WARRANTY; without even the implied warranty of
++MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++GNU General Public License for more details.
++
++You should have received a copy of the GNU General Public License
++along with GNU CC; see the file COPYING.  If not, write to
++the Free Software Foundation, 59 Temple Place - Suite 330,
++Boston, MA 02111-1307, USA.  */
++
++#include <m68k.h>
++#include <linux-aout.h>
++
++/* 68020 with 68881 */
++#define TARGET_DEFAULT 7
++
++#define DBX_DEBUGGING_INFO
++
++#define CPP_PREDEFINES \
++  "-Dunix -Dmc68000 -Dmc68020 -Dlinux -Asystem(unix) -Asystem(posix) -Acpu(m68k) -Amachine(m68k)"
++
++#undef CPP_SPEC
++#if TARGET_DEFAULT & 2
++#define CPP_SPEC \
++  "%{!msoft-float:-D__HAVE_68881__} %{posix:-D_POSIX_SOURCE}"
++#else
++#define CPP_SPEC \
++  "%{m68881:-D__HAVE_68881__} %{posix:-D_POSIX_SOURCE}"
++#endif
++
++#undef SUBTARGET_SWITCHES
++#define SUBTARGET_SWITCHES	{"ieee-fp", 0},
++
++#undef ASM_SPEC
++#define ASM_SPEC \
++  "%{m68030} %{m68040} %{fpic:-k} %{fPIC:-k}"
++
++#undef LIB_SPEC
++#if 1
++/* We no longer link with libc_p.a or libg.a by default.  If you want
++   to profile or debug the Linux C library, please add -lc_p or -ggdb
++   to LDFLAGS at the link time, respectively.  */
++#define LIB_SPEC \
++  "%{mieee-fp:-lieee} %{p:-lgmon} %{pg:-lgmon} %{!ggdb:-lc} %{ggdb:-lg}"
++#else
++#define LIB_SPEC \
++  "%{mieee-fp:-lieee} %{p:-lgmon -lc_p} %{pg:-lgmon -lc_p} %{!p:%{!pg:%{!g*:-lc} %{g*:-lg}}}"
++#endif
++
++/* We want to pass -v to linker */
++#undef LINK_SPEC
++#define LINK_SPEC	"-m m68klinux %{v:-dll-verbose}"
++
++#define SIZE_TYPE "unsigned int"
++#define PTRDIFF_TYPE "int"
++
++/* Generate calls to memcpy, memcmp and memset.  */
++#define TARGET_MEM_FUNCTIONS
++
++/* Don't default to pcc-struct-return, because gcc is the only compiler.  */
++#undef PCC_STATIC_STRUCT_RETURN
++#define DEFAULT_PCC_STRUCT_RETURN 0
++
++/* Allow folding division by zero.  */
++#define REAL_INFINITY
+diff --git a/config/m68klinux.h b/config/m68klinux.h
+new file mode 100644
+index 0000000..61bc4ae
+--- /dev/null
++++ b/config/m68klinux.h
+@@ -0,0 +1,354 @@
++/* Definitions for Motorola 68k running Linux with ELF format.
++   Copyright (C) 1995 Free Software Foundation, Inc.
++
++This file is part of GNU CC.
++
++GNU CC is free software; you can redistribute it and/or modify
++it under the terms of the GNU General Public License as published by
++the Free Software Foundation; either version 1, or (at your option)
++any later version.
++
++GNU CC is distributed in the hope that it will be useful,
++but WITHOUT ANY WARRANTY; without even the implied warranty of
++MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++GNU General Public License for more details.
++
++You should have received a copy of the GNU General Public License
++along with GNU CC; see the file COPYING.  If not, write to
++the Free Software Foundation, 59 Temple Place - Suite 330,
++Boston, MA 02111-1307, USA.  */
++
++#define LINUX_DEFAULT_ELF
++#define MOTOROLA		/* Use Motorola syntax */
++#define USE_GAS			/* But GAS wants jbsr instead of jsr */
++
++#include <m68k.h>
++#include <linux.h>		/* some common stuff */
++
++#undef TARGET_VERSION
++#define TARGET_VERSION fprintf (stderr, " (68k Linux/ELF)");
++
++/* 68020 with 68881 */
++#define TARGET_DEFAULT 7
++
++/* for 68k machines this only needs to be TRUE for the 68000 */
++
++#undef STRICT_ALIGNMENT     
++#define STRICT_ALIGNMENT 0
++
++#undef SUBTARGET_SWITCHES
++#define SUBTARGET_SWITCHES	{"ieee-fp", 0},
++
++/* Here are four prefixes that are used by asm_fprintf to
++   facilitate customization for alternate assembler syntaxes.
++   Machines with no likelihood of an alternate syntax need not
++   define these and need not use asm_fprintf.  */
++
++/* The prefix for register names.  Note that REGISTER_NAMES
++   is supposed to include this prefix. Also note that this is NOT an
++   fprintf format string, it is a literal string */
++
++#undef REGISTER_PREFIX
++#define REGISTER_PREFIX "%"
++
++/* The prefix for local (compiler generated) labels.
++   These labels will not appear in the symbol table. */
++
++#undef LOCAL_LABEL_PREFIX
++#define LOCAL_LABEL_PREFIX "."
++
++/* The prefix to add to user-visible assembler symbols. */
++
++#undef USER_LABEL_PREFIX
++#define USER_LABEL_PREFIX ""
++
++/* How to refer to registers in assembler output.
++   This sequence is indexed by compiler's hard-register-number.
++   Motorola format uses different register names than defined in m68k.h. */
++
++#undef REGISTER_NAMES
++
++#ifndef SUPPORT_SUN_FPA
++
++#define REGISTER_NAMES \
++{"%d0", "%d1", "%d2", "%d3", "%d4", "%d5", "%d6", "%d7", \
++ "%a0", "%a1", "%a2", "%a3", "%a4", "%a5", "%a6", "%sp", \
++ "%fp0", "%fp1", "%fp2", "%fp3", "%fp4", "%fp5", "%fp6", "%fp7" }
++
++#else /* SUPPORTED_SUN_FPA */
++
++#define REGISTER_NAMES \
++{"%d0", "%d1", "%d2", "%d3", "%d4", "%d5", "%d6", "%d7", \
++ "%a0", "%a1", "%a2", "%a3", "%a4", "%a5", "%a6", "%sp", \
++ "%fp0", "%fp1", "%fp2", "%fp3", "%fp4", "%fp5", "%fp6", "%fp7", \
++ "%fpa0", "%fpa1", "%fpa2", "%fpa3", "%fpa4", "%fpa5", "%fpa6", "%fpa7", \
++ "%fpa8", "%fpa9", "%fpa10","%fpa11","%fpa12","%fpa13","%fpa14","%fpa15", \
++ "%fpa16","%fpa17","%fpa18","%fpa19","%fpa20","%fpa21","%fpa22","%fpa23", \
++ "%fpa24","%fpa25","%fpa26","%fpa27","%fpa28","%fpa29","%fpa30","%fpa31" }
++
++#endif /* defined SUPPORT_SUN_FPA */
++
++#undef SIZE_TYPE
++#define SIZE_TYPE "unsigned int"
++ 
++#undef PTRDIFF_TYPE
++#define PTRDIFF_TYPE "int"
++  
++#undef WCHAR_TYPE
++#define WCHAR_TYPE "long int"
++   
++#undef WCHAR_TYPE_SIZE
++#define WCHAR_TYPE_SIZE BITS_PER_WORD
++
++#undef ASM_SPEC
++#define ASM_SPEC "%{m68030} %{m68040} %{fpic:-k} %{fPIC:-k}"
++
++#define CPP_PREDEFINES \
++  "-D__ELF__ -Dunix -Dmc68000 -Dmc68020 -Dlinux -Asystem(unix) -Asystem(posix) -Acpu(m68k) -Amachine(m68k)"
++
++#undef CPP_SPEC
++#ifdef USE_GNULIBC_1
++#if TARGET_DEFAULT & 2
++#define CPP_SPEC \
++  "%{fPIC:-D__PIC__ -D__pic__} %{fpic:-D__PIC__ -D__pic__} %{!msoft-float:-D__HAVE_68881__} %{posix:-D_POSIX_SOURCE}"
++#else
++#define CPP_SPEC \
++  "%{fPIC:-D__PIC__ -D__pic__} %{fpic:-D__PIC__ -D__pic__} %{m68881:-D__HAVE_68881__} %{posix:-D_POSIX_SOURCE}"
++#endif
++#else /* not USE_GNULIBC_1 */
++#if TARGET_DEFAULT & 2
++#define CPP_SPEC \
++  "%{fPIC:-D__PIC__ -D__pic__} %{fpic:-D__PIC__ -D__pic__} %{!msoft-float:-D__HAVE_68881__} %{posix:-D_POSIX_SOURCE} %{pthread:-D_REENTRANT}"
++#else
++#define CPP_SPEC \
++  "%{fPIC:-D__PIC__ -D__pic__} %{fpic:-D__PIC__ -D__pic__} %{m68881:-D__HAVE_68881__} %{posix:-D_POSIX_SOURCE} %{pthread:-D_REENTRANT}"
++#endif
++#endif
++
++#undef LIBGCC_SPEC
++#define LIBGCC_SPEC "-lgcc"
++
++#undef	LIB_SPEC
++#ifdef USE_GNULIBC_1
++#if 1
++/* We no longer link with libc_p.a or libg.a by default.  If you want
++   to profile or debug the Linux C library, please add -lc_p or -ggdb
++   to LDFLAGS at the link time, respectively.  */
++#define LIB_SPEC \
++  "%{!shared:%{!symbolic: %{mieee-fp:-lieee} %{p:-lgmon} %{pg:-lgmon} \
++     %{!ggdb:-lc} %{ggdb:-lg}}}"
++#else
++#define LIB_SPEC \
++  "%{!shared:%{!symbolic: \
++     %{mieee-fp:-lieee} %{p:-lgmon -lc_p} %{pg:-lgmon -lc_p} \
++     %{!p:%{!pg:%{!g*:-lc} %{g*:-lg}}}}}"
++#endif
++#else
++#define LIB_SPEC \
++  "%{!shared: %{mieee-fp:-lieee} %{pthread:-lpthread} \
++	%{profile:-lc_p} %{!profile: -lc}}"
++#endif /* not USE_GNULIBC_1 */
++
++/* Provide a LINK_SPEC appropriate for Linux.  Here we provide support
++   for the special GCC options -static and -shared, which allow us to
++   link things in one of these three modes by applying the appropriate
++   combinations of options at link-time.  We like to support here for
++   as many of the other GNU linker options as possible.  But I don't
++   have the time to search for those flags.  I am sure how to add
++   support for -soname shared_object_name. H.J.
++
++   I took out %{v:%{!V:-V}}.  It is too much :-(.  They can use
++   -Wl,-V.
++
++   When the -shared link option is used a final link is not being
++   done.  */
++
++/* If ELF is the default format, we should not use /lib/elf. */
++
++#undef	LINK_SPEC
++#ifdef USE_GNULIBC_1
++#ifndef LINUX_DEFAULT_ELF
++#define LINK_SPEC "-m m68kelf %{shared} %{symbolic:-shared -Bsymbolic} \
++  %{!shared:%{!symbolic: \
++    %{!static: \
++      %{rdynamic:-export-dynamic} \
++      %{!dynamic-linker*:-dynamic-linker /lib/elf/ld-linux.so.1} \
++      %{!rpath*:-rpath /lib/elf/}} %{static}}}"
++#else
++#define LINK_SPEC "-m m68kelf %{shared} %{symbolic:-shared -Bsymbolic} \
++  %{!shared:%{!symbolic: \
++    %{!static: \
++      %{rdynamic:-export-dynamic} \
++      %{!dynamic-linker*:-dynamic-linker /lib/ld-linux.so.1}} \
++    %{static}}}"
++#endif
++#else /* not USE_GNULIBC_1 */
++#define LINK_SPEC "-m m68kelf %{shared} \
++  %{!shared: \
++    %{!static: \
++      %{rdynamic:-export-dynamic} \
++      %{!dynamic-linker*:-dynamic-linker /lib/ld.so.1}} \
++    %{static}}"
++#endif /* not USE_GNULIBC_1 */
++
++
++/* For compatibility with linux/a.out */
++
++#undef PCC_BITFIELD_TYPE_MATTERS
++
++/* Currently, JUMP_TABLES_IN_TEXT_SECTION must be defined in order to
++   keep switch tables in the text section.  */
++   
++#define JUMP_TABLES_IN_TEXT_SECTION 1
++
++/* Use the default action for outputting the case label.  */
++#undef ASM_OUTPUT_CASE_LABEL
++
++#define ASM_RETURN_CASE_JUMP \
++  return "jmp (2,%%pc,%0.w)"
++
++/* This is how to output an assembler line that says to advance the
++   location counter to a multiple of 2**LOG bytes.  */
++
++#undef ASM_OUTPUT_ALIGN
++#define ASM_OUTPUT_ALIGN(FILE,LOG)				\
++  if ((LOG) > 0)						\
++    fprintf ((FILE), "\t%s \t%u\n", ALIGN_ASM_OP, 1 << (LOG));
++
++/* Output assembler code to FILE to increment profiler label # LABELNO
++   for profiling a function entry.  */
++
++#undef FUNCTION_PROFILER
++#define FUNCTION_PROFILER(FILE, LABELNO) \
++{									\
++  asm_fprintf (FILE, "\tlea (%LLP%d,%Rpc),%Ra1\n", (LABELNO));		\
++  if (flag_pic)								\
++    fprintf (FILE, "\tbsr.l _mcount@PLTPC\n");				\
++  else									\
++    fprintf (FILE, "\tjbsr _mcount\n");					\
++}
++
++/* How to renumber registers for dbx and gdb.
++   On the Sun-3, the floating point registers have numbers
++   18 to 25, not 16 to 23 as they do in the compiler.  */
++
++#define DBX_REGISTER_NUMBER(REGNO) ((REGNO) < 16 ? (REGNO) : (REGNO) + 2)
++
++/* Do not break .stabs pseudos into continuations.  */
++
++#define DBX_CONTIN_LENGTH 0
++
++/* Allow folding division by zero.  */
++#define REAL_INFINITY
++
++/* 1 if N is a possible register number for a function value.  For
++   m68k/SVR4 allow d0, a0, or fp0 as return registers, for integral,
++   pointer, or floating types, respectively.  Reject fp0 if not using
++   a 68881 coprocessor.  */
++
++#undef FUNCTION_VALUE_REGNO_P
++#define FUNCTION_VALUE_REGNO_P(N) \
++  ((N) == 0 || (N) == 8 || (TARGET_68881 && (N) == 16))
++
++/* Define this to be true when FUNCTION_VALUE_REGNO_P is true for
++   more than one register.  */
++
++#undef NEEDS_UNTYPED_CALL
++#define NEEDS_UNTYPED_CALL 1
++
++/* Define how to generate (in the callee) the output value of a
++   function and how to find (in the caller) the value returned by a
++   function.  VALTYPE is the data type of the value (as a tree).  If
++   the precise function being called is known, FUNC is its
++   FUNCTION_DECL; otherwise, FUNC is 0.  For m68k/SVR4 generate the
++   result in d0, a0, or fp0 as appropriate. */
++   
++#undef FUNCTION_VALUE
++#define FUNCTION_VALUE(VALTYPE, FUNC)					\
++  (TREE_CODE (VALTYPE) == REAL_TYPE && TARGET_68881			\
++   ? gen_rtx (REG, TYPE_MODE (VALTYPE), 16)				\
++   : (POINTER_TYPE_P (VALTYPE)						\
++      ? gen_rtx (REG, TYPE_MODE (VALTYPE), 8)				\
++      : gen_rtx (REG, TYPE_MODE (VALTYPE), 0)))
++
++/* For compatibility with the large body of existing code which does
++   not always properly declare external functions returning pointer
++   types, the m68k/SVR4 convention is to copy the value returned for
++   pointer functions from a0 to d0 in the function epilogue, so that
++   callers that have neglected to properly declare the callee can
++   still find the correct return value.  */
++
++extern int current_function_returns_pointer;
++#define FUNCTION_EXTRA_EPILOGUE(FILE, SIZE)				\
++do {									\
++  if ((current_function_returns_pointer) && 				\
++      ! find_equiv_reg (0, get_last_insn (), 0, 0, 0, 8, Pmode))	\
++    asm_fprintf (FILE, "\tmove.l %Ra0,%Rd0\n");				\
++} while (0);
++
++/* Define how to find the value returned by a library function
++   assuming the value has mode MODE.
++   For m68k/SVR4 look for integer values in d0, pointer values in d0
++   (returned in both d0 and a0), and floating values in fp0.  */
++
++#undef LIBCALL_VALUE
++#define LIBCALL_VALUE(MODE)						\
++  ((((MODE) == SFmode || (MODE) == DFmode || (MODE) == XFmode)		\
++    && TARGET_68881)							\
++   ? gen_rtx (REG, (MODE), 16)						\
++   : gen_rtx (REG, (MODE), 0))
++
++/* In m68k svr4, a symbol_ref rtx can be a valid PIC operand if it is
++   an operand of a function call. */
++#undef LEGITIMATE_PIC_OPERAND_P
++#define LEGITIMATE_PIC_OPERAND_P(X)	\
++  (! symbolic_operand (X, VOIDmode))
++
++/* Turn off function cse if we are doing PIC. We always want function
++   call to be done as `bsr foo@PLTPC', so it will force the assembler
++   to create the PLT entry for `foo'.  Doing function cse will cause
++   the address of `foo' to be loaded into a register, which is exactly
++   what we want to avoid when we are doing PIC on svr4 m68k.  */
++#undef SUBTARGET_OVERRIDE_OPTIONS
++#define SUBTARGET_OVERRIDE_OPTIONS \
++  if (flag_pic) flag_no_function_cse = 1;
++
++/* For m68k SVR4, structures are returned using the reentrant
++   technique. */
++#undef PCC_STATIC_STRUCT_RETURN
++#define DEFAULT_PCC_STRUCT_RETURN 0
++
++/* Finalize the trampoline by flushing the insn cache.  */
++
++#undef FINALIZE_TRAMPOLINE
++#define FINALIZE_TRAMPOLINE(TRAMP)					\
++  emit_library_call (gen_rtx (SYMBOL_REF, Pmode, "__clear_cache"),	\
++		     0, VOIDmode, 2, TRAMP, Pmode,			\
++		     plus_constant (TRAMP, TRAMPOLINE_SIZE), Pmode);
++
++/* Clear the instruction cache from `beg' to `end'.  This makes an
++   inline system call to SYS_cacheflush.  The arguments are as
++   follows:
++
++	cacheflush (addr, scope, cache, len)
++
++   addr	  - the start address for the flush
++   scope  - the scope of the flush (see the cpush insn)
++   cache  - which cache to flush (see the cpush insn)
++   len    - a factor relating to the number of flushes to perform:
++   	    len/16 lines, or len/4096 pages.  */
++
++#define CLEAR_INSN_CACHE(BEG, END)					\
++{									\
++  register unsigned long _beg __asm ("%d1") = (unsigned long) (BEG);	\
++  unsigned long _end = (unsigned long) (END);				\
++  register unsigned long _len __asm ("%d4") = (_end - _beg + 32);	\
++  __asm __volatile							\
++    ("move%.l %#123, %/d0\n\t"	/* system call nr */			\
++     "move%.l %#1, %/d2\n\t"	/* clear lines */			\
++     "move%.l %#3, %/d3\n\t"	/* insn+data caches */			\
++     "trap %#0"								\
++     : /* no outputs */							\
++     : "d" (_beg), "d" (_len)						\
++     : "%d0", "%d2", "%d3");						\
++}
 diff --git a/config/svr4.h b/config/svr4.h
 index 382171b..7377944 100644
 --- a/config/svr4.h
@@ -1775,12 +2546,12 @@ index b617d9b..eb90681 100644
  #define alloca __builtin_alloca
  #endif
  
-diff --git a/config/xm-linux.h b/config/xm-linux.h
+diff --git a/config/xm-i386linux.h b/config/xm-i386linux.h
 new file mode 100644
-index 0000000..c9795dc
+index 0000000..5b7f67f
 --- /dev/null
-+++ b/config/xm-linux.h
-@@ -0,0 +1,44 @@
++++ b/config/xm-i386linux.h
+@@ -0,0 +1,23 @@
 +/* Configuration for GCC for Intel i386 running Linux.
 +   Copyright (C) 1995 Free Software Foundation, Inc.
 +   Contributed by H.J. Lu (hjl@nynexst.com)
@@ -1803,7 +2574,13 @@ index 0000000..c9795dc
 +Boston, MA 02111-1307, USA.  */
 +
 +#include "xm-i386.h"
-+
++#include "xm-linux.h"
+diff --git a/config/xm-linux.h b/config/xm-linux.h
+new file mode 100644
+index 0000000..168fe9d
+--- /dev/null
++++ b/config/xm-linux.h
+@@ -0,0 +1,21 @@
 +#define HAVE_VPRINTF
 +
 +#define HAVE_STRERROR
@@ -1825,8 +2602,29 @@ index 0000000..c9795dc
 +#undef bzero
 +#undef index
 +#undef rindex
+diff --git a/config/xm-m68k.h b/config/xm-m68k.h
+index 2f09a4d..9aa6693 100755
+--- a/config/xm-m68k.h
++++ b/config/xm-m68k.h
+@@ -43,5 +43,6 @@ the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.  */
+ #ifdef __GNUC__
+ /* Use an arg in this macro because that's what some other
+    system does--let's avoid conflict.  */
++#undef alloca
+ #define alloca(x) __builtin_alloca(x)
+ #endif
+diff --git a/config/xm-m68klinux.h b/config/xm-m68klinux.h
+new file mode 100644
+index 0000000..f448c50
+--- /dev/null
++++ b/config/xm-m68klinux.h
+@@ -0,0 +1,4 @@
++/* Configuration for GCC for Motorola m68k running Linux. */
++
++#include "xm-m68k.h"
++#include "xm-linux.h"
 diff --git a/configure b/configure
-index 7acc807..172bc4b 100755
+index 7acc807..9ad68bb 100755
 --- a/configure
 +++ b/configure
 @@ -180,8 +180,11 @@ for machine in $host $target; do
@@ -1847,7 +2645,7 @@ index 7acc807..172bc4b 100755
  		;;
 +	i[3456]86-*-linux*aout)         # Intel 80386's running Linux
 +		cpu_type=i386
-+		xm_file=xm-linux.h
++		xm_file=xm-i386linux.h
 +		xmake_file=x-linux
 +		tm_file=i386linux-aout.h
 +		fixincludes=Makefile.in
@@ -1855,7 +2653,7 @@ index 7acc807..172bc4b 100755
 +		;;
 +	i[3456]86-*-linux*)             # Intel 80386's running Linux
 +		cpu_type=i386           # with ELF support
-+		xm_file=xm-linux.h
++		xm_file=xm-i386linux.h
 +		xmake_file=x-linux
 +		tm_file=i386linux.h
 +		tmake_file=t-linux
@@ -1866,7 +2664,32 @@ index 7acc807..172bc4b 100755
  	i386-*-sysv4*)			# Intel 80386's running system V.4
  		xm_file=xm-i38v4.h
  		xmake_file=x-i386v4
-@@ -827,6 +848,13 @@ for machine in $host $target; do
+@@ -364,6 +385,24 @@ for machine in $host $target; do
+ 		tmake_file=t-svr4
+ 		xmake_file=x-sparcv4
+ 		;;
++	m68k-*-linux*aout)
++		cpu_type=m68k
++		xm_file=xm-m68klinux.h
++		xmake_file=x-linux
++		tm_file=m68klinux-aout.h
++		fixincludes=Makefile.in
++		broken_install=yes
++		;;
++	m68k-*-linux*)
++		cpu_type=m68k
++		xm_file=xm-m68klinux.h
++		xmake_file=x-linux
++		tm_file=m68klinux.h
++		tmake_file=t-linux
++		fixincludes=Makefile.in
++		broken_install=yes
++		extra_parts="crtbegin.o crtend.o crtbeginS.o crtendS.o"
++		;;
+ 	m68k-*-amix*)		# Commodore variant of V.4.
+ 		tm_file=amix.h
+ 		xm_file=xm-amix.h
+@@ -827,6 +866,13 @@ for machine in $host $target; do
  		;;
  	esac
  
@@ -1880,7 +2703,7 @@ index 7acc807..172bc4b 100755
  	# No need for collect2 if we have the GNU linker.
  	case x$gnu_ld in 
  	xyes)
-@@ -966,6 +994,17 @@ else
+@@ -966,6 +1012,17 @@ else
  	mv Makefile.xx Makefile.tem
  fi
  
@@ -1898,7 +2721,7 @@ index 7acc807..172bc4b 100755
  # Add a definition of USE_COLLECT2 if system wants one.
  # Also tell toplev.c what to do.
  # This substitutes for lots of t-* files.
-@@ -979,6 +1018,18 @@ else
+@@ -979,6 +1036,18 @@ else
  	mv Makefile.xx Makefile.tem
  fi
  
@@ -3343,10 +4166,23 @@ index 5207ba1..d9e00f2 100644
    length = tree_code_length[(int) code];
  
 diff --git a/tree.h b/tree.h
-index 87effce..5998240 100644
+index 87effce..d3f428e 100644
 --- a/tree.h
 +++ b/tree.h
-@@ -845,6 +845,45 @@ union tree_node
+@@ -193,6 +193,12 @@ struct tree_common
+ 	     == TYPE_MODE (TREE_TYPE (TREE_OPERAND (EXP, 0)))))	\
+     (EXP) = TREE_OPERAND (EXP, 0);
+ 
++
++/* Nonzero if TYPE represents a pointer type.  */
++
++#define POINTER_TYPE_P(TYPE) \
++  (TREE_CODE (TYPE) == POINTER_TYPE || TREE_CODE (TYPE) == REFERENCE_TYPE)
++
+ /* Define many boolean fields that all tree nodes have.  */
+ 
+ /* In VAR_DECL nodes, nonzero means address of this is needed.
+@@ -845,6 +851,45 @@ union tree_node
    struct tree_exp exp;
   };
  
@@ -3392,7 +4228,7 @@ index 87effce..5998240 100644
  /* Format for global names of constructor and destructor functions.  */
  #ifndef NO_DOLLAR_IN_LABEL
  #define CONSTRUCTOR_NAME_FORMAT "_GLOBAL_$I$%s"
-@@ -889,8 +928,10 @@ extern tree build_real_from_string ();
+@@ -889,8 +934,10 @@ extern tree build_real_from_string ();
  extern tree build_real_from_int_cst ();
  extern tree build_complex ();
  extern tree build_string ();
