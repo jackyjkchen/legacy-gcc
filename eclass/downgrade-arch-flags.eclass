@@ -54,6 +54,11 @@ downgrade_arch_flags() {
 			fi
         fi
         ;;
+    ppc64)
+		if ! tc_version_is_at_least 6 ${bver} ; then
+			replace-cpu-flags power9 power8
+		fi
+        ;;
 	sparc)
 		if ! tc_version_is_at_least 3.1 ${bver} ; then
 			filter-flags '-mcpu=*' '-mtune=*'
