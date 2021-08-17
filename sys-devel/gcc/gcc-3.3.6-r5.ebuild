@@ -41,4 +41,5 @@ src_prepare() {
 	[[ ${ARCH} == "mips" ]] && eapply "${FILESDIR}"/${PV}/00_support_mips64.patch
 	[[ ${ARCH} == "mips" && ${DEFAULT_ABI} == "n32" ]] && eapply "${FILESDIR}"/${PV}/01_mips64_default_n32_abi.patch
 	[[ ${ARCH} == "sh" ]] && eapply "${FILESDIR}"/${PV}/02_fix_for_sh4_install.patch
+	[[ ${ARCH} == "ppc64" ]] && eapply "${FILESDIR}"/${PV}/03_workaround_for_ppc64_lib64.patch
 }
