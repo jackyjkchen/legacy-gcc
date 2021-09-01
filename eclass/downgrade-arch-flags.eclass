@@ -52,13 +52,13 @@ downgrade_arch_flags() {
 					append-flags '-march=mips32r2' '-mtune=mips32r2'
 				fi
 			fi
-        fi
-        ;;
-    ppc64)
+		fi
+		;;
+	ppc64)
 		if ! tc_version_is_at_least 6 ${bver} ; then
 			replace-cpu-flags power9 power8
 		fi
-        ;;
+		;;
 	sparc)
 		if ! tc_version_is_at_least 3.1 ${bver} ; then
 			filter-flags '-mcpu=*' '-mtune=*'
