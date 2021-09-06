@@ -2182,6 +2182,7 @@ toolchain_src_install() {
 			-name libquadmath.la -o \
 			-name libg2c.la -o \
 			-name libf2c.la -o \
+			-name libgo.la -o \
 			-name 'lib*san.la' \
 		')' -type f -delete
 
