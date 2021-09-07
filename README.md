@@ -87,7 +87,7 @@ USE参数可使用equery u sys-devel/gcc:${slot}查询
 
 4.0.4以上版本支持f95/fortran
 
-4.7.4以上版本支持go
+4.7.4以上版本支持go（USE=go默认关闭）
 
 
 # 原理
