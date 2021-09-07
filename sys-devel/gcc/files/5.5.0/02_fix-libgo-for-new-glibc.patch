@@ -1,0 +1,133 @@
+diff --git a/libgo/config.h.in b/libgo/config.h.in
+index 629c603..c4ff455 100644
+--- a/libgo/config.h.in
++++ b/libgo/config.h.in
+@@ -325,9 +325,6 @@
+ /* Define to 1 if you have the `unshare' function. */
+ #undef HAVE_UNSHARE
+ 
+-/* Define to 1 if you have the <ustat.h> header file and it works. */
+-#undef HAVE_USTAT_H
+-
+ /* Define to 1 if you have the `utimensat' function. */
+ #undef HAVE_UTIMENSAT
+ 
+diff --git a/libgo/configure b/libgo/configure
+index e31faf6..6105d36 100755
+--- a/libgo/configure
++++ b/libgo/configure
+@@ -14768,39 +14768,6 @@ fi
+ done
+ 
+ 
+-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking whether <ustat.h> can be used" >&5
+-$as_echo_n "checking whether <ustat.h> can be used... " >&6; }
+-if test "${libgo_cv_c_ustat_h+set}" = set; then :
+-  $as_echo_n "(cached) " >&6
+-else
+-  CFLAGS_hold=$CFLAGS
+-CFLAGS="$CFLAGS -D_LARGEFILE_SOURCE -D_LARGEFILE64_SOURCE $OSCFLAGS"
+-cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+-/* end confdefs.h.  */
+-
+-#include <sys/types.h>
+-#ifdef HAVE_LINUX_FILTER_H
+-#include <linux/filter.h>
+-#endif
+-#include <ustat.h>
+-
+-_ACEOF
+-if ac_fn_c_try_compile "$LINENO"; then :
+-  libgo_cv_c_ustat_h=yes
+-else
+-  libgo_cv_c_ustat_h=no
+-fi
+-rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
+-CFLAGS=$CFLAGS_hold
+-fi
+-{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $libgo_cv_c_ustat_h" >&5
+-$as_echo "$libgo_cv_c_ustat_h" >&6; }
+-if test $libgo_cv_c_ustat_h = yes; then
+-
+-$as_echo "#define HAVE_USTAT_H 1" >>confdefs.h
+-
+-fi
+-
+  if test "$ac_cv_header_sys_mman_h" = yes; then
+   HAVE_SYS_MMAN_H_TRUE=
+   HAVE_SYS_MMAN_H_FALSE='#'
+diff --git a/libgo/configure.ac b/libgo/configure.ac
+index c97adfc..2d99cc3 100644
+--- a/libgo/configure.ac
++++ b/libgo/configure.ac
+@@ -531,24 +531,6 @@ AC_CHECK_HEADERS([linux/filter.h linux/if_addr.h linux/if_ether.h linux/if_tun.h
+ #endif
+ ])
+ 
+-AC_CACHE_CHECK([whether <ustat.h> can be used],
+-[libgo_cv_c_ustat_h],
+-[CFLAGS_hold=$CFLAGS
+-CFLAGS="$CFLAGS -D_LARGEFILE_SOURCE -D_LARGEFILE64_SOURCE $OSCFLAGS"
+-AC_COMPILE_IFELSE(
+-[AC_LANG_SOURCE([
+-#include <sys/types.h>
+-#ifdef HAVE_LINUX_FILTER_H
+-#include <linux/filter.h>
+-#endif
+-#include <ustat.h>
+-])], [libgo_cv_c_ustat_h=yes], [libgo_cv_c_ustat_h=no])
+-CFLAGS=$CFLAGS_hold])
+-if test $libgo_cv_c_ustat_h = yes; then
+-  AC_DEFINE(HAVE_USTAT_H, 1,
+-    [Define to 1 if you have the <ustat.h> header file and it works.])
+-fi
+-
+ AM_CONDITIONAL(HAVE_SYS_MMAN_H, test "$ac_cv_header_sys_mman_h" = yes)
+ 
+ AC_CHECK_FUNCS(strerror_r strsignal wait4 mincore setenv unsetenv dl_iterate_phdr)
+diff --git a/libgo/go/syscall/libcall_linux.go b/libgo/go/syscall/libcall_linux.go
+index 3b434e3..f0479eb 100644
+--- a/libgo/go/syscall/libcall_linux.go
++++ b/libgo/go/syscall/libcall_linux.go
+@@ -409,6 +409,3 @@ func Unlinkat(dirfd int, path string) (err error) {
+ 
+ //sys	Unshare(flags int) (err error)
+ //unshare(flags _C_int) _C_int
+-
+-//sys	Ustat(dev int, ubuf *Ustat_t) (err error)
+-//ustat(dev _dev_t, ubuf *Ustat_t) _C_int
+diff --git a/libgo/mksysinfo.sh b/libgo/mksysinfo.sh
+index 9062c2c..d581db4 100755
+--- a/libgo/mksysinfo.sh
++++ b/libgo/mksysinfo.sh
+@@ -142,9 +142,6 @@ cat > sysinfo.c <<EOF
+ #if defined(HAVE_SYS_SYSINFO_H)
+ #include <sys/sysinfo.h>
+ #endif
+-#if defined(HAVE_USTAT_H)
+-#include <ustat.h>
+-#endif
+ #if defined(HAVE_UTIME_H)
+ #include <utime.h>
+ #endif
+@@ -1342,20 +1339,6 @@ grep '^type _sysinfo ' gen-sysinfo.go | \
+       -e 's/mem_unit/Unit/' \
+     >> ${OUT}
+ 
+-# The ustat struct.
+-grep '^type _ustat ' gen-sysinfo.go | \
+-    sed -e 's/_ustat/Ustat_t/' \
+-      -e 's/f_tfree/Tfree/' \
+-      -e 's/f_tinode/Tinoe/' \
+-      -e 's/f_fname/Fname/' \
+-      -e 's/f_fpack/Fpack/' \
+-    >> ${OUT}
+-# Force it to be defined, as on some older GNU/Linux systems the
+-# header file fails when using with <linux/filter.h>.
+-if ! grep 'type _ustat ' gen-sysinfo.go >/dev/null 2>&1; then
+-  echo 'type Ustat_t struct { Tfree int32; Tinoe uint64; Fname [5+1]int8; Fpack [5+1]int8; }' >> ${OUT}
+-fi
+-
+ # The utimbuf struct.
+ grep '^type _utimbuf ' gen-sysinfo.go | \
+     sed -e 's/_utimbuf/Utimbuf/' \
