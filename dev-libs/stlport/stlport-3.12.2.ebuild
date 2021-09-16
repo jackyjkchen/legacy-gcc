@@ -5,7 +5,7 @@ EAPI=7
 
 DESCRIPTION=""
 HOMEPAGE=""
-SRC_URI="mirror://sourceforge/stlport/STLport/STLport-${PV}.tar.bz2"
+SRC_URI="mirror://sourceforge/stlport/STLport%20archive/STLport%203/STLport-${PV}.tar.gz"
 
 inherit downgrade-arch-flags
 
@@ -25,7 +25,8 @@ case ${ARCH} in
 esac
 
 DEPEND="
-	sys-devel/gcc:2.95.3[cxx]
+	sys-devel/egcs:1.1.2[cxx]
+	sys-devel/gcc:2.8.1[cxx]
 	legacy-gcc/linux-headers:${TOOL_SLOT}
 	legacy-gcc/glibc-headers:${TOOL_SLOT}
 	legacy-gcc/binutils-wrapper:${TOOL_SLOT}"
@@ -33,9 +34,6 @@ RDEPEND="${DEPEND}"
 BDEPEND=""
 
 CHOST="${TOOL_SLOT}-linux-gnu"
-
-CC="gcc-2.95.3"
-CXX="g++-2.95.3"
 
 S="${WORKDIR}"/STLport-${PV}
 
@@ -47,21 +45,18 @@ src_prepare() {
 
 src_configure() {
 	pushd "${S}" > /dev/null
-	downgrade_arch_flags 2.95.3
 	popd > /dev/null
 }
 
 src_compile() {
-	pushd "${S}"/build/lib > /dev/null
-	emake -j1 CC="${CC} ${CFLAGS}" CXX="${CXX} ${CXXFLAGS}" -f gcc.mak depend
-	emake CC="${CC} ${CFLAGS}" CXX="${CXX} ${CXXFLAGS}" -f gcc.mak release-shared release-static
+	pushd "${S}" > /dev/null
 	popd > /dev/null
 }
 
 src_install() {
 	pushd "${S}" > /dev/null
-	mkdir -p "${ED}"/usr/lib/gcc-lib/${CHOST}/2.95.3/include/ || die
-	cp -avx build/lib/obj/gcc/so/libstlport.* "${ED}"/usr/lib/gcc-lib/${CHOST}/2.95.3/ || die
-	cp -avx stlport "${ED}"/usr/lib/gcc-lib/${CHOST}/2.95.3/include/ || die
+	mkdir -p "${ED}"/usr/lib/gcc-lib/${CHOST}/{2.8.1,2.91.66}/include/ || die
+	cp -avx stl "${ED}"/usr/lib/gcc-lib/${CHOST}/2.8.1/include/stlport || die
+	cp -avx stl "${ED}"/usr/lib/gcc-lib/${CHOST}/2.91.66/include/stlport || die
 	popd > /dev/null
 }
