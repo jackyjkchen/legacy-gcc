@@ -5,7 +5,7 @@ EAPI=7
 
 DESCRIPTION=""
 HOMEPAGE=""
-SRC_URI="mirror://sourceforge/stlport/STLport%20archive/STLport%203/STLport-${PV}.tar.gz"
+SRC_URI="mirror://sourceforge/stlport/STLport%20archive/STLport%204/STLport-${PV}.tar.gz"
 
 inherit downgrade-arch-flags
 
@@ -25,7 +25,7 @@ case ${ARCH} in
 esac
 
 DEPEND="
-	sys-devel/gcc:2.7.2[cxx]
+	sys-devel/egcs:1.1.2[cxx]
 	legacy-gcc/linux-headers:${TOOL_SLOT}
 	legacy-gcc/glibc-headers:${TOOL_SLOT}
 	legacy-gcc/binutils-wrapper:${TOOL_SLOT}"
@@ -34,34 +34,34 @@ BDEPEND=""
 
 CHOST="${TOOL_SLOT}-linux-gnu"
 
-S="${WORKDIR}"/STLport-${PV}
+CC="gcc-2.91.66"
+CXX="g++-2.91.66"
 
-src_unpack() {
-	pushd "${WORKDIR}" > /dev/null
-	mkdir =p "${WORKDIR}"/STLport-${PV} || die
-	tar -pxf "${DISTDIR}"/STLport-${PV}.tar.gz -C "${WORKDIR}"/STLport-${PV} || die
-	popd > /dev/null
-}
+S="${WORKDIR}"/STLport-${PV}
 
 src_prepare() {
 	pushd "${S}" > /dev/null
 	default
+	eapply "${FILESDIR}"/${PV}/00_stlport-${PV}.patch || die
 	popd > /dev/null
 }
 
 src_configure() {
 	pushd "${S}" > /dev/null
+	downgrade_arch_flags 2.91.66
 	popd > /dev/null
 }
 
 src_compile() {
-	pushd "${S}" > /dev/null
+	pushd "${S}"/src > /dev/null
+	emake CC="${CC} ${CFLAGS}" CXX="${CXX} ${CXXFLAGS} -pthread -fexceptions" DYN_LINK='${CXX} ${CXXFLAGS} -pthread -fexceptions -shared -o' -f gcc-linux.mak release_dynamic release_static
 	popd > /dev/null
 }
 
 src_install() {
 	pushd "${S}" > /dev/null
-	mkdir -p "${ED}"/usr/lib/gcc-lib/${CHOST}/2.7.2.3/include/ || die
-	cp -avx "${S}" "${ED}"/usr/lib/gcc-lib/${CHOST}/2.7.2.3/include/stlport || die
+	mkdir -p "${ED}"/usr/lib/gcc-lib/${CHOST}/2.91.66/include/ || die
+	cp -avx lib/libstlport_gcc.* "${ED}"/usr/lib/gcc-lib/${CHOST}/2.91.66/ || die
+	cp -avx stlport "${ED}"/usr/lib/gcc-lib/${CHOST}/2.91.66/include/ || die
 	popd > /dev/null
 }

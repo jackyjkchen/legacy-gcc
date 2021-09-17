@@ -25,8 +25,8 @@ case ${ARCH} in
 esac
 
 DEPEND="
-	sys-devel/egcs:1.1.2[cxx]
 	sys-devel/gcc:2.8.1[cxx]
+	sys-devel/gcc:2.7.2[cxx]
 	legacy-gcc/linux-headers:${TOOL_SLOT}
 	legacy-gcc/glibc-headers:${TOOL_SLOT}
 	legacy-gcc/binutils-wrapper:${TOOL_SLOT}"
@@ -40,6 +40,7 @@ S="${WORKDIR}"/STLport-${PV}
 src_prepare() {
 	pushd "${S}" > /dev/null
 	default
+	eapply "${FILESDIR}"/${PV}/00_stlport-${PV}.patch || die
 	popd > /dev/null
 }
 
@@ -55,8 +56,9 @@ src_compile() {
 
 src_install() {
 	pushd "${S}" > /dev/null
-	mkdir -p "${ED}"/usr/lib/gcc-lib/${CHOST}/{2.8.1,2.91.66}/include/ || die
+	mkdir -p "${ED}"/usr/lib/gcc-lib/${CHOST}/2.8.1/include/ || die
 	cp -avx stl "${ED}"/usr/lib/gcc-lib/${CHOST}/2.8.1/include/stlport || die
-	cp -avx stl "${ED}"/usr/lib/gcc-lib/${CHOST}/2.91.66/include/stlport || die
+	mkdir -p "${ED}"/usr/lib/gcc-lib/${CHOST}/2.7.2.3/include/ || die
+	cp -avx stl "${ED}"/usr/lib/gcc-lib/${CHOST}/2.7.2.3/include/stlport || die
 	popd > /dev/null
 }

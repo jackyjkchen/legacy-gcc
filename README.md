@@ -93,9 +93,9 @@ USE参数可使用equery u sys-devel/gcc:${slot}查询。
 
 dev-libs/stlport:5.2.1用于sys-devel/gcc:2.95.3。
 
-dev-libs/stlport:3.12.2用于sys-devel/egcs:1.1.2和sys-devel/gcc:2.8.1。
+dev-libs/stlport:4.6.2用于sys-devel/egcs:1.1.2。
 
-dev-libs/stlport:3.01用于sys-devel/gcc:2.7.2。
+dev-libs/stlport:3.12.2用于sys-devel/gcc:2.8.1和sys-devel/gcc:2.7.2。
 
 # 原理
 
