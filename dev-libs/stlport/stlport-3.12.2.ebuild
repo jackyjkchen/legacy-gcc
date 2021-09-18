@@ -24,9 +24,11 @@ case ${ARCH} in
 		;;
 esac
 
+IUSE="+gcc281 +gcc272"
+
 DEPEND="
-	sys-devel/gcc:2.8.1[cxx]
-	sys-devel/gcc:2.7.2[cxx]
+	gcc281? ( sys-devel/gcc:2.8.1[cxx] )
+	gcc272? ( sys-devel/gcc:2.7.2[cxx] )
 	legacy-gcc/linux-headers:${TOOL_SLOT}
 	legacy-gcc/glibc-headers:${TOOL_SLOT}
 	legacy-gcc/binutils-wrapper:${TOOL_SLOT}"
@@ -56,9 +58,13 @@ src_compile() {
 
 src_install() {
 	pushd "${S}" > /dev/null
-	mkdir -p "${ED}"/usr/lib/gcc-lib/${CHOST}/2.8.1/include/ || die
-	cp -avx stl "${ED}"/usr/lib/gcc-lib/${CHOST}/2.8.1/include/stlport || die
-	mkdir -p "${ED}"/usr/lib/gcc-lib/${CHOST}/2.7.2.3/include/ || die
-	cp -avx stl "${ED}"/usr/lib/gcc-lib/${CHOST}/2.7.2.3/include/stlport || die
+	if use gcc281; then
+		mkdir -p "${ED}"/usr/lib/gcc-lib/${CHOST}/2.8.1/include/ || die
+		cp -avx stl "${ED}"/usr/lib/gcc-lib/${CHOST}/2.8.1/include/stlport || die
+	fi
+	if use gcc272; then
+		mkdir -p "${ED}"/usr/lib/gcc-lib/${CHOST}/2.7.2.3/include/ || die
+		cp -avx stl "${ED}"/usr/lib/gcc-lib/${CHOST}/2.7.2.3/include/stlport || die
+	fi
 	popd > /dev/null
 }
