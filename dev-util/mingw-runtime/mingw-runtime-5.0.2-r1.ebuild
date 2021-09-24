@@ -51,6 +51,8 @@ src_prepare() {
 }
 
 src_configure() {
+	CFLAGS="-O2 -pipe"
+	CXXFLAGS="-O2 -pipe"
 	CHOST=${CTARGET} strip-unsupported-flags
 	econf \
 		--host=${CTARGET} \
