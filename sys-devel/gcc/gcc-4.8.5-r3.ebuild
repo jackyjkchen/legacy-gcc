@@ -4,7 +4,6 @@
 EAPI="6"
 
 PATCH_VER="1.5"
-UCLIBC_VER="1.0"
 
 # Hardened gcc 4 stuff
 PIE_VER="0.6.2"
@@ -12,11 +11,7 @@ SPECS_VER="0.2.0"
 SPECS_GCC_VER="4.4.3"
 # arch/libc configurations known to be stable with {PIE,SSP}-by-default
 PIE_GLIBC_STABLE="x86 amd64 mips ppc ppc64 arm ia64"
-PIE_UCLIBC_STABLE="x86 arm amd64 mips ppc ppc64"
 SSP_STABLE="amd64 x86 mips ppc ppc64 arm"
-# uclibc need tls and nptl support for SSP support
-# uclibc need to be >= 0.9.33
-SSP_UCLIBC_STABLE="x86 amd64 mips ppc ppc64 arm"
 #end Hardened stuff
 
 inherit toolchain
