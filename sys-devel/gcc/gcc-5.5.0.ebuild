@@ -25,6 +25,9 @@ DEPEND="${RDEPEND}
 
 if [[ ${CATEGORY} != cross-* ]] ; then
 	PDEPEND="${PDEPEND} elibc_glibc? ( >=sys-libs/glibc-2.8 )"
+	DEPEND="${DEPEND} sys-devel/gcc:8.5.0"
+	CC="gcc-8.5.0"
+	CXX="g++-8.5.0"
 else
 	DEPEND="${DEPEND} sys-devel/gcc:5.5.0"
 	CC="gcc-5.5.0"
@@ -44,4 +47,5 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/00_fix-building-on-ppc64.patch
 	[[ ${ARCH} == "sh" ]] && eapply "${FILESDIR}"/${PV}/01_workaround-bootstrap-for-sh4.patch
 	eapply "${FILESDIR}"/${PV}/02_fix-libgo-for-new-glibc.patch
+	eapply "${FILESDIR}"/${PV}/03_fix-sanitizer-for-new-kernel.patch
 }
