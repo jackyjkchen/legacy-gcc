@@ -992,6 +992,54 @@ index f4d5134..4823d4b 100644
  /* Return the maximum number of consecutive registers
     needed to represent mode MODE in a register of class CLASS.
  
+diff --git a/gcc/config/rs6000/sysv4.h b/gcc/config/rs6000/sysv4.h
+index 2b7e1ed..134f462 100644
+--- a/gcc/config/rs6000/sysv4.h
++++ b/gcc/config/rs6000/sysv4.h
+@@ -1287,7 +1287,14 @@ do {									\
+ 
+ /* GNU/Linux support.  */
+ #ifndef	LIB_LINUX_SPEC
+-#define LIB_LINUX_SPEC "%{mnewlib: --start-group -llinux -lc --end-group } %{!mnewlib: -lc }"
++#ifdef USE_GNULIBC_1
++#define LIB_LINUX_SPEC "%{mnewlib: --start-group -llinux -lc --end-group } \
++%{!mnewlib: -lc }"
++#else
++#define LIB_LINUX_SPEC "%{mnewlib: --start-group -llinux -lc --end-group } \
++%{!mnewlib: %{shared:-lc} %{!shared: %{pthread:-lpthread } \
++%{profile:-lc_p} %{!profile:-lc}}}"
++#endif
+ #endif
+ 
+ #ifndef	STARTFILE_LINUX_SPEC
+@@ -1312,13 +1319,21 @@ do {									\
+ #endif
+ 
+ #ifndef CPP_OS_LINUX_SPEC
+-#define CPP_OS_LINUX_SPEC "-D__unix__ -D__linux__ \
+-%{!ansi: -Dunix -Dlinux } \
+--Asystem(unix) -Asystem(linux)"
++#ifdef USE_GNULIBC_1
++#define CPP_OS_LINUX_SPEC "-D__unix__ -D__linux__		\
++%{!undef:							\
++  %{!ansi:							\
++    %{!std=*:-Dunix -D__unix -Dlinux -D__linux}			\
++    %{std=gnu*:-Dunix -D__unix -Dlinux -D__linux}}}		\
++-Asystem(unix) -Asystem(posix)"
++#else
++#define CPP_OS_LINUX_SPEC "-D__unix__ -D__linux__		\
++%{!undef:							\
++  %{!ansi:							\
++    %{!std=*:-Dunix -D__unix -Dlinux -D__linux}			\
++    %{std=gnu*:-Dunix -D__unix -Dlinux -D__linux}}}		\
++-Asystem(unix) -Asystem(posix) %{pthread:-D_REENTRANT}"
+ #endif
+-
+-#ifndef CPP_OS_LINUX_SPEC
+-#define CPP_OS_LINUX_SPEC ""
+ #endif
+ 
+ /* Solaris support.  */
 diff --git a/gcc/configure b/gcc/configure
 index d341217..39f679b 100755
 --- a/gcc/configure

@@ -471,6 +471,54 @@ index 6eefaba..bf6ac9d 100644
  /* Run-time compilation parameters selecting different hardware subsets.
  
     Macro to define tables used to set the flags.
+diff --git a/config/rs6000/sysv4.h b/config/rs6000/sysv4.h
+index 1fdd2f0..4db0dde 100644
+--- a/config/rs6000/sysv4.h
++++ b/config/rs6000/sysv4.h
+@@ -1271,7 +1271,14 @@ do {									\
+ 
+ /* GNU/Linux support.  */
+ #ifndef	LIB_LINUX_SPEC
+-#define LIB_LINUX_SPEC "%{mnewlib: --start-group -llinux -lc --end-group } %{!mnewlib: -lc }"
++#ifdef USE_GNULIBC_1
++#define LIB_LINUX_SPEC "%{mnewlib: --start-group -llinux -lc --end-group } \
++%{!mnewlib: -lc }"
++#else
++#define LIB_LINUX_SPEC "%{mnewlib: --start-group -llinux -lc --end-group } \
++%{!mnewlib: %{shared:-lc} %{!shared: %{pthread:-lpthread } \
++%{profile:-lc_p} %{!profile:-lc}}}"
++#endif
+ #endif
+ 
+ #ifndef	STARTFILE_LINUX_SPEC
+@@ -1296,13 +1303,21 @@ do {									\
+ #endif
+ 
+ #ifndef CPP_OS_LINUX_SPEC
+-#define CPP_OS_LINUX_SPEC "-D__unix__ -D__linux__ \
+-%{!ansi: -Dunix -Dlinux } \
+--Asystem(unix) -Asystem(linux)"
++#ifdef USE_GNULIBC_1
++#define CPP_OS_LINUX_SPEC "-D__unix__ -D__linux__		\
++%{!undef:							\
++  %{!ansi:							\
++    %{!std=*:-Dunix -D__unix -Dlinux -D__linux}			\
++    %{std=gnu*:-Dunix -D__unix -Dlinux -D__linux}}}		\
++-Asystem(unix) -Asystem(posix)"
++#else
++#define CPP_OS_LINUX_SPEC "-D__unix__ -D__linux__		\
++%{!undef:							\
++  %{!ansi:							\
++    %{!std=*:-Dunix -D__unix -Dlinux -D__linux}			\
++    %{std=gnu*:-Dunix -D__unix -Dlinux -D__linux}}}		\
++-Asystem(unix) -Asystem(posix) %{pthread:-D_REENTRANT}"
+ #endif
+-
+-#ifndef CPP_OS_LINUX_SPEC
+-#define CPP_OS_LINUX_SPEC ""
+ #endif
+ 
+ /* Solaris support.  */
 diff --git a/cp/Make-lang.in b/cp/Make-lang.in
 index 7646cf6..4c5b3ea 100644
 --- a/cp/Make-lang.in

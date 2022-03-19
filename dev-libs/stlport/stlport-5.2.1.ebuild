@@ -11,7 +11,7 @@ inherit downgrade-arch-flags
 
 LICENSE=""
 SLOT="$(ver_cut 1-3 ${PV})"
-KEYWORDS="amd64 m68k x86"
+KEYWORDS="amd64 m68k ppc x86"
 
 case ${ARCH} in
 	amd64|x86)
@@ -19,6 +19,9 @@ case ${ARCH} in
 		;;
 	m68k)
 		TOOL_SLOT="${ARCH}-legacy"
+		;;
+	ppc)
+		TOOL_SLOT="powerpc-legacy"
 		;;
 	*)
 		;;
@@ -54,7 +57,14 @@ src_configure() {
 src_compile() {
 	pushd "${S}"/build/lib > /dev/null
 	emake -j1 CC="${CC} ${CFLAGS}" CXX="${CXX} ${CXXFLAGS}" -f gcc.mak depend
-	emake CC="${CC} ${CFLAGS}" CXX="${CXX} ${CXXFLAGS}" -f gcc.mak release-shared release-static
+	case ${ARCH} in
+		ppc)
+			emake CC="${CC} ${CFLAGS}" CXX="${CXX} ${CXXFLAGS}" -f gcc.mak release-static
+			;;
+		*)
+			emake CC="${CC} ${CFLAGS}" CXX="${CXX} ${CXXFLAGS}" -f gcc.mak release-shared release-static
+			;;
+	esac
 	popd > /dev/null
 }
 
