@@ -95,7 +95,7 @@ dev-libs/stlport:5.2.1用于sys-devel/gcc:2.95.3。
 
 dev-libs/stlport:4.6.2用于sys-devel/egcs:1.1.2。
 
-dev-libs/stlport:3.12.2用于sys-devel/gcc:2.8.1和sys-devel/gcc:2.7.2。
+dev-libs/stlport:3.12.3用于sys-devel/gcc:2.8.1和sys-devel/gcc:2.7.2。
 
 gcc-2.6.3或更低版本，其C++编译器无法支持STLPort。
 
