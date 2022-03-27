@@ -1,0 +1,375 @@
+diff --git a/gcc/config/m68k/m68k.c b/gcc/config/m68k/m68k.c
+index 9567c9d..3e7ed9b 100644
+--- a/gcc/config/m68k/m68k.c
++++ b/gcc/config/m68k/m68k.c
+@@ -356,7 +356,7 @@ output_function_prologue (stream, size)
+       mask &= ~ (1 << (15 - FRAME_POINTER_REGNUM));
+       num_saved_regs--;
+     }
+-  if (flag_pic && regs_ever_live[PIC_OFFSET_TABLE_REGNUM])
++  if (flag_pic && current_function_uses_pic_offset_table)
+     {
+       mask |= 1 << (15 - PIC_OFFSET_TABLE_REGNUM);
+       num_saved_regs++;
+@@ -493,7 +493,10 @@ use_return_insn ()
+   for (regno = 0 ; regno < FIRST_PSEUDO_REGISTER ; regno++)
+     if (regs_ever_live[regno] && ! call_used_regs[regno])
+       return 0;
+-  
++
++  if (flag_pic && current_function_uses_pic_offset_table)
++    return 0;
++
+   return 1;
+ }
+ 
+@@ -568,7 +571,7 @@ output_function_epilogue (stream, size)
+         nregs++;
+ 	mask |= 1 << regno;
+       }
+-  if (flag_pic && regs_ever_live[PIC_OFFSET_TABLE_REGNUM])
++  if (flag_pic && current_function_uses_pic_offset_table)
+     {
+       nregs++;
+       mask |= 1 << PIC_OFFSET_TABLE_REGNUM;
+@@ -1334,8 +1337,6 @@ legitimize_pic_address (orig, mode, reg)
+ 			     gen_rtx_PLUS (Pmode,
+ 					   pic_offset_table_rtx, orig));
+       current_function_uses_pic_offset_table = 1;
+-      if (reload_in_progress)
+-	regs_ever_live[PIC_OFFSET_TABLE_REGNUM] = 1;
+       RTX_UNCHANGING_P (pic_ref) = 1;
+       emit_move_insn (reg, pic_ref);
+       return reg;
+diff --git a/gcc/config/m68k/m68k.md b/gcc/config/m68k/m68k.md
+index 59a509c..4f3861e 100644
+--- a/gcc/config/m68k/m68k.md
++++ b/gcc/config/m68k/m68k.md
+@@ -2116,7 +2116,7 @@
+ ;;    (plus:DI (match_operand:DI 2 "general_operand" "%0")
+ ;;	(lshiftrt:DI (match_operand:DI 1 "general_operand" "ro")
+ ;;            (const_int 32))))]
+-    (plus:DI (lshiftrt:DI (match_operand:DI 1 "general_operand" "ro,r")
++    (plus:DI (lshiftrt:DI (match_operand:DI 1 "general_operand" "ro,d")
+             (const_int 32))
+         (match_operand:DI 2 "general_operand" "0,0")))]
+   ""
+@@ -2135,7 +2135,7 @@
+ ;;    (plus:DI (match_operand:DI 2 "general_operand" "%0")
+ ;;	(ashift:DI (match_operand:DI 1 "general_operand" "ro")
+ ;;            (const_int 32))))]
+-    (plus:DI (ashift:DI (match_operand:DI 1 "general_operand" "ro,r")
++    (plus:DI (ashift:DI (match_operand:DI 1 "general_operand" "ro,d")
+             (const_int 32))
+         (match_operand:DI 2 "general_operand" "0,0")))]
+   ""
+diff --git a/gcc/reload.c b/gcc/reload.c
+index 7b4b38d..35c466f 100644
+--- a/gcc/reload.c
++++ b/gcc/reload.c
+@@ -2468,6 +2468,7 @@ find_reloads (insn, replace, ind_levels, live_known, reload_reg_p)
+   char this_alternative_earlyclobber[MAX_RECOG_OPERANDS];
+   int this_alternative_matches[MAX_RECOG_OPERANDS];
+   int swapped;
++  int n_swapped;
+   int goal_alternative[MAX_RECOG_OPERANDS];
+   int this_alternative_number;
+   int goal_alternative_number;
+@@ -2479,7 +2480,8 @@ find_reloads (insn, replace, ind_levels, live_known, reload_reg_p)
+   char goal_alternative_earlyclobber[MAX_RECOG_OPERANDS];
+   int goal_alternative_swapped;
+   int best;
+-  int commutative;
++  int commutative[MAX_RECOG_OPERANDS];
++  int commutative_op[MAX_RECOG_OPERANDS/2];
+   int changed;
+   char operands_match[MAX_RECOG_OPERANDS][MAX_RECOG_OPERANDS];
+   rtx substed_operand[MAX_RECOG_OPERANDS];
+@@ -2496,6 +2498,7 @@ find_reloads (insn, replace, ind_levels, live_known, reload_reg_p)
+   n_reloads = 0;
+   n_replacements = 0;
+   n_earlyclobbers = 0;
++  n_swapped = 0;
+   replace_reloads = replace;
+   hard_regs_live_known = live_known;
+   static_reload_reg_p = reload_reg_p;
+@@ -2549,14 +2552,12 @@ find_reloads (insn, replace, ind_levels, live_known, reload_reg_p)
+   bcopy ((char *) recog_constraints, (char *) constraints,
+ 	 noperands * sizeof (char *));
+ 
+-  commutative = -1;
+-
+   /* If we will need to know, later, whether some pair of operands
+      are the same, we must compare them now and save the result.
+      Reloading the base and index registers will clobber them
+      and afterward they will fail to match.  */
+ 
+-  for (i = 0; i < noperands; i++)
++  for (i = 0, j = 0; i < noperands; i++)
+     {
+       register char *p;
+       register int c;
+@@ -2564,6 +2565,7 @@ find_reloads (insn, replace, ind_levels, live_known, reload_reg_p)
+       substed_operand[i] = recog_operand[i];
+       p = constraints[i];
+ 
++      commutative[i] = i;
+       modified[i] = RELOAD_READ;
+ 
+       /* Scan this operand's constraint to see if it is an output operand, 
+@@ -2577,11 +2579,14 @@ find_reloads (insn, replace, ind_levels, live_known, reload_reg_p)
+ 	    modified[i] = RELOAD_READ_WRITE;
+ 	  else if (c == '%')
+ 	    {
+-	      /* The last operand should not be marked commutative.  */
+-	      if (i == noperands - 1)
++	      /* The last and the next operand should not be marked commutative.  */
++	      if (i == noperands - 1 || commutative[i] != i)
+ 		abort ();
+ 
+-	      commutative = i;
++	      n_swapped = n_swapped ? n_swapped * 2 : 2;
++	      commutative_op[j++] = i;
++	      commutative[i] = i + 1;
++	      commutative[i + 1] = i;
+ 	    }
+ 	  else if (c >= '0' && c <= '9')
+ 	    {
+@@ -2593,26 +2598,21 @@ find_reloads (insn, replace, ind_levels, live_known, reload_reg_p)
+ 	      if (c == i)
+ 		abort ();
+ 
++	      if (commutative[i] != i)
++		operands_match[c][commutative[i]]
++		  = operands_match_p (recog_operand[c],
++				      recog_operand[commutative[i]]);
++
+ 	      /* If C can be commuted with C+1, and C might need to match I,
+ 		 then C+1 might also need to match I.  */
+-	      if (commutative >= 0)
+-		{
+-		  if (c == commutative || c == commutative + 1)
+-		    {
+-		      int other = c + (c == commutative ? 1 : -1);
+-		      operands_match[other][i]
+-			= operands_match_p (recog_operand[other], recog_operand[i]);
+-		    }
+-		  if (i == commutative || i == commutative + 1)
+-		    {
+-		      int other = i + (i == commutative ? 1 : -1);
+-		      operands_match[c][other]
+-			= operands_match_p (recog_operand[c], recog_operand[other]);
+-		    }
+-		  /* Note that C is supposed to be less than I.
+-		     No need to consider altering both C and I because in
+-		     that case we would alter one into the other.  */
+-		}
++	      if (commutative[c] != c)
++		operands_match[commutative[c]][i]
++		  = operands_match_p (recog_operand[commutative[c]],
++				      recog_operand[i]);
++	      if (commutative[i] != i && commutative[c] != c)
++		operands_match[commutative[c]][commutative[i]]
++		  = operands_match_p (recog_operand[commutative[c]],
++				      recog_operand[commutative[i]]);
+ 	    }
+ 	}
+     }
+@@ -2773,6 +2773,8 @@ find_reloads (insn, replace, ind_levels, live_known, reload_reg_p)
+ 
+   swapped = 0;
+   goal_alternative_swapped = 0;
++  for (i = 0; i < noperands; i++)
++    commutative[i] = i;
+  try_swapped:
+ 
+   /* The constraints are made of several alternatives.
+@@ -2927,12 +2929,7 @@ find_reloads (insn, replace, ind_levels, live_known, reload_reg_p)
+ 	      case '=':
+ 	      case '+':
+ 	      case '*':
+-		break;
+-
+ 	      case '%':
+-		/* The last operand should not be marked commutative.  */
+-		if (i != noperands - 1)
+-		  commutative = i;
+ 		break;
+ 
+ 	      case '?':
+@@ -2963,19 +2960,10 @@ find_reloads (insn, replace, ind_levels, live_known, reload_reg_p)
+ 		   only a single reload insn will be needed to make
+ 		   the two operands win.  As a result, this alternative
+ 		   may be rejected when it is actually desirable.)  */
+-		if ((swapped && (c != commutative || i != commutative + 1))
+-		    /* If we are matching as if two operands were swapped,
+-		       also pretend that operands_match had been computed
+-		       with swapped.
+-		       But if I is the second of those and C is the first,
+-		       don't exchange them, because operands_match is valid
+-		       only on one side of its diagonal.  */
+-		    ? (operands_match
+-		        [(c == commutative || c == commutative + 1)
+-			 ? 2*commutative + 1 - c : c]
+-		        [(i == commutative || i == commutative + 1)
+-			 ? 2*commutative + 1 - i : i])
+-		    : operands_match[c][i])
++		/* If we are matching as if two operands were swapped,
++		   also pretend that operands_match had been computed
++		   with swapped. */
++		if (operands_match[commutative[c]][commutative[i]])
+ 		  {
+ 		    /* If we are matching a non-offsettable address where an
+ 		       offsettable address was expected, then we must reject
+@@ -3455,11 +3443,22 @@ find_reloads (insn, replace, ind_levels, live_known, reload_reg_p)
+       if (losers == 0)
+ 	{
+ 	  /* Unswap these so that they are never swapped at `finish'.  */
+-	  if (commutative >= 0)
++	  if (swapped)
+ 	    {
+-	      recog_operand[commutative] = substed_operand[commutative];
+-	      recog_operand[commutative + 1]
+-		= substed_operand[commutative + 1];
++	      int s = swapped;
++	      s ^= s >> 1;
++
++	      for (i = 0; s; i++, s >>= 1)
++		{
++		  register int c;
++
++		  if (!(s & 1))
++		    continue;
++		  c = commutative_op[i];
++
++		  recog_operand[c] = substed_operand[c];
++		  recog_operand[c + 1] = substed_operand[c + 1];
++		}
+ 	    }
+ 	  for (i = 0; i < noperands; i++)
+ 	    {
+@@ -3509,37 +3508,48 @@ find_reloads (insn, replace, ind_levels, live_known, reload_reg_p)
+      as if we had exchanged them.
+      To do this, really exchange them in operands.
+ 
+-     If we have just tried the alternatives the second time,
++     We try all the possible alternatives and after we tried the last one,
+      return operands to normal and drop through.  */
+ 
+-  if (commutative >= 0)
++  if (++swapped <= n_swapped)
+     {
+-      swapped = !swapped;
+-      if (swapped)
++      int s, t;
++      rtx x;
++
++      s = swapped - 1;
++      if (swapped < n_swapped)
++	  s ^= swapped;
++      s ^= s >> 1;
++
++      for (i = 0; s; i++, s >>= 1)
++	if (s & 1)
++	  break;
++      i = commutative_op[i];
++
++      t = commutative[i];
++      commutative[i] = commutative[i + 1];
++      commutative[i + 1] = t;
++
++      x = recog_operand[i];
++      recog_operand[i] = recog_operand[i + 1];
++      recog_operand[i + 1] = x;
++
++      if (swapped < n_swapped)
+ 	{
+ 	  register enum reg_class tclass;
+-	  register int t;
+ 
+-	  recog_operand[commutative] = substed_operand[commutative + 1];
+-	  recog_operand[commutative + 1] = substed_operand[commutative];
++	  tclass = preferred_class[i];
++	  preferred_class[i] = preferred_class[i + 1];
++	  preferred_class[i + 1] = tclass;
+ 
+-	  tclass = preferred_class[commutative];
+-	  preferred_class[commutative] = preferred_class[commutative + 1];
+-	  preferred_class[commutative + 1] = tclass;
+-
+-	  t = pref_or_nothing[commutative];
+-	  pref_or_nothing[commutative] = pref_or_nothing[commutative + 1];
+-	  pref_or_nothing[commutative + 1] = t;
++	  t = pref_or_nothing[i];
++	  pref_or_nothing[i] = pref_or_nothing[i + 1];
++	  pref_or_nothing[i + 1] = t;
+ 
+ 	  bcopy ((char *) recog_constraints, (char *) constraints,
+ 		 noperands * sizeof (char *));
+ 	  goto try_swapped;
+ 	}
+-      else
+-	{
+-	  recog_operand[commutative] = substed_operand[commutative];
+-	  recog_operand[commutative + 1] = substed_operand[commutative + 1];
+-	}
+     }
+ 
+   /* The operands don't meet the constraints.
+@@ -3583,25 +3593,38 @@ find_reloads (insn, replace, ind_levels, live_known, reload_reg_p)
+ 
+   if (goal_alternative_swapped)
+     {
+-      register rtx tem;
+-
+-      tem = substed_operand[commutative];
+-      substed_operand[commutative] = substed_operand[commutative + 1];
+-      substed_operand[commutative + 1] = tem;
+-      tem = recog_operand[commutative];
+-      recog_operand[commutative] = recog_operand[commutative + 1];
+-      recog_operand[commutative + 1] = tem;
+-      tem = *recog_operand_loc[commutative];
+-      *recog_operand_loc[commutative] = *recog_operand_loc[commutative+1];
+-      *recog_operand_loc[commutative+1] = tem;
++      int s = goal_alternative_swapped;
++      s ^= s >> 1;
+ 
+-      for (i = 0; i < n_reloads; i++)
+-	{
+-	  if (reload_opnum[i] == commutative)
+-	    reload_opnum[i] = commutative + 1;
+-	  else if (reload_opnum[i] == commutative + 1)
+-	    reload_opnum[i] = commutative;
+-	}
++      for (i = 0; s; i++, s >>= 1)
++  	{
++	  register int c;
++	  register rtx tem;
++
++	  if (!(s & 1))
++	    continue;
++	  c = commutative_op[i];
++
++	  tem = substed_operand[c];
++	  substed_operand[c] = substed_operand[c + 1];
++	  substed_operand[c + 1] = tem;
++
++	  tem = recog_operand[c];
++	  recog_operand[c] = recog_operand[c + 1];
++	  recog_operand[c + 1] = tem;
++
++	  tem = *recog_operand_loc[c];
++	  *recog_operand_loc[c] = *recog_operand_loc[c + 1];
++	  *recog_operand_loc[c + 1] = tem;
++
++	  for (j = 0; j < n_reloads; j++)
++	    {
++	      if (reload_opnum[j] == c)
++		reload_opnum[j] = c + 1;
++	      else if (reload_opnum[j] == c + 1)
++		reload_opnum[j] = c;
++	    }
++  	}
+     }
+ 
+   for (i = 0; i < noperands; i++)

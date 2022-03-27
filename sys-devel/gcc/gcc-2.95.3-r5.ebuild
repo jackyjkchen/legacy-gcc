@@ -1,9 +1,7 @@
 # Copyright 1999-2019 Gentoo Authors
 # Distributed under the terms of the GNU General Public License v2
 
-EAPI=6
-
-PATCH_VER="1.4"
+EAPI=7
 
 CC="gcc-3.4.6"
 CXX="g++-3.4.6"
@@ -56,20 +54,19 @@ KEYWORDS="alpha amd64 m68k mips ppc sparc x86"
 
 RDEPEND=""
 DEPEND="${RDEPEND}
-	sys-devel/gcc:3.4.6
 	legacy-gcc/linux-headers:${TOOL_SLOT}
 	legacy-gcc/glibc-headers:${TOOL_SLOT}
 	legacy-gcc/binutils-wrapper:${TOOL_SLOT}"
+BDEPEND="${BDEPEND} sys-devel/gcc:3.4.6"
 
 src_prepare() {
-	EPATCH_EXCLUDE+=" 10_alpha_new-atexit.patch"
-	[[ ${ARCH} != "m68k" ]] && EPATCH_EXCLUDE+=" 42_all_debian-m68k-md.patch 42_all_debian-gcc-m68k-pic.patch 42_all_debian-m68k-reload.patch"
-	[[ ${ARCH} != "avr" ]] && EPATCH_EXCLUDE+=" 41_all_debian-gcc-core-2.95.2-avr-1.1.patch"
 	toolchain_src_prepare
+
 	eapply "${FILESDIR}"/${PV}/00_gcc-${PV}.patch
 	eapply "${FILESDIR}"/${PV}/01_workaround-for-legacy-glibc-in-non-system-dir.patch
-	eapply "${FILESDIR}"/${PV}/02_fix-patchset.patch
+	[[ ${ARCH} == "m68k" ]] && eapply "${FILESDIR}"/${PV}/02_m68k-debian.patch
 	[[ ${TOOL_SLOT} == "sparc64-legacy" ]] && eapply "${FILESDIR}"/${PV}/03_workaround-for-sparc64.patch
+	[[ ${ARCH} == "avr" ]] && "${FILESDIR}"/${PV}/04_support-avr.patch
 	touch -r gcc/README gcc/configure.in || die
 }
 
