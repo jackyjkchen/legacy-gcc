@@ -35,12 +35,6 @@ else
 fi
 
 src_prepare() {
-	if has_version '<sys-libs/glibc-2.12' ; then
-		ewarn "Your host glibc is too old; disabling automatic fortify."
-		ewarn "Please rebuild gcc after upgrading to >=glibc-2.12 #362315"
-		EPATCH_EXCLUDE+=" 10_all_default-fortify-source.patch"
-	fi
-
 	# Bug 638056
 	eapply "${FILESDIR}/${P}-bootstrap.patch"
 

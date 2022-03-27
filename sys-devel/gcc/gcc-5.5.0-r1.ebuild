@@ -35,13 +35,6 @@ else
 fi
 
 src_prepare() {
-	if has_version '<sys-libs/glibc-2.12' ; then
-		ewarn "Your host glibc is too old; disabling automatic fortify."
-		ewarn "Please rebuild gcc after upgrading to >=glibc-2.12 #362315"
-		EPATCH_EXCLUDE+=" 10_all_default-fortify-source.patch"
-	fi
-	is_crosscompile && EPATCH_EXCLUDE+=" 05_all_gcc-spec-env.patch"
-
 	toolchain_src_prepare
 
 	eapply "${FILESDIR}"/${PV}/00_fix-building-on-ppc64.patch

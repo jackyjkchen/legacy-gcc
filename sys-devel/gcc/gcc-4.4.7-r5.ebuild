@@ -1,7 +1,7 @@
 # Copyright 1999-2020 Gentoo Authors
 # Distributed under the terms of the GNU General Public License v2
 
-EAPI="6"
+EAPI="7"
 
 PATCH_VER="2"
 
@@ -18,17 +18,16 @@ DEPEND="${RDEPEND}
 
 if [[ ${CATEGORY} != cross-* ]] ; then
 	PDEPEND="${PDEPEND} elibc_glibc? ( >=sys-libs/glibc-2.8 )"
-	DEPEND="${DEPEND} sys-devel/gcc:4.9.4"
+	BDEPEND="${BDEPEND} sys-devel/gcc:4.9.4"
 	CC="gcc-4.9.4"
 	CXX="g++-4.9.4"
 else
-	DEPEND="${DEPEND} sys-devel/gcc:4.4.7"
+	BDEPEND="${BDEPEND} sys-devel/gcc:4.4.7"
 	CC="gcc-4.4.7"
 	CXX="g++-4.4.7"
 fi
 
 src_prepare() {
-	EPATCH_EXCLUDE+=" 30_all_gcc-4.4_arm_armv4-no-thumb-fix-link.patch 41_all_4.4.5-msabi.patch 93_all_gcc-4.4-cloog-dl.patch 96_all_arm-pr43440.patch"
 	toolchain_src_prepare
 	use vanilla && return 0
 
