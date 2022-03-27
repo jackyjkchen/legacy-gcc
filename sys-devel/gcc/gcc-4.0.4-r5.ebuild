@@ -1,9 +1,7 @@
 # Copyright 1999-2019 Gentoo Authors
 # Distributed under the terms of the GNU General Public License v2
 
-EAPI="6"
-
-PATCH_VER="2"
+EAPI=7
 
 case ${ARCH} in
 	sh)
@@ -35,10 +33,10 @@ else
 fi
 
 src_prepare() {
+	! use vanilla && eapply "${FILESDIR}"/${PV}/00_gentoo-patchset.patch
 	toolchain_src_prepare
-
 	use vanilla && return 0
 
-	[[ ${ARCH} == "mips" && ${DEFAULT_ABI} == "n64" ]] && eapply "${FILESDIR}"/${PV}/00_mips64_default_n64_abi.patch
-	[[ ${ARCH} == "sh" ]] && eapply "${FILESDIR}"/${PV}/01_sh4_workaround_fixproto_core.patch
+	[[ ${ARCH} == "mips" && ${DEFAULT_ABI} == "n64" ]] && eapply "${FILESDIR}"/${PV}/01_mips64-default-n64-abi.patch
+	[[ ${ARCH} == "sh" ]] && eapply "${FILESDIR}"/${PV}/02_sh4-workaround-fixproto-core.patch
 }
