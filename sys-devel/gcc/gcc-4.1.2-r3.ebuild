@@ -4,8 +4,6 @@
 EAPI="6"
 
 PATCH_VER="2"
-UCLIBC_VER="1.0"
-D_VER="0.24"
 
 inherit toolchain
 

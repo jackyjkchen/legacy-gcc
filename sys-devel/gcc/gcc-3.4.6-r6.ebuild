@@ -4,11 +4,6 @@
 EAPI="6"
 
 PATCH_VER="3"
-UCLIBC_VER="1.1"
-UCLIBC_GCC_VER="3.4.5"
-HTB_VER="1.00.1"
-HTB_GCC_VER="3.4.4"
-D_VER="0.24"
 
 case ${ARCH} in
 	sh)

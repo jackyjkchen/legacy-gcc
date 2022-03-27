@@ -4,7 +4,6 @@
 EAPI="6"
 
 PATCH_VER="2"
-UCLIBC_VER="1.0"
 
 case ${ARCH} in
 	sh)
