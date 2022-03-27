@@ -30,15 +30,15 @@ DEPEND="${RDEPEND}
 	amd64? ( >=sys-devel/binutils-2.15.90.0.1.1-r1 )"
 
 if is_crosscompile ; then
-	DEPEND="${DEPEND} sys-devel/gcc:3.4.6"
+	BDEPEND="${BDEPEND} sys-devel/gcc:3.4.6"
 	CC="gcc-3.4.6"
 	CXX="g++-3.4.6"
 else
-	DEPEND="${DEPEND} ${STAGE1_GCC}"
+	BDEPEND="${BDEPEND} ${STAGE1_GCC}"
 fi
 
 src_prepare() {
-	! use vanilla && eapply "${FILESDIR}"/${PV}/00_gentoo-patchset.patch
+	eapply "${FILESDIR}"/${PV}/00_gentoo-patchset.patch
 	toolchain_src_prepare
 
 	# Arch stuff

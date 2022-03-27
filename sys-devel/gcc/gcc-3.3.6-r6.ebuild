@@ -1,9 +1,7 @@
 # Copyright 1999-2019 Gentoo Authors
 # Distributed under the terms of the GNU General Public License v2
 
-EAPI=6
-
-PATCH_VER="3"
+EAPI=7
 
 inherit toolchain
 
@@ -18,27 +16,28 @@ DEPEND="${RDEPEND}
 	amd64? ( >=sys-devel/binutils-2.15.90.0.1.1-r1 )"
 
 if is_crosscompile ; then
-	DEPEND="${DEPEND} sys-devel/gcc:3.3.6"
+	BDEPEND="${BDEPEND} sys-devel/gcc:3.3.6"
 	CC="gcc-3.3.6"
 	CXX="g++-3.3.6"
 else
-	DEPEND="${DEPEND} sys-devel/gcc:3.4.6"
+	BDEPEND="${BDEPEND} sys-devel/gcc:3.4.6"
 	CC="gcc-3.4.6"
 	CXX="g++-3.4.6"
 fi
 
 src_prepare() {
+	eapply "${FILESDIR}"/${PV}/00_gentoo-patchset.patch
 	toolchain_src_prepare
+
+	[[ ${ARCH} == "mips" ]] && eapply "${FILESDIR}"/${PV}/01_support-mips64.patch
+	[[ ${ARCH} == "mips" && ${DEFAULT_ABI} == "n32" ]] && eapply "${FILESDIR}"/${PV}/02_mips64-default-n32-abi.patch
+	[[ ${ARCH} == "sh" ]] && eapply "${FILESDIR}"/${PV}/03_fix-for-sh4-install.patch
+	[[ ${ARCH} == "ppc64" ]] && eapply "${FILESDIR}"/${PV}/04_workaround-for-ppc64-lib64.patch
 
 	# Anything useful and objc will require libffi. Seriously. Lets just force
 	# libffi to install with USE="objc", even though it normally only installs
 	# if you attempt to build gcj.
 	if use objc && ! use gcj ; then
-		[[ ${ARCH} != "mips" ]] && epatch "${FILESDIR}"/${PV}/libffi-without-libgcj.patch
+		[[ ${ARCH} != "mips" ]] && eapply "${FILESDIR}"/${PV}/05_libffi-without-libgcj.patch
 	fi
-
-	[[ ${ARCH} == "mips" ]] && eapply "${FILESDIR}"/${PV}/00_support_mips64.patch
-	[[ ${ARCH} == "mips" && ${DEFAULT_ABI} == "n32" ]] && eapply "${FILESDIR}"/${PV}/01_mips64_default_n32_abi.patch
-	[[ ${ARCH} == "sh" ]] && eapply "${FILESDIR}"/${PV}/02_fix_for_sh4_install.patch
-	[[ ${ARCH} == "ppc64" ]] && eapply "${FILESDIR}"/${PV}/03_workaround_for_ppc64_lib64.patch
 }

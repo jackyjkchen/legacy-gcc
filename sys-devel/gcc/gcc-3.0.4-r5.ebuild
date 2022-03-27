@@ -1,7 +1,7 @@
 # Copyright 1999-2019 Gentoo Authors
 # Distributed under the terms of the GNU General Public License v2
 
-EAPI=6
+EAPI=7
 
 CC="gcc-3.4.6"
 CXX="g++-3.4.6"
@@ -59,12 +59,13 @@ KEYWORDS="alpha amd64 m68k mips ppc s390 sparc x86"
 
 RDEPEND=""
 DEPEND="${RDEPEND}
-	sys-devel/gcc:3.4.6
 	${LEGACY_DEPEND}"
+BDEPEND="${BDEPEND} sys-devel/gcc:3.4.6"
 
 src_prepare() {
-	toolchain_src_prepare
 	eapply "${FILESDIR}"/${PV}/00_gcc-${PV}.patch
+	toolchain_src_prepare
+
 	[[ ${TOOL_SLOT} != "host" ]] && eapply "${FILESDIR}"/${PV}/01_workaround-for-legacy-glibc-in-non-system-dir.patch
 }
 
