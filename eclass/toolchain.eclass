@@ -533,7 +533,7 @@ toolchain_src_unpack() {
 
 	default_src_unpack
 	tc_version_is_at_least 10 || unpack_gcc_patchset
-	tc_version_is_at_least 4.2 || git_init_src
+	tc_version_is_at_least 4.7 || git_init_src
 }
 
 #---->> src_prepare <<----

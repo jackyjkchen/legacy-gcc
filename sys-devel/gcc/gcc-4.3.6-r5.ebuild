@@ -25,10 +25,10 @@ else
 fi
 
 src_prepare() {
+	! use vanilla && eapply "${FILESDIR}"/${PV}/00_gentoo-patchset.patch
 	toolchain_src_prepare
 	use vanilla && return 0
 
-	eapply "${FILESDIR}"/${PV}/00_gentoo-patchset.patch
 	[[ ${ARCH} == "mips" && ${DEFAULT_ABI} == "n64" ]] && eapply "${FILESDIR}"/${PV}/01_mips64-default-n64-abi.patch
 
 	sed -i 's/use_fixproto=yes/:/' gcc/config.gcc #PR33200
