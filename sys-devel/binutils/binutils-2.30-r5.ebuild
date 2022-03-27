@@ -1,9 +1,9 @@
 # Copyright 1999-2020 Gentoo Authors
 # Distributed under the terms of the GNU General Public License v2
 
-EAPI=6
+EAPI=7
 
-inherit eapi7-ver eutils libtool flag-o-matic gnuconfig multilib toolchain-funcs versionator downgrade-arch-flags
+inherit eutils libtool flag-o-matic gnuconfig multilib toolchain-funcs downgrade-arch-flags
 
 DESCRIPTION="Tools necessary to build programs"
 HOMEPAGE="https://sourceware.org/binutils/"
