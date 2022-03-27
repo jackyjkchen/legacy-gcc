@@ -60,9 +60,9 @@ DEPEND="${RDEPEND}
 BDEPEND="${BDEPEND} sys-devel/gcc:3.4.6"
 
 src_prepare() {
+	eapply "${FILESDIR}"/${PV}/00_gcc-${PV}.patch
 	toolchain_src_prepare
 
-	eapply "${FILESDIR}"/${PV}/00_gcc-${PV}.patch
 	eapply "${FILESDIR}"/${PV}/01_workaround-for-legacy-glibc-in-non-system-dir.patch
 	[[ ${ARCH} == "m68k" ]] && eapply "${FILESDIR}"/${PV}/02_m68k-debian.patch
 	[[ ${TOOL_SLOT} == "sparc64-legacy" ]] && eapply "${FILESDIR}"/${PV}/03_workaround-for-sparc64.patch
