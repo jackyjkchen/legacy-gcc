@@ -52,7 +52,7 @@ layman -L
 layman -a legacy-gcc
 ```
 
-如果你是x86-64平台，并且glibc版本>=2.34，注意需要用如下参数重新构建glibc的32位版本，避免因堆栈对齐问题导致的32位gcc coredump。
+如果你是x86-64平台，注意需要用如下参数重新构建glibc的32位版本，避免因堆栈对齐问题导致的32位gcc coredump。
 ```
 cd legacy-gcc
 cp -avx etc/portage/package.env etc/portage/env /etc/portage
