@@ -1,7 +1,7 @@
 # Copyright 1999-2019 Gentoo Authors
 # Distributed under the terms of the GNU General Public License v2
 
-EAPI=6
+EAPI=7
 
 CC="gcc-2.95.3"
 CXX="g++-2.95.3"
@@ -28,16 +28,18 @@ LD="${CHOST}-ld"
 AR="${CHOST}-ar"
 RANLIB="${CHOST}-ranlib"
 
+EXTRA_ECONF="--gxx-include-dir=/usr/lib/gcc-lib/${CHOST}/${PV}/include/g++"
+
 inherit toolchain
 
 KEYWORDS="amd64 m68k x86"
 
 RDEPEND=""
 DEPEND="${RDEPEND}
-	sys-devel/gcc:2.95.3
 	legacy-gcc/linux-headers:${TOOL_SLOT}
 	legacy-gcc/glibc-headers:${TOOL_SLOT}
 	legacy-gcc/binutils-wrapper:${TOOL_SLOT}"
+BDEPEND="${BDEPEND} sys-devel/gcc:2.95.3"
 
 src_prepare() {
 	eapply "${FILESDIR}"/${PV}/00_gcc-${PV}.patch

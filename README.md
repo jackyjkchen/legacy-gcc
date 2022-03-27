@@ -52,6 +52,13 @@ layman -L
 layman -a legacy-gcc
 ```
 
+如果你是x86-64平台，并且glibc版本>=2.34，注意需要用如下参数重新构建glibc的32位版本，避免因堆栈对齐问题导致的32位gcc coredump。
+```
+cd legacy-gcc
+cp -avx etc/portage/package.env etc/portage/env /etc/portage
+emerge -1 sys-libs/glibc
+```
+
 现在你可以安装旧版本gcc了，比如于1992年发布，本来不支持linux，也不支持elf文件格式的gcc-2.0，现在可以正常在最新的kernel+glibc运行环境下运行：
 ```
 emerge -1a sys-devel/gcc:2.0

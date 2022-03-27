@@ -64,13 +64,13 @@ RDEPEND="
 	sys-libs/zlib
 "
 DEPEND="${RDEPEND}
-	sys-devel/gcc:4.9.4
 	doc? ( sys-apps/texinfo )
 	test? ( dev-util/dejagnu )
 	nls? ( sys-devel/gettext )
 	sys-devel/flex
 	virtual/yacc
 "
+BDEPEND="${BDEPEND} sys-devel/gcc:4.9.4"
 RESTRICT="!test? ( test )"
 
 if is_cross ; then
