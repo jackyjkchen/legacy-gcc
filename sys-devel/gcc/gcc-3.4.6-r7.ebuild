@@ -1,9 +1,7 @@
 # Copyright 1999-2020 Gentoo Authors
 # Distributed under the terms of the GNU General Public License v2
 
-EAPI="6"
-
-PATCH_VER="3"
+EAPI=7
 
 case ${ARCH} in
 	sh)
@@ -40,17 +38,8 @@ else
 fi
 
 src_prepare() {
+	! use vanilla && eapply "${FILESDIR}"/${PV}/00_gentoo-patchset.patch
 	toolchain_src_prepare
-
-	# Anything useful and objc will require libffi. Seriously. Lets just force
-	# libffi to install with USE="objc", even though it normally only installs
-	# if you attempt to build gcj.
-	if use objc && ! use gcj ; then
-		[[ ${ARCH} != "mips" ]] && epatch "${FILESDIR}"/${PV}/libffi-without-libgcj.patch
-	fi
-
-	# Fix cross-compiling
-	epatch "${FILESDIR}"/${PV}/gcc-3.4.4-cross-compile.patch
 
 	# Arch stuff
 	case $(tc-arch) in
@@ -60,10 +49,16 @@ src_prepare() {
 			fi
 			;;
 		mips)
-			eapply "${FILESDIR}"/${PV}/00_backport_mips_t-linux64.patch
-			[[ ${DEFAULT_ABI} == "n64" ]] && eapply "${FILESDIR}"/${PV}/01_mips64_default_n64_abi.patch
-			[[ ${DEFAULT_ABI} == "n32" ]] && eapply "${FILESDIR}"/${PV}/01_mips64_default_n32_abi.patch
+			eapply "${FILESDIR}"/${PV}/01_backport-mips-t-linux64.patch
+			[[ ${DEFAULT_ABI} == "n64" ]] && eapply "${FILESDIR}"/${PV}/02_mips64-default-n64-abi.patch
+			[[ ${DEFAULT_ABI} == "n32" ]] && eapply "${FILESDIR}"/${PV}/02_mips64-default-n32-abi.patch
 			;;
 	esac
 
+	# Anything useful and objc will require libffi. Seriously. Lets just force
+	# libffi to install with USE="objc", even though it normally only installs
+	# if you attempt to build gcj.
+	if use objc && ! use gcj ; then
+		[[ ${ARCH} != "mips" ]] && eapply "${FILESDIR}"/${PV}/03_libffi-without-libgcj.patch
+	fi
 }

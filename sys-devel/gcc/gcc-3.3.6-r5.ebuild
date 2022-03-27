@@ -36,6 +36,7 @@ src_prepare() {
 	if use objc && ! use gcj ; then
 		[[ ${ARCH} != "mips" ]] && epatch "${FILESDIR}"/${PV}/libffi-without-libgcj.patch
 	fi
+
 	[[ ${ARCH} == "mips" ]] && eapply "${FILESDIR}"/${PV}/00_support_mips64.patch
 	[[ ${ARCH} == "mips" && ${DEFAULT_ABI} == "n32" ]] && eapply "${FILESDIR}"/${PV}/01_mips64_default_n32_abi.patch
 	[[ ${ARCH} == "sh" ]] && eapply "${FILESDIR}"/${PV}/02_fix_for_sh4_install.patch
