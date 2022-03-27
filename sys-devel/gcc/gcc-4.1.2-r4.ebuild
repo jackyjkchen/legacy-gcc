@@ -1,9 +1,7 @@
 # Copyright 1999-2020 Gentoo Authors
 # Distributed under the terms of the GNU General Public License v2
 
-EAPI="6"
-
-PATCH_VER="2"
+EAPI="7"
 
 inherit toolchain
 
@@ -27,16 +25,10 @@ fi
 
 src_prepare() {
 	toolchain_src_prepare
-
 	use vanilla && return 0
 
-	# Fix cross-compiling
-	epatch "${FILESDIR}"/${PV}/gcc-4.1.0-cross-compile.patch
-
-	epatch "${FILESDIR}"/${PV}/gcc-4.1.0-fast-math-i386-Os-workaround.patch
-
-	eapply "${FILESDIR}"/${PV}/00_compat_new_mpfr.patch
-
-	[[ ${ARCH} == "mips" && ${DEFAULT_ABI} == "n64" ]] && eapply "${FILESDIR}"/${PV}/01_mips64_default_n64_abi.patch
-	[[ ${ARCH} == "sh" ]] && eapply "${FILESDIR}"/${PV}/02_sh4_fix_build_by_gcc42_and_up.patch
+	eapply "${FILESDIR}"/${PV}/00_gentoo-patchset.patch
+	eapply "${FILESDIR}"/${PV}/01_compat-new-mpfr.patch
+	[[ ${ARCH} == "mips" && ${DEFAULT_ABI} == "n64" ]] && eapply "${FILESDIR}"/${PV}/02_mips64-default-n64-abi.patch
+	[[ ${ARCH} == "sh" ]] && eapply "${FILESDIR}"/${PV}/03_sh4-fix-build.patch
 }

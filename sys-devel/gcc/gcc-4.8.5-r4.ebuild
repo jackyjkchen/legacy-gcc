@@ -36,12 +36,11 @@ fi
 
 src_prepare() {
 	toolchain_src_prepare
-
 	use vanilla && return 0
+
+	[[ ${ARCH} == "mips" && ${DEFAULT_ABI} == "n64" ]] && eapply "${FILESDIR}"/${PV}/00_mips64-default-n64-abi.patch
+	eapply "${FILESDIR}"/${PV}/01_fix-mingw.patch
+
 	#Use -r1 for newer pieapplyet that use DRIVER_SELF_SPECS for the hardened specs.
 	[[ ${CHOST} == ${CTARGET} ]] && eapply "${FILESDIR}"/gcc-spec-env-r1.patch
-
-	[[ ${ARCH} == "mips" && ${DEFAULT_ABI} == "n64" ]] && eapply "${FILESDIR}"/${PV}/00_mips64_default_n64_abi.patch
-
-	eapply "${FILESDIR}"/${PV}/01_fix_for_mingw.patch
 }

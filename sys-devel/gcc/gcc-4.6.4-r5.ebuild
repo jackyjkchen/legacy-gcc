@@ -3,8 +3,6 @@
 
 EAPI="7"
 
-PATCH_VER="2"
-
 inherit toolchain
 
 KEYWORDS="alpha amd64 arm hppa ia64 m68k mips ppc ppc64 s390 sh sparc x86"
@@ -27,10 +25,9 @@ fi
 
 src_prepare() {
 	toolchain_src_prepare
-
 	use vanilla && return 0
 
-	eapply "${FILESDIR}"/${PV}/00_support-armhf.patch
-
-	[[ ${ARCH} == "mips" && ${DEFAULT_ABI} == "n64" ]] && eapply "${FILESDIR}"/${PV}/01_mips64_default_n64_abi.patch
+	eapply "${FILESDIR}"/${PV}/00_gentoo-patchset.patch
+	eapply "${FILESDIR}"/${PV}/01_support-armhf.patch
+	[[ ${ARCH} == "mips" && ${DEFAULT_ABI} == "n64" ]] && eapply "${FILESDIR}"/${PV}/02_mips64-default-n64-abi.patch
 }

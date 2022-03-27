@@ -1,0 +1,1632 @@
+diff --git a/gcc/Makefile.in b/gcc/Makefile.in
+index d10c574cd..f9c29a6ff 100644
+--- a/gcc/Makefile.in
++++ b/gcc/Makefile.in
+@@ -1011,7 +1011,7 @@ BUILD_LIBDEPS= $(BUILD_LIBIBERTY)
+ # and the system's installed libraries.
+ LIBS = @LIBS@ $(CPPLIB) $(LIBINTL) $(LIBICONV) $(LIBIBERTY) $(LIBDECNUMBER) \
+ 	$(HOST_LIBS)
+-BACKENDLIBS = $(CLOOGLIBS) $(PPLLIBS) $(GMPLIBS) $(PLUGINLIBS) $(HOST_LIBS) \
++BACKENDLIBS = $(GMPLIBS) $(if $(CLOOGLIBS),@DL_LIB@) $(PLUGINLIBS) $(HOST_LIBS) \
+ 	$(ZLIB) $(LIBELFLIBS)
+ # Any system libraries needed just for GNAT.
+ SYSLIBS = @GNAT_LIBEXC@
+@@ -2606,7 +2606,7 @@ graphite-poly.o: graphite-poly.c $(CONFIG_H) $(SYSTEM_H) coretypes.h $(TM_H) \
+    $(TREE_DATA_REF_H) tree-pass.h domwalk.h graphite.h graphite-dependences.h \
+    pointer-set.h value-prof.h graphite-ppl.h sese.h output.h graphite-poly.h
+ graphite-ppl.o: graphite-ppl.c $(CONFIG_H) $(SYSTEM_H) coretypes.h $(TM_H) \
+-   $(GGC_H) graphite-ppl.h
++   $(GGC_H) graphite-ppl.h graphite.h
+ graphite-scop-detection.o: graphite-scop-detection.c $(CONFIG_H) $(SYSTEM_H) \
+    $(GGC_H) $(TREE_H) $(RTL_H) $(BASIC_BLOCK_H) $(DIAGNOSTIC_H) $(TOPLEV_H) \
+    $(TREE_FLOW_H) $(TREE_DUMP_H) $(TIMEVAR_H) $(CFGLOOP_H) $(GIMPLE_H) \
+@@ -3357,6 +3357,11 @@ $(out_object_file): $(out_file) $(CONFIG_H) coretypes.h $(TM_H) $(TREE_H) \
+ 	$(COMPILER) -c $(ALL_COMPILERFLAGS) $(ALL_CPPFLAGS) \
+ 		$(out_file) $(OUTPUT_OPTION)
+ 
++graphite%.o : \
++  ALL_CFLAGS := -O $(filter-out -fkeep-inline-functions, $(ALL_CFLAGS))
++graphite.o : \
++  ALL_CFLAGS := -O $(filter-out -fkeep-inline-functions, $(ALL_CFLAGS))
++
+ # Build auxiliary files that support ecoff format.
+ mips-tfile: mips-tfile.o version.o $(LIBDEPS)
+ 	$(LINKER) $(LINKERFLAGS) $(LDFLAGS) -o $@ \
+diff --git a/gcc/config.gcc b/gcc/config.gcc
+index aa55f7799..e184febea 100644
+--- a/gcc/config.gcc
++++ b/gcc/config.gcc
+@@ -2322,7 +2322,7 @@ sh-*-symbianelf* | sh[12346l]*-*-symbianelf* | \
+ 	if test "$sh_multilibs" = "default" ; then
+ 		case ${target} in
+ 		sh64-superh-linux* | \
+-		sh[1234]*)	sh_multilibs=${sh_cpu_target} ;;
++		sh[1234]*)	sh_multilibs=$(echo $(sed -n '/^[[:space:]]*case ${sh_multilib} in/,/)/{s:case ${sh_multilib} in::;s: | *:,:g;s:[\\)]::g;p}' ${srcdir}/config.gcc) | sed 's: ::g') ;;
+ 		sh64* | sh5*)	sh_multilibs=m5-32media,m5-32media-nofpu,m5-compact,m5-compact-nofpu,m5-64media,m5-64media-nofpu ;;
+ 		sh-superh-*)	sh_multilibs=m4,m4-single,m4-single-only,m4-nofpu ;;
+ 		sh*-*-linux*)	sh_multilibs=m1,m3e,m4 ;;
+diff --git a/gcc/config/alpha/alpha.h b/gcc/config/alpha/alpha.h
+index 6235d9ff9..f2405da2b 100644
+--- a/gcc/config/alpha/alpha.h
++++ b/gcc/config/alpha/alpha.h
+@@ -96,6 +96,8 @@ along with GCC; see the file COPYING3.  If not see
+   while (0)
+ #endif
+ 
++#define CPP_SPEC "%{!no-ieee:-mieee}"
++
+ #define WORD_SWITCH_TAKES_ARG(STR)		\
+  (!strcmp (STR, "rpath") || DEFAULT_WORD_SWITCH_TAKES_ARG(STR))
+ 
+diff --git a/gcc/config/alpha/alpha.opt b/gcc/config/alpha/alpha.opt
+index fb7db3775..e11721350 100644
+--- a/gcc/config/alpha/alpha.opt
++++ b/gcc/config/alpha/alpha.opt
+@@ -39,7 +39,7 @@ Target RejectNegative Mask(IEEE_CONFORMANT)
+ Request IEEE-conformant math library routines (OSF/1)
+ 
+ mieee
+-Target Report RejectNegative Mask(IEEE)
++Target Report Mask(IEEE)
+ Emit IEEE-conformant code, without inexact exceptions
+ 
+ mieee-with-inexact
+diff --git a/gcc/config/alpha/elf.h b/gcc/config/alpha/elf.h
+index 57ab91e2f..d5d46c146 100644
+--- a/gcc/config/alpha/elf.h
++++ b/gcc/config/alpha/elf.h
+@@ -46,7 +46,7 @@ along with GCC; see the file COPYING3.  If not see
+ #define CC1_SPEC  "%{G*}"
+ 
+ #undef  ASM_SPEC
+-#define ASM_SPEC  "%{G*} %{relax:-relax} %{!gstabs*:-no-mdebug}%{gstabs*:-mdebug}"
++#define ASM_SPEC  "%{G*} %{relax:-relax} %{!gstabs*:-no-mdebug}%{gstabs*:-mdebug} %{mcpu=*:-m%*}"
+ 
+ #undef  IDENT_ASM_OP
+ #define IDENT_ASM_OP "\t.ident\t"
+diff --git a/gcc/config/alpha/linux-unwind.h b/gcc/config/alpha/linux-unwind.h
+index 8c04b3b41..58893c7e4 100644
+--- a/gcc/config/alpha/linux-unwind.h
++++ b/gcc/config/alpha/linux-unwind.h
+@@ -50,7 +50,7 @@ alpha_fallback_frame_state (struct _Unwind_Context *context,
+     {
+       struct rt_sigframe {
+ 	siginfo_t info;
+-	struct ucontext uc;
++	ucontext_t uc;
+       } *rt_ = context->cfa;
+       sc = &rt_->uc.uc_mcontext;
+     }
+diff --git a/gcc/config/arm/aout.h b/gcc/config/arm/aout.h
+index 5abad67dd..f6e60bbfe 100644
+--- a/gcc/config/arm/aout.h
++++ b/gcc/config/arm/aout.h
+@@ -163,34 +163,49 @@
+   {"mvdx12", 39},				\
+   {"mvdx13", 40},				\
+   {"mvdx14", 41},				\
+-  {"mvdx15", 42},				\
+-  {"d0", 63}, {"q0", 63},			\
+-  {"d1", 65},					\
+-  {"d2", 67}, {"q1", 67},			\
+-  {"d3", 69},					\
+-  {"d4", 71}, {"q2", 71},			\
+-  {"d5", 73},					\
+-  {"d6", 75}, {"q3", 75},			\
+-  {"d7", 77},					\
+-  {"d8", 79}, {"q4", 79},			\
+-  {"d9", 81},					\
+-  {"d10", 83}, {"q5", 83},			\
+-  {"d11", 85},					\
+-  {"d12", 87}, {"q6", 87},			\
+-  {"d13", 89},					\
+-  {"d14", 91}, {"q7", 91},			\
+-  {"d15", 93},					\
+-  {"q8", 95},					\
+-  {"q9", 99},					\
+-  {"q10", 103},					\
+-  {"q11", 107},					\
+-  {"q12", 111},					\
+-  {"q13", 115},					\
+-  {"q14", 119},					\
+-  {"q15", 123}					\
++  {"mvdx15", 42}				\
+ }
+ #endif
+ 
++#ifndef OVERLAPPING_REGISTER_NAMES
++#define OVERLAPPING_REGISTER_NAMES       \
++{					 \
++  {"d0", 63, 2},			 \
++  {"d1", 65, 2},			 \
++  {"d2", 67, 2},			 \
++  {"d3", 69, 2},			 \
++  {"d4", 71, 2},			 \
++  {"d5", 73, 2},			 \
++  {"d6", 75, 2},			 \
++  {"d7", 77, 2},			 \
++  {"d8", 79, 2},			 \
++  {"d9", 81, 2},			 \
++  {"d10", 83, 2},			 \
++  {"d11", 85, 2},			 \
++  {"d12", 87, 2},			 \
++  {"d13", 89, 2},			 \
++  {"d14", 91, 2},			 \
++  {"d15", 93, 2},			 \
++  {"q0", 63, 4},			 \
++  {"q1", 67, 4},			 \
++  {"q2", 71, 4},			 \
++  {"q3", 75, 4},			 \
++  {"q4", 79, 4},			 \
++  {"q5", 83, 4},			 \
++  {"q6", 87, 4},			 \
++  {"q7", 91, 4},			 \
++  {"q8", 95, 4},			 \
++  {"q9", 99, 4},			 \
++  {"q10", 103, 4},			 \
++  {"q11", 107, 4},			 \
++  {"q12", 111, 4},			 \
++  {"q13", 115, 4},			 \
++  {"q14", 119, 4},			 \
++  {"q15", 123, 4}			 \
++}
++#endif
++
++
+ #ifndef NO_DOLLAR_IN_LABEL
+ #define NO_DOLLAR_IN_LABEL 1
+ #endif
+diff --git a/gcc/config/arm/arm.c b/gcc/config/arm/arm.c
+index 8522c283f..8c102515e 100644
+--- a/gcc/config/arm/arm.c
++++ b/gcc/config/arm/arm.c
+@@ -700,7 +700,7 @@ static int after_arm_reorg = 0;
+ /* The maximum number of insns to be used when loading a constant.  */
+ static int arm_constant_limit = 3;
+ 
+-static enum arm_pcs arm_pcs_default;
++enum arm_pcs arm_pcs_default;
+ 
+ /* For an explanation of these variables, see final_prescan_insn below.  */
+ int arm_ccfsm_state;
+@@ -12209,13 +12209,13 @@ output_move_double (rtx *operands)
+ 	    {
+ 	      if (GET_CODE (XEXP (operands[0], 0)) == PRE_MODIFY)
+ 		{
+-		  output_asm_insn ("ldr%?\t%0, [%1, %2]!", otherops);
+-		  output_asm_insn ("ldr%?\t%H0, [%1, #4]", otherops);
++		  output_asm_insn ("str%?\t%0, [%1, %2]!", otherops);
++		  output_asm_insn ("str%?\t%H0, [%1, #4]", otherops);
+ 		}
+ 	      else
+ 		{
+-		  output_asm_insn ("ldr%?\t%H0, [%1, #4]", otherops);
+-		  output_asm_insn ("ldr%?\t%0, [%1], %2", otherops);
++		  output_asm_insn ("str%?\t%H0, [%1, #4]", otherops);
++		  output_asm_insn ("str%?\t%0, [%1], %2", otherops);
+ 		}
+ 	    }
+ 	  else if (GET_CODE (XEXP (operands[0], 0)) == PRE_MODIFY)
+diff --git a/gcc/config/arm/arm.h b/gcc/config/arm/arm.h
+index 26ffaf8df..ac7bbb373 100644
+--- a/gcc/config/arm/arm.h
++++ b/gcc/config/arm/arm.h
+@@ -94,7 +94,13 @@ extern char arm_arch_name[];
+ 	if (arm_arch_iwmmxt)				\
+ 	  builtin_define ("__IWMMXT__");		\
+ 	if (TARGET_AAPCS_BASED)				\
+-	  builtin_define ("__ARM_EABI__");		\
++	  {						\
++	    if (arm_pcs_default == ARM_PCS_AAPCS_VFP)	\
++	      builtin_define ("__ARM_PCS_VFP");		\
++	    else if (arm_pcs_default == ARM_PCS_AAPCS)	\
++	      builtin_define ("__ARM_PCS");		\
++	    builtin_define ("__ARM_EABI__");		\
++	  }						\
+     } while (0)
+ 
+ /* The various ARM cores.  */
+@@ -1648,6 +1654,9 @@ enum arm_pcs
+   ARM_PCS_UNKNOWN
+ };
+ 
++/* Default procedure calling standard of current compilation unit. */
++extern enum arm_pcs arm_pcs_default;
++
+ /* A C type for declaring a variable that is used as the first argument of
+    `FUNCTION_ARG' and other related values.  */
+ typedef struct
+diff --git a/gcc/config/arm/linux-eabi.h b/gcc/config/arm/linux-eabi.h
+index fce1ed165..9a63c29da 100644
+--- a/gcc/config/arm/linux-eabi.h
++++ b/gcc/config/arm/linux-eabi.h
+@@ -31,7 +31,8 @@
+   while (false)
+ 
+ /* We default to a soft-float ABI so that binaries can run on all
+-   target hardware.  */
++   target hardware.  If you override this to use the hard-float ABI then
++   change the setting of GLIBC_DYNAMIC_LINKER_DEFAULT as well.  */
+ #undef  TARGET_DEFAULT_FLOAT_ABI
+ #define TARGET_DEFAULT_FLOAT_ABI ARM_FLOAT_ABI_SOFT
+ 
+@@ -44,7 +45,7 @@
+    The ARM10TDMI core is the default for armv5t, so set
+    SUBTARGET_CPU_DEFAULT to achieve this.  */
+ #undef  SUBTARGET_CPU_DEFAULT
+-#define SUBTARGET_CPU_DEFAULT TARGET_CPU_arm10tdmi
++#define SUBTARGET_CPU_DEFAULT TARGET_CPU_arm9tdmi
+ 
+ /* TARGET_BIG_ENDIAN_DEFAULT is set in
+    config.gcc for big endian configurations.  */
+@@ -58,15 +59,28 @@
+ #undef  SUBTARGET_EXTRA_LINK_SPEC
+ #define SUBTARGET_EXTRA_LINK_SPEC " -m " TARGET_LINKER_EMULATION
+ 
+-/* Use ld-linux.so.3 so that it will be possible to run "classic"
+-   GNU/Linux binaries on an EABI system.  */
++/* GNU/Linux on ARM currently supports three dynamic linkers:
++   - ld-linux.so.2 - for the legacy ABI
++   - ld-linux.so.3 - for the EABI-derived soft-float ABI
++   - ld-linux-armhf.so.3 - for the EABI-derived hard-float ABI.
++   All the dynamic linkers live in /lib.
++   We default to soft-float, but this can be overridden by changing both
++   GLIBC_DYNAMIC_LINKER_DEFAULT and TARGET_DEFAULT_FLOAT_ABI.  */
++
+ #undef  GLIBC_DYNAMIC_LINKER
+-#define GLIBC_DYNAMIC_LINKER "/lib/ld-linux.so.3"
++#define GLIBC_DYNAMIC_LINKER_SOFT_FLOAT "/lib/ld-linux.so.3"
++#define GLIBC_DYNAMIC_LINKER_HARD_FLOAT "/lib/ld-linux-armhf.so.3"
++#define GLIBC_DYNAMIC_LINKER_DEFAULT GLIBC_DYNAMIC_LINKER_SOFT_FLOAT
++
++#define GLIBC_DYNAMIC_LINKER \
++   "%{mfloat-abi=hard:" GLIBC_DYNAMIC_LINKER_HARD_FLOAT "} \
++    %{mfloat-abi=soft*:" GLIBC_DYNAMIC_LINKER_SOFT_FLOAT "} \
++    %{!mfloat-abi=*:" GLIBC_DYNAMIC_LINKER_DEFAULT "}"
+ 
+ /* At this point, bpabi.h will have clobbered LINK_SPEC.  We want to
+    use the GNU/Linux version, not the generic BPABI version.  */
+ #undef  LINK_SPEC
+-#define LINK_SPEC LINUX_TARGET_LINK_SPEC BE8_LINK_SPEC
++#define LINK_SPEC LINUX_TARGET_LINK_SPEC TARGET_FIX_V4BX_SPEC BE8_LINK_SPEC
+ 
+ /* Use the default LIBGCC_SPEC, not the version in linux-elf.h, as we
+    do not use -lfloat.  */
+diff --git a/gcc/config/bfin/linux-unwind.h b/gcc/config/bfin/linux-unwind.h
+index 15bb2f12b..28d9f4207 100644
+--- a/gcc/config/bfin/linux-unwind.h
++++ b/gcc/config/bfin/linux-unwind.h
+@@ -52,7 +52,7 @@ bfin_fallback_frame_state (struct _Unwind_Context *context,
+ 	void *puc;
+ 	char retcode[8];
+ 	siginfo_t info;
+-	struct ucontext uc;
++	ucontext_t uc;
+       } *rt_ = context->cfa;
+ 
+       /* The void * cast is necessary to avoid an aliasing warning.
+diff --git a/gcc/config/freebsd-spec.h b/gcc/config/freebsd-spec.h
+index ffdbf6f53..66e895f33 100644
+--- a/gcc/config/freebsd-spec.h
++++ b/gcc/config/freebsd-spec.h
+@@ -83,11 +83,8 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+ 	before entering `main'.  */
+    
+ #define FBSD_STARTFILE_SPEC \
+-  "%{!shared: \
+-     %{pg:gcrt1.o%s} %{!pg:%{p:gcrt1.o%s} \
+-		       %{!p:%{profile:gcrt1.o%s} \
+-			 %{!profile:crt1.o%s}}}} \
+-   crti.o%s %{!shared:crtbegin.o%s} %{shared:crtbeginS.o%s}"
++  "%{!shared: %{pg|p|profile:gcrt1.o%s;pie:Scrt1.o%s;:crt1.o%s}} \
++   crti.o%s %{shared|pie:crtbeginS.o%s;:crtbegin.o%s}"
+ 
+ /* Provide a ENDFILE_SPEC appropriate for FreeBSD.  Here we tack on
+    the magical crtend.o file (see crtstuff.c) which provides part of 
+@@ -96,7 +93,7 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+ 	`crtn.o'.  */
+ 
+ #define FBSD_ENDFILE_SPEC \
+-  "%{!shared:crtend.o%s} %{shared:crtendS.o%s} crtn.o%s"
++  "%{shared|pie:crtendS.o%s;:crtend.o%s} crtn.o%s"
+ 
+ /* Provide a LIB_SPEC appropriate for FreeBSD as configured and as
+    required by the user-land thread model.  Before __FreeBSD_version
+diff --git a/gcc/config/i386/freebsd.h b/gcc/config/i386/freebsd.h
+index 6195338c3..8be0a1244 100644
+--- a/gcc/config/i386/freebsd.h
++++ b/gcc/config/i386/freebsd.h
+@@ -69,11 +69,8 @@ along with GCC; see the file COPYING3.  If not see
+    
+ #undef	STARTFILE_SPEC
+ #define STARTFILE_SPEC \
+-  "%{!shared: \
+-     %{pg:gcrt1.o%s} %{!pg:%{p:gcrt1.o%s} \
+-		       %{!p:%{profile:gcrt1.o%s} \
+-			 %{!profile:crt1.o%s}}}} \
+-   crti.o%s %{!shared:crtbegin.o%s} %{shared:crtbeginS.o%s}"
++  "%{!shared: %{pg|p|profile:gcrt1.o%s;pie:Scrt1.o%s;:crt1.o%s}} \
++   crti.o%s %{shared|pie:crtbeginS.o%s;:crtbegin.o%s}"
+ 
+ /* Provide a ENDFILE_SPEC appropriate for FreeBSD.  Here we tack on
+    the magical crtend.o file (see crtstuff.c) which provides part of 
+@@ -83,7 +80,7 @@ along with GCC; see the file COPYING3.  If not see
+ 
+ #undef	ENDFILE_SPEC
+ #define ENDFILE_SPEC \
+-  "%{!shared:crtend.o%s} %{shared:crtendS.o%s} crtn.o%s"
++  "%{shared|pie:crtendS.o%s;:crtend.o%s} crtn.o%s"
+ 
+ /* Provide a LINK_SPEC appropriate for FreeBSD.  Here we provide support
+    for the special GCC options -static and -shared, which allow us to
+diff --git a/gcc/config/i386/linux-unwind.h b/gcc/config/i386/linux-unwind.h
+index fe0ea3eb8..ea2228afc 100644
+--- a/gcc/config/i386/linux-unwind.h
++++ b/gcc/config/i386/linux-unwind.h
+@@ -47,7 +47,7 @@ x86_64_fallback_frame_state (struct _Unwind_Context *context,
+   if (*(unsigned char *)(pc+0) == 0x48
+       && *(unsigned long *)(pc+1) == 0x050f0000000fc0c7)
+     {
+-      struct ucontext *uc_ = context->cfa;
++      ucontext_t *uc_ = context->cfa;
+       /* The void * cast is necessary to avoid an aliasing warning.
+          The aliasing warning is correct, but should not be a problem
+          because it does not alias anything.  */
+@@ -136,7 +136,7 @@ x86_fallback_frame_state (struct _Unwind_Context *context,
+ 	siginfo_t *pinfo;
+ 	void *puc;
+ 	siginfo_t info;
+-	struct ucontext uc;
++	ucontext_t uc;
+       } *rt_ = context->cfa;
+       /* The void * cast is necessary to avoid an aliasing warning.
+          The aliasing warning is correct, but should not be a problem
+diff --git a/gcc/config/ia64/crtbegin.asm b/gcc/config/ia64/crtbegin.asm
+index 638489990..163016b0b 100644
+--- a/gcc/config/ia64/crtbegin.asm
++++ b/gcc/config/ia64/crtbegin.asm
+@@ -252,3 +252,7 @@ __do_jv_register_classes:
+ .weak __cxa_finalize
+ #endif
+ .weak _Jv_RegisterClasses
++
++#ifdef __linux__
++.section .note.GNU-stack; .previous
++#endif
+diff --git a/gcc/config/ia64/crtend.asm b/gcc/config/ia64/crtend.asm
+index a904af9cf..c8f783143 100644
+--- a/gcc/config/ia64/crtend.asm
++++ b/gcc/config/ia64/crtend.asm
+@@ -119,3 +119,7 @@ __do_global_ctors_aux:
+ 
+ 	br.ret.sptk.many rp
+ 	.endp __do_global_ctors_aux
++
++#ifdef __linux__
++.section .note.GNU-stack; .previous
++#endif
+diff --git a/gcc/config/ia64/crti.asm b/gcc/config/ia64/crti.asm
+index a9d515097..9196db295 100644
+--- a/gcc/config/ia64/crti.asm
++++ b/gcc/config/ia64/crti.asm
+@@ -51,3 +51,7 @@ _fini:
+ 	.body
+ 
+ # end of crti.asm
++
++#ifdef __linux__
++.section .note.GNU-stack; .previous
++#endif
+diff --git a/gcc/config/ia64/crtn.asm b/gcc/config/ia64/crtn.asm
+index e1a18795f..83eeb72de 100644
+--- a/gcc/config/ia64/crtn.asm
++++ b/gcc/config/ia64/crtn.asm
+@@ -41,3 +41,7 @@
+ 	br.ret.sptk.many b0
+ 
+ # end of crtn.asm
++
++#ifdef __linux__
++.section .note.GNU-stack; .previous
++#endif
+diff --git a/gcc/config/ia64/lib1funcs.asm b/gcc/config/ia64/lib1funcs.asm
+index b7eaa6eca..86661c0d6 100644
+--- a/gcc/config/ia64/lib1funcs.asm
++++ b/gcc/config/ia64/lib1funcs.asm
+@@ -793,3 +793,7 @@ __floattitf:
+ 	.endp __floattitf
+ #endif
+ #endif
++
++#ifdef __linux__
++.section .note.GNU-stack; .previous
++#endif
+diff --git a/gcc/config/ia64/linux.h b/gcc/config/ia64/linux.h
+index 587a4f44f..6a96a57cd 100644
+--- a/gcc/config/ia64/linux.h
++++ b/gcc/config/ia64/linux.h
+@@ -29,6 +29,8 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+ 
+ #define TARGET_VERSION fprintf (stderr, " (IA-64) Linux");
+ 
++#define TARGET_ASM_FILE_END file_end_indicate_exec_stack
++
+ /* This is for -profile to use -lc_p instead of -lc.  */
+ #undef CC1_SPEC
+ #define CC1_SPEC "%{profile:-p} %{G*}"
+diff --git a/gcc/config/m68k/linux-unwind.h b/gcc/config/m68k/linux-unwind.h
+index 053c15558..d7bc1f2c0 100644
+--- a/gcc/config/m68k/linux-unwind.h
++++ b/gcc/config/m68k/linux-unwind.h
+@@ -33,7 +33,7 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+ /* <sys/ucontext.h> is unfortunately broken right now.  */
+ struct uw_ucontext {
+ 	unsigned long	  uc_flags;
+-	struct ucontext  *uc_link;
++	ucontext_t	 *uc_link;
+ 	stack_t		  uc_stack;
+ 	mcontext_t	  uc_mcontext;
+ 	unsigned long	  uc_filler[80];
+diff --git a/gcc/config/netbsd-elf.h b/gcc/config/netbsd-elf.h
+index 37f504b84..3fb086d0a 100644
+--- a/gcc/config/netbsd-elf.h
++++ b/gcc/config/netbsd-elf.h
+@@ -82,6 +82,7 @@ along with GCC; see the file COPYING3.  If not see
+ #define NETBSD_LINK_SPEC_ELF \
+   "%{assert*} %{R*} %{rpath*} \
+    %{shared:-shared} \
++   %{symbolic:-Bsymbolic} \
+    %{!shared: \
+      -dc -dp \
+      %{!nostdlib: \
+diff --git a/gcc/config/pa/linux-unwind.h b/gcc/config/pa/linux-unwind.h
+index 38b4eda7a..45ea66cf3 100644
+--- a/gcc/config/pa/linux-unwind.h
++++ b/gcc/config/pa/linux-unwind.h
+@@ -64,7 +64,7 @@ pa32_fallback_frame_state (struct _Unwind_Context *context,
+   struct sigcontext *sc;
+   struct rt_sigframe {
+     siginfo_t info;
+-    struct ucontext uc;
++    ucontext_t uc;
+   } *frame;
+ 
+   /* rt_sigreturn trampoline:
+diff --git a/gcc/config/rs6000/ppc-asm.h b/gcc/config/rs6000/ppc-asm.h
+index c963eb98a..c30a43d7d 100644
+--- a/gcc/config/rs6000/ppc-asm.h
++++ b/gcc/config/rs6000/ppc-asm.h
+@@ -352,7 +352,7 @@ GLUE(.L,name): \
+ #endif
+ #endif
+ 
+-#if defined __linux__ && !defined __powerpc64__
++#if defined __linux__
+ 	.section .note.GNU-stack
+ 	.previous
+ #endif
+diff --git a/gcc/config/rs6000/rs6000-c.c b/gcc/config/rs6000/rs6000-c.c
+index a78ded731..e0b24e6bb 100644
+--- a/gcc/config/rs6000/rs6000-c.c
++++ b/gcc/config/rs6000/rs6000-c.c
+@@ -183,7 +183,10 @@ rs6000_macro_to_expand (cpp_reader *pfile, const cpp_token *tok)
+ 	  expand_this = C_CPP_HASHNODE (__vector_keyword);
+ 	  expand_bool_pixel = __bool_keyword;
+ 	}
+-      else if (ident)
++      /* The boost libraries have code with Iterator::vector vector in it.  If
++	 we allow the normal handling, this module will be called recursively,
++	 and the vector will be skipped.; */
++      else if (ident && (ident != C_CPP_HASHNODE (__vector_keyword)))
+ 	{
+ 	  enum rid rid_code = (enum rid)(ident->rid_code);
+ 	  if (ident->type == NT_MACRO)
+diff --git a/gcc/config/rs6000/rs6000.c b/gcc/config/rs6000/rs6000.c
+index 285435d25..f2763a50d 100644
+--- a/gcc/config/rs6000/rs6000.c
++++ b/gcc/config/rs6000/rs6000.c
+@@ -18614,8 +18614,10 @@ rs6000_reg_live_or_pic_offset_p (int reg)
+   return ((df_regs_ever_live_p (reg)
+            && (!call_used_regs[reg]
+                || (reg == RS6000_PIC_OFFSET_TABLE_REGNUM
++		   && !TARGET_SINGLE_PIC_BASE
+                    && TARGET_TOC && TARGET_MINIMAL_TOC)))
+           || (reg == RS6000_PIC_OFFSET_TABLE_REGNUM
++	      && !TARGET_SINGLE_PIC_BASE
+               && ((DEFAULT_ABI == ABI_V4 && flag_pic != 0)
+                   || (DEFAULT_ABI == ABI_DARWIN && flag_pic))));
+ }
+@@ -19366,6 +19368,9 @@ rs6000_emit_prologue (void)
+       insn = emit_insn (generate_set_vrsave (reg, info, 0));
+     }
+ 
++  if (TARGET_SINGLE_PIC_BASE)
++    return; /* Do not set PIC register */
++
+   /* If we are using RS6000_PIC_OFFSET_TABLE_REGNUM, we need to set it up.  */
+   if ((TARGET_TOC && TARGET_MINIMAL_TOC && get_pool_size () != 0)
+       || (DEFAULT_ABI == ABI_V4
+diff --git a/gcc/config/rs6000/rs6000.opt b/gcc/config/rs6000/rs6000.opt
+index 63f0f8c15..1c97c9449 100644
+--- a/gcc/config/rs6000/rs6000.opt
++++ b/gcc/config/rs6000/rs6000.opt
+@@ -163,6 +163,10 @@ mupdate
+ Target Report RejectNegative InverseMask(NO_UPDATE, UPDATE)
+ Generate load/store with update instructions
+ 
++msingle-pic-base
++Target Report Var(TARGET_SINGLE_PIC_BASE) Init(0)
++Do not load the PIC register in function prologues
++
+ mavoid-indexed-addresses
+ Target Report Var(TARGET_AVOID_XFORM) Init(-1)
+ Avoid generation of indexed load/store instructions when possible
+diff --git a/gcc/config/rs6000/sysv4.h b/gcc/config/rs6000/sysv4.h
+index 31d5cb615..b49f451c3 100644
+--- a/gcc/config/rs6000/sysv4.h
++++ b/gcc/config/rs6000/sysv4.h
+@@ -229,7 +229,8 @@ do {									\
+     }									\
+ 									\
+   else if (TARGET_RELOCATABLE)						\
+-    flag_pic = 2;							\
++    if (!flag_pic)							\
++      flag_pic = 2;							\
+ } while (0)
+ 
+ #ifndef RS6000_BI_ARCH
+diff --git a/gcc/config/sh/linux-unwind.h b/gcc/config/sh/linux-unwind.h
+index 5a78e3172..eefad5175 100644
+--- a/gcc/config/sh/linux-unwind.h
++++ b/gcc/config/sh/linux-unwind.h
+@@ -181,7 +181,7 @@ sh_fallback_frame_state (struct _Unwind_Context *context,
+     {
+       struct rt_sigframe {
+ 	siginfo_t info;
+-	struct ucontext uc;
++	ucontext_t uc;
+       } *rt_ = context->cfa;
+       /* The void * cast is necessary to avoid an aliasing warning.
+          The aliasing warning is correct, but should not be a problem
+diff --git a/gcc/config/sparc/freebsd.h b/gcc/config/sparc/freebsd.h
+index 9c86f5c9a..ce60d6cb3 100644
+--- a/gcc/config/sparc/freebsd.h
++++ b/gcc/config/sparc/freebsd.h
+@@ -25,9 +25,22 @@ along with GCC; see the file COPYING3.  If not see
+ /* FreeBSD needs the platform name (sparc64) defined.
+    Emacs needs to know if the arch is 64 or 32-bits.  */
+ 
+-#undef  CPP_CPU64_DEFAULT_SPEC
+-#define CPP_CPU64_DEFAULT_SPEC \
+-  "-D__sparc64__ -D__sparc_v9__ -D__sparcv9 -D__arch64__"
++#undef  FBSD_TARGET_CPU_CPP_BUILTINS
++#define FBSD_TARGET_CPU_CPP_BUILTINS()                  \
++  do                                                    \
++    {                                                   \
++      if (TARGET_ARCH64)                                \
++        {                                               \
++          builtin_define ("__sparc64__");               \
++          builtin_define ("__sparc_v9__");              \
++          builtin_define ("__sparcv9");                 \
++        }                                               \
++      else                                              \
++        builtin_define ("__sparc");                     \
++      builtin_define ("__sparc__");                     \
++    }                                                   \
++  while (0)
++
+ 
+ #define LINK_SPEC "%(link_arch)						\
+   %{!mno-relax:%{!r:-relax}}						\
+diff --git a/gcc/config/xtensa/linux-unwind.h b/gcc/config/xtensa/linux-unwind.h
+index 245649728..b7b128cf0 100644
+--- a/gcc/config/xtensa/linux-unwind.h
++++ b/gcc/config/xtensa/linux-unwind.h
+@@ -63,7 +63,7 @@ xtensa_fallback_frame_state (struct _Unwind_Context *context,
+ 
+   struct rt_sigframe {
+     siginfo_t info;
+-    struct ucontext uc;
++    ucontext_t uc;
+   } *rt_;
+ 
+   /* movi a2, __NR_rt_sigreturn; syscall */
+diff --git a/gcc/configure b/gcc/configure
+index 145923ae1..6d0fe4321 100755
+--- a/gcc/configure
++++ b/gcc/configure
+@@ -602,6 +602,7 @@ ac_subst_vars='LTLIBOBJS
+ LIBOBJS
+ enable_plugin
+ pluginlibs
++DL_LIB
+ LIBELFINC
+ LIBELFLIBS
+ CLOOGINC
+@@ -10954,7 +10955,7 @@ then
+ 	    | powerpc*-*-*,powerpc64*-*-*)
+ 		CROSS="$CROSS -DNATIVE_CROSS" ;;
+ 	esac
+-elif test "x$TARGET_SYSTEM_ROOT" != x; then
++elif test "x$TARGET_SYSTEM_ROOT" != x -o $build != $host; then
+         SYSTEM_HEADER_DIR=$build_system_header_dir
+ fi
+ 
+@@ -22301,7 +22302,7 @@ foo:	.long	25
+ 	tls_first_minor=14
+ 	tls_as_opt="-m64 -Aesame --fatal-warnings"
+ 	;;
+-  sh-*-* | sh[34]-*-*)
++  sh-*-* | sh[34]*-*-*)
+     conftest_s='
+ 	.section ".tdata","awT",@progbits
+ foo:	.long	25
+@@ -25456,6 +25457,72 @@ $as_echo "#define HAVE_libelf 1" >>confdefs.h
+ 
+ fi
+ 
++# Check how to dlopen
++DL_LIB=
++saved_LIBS="$LIBS"
++{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for library containing dlopen" >&5
++$as_echo_n "checking for library containing dlopen... " >&6; }
++if test "${ac_cv_search_dlopen+set}" = set; then :
++  $as_echo_n "(cached) " >&6
++else
++  ac_func_search_save_LIBS=$LIBS
++cat confdefs.h - <<_ACEOF >conftest.$ac_ext
++/* end confdefs.h.  */
++
++/* Override any GCC internal prototype to avoid an error.
++   Use char because int might match the return type of a GCC
++   builtin and then its argument prototype would still apply.  */
++#ifdef __cplusplus
++extern "C"
++#endif
++char dlopen ();
++int
++main ()
++{
++return dlopen ();
++  ;
++  return 0;
++}
++_ACEOF
++for ac_lib in '' dl; do
++  if test -z "$ac_lib"; then
++    ac_res="none required"
++  else
++    ac_res=-l$ac_lib
++    LIBS="-l$ac_lib  $ac_func_search_save_LIBS"
++  fi
++  if ac_fn_c_try_link "$LINENO"; then :
++  ac_cv_search_dlopen=$ac_res
++fi
++rm -f core conftest.err conftest.$ac_objext \
++    conftest$ac_exeext
++  if test "${ac_cv_search_dlopen+set}" = set; then :
++  break
++fi
++done
++if test "${ac_cv_search_dlopen+set}" = set; then :
++
++else
++  ac_cv_search_dlopen=no
++fi
++rm conftest.$ac_ext
++LIBS=$ac_func_search_save_LIBS
++fi
++{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_search_dlopen" >&5
++$as_echo "$ac_cv_search_dlopen" >&6; }
++ac_res=$ac_cv_search_dlopen
++if test "$ac_res" != no; then :
++  test "$ac_res" = "none required" || LIBS="$ac_res $LIBS"
++
++fi
++
++case $ac_cv_search_dlopen in
++    no*) ;;
++      *) DL_LIB=$ac_cv_search_dlopen ;;
++esac
++
++LIBS=$saved_LIBS
++
+ # Check for plugin support
+ # Check whether --enable-plugin was given.
+ if test "${enable_plugin+set}" = set; then :
+diff --git a/gcc/configure.ac b/gcc/configure.ac
+index 45d29595c..7da752f3a 100644
+--- a/gcc/configure.ac
++++ b/gcc/configure.ac
+@@ -1773,7 +1773,7 @@ then
+ 	    | powerpc*-*-*,powerpc64*-*-*)
+ 		CROSS="$CROSS -DNATIVE_CROSS" ;;
+ 	esac
+-elif test "x$TARGET_SYSTEM_ROOT" != x; then
++elif test "x$TARGET_SYSTEM_ROOT" != x -o $build != $host; then
+         SYSTEM_HEADER_DIR=$build_system_header_dir 
+ fi
+ 
+@@ -2882,7 +2882,7 @@ foo:	.long	25
+ 	tls_first_minor=14
+ 	tls_as_opt="-m64 -Aesame --fatal-warnings"
+ 	;;
+-  sh-*-* | sh[34]-*-*)
++  sh-*-* | sh[34]*-*-*)
+     conftest_s='
+ 	.section ".tdata","awT",@progbits
+ foo:	.long	25
+@@ -4547,6 +4547,17 @@ if test "x${LIBELFLIBS}" != "x" ; then
+    AC_DEFINE(HAVE_libelf, 1, [Define if libelf is in use.])
+ fi
+ 
++# Check how to dlopen
++DL_LIB=
++saved_LIBS="$LIBS"
++AC_SEARCH_LIBS([dlopen], [dl])
++case $ac_cv_search_dlopen in
++    no*) ;;
++      *) DL_LIB=$ac_cv_search_dlopen ;;
++esac
++AC_SUBST(DL_LIB)
++LIBS=$saved_LIBS
++
+ # Check for plugin support
+ AC_ARG_ENABLE(plugin,
+ [  --enable-plugin         enable plugin support],
+diff --git a/gcc/cp/cfns.gperf b/gcc/cp/cfns.gperf
+index ef1ed083d..7d4ec2d27 100644
+--- a/gcc/cp/cfns.gperf
++++ b/gcc/cp/cfns.gperf
+@@ -22,6 +22,9 @@ __inline
+ static unsigned int hash (const char *, unsigned int);
+ #ifdef __GNUC__
+ __inline
++#ifdef __GNUC_STDC_INLINE__
++__attribute__ ((__gnu_inline__)) static
++#endif
+ #endif
+ const char * libc_name_p (const char *, unsigned int);
+ %}
+diff --git a/gcc/cp/cfns.h b/gcc/cp/cfns.h
+index 62cdfab93..cb5c073e7 100644
+--- a/gcc/cp/cfns.h
++++ b/gcc/cp/cfns.h
+@@ -53,6 +53,9 @@ __inline
+ static unsigned int hash (const char *, unsigned int);
+ #ifdef __GNUC__
+ __inline
++#ifdef __GNUC_STDC_INLINE__
++__attribute__ ((__gnu_inline__)) static
++#endif
+ #endif
+ const char * libc_name_p (const char *, unsigned int);
+ /* maximum key range = 391, duplicates = 0 */
+diff --git a/gcc/doc/invoke.texi b/gcc/doc/invoke.texi
+index 81c20dcb6..57458b3e1 100644
+--- a/gcc/doc/invoke.texi
++++ b/gcc/doc/invoke.texi
+@@ -770,7 +770,7 @@ See RS/6000 and PowerPC Options.
+ -mstrict-align  -mno-strict-align  -mrelocatable @gol
+ -mno-relocatable  -mrelocatable-lib  -mno-relocatable-lib @gol
+ -mtoc  -mno-toc  -mlittle  -mlittle-endian  -mbig  -mbig-endian @gol
+--mdynamic-no-pic  -maltivec -mswdiv @gol
++-mdynamic-no-pic  -maltivec  -mswdiv  -msingle-pic-base @gol
+ -mprioritize-restricted-insns=@var{priority} @gol
+ -msched-costly-dep=@var{dependence_type} @gol
+ -minsert-sched-nops=@var{scheme} @gol
+@@ -15309,6 +15309,13 @@ relocatable, but that its external references are relocatable.  The
+ resulting code is suitable for applications, but not shared
+ libraries.
+ 
++@item -msingle-pic-base
++@opindex msingle-pic-base
++Treat the register used for PIC addressing as read-only, rather than
++loading it in the prologue for each function.  The run-time system is
++responsible for initializing this register with an appropriate value
++before execution begins.
++
+ @item -mprioritize-restricted-insns=@var{priority}
+ @opindex mprioritize-restricted-insns
+ This option controls the priority that is assigned to
+diff --git a/gcc/graphite-clast-to-gimple.c b/gcc/graphite-clast-to-gimple.c
+index c01d899fe..2f7ceef14 100644
+--- a/gcc/graphite-clast-to-gimple.c
++++ b/gcc/graphite-clast-to-gimple.c
+@@ -613,11 +613,11 @@ gcc_type_for_cloog_iv (const char *cloog_iv, gimple_bb_p gbb)
+    STMT.  */
+ 
+ static tree
+-gcc_type_for_iv_of_clast_loop (struct clast_for *stmt_for)
++gcc_type_for_iv_of_clast_loop (struct clast_for *stmt_fora)
+ {
+-  struct clast_stmt *stmt = (struct clast_stmt *) stmt_for;
++  struct clast_stmt *stmt = (struct clast_stmt *) stmt_fora;
+   struct clast_user_stmt *body = clast_get_body_of_loop (stmt);
+-  const char *cloog_iv = stmt_for->iterator;
++  const char *cloog_iv = stmt_fora->iterator;
+   CloogStatement *cs = body->statement;
+   poly_bb_p pbb = (poly_bb_p) cloog_statement_usr (cs);
+ 
+diff --git a/gcc/graphite-ppl.c b/gcc/graphite-ppl.c
+index 62af5adfc..1f6c69133 100644
+--- a/gcc/graphite-ppl.c
++++ b/gcc/graphite-ppl.c
+@@ -29,6 +29,7 @@ along with GCC; see the file COPYING3.  If not see
+ #include "ppl_c.h"
+ #include "cloog/cloog.h"
+ #include "graphite-ppl.h"
++#include "graphite.h"
+ 
+ /* Translates row ROW of the CloogMatrix MATRIX to a PPL Constraint.  */
+ 
+diff --git a/gcc/graphite.c b/gcc/graphite.c
+index fdbc81a5e..400536dae 100644
+--- a/gcc/graphite.c
++++ b/gcc/graphite.c
+@@ -67,6 +67,35 @@ along with GCC; see the file COPYING3.  If not see
+ #include "graphite-clast-to-gimple.h"
+ #include "graphite-sese-to-poly.h"
+ 
++__typeof (cloog_pointers__) cloog_pointers__;
++
++static bool
++init_cloog_pointers (void)
++{
++  void *h;
++
++  if (cloog_pointers__.inited)
++    return cloog_pointers__.h != NULL;
++  h = dlopen ("libcloog.so.0", RTLD_LAZY);
++  cloog_pointers__.h = h;
++  if (h == NULL)
++    return false;
++#define DYNSYM(x) \
++  do \
++    { \
++      union { __typeof (cloog_pointers__.p_##x) p; void *q; } u; \
++      u.q = dlsym (h, #x); \
++      if (u.q == NULL) \
++	return false; \
++      cloog_pointers__.p_##x = u.p; \
++    } \
++  while (0)
++  DYNSYMS
++#undef DYNSYM
++  return true;
++}
++
++
+ /* Print global statistics to FILE.  */
+ 
+ static void
+@@ -210,6 +239,12 @@ graphite_initialize (void)
+       return false;
+     }
+ 
++  if (!init_cloog_pointers ())
++    {
++      sorry ("Graphite loop optimizations cannot be used; rebuild gcc to fix");
++      return false;
++    }
++
+   scev_reset ();
+   recompute_all_dominators ();
+   initialize_original_copy_tables ();
+diff --git a/gcc/graphite.h b/gcc/graphite.h
+index 1007e9af4..7e256b6fc 100644
+--- a/gcc/graphite.h
++++ b/gcc/graphite.h
+@@ -21,4 +21,224 @@ along with GCC; see the file COPYING3.  If not see
+ #ifndef GCC_GRAPHITE_H
+ #define GCC_GRAPHITE_H
+ 
++#include <dlfcn.h>
++#define DYNSYMS \
++  DYNSYM (cloog_block_alloc); \
++  DYNSYM (cloog_block_list_free); \
++  DYNSYM (cloog_block_list_malloc); \
++  DYNSYM (cloog_clast_create); \
++  DYNSYM (cloog_clast_free); \
++  DYNSYM (cloog_domain_free); \
++  DYNSYM (cloog_domain_matrix2domain); \
++  DYNSYM (cloog_initialize); \
++  DYNSYM (cloog_loop_malloc); \
++  DYNSYM (cloog_matrix_alloc); \
++  DYNSYM (cloog_matrix_copy); \
++  DYNSYM (cloog_matrix_free); \
++  DYNSYM (cloog_matrix_print); \
++  DYNSYM (cloog_names_malloc); \
++  DYNSYM (cloog_names_scalarize); \
++  DYNSYM (cloog_options_free); \
++  DYNSYM (cloog_options_malloc); \
++  DYNSYM (cloog_program_dump_cloog); \
++  DYNSYM (cloog_program_extract_scalars); \
++  DYNSYM (cloog_program_free); \
++  DYNSYM (cloog_program_generate); \
++  DYNSYM (cloog_program_malloc); \
++  DYNSYM (cloog_program_print); \
++  DYNSYM (cloog_program_scatter); \
++  DYNSYM (cloog_statement_alloc); \
++  DYNSYM (cloog_domain_union); \
++  DYNSYM (cloog_matrix_read); \
++  DYNSYM (cloog_new_pol); \
++  DYNSYM (cloog_vector_gcd); \
++  DYNSYM (ppl_finalize); \
++  DYNSYM (ppl_assign_Coefficient_from_mpz_t); \
++  DYNSYM (ppl_assign_Linear_Expression_from_Linear_Expression); \
++  DYNSYM (ppl_Coefficient_to_mpz_t); \
++  DYNSYM (ppl_Constraint_coefficient); \
++  DYNSYM (ppl_Constraint_inhomogeneous_term); \
++  DYNSYM (ppl_Constraint_space_dimension); \
++  DYNSYM (ppl_Constraint_System_begin); \
++  DYNSYM (ppl_Constraint_System_const_iterator_dereference); \
++  DYNSYM (ppl_Constraint_System_const_iterator_equal_test); \
++  DYNSYM (ppl_Constraint_System_const_iterator_increment); \
++  DYNSYM (ppl_Constraint_System_end); \
++  DYNSYM (ppl_Constraint_System_insert_Constraint); \
++  DYNSYM (ppl_Constraint_System_space_dimension); \
++  DYNSYM (ppl_Constraint_type); \
++  DYNSYM (ppl_delete_Coefficient); \
++  DYNSYM (ppl_delete_Constraint); \
++  DYNSYM (ppl_delete_Constraint_System_const_iterator); \
++  DYNSYM (ppl_delete_Linear_Expression); \
++  DYNSYM (ppl_delete_Pointset_Powerset_C_Polyhedron); \
++  DYNSYM (ppl_delete_Pointset_Powerset_C_Polyhedron_iterator); \
++  DYNSYM (ppl_delete_Polyhedron); \
++  DYNSYM (ppl_Linear_Expression_add_to_coefficient); \
++  DYNSYM (ppl_Linear_Expression_add_to_inhomogeneous); \
++  DYNSYM (ppl_Linear_Expression_coefficient); \
++  DYNSYM (ppl_Linear_Expression_inhomogeneous_term); \
++  DYNSYM (ppl_Linear_Expression_space_dimension); \
++  DYNSYM (ppl_new_Coefficient); \
++  DYNSYM (ppl_new_Coefficient_from_mpz_t); \
++  DYNSYM (ppl_new_Constraint); \
++  DYNSYM (ppl_new_Constraint_System); \
++  DYNSYM (ppl_new_Constraint_System_const_iterator); \
++  DYNSYM (ppl_new_C_Polyhedron_from_C_Polyhedron); \
++  DYNSYM (ppl_new_C_Polyhedron_from_space_dimension); \
++  DYNSYM (ppl_new_C_Polyhedron_recycle_Constraint_System); \
++  DYNSYM (ppl_new_Linear_Expression); \
++  DYNSYM (ppl_new_Linear_Expression_from_Constraint); \
++  DYNSYM (ppl_new_Linear_Expression_from_Linear_Expression); \
++  DYNSYM (ppl_new_Linear_Expression_with_dimension); \
++  DYNSYM (ppl_new_Pointset_Powerset_C_Polyhedron_from_C_Polyhedron); \
++  DYNSYM (ppl_new_Pointset_Powerset_C_Polyhedron_from_Pointset_Powerset_C_Polyhedron); \
++  DYNSYM (ppl_new_Pointset_Powerset_C_Polyhedron_from_space_dimension); \
++  DYNSYM (ppl_new_Pointset_Powerset_C_Polyhedron_iterator); \
++  DYNSYM (ppl_Pointset_Powerset_C_Polyhedron_add_constraint); \
++  DYNSYM (ppl_Pointset_Powerset_C_Polyhedron_add_space_dimensions_and_embed); \
++  DYNSYM (ppl_Pointset_Powerset_C_Polyhedron_difference_assign); \
++  DYNSYM (ppl_Pointset_Powerset_C_Polyhedron_intersection_assign); \
++  DYNSYM (ppl_Pointset_Powerset_C_Polyhedron_is_empty); \
++  DYNSYM (ppl_Pointset_Powerset_C_Polyhedron_iterator_begin); \
++  DYNSYM (ppl_Pointset_Powerset_C_Polyhedron_iterator_dereference); \
++  DYNSYM (ppl_Pointset_Powerset_C_Polyhedron_iterator_end); \
++  DYNSYM (ppl_Pointset_Powerset_C_Polyhedron_iterator_equal_test); \
++  DYNSYM (ppl_Pointset_Powerset_C_Polyhedron_iterator_increment); \
++  DYNSYM (ppl_Pointset_Powerset_C_Polyhedron_map_space_dimensions); \
++  DYNSYM (ppl_Pointset_Powerset_C_Polyhedron_maximize); \
++  DYNSYM (ppl_Pointset_Powerset_C_Polyhedron_minimize); \
++  DYNSYM (ppl_Pointset_Powerset_C_Polyhedron_remove_space_dimensions); \
++  DYNSYM (ppl_Pointset_Powerset_C_Polyhedron_size); \
++  DYNSYM (ppl_Pointset_Powerset_C_Polyhedron_space_dimension); \
++  DYNSYM (ppl_Pointset_Powerset_C_Polyhedron_upper_bound_assign); \
++  DYNSYM (ppl_Polyhedron_add_constraint); \
++  DYNSYM (ppl_Polyhedron_add_constraints); \
++  DYNSYM (ppl_Polyhedron_add_space_dimensions_and_embed); \
++  DYNSYM (ppl_Polyhedron_get_constraints); \
++  DYNSYM (ppl_Polyhedron_map_space_dimensions); \
++  DYNSYM (ppl_Polyhedron_remove_space_dimensions); \
++  DYNSYM (ppl_Polyhedron_space_dimension); \
++  DYNSYM (ppl_subtract_Linear_Expression_from_Linear_Expression); \
++  DYNSYM (pprint); \
++  DYNSYM (stmt_block); \
++  DYNSYM (stmt_for); \
++  DYNSYM (stmt_guard); \
++  DYNSYM (stmt_root); \
++  DYNSYM (stmt_user);
++extern struct
++{
++  bool inited;
++  void *h;
++#define DYNSYM(x) __typeof (x) *p_##x
++  DYNSYMS
++#undef DYNSYM
++} cloog_pointers__;
++
++#define cloog_block_alloc (*cloog_pointers__.p_cloog_block_alloc)
++#define cloog_block_list_free (*cloog_pointers__.p_cloog_block_list_free)
++#define cloog_block_list_malloc (*cloog_pointers__.p_cloog_block_list_malloc)
++#define cloog_clast_create (*cloog_pointers__.p_cloog_clast_create)
++#define cloog_clast_free (*cloog_pointers__.p_cloog_clast_free)
++#define cloog_domain_free (*cloog_pointers__.p_cloog_domain_free)
++#define cloog_domain_matrix2domain (*cloog_pointers__.p_cloog_domain_matrix2domain)
++#define cloog_initialize (*cloog_pointers__.p_cloog_initialize)
++#define cloog_loop_malloc (*cloog_pointers__.p_cloog_loop_malloc)
++#define cloog_matrix_alloc (*cloog_pointers__.p_cloog_matrix_alloc)
++#define cloog_matrix_copy (*cloog_pointers__.p_cloog_matrix_copy)
++#define cloog_matrix_free (*cloog_pointers__.p_cloog_matrix_free)
++#define cloog_matrix_print (*cloog_pointers__.p_cloog_matrix_print)
++#define cloog_names_malloc (*cloog_pointers__.p_cloog_names_malloc)
++#define cloog_names_scalarize (*cloog_pointers__.p_cloog_names_scalarize)
++#define cloog_options_free (*cloog_pointers__.p_cloog_options_free)
++#define cloog_options_malloc (*cloog_pointers__.p_cloog_options_malloc)
++#define cloog_program_dump_cloog (*cloog_pointers__.p_cloog_program_dump_cloog)
++#define cloog_program_extract_scalars (*cloog_pointers__.p_cloog_program_extract_scalars)
++#define cloog_program_free (*cloog_pointers__.p_cloog_program_free)
++#define cloog_program_generate (*cloog_pointers__.p_cloog_program_generate)
++#define cloog_program_malloc (*cloog_pointers__.p_cloog_program_malloc)
++#define cloog_program_print (*cloog_pointers__.p_cloog_program_print)
++#define cloog_program_scatter (*cloog_pointers__.p_cloog_program_scatter)
++#define cloog_statement_alloc (*cloog_pointers__.p_cloog_statement_alloc)
++#define cloog_domain_union (*cloog_pointers__.p_cloog_domain_union)
++#define cloog_matrix_read (*cloog_pointers__.p_cloog_matrix_read)
++#define cloog_new_pol (*cloog_pointers__.p_cloog_new_pol)
++#define cloog_vector_gcd (*cloog_pointers__.p_cloog_vector_gcd)
++#define ppl_finalize (*cloog_pointers__.p_ppl_finalize)
++#define ppl_assign_Coefficient_from_mpz_t (*cloog_pointers__.p_ppl_assign_Coefficient_from_mpz_t)
++#define ppl_assign_Linear_Expression_from_Linear_Expression (*cloog_pointers__.p_ppl_assign_Linear_Expression_from_Linear_Expression)
++#define ppl_Coefficient_to_mpz_t (*cloog_pointers__.p_ppl_Coefficient_to_mpz_t)
++#define ppl_Constraint_coefficient (*cloog_pointers__.p_ppl_Constraint_coefficient)
++#define ppl_Constraint_inhomogeneous_term (*cloog_pointers__.p_ppl_Constraint_inhomogeneous_term)
++#define ppl_Constraint_space_dimension (*cloog_pointers__.p_ppl_Constraint_space_dimension)
++#define ppl_Constraint_System_begin (*cloog_pointers__.p_ppl_Constraint_System_begin)
++#define ppl_Constraint_System_const_iterator_dereference (*cloog_pointers__.p_ppl_Constraint_System_const_iterator_dereference)
++#define ppl_Constraint_System_const_iterator_equal_test (*cloog_pointers__.p_ppl_Constraint_System_const_iterator_equal_test)
++#define ppl_Constraint_System_const_iterator_increment (*cloog_pointers__.p_ppl_Constraint_System_const_iterator_increment)
++#define ppl_Constraint_System_end (*cloog_pointers__.p_ppl_Constraint_System_end)
++#define ppl_Constraint_System_insert_Constraint (*cloog_pointers__.p_ppl_Constraint_System_insert_Constraint)
++#define ppl_Constraint_System_space_dimension (*cloog_pointers__.p_ppl_Constraint_System_space_dimension)
++#define ppl_Constraint_type (*cloog_pointers__.p_ppl_Constraint_type)
++#define ppl_delete_Coefficient (*cloog_pointers__.p_ppl_delete_Coefficient)
++#define ppl_delete_Constraint (*cloog_pointers__.p_ppl_delete_Constraint)
++#define ppl_delete_Constraint_System_const_iterator (*cloog_pointers__.p_ppl_delete_Constraint_System_const_iterator)
++#define ppl_delete_Linear_Expression (*cloog_pointers__.p_ppl_delete_Linear_Expression)
++#define ppl_delete_Pointset_Powerset_C_Polyhedron (*cloog_pointers__.p_ppl_delete_Pointset_Powerset_C_Polyhedron)
++#define ppl_delete_Pointset_Powerset_C_Polyhedron_iterator (*cloog_pointers__.p_ppl_delete_Pointset_Powerset_C_Polyhedron_iterator)
++#define ppl_delete_Polyhedron (*cloog_pointers__.p_ppl_delete_Polyhedron)
++#define ppl_Linear_Expression_add_to_coefficient (*cloog_pointers__.p_ppl_Linear_Expression_add_to_coefficient)
++#define ppl_Linear_Expression_add_to_inhomogeneous (*cloog_pointers__.p_ppl_Linear_Expression_add_to_inhomogeneous)
++#define ppl_Linear_Expression_coefficient (*cloog_pointers__.p_ppl_Linear_Expression_coefficient)
++#define ppl_Linear_Expression_inhomogeneous_term (*cloog_pointers__.p_ppl_Linear_Expression_inhomogeneous_term)
++#define ppl_Linear_Expression_space_dimension (*cloog_pointers__.p_ppl_Linear_Expression_space_dimension)
++#define ppl_new_Coefficient (*cloog_pointers__.p_ppl_new_Coefficient)
++#define ppl_new_Coefficient_from_mpz_t (*cloog_pointers__.p_ppl_new_Coefficient_from_mpz_t)
++#define ppl_new_Constraint (*cloog_pointers__.p_ppl_new_Constraint)
++#define ppl_new_Constraint_System (*cloog_pointers__.p_ppl_new_Constraint_System)
++#define ppl_new_Constraint_System_const_iterator (*cloog_pointers__.p_ppl_new_Constraint_System_const_iterator)
++#define ppl_new_C_Polyhedron_from_C_Polyhedron (*cloog_pointers__.p_ppl_new_C_Polyhedron_from_C_Polyhedron)
++#define ppl_new_C_Polyhedron_from_space_dimension (*cloog_pointers__.p_ppl_new_C_Polyhedron_from_space_dimension)
++#define ppl_new_C_Polyhedron_recycle_Constraint_System (*cloog_pointers__.p_ppl_new_C_Polyhedron_recycle_Constraint_System)
++#define ppl_new_Linear_Expression (*cloog_pointers__.p_ppl_new_Linear_Expression)
++#define ppl_new_Linear_Expression_from_Constraint (*cloog_pointers__.p_ppl_new_Linear_Expression_from_Constraint)
++#define ppl_new_Linear_Expression_from_Linear_Expression (*cloog_pointers__.p_ppl_new_Linear_Expression_from_Linear_Expression)
++#define ppl_new_Linear_Expression_with_dimension (*cloog_pointers__.p_ppl_new_Linear_Expression_with_dimension)
++#define ppl_new_Pointset_Powerset_C_Polyhedron_from_C_Polyhedron (*cloog_pointers__.p_ppl_new_Pointset_Powerset_C_Polyhedron_from_C_Polyhedron)
++#define ppl_new_Pointset_Powerset_C_Polyhedron_from_Pointset_Powerset_C_Polyhedron (*cloog_pointers__.p_ppl_new_Pointset_Powerset_C_Polyhedron_from_Pointset_Powerset_C_Polyhedron)
++#define ppl_new_Pointset_Powerset_C_Polyhedron_from_space_dimension (*cloog_pointers__.p_ppl_new_Pointset_Powerset_C_Polyhedron_from_space_dimension)
++#define ppl_new_Pointset_Powerset_C_Polyhedron_iterator (*cloog_pointers__.p_ppl_new_Pointset_Powerset_C_Polyhedron_iterator)
++#define ppl_Pointset_Powerset_C_Polyhedron_add_constraint (*cloog_pointers__.p_ppl_Pointset_Powerset_C_Polyhedron_add_constraint)
++#define ppl_Pointset_Powerset_C_Polyhedron_add_space_dimensions_and_embed (*cloog_pointers__.p_ppl_Pointset_Powerset_C_Polyhedron_add_space_dimensions_and_embed)
++#define ppl_Pointset_Powerset_C_Polyhedron_difference_assign (*cloog_pointers__.p_ppl_Pointset_Powerset_C_Polyhedron_difference_assign)
++#define ppl_Pointset_Powerset_C_Polyhedron_intersection_assign (*cloog_pointers__.p_ppl_Pointset_Powerset_C_Polyhedron_intersection_assign)
++#define ppl_Pointset_Powerset_C_Polyhedron_is_empty (*cloog_pointers__.p_ppl_Pointset_Powerset_C_Polyhedron_is_empty)
++#define ppl_Pointset_Powerset_C_Polyhedron_iterator_begin (*cloog_pointers__.p_ppl_Pointset_Powerset_C_Polyhedron_iterator_begin)
++#define ppl_Pointset_Powerset_C_Polyhedron_iterator_dereference (*cloog_pointers__.p_ppl_Pointset_Powerset_C_Polyhedron_iterator_dereference)
++#define ppl_Pointset_Powerset_C_Polyhedron_iterator_end (*cloog_pointers__.p_ppl_Pointset_Powerset_C_Polyhedron_iterator_end)
++#define ppl_Pointset_Powerset_C_Polyhedron_iterator_equal_test (*cloog_pointers__.p_ppl_Pointset_Powerset_C_Polyhedron_iterator_equal_test)
++#define ppl_Pointset_Powerset_C_Polyhedron_iterator_increment (*cloog_pointers__.p_ppl_Pointset_Powerset_C_Polyhedron_iterator_increment)
++#define ppl_Pointset_Powerset_C_Polyhedron_map_space_dimensions (*cloog_pointers__.p_ppl_Pointset_Powerset_C_Polyhedron_map_space_dimensions)
++#define ppl_Pointset_Powerset_C_Polyhedron_maximize (*cloog_pointers__.p_ppl_Pointset_Powerset_C_Polyhedron_maximize)
++#define ppl_Pointset_Powerset_C_Polyhedron_minimize (*cloog_pointers__.p_ppl_Pointset_Powerset_C_Polyhedron_minimize)
++#define ppl_Pointset_Powerset_C_Polyhedron_remove_space_dimensions (*cloog_pointers__.p_ppl_Pointset_Powerset_C_Polyhedron_remove_space_dimensions)
++#define ppl_Pointset_Powerset_C_Polyhedron_size (*cloog_pointers__.p_ppl_Pointset_Powerset_C_Polyhedron_size)
++#define ppl_Pointset_Powerset_C_Polyhedron_space_dimension (*cloog_pointers__.p_ppl_Pointset_Powerset_C_Polyhedron_space_dimension)
++#define ppl_Pointset_Powerset_C_Polyhedron_upper_bound_assign (*cloog_pointers__.p_ppl_Pointset_Powerset_C_Polyhedron_upper_bound_assign)
++#define ppl_Polyhedron_add_constraint (*cloog_pointers__.p_ppl_Polyhedron_add_constraint)
++#define ppl_Polyhedron_add_constraints (*cloog_pointers__.p_ppl_Polyhedron_add_constraints)
++#define ppl_Polyhedron_add_space_dimensions_and_embed (*cloog_pointers__.p_ppl_Polyhedron_add_space_dimensions_and_embed)
++#define ppl_Polyhedron_get_constraints (*cloog_pointers__.p_ppl_Polyhedron_get_constraints)
++#define ppl_Polyhedron_map_space_dimensions (*cloog_pointers__.p_ppl_Polyhedron_map_space_dimensions)
++#define ppl_Polyhedron_remove_space_dimensions (*cloog_pointers__.p_ppl_Polyhedron_remove_space_dimensions)
++#define ppl_Polyhedron_space_dimension (*cloog_pointers__.p_ppl_Polyhedron_space_dimension)
++#define ppl_subtract_Linear_Expression_from_Linear_Expression (*cloog_pointers__.p_ppl_subtract_Linear_Expression_from_Linear_Expression)
++#define pprint (*cloog_pointers__.p_pprint)
++#define stmt_block (*cloog_pointers__.p_stmt_block)
++#define stmt_for (*cloog_pointers__.p_stmt_for)
++#define stmt_guard (*cloog_pointers__.p_stmt_guard)
++#define stmt_root (*cloog_pointers__.p_stmt_root)
++#define stmt_user (*cloog_pointers__.p_stmt_user)
++
++#define cloog_finalize (*cloog_pointers__.p_ppl_finalize)
++
+ #endif  /* GCC_GRAPHITE_H  */
+diff --git a/gcc/lto/Make-lang.in b/gcc/lto/Make-lang.in
+index ccdf2e384..05143b0a3 100644
+--- a/gcc/lto/Make-lang.in
++++ b/gcc/lto/Make-lang.in
+@@ -94,3 +94,6 @@ lto/lto-coff.o: lto/lto-coff.c $(CONFIG_H) coretypes.h $(SYSTEM_H) \
+ lto/lto-macho.o: lto/lto-macho.c $(CONFIG_H) coretypes.h $(SYSTEM_H) \
+ 	toplev.h $(LTO_H) $(TM_H) $(LIBIBERTY_H) $(GGC_H) $(LTO_STREAMER_H) \
+ 	lto/lto-macho.h lto/lto-endian.h
++
++# LTO testing is done as part of C/C++/Fortran etc. testing.
++check-lto:
+diff --git a/gcc/output.h b/gcc/output.h
+index 5d771d7d0..0e3e47909 100644
+--- a/gcc/output.h
++++ b/gcc/output.h
+@@ -173,6 +173,11 @@ extern void emutls_finish (void);
+    Prefixes such as % are optional.  */
+ extern int decode_reg_name (const char *);
+ 
++/* Similar to decode_reg_name, but takes an extra parameter that is a
++   pointer to the number of (internal) registers described by the
++   external name.  */
++extern int decode_reg_name_and_count (const char *, int *);
++
+ extern void assemble_alias (tree, tree);
+ 
+ extern void default_assemble_visibility (tree, int);
+diff --git a/gcc/pretty-print.h b/gcc/pretty-print.h
+index 3ba503538..a98a9a83a 100644
+--- a/gcc/pretty-print.h
++++ b/gcc/pretty-print.h
+@@ -310,7 +310,7 @@ extern void pp_base_append_text (pretty_printer *, const char *, const char *);
+ 
+ /* This header may be included before toplev.h, hence the duplicate
+    definitions to allow for GCC-specific formats.  */
+-#if GCC_VERSION >= 3005
++#if (GCC_VERSION >= 3005) && (__GNUC__ != 9) /* gcc-9 is buggy: https://gcc.gnu.org/PR90677  */
+ #define ATTRIBUTE_GCC_PPDIAG(m, n) __attribute__ ((__format__ (__gcc_diag__, m ,n))) ATTRIBUTE_NONNULL(m)
+ #else
+ #define ATTRIBUTE_GCC_PPDIAG(m, n) ATTRIBUTE_NONNULL(m)
+diff --git a/gcc/reginfo.c b/gcc/reginfo.c
+index 59c0cecbd..a2120223a 100644
+--- a/gcc/reginfo.c
++++ b/gcc/reginfo.c
+@@ -799,39 +799,44 @@ void
+ fix_register (const char *name, int fixed, int call_used)
+ {
+   int i;
++  int reg, nregs;
+ 
+   /* Decode the name and update the primary form of
+      the register info.  */
+-
+-  if ((i = decode_reg_name (name)) >= 0)
++  if ((reg = decode_reg_name_and_count (name, &nregs)) >= 0)
+     {
+-      if ((i == STACK_POINTER_REGNUM
++      gcc_assert (nregs >= 1);
++      for (i = reg; i < reg + nregs; i++)
++      {
++        if ((i == STACK_POINTER_REGNUM
+ #ifdef HARD_FRAME_POINTER_REGNUM
+-	   || i == HARD_FRAME_POINTER_REGNUM
++             || i == HARD_FRAME_POINTER_REGNUM
+ #else
+-	   || i == FRAME_POINTER_REGNUM
++             || i == FRAME_POINTER_REGNUM
+ #endif
+-	   )
+-	  && (fixed == 0 || call_used == 0))
+-	{
+-	  static const char * const what_option[2][2] = {
+-	    { "call-saved", "call-used" },
+-	    { "no-such-option", "fixed" }};
+-
+-	  error ("can't use '%s' as a %s register", name,
+-		 what_option[fixed][call_used]);
+-	}
+-      else
+-	{
+-	  fixed_regs[i] = fixed;
+-	  call_used_regs[i] = call_used;
++             )
++            && (fixed == 0 || call_used == 0))
++          {
++            static const char * const what_option[2][2] = {
++              { "call-saved", "call-used" },
++              { "no-such-option", "fixed" }};
++
++            error ("can't use '%s' as a %s register", name,
++                   what_option[fixed][call_used]);
++          }
++        else
++          {
++            fixed_regs[i] = fixed;
++            call_used_regs[i] = call_used;
+ #ifdef CALL_REALLY_USED_REGISTERS
+-	  if (fixed == 0)
+-	    call_really_used_regs[i] = call_used;
++             if (fixed == 0)
++               call_really_used_regs[i] = call_used;
+ #endif
+-	}
+-    }
+-  else
++           }
++        }
++      }
++    else
++
+     {
+       warning (0, "unknown register name: %s", name);
+     }
+diff --git a/gcc/stmt.c b/gcc/stmt.c
+index afa4e6961..4f55b3d7b 100644
+--- a/gcc/stmt.c
++++ b/gcc/stmt.c
+@@ -684,13 +684,14 @@ expand_asm_operands (tree string, tree outputs, tree inputs,
+   for (tail = clobbers; tail; tail = TREE_CHAIN (tail))
+     {
+       const char *regname;
++      int nregs;
+ 
+       if (TREE_VALUE (tail) == error_mark_node)
+ 	return;
+       regname = TREE_STRING_POINTER (TREE_VALUE (tail));
+ 
+-      i = decode_reg_name (regname);
+-      if (i >= 0 || i == -4)
++      i = decode_reg_name_and_count (regname, &nregs);
++      if (i == -4)
+ 	++nclobbers;
+       else if (i == -2)
+ 	error ("unknown register name %qs in %<asm%>", regname);
+@@ -698,14 +699,21 @@ expand_asm_operands (tree string, tree outputs, tree inputs,
+       /* Mark clobbered registers.  */
+       if (i >= 0)
+         {
+-	  /* Clobbering the PIC register is an error.  */
+-	  if (i == (int) PIC_OFFSET_TABLE_REGNUM)
+-	    {
+-	      error ("PIC register %qs clobbered in %<asm%>", regname);
+-	      return;
+-	    }
++        int reg;
++
++        for (reg = i; reg < i + nregs; reg++)
++          {
++            ++nclobbers;
++
++            /* Clobbering the PIC register is an error.  */
++            if (reg == (int) PIC_OFFSET_TABLE_REGNUM)
++              {
++                error ("PIC register clobbered by %qs in %<asm%>", regname);
++                return;
++              }
+ 
+-	  SET_HARD_REG_BIT (clobbered_regs, i);
++            SET_HARD_REG_BIT (clobbered_regs, reg);
++          }
+ 	}
+     }
+ 
+@@ -1030,8 +1038,9 @@ expand_asm_operands (tree string, tree outputs, tree inputs,
+       for (tail = clobbers; tail; tail = TREE_CHAIN (tail))
+ 	{
+ 	  const char *regname = TREE_STRING_POINTER (TREE_VALUE (tail));
+-	  int j = decode_reg_name (regname);
+-	  rtx clobbered_reg;
++	  int reg, nregs;
++          int j = decode_reg_name_and_count (regname, &nregs);
++          rtx clobbered_reg;
+ 
+ 	  if (j < 0)
+ 	    {
+@@ -1051,31 +1060,40 @@ expand_asm_operands (tree string, tree outputs, tree inputs,
+ 	      /* Ignore unknown register, error already signaled.  */
+ 	      continue;
+ 	    }
+-
+-	  /* Use QImode since that's guaranteed to clobber just one reg.  */
+-	  clobbered_reg = gen_rtx_REG (QImode, j);
+-
+-	  /* Do sanity check for overlap between clobbers and respectively
+-	     input and outputs that hasn't been handled.  Such overlap
+-	     should have been detected and reported above.  */
+-	  if (!clobber_conflict_found)
+-	    {
+-	      int opno;
+-
+-	      /* We test the old body (obody) contents to avoid tripping
+-		 over the under-construction body.  */
+-	      for (opno = 0; opno < noutputs; opno++)
+-		if (reg_overlap_mentioned_p (clobbered_reg, output_rtx[opno]))
+-		  internal_error ("asm clobber conflict with output operand");
+-
+-	      for (opno = 0; opno < ninputs - ninout; opno++)
+-		if (reg_overlap_mentioned_p (clobbered_reg,
+-					     ASM_OPERANDS_INPUT (obody, opno)))
+-		  internal_error ("asm clobber conflict with input operand");
++        
++          for (reg = j; reg < j + nregs; reg++)
++            {
++              /* Use QImode since that's guaranteed to clobber just
++               * one reg.  */
++              clobbered_reg = gen_rtx_REG (QImode, reg);
++
++              /* Do sanity check for overlap between clobbers and
++                 respectively input and outputs that hasn't been
++                 handled.  Such overlap should have been detected and
++                 reported above.  */
++              if (!clobber_conflict_found)
++                {
++                  int opno;
++
++                  /* We test the old body (obody) contents to avoid
++                     tripping over the under-construction body.  */
++                  for (opno = 0; opno < noutputs; opno++)
++                    if (reg_overlap_mentioned_p (clobbered_reg,
++                                                 output_rtx[opno]))
++                      internal_error
++                        ("asm clobber conflict with output operand");
++
++                  for (opno = 0; opno < ninputs - ninout; opno++)
++                    if (reg_overlap_mentioned_p (clobbered_reg,
++                                                 ASM_OPERANDS_INPUT (obody,
++                                                                     opno)))
++                      internal_error
++                        ("asm clobber conflict with input operand");
++                }
++  
++              XVECEXP (body, 0, i++)
++                = gen_rtx_CLOBBER (VOIDmode, clobbered_reg);
+ 	    }
+-
+-	  XVECEXP (body, 0, i++)
+-	    = gen_rtx_CLOBBER (VOIDmode, clobbered_reg);
+ 	}
+ 
+       if (nlabels > 0)
+diff --git a/gcc/testsuite/gcc.target/arm/pr45094.c b/gcc/testsuite/gcc.target/arm/pr45094.c
+new file mode 100644
+index 000000000..043aaccd9
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/arm/pr45094.c
+@@ -0,0 +1,26 @@
++/* { dg-do run } */
++/* { dg-require-effective-target arm_neon_hw } */
++/* { dg-options "-O2 -mcpu=cortex-a8 -mfpu=neon -mfloat-abi=softfp" } */
++
++#include <stdlib.h>
++
++long long buffer[32];
++
++void __attribute__((noinline)) f(long long *p, int n)
++{
++  while (--n >= 0)
++    {
++      *p = 1;
++      p += 32;
++    }
++}
++
++int main(void)
++{
++  f(buffer, 1);
++  
++  if (!buffer[0])
++    abort();
++
++  return 0;
++}
+diff --git a/gcc/unwind-dw2.c b/gcc/unwind-dw2.c
+index 2b2836f9e..2c0b363dc 100644
+--- a/gcc/unwind-dw2.c
++++ b/gcc/unwind-dw2.c
+@@ -329,9 +329,11 @@ _Unwind_GetTextRelBase (struct _Unwind_Context *context)
+ }
+ #endif
+ 
++#ifndef inhibit_libc
+ #ifdef MD_UNWIND_SUPPORT
+ #include MD_UNWIND_SUPPORT
+ #endif
++#endif
+ 
+ /* Extract any interesting information from the CIE for the translation
+    unit F belongs to.  Return a pointer to the byte after the augmentation,
+diff --git a/gcc/varasm.c b/gcc/varasm.c
+index 835b74f72..aa8d756e8 100644
+--- a/gcc/varasm.c
++++ b/gcc/varasm.c
+@@ -1044,8 +1044,11 @@ set_user_assembler_name (tree decl, const char *name)
+    Prefixes such as % are optional.  */
+ 
+ int
+-decode_reg_name (const char *asmspec)
++decode_reg_name_and_count (const char *asmspec, int *pnregs)
+ {
++  /* Presume just one register is clobbered.  */
++   *pnregs = 1;
++
+   if (asmspec != 0)
+     {
+       int i;
+@@ -1071,6 +1074,25 @@ decode_reg_name (const char *asmspec)
+ 	    && ! strcmp (asmspec, strip_reg_name (reg_names[i])))
+ 	  return i;
+ 
++#ifdef OVERLAPPING_REGISTER_NAMES
++      {
++      static const struct
++      {
++        const char *const name;
++        const int number;
++        const int nregs;
++      } table[] = OVERLAPPING_REGISTER_NAMES;
++
++      for (i = 0; i < (int) ARRAY_SIZE (table); i++)
++        if (table[i].name[0]
++            && ! strcmp (asmspec, table[i].name))
++          {
++            *pnregs = table[i].nregs;
++            return table[i].number;
++          }
++      }
++#endif /* OVERLAPPING_REGISTER_NAMES */
++
+ #ifdef ADDITIONAL_REGISTER_NAMES
+       {
+ 	static const struct { const char *const name; const int number; } table[]
+@@ -1094,6 +1116,15 @@ decode_reg_name (const char *asmspec)
+ 
+   return -1;
+ }
++
++int
++decode_reg_name (const char *name)
++{
++   int count;
++   return decode_reg_name_and_count (name, &count);
++}
++
++
+ 
+ /* Return true if DECL's initializer is suitable for a BSS section.  */
+ 
+diff --git a/include/libiberty.h b/include/libiberty.h
+index a7716e4a4..d97e72616 100644
+--- a/include/libiberty.h
++++ b/include/libiberty.h
+@@ -598,8 +598,11 @@ extern int pwait (int, int *, int);
+ /* Like sprintf but provides a pointer to malloc'd storage, which must
+    be freed by the caller.  */
+ 
++/* asprintf may be declared as a macro by glibc with __USE_FORTIFY_LEVEL.  */
++#ifndef asprintf
+ extern int asprintf (char **, const char *, ...) ATTRIBUTE_PRINTF_2;
+ #endif
++#endif
+ 
+ #if !HAVE_DECL_VASPRINTF
+ /* Like vsprintf but provides a pointer to malloc'd storage, which
+diff --git a/libgcc/Makefile.in b/libgcc/Makefile.in
+index 080aae287..e7c1dfeec 100644
+--- a/libgcc/Makefile.in
++++ b/libgcc/Makefile.in
+@@ -194,7 +194,7 @@ export RANLIB_FOR_TARGET
+ export libsubdir
+ export slibdir
+ 
+-version := $(shell $(CC) -dumpversion)
++version := $(shell cat $(srcdir)/../gcc/BASE-VER)
+ 
+ ifeq ($(decimal_float),yes)
+ ifeq ($(enable_decimal_float),bid)
+diff --git a/libgfortran/configure b/libgfortran/configure
+index 46e08630f..42d74136d 100755
+--- a/libgfortran/configure
++++ b/libgfortran/configure
+@@ -4398,7 +4398,7 @@ fi
+ 
+ # Add -Wall -fno-repack-arrays -fno-underscoring if we are using GCC.
+ if test "x$GCC" = "xyes"; then
+-  AM_FCFLAGS="-I . -Wall -Werror -fimplicit-none -fno-repack-arrays -fno-underscoring"
++  AM_FCFLAGS="-I . -Wall -fimplicit-none -fno-repack-arrays -fno-underscoring"
+   ## We like to use C99 routines when available.  This makes sure that
+   ## __STDC_VERSION__ is set such that libc includes make them available.
+   AM_CFLAGS="-std=gnu99 -Wall -Wstrict-prototypes -Wmissing-prototypes -Wold-style-definition -Wextra -Wwrite-strings"
+diff --git a/libgomp/configure b/libgomp/configure
+index 37c3d7766..fadca2de9 100755
+--- a/libgomp/configure
++++ b/libgomp/configure
+@@ -4276,7 +4276,7 @@ save_CFLAGS="$CFLAGS"
+ 
+ # Add -Wall -Werror if we are using GCC.
+ if test "x$GCC" = "xyes"; then
+-  XCFLAGS="$XCFLAGS -Wall -Werror"
++  XCFLAGS="$XCFLAGS -Wall"
+ fi
+ 
+ # Find other programs we need.
+diff --git a/libiberty/Makefile.in b/libiberty/Makefile.in
+index f22d3a341..f8a682def 100644
+--- a/libiberty/Makefile.in
++++ b/libiberty/Makefile.in
+@@ -227,6 +227,7 @@ $(TARGETLIB): $(REQUIRED_OFILES) $(EXTRA_OFILES) $(LIBOBJS)
+ 	  $(AR) $(AR_FLAGS) $(TARGETLIB) \
+ 	    $(REQUIRED_OFILES) $(EXTRA_OFILES) $(LIBOBJS); \
+ 	  $(RANLIB) $(TARGETLIB); \
++	  cp $(TARGETLIB) ../ ; \
+ 	  cd ..; \
+ 	else true; fi
+ 
+diff --git a/libjava/classpath/scripts/check_jni_methods.sh.in b/libjava/classpath/scripts/check_jni_methods.sh.in
+index facf34b34..fb9d104e3 100644
+--- a/libjava/classpath/scripts/check_jni_methods.sh.in
++++ b/libjava/classpath/scripts/check_jni_methods.sh.in
+@@ -14,7 +14,7 @@ grep -h '^JNIEXPORT .* Java_' @abs_top_srcdir@/include/*.h | \
+         LC_ALL=C sed -e 's,.*JNICALL \(Java_[a-z_A-Z0-9]*\).*$,\1,' > $TMPFILE
+ grep -h '^JNIEXPORT .* Java_' @abs_top_builddir@/include/*.h | \
+         LC_ALL=C sed -e 's,.*JNICALL \(Java_[a-z_A-Z0-9]*\).*$,\1,' >> $TMPFILE
+-sort -u $TMPFILE > $TMPFILE4
++LC_ALL=C sort -u $TMPFILE > $TMPFILE4
+ mv $TMPFILE4 $TMPFILE
+ 
+ # Find all methods in the JNI C source files.
+@@ -31,7 +31,7 @@ find @abs_top_srcdir@/native/jni -name \*.cpp | \
+ 	cut -f4 -d\  | \
+         LC_ALL=C sed -e 's,^\JNIEXPORT .* JNICALL \(Java_[a-z_A-Z0-9]*\).*$,\1,' >> $TMPFILE2
+ mv $TMPFILE2 $TMPFILE3
+-sort $TMPFILE3 | uniq > $TMPFILE2
++LC_ALL=C sort -u $TMPFILE3 > $TMPFILE2
+ rm $TMPFILE3
+ 
+ # Write temporary ignore file.
+diff --git a/libjava/include/i386-signal.h b/libjava/include/i386-signal.h
+index a3d3a1b75..85f286e7e 100644
+--- a/libjava/include/i386-signal.h
++++ b/libjava/include/i386-signal.h
+@@ -26,7 +26,7 @@ static void _Jv_##_name (int, siginfo_t *,			\
+ #define HANDLE_DIVIDE_OVERFLOW						\
+ do									\
+ {									\
+-  struct ucontext *_uc = (struct ucontext *)_p;				\
++  ucontext_t *_uc = (ucontext_t *)_p;					\
+   gregset_t &_gregs = _uc->uc_mcontext.gregs;				\
+   unsigned char *_eip = (unsigned char *)_gregs[REG_EIP];		\
+ 									\
+diff --git a/libjava/include/x86_64-signal.h b/libjava/include/x86_64-signal.h
+index 4bd8a3601..d04e86893 100644
+--- a/libjava/include/x86_64-signal.h
++++ b/libjava/include/x86_64-signal.h
+@@ -28,7 +28,7 @@ static void _Jv_##_name (int, siginfo_t *,			\
+ #define HANDLE_DIVIDE_OVERFLOW						\
+ do									\
+ {									\
+-  struct ucontext *_uc = (struct ucontext *)_p;				\
++  ucontext_t *_uc = (ucontext_t *)_p;					\
+   gregset_t &_gregs = _uc->uc_mcontext.gregs;				\
+   unsigned char *_rip = (unsigned char *)_gregs[REG_RIP];		\
+ 									\
+diff --git a/libstdc++-v3/include/Makefile.am b/libstdc++-v3/include/Makefile.am
+index 23aad1469..b63b28d12 100644
+--- a/libstdc++-v3/include/Makefile.am
++++ b/libstdc++-v3/include/Makefile.am
+@@ -893,7 +893,7 @@ pch_output_dirs = \
+ 	${pch1_output_builddir} ${pch2_output_builddir} ${pch3_output_builddir}
+ pch_output_anchors = \
+ 	${pch1_output_anchor} ${pch2_output_anchor} ${pch3_output_anchor}
+-PCHFLAGS=-x c++-header $(CXXFLAGS)
++PCHFLAGS=-x c++-header $(CXXFLAGS) -nostdinc++
+ if GLIBCXX_BUILD_PCH
+ pch_build = ${pch_output}
+ else
+diff --git a/libstdc++-v3/include/Makefile.in b/libstdc++-v3/include/Makefile.in
+index 9caf45989..9fe81441c 100644
+--- a/libstdc++-v3/include/Makefile.in
++++ b/libstdc++-v3/include/Makefile.in
+@@ -1119,7 +1119,7 @@ pch_output_dirs = \
+ pch_output_anchors = \
+ 	${pch1_output_anchor} ${pch2_output_anchor} ${pch3_output_anchor}
+ 
+-PCHFLAGS = -x c++-header $(CXXFLAGS)
++PCHFLAGS = -x c++-header $(CXXFLAGS) -nostdinc++
+ @GLIBCXX_BUILD_PCH_FALSE@pch_build = 
+ @GLIBCXX_BUILD_PCH_TRUE@pch_build = ${pch_output}
+ 

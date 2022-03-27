@@ -1,0 +1,1045 @@
+diff --git a/gcc/Makefile.in b/gcc/Makefile.in
+index 727028436..8bc4eb703 100644
+--- a/gcc/Makefile.in
++++ b/gcc/Makefile.in
+@@ -3387,7 +3387,7 @@ build/genattrtab.o : genattrtab.c $(RTL_BASE_H) $(OBSTACK_H)		\
+ build/genautomata.o : genautomata.c $(RTL_BASE_H) $(OBSTACK_H)		\
+   $(BCONFIG_H) $(SYSTEM_H) coretypes.h $(GTM_H) errors.h vec.h		\
+   $(HASHTAB_H) gensupport.h
+-build/gencheck.o : gencheck.c tree.def $(BCONFIG_H) $(GTM_H)		\
++build/gencheck.o : gencheck.c all-tree.def $(BCONFIG_H) $(GTM_H)	\
+ 	$(SYSTEM_H) coretypes.h $(lang_tree_files) gimple.def
+ build/genchecksum.o : genchecksum.c $(BCONFIG_H) $(SYSTEM_H) $(MD5_H)
+ build/gencodes.o : gencodes.c $(RTL_BASE_H) $(BCONFIG_H) $(SYSTEM_H)	\
+diff --git a/gcc/c-tree.h b/gcc/c-tree.h
+index aedf191c3..26a274543 100644
+--- a/gcc/c-tree.h
++++ b/gcc/c-tree.h
+@@ -638,7 +638,7 @@ extern void c_write_global_declarations (void);
+ /* In order for the format checking to accept the C frontend
+    diagnostic framework extensions, you must include this file before
+    toplev.h, not after.  */
+-#if GCC_VERSION >= 4001
++#if (GCC_VERSION >= 4001) && (__GNUC__ != 9) /* gcc-9 is buggy: https://gcc.gnu.org/PR90677  */
+ #define ATTRIBUTE_GCC_CDIAG(m, n) __attribute__ ((__format__ (GCC_DIAG_STYLE, m ,n))) ATTRIBUTE_NONNULL(m)
+ #else
+ #define ATTRIBUTE_GCC_CDIAG(m, n) ATTRIBUTE_NONNULL(m)
+diff --git a/gcc/config.gcc b/gcc/config.gcc
+index cc34a591d..3f9951d27 100644
+--- a/gcc/config.gcc
++++ b/gcc/config.gcc
+@@ -456,7 +456,7 @@ case ${target} in
+   # pleases around the provided core setting.
+   gas=yes
+   gnu_ld=yes
+-  extra_parts="crtbegin.o crtend.o crtbeginS.o crtendS.o"
++  extra_parts="crtbegin.o crtend.o crtbeginS.o crtendS.o crtbeginT.o"
+   fbsd_major=`echo ${target} | sed -e 's/.*freebsd//g' | sed -e 's/\..*//g'`
+   tm_defines="${tm_defines} FBSD_MAJOR=${fbsd_major}"
+   tmake_file="t-slibgcc-elf-ver t-freebsd"
+@@ -1049,6 +1049,10 @@ i[34567]86-*-aout*)
+ 	;;
+ i[34567]86-*-freebsd*)
+ 	tm_file="${tm_file} i386/unix.h i386/att.h dbxelf.h elfos.h ${fbsd_tm_file} i386/freebsd.h"
++	fbsd_major=`echo ${target} | sed -e 's/.*freebsd//g' | sed -e 's/\..*//g'`
++	if test ${fbsd_major} -ge 7; then
++		tmake_file="${tmake_file} t-freebsd-eh"
++	fi
+ 	;;
+ x86_64-*-freebsd*)
+ 	tm_file="${tm_file} i386/unix.h i386/att.h dbxelf.h elfos.h ${fbsd_tm_file} i386/x86-64.h i386/freebsd.h i386/freebsd64.h"
+@@ -2141,7 +2145,7 @@ sh-*-symbianelf* | sh[12346l]*-*-symbianelf* | \
+ 	if test x${sh_multilibs} = x ; then
+ 		case ${target} in
+ 		sh64-superh-linux* | \
+-		sh[1234]*)	sh_multilibs=${sh_cpu_target} ;;
++		sh[1234]*)	sh_multilibs=`cd ${srcdir}/config/sh ; echo t-mlib-sh[1-4]* | sed 's:t-mlib-sh:,m:g;s: ::g'` ;;
+ 		sh64* | sh5*)	sh_multilibs=m5-32media,m5-32media-nofpu,m5-compact,m5-compact-nofpu,m5-64media,m5-64media-nofpu ;;
+ 		sh-superh-*)	sh_multilibs=m4,m4-single,m4-single-only,m4-nofpu ;;
+ 		sh*-*-linux*)	sh_multilibs=m1,m3e,m4 ;;
+@@ -2315,6 +2319,10 @@ sparc64-*-freebsd*|ultrasparc-*-freebsd*)
+ 	tm_file="${tm_file} ${fbsd_tm_file} dbxelf.h elfos.h sparc/sysv4.h sparc/freebsd.h"
+ 	extra_options="${extra_options} sparc/long-double-switch.opt"
+ 	tmake_file="${tmake_file} sparc/t-crtfm"
++	fbsd_major=`echo ${target} | sed -e 's/.*freebsd//g' | sed -e 's/\..*//g'`
++	if test ${fbsd_major} -ge 7; then
++		tmake_file="${tmake_file} t-freebsd-eh"
++	fi
+ 	case "x$with_cpu" in
+ 		xultrasparc) ;;
+ 		x) with_cpu=ultrasparc ;;
+diff --git a/gcc/config/alpha/alpha.h b/gcc/config/alpha/alpha.h
+index 05447193a..9ace48cc1 100644
+--- a/gcc/config/alpha/alpha.h
++++ b/gcc/config/alpha/alpha.h
+@@ -95,6 +95,8 @@ along with GCC; see the file COPYING3.  If not see
+   while (0)
+ #endif
+ 
++#define CPP_SPEC "%{!no-ieee:-mieee}"
++
+ #define WORD_SWITCH_TAKES_ARG(STR)		\
+  (!strcmp (STR, "rpath") || DEFAULT_WORD_SWITCH_TAKES_ARG(STR))
+ 
+diff --git a/gcc/config/alpha/alpha.opt b/gcc/config/alpha/alpha.opt
+index fb7db3775..e11721350 100644
+--- a/gcc/config/alpha/alpha.opt
++++ b/gcc/config/alpha/alpha.opt
+@@ -39,7 +39,7 @@ Target RejectNegative Mask(IEEE_CONFORMANT)
+ Request IEEE-conformant math library routines (OSF/1)
+ 
+ mieee
+-Target Report RejectNegative Mask(IEEE)
++Target Report Mask(IEEE)
+ Emit IEEE-conformant code, without inexact exceptions
+ 
+ mieee-with-inexact
+diff --git a/gcc/config/alpha/elf.h b/gcc/config/alpha/elf.h
+index 0e5265c64..0d23cc67b 100644
+--- a/gcc/config/alpha/elf.h
++++ b/gcc/config/alpha/elf.h
+@@ -46,7 +46,7 @@ along with GCC; see the file COPYING3.  If not see
+ #define CC1_SPEC  "%{G*}"
+ 
+ #undef  ASM_SPEC
+-#define ASM_SPEC  "%{G*} %{relax:-relax} %{!gstabs*:-no-mdebug}%{gstabs*:-mdebug}"
++#define ASM_SPEC  "%{G*} %{relax:-relax} %{!gstabs*:-no-mdebug}%{gstabs*:-mdebug} %{mcpu=*:-m%*}"
+ 
+ #undef  IDENT_ASM_OP
+ #define IDENT_ASM_OP "\t.ident\t"
+diff --git a/gcc/config/alpha/linux-unwind.h b/gcc/config/alpha/linux-unwind.h
+index 4c811dca4..945a881bc 100644
+--- a/gcc/config/alpha/linux-unwind.h
++++ b/gcc/config/alpha/linux-unwind.h
+@@ -49,8 +49,8 @@ alpha_fallback_frame_state (struct _Unwind_Context *context,
+   else if (pc[1] == 0x201f015f)		/* lda $0,NR_rt_sigreturn */
+     {
+       struct rt_sigframe {
+-	struct siginfo info;
+-	struct ucontext uc;
++	siginfo_t info;
++	ucontext_t uc;
+       } *rt_ = context->cfa;
+       sc = &rt_->uc.uc_mcontext;
+     }
+diff --git a/gcc/config/arm/linux-eabi.h b/gcc/config/arm/linux-eabi.h
+index 4174d70db..62b0490ee 100644
+--- a/gcc/config/arm/linux-eabi.h
++++ b/gcc/config/arm/linux-eabi.h
+@@ -44,7 +44,7 @@
+    The ARM10TDMI core is the default for armv5t, so set
+    SUBTARGET_CPU_DEFAULT to achieve this.  */
+ #undef  SUBTARGET_CPU_DEFAULT
+-#define SUBTARGET_CPU_DEFAULT TARGET_CPU_arm10tdmi
++#define SUBTARGET_CPU_DEFAULT TARGET_CPU_arm9tdmi
+ 
+ /* TARGET_BIG_ENDIAN_DEFAULT is set in
+    config.gcc for big endian configurations.  */
+diff --git a/gcc/config/bfin/linux-unwind.h b/gcc/config/bfin/linux-unwind.h
+index 88c828563..8317327f0 100644
+--- a/gcc/config/bfin/linux-unwind.h
++++ b/gcc/config/bfin/linux-unwind.h
+@@ -48,11 +48,11 @@ bfin_fallback_frame_state (struct _Unwind_Context *context,
+     {
+       struct rt_sigframe {
+ 	int sig;
+-	struct siginfo *pinfo;
++	siginfo_t *pinfo;
+ 	void *puc;
+ 	char retcode[8];
+-	struct siginfo info;
+-	struct ucontext uc;
++	siginfo_t info;
++	ucontext_t uc;
+       } *rt_ = context->cfa;
+ 
+       /* The void * cast is necessary to avoid an aliasing warning.
+diff --git a/gcc/config/freebsd-spec.h b/gcc/config/freebsd-spec.h
+index c726a158c..6da35fc85 100644
+--- a/gcc/config/freebsd-spec.h
++++ b/gcc/config/freebsd-spec.h
+@@ -61,6 +61,8 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+ 	builtin_assert ("system=unix");					\
+ 	builtin_assert ("system=bsd");					\
+ 	builtin_assert ("system=FreeBSD");				\
++	if(!(flag_iso && (c_dialect_cxx () ? cxx_dialect == cxx98 : !flag_isoc99)))	\
++		builtin_define("_LONGLONG");				\
+ 	FBSD_TARGET_CPU_CPP_BUILTINS();					\
+     }									\
+   while (0)
+@@ -84,9 +86,10 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+ #define FBSD_STARTFILE_SPEC \
+   "%{!shared: \
+      %{pg:gcrt1.o%s} %{!pg:%{p:gcrt1.o%s} \
+-		       %{!p:%{profile:gcrt1.o%s} \
+-			 %{!profile:crt1.o%s}}}} \
+-   crti.o%s %{!shared:crtbegin.o%s} %{shared:crtbeginS.o%s}"
++	%{!p:%{profile:gcrt1.o%s} \
++	 %{!profile:crt1.o%s}}}} \
++   crti.o%s \
++   %{static:crtbeginT.o%s;shared:crtbeginS.o%s;:crtbegin.o%s}"
+ 
+ /* Provide a ENDFILE_SPEC appropriate for FreeBSD.  Here we tack on
+    the magical crtend.o file (see crtstuff.c) which provides part of 
+@@ -124,7 +127,8 @@ is built with the --enable-threads configure-time option.}		\
+     %{pg:  -lc_p}							\
+   }"
+ #else
+-#if FBSD_MAJOR < 5
++#include <sys/param.h>
++#if __FreeBSD_version < 500016
+ #define FBSD_LIB_SPEC "							\
+   %{!shared:								\
+     %{!pg:								\
+@@ -134,17 +138,34 @@ is built with the --enable-threads configure-time option.}		\
+       %{!pthread:-lc_p}							\
+       %{pthread:-lc_r_p}}						\
+   }"
+-#else
++#elif __FreeBSD_version < 700022
+ #define FBSD_LIB_SPEC "							\
+   %{!shared:								\
+     %{!pg: %{pthread:-lpthread} -lc}					\
+     %{pg:  %{pthread:-lpthread_p} -lc_p}				\
+   }"
++#else
++#define FBSD_LIB_SPEC "							\
++  %{!shared:								\
++    %{!pg: %{pthread:-lpthread} -lc}					\
++    %{pg:  %{pthread:-lpthread_p} -lc_p}}				\
++  %{shared:								\
++    %{pthread:-lpthread} -lc}						\
++  "
+ #endif
+ #endif
+ 
+-#if FBSD_MAJOR < 6
++#if FBSD_MAJOR < 5
+ #define FBSD_DYNAMIC_LINKER "/usr/libexec/ld-elf.so.1"
+ #else
+ #define FBSD_DYNAMIC_LINKER "/libexec/ld-elf.so.1"
+ #endif
++
++#if defined(HAVE_LD_EH_FRAME_HDR)
++#define LINK_EH_SPEC "%{!static:--eh-frame-hdr} "
++#endif
++
++/* Use --as-needed -lgcc_s for eh support.  */
++#ifdef HAVE_LD_AS_NEEDED
++#define USE_LD_AS_NEEDED 1
++#endif
+diff --git a/gcc/config/i386/linux-unwind.h b/gcc/config/i386/linux-unwind.h
+index 89f238a6e..d1df9427d 100644
+--- a/gcc/config/i386/linux-unwind.h
++++ b/gcc/config/i386/linux-unwind.h
+@@ -47,7 +47,7 @@ x86_64_fallback_frame_state (struct _Unwind_Context *context,
+   if (*(unsigned char *)(pc+0) == 0x48
+       && *(unsigned long *)(pc+1) == 0x050f0000000fc0c7)
+     {
+-      struct ucontext *uc_ = context->cfa;
++      ucontext_t *uc_ = context->cfa;
+       /* The void * cast is necessary to avoid an aliasing warning.
+          The aliasing warning is correct, but should not be a problem
+          because it does not alias anything.  */
+@@ -133,10 +133,10 @@ x86_fallback_frame_state (struct _Unwind_Context *context,
+     {
+       struct rt_sigframe {
+ 	int sig;
+-	struct siginfo *pinfo;
++	siginfo_t *pinfo;
+ 	void *puc;
+-	struct siginfo info;
+-	struct ucontext uc;
++	siginfo_t info;
++	ucontext_t uc;
+       } *rt_ = context->cfa;
+       /* The void * cast is necessary to avoid an aliasing warning.
+          The aliasing warning is correct, but should not be a problem
+diff --git a/gcc/config/ia64/crtbegin.asm b/gcc/config/ia64/crtbegin.asm
+index 638489990..163016b0b 100644
+--- a/gcc/config/ia64/crtbegin.asm
++++ b/gcc/config/ia64/crtbegin.asm
+@@ -252,3 +252,7 @@ __do_jv_register_classes:
+ .weak __cxa_finalize
+ #endif
+ .weak _Jv_RegisterClasses
++
++#ifdef __linux__
++.section .note.GNU-stack; .previous
++#endif
+diff --git a/gcc/config/ia64/crtend.asm b/gcc/config/ia64/crtend.asm
+index a904af9cf..c8f783143 100644
+--- a/gcc/config/ia64/crtend.asm
++++ b/gcc/config/ia64/crtend.asm
+@@ -119,3 +119,7 @@ __do_global_ctors_aux:
+ 
+ 	br.ret.sptk.many rp
+ 	.endp __do_global_ctors_aux
++
++#ifdef __linux__
++.section .note.GNU-stack; .previous
++#endif
+diff --git a/gcc/config/ia64/crti.asm b/gcc/config/ia64/crti.asm
+index a9d515097..9196db295 100644
+--- a/gcc/config/ia64/crti.asm
++++ b/gcc/config/ia64/crti.asm
+@@ -51,3 +51,7 @@ _fini:
+ 	.body
+ 
+ # end of crti.asm
++
++#ifdef __linux__
++.section .note.GNU-stack; .previous
++#endif
+diff --git a/gcc/config/ia64/crtn.asm b/gcc/config/ia64/crtn.asm
+index e1a18795f..83eeb72de 100644
+--- a/gcc/config/ia64/crtn.asm
++++ b/gcc/config/ia64/crtn.asm
+@@ -41,3 +41,7 @@
+ 	br.ret.sptk.many b0
+ 
+ # end of crtn.asm
++
++#ifdef __linux__
++.section .note.GNU-stack; .previous
++#endif
+diff --git a/gcc/config/ia64/lib1funcs.asm b/gcc/config/ia64/lib1funcs.asm
+index b7eaa6eca..86661c0d6 100644
+--- a/gcc/config/ia64/lib1funcs.asm
++++ b/gcc/config/ia64/lib1funcs.asm
+@@ -793,3 +793,7 @@ __floattitf:
+ 	.endp __floattitf
+ #endif
+ #endif
++
++#ifdef __linux__
++.section .note.GNU-stack; .previous
++#endif
+diff --git a/gcc/config/ia64/linux-unwind.h b/gcc/config/ia64/linux-unwind.h
+index e2bad480b..9b089f261 100644
+--- a/gcc/config/ia64/linux-unwind.h
++++ b/gcc/config/ia64/linux-unwind.h
+@@ -47,7 +47,7 @@ ia64_fallback_frame_state (struct _Unwind_Context *context,
+       struct sigframe {
+ 	char scratch[16];
+ 	unsigned long sig_number;
+-	struct siginfo *info;
++	siginfo_t *info;
+ 	struct sigcontext *sc;
+       } *frame_ = (struct sigframe *)context->psp;
+       struct sigcontext *sc = frame_->sc;
+@@ -126,7 +126,7 @@ ia64_handle_unwabi (struct _Unwind_Context *context, _Unwind_FrameState *fs)
+       struct sigframe {
+ 	char scratch[16];
+ 	unsigned long sig_number;
+-	struct siginfo *info;
++	siginfo_t *info;
+ 	struct sigcontext *sc;
+       } *frame = (struct sigframe *)context->psp;
+       struct sigcontext *sc = frame->sc;
+diff --git a/gcc/config/ia64/linux.h b/gcc/config/ia64/linux.h
+index e883f8938..c16d6a91e 100644
+--- a/gcc/config/ia64/linux.h
++++ b/gcc/config/ia64/linux.h
+@@ -5,6 +5,8 @@
+ 
+ #define TARGET_VERSION fprintf (stderr, " (IA-64) Linux");
+ 
++#define TARGET_ASM_FILE_END file_end_indicate_exec_stack
++
+ /* This is for -profile to use -lc_p instead of -lc.  */
+ #undef CC1_SPEC
+ #define CC1_SPEC "%{profile:-p} %{G*}"
+diff --git a/gcc/config/m68k/linux-unwind.h b/gcc/config/m68k/linux-unwind.h
+index 5f877464f..5cfa4afdc 100644
+--- a/gcc/config/m68k/linux-unwind.h
++++ b/gcc/config/m68k/linux-unwind.h
+@@ -33,7 +33,7 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+ /* <sys/ucontext.h> is unfortunately broken right now.  */
+ struct uw_ucontext {
+ 	unsigned long	  uc_flags;
+-	struct ucontext  *uc_link;
++	ucontext_t	 *uc_link;
+ 	stack_t		  uc_stack;
+ 	mcontext_t	  uc_mcontext;
+ 	unsigned long	  uc_filler[80];
+diff --git a/gcc/config/mips/linux-unwind.h b/gcc/config/mips/linux-unwind.h
+index 02f7cd54c..69d96f13d 100644
+--- a/gcc/config/mips/linux-unwind.h
++++ b/gcc/config/mips/linux-unwind.h
+@@ -75,7 +75,7 @@ mips_fallback_frame_state (struct _Unwind_Context *context,
+       struct rt_sigframe {
+ 	u_int32_t ass[4];  /* Argument save space for o32.  */
+ 	u_int32_t trampoline[2];
+-	struct siginfo info;
++	siginfo_t info;
+ 	_sig_ucontext_t uc;
+       } *rt_ = context->cfa;
+       sc = &rt_->uc.uc_mcontext;
+diff --git a/gcc/config/netbsd-elf.h b/gcc/config/netbsd-elf.h
+index 37f504b84..3fb086d0a 100644
+--- a/gcc/config/netbsd-elf.h
++++ b/gcc/config/netbsd-elf.h
+@@ -82,6 +82,7 @@ along with GCC; see the file COPYING3.  If not see
+ #define NETBSD_LINK_SPEC_ELF \
+   "%{assert*} %{R*} %{rpath*} \
+    %{shared:-shared} \
++   %{symbolic:-Bsymbolic} \
+    %{!shared: \
+      -dc -dp \
+      %{!nostdlib: \
+diff --git a/gcc/config/pa/linux-unwind.h b/gcc/config/pa/linux-unwind.h
+index a0560e974..3df740079 100644
+--- a/gcc/config/pa/linux-unwind.h
++++ b/gcc/config/pa/linux-unwind.h
+@@ -63,8 +63,8 @@ pa32_fallback_frame_state (struct _Unwind_Context *context,
+   int i;
+   struct sigcontext *sc;
+   struct rt_sigframe {
+-    struct siginfo info;
+-    struct ucontext uc;
++    siginfo_t info;
++    ucontext_t uc;
+   } *frame;
+ 
+   /* rt_sigreturn trampoline:
+diff --git a/gcc/config/rs6000/ppc-asm.h b/gcc/config/rs6000/ppc-asm.h
+index 7f39a2a43..af7869c70 100644
+--- a/gcc/config/rs6000/ppc-asm.h
++++ b/gcc/config/rs6000/ppc-asm.h
+@@ -172,7 +172,7 @@ GLUE(.L,name): \
+ 	.size FUNC_NAME(name),GLUE(.L,name)-FUNC_NAME(name)
+ #endif
+ 
+-#if defined __linux__ && !defined __powerpc64__
++#if defined __linux__
+ 	.section .note.GNU-stack
+ 	.previous
+ #endif
+diff --git a/gcc/config/rs6000/rs6000.c b/gcc/config/rs6000/rs6000.c
+index 28a209ba7..f0450d831 100644
+--- a/gcc/config/rs6000/rs6000.c
++++ b/gcc/config/rs6000/rs6000.c
+@@ -16036,8 +16036,10 @@ rs6000_reg_live_or_pic_offset_p (int reg)
+   return ((df_regs_ever_live_p (reg)
+            && (!call_used_regs[reg]
+                || (reg == RS6000_PIC_OFFSET_TABLE_REGNUM
++		   && !TARGET_SINGLE_PIC_BASE
+                    && TARGET_TOC && TARGET_MINIMAL_TOC)))
+           || (reg == RS6000_PIC_OFFSET_TABLE_REGNUM
++	      && !TARGET_SINGLE_PIC_BASE
+               && ((DEFAULT_ABI == ABI_V4 && flag_pic != 0)
+                   || (DEFAULT_ABI == ABI_DARWIN && flag_pic))));
+ }
+@@ -16737,6 +16739,9 @@ rs6000_emit_prologue (void)
+       insn = emit_insn (generate_set_vrsave (reg, info, 0));
+     }
+ 
++  if (TARGET_SINGLE_PIC_BASE)
++    return; /* Do not set PIC register */
++
+   /* If we are using RS6000_PIC_OFFSET_TABLE_REGNUM, we need to set it up.  */
+   if ((TARGET_TOC && TARGET_MINIMAL_TOC && get_pool_size () != 0)
+       || (DEFAULT_ABI == ABI_V4
+diff --git a/gcc/config/rs6000/rs6000.opt b/gcc/config/rs6000/rs6000.opt
+index 8a6235278..2adb6dd27 100644
+--- a/gcc/config/rs6000/rs6000.opt
++++ b/gcc/config/rs6000/rs6000.opt
+@@ -119,6 +119,10 @@ mupdate
+ Target Report RejectNegative InverseMask(NO_UPDATE, UPDATE)
+ Generate load/store with update instructions
+ 
++msingle-pic-base
++Target Report Var(TARGET_SINGLE_PIC_BASE) Init(0)
++Do not load the PIC register in function prologues
++
+ mavoid-indexed-addresses
+ Target Report Var(TARGET_AVOID_XFORM) Init(-1)
+ Avoid generation of indexed load/store instructions when possible
+diff --git a/gcc/config/rs6000/sysv4.h b/gcc/config/rs6000/sysv4.h
+index 58b5bcd08..aa6774414 100644
+--- a/gcc/config/rs6000/sysv4.h
++++ b/gcc/config/rs6000/sysv4.h
+@@ -227,7 +227,8 @@ do {									\
+     }									\
+ 									\
+   else if (TARGET_RELOCATABLE)						\
+-    flag_pic = 2;							\
++    if (!flag_pic)							\
++      flag_pic = 2;							\
+ } while (0)
+ 
+ #ifndef RS6000_BI_ARCH
+diff --git a/gcc/config/sh/lib1funcs.asm b/gcc/config/sh/lib1funcs.asm
+index 529acb162..6e0a12c57 100644
+--- a/gcc/config/sh/lib1funcs.asm
++++ b/gcc/config/sh/lib1funcs.asm
+@@ -30,6 +30,11 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+ !! recoded in assembly by Toshiyasu Morita
+ !! tm@netcom.com
+ 
++#if defined(__ELF__) && defined(__linux__)
++.section .note.GNU-stack,"",%progbits
++.previous
++#endif
++
+ /* SH2 optimizations for ___ashrsi3, ___ashlsi3, ___lshrsi3 and
+    ELF local label prefixes by J"orn Rennecke
+    amylaar@cygnus.com  */
+diff --git a/gcc/config/sh/linux-atomic.asm b/gcc/config/sh/linux-atomic.asm
+index bf9597042..35d7863f3 100644
+--- a/gcc/config/sh/linux-atomic.asm
++++ b/gcc/config/sh/linux-atomic.asm
+@@ -136,3 +136,6 @@ ATOMIC_FETCH_AND_COMBOP(nand,and,not,2,w,extu.w)
+ ATOMIC_FETCH_AND_COMBOP(nand,and,not,4,l,mov)
+ 
+ #endif /* ! __SH5__ */
++
++.section .note.GNU-stack,"",%progbits
++.previous
+diff --git a/gcc/config/sh/linux-unwind.h b/gcc/config/sh/linux-unwind.h
+index 50cb5033a..9f9beb928 100644
+--- a/gcc/config/sh/linux-unwind.h
++++ b/gcc/config/sh/linux-unwind.h
+@@ -77,9 +77,9 @@ shmedia_fallback_frame_state (struct _Unwind_Context *context,
+ 	   && (*(unsigned long *) (pc+11)  == 0x6ff0fff0))
+     {
+       struct rt_sigframe {
+-	struct siginfo *pinfo;
++	siginfo_t *pinfo;
+ 	void *puc;
+-	struct siginfo info;
++	siginfo_t info;
+ 	struct ucontext uc;
+       } *rt_ = context->cfa;
+       /* The void * cast is necessary to avoid an aliasing warning.
+@@ -176,8 +176,8 @@ sh_fallback_frame_state (struct _Unwind_Context *context,
+ 		&& (*(unsigned short *) (pc+14)  == 0x00ad))))
+     {
+       struct rt_sigframe {
+-	struct siginfo info;
+-	struct ucontext uc;
++	siginfo_t info;
++	ucontext_t uc;
+       } *rt_ = context->cfa;
+       /* The void * cast is necessary to avoid an aliasing warning.
+          The aliasing warning is correct, but should not be a problem
+diff --git a/gcc/config/sparc/freebsd.h b/gcc/config/sparc/freebsd.h
+index 9c86f5c9a..ce60d6cb3 100644
+--- a/gcc/config/sparc/freebsd.h
++++ b/gcc/config/sparc/freebsd.h
+@@ -25,9 +25,22 @@ along with GCC; see the file COPYING3.  If not see
+ /* FreeBSD needs the platform name (sparc64) defined.
+    Emacs needs to know if the arch is 64 or 32-bits.  */
+ 
+-#undef  CPP_CPU64_DEFAULT_SPEC
+-#define CPP_CPU64_DEFAULT_SPEC \
+-  "-D__sparc64__ -D__sparc_v9__ -D__sparcv9 -D__arch64__"
++#undef  FBSD_TARGET_CPU_CPP_BUILTINS
++#define FBSD_TARGET_CPU_CPP_BUILTINS()                  \
++  do                                                    \
++    {                                                   \
++      if (TARGET_ARCH64)                                \
++        {                                               \
++          builtin_define ("__sparc64__");               \
++          builtin_define ("__sparc_v9__");              \
++          builtin_define ("__sparcv9");                 \
++        }                                               \
++      else                                              \
++        builtin_define ("__sparc");                     \
++      builtin_define ("__sparc__");                     \
++    }                                                   \
++  while (0)
++
+ 
+ #define LINK_SPEC "%(link_arch)						\
+   %{!mno-relax:%{!r:-relax}}						\
+diff --git a/gcc/config/t-freebsd-eh b/gcc/config/t-freebsd-eh
+new file mode 100644
+index 000000000..d31d93121
+--- /dev/null
++++ b/gcc/config/t-freebsd-eh
+@@ -0,0 +1,4 @@
++# Use unwind-dw2-fde-glibc
++LIB2ADDEH = $(srcdir)/unwind-dw2.c $(srcdir)/unwind-dw2-fde-glibc.c \
++  $(srcdir)/unwind-sjlj.c $(srcdir)/gthr-gnat.c $(srcdir)/unwind-c.c
++LIB2ADDEHDEP = unwind.inc unwind-dw2-fde.h unwind-dw2-fde.c
+diff --git a/gcc/config/xtensa/linux-unwind.h b/gcc/config/xtensa/linux-unwind.h
+index 32e934972..a8ac8ef49 100644
+--- a/gcc/config/xtensa/linux-unwind.h
++++ b/gcc/config/xtensa/linux-unwind.h
+@@ -62,8 +62,8 @@ xtensa_fallback_frame_state (struct _Unwind_Context *context,
+   struct sigcontext *sc;
+ 
+   struct rt_sigframe {
+-    struct siginfo info;
+-    struct ucontext uc;
++    siginfo_t info;
++    ucontext_t uc;
+   } *rt_;
+ 
+   /* movi a2, __NR_rt_sigreturn; syscall */
+diff --git a/gcc/configure b/gcc/configure
+index 3d434a819..4a42eaf3e 100755
+--- a/gcc/configure
++++ b/gcc/configure
+@@ -13997,7 +13997,7 @@ then
+ 	    | powerpc*-*-*,powerpc64*-*-*)
+ 		CROSS="$CROSS -DNATIVE_CROSS" ;;
+ 	esac
+-elif test "x$TARGET_SYSTEM_ROOT" != x; then
++elif test "x$TARGET_SYSTEM_ROOT" != x -o $build != $host; then
+         SYSTEM_HEADER_DIR=$build_system_header_dir
+ fi
+ 
+@@ -22285,7 +22285,7 @@ foo:	.long	25
+ 	tls_first_minor=14
+ 	tls_as_opt="-m64 -Aesame --fatal-warnings"
+ 	;;
+-  sh-*-* | sh[34]-*-*)
++  sh-*-* | sh[34]*-*-*)
+     conftest_s='
+ 	.section ".tdata","awT",@progbits
+ foo:	.long	25
+diff --git a/gcc/configure.ac b/gcc/configure.ac
+index 47f39ac7e..99950d717 100644
+--- a/gcc/configure.ac
++++ b/gcc/configure.ac
+@@ -1720,7 +1720,7 @@ then
+ 	    | powerpc*-*-*,powerpc64*-*-*)
+ 		CROSS="$CROSS -DNATIVE_CROSS" ;;
+ 	esac
+-elif test "x$TARGET_SYSTEM_ROOT" != x; then
++elif test "x$TARGET_SYSTEM_ROOT" != x -o $build != $host; then
+         SYSTEM_HEADER_DIR=$build_system_header_dir 
+ fi
+ 
+@@ -2728,7 +2728,7 @@ foo:	.long	25
+ 	tls_first_minor=14
+ 	tls_as_opt="-m64 -Aesame --fatal-warnings"
+ 	;;
+-  sh-*-* | sh[34]-*-*)
++  sh-*-* | sh[34]*-*-*)
+     conftest_s='
+ 	.section ".tdata","awT",@progbits
+ foo:	.long	25
+diff --git a/gcc/crtstuff.c b/gcc/crtstuff.c
+index 884a2a5e6..1e01c2d82 100644
+--- a/gcc/crtstuff.c
++++ b/gcc/crtstuff.c
+@@ -85,13 +85,15 @@ call_ ## FUNC (void)					\
+     && !defined(OBJECT_FORMAT_FLAT) \
+     && defined(HAVE_LD_EH_FRAME_HDR) \
+     && !defined(inhibit_libc) && !defined(CRTSTUFFT_O) \
+-    && defined(__GLIBC__) && __GLIBC__ >= 2
++    && ((defined(__GLIBC__) && __GLIBC__ >= 2) \
++    || (defined(__FreeBSD_version) && __FreeBSD_version >= 700022))
+ #include <link.h>
+ /* uClibc pretends to be glibc 2.2 and DT_CONFIG is defined in its link.h.
+    But it doesn't use PT_GNU_EH_FRAME ELF segment currently.  */
+ # if !defined(__UCLIBC__) \
+-     && (__GLIBC__ > 2 || (__GLIBC__ == 2 && __GLIBC_MINOR__ > 2) \
+-     || (__GLIBC__ == 2 && __GLIBC_MINOR__ == 2 && defined(DT_CONFIG)))
++     || (__GLIBC__ > 2 || (__GLIBC__ == 2 && __GLIBC_MINOR__ > 2) \
++     || (__GLIBC__ == 2 && __GLIBC_MINOR__ == 2 && defined(DT_CONFIG))) \
++     || (__FreeBSD_version >= 700022)
+ #  define USE_PT_GNU_EH_FRAME
+ # endif
+ #endif
+diff --git a/gcc/doc/invoke.texi b/gcc/doc/invoke.texi
+index fb2efeefa..8f8dbe704 100644
+--- a/gcc/doc/invoke.texi
++++ b/gcc/doc/invoke.texi
+@@ -732,7 +732,7 @@ See RS/6000 and PowerPC Options.
+ -mstrict-align  -mno-strict-align  -mrelocatable @gol
+ -mno-relocatable  -mrelocatable-lib  -mno-relocatable-lib @gol
+ -mtoc  -mno-toc  -mlittle  -mlittle-endian  -mbig  -mbig-endian @gol
+--mdynamic-no-pic  -maltivec  -mswdiv @gol
++-mdynamic-no-pic  -maltivec  -mswdiv  -msingle-pic-base @gol
+ -mprioritize-restricted-insns=@var{priority} @gol
+ -msched-costly-dep=@var{dependence_type} @gol
+ -minsert-sched-nops=@var{scheme} @gol
+@@ -14194,6 +14194,13 @@ relocatable, but that its external references are relocatable.  The
+ resulting code is suitable for applications, but not shared
+ libraries.
+ 
++@item -msingle-pic-base
++@opindex msingle-pic-base
++Treat the register used for PIC addressing as read-only, rather than
++loading it in the prologue for each function.  The run-time system is
++responsible for initializing this register with an appropriate value
++before execution begins.
++
+ @item -mprioritize-restricted-insns=@var{priority}
+ @opindex mprioritize-restricted-insns
+ This option controls the priority that is assigned to
+diff --git a/gcc/pretty-print.h b/gcc/pretty-print.h
+index dd3f0c0ad..f46a6d4a7 100644
+--- a/gcc/pretty-print.h
++++ b/gcc/pretty-print.h
+@@ -301,7 +301,7 @@ extern void pp_base_append_text (pretty_printer *, const char *, const char *);
+ 
+ /* This header may be included before toplev.h, hence the duplicate
+    definitions to allow for GCC-specific formats.  */
+-#if GCC_VERSION >= 3005
++#if (GCC_VERSION >= 3005) && (__GNUC__ != 9) /* gcc-9 is buggy: https://gcc.gnu.org/PR90677  */
+ #define ATTRIBUTE_GCC_PPDIAG(m, n) __attribute__ ((__format__ (__gcc_diag__, m ,n))) ATTRIBUTE_NONNULL(m)
+ #else
+ #define ATTRIBUTE_GCC_PPDIAG(m, n) ATTRIBUTE_NONNULL(m)
+diff --git a/gcc/stmt.c b/gcc/stmt.c
+index eaa7d6b97..565ee5a63 100644
+--- a/gcc/stmt.c
++++ b/gcc/stmt.c
+@@ -2377,7 +2377,11 @@ expand_case (tree exp)
+ 	  use_cost_table
+ 	    = (TREE_CODE (orig_type) != ENUMERAL_TYPE
+ 	       && estimate_case_costs (case_list));
+-	  balance_case_nodes (&case_list, NULL);
++	  /* When optimizing for size, we want a straight list to avoid
++	     jumps as much as possible. This basically creates an if-else
++	     chain.  */
++	  if (!optimize_size)
++	    balance_case_nodes (&case_list, NULL);
+ 	  emit_case_nodes (index, case_list, default_label, index_type);
+ 	  if (default_label)
+ 	    emit_jump (default_label);
+@@ -2943,6 +2947,7 @@ emit_case_nodes (rtx index, case_node_ptr node, rtx default_label,
+ 	    {
+ 	      if (!node_has_low_bound (node, index_type))
+ 		{
++		  if (!optimize_size) /* don't jl to the .default_label. */
+ 		  emit_cmp_and_jump_insns (index,
+ 					   convert_modes
+ 					   (mode, imode,
+diff --git a/gcc/toplev.c b/gcc/toplev.c
+index d37c50757..85c5fd1c1 100644
+--- a/gcc/toplev.c
++++ b/gcc/toplev.c
+@@ -523,11 +523,11 @@ read_integral_parameter (const char *p, const char *pname, const int  defval)
+   return atoi (p);
+ }
+ 
+-/* When compiling with a recent enough GCC, we use the GNU C "extern inline"
+-   for floor_log2 and exact_log2; see toplev.h.  That construct, however,
+-   conflicts with the ISO C++ One Definition Rule.   */
++#if GCC_VERSION < 3004
+ 
+-#if GCC_VERSION < 3004 || !defined (__cplusplus)
++/* The functions floor_log2 and exact_log2 are defined as inline
++   functions in toplev.h if GCC_VERSION >= 3004.  The definitions here
++   are used for older versions of gcc.  */
+ 
+ /* Given X, an unsigned number, return the largest int Y such that 2**Y <= X.
+    If X is 0, return -1.  */
+@@ -540,9 +540,6 @@ floor_log2 (unsigned HOST_WIDE_INT x)
+   if (x == 0)
+     return -1;
+ 
+-#ifdef CLZ_HWI
+-  t = HOST_BITS_PER_WIDE_INT - 1 - (int) CLZ_HWI (x);
+-#else
+   if (HOST_BITS_PER_WIDE_INT > 64)
+     if (x >= (unsigned HOST_WIDE_INT) 1 << (t + 64))
+       t += 64;
+@@ -559,7 +556,6 @@ floor_log2 (unsigned HOST_WIDE_INT x)
+     t += 2;
+   if (x >= ((unsigned HOST_WIDE_INT) 1) << (t + 1))
+     t += 1;
+-#endif
+ 
+   return t;
+ }
+@@ -572,14 +568,10 @@ exact_log2 (unsigned HOST_WIDE_INT x)
+ {
+   if (x != (x & -x))
+     return -1;
+-#ifdef CTZ_HWI
+-  return x ? CTZ_HWI (x) : -1;
+-#else
+   return floor_log2 (x);
+-#endif
+ }
+ 
+-#endif /*  GCC_VERSION < 3004 || !defined (__cplusplus)  */
++#endif /* GCC_VERSION < 3004 */
+ 
+ /* Handler for fatal signals, such as SIGSEGV.  These are transformed
+    into ICE messages, which is much more user friendly.  In case the
+diff --git a/gcc/toplev.h b/gcc/toplev.h
+index 2324b068f..15feb8db8 100644
+--- a/gcc/toplev.h
++++ b/gcc/toplev.h
+@@ -49,7 +49,7 @@ extern void _fatal_insn (const char *, const_rtx, const char *, int, const char
+ /* None of these functions are suitable for ATTRIBUTE_PRINTF, because
+    each language front end can extend them with its own set of format
+    specifiers.  We must use custom format checks.  */
+-#if GCC_VERSION >= 4001
++#if (GCC_VERSION >= 4001) && (__GNUC__ != 9) /* gcc-9 is buggy: https://gcc.gnu.org/PR90677  */
+ #define ATTRIBUTE_GCC_DIAG(m, n) __attribute__ ((__format__ (GCC_DIAG_STYLE, m, n))) ATTRIBUTE_NONNULL(m)
+ #else
+ #define ATTRIBUTE_GCC_DIAG(m, n) ATTRIBUTE_NONNULL(m)
+@@ -167,14 +167,17 @@ extern void decode_d_option		(const char *);
+ extern bool fast_math_flags_set_p	(void);
+ extern bool fast_math_flags_struct_set_p (struct cl_optimization *);
+ 
++/* Inline versions of the above for speed.  */
++#if GCC_VERSION < 3004
++
+ /* Return log2, or -1 if not exact.  */
+ extern int exact_log2                  (unsigned HOST_WIDE_INT);
+ 
+ /* Return floor of log2, with -1 for zero.  */
+ extern int floor_log2                  (unsigned HOST_WIDE_INT);
+ 
+-/* Inline versions of the above for speed.  */
+-#if GCC_VERSION >= 3004
++#else /* GCC_VERSION >= 3004 */
++
+ # if HOST_BITS_PER_WIDE_INT == HOST_BITS_PER_LONG
+ #  define CLZ_HWI __builtin_clzl
+ #  define CTZ_HWI __builtin_ctzl
+@@ -186,17 +189,18 @@ extern int floor_log2                  (unsigned HOST_WIDE_INT);
+ #  define CTZ_HWI __builtin_ctz
+ # endif
+ 
+-extern inline int
++static inline int
+ floor_log2 (unsigned HOST_WIDE_INT x)
+ {
+   return x ? HOST_BITS_PER_WIDE_INT - 1 - (int) CLZ_HWI (x) : -1;
+ }
+ 
+-extern inline int
++static inline int
+ exact_log2 (unsigned HOST_WIDE_INT x)
+ {
+   return x == (x & -x) && x ? (int) CTZ_HWI (x) : -1;
+ }
++
+ #endif /* GCC_VERSION >= 3004 */
+ 
+ /* Functions used to get and set GCC's notion of in what directory
+diff --git a/gcc/unwind-dw2-fde-glibc.c b/gcc/unwind-dw2-fde-glibc.c
+index d246ae124..1dc5c3574 100644
+--- a/gcc/unwind-dw2-fde-glibc.c
++++ b/gcc/unwind-dw2-fde-glibc.c
+@@ -46,8 +46,9 @@
+ #include "gthr.h"
+ 
+ #if !defined(inhibit_libc) && defined(HAVE_LD_EH_FRAME_HDR) \
+-    && (__GLIBC__ > 2 || (__GLIBC__ == 2 && __GLIBC_MINOR__ > 2) \
+-	|| (__GLIBC__ == 2 && __GLIBC_MINOR__ == 2 && defined(DT_CONFIG)))
++    && ((__GLIBC__ > 2 || (__GLIBC__ == 2 && __GLIBC_MINOR__ > 2) \
++	|| (__GLIBC__ == 2 && __GLIBC_MINOR__ == 2 && defined(DT_CONFIG))) \
++    || (__FreeBSD_version >= 700022 ))
+ 
+ #ifndef __RELOC_POINTER
+ # define __RELOC_POINTER(ptr, base) ((ptr) + (base))
+@@ -63,6 +64,13 @@ static const fde * _Unwind_Find_registered_FDE (void *pc, struct dwarf_eh_bases
+ #define PT_GNU_EH_FRAME (PT_LOOS + 0x474e550)
+ #endif
+ 
++/* Support FreeBSD */
++#ifndef ElfW
++# ifdef __ElfN
++#  define ElfW __ElfN
++# endif
++#endif
++
+ struct unw_eh_callback_data
+ {
+   _Unwind_Ptr pc;
+diff --git a/gcc/unwind-dw2.c b/gcc/unwind-dw2.c
+index 27c40b189..f5c2126ed 100644
+--- a/gcc/unwind-dw2.c
++++ b/gcc/unwind-dw2.c
+@@ -329,9 +329,11 @@ _Unwind_GetTextRelBase (struct _Unwind_Context *context)
+ }
+ #endif
+ 
++#ifndef inhibit_libc
+ #ifdef MD_UNWIND_SUPPORT
+ #include MD_UNWIND_SUPPORT
+ #endif
++#endif
+ 
+ /* Extract any interesting information from the CIE for the translation
+    unit F belongs to.  Return a pointer to the byte after the augmentation,
+diff --git a/include/libiberty.h b/include/libiberty.h
+index e3eca9d75..b7b9a248c 100644
+--- a/include/libiberty.h
++++ b/include/libiberty.h
+@@ -595,8 +595,11 @@ extern int pwait (int, int *, int);
+ /* Like sprintf but provides a pointer to malloc'd storage, which must
+    be freed by the caller.  */
+ 
++/* asprintf may be declared as a macro by glibc with __USE_FORTIFY_LEVEL.  */
++#ifndef asprintf
+ extern int asprintf (char **, const char *, ...) ATTRIBUTE_PRINTF_2;
+ #endif
++#endif
+ 
+ #if !HAVE_DECL_VASPRINTF
+ /* Like vsprintf but provides a pointer to malloc'd storage, which
+diff --git a/libgcc/Makefile.in b/libgcc/Makefile.in
+index 53dde12b4..b6d088164 100644
+--- a/libgcc/Makefile.in
++++ b/libgcc/Makefile.in
+@@ -183,7 +183,7 @@ export RANLIB_FOR_TARGET
+ export libsubdir
+ export slibdir
+ 
+-version := $(shell $(CC) -dumpversion)
++version := $(shell cat $(srcdir)/../gcc/BASE-VER)
+ 
+ ifeq ($(decimal_float),yes)
+ ifeq ($(enable_decimal_float),bid)
+diff --git a/libgfortran/configure b/libgfortran/configure
+index caa7e59fd..ef19d153b 100755
+--- a/libgfortran/configure
++++ b/libgfortran/configure
+@@ -3412,7 +3412,7 @@ fi
+ 
+ # Add -Wall -fno-repack-arrays -fno-underscoring if we are using GCC.
+ if test "x$GCC" = "xyes"; then
+-  AM_FCFLAGS="-I . -Wall -Werror -fimplicit-none -fno-repack-arrays -fno-underscoring"
++  AM_FCFLAGS="-I . -Wall -fimplicit-none -fno-repack-arrays -fno-underscoring"
+   ## We like to use C99 routines when available.  This makes sure that
+   ## __STDC_VERSION__ is set such that libc includes make them available.
+   AM_CFLAGS="-std=gnu99 -Wall -Wstrict-prototypes -Wmissing-prototypes -Wold-style-definition -Wextra -Wwrite-strings"
+diff --git a/libgomp/configure b/libgomp/configure
+index deef67334..3274f1fc1 100755
+--- a/libgomp/configure
++++ b/libgomp/configure
+@@ -3334,7 +3334,7 @@ save_CFLAGS="$CFLAGS"
+ 
+ # Add -Wall -Werror if we are using GCC.
+ if test "x$GCC" = "xyes"; then
+-  XCFLAGS="$XCFLAGS -Wall -Werror"
++  XCFLAGS="$XCFLAGS -Wall"
+ fi
+ 
+ # Find other programs we need.
+diff --git a/libiberty/Makefile.in b/libiberty/Makefile.in
+index 41a71f5ea..f68a7a662 100644
+--- a/libiberty/Makefile.in
++++ b/libiberty/Makefile.in
+@@ -227,6 +227,7 @@ $(TARGETLIB): $(REQUIRED_OFILES) $(EXTRA_OFILES) $(LIBOBJS)
+ 	  $(AR) $(AR_FLAGS) $(TARGETLIB) \
+ 	    $(REQUIRED_OFILES) $(EXTRA_OFILES) $(LIBOBJS); \
+ 	  $(RANLIB) $(TARGETLIB); \
++	  cp $(TARGETLIB) ../ ; \
+ 	  cd ..; \
+ 	else true; fi
+ 
+diff --git a/libjava/Makefile.am b/libjava/Makefile.am
+index e14ed6f18..5f12732a9 100644
+--- a/libjava/Makefile.am
++++ b/libjava/Makefile.am
+@@ -317,6 +317,7 @@ libgcj_tools_la_GCJFLAGS = $(AM_GCJFLAGS) -findirect-dispatch \
+ libgcj_tools_la_LDFLAGS = -rpath $(toolexeclibdir) \
+  -version-info `grep -v '^\#' $(srcdir)/libtool-version` \
+  $(LIBGCJ_LD_SYMBOLIC_FUNCTIONS)
++libgcj_tools_la_LIBADD = -lm
+ libgcj_tools_la_DEPENDENCIES = libgcj.la libgcj.spec
+ libgcj_tools_la_LINK = $(LIBLINK)
+ 
+diff --git a/libjava/Makefile.in b/libjava/Makefile.in
+index e0d105ddb..606abc592 100644
+--- a/libjava/Makefile.in
++++ b/libjava/Makefile.in
+@@ -161,7 +161,7 @@ am__objects_1 = gnu/gcj/xlib/lib_gnu_awt_xlib_la-natClip.lo \
+ am_lib_gnu_awt_xlib_la_OBJECTS = $(am__objects_1)
+ lib_gnu_awt_xlib_la_OBJECTS = $(am_lib_gnu_awt_xlib_la_OBJECTS)
+ @XLIB_AWT_TRUE@am_lib_gnu_awt_xlib_la_rpath = -rpath $(toolexeclibdir)
+-libgcj_tools_la_LIBADD =
++libgcj_tools_la_LIBADD = -lm
+ am_libgcj_tools_la_OBJECTS = classpath/tools/libgcj_tools_la-tools.lo
+ libgcj_tools_la_OBJECTS = $(am_libgcj_tools_la_OBJECTS)
+ @INTERPRETER_TRUE@am__DEPENDENCIES_1 = gnu/classpath/jdwp.lo \
+diff --git a/libjava/classpath/scripts/check_jni_methods.sh.in b/libjava/classpath/scripts/check_jni_methods.sh.in
+index facf34b34..fb9d104e3 100644
+--- a/libjava/classpath/scripts/check_jni_methods.sh.in
++++ b/libjava/classpath/scripts/check_jni_methods.sh.in
+@@ -14,7 +14,7 @@ grep -h '^JNIEXPORT .* Java_' @abs_top_srcdir@/include/*.h | \
+         LC_ALL=C sed -e 's,.*JNICALL \(Java_[a-z_A-Z0-9]*\).*$,\1,' > $TMPFILE
+ grep -h '^JNIEXPORT .* Java_' @abs_top_builddir@/include/*.h | \
+         LC_ALL=C sed -e 's,.*JNICALL \(Java_[a-z_A-Z0-9]*\).*$,\1,' >> $TMPFILE
+-sort -u $TMPFILE > $TMPFILE4
++LC_ALL=C sort -u $TMPFILE > $TMPFILE4
+ mv $TMPFILE4 $TMPFILE
+ 
+ # Find all methods in the JNI C source files.
+@@ -31,7 +31,7 @@ find @abs_top_srcdir@/native/jni -name \*.cpp | \
+ 	cut -f4 -d\  | \
+         LC_ALL=C sed -e 's,^\JNIEXPORT .* JNICALL \(Java_[a-z_A-Z0-9]*\).*$,\1,' >> $TMPFILE2
+ mv $TMPFILE2 $TMPFILE3
+-sort $TMPFILE3 | uniq > $TMPFILE2
++LC_ALL=C sort -u $TMPFILE3 > $TMPFILE2
+ rm $TMPFILE3
+ 
+ # Write temporary ignore file.
+diff --git a/libjava/include/i386-signal.h b/libjava/include/i386-signal.h
+index a3d3a1b75..85f286e7e 100644
+--- a/libjava/include/i386-signal.h
++++ b/libjava/include/i386-signal.h
+@@ -26,7 +26,7 @@ static void _Jv_##_name (int, siginfo_t *,			\
+ #define HANDLE_DIVIDE_OVERFLOW						\
+ do									\
+ {									\
+-  struct ucontext *_uc = (struct ucontext *)_p;				\
++  ucontext_t *_uc = (ucontext_t *)_p;					\
+   gregset_t &_gregs = _uc->uc_mcontext.gregs;				\
+   unsigned char *_eip = (unsigned char *)_gregs[REG_EIP];		\
+ 									\
+diff --git a/libjava/include/x86_64-signal.h b/libjava/include/x86_64-signal.h
+index 4bd8a3601..d04e86893 100644
+--- a/libjava/include/x86_64-signal.h
++++ b/libjava/include/x86_64-signal.h
+@@ -28,7 +28,7 @@ static void _Jv_##_name (int, siginfo_t *,			\
+ #define HANDLE_DIVIDE_OVERFLOW						\
+ do									\
+ {									\
+-  struct ucontext *_uc = (struct ucontext *)_p;				\
++  ucontext_t *_uc = (ucontext_t *)_p;					\
+   gregset_t &_gregs = _uc->uc_mcontext.gregs;				\
+   unsigned char *_rip = (unsigned char *)_gregs[REG_RIP];		\
+ 									\
+diff --git a/libmudflap/mf-runtime.c b/libmudflap/mf-runtime.c
+index 6edb71a60..25e49ba9d 100644
+--- a/libmudflap/mf-runtime.c
++++ b/libmudflap/mf-runtime.c
+@@ -303,6 +303,14 @@ __mf_set_default_options ()
+ #ifdef LIBMUDFLAPTH
+   __mf_opts.thread_stack = 0;
+ #endif
++
++  /* PR41443: Beware that the above flags will be applied to
++     setuid/setgid binaries, and cannot be overriden with
++     $MUDFLAP_OPTIONS.  So the defaults must be non-exploitable. 
++
++     Should we consider making the default violation_mode something
++     harsher than viol_nop?  OTOH, glibc's MALLOC_CHECK_ is disabled
++     by default for these same programs. */
+ }
+ 
+ static struct mudoption
+@@ -442,7 +450,7 @@ __mf_usage ()
+            "This is a %s%sGCC \"mudflap\" memory-checked binary.\n"
+            "Mudflap is Copyright (C) 2002-2010 Free Software Foundation, Inc.\n"
+            "\n"
+-           "The mudflap code can be controlled by an environment variable:\n"
++           "Unless setuid, a program's mudflap options be set by an environment variable:\n"
+            "\n"
+            "$ export MUDFLAP_OPTIONS='<options>'\n"
+            "$ <mudflapped_program>\n"
+@@ -711,7 +719,8 @@ __mf_init ()
+ 
+   __mf_set_default_options ();
+ 
+-  ov = getenv ("MUDFLAP_OPTIONS");
++  if (getuid () == geteuid () && getgid () == getegid ()) /* PR41433, not setuid */
++    ov = getenv ("MUDFLAP_OPTIONS");
+   if (ov)
+     {
+       int rc = __mfu_set_options (ov);
