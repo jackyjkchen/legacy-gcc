@@ -1,7 +1,7 @@
 # Copyright 1999-2018 Gentoo Authors
 # Distributed under the terms of the GNU General Public License v2
 
-EAPI=6
+EAPI=7
 
 export CBUILD=${CBUILD:-${CHOST}}
 export CTARGET=${CTARGET:-${CHOST}}
@@ -11,13 +11,13 @@ if [[ ${CTARGET} == ${CHOST} ]] ; then
 	fi
 fi
 
-inherit flag-o-matic autotools versionator eutils
+inherit eutils flag-o-matic
 
 DESCRIPTION="Free Win32 runtime and import library definitions"
 HOMEPAGE="http://www.mingw.org/"
-# https://sourceforge.net/projects/mingw/files/MinGW/Base/mingw-rt/
-SRC_URI="mirror://sourceforge/mingw/mingwrt-${PV}-mingw32-src.tar.xz
-		mirror://sourceforge/mingw/w32api-${PV}-mingw32-src.tar.xz"
+# https://sourceforge.net/projects/mingw/files/MinGW/Base/w32api/
+SRC_URI="mirror://sourceforge/mingw/${P}-mingw32-src.tar.xz
+		mirror://sourceforge/mingw/mingwrt-${PV}-mingw32-src.tar.xz"
 
 LICENSE="BSD"
 SLOT="0"
@@ -26,29 +26,20 @@ IUSE="headers-only"
 RESTRICT="strip"
 
 DEPEND="app-arch/xz-utils"
+RDEPEND=""
 
-S=${WORKDIR}/mingwrt-${PV}
+S=${WORKDIR}/${P}
 
-is_crosscompile() {
-	[[ ${CHOST} != ${CTARGET} ]]
-}
 just_headers() {
 	use headers-only && [[ ${CHOST} != ${CTARGET} ]]
 }
 
 pkg_setup() {
 	if [[ ${CBUILD} == ${CHOST} ]] && [[ ${CHOST} == ${CTARGET} ]] ; then
-		die "Invalid configuration"
+		die "Invalid configuration; do not emerge this directly"
 	fi
 }
 
-src_prepare() {
-	default
-	eautoconf
-	sed -i \
-		-e '/^install_dlls_host:/s:$: install-dirs:' \
-		Makefile.in || die # fix parallel install
-}
 
 src_configure() {
 	CFLAGS="-O2 -pipe"
@@ -56,12 +47,12 @@ src_configure() {
 	CHOST=${CTARGET} strip-unsupported-flags
 	econf \
 		--host=${CTARGET} \
-		--prefix="/usr/${CTARGET}/usr"
+		--prefix=/usr/${CTARGET}/usr
 }
 
 src_compile() {
 	just_headers && return 0
-	emake -j1 || die
+	emake || die
 }
 
 src_install() {
@@ -69,9 +60,9 @@ src_install() {
 		emake install-headers DESTDIR="${D}" || die
 	else
 		emake install DESTDIR="${D}" || die
-		rm -rf "${D}"/usr/${CTARGET}/usr/doc
-		docinto ${CTARGET} # Avoid collisions with other cross-compilers.
-		dodoc CONTRIBUTORS ChangeLog README TODO readme.txt
+		dodoc CONTRIBUTIONS ChangeLog README.w32api TODO
+
+		# Make sure diff cross-compilers don't collide #414075
+		mv "${D}"/usr/share/doc/{${PF},${CTARGET}-${PF}} || die
 	fi
-	is_crosscompile && dosym usr /usr/${CTARGET}/mingw
 }
