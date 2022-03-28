@@ -7,8 +7,7 @@ public:
     }
 };
 
-int main()
-{
+int main() {
     HelloWorld::print();
     return 0;
 }
