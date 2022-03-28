@@ -66,8 +66,8 @@ src_install() {
 		cp -avx stl "${ED}"/usr/lib/gcc-lib/${CHOST}/2.8.1/include/stlport || die
 	fi
 	if use gcc272; then
-		mkdir -p "${ED}"/usr/lib/gcc-lib/${CHOST}/2.7.2.3/include/ || die
-		cp -avx stl "${ED}"/usr/lib/gcc-lib/${CHOST}/2.7.2.3/include/stlport || die
+		mkdir -p "${ED}"/usr/lib/gcc-lib/${CHOST}/2.7.2/include/ || die
+		cp -avx stl "${ED}"/usr/lib/gcc-lib/${CHOST}/2.7.2/include/stlport || die
 	fi
 	popd > /dev/null
 }

@@ -1,8 +1,20 @@
-# Copyright 1999-2021 Gentoo Authors
+# Copyright 1999-2022 Gentoo Authors
 # Distributed under the terms of the GNU General Public License v2
 
-# Maintainer: Toolchain Ninjas <toolchain@gentoo.org>
-# @SUPPORTED_EAPIS: 5 6 7 8
+# @ECLASS: toolchain.eclass
+# @MAINTAINER:
+# Toolchain Ninjas <toolchain@gentoo.org>
+# @SUPPORTED_EAPIS: 7 8
+# @BLURB: Common code for sys-devel/gcc ebuilds
+
+case ${EAPI} in
+	7) inherit eutils ;;
+	8) ;;
+	*) die "${ECLASS}: EAPI ${EAPI:-0} not supported" ;;
+esac
+
+if [[ ! ${_TOOLCHAIN_ECLASS} ]]; then
+_TOOLCHAIN_ECLASS=1
 
 DESCRIPTION="The GNU Compiler Collection"
 HOMEPAGE="https://gcc.gnu.org/"
@@ -26,16 +38,6 @@ if tc_is_live ; then
 fi
 
 FEATURES=${FEATURES/multilib-strict/}
-
-case ${EAPI} in
-	5|6) inherit eapi7-ver eutils ;;
-	7) inherit eutils ;;
-	8) ;;
-	*) die "${ECLASS}: EAPI ${EAPI:-0} not supported" ;;
-esac
-
-EXPORT_FUNCTIONS pkg_pretend pkg_setup src_unpack src_prepare src_configure \
-	src_compile src_test src_install pkg_postinst pkg_postrm
 
 #---->> globals <<----
 
@@ -103,20 +105,20 @@ fi
 PREFIX=${TOOLCHAIN_PREFIX:-${EPREFIX}/usr}
 
 if tc_version_is_at_least 3.4 ; then
-	LIBPATH=${TOOLCHAIN_LIBPATH:-${PREFIX}/lib/gcc/${CTARGET}/${GCC_PV}}
+	LIBPATH=${TOOLCHAIN_LIBPATH:-${PREFIX}/lib/gcc/${CTARGET}/${GCC_CONFIG_VER}}
 else
-	LIBPATH=${TOOLCHAIN_LIBPATH:-${PREFIX}/lib/gcc-lib/${CTARGET}/${GCC_PV}}
+	LIBPATH=${TOOLCHAIN_LIBPATH:-${PREFIX}/lib/gcc-lib/${CTARGET}/${GCC_CONFIG_VER}}
 fi
 INCLUDEPATH=${TOOLCHAIN_INCLUDEPATH:-${LIBPATH}/include}
 
 if is_crosscompile ; then
-	BINPATH=${TOOLCHAIN_BINPATH:-${PREFIX}/${CHOST}/${CTARGET}/gcc-bin/${GCC_PV}}
-	HOSTLIBPATH=${PREFIX}/${CHOST}/${CTARGET}/lib/${GCC_PV}
+	BINPATH=${TOOLCHAIN_BINPATH:-${PREFIX}/${CHOST}/${CTARGET}/gcc-bin/${GCC_CONFIG_VER}}
+	HOSTLIBPATH=${PREFIX}/${CHOST}/${CTARGET}/lib/${GCC_CONFIG_VER}
 else
-	BINPATH=${TOOLCHAIN_BINPATH:-${PREFIX}/${CTARGET}/gcc-bin/${GCC_PV}}
+	BINPATH=${TOOLCHAIN_BINPATH:-${PREFIX}/${CTARGET}/gcc-bin/${GCC_CONFIG_VER}}
 fi
 
-DATAPATH=${TOOLCHAIN_DATAPATH:-${PREFIX}/share/gcc-data/${CTARGET}/${GCC_PV}}
+DATAPATH=${TOOLCHAIN_DATAPATH:-${PREFIX}/share/gcc-data/${CTARGET}/${GCC_CONFIG_VER}}
 
 # Dont install in /usr/include/g++-v3/, but in gcc internal directory.
 # We will handle /usr/include/g++-v3/ with gcc-config ...
@@ -140,14 +142,6 @@ fi
 
 IUSE="test vanilla +nls"
 RESTRICT="!test? ( test )"
-
-tc_supports_dostrip() {
-	case ${EAPI} in
-		5|6) return 0 ;;
-		7|8) return 0 ;;
-		*) die "Update apply_patches() for ${EAPI}." ;;
-	esac
-}
 
 is_crosscompile && RESTRICT+=" strip" # cross-compilers need controlled stripping
 
@@ -234,6 +228,7 @@ if [[ ${PN} != "kgcc64" && ${PN} != gcc-* ]] ; then
 	tc_version_is_at_least 10 && IUSE+=" cet"
 	tc_version_is_at_least 10 && IUSE+=" zstd" TC_FEATURES+=( zstd )
 	tc_version_is_at_least 11 && IUSE+=" valgrind" TC_FEATURES+=( valgrind )
+	tc_version_is_at_least 11 && IUSE+=" custom-cflags"
 fi
 
 if tc_version_is_at_least 10; then
@@ -322,10 +317,6 @@ fi
 if tc_has_feature valgrind; then
 	BDEPEND+=" valgrind? ( dev-util/valgrind )"
 fi
-
-case ${EAPI} in
-	5|6) DEPEND+=" ${BDEPEND}" ;;
-esac
 
 PDEPEND=">=sys-devel/gcc-config-2.3"
 
@@ -538,22 +529,6 @@ toolchain_src_unpack() {
 
 #---->> src_prepare <<----
 
-# 'epatch' is not available in EAPI=7. Abstract away patchset application
-# until we eventually get all gcc ebuilds on EAPI=7 or later.
-tc_apply_patches() {
-	[[ ${#@} -lt 2 ]] && die "usage: tc_apply_patches <message> <patches...>"
-
-	einfo "$1"; shift
-
-	case ${EAPI} in
-		# Note: even for EAPI=6 we used 'epatch' semantics. To avoid
-		# breaking existing ebuilds use 'eapply' only in EAPI=7 or later.
-		5|6) epatch "$@" ;;
-		7|8) eapply "$@" ;;
-		*) die "Update apply_patches() for ${EAPI}." ;;
-	esac
-}
-
 toolchain_src_prepare() {
 	export BRANDING_GCC_PKGVERSION="Gentoo ${GCC_PVR}"
 	cd "${S}" || die
@@ -566,11 +541,7 @@ toolchain_src_prepare() {
 		BRANDING_GCC_PKGVERSION="${BRANDING_GCC_PKGVERSION}, commit ${EGIT_VERSION}"
 	fi
 
-	case ${EAPI} in
-		5) epatch_user;;
-		6|7|8) eapply_user ;;
-		*) die "Update toolchain_src_prepare() for ${EAPI}." ;;
-	esac
+	eapply_user
 
 	if ( tc_version_is_at_least 4.8.2 || _tc_use_if_iuse hardened ) \
 		   && ! use vanilla ; then
@@ -660,7 +631,8 @@ toolchain_src_prepare() {
 
 	# Prevent new texinfo from breaking old versions (see #198182, #464008)
 	if tc_version_is_at_least 4.1; then
-		tc_apply_patches "Remove texinfo (bug #198182, bug #464008)" "${FILESDIR}"/gcc-configure-texinfo.patch
+		einfo "Remove texinfo (bug #198182, bug #464008)"
+		eapply "${FILESDIR}"/gcc-configure-texinfo.patch
 	fi
 
 	# >=gcc-4
@@ -676,7 +648,8 @@ toolchain_src_prepare() {
 do_gcc_gentoo_patches() {
 	if ! use vanilla ; then
 		if [[ -n ${PATCH_VER} ]] ; then
-			tc_apply_patches "Applying Gentoo patches ..." "${WORKDIR}"/patch/*.patch
+			einfo "Applying Gentoo patches ..."
+			eapply "${WORKDIR}"/patch/*.patch
 			BRANDING_GCC_PKGVERSION="${BRANDING_GCC_PKGVERSION} p${PATCH_VER}"
 		fi
 
@@ -704,7 +677,8 @@ do_gcc_PIE_patches() {
 	want_pie || return 0
 	use vanilla && return 0
 
-	tc_apply_patches "Applying pie patches ..." "${WORKDIR}"/piepatch/*.patch
+	einfo "Applying pie patches ..."
+	eapply "${WORKDIR}"/piepatch/*.patch
 
 	BRANDING_GCC_PKGVERSION="${BRANDING_GCC_PKGVERSION}, pie-${PIE_VER}"
 }
@@ -722,7 +696,8 @@ do_gcc_CYGWINPORTS_patches() {
 			echo "${d}/${p}"
 		done
 	) )
-	tc_apply_patches "Applying cygwin port patches ..." ${patches[*]}
+	einfo "Applying cygwin port patches ..."
+	eapply -- "${patches[@]}"
 }
 
 # configure to build with the hardened GCC specs as the default
@@ -950,7 +925,7 @@ toolchain_src_configure() {
 	#  Python modules are to be installed in /usr/lib/python2.5/site-packages,
 	#  then --with-python-dir=/lib/python2.5/site-packages should be passed.
 	#
-	# This should translate into "/share/gcc-data/${CTARGET}/${GCC_PV}/python"
+	# This should translate into "/share/gcc-data/${CTARGET}/${GCC_CONFIG_VER}/python"
 	if tc_version_is_at_least 4.4 ; then
 		confgcc+=( --with-python-dir=${DATAPATH/$PREFIX/}/python )
 	fi
@@ -2117,7 +2092,7 @@ toolchain_src_install() {
 		fi
 		${CHOST}-strip -s ${D}${BINPATH}/*
 		${CHOST}-strip -s ${D}${HOSTLIBPATH}/*
-		${CHOST}-strip -s ${D}${PREFIX}/libexec/gcc/${CTARGET}/${GCC_PV}/{*,plugin/*}
+		${CHOST}-strip -s ${D}${PREFIX}/libexec/gcc/${CTARGET}/${GCC_CONFIG_VER}/{*,plugin/*}
 		${CHOST}-strip -s ${D}${LIBPATH}/plugin/*.so*
 	fi
 
@@ -2216,14 +2191,14 @@ toolchain_src_install() {
 
 	# Disable RANDMMAP so PCH works. #301299
 	if tc_version_is_at_least 4.3 ; then
-		pax-mark -r "${D}${PREFIX}/libexec/gcc/${CTARGET}/${GCC_PV}/cc1"
-		pax-mark -r "${D}${PREFIX}/libexec/gcc/${CTARGET}/${GCC_PV}/cc1plus"
+		pax-mark -r "${D}${PREFIX}/libexec/gcc/${CTARGET}/${GCC_CONFIG_VER}/cc1"
+		pax-mark -r "${D}${PREFIX}/libexec/gcc/${CTARGET}/${GCC_CONFIG_VER}/cc1plus"
 	fi
 
 	# Disable MPROTECT so java works. #574808
 	if is_gcj ; then
-		pax-mark -m "${D}${PREFIX}/libexec/gcc/${CTARGET}/${GCC_PV}/ecj1"
-		pax-mark -m "${D}${PREFIX}/${CTARGET}/gcc-bin/${GCC_PV}/gij"
+		pax-mark -m "${D}${PREFIX}/libexec/gcc/${CTARGET}/${GCC_CONFIG_VER}/ecj1"
+		pax-mark -m "${D}${PREFIX}/${CTARGET}/gcc-bin/${GCC_CONFIG_VER}/gij"
 	fi
 }
 
@@ -2746,6 +2721,11 @@ toolchain_death_notice() {
 		popd >/dev/null
 	fi
 }
+
+fi
+
+EXPORT_FUNCTIONS pkg_pretend pkg_setup src_unpack src_prepare src_configure \
+	src_compile src_test src_install pkg_postinst pkg_postrm
 
 # Note [implicitly enabled flags]
 # -------------------------------

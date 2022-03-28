@@ -50,6 +50,6 @@ src_install() {
 	toolchain_src_install
 	mkdir -p ${ED}/etc/ld.so.conf.d/ || die
 	cat <<-_EOF_ > "${ED}"/etc/ld.so.conf.d/14-${CHOST}-gcc-${SLOT}.conf || die
-/usr/lib/gcc-lib/${CHOST}/${PV}
+/usr/lib/gcc-lib/${CHOST}/${GCC_CONFIG_VER}
 _EOF_
 }
