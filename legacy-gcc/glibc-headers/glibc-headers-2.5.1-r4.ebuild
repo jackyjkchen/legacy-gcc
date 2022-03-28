@@ -44,11 +44,10 @@ esac
 SLOT="${TOOL_SLOT}"
 
 DEPEND="
-	sys-devel/gcc:4.4.7
 	legacy-gcc/linux-headers:${TOOL_SLOT}
 	legacy-gcc/binutils-wrapper:${TOOL_SLOT}"
 RDEPEND="${DEPEND}"
-BDEPEND=""
+BDEPEND="${BDEPEND} sys-devel/gcc:4.4.7"
 
 CHOST="${TOOL_SLOT}-linux-gnu"
 
