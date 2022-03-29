@@ -40,5 +40,6 @@ src_prepare() {
 
 	[[ ${ARCH} == "alpha" ]] && eapply "${FILESDIR}"/${PV}/00_fix-alpha-bootstrap.patch
 	[[ ${ARCH} == "mips" && ${DEFAULT_ABI} == "n64" ]] && eapply "${FILESDIR}"/${PV}/01_mips64-default-n64-abi.patch
+	eapply "${FILESDIR}"/${PV}/02_fix-cpp98-break.patch
 	[[ ${CHOST} == ${CTARGET} ]] && eapply "${FILESDIR}"/gcc-spec-env.patch
 }
