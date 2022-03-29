@@ -47,7 +47,7 @@ DEPEND="
 	legacy-gcc/linux-headers:${TOOL_SLOT}
 	legacy-gcc/binutils-wrapper:${TOOL_SLOT}"
 RDEPEND="${DEPEND}"
-BDEPEND="${BDEPEND} sys-devel/gcc:4.4.7"
+BDEPEND="sys-devel/gcc:4.4.7"
 
 CHOST="${TOOL_SLOT}-linux-gnu"
 

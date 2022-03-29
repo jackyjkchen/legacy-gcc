@@ -14,11 +14,11 @@ DEPEND="${RDEPEND}
 	>=sys-devel/binutils-2.15.94"
 
 if is_crosscompile ; then
-	BDEPEND="${BDEPEND} sys-devel/gcc:4.1.2"
+	BDEPEND="sys-devel/gcc:4.1.2"
 	CC="gcc-4.1.2"
 	CXX="g++-4.1.2"
 else
-	BDEPEND="${BDEPEND} sys-devel/gcc:4.4.7"
+	BDEPEND="sys-devel/gcc:4.4.7"
 	CC="gcc-4.4.7"
 	CXX="g++-4.4.7"
 fi

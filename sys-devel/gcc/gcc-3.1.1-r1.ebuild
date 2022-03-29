@@ -41,7 +41,7 @@ RDEPEND=">=sys-devel/binutils-2.14.90.0.6-r1"
 DEPEND="${RDEPEND}
 	amd64? ( >=sys-devel/binutils-2.15.90.0.1.1-r1 )
 	${LEGACY_DEPEND}"
-BDEPEND="${BDEPEND} sys-devel/gcc:3.4.6"
+BDEPEND="sys-devel/gcc:3.4.6"
 
 src_prepare() {
 	eapply "${FILESDIR}"/${PV}/00_gcc-${PV}.patch

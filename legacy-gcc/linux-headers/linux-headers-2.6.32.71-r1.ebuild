@@ -26,8 +26,6 @@ case ${ARCH} in
 		TOOL_SLOT="s390x-legacy"
 		;;
 	sparc)
-		CC="${CC} ${CFLAGS_sparc32}"
-		CXX="${CXX} ${CFLAGS_sparc32}"
 		TOOL_SLOT="sparc-legacy"
 		;;
 	*)
@@ -36,10 +34,10 @@ case ${ARCH} in
 esac
 SLOT="${TOOL_SLOT}"
 
-DEPEND="sys-devel/make
-	sys-devel/gcc:4.4.7"
+DEPEND=""
 RDEPEND="${DEPEND}"
-BDEPEND=""
+BDEPEND="sys-devel/make
+	sys-devel/gcc:4.4.7"
 
 TARGET_PREFIX="${TOOL_SLOT}-linux-gnu"
 UNIX_PREFIX="/usr"

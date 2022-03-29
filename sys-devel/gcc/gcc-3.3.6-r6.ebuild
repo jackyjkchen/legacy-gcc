@@ -16,11 +16,11 @@ DEPEND="${RDEPEND}
 	amd64? ( >=sys-devel/binutils-2.15.90.0.1.1-r1 )"
 
 if is_crosscompile ; then
-	BDEPEND="${BDEPEND} sys-devel/gcc:3.3.6"
+	BDEPEND="sys-devel/gcc:3.3.6"
 	CC="gcc-3.3.6"
 	CXX="g++-3.3.6"
 else
-	BDEPEND="${BDEPEND} sys-devel/gcc:3.4.6"
+	BDEPEND="sys-devel/gcc:3.4.6"
 	CC="gcc-3.4.6"
 	CXX="g++-3.4.6"
 fi

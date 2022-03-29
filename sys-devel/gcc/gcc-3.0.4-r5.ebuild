@@ -60,7 +60,7 @@ KEYWORDS="alpha amd64 m68k mips ppc s390 sparc x86"
 RDEPEND=""
 DEPEND="${RDEPEND}
 	${LEGACY_DEPEND}"
-BDEPEND="${BDEPEND} sys-devel/gcc:3.4.6"
+BDEPEND="sys-devel/gcc:3.4.6"
 
 src_prepare() {
 	eapply "${FILESDIR}"/${PV}/00_gcc-${PV}.patch

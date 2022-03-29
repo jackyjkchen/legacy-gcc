@@ -57,7 +57,7 @@ DEPEND="${RDEPEND}
 	legacy-gcc/linux-headers:${TOOL_SLOT}
 	legacy-gcc/glibc-headers:${TOOL_SLOT}
 	legacy-gcc/binutils-wrapper:${TOOL_SLOT}"
-BDEPEND="${BDEPEND} sys-devel/gcc:3.4.6"
+BDEPEND="sys-devel/gcc:3.4.6"
 
 src_prepare() {
 	eapply "${FILESDIR}"/${PV}/00_gcc-${PV}.patch

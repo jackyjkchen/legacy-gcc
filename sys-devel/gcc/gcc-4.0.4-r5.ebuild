@@ -25,11 +25,11 @@ DEPEND="${RDEPEND}
 	>=sys-devel/binutils-2.15.94"
 
 if is_crosscompile ; then
-	BDEPEND="${BDEPEND} sys-devel/gcc:4.0.4"
+	BDEPEND="sys-devel/gcc:4.0.4"
 	CC="gcc-4.0.4"
 	CXX="g++-4.0.4"
 else
-	BDEPEND="${BDEPEND} ${STAGE1_GCC}"
+	BDEPEND="${STAGE1_GCC}"
 fi
 
 src_prepare() {
