@@ -33,11 +33,11 @@ case ${ARCH} in
 		TOOL_PREFIX="${PROFILE_ARCH}-legacy"
 		;;
 	*)
-		TOOL_PREFIX="host"
+		TOOL_PREFIX=""
 		;;
 esac
 
-if [[ ${TOOL_PREFIX} != "host" ]]; then
+if [[ ${TOOL_PREFIX} != "" ]]; then
 	CBUILD="${TOOL_PREFIX}-linux-gnu"
 	CHOST=${CBUILD}
 	AS="${CHOST}-as"
@@ -68,15 +68,25 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/00_gcc-${PV}.patch
 	toolchain_src_prepare
 
-	[[ ${TOOL_PREFIX} != "host" ]] && eapply "${FILESDIR}"/${PV}/01_workaround-for-legacy-glibc-in-non-system-dir.patch
+	[[ ${TOOL_PREFIX} != "" ]] && eapply "${FILESDIR}"/${PV}/01_workaround-for-legacy-glibc-in-non-system-dir.patch
 }
 
 src_install() {
 	toolchain_src_install
-	if [[ ${TOOL_PREFIX} != "host" ]]; then
+	if [[ ${TOOL_PREFIX} != "" ]]; then
 		mkdir -p ${ED}/etc/ld.so.conf.d/ || die
-		cat <<-_EOF_ > "${ED}"/etc/ld.so.conf.d/09-${CHOST}-gcc-${PV}.conf || die
+		case ${TOOL_PREFIX} in
+			x86_64-legacy|sparc64-legacy)
+				cat <<-_EOF_ > "${ED}"/etc/ld.so.conf.d/09-${CHOST}-gcc-${PV}.conf || die
+/usr/lib/gcc-lib/${CHOST}/${PV}
+/usr/lib/gcc-lib/${CHOST}/${PV}/32
+_EOF_
+				;;
+			*)
+				cat <<-_EOF_ > "${ED}"/etc/ld.so.conf.d/09-${CHOST}-gcc-${PV}.conf || die
 /usr/lib/gcc-lib/${CHOST}/${PV}
 _EOF_
+				;;
+		esac
 	fi
 }

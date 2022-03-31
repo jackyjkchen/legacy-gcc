@@ -36,11 +36,11 @@ case ${ARCH} in
 		TOOL_PREFIX="sparc-legacy"
 		;;
 	*)
-		TOOL_PREFIX="host"
+		TOOL_PREFIX=""
 		;;
 esac
 
-if [[ ${TOOL_PREFIX} != "host" ]]; then
+if [[ ${TOOL_PREFIX} != "" ]]; then
 	CBUILD="${TOOL_PREFIX}-linux-gnu"
 	CHOST=${CBUILD}
 	AS="${CHOST}-as"
@@ -66,7 +66,7 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/00_gcc-${PV}.patch
 	toolchain_src_prepare
 
-	[[ ${TOOL_PREFIX} != "host" ]] && eapply "${FILESDIR}"/${PV}/01_workaround-for-legacy-glibc-in-non-system-dir.patch
+	[[ ${TOOL_PREFIX} != "" ]] && eapply "${FILESDIR}"/${PV}/01_workaround-for-legacy-glibc-in-non-system-dir.patch
 }
 
 src_install() {

@@ -30,11 +30,11 @@ if [[ ${CATEGORY} != cross-* ]] ; then
 			TOOL_PREFIX="sh4-legacy"
 			;;
 		*)
-			TOOL_PREFIX="host"
+			TOOL_PREFIX=""
 			;;
 	esac
 
-	if [[ ${TOOL_PREFIX} != "host" ]]; then
+	if [[ ${TOOL_PREFIX} != "" ]]; then
 		CBUILD="${TOOL_PREFIX}-linux-gnu"
 		CHOST=${CBUILD}
 		AS="${CHOST}-as"
@@ -87,15 +87,32 @@ src_prepare() {
 		[[ ${ARCH} != "mips" ]] && eapply "${FILESDIR}"/${PV}/05_libffi-without-libgcj.patch
 	fi
 
-	[[ ${TOOL_PREFIX} != "host" ]] && eapply "${FILESDIR}"/${PV}/06_workaround-for-legacy-glibc-in-non-system-dir.patch
+	[[ ${TOOL_PREFIX} != "" ]] && eapply "${FILESDIR}"/${PV}/06_workaround-for-legacy-glibc-in-non-system-dir.patch
 }
 
 src_install() {
 	toolchain_src_install
-	if [[ ${TOOL_PREFIX} != "host" ]]; then
+	if [[ ${TOOL_PREFIX} != "" ]]; then
 		mkdir -p ${ED}/etc/ld.so.conf.d/ || die
-		cat <<-_EOF_ > "${ED}"/etc/ld.so.conf.d/07-${CHOST}-gcc-${PV}.conf || die
+		case ${TOOL_PREFIX} in
+			x86_64-legacy|sparc64-legacy)
+				cat <<-_EOF_ > "${ED}"/etc/ld.so.conf.d/07-${CHOST}-gcc-${PV}.conf || die
+/usr/lib/gcc-lib/${CHOST}/${PV}
+/usr/lib/gcc-lib/${CHOST}/${PV}/32
+_EOF_
+				;;
+			mips64*-legacy)
+				cat <<-_EOF_ > "${ED}"/etc/ld.so.conf.d/07-${CHOST}-gcc-${PV}.conf || die
+/usr/lib/gcc-lib/${CHOST}/${PV}
+/usr/lib/gcc-lib/${CHOST}/${PV}/32
+/usr/lib/gcc-lib/${CHOST}/${PV}/n32
+_EOF_
+				;;
+			*)
+				cat <<-_EOF_ > "${ED}"/etc/ld.so.conf.d/07-${CHOST}-gcc-${PV}.conf || die
 /usr/lib/gcc-lib/${CHOST}/${PV}
 _EOF_
+				;;
+		esac
 	fi
 }
