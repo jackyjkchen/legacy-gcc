@@ -11,7 +11,7 @@ SRC_URI="https://mirrors.ustc.edu.cn/gnu/glibc/glibc-${PV}.tar.bz2
 inherit downgrade-arch-flags gnuconfig
 
 LICENSE=""
-KEYWORDS="alpha amd64 m68k mips ppc s390 sh sparc x86"
+KEYWORDS="alpha amd64 m68k mips ppc ppc64 s390 sh sparc x86"
 CC="gcc-4.4.7"
 CXX="g++-4.4.7"
 case ${ARCH} in

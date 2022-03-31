@@ -8,7 +8,7 @@ HOMEPAGE=""
 SRC_URI=""
 
 LICENSE=""
-KEYWORDS="alpha amd64 m68k mips ppc s390 sh sparc x86"
+KEYWORDS="alpha amd64 m68k mips ppc ppc64 s390 sh sparc x86"
 case ${ARCH} in
 	amd64)
 		TOOL_PREFIX="x86_64-legacy"
