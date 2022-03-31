@@ -9,48 +9,48 @@ case ${ARCH} in
 	amd64|x86)
 		CC="${CC} ${CFLAGS_x86}"
 		CXX="${CXX} ${CFLAGS_x86}"
-		TOOL_SLOT="i686-legacy"
-		CHOST_x86="${TOOL_SLOT}-linux-gnu"
+		TOOL_PREFIX="i686-legacy"
+		CHOST_x86="${TOOL_PREFIX}-linux-gnu"
 		ABI='x86'
 		DEFAULT_ABI='x86'
 		ABI_X86='32'
 		CFLAGS_x86=""
 		;;
 	alpha|m68k)
-		TOOL_SLOT="${ARCH}-legacy"
+		TOOL_PREFIX="${ARCH}-legacy"
 		;;
 	mips)
 		CC="${CC} ${CFLAGS_o32}"
 		CXX="${CXX} ${CFLAGS_o32}"
-		TOOL_SLOT="${PROFILE_ARCH/64/}-legacy"
+		TOOL_PREFIX="${PROFILE_ARCH/64/}-legacy"
 		;;
 	ppc)
-		TOOL_SLOT="powerpc-legacy"
+		TOOL_PREFIX="powerpc-legacy"
 		;;
 	s390)
-		TOOL_SLOT="s390x-legacy"
+		TOOL_PREFIX="s390x-legacy"
 		;;
 	sparc)
 		CC="${CC} ${CFLAGS_sparc32}"
 		CXX="${CXX} ${CFLAGS_sparc32}"
-		TOOL_SLOT="sparc-legacy"
+		TOOL_PREFIX="sparc-legacy"
 		;;
 	*)
-		TOOL_SLOT="host"
+		TOOL_PREFIX="host"
 		;;
 esac
 
-if [[ ${TOOL_SLOT} != "host" ]]; then
-	CBUILD="${TOOL_SLOT}-linux-gnu"
+if [[ ${TOOL_PREFIX} != "host" ]]; then
+	CBUILD="${TOOL_PREFIX}-linux-gnu"
 	CHOST=${CBUILD}
 	AS="${CHOST}-as"
 	LD="${CHOST}-ld"
 	AR="${CHOST}-ar"
 	RANLIB="${CHOST}-ranlib"
 	LEGACY_DEPEND="
-		legacy-gcc/linux-headers:${TOOL_SLOT}
-		legacy-gcc/glibc-headers:${TOOL_SLOT}
-		legacy-gcc/binutils-wrapper:${TOOL_SLOT}"
+		legacy-gcc/linux-headers
+		legacy-gcc/glibc-headers
+		legacy-gcc/binutils-wrapper"
 fi
 
 inherit toolchain
@@ -66,7 +66,7 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/00_gcc-${PV}.patch
 	toolchain_src_prepare
 
-	[[ ${TOOL_SLOT} != "host" ]] && eapply "${FILESDIR}"/${PV}/01_workaround-for-legacy-glibc-in-non-system-dir.patch
+	[[ ${TOOL_PREFIX} != "host" ]] && eapply "${FILESDIR}"/${PV}/01_workaround-for-legacy-glibc-in-non-system-dir.patch
 }
 
 src_install() {

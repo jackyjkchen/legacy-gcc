@@ -152,11 +152,11 @@ gcc的历史很久远，对可执行文件格式和CPU架构的支持发生过�
 
 该组gcc工具链调整为i686-legacy-linux-gnu，依赖如下三个软件包（自动依赖，无须手工安装）：
 
-legacy-gcc/binutils-wrapper:i686-legacy
+legacy-gcc/binutils-wrapper
 
-legacy-gcc/linux-headers:i686-legacy
+legacy-gcc/linux-headers
 
-legacy-gcc/glibc-headers:i686-legacy
+legacy-gcc/glibc-headers
 
 binutils-wrapper利用x86-64版本binutils的multiarch能力，大部分直接软链接到系统版本即可使用，as和ld则通过指定参数支持32位。
 

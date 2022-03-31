@@ -9,8 +9,8 @@ case ${ARCH} in
 	amd64|x86)
 		CC="${CC} ${CFLAGS_x86}"
 		CXX="${CXX} ${CFLAGS_x86}"
-		TOOL_SLOT="i686-legacy"
-		CHOST_x86="${TOOL_SLOT}-linux-gnu"
+		TOOL_PREFIX="i686-legacy"
+		CHOST_x86="${TOOL_PREFIX}-linux-gnu"
 		ABI='x86'
 		DEFAULT_ABI='x86'
 		ABI_X86='32'
@@ -19,29 +19,29 @@ case ${ARCH} in
 	alpha)
 		CFLAGS="${CFLAGS} -Wl,-no-relax"
 		CXXFLAGS="${CFLAGS} -Wl,-no-relax"
-		TOOL_SLOT="${ARCH}-legacy"
+		TOOL_PREFIX="${ARCH}-legacy"
 		;;
 	m68k)
-		TOOL_SLOT="${ARCH}-legacy"
+		TOOL_PREFIX="${ARCH}-legacy"
 		;;
 	mips)
 		CC="${CC} ${CFLAGS_o32}"
 		CXX="${CXX} ${CFLAGS_o32}"
-		TOOL_SLOT="${PROFILE_ARCH/64/}-legacy"
+		TOOL_PREFIX="${PROFILE_ARCH/64/}-legacy"
 		;;
 	ppc)
-		TOOL_SLOT="powerpc-legacy"
+		TOOL_PREFIX="powerpc-legacy"
 		;;
 	sparc)
 		CC="${CC} ${CFLAGS_sparc32}"
 		CXX="${CXX} ${CFLAGS_sparc32}"
-		TOOL_SLOT="sparc-legacy"
+		TOOL_PREFIX="sparc-legacy"
 		;;
 	*)
 		;;
 esac
 
-CBUILD="${TOOL_SLOT}-linux-gnu"
+CBUILD="${TOOL_PREFIX}-linux-gnu"
 CHOST=${CBUILD}
 AS="${CHOST}-as"
 LD="${CHOST}-ld"
@@ -54,9 +54,9 @@ KEYWORDS="alpha amd64 m68k mips ppc sparc x86"
 
 RDEPEND=""
 DEPEND="${RDEPEND}
-	legacy-gcc/linux-headers:${TOOL_SLOT}
-	legacy-gcc/glibc-headers:${TOOL_SLOT}
-	legacy-gcc/binutils-wrapper:${TOOL_SLOT}"
+	legacy-gcc/linux-headers
+	legacy-gcc/glibc-headers
+	legacy-gcc/binutils-wrapper"
 BDEPEND="sys-devel/gcc:3.4.6"
 
 src_prepare() {
@@ -65,7 +65,7 @@ src_prepare() {
 
 	eapply "${FILESDIR}"/${PV}/01_workaround-for-legacy-glibc-in-non-system-dir.patch
 	[[ ${ARCH} == "m68k" ]] && eapply "${FILESDIR}"/${PV}/02_m68k-debian.patch
-	[[ ${TOOL_SLOT} == "sparc64-legacy" ]] && eapply "${FILESDIR}"/${PV}/03_workaround-for-sparc64.patch
+	[[ ${TOOL_PREFIX} == "sparc64-legacy" ]] && eapply "${FILESDIR}"/${PV}/03_workaround-for-sparc64.patch
 	[[ ${ARCH} == "avr" ]] && "${FILESDIR}"/${PV}/04_support-avr.patch
 	touch -r gcc/README gcc/configure.in || die
 }

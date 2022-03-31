@@ -3,22 +3,58 @@
 
 EAPI=7
 
-case ${ARCH} in
-	sh)
-		CC="gcc-4.1.2"
-		CXX="g++-4.1.2"
-		STAGE1_GCC="sys-devel/gcc:4.1.2"
-		;;
-	*)
-		CC="gcc-4.4.7"
-		CXX="g++-4.4.7"
-		STAGE1_GCC="sys-devel/gcc:4.4.7"
-		;;
-esac
+if [[ ${CATEGORY} != cross-* ]] ; then
+	STAGE1_GCC="sys-devel/gcc:4.4.7"
+	case ${ARCH} in
+		amd64)
+			TOOL_PREFIX="x86_64-legacy"
+			;;
+		x86)
+			TOOL_PREFIX="i686-legacy"
+			;;
+		alpha|m68k)
+			TOOL_PREFIX="${ARCH}-legacy"
+			;;
+		mips|sparc)
+			TOOL_PREFIX="${PROFILE_ARCH}-legacy"
+			;;
+		ppc)
+			TOOL_PREFIX="powerpc-legacy"
+			;;
+		ppc64)
+			TOOL_PREFIX="powerpc64-legacy"
+			;;
+		s390)
+			TOOL_PREFIX="s390x-legacy"
+			;;
+		sh)
+			CC="gcc-4.1.2"
+			CXX="g++-4.1.2"
+			STAGE1_GCC="sys-devel/gcc:4.1.2"
+			TOOL_PREFIX="sh4-legacy"
+			;;
+		*)
+			TOOL_PREFIX="host"
+			;;
+	esac
+
+	if [[ ${TOOL_PREFIX} != "host" ]]; then
+		CBUILD="${TOOL_PREFIX}-linux-gnu"
+		CHOST=${CBUILD}
+		AS="${CHOST}-as"
+		LD="${CHOST}-ld"
+		AR="${CHOST}-ar"
+		RANLIB="${CHOST}-ranlib"
+		LEGACY_DEPEND="
+			legacy-gcc/linux-headers
+			legacy-gcc/glibc-headers
+			legacy-gcc/binutils-wrapper"
+	fi
+fi
 
 inherit toolchain
 
-KEYWORDS="alpha amd64 arm ia64 m68k mips ppc ppc64 s390 sh sparc x86"
+KEYWORDS="alpha amd64 ia64 m68k mips ppc ppc64 s390 sh sparc x86"
 
 # we need a proper glibc version for the Scrt1.o provided to the pie-ssp specs
 # NOTE: we SHOULD be using at least binutils 2.15.90.0.1 everywhere for proper
@@ -34,6 +70,7 @@ if is_crosscompile ; then
 	CC="gcc-3.4.6"
 	CXX="g++-3.4.6"
 else
+	DEPEND="${DEPEND} ${LEGACY_DEPEND}"
 	BDEPEND="${STAGE1_GCC}"
 fi
 
@@ -61,4 +98,6 @@ src_prepare() {
 	if use objc && ! use gcj ; then
 		[[ ${ARCH} != "mips" ]] && eapply "${FILESDIR}"/${PV}/03_libffi-without-libgcj.patch
 	fi
+
+	[[ ${TOOL_PREFIX} != "host" ]] && eapply "${FILESDIR}"/${PV}/04_workaround-for-legacy-glibc-in-non-system-dir.patch
 }

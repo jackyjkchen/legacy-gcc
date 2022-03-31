@@ -10,37 +10,40 @@ SRC_URI="https://mirrors.ustc.edu.cn/kernel.org/linux/kernel/v2.6/longterm/v2.6.
 LICENSE=""
 KEYWORDS="alpha amd64 m68k mips ppc s390 sh sparc x86"
 case ${ARCH} in
-	amd64|x86)
-		TOOL_SLOT="i686-legacy"
+	amd64)
+		TOOL_PREFIX="x86_64-legacy"
 		;;
-	alpha|m68k|sh)
-		TOOL_SLOT="${ARCH}-legacy"
+	x86)
+		TOOL_PREFIX="i686-legacy"
 		;;
-	mips)
-		TOOL_SLOT="${PROFILE_ARCH/64/}-legacy"
+	alpha|m68k)
+		TOOL_PREFIX="${ARCH}-legacy"
+		;;
+	mips|sparc)
+		TOOL_PREFIX="${PROFILE_ARCH}-legacy"
 		;;
 	ppc)
-		TOOL_SLOT="powerpc-legacy"
+		TOOL_PREFIX="powerpc-legacy"
+		;;
+	ppc64)
+		TOOL_PREFIX="powerpc64-legacy"
 		;;
 	s390)
-		TOOL_SLOT="s390x-legacy"
+		TOOL_PREFIX="s390x-legacy"
 		;;
-	sparc)
-		TOOL_SLOT="sparc-legacy"
+	sh)
+		TOOL_PREFIX="sh4-legacy"
 		;;
 	*)
-		TOOL_SLOT="invalid"
 		;;
 esac
-SLOT="${TOOL_SLOT}"
+SLOT="0"
 
 DEPEND=""
 RDEPEND="${DEPEND}"
 BDEPEND="sys-devel/make
 	sys-devel/gcc:4.4.7"
 
-TARGET_PREFIX="${TOOL_SLOT}-linux-gnu"
-UNIX_PREFIX="/usr"
 unset ARCH
 HOSTCC="gcc-4.4.7"
 
@@ -52,6 +55,8 @@ src_compile() {
 }
 
 src_install() {
+	TARGET_PREFIX="${TOOL_PREFIX}-linux-gnu"
+	UNIX_PREFIX="/usr"
 	emake HOSTCC=${HOSTCC} INSTALL_HDR_PATH="${ED}"${UNIX_PREFIX}/${TARGET_PREFIX} headers_install || die
 	find "${ED}"${UNIX_PREFIX}/${TARGET_PREFIX} -name '..install.cmd' -delete || die
 }

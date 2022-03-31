@@ -15,41 +15,44 @@ KEYWORDS="alpha amd64 m68k mips ppc s390 sh sparc x86"
 CC="gcc-4.4.7"
 CXX="g++-4.4.7"
 case ${ARCH} in
-	amd64|x86)
-		CC="${CC} ${CFLAGS_x86}"
-		CXX="${CXX} ${CFLAGS_x86}"
-		TOOL_SLOT="i686-legacy"
+	amd64)
+		TOOL_PREFIX="x86_64-legacy"
+		TOOL32_PREFIX="i686-legacy"
 		;;
-	alpha|m68k|sh)
-		TOOL_SLOT="${ARCH}-legacy"
+	x86)
+		TOOL_PREFIX="i686-legacy"
 		;;
-	mips)
-		TOOL_SLOT="${PROFILE_ARCH/64/}-legacy"
+	alpha|m68k)
+		TOOL_PREFIX="${ARCH}-legacy"
+		;;
+	mips|sparc)
+		TOOL_PREFIX="${PROFILE_ARCH}-legacy"
+		TOOL32_PREFIX="${PROFILE_ARCH/64/}-legacy"
 		;;
 	ppc)
-		TOOL_SLOT="powerpc-legacy"
+		TOOL_PREFIX="powerpc-legacy"
+		;;
+	ppc64)
+		TOOL_PREFIX="powerpc64-legacy"
 		;;
 	s390)
-		TOOL_SLOT="s390x-legacy"
+		TOOL_PREFIX="s390x-legacy"
 		;;
-	sparc)
-		CC="${CC} ${CFLAGS_sparc32}"
-		CXX="${CXX} ${CFLAGS_sparc32}"
-		TOOL_SLOT="sparc-legacy"
+	sh)
+		TOOL_PREFIX="sh4-legacy"
 		;;
 	*)
-		TOOL_SLOT="invalid"
 		;;
 esac
-SLOT="${TOOL_SLOT}"
+SLOT="2.2"
 
 DEPEND="
-	legacy-gcc/linux-headers:${TOOL_SLOT}
-	legacy-gcc/binutils-wrapper:${TOOL_SLOT}"
+	legacy-gcc/linux-headers
+	legacy-gcc/binutils-wrapper"
 RDEPEND="${DEPEND}"
 BDEPEND="sys-devel/gcc:4.4.7"
 
-CHOST="${TOOL_SLOT}-linux-gnu"
+CHOST="${TOOL_PREFIX}-linux-gnu"
 
 S=${WORKDIR}/glibc-${PV}
 
@@ -110,6 +113,11 @@ src_install() {
 	touch  ${ED}/usr/${CHOST}/include/gnu/stubs.h || die
 	cp -v bits/stdio_lim.h ${ED}/usr/${CHOST}/include/bits || die
 	rm -rv ${ED}/usr/${CHOST}/include/scsi || die
+	if [[ ${TOOL32_PREFIX} != "" ]] && [[ ${TOOL32_PREFIX} != ${TOOL_PREFIX} ]] ; then
+		TARGET32_PREFIX="${TOOL32_PREFIX}-linux-gnu"
+		mkdir -p ${ED}/usr/${TARGET32_PREFIX} || die
+		ln -sv ../${CHOST}/include ${ED}/usr/${TARGET32_PREFIX}/include || die
+	fi
 	popd > /dev/null
 }
 

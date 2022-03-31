@@ -15,27 +15,23 @@ KEYWORDS="amd64 m68k ppc x86"
 
 case ${ARCH} in
 	amd64|x86)
-		TOOL_SLOT="i686-legacy"
+		TOOL_PREFIX="i686-legacy"
 		;;
 	m68k)
-		TOOL_SLOT="${ARCH}-legacy"
+		TOOL_PREFIX="${ARCH}-legacy"
 		;;
 	ppc)
-		TOOL_SLOT="powerpc-legacy"
+		TOOL_PREFIX="powerpc-legacy"
 		;;
 	*)
 		;;
 esac
 
-DEPEND="
-	sys-devel/egcs:1.1.2[cxx]
-	legacy-gcc/linux-headers:${TOOL_SLOT}
-	legacy-gcc/glibc-headers:${TOOL_SLOT}
-	legacy-gcc/binutils-wrapper:${TOOL_SLOT}"
+DEPEND="sys-devel/egcs:1.1.2[cxx]"
 RDEPEND="${DEPEND}"
 BDEPEND=""
 
-CHOST="${TOOL_SLOT}-linux-gnu"
+CHOST="${TOOL_PREFIX}-linux-gnu"
 
 CC="gcc-2.91.66"
 CXX="g++-2.91.66"

@@ -5,59 +5,46 @@ EAPI=7
 
 DESCRIPTION=""
 HOMEPAGE=""
-SRC_URI="https://gcc.gnu.org/pub/gcc/old-releases/libstdc++/${P}.tar.bz2"
+SRC_URI="https://gcc.gnu.org/pub/gcc/old-releases/libg++/${P}.tar.bz2"
 
 inherit downgrade-arch-flags gnuconfig
 
 LICENSE=""
 SLOT="$(ver_cut 1-3 ${PV})"
-KEYWORDS="amd64 m68k ppc sparc x86"
+KEYWORDS="amd64 m68k x86"
 
 case ${ARCH} in
 	amd64|x86)
-		TOOL_SLOT="i686-legacy"
+		TOOL_PREFIX="i686-legacy"
 		;;
 	m68k)
-		TOOL_SLOT="${ARCH}-legacy"
-		;;
-	ppc)
-		TOOL_SLOT="powerpc-legacy"
-		;;
-	sparc)
-		TOOL_SLOT="sparc-legacy"
+		TOOL_PREFIX="${ARCH}-legacy"
 		;;
 	*)
 		;;
 esac
 
-DEPEND="
-	sys-devel/gcc:2.8.1[cxx]
-	legacy-gcc/linux-headers:${TOOL_SLOT}
-	legacy-gcc/glibc-headers:${TOOL_SLOT}
-	legacy-gcc/binutils-wrapper:${TOOL_SLOT}"
+DEPEND="sys-devel/gcc:2.3.3[cxx]"
 RDEPEND="${DEPEND}"
 BDEPEND=""
 
-CHOST="${TOOL_SLOT}-linux-gnu"
+CHOST="${TOOL_PREFIX}-linux-gnu"
 
-CC="gcc-2.8.1"
-CXX="g++-2.8.1"
+CC="gcc-2.3.3"
+CXX="gcc-2.3.3"
 
 src_prepare() {
 	default
 	gnuconfig_update
-	eapply "${FILESDIR}"/${PV}/00_libstdcxx-${PV}.patch || die
+	eapply "${FILESDIR}"/${PV}/00_libgxx-${PV}.patch || die
 }
 
 src_configure() {
-	downgrade_arch_flags 2.8.1
+	downgrade_arch_flags 2.3.3
 	local econfargs=(
-		--build=${CHOST}
 		--host=${CHOST}
 		--target=${CHOST}
 		--prefix=/usr
-		--enable-shared
-		--with-gxx-include-dir=/usr/lib/gcc-lib/${CHOST}/2.8.1/include/g++-v2
 	)
 
 	mkdir -p "${WORKDIR}"/build
@@ -72,14 +59,16 @@ src_configure() {
 
 src_compile() {
 	pushd "${WORKDIR}"/build > /dev/null
-	emake || die "failed to run make"
+	emake -j1 CC="${CC}" CXX="${CXX}" AR=ar RANLIB=ranlib NM=nm || die "failed to run make"
 	popd > /dev/null
 }
 
 src_install() {
 	pushd "${WORKDIR}"/build > /dev/null
 	emake -j1 DESTDIR="${ED}" install || die "failed to run make install"
-	mv -v "${ED}"/usr/lib/libstdc++* "${ED}"/usr/lib/gcc-lib/${CHOST}/2.8.1/ || die
-	rm -rfv "${ED}"/usr/lib/libiberty.a "${ED}"/usr/${CHOST}
+	mkdir -p "${ED}"/usr/lib/gcc-lib/${CHOST}/2.3.3/include || die
+	mv -v "${ED}"/usr/lib/g++-include "${ED}"/usr/lib/gcc-lib/${CHOST}/2.3.3/include/g++ || die
+	mv -v "${ED}"/usr/lib/libg++.a "${ED}"/usr/lib/gcc-lib/${CHOST}/2.3.3/ || die
+	rm -rfv "${ED}"/usr/lib/lib* "${ED}"/usr/lib/doc "${ED}"/usr/bin "${ED}"/usr/include "${ED}"/usr/man "${ED}"/usr/${CHOST}
 	popd > /dev/null
 }

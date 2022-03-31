@@ -6,27 +6,48 @@ EAPI=7
 CC="gcc-3.4.6"
 CXX="g++-3.4.6"
 case ${ARCH} in
+	amd64)
+		TOOL_PREFIX="x86_64-legacy"
+		;;
+	x86)
+		TOOL_PREFIX="i686-legacy"
+		;;
+	alpha|m68k)
+		TOOL_PREFIX="${ARCH}-legacy"
+		;;
 	mips)
 		CC="${CC} ${CFLAGS_o32}"
 		CXX="${CXX} ${CFLAGS_o32}"
-		TOOL_SLOT="${PROFILE_ARCH/64/}-legacy"
+		TOOL_PREFIX="${PROFILE_ARCH/64/}-legacy"
+		;;
+	ppc)
+		TOOL_PREFIX="powerpc-legacy"
+		;;
+	ppc64)
+		TOOL_PREFIX="powerpc64-legacy"
+		;;
+	s390)
+		TOOL_PREFIX="s390x-legacy"
+		;;
+	sparc)
+		TOOL_PREFIX="${PROFILE_ARCH}-legacy"
 		;;
 	*)
-		TOOL_SLOT="host"
+		TOOL_PREFIX="host"
 		;;
 esac
 
-if [[ ${TOOL_SLOT} != "host" ]]; then
-	CBUILD="${TOOL_SLOT}-linux-gnu"
+if [[ ${TOOL_PREFIX} != "host" ]]; then
+	CBUILD="${TOOL_PREFIX}-linux-gnu"
 	CHOST=${CBUILD}
 	AS="${CHOST}-as"
 	LD="${CHOST}-ld"
 	AR="${CHOST}-ar"
 	RANLIB="${CHOST}-ranlib"
 	LEGACY_DEPEND="
-		legacy-gcc/linux-headers:${TOOL_SLOT}
-		legacy-gcc/glibc-headers:${TOOL_SLOT}
-		legacy-gcc/binutils-wrapper:${TOOL_SLOT}"
+		legacy-gcc/linux-headers
+		legacy-gcc/glibc-headers
+		legacy-gcc/binutils-wrapper"
 fi
 
 inherit toolchain
@@ -47,12 +68,12 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/00_gcc-${PV}.patch
 	toolchain_src_prepare
 
-	[[ ${TOOL_SLOT} != "host" ]] && eapply "${FILESDIR}"/${PV}/01_workaround-for-legacy-glibc-in-non-system-dir.patch
+	[[ ${TOOL_PREFIX} != "host" ]] && eapply "${FILESDIR}"/${PV}/01_workaround-for-legacy-glibc-in-non-system-dir.patch
 }
 
 src_install() {
 	toolchain_src_install
-	if [[ ${TOOL_SLOT} != "host" ]]; then
+	if [[ ${TOOL_PREFIX} != "host" ]]; then
 		mkdir -p ${ED}/etc/ld.so.conf.d/ || die
 		cat <<-_EOF_ > "${ED}"/etc/ld.so.conf.d/08-${CHOST}-gcc-${PV}.conf || die
 /usr/lib/gcc-lib/${CHOST}/${PV}

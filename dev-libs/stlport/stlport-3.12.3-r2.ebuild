@@ -15,37 +15,29 @@ KEYWORDS="amd64 m68k ppc x86"
 
 case ${ARCH} in
 	amd64|x86)
-		TOOL_SLOT="i686-legacy"
+		TOOL_PREFIX="i686-legacy"
 		;;
 	m68k)
-		TOOL_SLOT="${ARCH}-legacy"
+		TOOL_PREFIX="${ARCH}-legacy"
 		;;
 	ppc)
-		TOOL_SLOT="powerpc-legacy"
+		TOOL_PREFIX="powerpc-legacy"
 		;;
 	*)
 		;;
 esac
 
+IUSE="+gcc281 +gcc272"
+
 DEPEND="
-	sys-devel/gcc:2.6.3[cxx]
-	legacy-gcc/linux-headers:${TOOL_SLOT}
-	legacy-gcc/glibc-headers:${TOOL_SLOT}
-	legacy-gcc/binutils-wrapper:${TOOL_SLOT}"
+	gcc281? ( sys-devel/gcc:2.8.1[cxx] )
+	gcc272? ( sys-devel/gcc:2.7.2[cxx] )"
 RDEPEND="${DEPEND}"
 BDEPEND=""
 
-CHOST="${TOOL_SLOT}-linux-gnu"
-
-CC="gcc-2.6,3"
-CXX="g++-2.6.3"
+CHOST="${TOOL_PREFIX}-linux-gnu"
 
 S="${WORKDIR}"/STLport-${PV}
-
-src_unpack() {
-	mkdir -p "${S}"
-	tar -pxf "${DISTDIR}"/STLport-${PV}.tar.gz -C "${S}"
-}
 
 src_prepare() {
 	pushd "${S}" > /dev/null
@@ -56,20 +48,23 @@ src_prepare() {
 
 src_configure() {
 	pushd "${S}" > /dev/null
-	downgrade_arch_flags 2.91.66
-	sh ./configure --enable-newalloc || die
 	popd > /dev/null
 }
 
 src_compile() {
 	pushd "${S}" > /dev/null
-	rm -rfv README* *.c configure config/configure.in
 	popd > /dev/null
 }
 
 src_install() {
 	pushd "${S}" > /dev/null
-	mkdir -p "${ED}"/usr/lib/gcc-lib/${CHOST}/2.6.3/include/ || die
-	cp -avx . "${ED}"/usr/lib/gcc-lib/${CHOST}/2.6.3/include/stlport || die
+	if use gcc281; then
+		mkdir -p "${ED}"/usr/lib/gcc-lib/${CHOST}/2.8.1/include/ || die
+		cp -avx stl "${ED}"/usr/lib/gcc-lib/${CHOST}/2.8.1/include/stlport || die
+	fi
+	if use gcc272; then
+		mkdir -p "${ED}"/usr/lib/gcc-lib/${CHOST}/2.7.2/include/ || die
+		cp -avx stl "${ED}"/usr/lib/gcc-lib/${CHOST}/2.7.2/include/stlport || die
+	fi
 	popd > /dev/null
 }

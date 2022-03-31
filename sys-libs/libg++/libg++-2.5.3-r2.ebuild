@@ -15,27 +15,23 @@ KEYWORDS="amd64 m68k x86"
 
 case ${ARCH} in
 	amd64|x86)
-		TOOL_SLOT="i686-legacy"
+		TOOL_PREFIX="i686-legacy"
 		;;
 	m68k)
-		TOOL_SLOT="${ARCH}-legacy"
+		TOOL_PREFIX="${ARCH}-legacy"
 		;;
 	*)
 		;;
 esac
 
-DEPEND="
-	sys-devel/gcc:2.2.2[cxx]
-	legacy-gcc/linux-headers:${TOOL_SLOT}
-	legacy-gcc/glibc-headers:${TOOL_SLOT}
-	legacy-gcc/binutils-wrapper:${TOOL_SLOT}"
+DEPEND="sys-devel/gcc:2.5.8[cxx]"
 RDEPEND="${DEPEND}"
 BDEPEND=""
 
-CHOST="${TOOL_SLOT}-linux-gnu"
+CHOST="${TOOL_PREFIX}-linux-gnu"
 
-CC="gcc-2.2.2"
-CXX="gcc-2.2.2"
+CC="gcc-2.5.8"
+CXX="gcc-2.5.8"
 
 src_prepare() {
 	default
@@ -44,8 +40,9 @@ src_prepare() {
 }
 
 src_configure() {
-	downgrade_arch_flags 2.2.2
+	downgrade_arch_flags 2.5.8
 	local econfargs=(
+		--build=${CHOST}
 		--host=${CHOST}
 		--target=${CHOST}
 		--prefix=/usr
@@ -63,16 +60,16 @@ src_configure() {
 
 src_compile() {
 	pushd "${WORKDIR}"/build > /dev/null
-	emake -j1 CC="${CC}" CXX="${CXX}" AR=ar RANLIB=ranlib NM=nm || die "failed to run make"
+	emake -j1 CC="${CC}" CXX="${CXX}" || die "failed to run make"
 	popd > /dev/null
 }
 
 src_install() {
 	pushd "${WORKDIR}"/build > /dev/null
 	emake -j1 DESTDIR="${ED}" install || die "failed to run make install"
-	mkdir -p "${ED}"/usr/lib/gcc-lib/${CHOST}/2.2.2/include || die
-	mv -v "${ED}"/usr/lib/g++-include "${ED}"/usr/lib/gcc-lib/${CHOST}/2.2.2/include/g++ || die
-	mv -v "${ED}"/usr/lib/libg++.a "${ED}"/usr/lib/gcc-lib/${CHOST}/2.2.2/ || die
+	mkdir -p "${ED}"/usr/lib/gcc-lib/${CHOST}/2.5.8/include || die
+	mv -v "${ED}"/usr/lib/g++-include "${ED}"/usr/lib/gcc-lib/${CHOST}/2.5.8/include/g++ || die
+	mv -v "${ED}"/usr/lib/libg++.a "${ED}"/usr/lib/gcc-lib/${CHOST}/2.5.8/ || die
 	rm -rfv "${ED}"/usr/lib/lib* "${ED}"/usr/lib/doc "${ED}"/usr/bin "${ED}"/usr/include "${ED}"/usr/man "${ED}"/usr/${CHOST}
 	popd > /dev/null
 }
