@@ -78,7 +78,7 @@ src_prepare() {
 	[[ ${ARCH} == "mips" ]] && eapply "${FILESDIR}"/${PV}/01_support-mips64.patch
 	[[ ${ARCH} == "mips" && ${DEFAULT_ABI} == "n32" ]] && eapply "${FILESDIR}"/${PV}/02_mips64-default-n32-abi.patch
 	[[ ${ARCH} == "sh" ]] && eapply "${FILESDIR}"/${PV}/03_fix-for-sh4-install.patch
-	[[ ${ARCH} == "ppc64" ]] && eapply "${FILESDIR}"/${PV}/04_workaround-for-ppc64-lib64.patch
+	[[ ${ARCH} == "ppc64" || ${ARCH} == "ppc" ]] && eapply "${FILESDIR}"/${PV}/04_workaround-for-ppc64-ppc.patch
 
 	# Anything useful and objc will require libffi. Seriously. Lets just force
 	# libffi to install with USE="objc", even though it normally only installs

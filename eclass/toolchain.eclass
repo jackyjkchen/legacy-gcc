@@ -2006,7 +2006,7 @@ toolchain_src_install() {
 	done < <(find gcc/include*/ -name '*.h')
 
 	# Do the 'make install' from the build directory
-	if tc_version_is_at_least 5 ; then
+	if tc_version_is_at_least 4.5 ; then
 		S="${WORKDIR}"/build emake DESTDIR="${D}" install || die
 	elif tc_version_is_at_least 2.9 ; then
 		S="${WORKDIR}"/build emake -j1 DESTDIR="${D}" install || die
