@@ -34,7 +34,7 @@ x86与非x86均为本项目的目标，x86目前进度较快，已经可以原�
 * sparc：gcc-2.8.1及以上
 * sparc64：gcc-2.95.3及以上
 * mingw-w64：gcc-4.5.4以及上
-* mingw：gcc-3.4.6 - gcc-6.5.0
+* mingw：gcc-3.4.6 - gcc-6.5.0（推荐不超过gcc-4.6.4，更高版本请使用mingw-w64）
 
 
 其中amd64/x86，mips64el/mipsel，mips64/mips，sparc64/sparc，mingw-w64已测试支持multilib。
@@ -55,7 +55,9 @@ layman -a legacy-gcc
 如果你是x86-64平台，注意需要用[如下参数](https://github.com/jackyjkchen/legacy-gcc/blob/master/etc/portage/env/stack_realign)重新构建glibc的32位版本，避免因堆栈对齐问题导致的32位gcc coredump（gcc 3.0以下版本会遇到，随着glibc和x86指令集的演进，问题可能会向上移动）。
 ```
 cd legacy-gcc
-cp -avx etc/portage/package.env etc/portage/env /etc/portage
+mkdir -p /etc/portage/{package.env,env}
+cp -avx etc/portage/package.env/baseos /etc/portage/package.env
+cp -avx etc/portage/env/{stack_realign,stage1_cflags} /etc/portage/env
 emerge -1 sys-libs/glibc
 ```
 
@@ -66,7 +68,7 @@ emerge -1a sys-devel/gcc:2.0
 
 亦可采用如下方式安装全套legacy-gcc（所有gcc版本），并启用c c++ objc objc++ fortran语言：
 ```
-mkdir /etc/portage/sets /etc/portage/package.use
+mkdir /etc/portage/{sets,package.use}
 wget https://raw.githubusercontent.com/jackyjkchen/legacy-gcc/master/etc/portage/sets/legacy-gcc \
      -O /etc/portage/sets/legacy-gcc
 wget https://raw.githubusercontent.com/jackyjkchen/legacy-gcc/master/etc/portage/package.use/legacy-gcc \
