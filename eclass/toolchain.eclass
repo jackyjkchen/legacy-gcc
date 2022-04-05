@@ -1062,11 +1062,13 @@ toolchain_src_configure() {
 		*-musl*)		 needed_libc=musl;;
 		*-cygwin)		 needed_libc=cygwin;;
 		x86_64-*-mingw*|*-w64-mingw*)
-						 needed_libc=mingw64-runtime
-						 confgcc+=( --enable-threads=win32 );;
+			needed_libc=mingw64-runtime
+			confgcc+=( --enable-threads=win32 )
+			;;
 		mingw*|*-mingw*)
-						 needed_libc=mingw-runtime
-						 confgcc+=( --enable-threads=win32 );;
+			needed_libc=mingw-runtime
+			confgcc+=( --enable-threads=win32 )
+			;;
 		avr)			 confgcc+=( --enable-shared --disable-threads );;
 		esac
 		if [[ -n ${needed_libc} ]] ; then
