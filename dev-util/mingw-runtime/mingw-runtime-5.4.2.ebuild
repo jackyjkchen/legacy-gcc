@@ -49,6 +49,7 @@ src_prepare() {
 		-e '/^install_dlls_host:/s:$: install-dirs:' \
 		Makefile.in || die # fix parallel install
 	eapply "${FILESDIR}"/${PV}/00_fix-build-mingwm10-dll.patch
+	eapply "${FILESDIR}"/${PV}/01_fix-build-gcc40-gcc41.patch
 }
 
 src_configure() {
