@@ -22,7 +22,7 @@ KEYWORDS="alpha amd64 hppa ia64 m68k mips ppc ppc64 s390 sh sparc x86"
 
 RDEPEND=""
 DEPEND="${RDEPEND}
-	>=sys-devel/binutils-2.15.94"
+	>=${CATEGORY}/binutils-2.15.94"
 
 if is_crosscompile ; then
 	BDEPEND="sys-devel/gcc:4.0.4"

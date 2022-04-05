@@ -62,8 +62,8 @@ KEYWORDS="alpha amd64 ia64 m68k mips ppc ppc64 s390 sh sparc x86"
 # well tested in gentoo on any arch other than amd64!!
 RDEPEND=""
 DEPEND="${RDEPEND}
-	>=sys-devel/binutils-2.14.90.0.8-r1
-	amd64? ( >=sys-devel/binutils-2.15.90.0.1.1-r1 )"
+	>=${CATEGORY}/binutils-2.14.90.0.8-r1
+	amd64? ( >=${CATEGORY}/binutils-2.15.90.0.1.1-r1 )"
 
 if is_crosscompile ; then
 	BDEPEND="sys-devel/gcc:3.4.6"

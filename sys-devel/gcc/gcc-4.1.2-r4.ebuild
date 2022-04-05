@@ -9,9 +9,9 @@ KEYWORDS="alpha amd64 arm hppa ia64 m68k mips ppc ppc64 s390 sh sparc x86"
 
 RDEPEND=""
 DEPEND="${RDEPEND}
-	ppc? ( >=sys-devel/binutils-2.17 )
-	ppc64? ( >=sys-devel/binutils-2.17 )
-	>=sys-devel/binutils-2.15.94"
+	ppc? ( >=${CATEGORY}/binutils-2.17 )
+	ppc64? ( >=${CATEGORY}/binutils-2.17 )
+	>=${CATEGORY}/binutils-2.15.94"
 
 if is_crosscompile ; then
 	BDEPEND="sys-devel/gcc:4.1.2"
