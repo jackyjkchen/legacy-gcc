@@ -56,9 +56,9 @@ src_compile() {
 
 src_install() {
 	if just_headers ; then
-		emake install-headers DESTDIR="${D}" || die
+		emake -j1 install-headers DESTDIR="${D}" || die
 	else
-		emake install DESTDIR="${D}" || die
+		emake -j1 install DESTDIR="${D}" || die
 		dodoc CONTRIBUTIONS ChangeLog README.w32api TODO
 
 		# Make sure diff cross-compilers don't collide #414075

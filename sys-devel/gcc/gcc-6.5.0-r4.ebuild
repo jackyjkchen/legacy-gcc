@@ -24,3 +24,9 @@ else
 	CC="gcc-6.5.0"
 	CXX="g++-6.5.0"
 fi
+
+src_prepare() {
+	toolchain_src_prepare
+
+	[[ ${CATEGORY} == "cross-i686-legacy-mingw32" ]] && eapply "${FILESDIR}"/${PV}/00_mingw-enable-c99-in-cpp.patch
+}

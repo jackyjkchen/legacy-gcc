@@ -42,4 +42,5 @@ src_prepare() {
 	[[ ${ARCH} == "mips" && ${DEFAULT_ABI} == "n64" ]] && eapply "${FILESDIR}"/${PV}/01_mips64-default-n64-abi.patch
 	eapply "${FILESDIR}"/${PV}/02_fix-cpp98-break.patch
 	[[ ${CHOST} == ${CTARGET} ]] && eapply "${FILESDIR}"/gcc-spec-env.patch
+	[[ ${CATEGORY} == "cross-i686-legacy-mingw32" ]] && eapply "${FILESDIR}"/${PV}/03_mingw-enable-c99-in-cpp.patch
 }

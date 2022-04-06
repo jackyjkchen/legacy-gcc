@@ -1,0 +1,2334 @@
+diff --git a/Makefile.in b/Makefile.in
+index ced98cc..b4286c3 100644
+--- a/Makefile.in
++++ b/Makefile.in
+@@ -468,10 +468,10 @@ libmingwex.a: $(addsuffix .$(OBJEXT), mkstemp mkdtemp memcrypt cryptnam setenv)
+ 
+ vpath %.s ${mingwrt_srcdir}/mingwex
+ vpath %.sx ${mingwrt_srcdir}/mingwex
+-libmingwex.a: $(addsuffix .$(OBJEXT), codeset mbrconv mbrscan mbrlen)
+-libmingwex.a: $(addsuffix .$(OBJEXT), mbrtowc mbsrtowcs strnlen wcharmap)
+-libmingwex.a: $(addsuffix .$(OBJEXT), wcrtomb wcsrtombs wcsnlen wcstod wcstof)
+-libmingwex.a: $(addsuffix .$(OBJEXT), wcstofp wcstold wctob wctrans wctype)
++libmingwex.a: $(addsuffix .$(OBJEXT), codeset)
++libmingwex.a: $(addsuffix .$(OBJEXT), mbrtowc strnlen)
++libmingwex.a: $(addsuffix .$(OBJEXT), wcrtomb wcsnlen wcstof)
++libmingwex.a: $(addsuffix .$(OBJEXT), wcstold wctob wctrans wctype)
+ libmingwex.a: $(addsuffix .$(OBJEXT), wmemchr wmemcmp wmemcpy wmemmove wmemset)
+ 
+ # The wcsnlen() function, enumerated above, is an adaptation of strnlen();
+@@ -480,12 +480,6 @@ libmingwex.a: $(addsuffix .$(OBJEXT), wmemchr wmemcmp wmemcpy wmemmove wmemset)
+ wcsnlen.$(OBJEXT): strnlen.sx
+ 	$(COMPILE.sx) -D_UNICODE $^ -o $@
+ 
+-# Similarly, the wcstod(), wcstof(), and wcstold() functions are
+-# compiled from the common wcstofp.c source file.
+-#
+-$(addsuffix .$(OBJEXT), wcstod wcstof wcstold): %.$(OBJEXT): wcstofp.c
+-	$(CC) -c $(CPPFLAGS) $(ALL_CFLAGS) -D FUNCTION=$* -o $@ $<
+-
+ # For the math sources, we support the convention that a single
+ # quux_generic.c source file will produce three objects: quux.o,
+ # quuxf.o, and quuxl.o; since a change in the common source file
+diff --git a/include/stdio.h b/include/stdio.h
+index 570a2d2..3a8b7b0 100644
+--- a/include/stdio.h
++++ b/include/stdio.h
+@@ -467,7 +467,7 @@ _CRTIMP __cdecl __MINGW_NOTHROW  int vsprintf (char *, const char *, __VALIST);
+ 
+ #endif	/* !__USE_MINGW_ANSI_STDIO */
+ 
+-#if __GNUC__ && defined _ISOC99_SOURCE
++#if (__GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 2)) && defined _ISOC99_SOURCE
+ /* Although MinGW implementations of the ISO-C99 snprintf() and
+  * vsnprintf() functions do not conflict with any implementation
+  * in MSVCRT.DLL, (because MSVCRT.DLL does not implement either),
+diff --git a/mingwex/btowc.c b/mingwex/btowc.c
+index b9e1da9..26b8870 100644
+--- a/mingwex/btowc.c
++++ b/mingwex/btowc.c
+@@ -1,58 +1,19 @@
+-/*
+- * btowc.c
+- *
+- * Implementation of an ISO-C99 conforming btowc() function; note that,
+- * since this considers only one byte for conversion, and a single byte
+- * can never convert to a surrogate pair, this is not susceptible to the
+- * potential wchar_t overflow error, which may occur with functions such
+- * as mbrtowc(), which may need to return surrogate pairs.
+- *
+- *
+- * $Id: btowc.c,v 28b17d1c4eab 2020/07/07 21:02:51 keith $
+- *
+- * Written by Keith Marshall <keith@users.osdn.me>
+- * Copyright (C) 2020, MinGW.org Project
+- *
+- *
+- * Permission is hereby granted, free of charge, to any person obtaining a
+- * copy of this software and associated documentation files (the "Software"),
+- * to deal in the Software without restriction, including without limitation
+- * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+- * and/or sell copies of the Software, and to permit persons to whom the
+- * Software is furnished to do so, subject to the following conditions:
+- *
+- * The above copyright notice, this permission notice, and the following
+- * disclaimer shall be included in all copies or substantial portions of
+- * the Software.
+- *
+- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+- * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+- * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+- * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OF OR OTHER
+- * DEALINGS IN THE SOFTWARE.
+- *
+- */
+-#include "wcharmap.h"
+-
+-/* We also need <stdio.h>, for EOF.
+- */
++#include "mb_wc_common.h"
++#include <wchar.h>
+ #include <stdio.h>
++#define WIN32_LEAN_AND_MEAN
++#include <windows.h>
+ 
+-wint_t btowc( int c )
+-{ /* Implementation of ISO-C99 btowc() function, in libmingwex.a;
+-   * this performs an MBCS to wchar_t conversion on the given single
+-   * character argument, (expressed as an int), returning WEOF in
+-   * the event that conversion fails.
+-   */
+-  if( c != EOF )
+-  { wint_t wc_result;
+-    (void)(__mingw_mbrtowc_codeset_init());
+-    if( __mingw_mbtowc_convert( (char *)(&c), 1, &wc_result, 1) == 1 )
+-      return wc_result;
+-  }
+-  return WEOF;
++wint_t btowc (int c)
++{
++  if (c == EOF)
++    return (WEOF);
++  else
++    {
++      unsigned char ch = c;
++      wchar_t wc = WEOF;
++      MultiByteToWideChar (get_codepage(), MB_ERR_INVALID_CHARS,
++			   (char*)&ch, 1, &wc, 1);
++      return wc;
++    }
+ }
+-
+-/* $RCSfile: btowc.c,v $: end of file */
+diff --git a/mingwex/mb_wc_common.h b/mingwex/mb_wc_common.h
+new file mode 100644
+index 0000000..d1c2f9d
+--- /dev/null
++++ b/mingwex/mb_wc_common.h
+@@ -0,0 +1,13 @@
++#include <locale.h>
++#include <string.h>
++#include <stdlib.h>
++
++static inline
++unsigned int get_codepage (void)
++{
++  /* locale :: "lang[_country[.code_page]]" | ".code_page"  */
++  char * cp_string;
++  if ((cp_string = strchr (setlocale(LC_CTYPE, NULL), '.')))
++    return  ((unsigned) atoi (cp_string + 1));
++  return 0;
++}
+diff --git a/mingwex/mbrconv.c b/mingwex/mbrconv.c
+deleted file mode 100644
+index a39ee1f..0000000
+--- a/mingwex/mbrconv.c
++++ /dev/null
+@@ -1,194 +0,0 @@
+-/*
+- * mbrconv.c
+- *
+- * Implementation of back-end MBCS to wchar_t conversion infrastructure
+- * routines to support the MinGW mbrlen(), and mbrtowc() functions.
+- *
+- *
+- * $Id: mbrconv.c,v 3346bd5e5239 2020/07/04 21:06:58 keith $
+- *
+- * Written by Keith Marshall <keith@users.osdn.me>
+- * Copyright (C) 2020, MinGW.org Project
+- *
+- *
+- * Permission is hereby granted, free of charge, to any person obtaining a
+- * copy of this software and associated documentation files (the "Software"),
+- * to deal in the Software without restriction, including without limitation
+- * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+- * and/or sell copies of the Software, and to permit persons to whom the
+- * Software is furnished to do so, subject to the following conditions:
+- *
+- * The above copyright notice, this permission notice, and the following
+- * disclaimer shall be included in all copies or substantial portions of
+- * the Software.
+- *
+- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+- * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+- * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+- * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OF OR OTHER
+- * DEALINGS IN THE SOFTWARE.
+- *
+- */
+-#include "wcharmap.h"
+-
+-/* We use the MB_LEN_MAX macro, to declare the size of internal
+- * MBCS storage buffers; it is defined in <limits.h>
+- */
+-#include <limits.h>
+-
+-static __mb_inline__ size_t mbrlen_min
+-( const char *restrict s, size_t n, wchar_t *restrict wc )
+-{
+-  /* Internal helper function to determine the minimum number of
+-   * initial bytes, within a MBCS sequence, which are required to
+-   * represent a single wide character code point, (which may be
+-   * represented as a single wchar_t entity, or alternatively as
+-   * a surrogate pair of two such wchar_t entities).  At most,
+-   * the routine will examine the initial "n" bytes of the given
+-   * MBCS sequence, (with "n" nominally limited to the effective
+-   * MB_CUR_MAX for the specified codeset).
+-   */
+-  int status, len = 1;
+-  do { status = __mingw_mbtowc_convert( s, len, wc, 2 );
+-     } while( (status == 0) && (n >= ++len) );
+-  return len;
+-}
+-
+-size_t __mingw_mbrtowc_handler
+-( wchar_t *restrict pwc, const char *restrict s, size_t n,
+-  mbstate_t *restrict ps
+-)
+-{ /* Common handler for MinGW mbrtowc() and mbrlen() functions.
+-   */
+-  (void)(__mingw_mbrlen_cur_max_init( __mingw_mbrtowc_codeset_init() ));
+-  { union { mbstate_t st; wchar_t wc[2]; } retval;
+-    union { mbstate_t st; char mb[MB_LEN_MAX]; wchar_t wc[2]; } state = { *ps };
+-    unsigned int mbrlen_cur_max = __mingw_mbrlen_cur_max();
+-    size_t pending, len = 0, count = 0;
+-
+-    /* Any residual state, from a preceding call, has been captured
+-     * in the local "state" union; assume that this call will clear
+-     * any such state, leaving no further residual.
+-     */
+-    *ps = (mbstate_t)(0);
+-
+-    /* Normally, it makes no sense to call mbrlen(), or mbrtowc(),
+-     * with a look-ahead byte count limit of zero; however, due to
+-     * the constraints imposed by MS-Windows using UTF-16LE as the
+-     * underlying encoding for wchar_t...
+-     */
+-    if( n == 0 )
+-    { /* ...we allow this, as a special case, so that, when any
+-       * immediately preceding call to mbrtowc() has returned a
+-       * high surrogate, the accompanying low surrogate...
+-       */
+-      if( IS_SURROGATE_PAIR( state.wc[0], state.wc[1] ) )
+-      {
+-	/* ...may be returned to the caller, without consuming
+-	 * any further bytes from the original MBCS sequence.
+-	 */
+-	if( pwc != NULL ) *pwc = state.wc[1];
+-	return (size_t)(0);
+-      }
+-      /* When the conversion state does not represent a deferred
+-       * low surrogate, then restore it, and pass this through as
+-       * an effective no-op.
+-       */
+-      *ps = state.st;
+-      return (size_t)(-2);
+-    }
+-    /* In any context, other than the preceding (special) n == 0
+-     * case, for retrieval of a deferred low surrogate, a pending
+-     * conversion state which represents a surrogate pair is not
+-     * a valid state; reject it.
+-     */
+-    if( IS_SURROGATE_PAIR( state.wc[0], state.wc[1] ) )
+-      return errout( EINVAL, (size_t)(-1) );
+-
+-    /* Step over any pending MBCS bytes, which may already be
+-     * present within the conversion state buffer, accumulating
+-     * both the count of such pending bytes, together with a
+-     * partial count of total bytes for conversion.
+-     */
+-    while( (len < sizeof( mbstate_t )) && (state.mb[len] != '\0') )
+-      ++len;
+-    pending = len;
+-
+-    /* Append MBCS bytes from the input sequence, to the pending
+-     * state buffer, up to the specified look-ahead count limit, or
+-     * until the filled length of the buffer becomes equivalent to
+-     * the effective value of MB_CUR_MAX.
+-     */
+-    while( (len < mbrlen_cur_max) && (count < n) && (s[count] != '\0') )
+-      state.mb[len++] = s[count++];
+-
+-    /* If the pending look-ahead state has not yet been padded
+-     * to the full MB_CUR_MAX length, ensure that it is encoded
+-     * as a NUL terminated MBCS sequence, before attempting to
+-     * interpret it as a complete MBCS sequence.
+-     */
+-    if( len < mbrlen_cur_max ) state.mb[len] = '\0';
+-    if( (int)(count = mbrlen_min( state.mb, len, retval.wc )) > 0 )
+-    {
+-      /* No valid conversion state should ever exist, where no
+-       * additional bytes are required to complete a previously
+-       * deferred multibyte character.
+-       */
+-      if( pending >= count ) return errout( EILSEQ, (size_t)(-1) );
+-
+-      /* The accumulated encoding state does now represent a
+-       * complete MBCS sequence; when servicing an mbrtowc() call,
+-       * with non-NULL return value pointer, we must store that
+-       * return value...
+-       */
+-      if( pwc != NULL )
+-      { /* ...noting that, under MS-Windows, we may not be able
+-	 * to accommodate the entire converted value in a single
+-	 * UTF-16 wchar_t, in which case we must return it as a
+-	 * surrogate pair, of which only the high surrogate can
+-	 * be returned now...
+-	 */
+-	if( IS_HIGH_SURROGATE( *pwc = retval.wc[0] ) )
+-	  /* ...with the entire pair being stored at the passed
+-	   * mbstate_t reference buffer, allowing for subsequent
+-	   * retrieval of the low surrogate.
+-	   */
+-	  *ps = retval.st;
+-      }
+-      /* In the case that the wchar_t return value represents a
+-       * NUL character, ISO-C99 prescribes that, whichever of the
+-       * supported functions is being serviced, the returned byte
+-       * count, of converted MBCS bytes, must be zero.
+-       */
+-      if( retval.wc[0] == L'\0' ) return (size_t)(0);
+-
+-      /* The effective function return value, for this case, is
+-       * the count of bytes accumulated into the completed MBCS
+-       * byte sequence, discounting those which were deferred
+-       * from any preceding call.
+-       */
+-      return (count - pending);
+-    }
+-    else if( count < mbrlen_cur_max )
+-    { /* The accumulated encoding state does not represent a
+-       * complete, and valid MBCS sequence, but we have not yet
+-       * accumulated as many bytes as the effective MB_CUR_MAX
+-       * length can accommodate; save the encoding state for
+-       * deferred reprocessing, and return the appropriate
+-       * pseudo-count to inform the caller that this encoding
+-       * state may yet develop into a valid MBCS sequence.
+-       */
+-      *ps = retval.st;
+-      return (size_t)(-2);
+-    }
+-  }
+-  /* If neither of the preceding encoding states prevails, then
+-   * the current state must represent an invalid MBCS sequence;
+-   * report it via errno, and appropriate return value.
+-   */
+-  return errout( EILSEQ, (size_t)(-1) );
+-}
+-
+-/* $RCSfile: mbrconv.c,v $: end of file */
+diff --git a/mingwex/mbrlen.c b/mingwex/mbrlen.c
+deleted file mode 100644
+index cdd3d1a..0000000
+--- a/mingwex/mbrlen.c
++++ /dev/null
+@@ -1,47 +0,0 @@
+-/*
+- * mbrlen.c
+- *
+- * MinGW.org replacement for the ISO-C99 mbrlen() function, supporting its
+- * use on any legacy Windows version for which Microsoft does not provide it,
+- * while replacing the Microsoft implementation on those Windows versions
+- * for which it is provided.
+- *
+- *
+- * $Id: mbrlen.c,v 28b17d1c4eab 2020/07/07 21:02:51 keith $
+- *
+- * Written by Keith Marshall <keith@users.osdn.me>
+- * Copyright (C) 2020, MinGW.org Project
+- *
+- *
+- * Permission is hereby granted, free of charge, to any person obtaining a
+- * copy of this software and associated documentation files (the "Software"),
+- * to deal in the Software without restriction, including without limitation
+- * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+- * and/or sell copies of the Software, and to permit persons to whom the
+- * Software is furnished to do so, subject to the following conditions:
+- *
+- * The above copyright notice, this permission notice, and the following
+- * disclaimer shall be included in all copies or substantial portions of
+- * the Software.
+- *
+- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+- * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+- * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+- * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OF OR OTHER
+- * DEALINGS IN THE SOFTWARE.
+- *
+- */
+-#include "wcharmap.h"
+-
+-size_t mbrlen( const char *restrict s, size_t n, mbstate_t *restrict ps )
+-{
+-  /* Implementation of ISO-C99 mbrlen() function, in libmingwex.a;
+-   * this is simply delegated to the common handler, which services
+-   * both the mbrlen(), and mbrtowc() functions.
+-   */
+-  return __mingw_mbrtowc_handler( NULL, s, n, __mbrtowc_state( ps ) );
+-}
+-
+-/* $RCSfile: mbrlen.c,v $: end of file */
+diff --git a/mingwex/mbrscan.c b/mingwex/mbrscan.c
+deleted file mode 100644
+index a3ae683..0000000
+--- a/mingwex/mbrscan.c
++++ /dev/null
+@@ -1,322 +0,0 @@
+-/*
+- * mbrscan.c
+- *
+- * Implementation of the infrastructure routines to support the mbrlen(),
+- * and mbrtowc() functions, for use in those applications where Microsoft
+- * does not provide adequate support.
+- *
+- * $Id: mbrscan.c,v 69af230cab1b 2020/03/19 21:17:25 keith $
+- *
+- * Written by Keith Marshall <keith@users.osdn.me>
+- * Copyright (C) 2020, MinGW.org Project
+- *
+- *
+- * Permission is hereby granted, free of charge, to any person obtaining a
+- * copy of this software and associated documentation files (the "Software"),
+- * to deal in the Software without restriction, including without limitation
+- * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+- * and/or sell copies of the Software, and to permit persons to whom the
+- * Software is furnished to do so, subject to the following conditions:
+- *
+- * The above copyright notice, this permission notice, and the following
+- * disclaimer shall be included in all copies or substantial portions of
+- * the Software.
+- *
+- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+- * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+- * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+- * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OF OR OTHER
+- * DEALINGS IN THE SOFTWARE.
+- *
+- */
+-#include "wcharmap.h"
+-
+-/* We use the MB_LEN_MAX macro, to declare the size of internal
+- * MBCS storage buffers; it is defined in <limits.h>
+- */
+-#include <limits.h>
+-
+-/* The working codeset, and its associated effective MB_CUR_MAX,
+- * are stored with file-scope visibility, to facilitate passing
+- * them to individual elements of the implementation...
+- */
+-static __thread unsigned int codeset, mbrlen_cur_max;
+-
+-/* ...but, in this instance, we also need to provide a mechanism
+- * for initializing each of these from the global scope...
+- */
+-unsigned int __mingw_mbrtowc_codeset_init( void )
+-{ return codeset = __mb_codeset_for_locale(); }
+-
+-unsigned int __mingw_mbrlen_cur_max_init( unsigned int codeset )
+-{ return mbrlen_cur_max = __mb_cur_max_for_codeset( codeset ); }
+-
+-/* ...and also, an accessor to make the effective MB_CUR_MAX
+- * available in the global scope.
+- */
+-unsigned int __mingw_mbrlen_cur_max( void )
+-{ return mbrlen_cur_max; }
+-
+-int __mingw_mbtowc_convert
+-( const char *s, size_t n, wchar_t *wc, size_t wmax )
+-{
+-  /* Public helper function to determine if a MBCS sequence, of any
+-   * arbitrary length, may be completely converted to a corresponding
+-   * wchar_t sequence of specified maximum length, initially subject
+-   * to the MB_ERR_INVALID_CHARS flag, and subsequently retrying with
+-   * no flags, in the event that conversion with this flag yields an
+-   * ERROR_INVALID_FLAGS exception.
+-   *
+-   * A maximum of "n" bytes of the given MBCS sequence, "s", will be
+-   * examined, unless a NUL byte is encountered before "n" bytes have
+-   * been evaluated; if "n" is specified as zero, it will be ignored,
+-   * and the full sequence, assumed to be of unlimited length, will
+-   * be examined until a NUL byte is encountered.
+-   *
+-   * Conversion of the given MBCS byte sequence will succeed, only
+-   * if it represents a whole number of complete and valid code point
+-   * encodings, and the fully converted representation of all of these
+-   * code points can be accommodated within "wmax" wchar_t entities;
+-   * (if "wmax" is specified as zero, it is treated as unlimited).
+-   *
+-   * If conversion is successful, the return value is the number of
+-   * wchar_t entities required to accommodate the fully converted MBCS
+-   * sequence; if conversion is unsuccessful, zero is returned.
+-   */
+-  int st;
+-  unsigned int flags = MB_ERR_INVALID_CHARS;
+-  if( n == 0 ) n = (size_t)(-1);
+-
+-  do { SetLastError( 0 );
+-       st = MultiByteToWideChar( codeset, flags, s, n, wc, wmax );
+-     } while( (st == (flags = 0)) && (GetLastError() == ERROR_INVALID_FLAGS) );
+-  return st;
+-}
+-
+-size_t __mingw_mbrscan_begin
+-( wchar_t *restrict *wcs, const char **restrict src, size_t *len,
+-  mbstate_t *restrict ps
+-)
+-{ /* Public helper function, to retrieve, interpret, and complete
+-   * conversion state, as passed to any MBCS to wchar_t conversion
+-   * routine, via its mbstate_t reference parameter.
+-   */
+-  size_t count = (size_t)(0);
+-
+-  /* This becomes a no-op, if there is no pending state data...
+-   */
+-  if( *ps != (mbstate_t)(0) )
+-  { /* ...otherwise, we capture, and map the pending state, for
+-     * completion and interpretation...
+-     */
+-    union { mbstate_t st; char mb[MB_LEN_MAX]; wchar_t wc[2]; }
+-      state = { *ps };
+-
+-    /* ...and mark the passed mbstate_t as completed.
+-     */
+-    *ps = (mbstate_t)(0);
+-    if( IS_SURROGATE_PAIR( state.wc[0], state.wc[1] ) )
+-    { /* When the pending state represents a surrogate pair, then
+-       * the high surrogate will have been returned previously; it
+-       * is the low surrogate which remains pending, and should now
+-       * be inserted into the return buffer, if any.
+-       */
+-      if( (wcs != NULL) && (*wcs != NULL) )
+-      { *(*wcs)++ = state.wc[1];
+-	if( *len > 0 ) --*len;
+-      }
+-      /* In any case, we must account for the low surrogate, which
+-       * is represented by this pending state.
+-       */
+-      ++count;
+-    }
+-    else
+-    { /* The pending state represents a previously scanned, but not
+-       * yet complete MBCS sequence; we must now add additional bytes,
+-       * from the MBCS input sequence, until the pending sequence is
+-       * either completed, or can be ruled as invalid.
+-       */
+-      int copy, scan = 0, mark = 0;
+-
+-      /* To determine completion state, we need a scratch conversion
+-       * buffer which may subsequently be interpreted as mbstate.
+-       */
+-      union { mbstate_t st; wchar_t wc[2]; } buf;
+-
+-      /* First, we mark the offset within the pending state buffer,
+-       * where the first additional byte should be appended...
+-       */
+-      while( state.mb[mark] != '\0' ) ++mark;
+-      while( scan == 0 )
+-      { /* ...then we extend this, by appending bytes from the MBCS
+-	 * input, until we either NUL terminate it, or we reach the
+-	 * effective maximum MBCS length for a single code point.
+-	 */
+-	for( copy = mark; ((*src)[scan] != '\0') && (copy < mbrlen_cur_max); )
+-	  state.mb[copy++] = (*src)[scan++];
+-
+-	/* In the case of NUL termination, the terminating byte has
+-	 * yet to be stored.
+-	 */
+-	if( copy < mbrlen_cur_max ) state.mb[copy] = '\0';
+-
+-	/* Having now captured a potential single code point MBCS
+-	 * sequence, in the state buffer, we now examine that, in
+-	 * incremental steps of its initial byte sequence, until
+-	 * we can successfully convert it, or we must reject it.
+-	 */
+-	do { copy = __mingw_mbtowc_convert( state.mb, ++scan, buf.wc, 2 );
+-	   } while( (copy == 0) && (scan < mbrlen_cur_max) );
+-
+-	/* If conversion is unsuccessful...
+-	 */
+-	if( copy == 0 )
+-	{ /* ...and we have extended the sequence to the maximum
+-	   * length allowed for a single code point, then we must
+-	   * reject the entire input sequence...
+-	   */
+-	  if( scan >= mbrlen_cur_max )
+-	    return errout( EILSEQ, (size_t)(-1) );
+-
+-	  /* ...otherwise, there is still a possibility that we
+-	   * may be able to complete this sequence during a later
+-	   * call, so return it as pending state.
+-	   */
+-	  *ps = buf.st;
+-	  return (size_t)(0);
+-	}
+-	/* A successful conversion, which requires more than one
+-	 * wchar_t, MUST be represented as a surrogate pair; any
+-	 * other longer representation is invalid.
+-	 */
+-	if( (copy > 1) && ! IS_SURROGATE_PAIR( buf.wc[0], buf.wc[1] ) )
+-	  return errout( EILSEQ, (size_t)(-1) );
+-
+-	/* When the representation of a successful conversion is
+-	 * accepted as valid, and...
+-	 */
+-	if( (wcs != NULL) && (*wcs != NULL) )
+-	{
+-	  /* ...the caller has provided a buffer, in which to
+-	   * return it, then we return at least the first wchar
+-	   * of its representation, and then...
+-	   */
+-	  *(*wcs)++ = buf.wc[0];
+-	  if( *len >= (size_t)(copy) )
+-	  { /* ...when the declared buffer length is sufficient
+-	     * to accommodate more, and the conversion represents
+-	     * a surrogate pair, we also return the low surrogate,
+-	     * and adjust the length to account for it...
+-	     */
+-	    if( copy > 1 ) *(*wcs)++ = buf.wc[1];
+-	    *len -= (size_t)(copy);
+-	  }
+-	  else if( copy > 1 )
+-	  { /* ...otherwise, when we have a surrogate pair to be
+-	     * returned, but only sufficient buffer to accommodate
+-	     * the high surrogate, we defer the low surrogate for
+-	     * return during a subsequent call.
+-	     */
+-	    *ps = buf.st;
+-	    return (size_t)(1);
+-	  }
+-	}
+-	/* Increment the return count, to account for each wchar
+-	 * which has been interpreted, thus far, from the given
+-	 * pending state.
+-	 */
+-	count += (size_t)(copy);
+-
+-	/* Check that we have consumed all content from the given
+-	 * pending state...
+-	 */
+-	if( mark > scan )
+-	{ /* ...or otherwise, discard what we have consumed, and
+-	   * promote the residual for further consideration.
+-	   */
+-	  state.mb[mark] = '\0';
+-	  for( mark = 0; state.mb[mark] != '\0'; ++mark, ++scan )
+-	    state.mb[mark] = state.mb[scan];
+-	  scan = 0;
+-	}
+-	/* When all pending state has been consumed, adjust the
+-	 * input MBCS sequence pointer, to account for any bytes
+-	 * used to complete that pending state.
+-	 */
+-	else *src += (scan - mark);
+-      }
+-    }
+-  }
+-  /* Ultimately, return the count of wchar elements, if any, which
+-   * result from conversion of pending state.
+-   */
+-  return count;
+-}
+-
+-size_t __mingw_mbtowc_copy
+-( wchar_t *restrict wcs, const char *restrict src, size_t len )
+-{
+-  /* Public helper function to copy a sequence of one or more wchar_t
+-   * elements, which result from conversion of the given MBCS sequence,
+-   * either to a caller-provided buffer, (or, if none is provided, use
+-   * an internal scratch buffer, to facilitate counting the number of
+-   * such elements which would be copied, without storing them).
+-   */
+-  size_t count = (size_t)(0);
+-  while( count < len )
+-  { /* Scan the multibyte sequence, one character at a time, while we
+-     * still have sufficient space to store each conversion, (ensuring
+-     * that there is always at least enough space to accommodate one
+-     * full conversion, avoiding possible surrogate pair overflow.
+-     */
+-    int copy, scan = 0, gap = len - count;
+-    wchar_t scratch[2], *wc = ((wcs == NULL) || (gap < 2)) ? scratch : wcs;
+-
+-    /* Determine the length of the next multibyte character, and the
+-     * number of wchar_t entities required to store it.
+-     */
+-    do { copy = __mingw_mbtowc_convert( src, ++scan, wc, 2 );
+-       } while( (copy == 0) && (scan < mbrlen_cur_max) );
+-
+-    /* Bail out, if no conversion is possible; (this can only occur
+-     * if an invalid multibyte sequence is detected).
+-     */
+-    if( copy == 0 ) return errout( EILSEQ, (size_t)(-1) );
+-
+-    /* Stop at any terminating NUL character, or if a surrogate pair
+-     * will overflow at the end of the designated buffer...
+-     */
+-    if( (*wc == L'\0') || (gap < copy) )
+-    {
+-      /* ...storing a NUL terminator, if necessary...
+-       */
+-      if( (wcs != NULL) && (*wc == L'\0') ) *wcs = L'\0';
+-      len = count;
+-    }
+-    else
+-    { /* ...otherwise, adjust the count of wchar_t entities, which
+-       * have been converted thus far...
+-       */
+-      count += copy;
+-      if( wcs != NULL )
+-      { /* ...ensuring that the conversion is appropriately stored,
+-	 * and the storage buffer pointer is advanced...
+-	 */
+-       	if( wc == scratch ) while( copy-- > 0 ) *wcs++ = *wc++;
+-	else wcs += copy;
+-      }
+-      /* ...and that the scan pointer is repositioned, to process
+-       * the next multibyte character, (if any).
+-       */
+-      src += scan;
+-    }
+-  }
+-  /* Finally, we return the total number of wchar_t entities which have,
+-   * (or would have), been stored for this conversion.
+-   */
+-  return count;
+-}
+-
+-/* $RCSfile: mbrscan.c,v $: end of file */
+diff --git a/mingwex/mbrtowc.c b/mingwex/mbrtowc.c
+index 43d6895..c8d8d8b 100644
+--- a/mingwex/mbrtowc.c
++++ b/mingwex/mbrtowc.c
+@@ -1,60 +1,154 @@
+-/*
+- * mbrtowc.c
+- *
+- * MinGW.org replacement for the ISO-C99 mbrtowc() function, supporting
+- * use of this function on legacy Windows versions, for which Microsoft
+- * does not provide it, while replacing the Microsoft implementation on
+- * those Windows versions for which it is provided.
+- *
+- *
+- * $Id: mbrtowc.c,v 28b17d1c4eab 2020/07/07 21:02:51 keith $
+- *
+- * Written by Keith Marshall <keith@users.osdn.me>
+- * Copyright (C) 2020, MinGW.org Project
+- *
+- *
+- * Permission is hereby granted, free of charge, to any person obtaining a
+- * copy of this software and associated documentation files (the "Software"),
+- * to deal in the Software without restriction, including without limitation
+- * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+- * and/or sell copies of the Software, and to permit persons to whom the
+- * Software is furnished to do so, subject to the following conditions:
+- *
+- * The above copyright notice, this permission notice, and the following
+- * disclaimer shall be included in all copies or substantial portions of
+- * the Software.
+- *
+- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+- * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+- * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+- * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OF OR OTHER
+- * DEALINGS IN THE SOFTWARE.
+- *
+- */
+-#include "wcharmap.h"
+-
+-size_t mbrtowc
+-( wchar_t *restrict pwc, const char *restrict s, size_t n,
+-  mbstate_t *restrict ps
+-)
+-{ /* Implementation of ISO-C99 mbrtowc() function, in libmingwex.a
+-   *
+-   * When s is a NULL pointer, ISO-C99 decrees that the call shall
+-   * be interpreted as the equivalent of:
+-   *
+-   *   mbrtowc( NULL, "", 1, ps )
+-   *
+-   * with any other supplied values for pwc and n being ignored.
+-   */
+-  if( s == NULL ) return mbrtowc( NULL, "", 1, ps );
+-
+-  /* Otherwise, we simply delegate the the call to the common
+-   * handler, which implements the action for both the mbrlen()
+-   * function, and the mbrtowc() function.
+-   */
+-  return __mingw_mbrtowc_handler( pwc, s, n, __mbrtowc_state( ps ) );
++#include "mb_wc_common.h"
++#include <wchar.h>
++#include <stdlib.h>
++#include <errno.h>
++#define WIN32_LEAN_AND_MEAN
++#include <windows.h>
++
++static int __MINGW_ATTRIB_NONNULL(1) __MINGW_ATTRIB_NONNULL(4)
++__mbrtowc_cp (wchar_t * __restrict__ pwc, const char * __restrict__ s,
++	      size_t n, mbstate_t* __restrict__ ps,
++	      const unsigned int cp, const unsigned int mb_max)
++{
++  union {
++    mbstate_t val;
++    char mbcs[4];
++  }  shift_state;
++
++
++  /* Do the prelim checks */
++  if (s == NULL)
++    return 0;
++
++  if (n == 0)
++    /* The standard doesn't mention this case explicitly. Tell
++       caller that the conversion from a non-null s is incomplete. */
++    return -2;
++
++  /* Save the current shift state, in case we need it in DBCS case.  */
++  shift_state.val = *ps;
++  *ps = 0;
++
++  if (!*s)
++    {
++      *pwc = 0;
++      return 0;
++    }
++
++  if (mb_max > 1)
++    {
++      if (shift_state.mbcs[0] != 0)
++	{
++	  /* Complete the mb char with the trailing byte.  */
++          shift_state.mbcs[1] = *s;  /* the second byte */
++          if (MultiByteToWideChar(cp, MB_ERR_INVALID_CHARS,
++				  shift_state.mbcs, 2, pwc, 1)
++		 == 0)
++	    {
++	      /* An invalid trailing byte */
++	      errno = EILSEQ;
++	      return -1;
++	    }
++          return 2;
++        }
++      else if (IsDBCSLeadByteEx (cp, *s))
++        {
++          /* If told to translate one byte, just save the leadbyte
++             in *ps.  */
++	  if (n < 2)
++	    {
++	      ((char*) ps)[0] = *s;
++	      return -2;
++	    }
++          /* Else translate the first two bytes  */
++          else if (MultiByteToWideChar (cp, MB_ERR_INVALID_CHARS,
++					s, 2, pwc, 1)
++		    == 0)
++	    {
++	      errno = EILSEQ;
++	      return -1;
++	    }
++          return 2;
++        }
++    }
++
++  /* Fall through to single byte char  */
++  if (cp == 0)
++      *pwc = (wchar_t)(unsigned char)*s;
++
++  else if (MultiByteToWideChar (cp, MB_ERR_INVALID_CHARS, s, 1, pwc, 1)
++	    == 0)
++    {
++      errno = EILSEQ;
++      return  -1;
++    }
++  return 1;
++}
++
++size_t
++mbrtowc (wchar_t * __restrict__ pwc, const char * __restrict__ s,
++	 size_t n, mbstate_t* __restrict__ ps)
++{
++  static mbstate_t internal_mbstate = 0;
++  wchar_t  byte_bucket = 0;
++  wchar_t* dst = pwc ? pwc : &byte_bucket;
++
++  return (size_t) __mbrtowc_cp (dst, s, n, ps ? ps : &internal_mbstate,
++				get_codepage(), MB_CUR_MAX);
++}
++
++
++size_t
++mbsrtowcs (wchar_t* __restrict__ dst,  const char ** __restrict__ src,
++	   size_t len, mbstate_t* __restrict__ ps)
++{
++  int ret =0 ;
++  size_t n = 0;
++  static mbstate_t internal_mbstate = 0;
++  mbstate_t* internal_ps = ps ? ps : &internal_mbstate;
++  const unsigned int cp = get_codepage();
++  const unsigned int mb_max = MB_CUR_MAX;
++
++  if ( src == NULL || *src == NULL )	/* undefined behavior */
++    return 0;
++
++  if (dst != NULL)
++    {
++      while (n < len
++	     && (ret = __mbrtowc_cp(dst, *src, len - n,
++				    internal_ps, cp, mb_max))
++		  > 0)
++	{
++	  ++dst;
++   	  *src += ret;
++          n += ret;
++        }
++
++      if (n < len && ret == 0)
++        *src = (char *)NULL;
++    }
++
++  else
++    {
++      wchar_t byte_bucket = 0;
++      while (n < len
++	     && (ret = __mbrtowc_cp (&byte_bucket, *src, mb_max,
++				     internal_ps, cp, mb_max))
++		  > 0)
++	{
++          *src += ret;
++          n += ret;
++        }
++    }
++  return n;
+ }
+ 
+-/* $RCSfile: mbrtowc.c,v $: end of file */
++size_t
++mbrlen (const char * __restrict__ s, size_t n,
++	mbstate_t * __restrict__ ps)
++{
++  static mbstate_t s_mbstate = 0;
++  wchar_t byte_bucket = 0;
++  return __mbrtowc_cp (&byte_bucket, s, n, (ps) ? ps : &s_mbstate,
++		       get_codepage(), MB_CUR_MAX);
++}
+diff --git a/mingwex/mbsrtowcs.c b/mingwex/mbsrtowcs.c
+deleted file mode 100644
+index 2cd6db1..0000000
+--- a/mingwex/mbsrtowcs.c
++++ /dev/null
+@@ -1,170 +0,0 @@
+-/*
+- * mbsrtowcs.c
+- *
+- * MinGW.org replacement for the ISO-C99 mbsrtowcs() function, supporting
+- * its use on legacy Windows versions, for which Microsoft does not provide
+- * it, while replacing the Microsoft implementation on any Windows version
+- * for which it is provided.
+- *
+- *
+- * $Id: mbsrtowcs.c,v 28b17d1c4eab 2020/07/07 21:02:51 keith $
+- *
+- * Written by Keith Marshall <keith@users.osdn.me>
+- * Copyright (C) 2020, MinGW.org Project
+- *
+- *
+- * Permission is hereby granted, free of charge, to any person obtaining a
+- * copy of this software and associated documentation files (the "Software"),
+- * to deal in the Software without restriction, including without limitation
+- * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+- * and/or sell copies of the Software, and to permit persons to whom the
+- * Software is furnished to do so, subject to the following conditions:
+- *
+- * The above copyright notice, this permission notice, and the following
+- * disclaimer shall be included in all copies or substantial portions of
+- * the Software.
+- *
+- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+- * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+- * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+- * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OF OR OTHER
+- * DEALINGS IN THE SOFTWARE.
+- *
+- */
+-#include "wcharmap.h"
+-
+-#include <limits.h>
+-
+-static __mb_inline__
+-boolean __mingw_mbtowc_verify( const char *src, size_t len )
+-{
+-  /* Internal convenience wrapper, for checking viability of any
+-   * bounded-length MBCS to wchar_t string conversion.
+-   */
+-  return __mingw_mbtowc_copy( NULL, src, len ) != (size_t)(-1);
+-}
+-
+-static __mb_inline__ size_t __mbsrtowcs_internal
+-( wchar_t *restrict wcs, const char **restrict src, size_t len,
+-  mbstate_t *restrict ps
+-)
+-{ /* Internal implementation of the mbsrtowcs() function; this is
+-     expanded inline, within the public implementation.
+-   */
+-  size_t count = (size_t)(0);
+-  if( (src != NULL) && (*src != NULL) )
+-  { /* There is an MBCS sequence to convert; we may need more than
+-     * one conversion pass, so save duplicates of the initial state,
+-     * for use when a deferred second pass is required.
+-     */
+-    boolean deferred = false;
+-    const char *srcptr = *src;
+-    mbstate_t psdup = *ps;
+-
+-    /* Begin by checking for any pending state, and determine the
+-     * number of wchar_t elements needed to represent its completed
+-     * conversion...
+-     */
+-    count = __mingw_mbrscan_begin( NULL, &srcptr, NULL, ps );
+-    if( count != (size_t)(-1) )
+-    { /* ...followed by the number of additional elements required
+-       * to represent the conversion of any remaining MBCS sequence,
+-       * including its mandatory terminating NUL.
+-       */
+-      size_t extra = __mingw_mbtowc_convert( srcptr, 0, NULL, 0 );
+-      if( extra > (size_t)(0) )
+-      {
+-	/* The specified MBCS sequence is valid, but its conversion
+-	 * has not (yet) been stored; (if storage is requested, then
+-	 * a further conversion pass is required).  First, we adjust
+-	 * the agregate count, discounting the terminating NUL...
+-	 */
+-	count += extra - 1;
+-
+-	/* ...then proceed with whatever further processing may be
+-	 * required.
+-	 */
+-	if( wcs == NULL )
+-	{ /* This was an unbounded scan, so it has terminated at the
+-	   * NUL terminator of the MBCS sequence; in this case, we do
+-	   * not store the converted result, so no further conversion
+-	   * pass is required, and we may immediately return the scan
+-	   * count, as already computed.
+-	   */
+-	  return count;
+-	}
+-	else if( len > count )
+-	{ /* This is a bounded scan, with sufficient buffer length to
+-	   * accommodate the entire converted MBCS sequence, including
+-	   * its terminating NUL; we must now perform the conversion
+-	   * again, this time actually storing the result.
+-	   */
+-	  (void)(__mingw_mbrscan_begin( &wcs, src, &len, &psdup ));
+-	  (void)(__mingw_mbtowc_convert( *src, 0, wcs, len ));
+-
+-	  /* Since we've converted the entire MBCS sequence, including
+-	   * the terminating NUL, the ISO-C99 standard decrees that we
+-	   * must reset the original MBCS pointer to NULL, and we must
+-	   * return the converted count, discounting the NUL.
+-	   */
+-	  *src = NULL;
+-	  return count;
+-	}
+-	else
+-	{ /* The converted MBCS sequence is longer than the declared
+-	   * length of the available buffer space can accommodate; we
+-	   * defer conversion for now; we will revisit it below.
+-	   */
+-	  deferred = true;
+-	}
+-      }
+-      else if( (wcs != NULL) && (len > count) )
+-      { /* There is an encoding error, somewhere within the original
+-	 * MBCS sequence; we must rescan it, to determine whether or
+-	 * not the singularity occurs within the declared length of
+-	 * the designated conversion buffer.
+-	 */
+-	deferred = __mingw_mbtowc_verify( srcptr, len - count );
+-      }
+-      if( deferred )
+-      { /* This occurs, only if a non-NULL buffer address was given,
+-	 * for storage of the converted MBCS sequence, but the actual
+-	 * store operation was deferred because the specified buffer
+-	 * length was insufficient to store the complete conversion,
+-	 * or an MBCS encoding error was detected, beyond the point
+-	 * at which the conversion buffer would be exhausted.  Do
+-	 * the conversion again, storing the converted data, until
+-	 * the buffer has been completely filled.
+-	 */
+-	count = __mingw_mbrscan_begin( &wcs, src, &len, &psdup );
+-	return count + __mingw_mbtowc_copy( wcs, *src, len );
+-      }
+-    }
+-    /* If we get to here, an illegal MBCS sequence was detected, and
+-     * it lay within the required conversion span; abort the entire
+-     * conversion, setting errno per ISO-C99 specification...
+-     */
+-    return errout( EILSEQ, (size_t)(-1) );
+-  }
+-  /* ...whereas, if we get to here, there was no MBCS sequence for us
+-   * to convert; ISO-C99 doesn't specify any particular action to take
+-   * in this case, so we simply do nothing.
+-   */
+-  return count;
+-}
+-
+-size_t mbsrtowcs
+-( wchar_t *restrict wcs, const char **restrict src, size_t len,
+-  mbstate_t *restrict ps
+-)
+-{ /* Implementation of ISO-C99 mbsrtowcs() function, in libmingwex.a;
+-   * this stores the effective codeset properties, before returning the
+-   * result from expansion of the preceding inline implementation.
+-   */
+-  (void)(__mingw_mbrlen_cur_max_init( __mingw_mbrtowc_codeset_init() ));
+-  return __mbsrtowcs_internal( wcs, src, len, __mbrtowc_state( ps ) );
+-}
+-
+-/* $RCSfile: mbsrtowcs.c,v $: end of file */
+diff --git a/mingwex/wcharmap.c b/mingwex/wcharmap.c
+deleted file mode 100644
+index fe5782c..0000000
+--- a/mingwex/wcharmap.c
++++ /dev/null
+@@ -1,250 +0,0 @@
+-/*
+- * wcharmap.c
+- *
+- * Provides an implementation-private helper function, to facilitate
+- * conversion from UTF-16LE wchar_t data, of arbitrary length, to an
+- * equivalent multi-byte character encoding sequence.
+- *
+- * $Id: wcharmap.c,v 5b0c00b36f6c 2020/04/02 19:02:26 keith $
+- *
+- * Written by Keith Marshall <keith@users.osdn.me>
+- * Copyright (C) 2019, 2020, MinGW.org Project
+- *
+- *
+- * Permission is hereby granted, free of charge, to any person obtaining a
+- * copy of this software and associated documentation files (the "Software"),
+- * to deal in the Software without restriction, including without limitation
+- * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+- * and/or sell copies of the Software, and to permit persons to whom the
+- * Software is furnished to do so, subject to the following conditions:
+- *
+- * The above copyright notice, this permission notice, and the following
+- * disclaimer shall be included in all copies or substantial portions of
+- * the Software.
+- *
+- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+- * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+- * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+- * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OF OR OTHER
+- * DEALINGS IN THE SOFTWARE.
+- *
+- */
+-#include "wcharmap.h"
+-
+-/* We need a definition of macro UCHAR_MAX; it is defined in <limits.h>
+- */
+-#include <limits.h>
+-
+-/* The working codeset, and its associated effective MB_CUR_MAX,
+- * are stored with file-scope visibility, to facilitate passing
+- * them to individual elements of the implementation...
+- */
+-static __thread unsigned int codeset, wctomb_cur_max;
+-
+-/* ...but, in this instance, we also need to provide a mechanism
+- * for initializing each of these from the global scope...
+- */
+-unsigned int __mingw_wctomb_codeset_init( void )
+-{ return codeset = __mb_codeset_for_locale(); }
+-
+-unsigned int __mingw_wctomb_cur_max_init( unsigned int codeset )
+-{ return wctomb_cur_max = __mb_cur_max_for_codeset( codeset ); }
+-
+-/* ...and also, an accessor to make the effective MB_CUR_MAX
+- * available in the global scope.
+- */
+-unsigned int __mingw_wctomb_cur_max( void )
+-{ return wctomb_cur_max; }
+-
+-size_t __mingw_wctomb_convert
+-( char *mbs, int mblen, const wchar_t *wcs, int wclen )
+-{
+-  /* Helper function to map a sequence of wchars to their corresponding
+-   * sequence of multibyte characters, encoded as is appropriate for the
+-   * specified code page, (which is nominally the code page associated
+-   * with the current locale).
+-   *
+-   * Inputs:
+-   *   mbs	Buffer in which the encoded multibyte sequence may be
+-   *    	returned, or NULL, if only the sequence length is to
+-   *    	be determined, discarding the encoded data.
+-   *
+-   *   mblen	Number of bytes available in mbs; ignured if mbs is
+-   *    	passed as NULL.
+-   *
+-   *   wcs	The sequence of wchars which is to be encoded.
+-   *
+-   *   wclen	The number of wchars in wcs; if passed as (size_t)(-1),
+-   *    	scan until (wchar_t)(0), or until a wchar with no valid
+-   *    	encoding, or space in the encoding buffer is exhausted.
+-   *
+-   * Returns:
+-   *   The number of encoded bytes (which would be) stored into mbs, if
+-   *   mbs is not NULL, and all specifed wchars in wcs are successfully
+-   *   encoded; otherwise, returns (size_t)(-1), and sets errno to:
+-   *
+-   *   EILSEQ	If encoding is interrupted by a wchar with no valid
+-   *    	encoding within the specified code page.
+-   *
+-   *   ENOMEM	The mbs pointer isn't NULL, but there is insufficient
+-   *    	space in the designated buffer to store the encoded
+-   *    	multibyte character sequence.
+-   */
+-  size_t retval; int eilseq_flag = 0, *eilseq_ptr = NULL;
+-
+-  if( codeset == 0 )
+-  { /* Code page zero is assumed to represent the encoding which applies
+-     * within the "C" locale; this is a single-byte encoding, with wchar
+-     * values in the range L'\0'..L'\255' mapped to their identical byte
+-     * values, and all greater wchar values considered to be invalid.
+-     *
+-     * Simply scan, count, and optionally store valid byte values,
+-     * starting from an initial count of zero.
+-     */
+-    retval = 0;
+-
+-    if( (size_t)(wclen) == (size_t)(-1) )
+-      do { /* This is an unbounded scan; simply check that each
+-	    * successive wchar lies in the valid range...
+-	    */
+-	   if( (unsigned)(*wcs) > UCHAR_MAX )
+-	     /* ...otherwise, report an invalid encoding, and
+-	      * bail out.
+-	      */
+-	     return errout( EILSEQ, wclen );
+-
+-	   /* We got a valid input wchar...
+-	    */
+-	   if( mbs != NULL )
+-	   { /* ...which we are now expected to store...
+-	      */
+-	     if( mblen-- > 0 ) *mbs++ = (unsigned char)(*wcs);
+-
+-	     /* ...but, we must bail out, if there is no
+-	      * space left in the encoding buffer.
+-	      */
+-	     else return errout( ENOMEM, (size_t)(-1) );
+-	   }
+-
+-	   /* We've accepted the current input wchar; count
+-	    * it, and then, provided it isn't the terminating
+-	    * NUL, move on to the next.
+-	    */
+-	   ++retval;
+-	 } while( *wcs++ != L'\0' );
+-
+-    else while( wclen-- > 0 )
+-    { /* This is a bounded scan; as in the unbounded case, take
+-       * each input wchar in turn, and verify that each lies in
+-       * the valid encoding range.
+-       */
+-      if( (unsigned)(*wcs) > UCHAR_MAX )
+-	return errout( EILSEQ, (size_t)(-1) );
+-
+-      /* We got a valid input wchar...
+-       */
+-      if( mbs != NULL )
+-      { /* ...which we are now expected to store...
+-	 */
+-	if( mblen-- > 0 ) *mbs++ = (unsigned char)(*wcs);
+-
+-	/* ...but, we must bail out, if there is no
+-   	 * space left in the encoding buffer.
+-	 */
+-	else return errout( ENOMEM, (size_t)(-1) );
+-      }
+-
+-      /* Ensure that we don't scan beyond a terminating NUL
+-       * wchar, even if this lies within the bounded count.
+-       */
+-      if( *wcs++ == L'\0' ) wclen = 0;
+-
+-      /* In any case, count the current encoded byte.
+-       */
+-      ++retval;
+-    }
+-
+-    /* We now have the final count, for a code page zero encoding;
+-     * we are done.
+-     */
+-    return retval;
+-  }
+-
+-  /* For any code page other than zero, we delegate both encoding
+-   * and byte counting to the Windows API; note that for code pages
+-   * other than CP_UTF7 or CP_UTF8, (and CP_UTF8 is the only code
+-   * page with an identifier greater than that for CP_UTF7), there
+-   * may be unrepresentable UTF-16 code points, and we must pass a
+-   * flag reference to detect their presence in the UTF-16LE input
+-   * sequence; OTOH, any valid UTF-16 code point is representable
+-   * in both CP_UTF7 and CP_UTF8, but invalid UTF-16 code points
+-   * may still arise, due to malformed surrogate pairs.
+-   */
+-  if( codeset >= CP_UTF7 )
+-  { /* Target codeset is either UTF-7, or UTF-8; unfortunately,
+-     * Microsoft's WideCharToMultiByte() is critically broken in
+-     * respect of invalid sequence detection, when converting to
+-     * either of these codeset's ... specifically, the function
+-     * will fail if the EILSEQ flag reference is non-NULL, but
+-     * without it, orphaned surrogates are not detected, and to
+-     * work around this defect, we must explicitly scan for any
+-     * such degenerate wide character sequence.
+-     */
+-    size_t count = wclen;
+-    const wchar_t *chk = wcs;
+-
+-    while( count != 0 )
+-    { /* Test each wide character in the source sequence, until
+-       * we reach the specified length limit, or we encounter a
+-       * NUL terminator.
+-       */
+-      if( count != (size_t)(-1) ) --count;
+-      else if( *chk == L'\0' ) count = 0;
+-
+-      /* Derived from the <winnls.h> tests for high surrogates,
+-       * and for low surrogates...
+-       */
+-      switch( 0xFC00 & *chk++ )
+-      { /* ...this mask will capture both surrogate types...
+-	 */
+-	case 0xD800:
+-	  /* ...and this explicitly identifies a high surrogate,
+-	   * and this must be paired with a low surrogate, which
+-	   * must immediately follow, so check...
+-	   */
+-	  if( (count != 0) && IS_LOW_SURROGATE( *chk++ ) )
+-	  {
+-	    /* ...accept, and account for it, when it does...
+-	     */
+-	    if( count != (size_t)(-1) ) --count;
+-	    break;
+-	  }
+-
+-	case 0xDC00:
+-	  /* This either explicitly matches a low surrogate, with
+-	   * no immediately preceding high surrogate, or we have
+-	   * fallen through from the preceding case of detecting
+-	   * a high surrogate without an immediately following low
+-	   * surrogate; either is invalid, so bail out.
+-	   */
+-	  return errout( EILSEQ, (size_t)(-1) );
+-      }
+-    }
+-  }
+-  else
+-    /* Target codeset is neither UTF-7, nor UTF-8; we may safely
+-     * call WideCharToMultiByte(), with a non-NULL reference for
+-     * the EILSEQ detection flag.
+-     */
+-    eilseq_ptr = &eilseq_flag;
+-
+-  retval = WideCharToMultiByte( codeset, 0, wcs, wclen, mbs, mblen, NULL,
+-      eilseq_ptr
+-    );
+-  return (eilseq_flag || (retval == 0)) ? errout( EILSEQ, (size_t)(-1) )
+-    : retval;
+-}
+-
+-/* $RCSfile: wcharmap.c,v $: end of file */
+diff --git a/mingwex/wcharmap.h b/mingwex/wcharmap.h
+deleted file mode 100644
+index f9f035c..0000000
+--- a/mingwex/wcharmap.h
++++ /dev/null
+@@ -1,115 +0,0 @@
+-/*
+- * wcharmap.h
+- *
+- * Private header file, declaring common components of the MinGW.org
+- * fallback implementations of wide to multi-byte (and complementary)
+- * character set conversion API functions.
+- *
+- * $Id: wcharmap.h,v 12baaa98ceb5 2020/03/02 14:43:44 keith $
+- *
+- * Written by Keith Marshall <keith@users.osdn.me>
+- * Copyright (C) 2019, 2020, MinGW.org Project
+- *
+- *
+- * Permission is hereby granted, free of charge, to any person obtaining a
+- * copy of this software and associated documentation files (the "Software"),
+- * to deal in the Software without restriction, including without limitation
+- * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+- * and/or sell copies of the Software, and to permit persons to whom the
+- * Software is furnished to do so, subject to the following conditions:
+- *
+- * The above copyright notice, this permission notice, and the following
+- * disclaimer shall be included in all copies or substantial portions of
+- * the Software.
+- *
+- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+- * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+- * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+- * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OF OR OTHER
+- * DEALINGS IN THE SOFTWARE.
+- *
+- */
+-#include <wchar.h>
+-#include <winnls.h>
+-#include <stdlib.h>
+-#include <errno.h>
+-
+-/* Define a logical boolean type, for use in C code; (note that we don't
+- * guard this, because we don't plan to use this header in C++ code).
+- */
+-typedef int boolean;
+-
+-#define false  (boolean)(0)
+-#define true   (! false)
+-
+-/* Provide a shorthand notation for declaring functions which
+- * we would like to always be expanded in line.
+- */
+-#define __mb_inline__ __inline__ __attribute__((__always_inline__))
+-
+-/* Define a pair of inline helper functions, to facilitate preservation
+- * of the "errno" state on entry, such that it may be restored or modified,
+- * as necessary for ISO-C99 conformance, on function return.
+- *
+- * First, a helper to save, and clear, error state on entry...
+- */
+-static __mb_inline__
+-int save_error_status_and_clear (int state, int clear)
+-{ errno = clear; return state; }
+-
+-/* ...and the complementary helper, which may be used to either restore
+- * the saved state, or to report a new error condition, on return.
+- */
+-static __mb_inline__
+-size_t errout (int errcode, size_t status){ errno = errcode; return status; }
+-
+-/* Generic codeset management functions.
+- */
+-unsigned int __mb_codeset_for_locale (void);
+-unsigned int __mb_cur_max_for_codeset (unsigned int);
+-
+-/* Codeset initializers, and internal helper functions for
+- * multi-byte sequence to wide character conversions.
+- */
+-unsigned int __mingw_mbrtowc_codeset_init (void);
+-unsigned int __mingw_mbrlen_cur_max_init (unsigned int);
+-unsigned int __mingw_mbrlen_cur_max (void);
+-
+-size_t __mingw_mbrscan_begin
+-( wchar_t *restrict *, const char **restrict, size_t *, mbstate_t *restrict );
+-
+-int __mingw_mbtowc_convert( const char *, size_t, wchar_t *, size_t );
+-size_t __mingw_mbtowc_copy( wchar_t *restrict, const char *restrict, size_t );
+-
+-size_t __mingw_mbrtowc_handler
+-( wchar_t *restrict, const char *restrict, size_t, mbstate_t *restrict );
+-
+-/* Codeset initializers, and internal helper functions for
+- * wide character to multi-byte sequence conversions.
+- */
+-unsigned int __mingw_wctomb_codeset_init (void);
+-unsigned int __mingw_wctomb_cur_max_init (unsigned int);
+-size_t __mingw_wctomb_convert (char *, int, const wchar_t *, int);
+-unsigned int __mingw_wctomb_cur_max (void);
+-
+-/* The legacy MinGW implementation used a get_codepage() function,
+- * which was effectively the same as our __mb_codeset_for_locale();
+- * this alias may, eventually, become redundant.
+- */
+-static __mb_inline__
+-unsigned int get_codepage( void ){ return __mb_codeset_for_locale(); }
+-
+-/* A private helper function, to furnish an internal conversion state
+- * buffer, for use in any case where a conversion function was called,
+- * and the caller didn't provide one.
+- */
+-static __mb_inline__
+-mbstate_t *__mbrtowc_state( mbstate_t *reference_state )
+-{
+-  static mbstate_t internal_state = (mbstate_t)(0);
+-  return (reference_state == NULL) ? &internal_state : reference_state;
+-}
+-
+-/* $RCSfile: wcharmap.h,v $: end of file */
+diff --git a/mingwex/wcrtomb.c b/mingwex/wcrtomb.c
+index 3b11ec3..1bc561d 100644
+--- a/mingwex/wcrtomb.c
++++ b/mingwex/wcrtomb.c
+@@ -1,121 +1,94 @@
+-/*
+- * wcrtomb.c
+- *
+- * MinGW.org replacement for the wcrtomb() function; supports use of this
+- * function on legacy Windows versions, for which it is not available in the
+- * C runtime DLL, and replaces the Microsoft implementation, in those cases
+- * where one is available.
+- *
+- *
+- * $Id: wcrtomb.c,v 28b17d1c4eab 2020/07/07 21:02:51 keith $
+- *
+- * Written by Keith Marshall <keith@users.osdn.me>
+- * Copyright (C) 2019, 2020, MinGW.org Project
+- *
+- *
+- * Permission is hereby granted, free of charge, to any person obtaining a
+- * copy of this software and associated documentation files (the "Software"),
+- * to deal in the Software without restriction, including without limitation
+- * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+- * and/or sell copies of the Software, and to permit persons to whom the
+- * Software is furnished to do so, subject to the following conditions:
+- *
+- * The above copyright notice, this permission notice, and the following
+- * disclaimer shall be included in all copies or substantial portions of
+- * the Software.
+- *
+- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+- * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+- * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+- * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OF OR OTHER
+- * DEALINGS IN THE SOFTWARE.
+- *
+- */
+-#include "wcharmap.h"
++#include "mb_wc_common.h"
++#include <wchar.h>
++#include <stdlib.h>
++#include <errno.h>
++#include <limits.h>
++#define WIN32_LEAN_AND_MEAN
++#include <windows.h>
+ 
+-static __mb_inline__ size_t __wcrtomb_internal
+-( char *restrict mb, wchar_t wc, mbstate_t *ps )
++
++static int __MINGW_ATTRIB_NONNULL(1)
++ __wcrtomb_cp (char *dst, wchar_t wc, const unsigned int cp,
++	       const unsigned int mb_max)
+ {
+-  /* Internal implementation of the wcrtomb() function; this is
+-   * expanded inline, within the public implementation.
+-   */
+-  if( *ps != (mbstate_t)(0) )
+-  {
+-    /* Microsoft's MBCS implementation does not use shift states;
+-     * however, it is possible that an immediately preceding call
+-     * may have stopped with a dangling high surrogate, and thus
+-     * a restart to complete this, by adding a low surrogate, and
+-     * converting the pair, may be appropriate.
+-     */
+-    if( IS_HIGH_SURROGATE( *ps ) && IS_LOW_SURROGATE( wc ) )
++  if (cp == 0)
+     {
+-      /* Reassemble the surrogate pair, in a local buffer, and
+-       * return its conversion, having reset the restart state.
+-       */
+-      wchar_t buf[2] = { (wchar_t)(*ps), wc }; *ps = (mbstate_t)(0);
+-      return __mingw_wctomb_convert( mb, __mingw_wctomb_cur_max(), buf, 2 );
+-    }
+-    else
+-    { /* We expected a low surrogate, but didn't get one; reset
+-       * the restart state, and abort this conversion.
+-       */
+-      *ps = (mbstate_t)(0); return errout( EILSEQ, (size_t)(-1) );
++      if (wc > 255)
++	{
++	  errno = EILSEQ;
++	  return -1;
++	}
++      *dst = (char) wc;
++      return 1;
+     }
+-  }
+-  /* When mb is a NULL pointer, ISO-C99 decrees that the call shall
+-   * be interpreted as the equivalent of:
+-   *
+-   *   wcrtomb( internal_buffer, L'\0', ps );
+-   *
+-   * with the encoding of the NUL wchar, preceded by any sequence
+-   * of bytes needed to restore ps to the initial shift state, being
+-   * stored in the internal buffer, (and thus, inaccessible to the
+-   * caller).  Since Microsoft's MBCS encodings do not use shift
+-   * states, and the encoding for NUL is always a single NUL byte,
+-   * this becomes the equivalent of returning (size_t)(1).
+-   */
+-  if( mb == NULL ) return (size_t)(1);
+-
+-  /* When mb is not a NULL pointer, then we are obliged to assume
+-   * that it points to a buffer of at least MB_CUR_MAX bytes, and
+-   * we may proceed with a normal conversion, (except that, when
+-   * wc lies in the range reserved for surrogates, we must handle
+-   * it as a special case.
+-   */
+-  if( IS_HIGH_SURROGATE( wc ) )
+-  { /* A high surrogate is permitted, but it cannot be converted
+-     * at this time; instead, we simply record that it is present,
+-     * (subverting ps for this purpose), and move on, without any
+-     * conversion being performed, and thus storing no converted
+-     * bytes, in the expection that the next wc passed will be a
+-     * low surrogate, thus allowing completion of the conversion.
+-     */
+-    *ps = (mbstate_t)(wc); return (size_t)(0);
+-  }
+-  if( IS_LOW_SURROGATE( wc ) )
+-    /* A low surrogate, detected here, is an orphan (not paired
+-     * with a high surrogate from an immediately preceding call);
+-     * this is not permitted, so report it as invalid.
+-     */
+-    return errout( EILSEQ, (size_t)(-1) );
++  else
++    {
++      int invalid_char = 0;
+ 
+-  /* If we get this far, we may proceed with conversion; we return
+-   * the byte count, and effect of encoding the single wchar which
+-   * was passed by value in wc.
+-   */
+-  return __mingw_wctomb_convert( mb, __mingw_wctomb_cur_max(), &wc, 1 );
++      int size = WideCharToMultiByte (cp, 0 /* Is this correct flag? */,
++				      &wc, 1, dst, mb_max,
++				      NULL, &invalid_char);
++      if (size == 0 || invalid_char)
++        {
++          errno = EILSEQ;
++          return -1;
++        }
++      return size;
++    }
+ }
+ 
+-size_t wcrtomb( char *restrict mb, wchar_t wc, mbstate_t *restrict ps )
++size_t
++wcrtomb (char *dst, wchar_t wc, mbstate_t * __UNUSED_PARAM (ps))
+ {
+-  /* Implementation of ISO-C99 wcrtomb() function, in libmingwex.a;
+-   * after storing the effective codeset properties, this returns the
+-   * result from expansion of the preceding inline implementation.
+-   */
+-  (void)(__mingw_wctomb_cur_max_init( __mingw_wctomb_codeset_init() ));
+-  return __wcrtomb_internal( mb, wc, __mbrtowc_state( ps ) );
++  char byte_bucket [MB_LEN_MAX];
++  char* tmp_dst = dst ? dst : byte_bucket;
++  return (size_t)__wcrtomb_cp (tmp_dst, wc, get_codepage (),
++			       MB_CUR_MAX);
+ }
+ 
+-/* $RCSfile: wcrtomb.c,v $: end of file */
++size_t wcsrtombs (char *dst, const wchar_t **src, size_t len,
++		  mbstate_t * __UNUSED_PARAM (ps))
++{
++  int ret = 0;
++  size_t n = 0;
++  const unsigned int cp = get_codepage();
++  const unsigned int mb_max = MB_CUR_MAX;
++  const wchar_t *pwc = *src;
++
++  if (src == NULL || *src == NULL) /* undefined behavior */
++     return 0;
++
++  if (dst != NULL)
++    {
++       while (n < len)
++        {
++          if ((ret = __wcrtomb_cp (dst, *pwc, cp, mb_max)) <= 0)
++	     return (size_t) -1;
++  	  n += ret;
++   	  dst += ret;
++          if (*(dst - 1) == '\0')
++	    {
++	      *src = (wchar_t*) NULL;;
++	      return (n  - 1);
++	    }
++	  pwc++;
++        }
++      *src = pwc;
++    }
++  else
++    {
++      char byte_bucket [MB_LEN_MAX];
++      while (n < len)
++        {
++	  if ((ret = __wcrtomb_cp (byte_bucket, *pwc, cp, mb_max))
++		 <= 0)
++ 	    return (size_t) -1;
++	  n += ret;
++	  if (byte_bucket [ret - 1] == '\0')
++	    return (n - 1);
++          pwc++;
++        }
++    }
++
++  return n;
++}
+diff --git a/mingwex/wcsrtombs.c b/mingwex/wcsrtombs.c
+deleted file mode 100644
+index 7d7cb6c..0000000
+--- a/mingwex/wcsrtombs.c
++++ /dev/null
+@@ -1,157 +0,0 @@
+-/*
+- * wcsrtombs.c
+- *
+- * MinGW.org implementation of the wcsrtombs() function; supports use of
+- * this function on any legacy Windows version, for which Microsoft do not
+- * provide it, and replaces the Microsoft implementation, when they do.
+- *
+- *
+- * $Id: wcsrtombs.c,v 28b17d1c4eab 2020/07/07 21:02:51 keith $
+- *
+- * Written by Keith Marshall <keith@users.osdn.me>
+- * Copyright (C) 2019, 2020, MinGW.org Project
+- *
+- *
+- * Permission is hereby granted, free of charge, to any person obtaining a
+- * copy of this software and associated documentation files (the "Software"),
+- * to deal in the Software without restriction, including without limitation
+- * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+- * and/or sell copies of the Software, and to permit persons to whom the
+- * Software is furnished to do so, subject to the following conditions:
+- *
+- * The above copyright notice, this permission notice, and the following
+- * disclaimer shall be included in all copies or substantial portions of
+- * the Software.
+- *
+- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+- * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+- * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+- * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OF OR OTHER
+- * DEALINGS IN THE SOFTWARE.
+- *
+- */
+-#include "wcharmap.h"
+-
+-static __mb_inline__ size_t __mingw_wcsrtombs_internal
+-( char *restrict mbs, const wchar_t **restrict wcs, size_t len,
+-  mbstate_t *restrict ps
+-)
+-{ /* Internal implementation of the wcsrtombs() function; this will be
+-   * expanded inline, within the body of the public implementation.
+-   *
+-   * Initially, save the current errno state, so that we may restore
+-   * it on return, clear it to zero for internal checking, and compute
+-   * the size of buffer required to accommodate the conversion.
+-   */
+-  int errno_reset = save_error_status_and_clear( errno, 0 );
+-  union { mbstate_t ps; wchar_t wc[2]; } resume = { (mbstate_t)(0) };
+-  size_t count = (size_t)(0), wanted = (size_t)(0);
+-
+-  /* This wcsrtombs() implementation will not use any mbstate...
+-   */
+-  if( ps != NULL )
+-  { /* ...unless it is provided by the caller, in which case we will,
+-     * ultimately, reset it to initial state, after processing it...
+-     */
+-    resume.ps = *ps;
+-    *ps = (mbstate_t)(0);
+-    if( IS_SURROGATE_PAIR( resume.wc[0], **wcs ) )
+-    { /* ...subject to the expectation that it represents deferred
+-       * completion of a surrogate pair.
+-       */
+-      resume.wc[1] = *(*wcs)++;
+-      count = __mingw_wctomb_convert( NULL, 0, resume.wc, 2 );
+-    }
+-  }
+-
+-  /* The total buffer space wanted is the aggregate of any deferred
+-   * surrogate pair completion, plus the contribution from conversion
+-   * of the remainder of the wide character string.
+-   */
+-  wanted = count + __mingw_wctomb_convert( NULL, 0, *wcs, -1 );
+-
+-  if( mbs == NULL )
+-    /* There is no buffer designated to store the encoded multibyte
+-     * character sequence; we are only interested in the size of the
+-     * buffer which would otherwise be required, and we've already
+-     * determined that, so simply return it.
+-     */
+-    return (errno == 0) ? errout( errno_reset, wanted - 1 ) : wanted;
+-
+-  if( (errno == 0) && (len >= wanted) )
+-  { /* There is an encoding buffer designated, its size is sufficient
+-     * to accommodate the encoding of the entire NUL terminated input
+-     * sequence, and there was no incipient encoding error during the
+-     * initial minimum buffer size determination; encode the entire
+-     * input sequence for return, and clean up the input state.
+-     */
+-    if( count != (size_t)(0) )
+-      mbs += __mingw_wctomb_convert( mbs, len, resume.wc, 2 );
+-    count += __mingw_wctomb_convert( mbs, len - count, *wcs, -1 ) - 1;
+-    *wcs = NULL;
+-  }
+-
+-  else
+-  { /* There is an encoding buffer designated, but either it is too
+-     * small, or a incipient encoding error has been detected; rescan
+-     * the input sequence, encoding one code point at a time, until we
+-     * either exhaust the encoding buffer space, or we encounter the
+-     * encoding error previously identified.
+-     */
+-    errno = 0;
+-
+-    /* Initially, if there's a pending surrogate completion, and there
+-     * is insufficient buffer space to accommodate its conversion, then
+-     * we must squash all conversion...
+-     */
+-    if( count > len ) count = len = 0;
+-    else if( count != 0 )
+-    { /* ...otherwise, we store the completed surrogate conversion, at
+-       * the start of the buffer, adjusting the buffer pointer, and its
+-       * residual length counter, to suit.
+-       */
+-      mbs += __mingw_wctomb_convert( mbs, len, resume.wc, 2 );
+-      len -= count;
+-    }
+-    while( (len >= __mingw_wctomb_convert( NULL, 0, *wcs, 1 )) && (errno == 0) )
+-    {
+-      /* There is still sufficient space to store the encoding of one
+-       * more input code point, and we haven't yet fallen foul of any
+-       * incipient encoding error; store this encoding, and adjust to
+-       * prepare for the next.
+-       */
+-      size_t step = __mingw_wctomb_convert( mbs, len, (*wcs)++, 1 );
+-      count += step; len -= step; mbs += step;
+-    }
+-
+-    /* Check that we didn't fall foul of any incipient encoding error;
+-     * if we did, then we must bail out.
+-     */
+-    if( errno != 0 ) return (size_t)(-1);
+-  }
+-  /* We have now successfully encoded as much of the input sequence
+-   * as possible, without encountering any encoding error; restore
+-   * the saved errno state, and return the encoded byte count.
+-   */
+-  return errout( errno_reset, count );
+-}
+-
+-size_t wcsrtombs( char *mbs, const wchar_t **wcs, size_t len, mbstate_t *ps )
+-{
+-  /* Implementation of ISO-C99 wcsrtombs() function, in libmingwex.a;
+-   * before proceeding, we must ensure that the wcs argument specifies
+-   * an indirect reference to a non-NULL wchar_t array.
+-   */
+-  if( (wcs == NULL) || (*wcs == NULL) ) return errout( EINVAL, (size_t)(-1) );
+-
+-  /* With a valid wcs reference, store the effective codeset, and
+-   * hand the conversion off to the inline expansion of the preceding
+-   * implementation.
+-   */
+-  (void)(__mingw_wctomb_codeset_init() );
+-  return __mingw_wcsrtombs_internal( mbs, wcs, len, ps );
+-}
+-
+-/* $RCSfile: wcsrtombs.c,v $: end of file */
+diff --git a/mingwex/wcstof.c b/mingwex/wcstof.c
+new file mode 100644
+index 0000000..66e1a30
+--- /dev/null
++++ b/mingwex/wcstof.c
+@@ -0,0 +1,64 @@
++/*  Wide char wrapper for strtof
++ *  Revision history:
++ *  25 Aug 2006 Initial version.
++ *
++ *  Contributor:   Danny Smith <dannysmith@users.sourceforege.net>
++ */
++
++ /* This routine has been placed in the public domain.*/
++
++#define WIN32_LEAN_AND_MEAN
++#include <windows.h>
++#include <locale.h>
++#include <wchar.h>
++#include <stdlib.h>
++#include <string.h>
++#include <mbstring.h>
++
++#include "mb_wc_common.h"
++
++float wcstof (const wchar_t * __restrict__ wcs, wchar_t ** __restrict__ wcse)
++{
++  char * cs;
++  char * cse;
++  unsigned int i;
++  float ret;
++  const unsigned int cp = get_codepage ();
++
++  /* Allocate enough room for (possibly) mb chars */
++  cs = (char *) malloc ((wcslen(wcs)+1) * MB_CUR_MAX);
++
++  if (cp == 0) /* C locale */
++    {
++      for (i = 0; (wcs[i] != 0) && wcs[i] <= 255; i++)
++        cs[i] = (char) wcs[i];
++      cs[i]  = '\0';
++    }
++  else
++    {
++      int nbytes = -1;
++      int mb_len = 0;
++      /* loop through till we hit null or invalid character */
++      for (i = 0; (wcs[i] != 0) && (nbytes != 0); i++)
++	{
++     	  nbytes = WideCharToMultiByte(cp, WC_COMPOSITECHECK | WC_SEPCHARS,
++				       wcs + i, 1, cs + mb_len, MB_CUR_MAX,
++				       NULL, NULL);
++	  mb_len += nbytes;
++	}
++      cs[mb_len] = '\0';
++    }
++
++  ret =  strtof (cs, &cse);
++
++  if (wcse)
++    {
++      /* Make sure temp mbstring cs has 0 at cse.  */
++      *cse = '\0';
++      i = _mbslen ((unsigned char*) cs); /* Number of chars, not bytes */
++      *wcse = (wchar_t *) wcs + i;
++    }
++  free (cs);
++
++  return ret;
++}
+diff --git a/mingwex/wcstofp.c b/mingwex/wcstofp.c
+deleted file mode 100644
+index 3346444..0000000
+--- a/mingwex/wcstofp.c
++++ /dev/null
+@@ -1,243 +0,0 @@
+-/*
+- * wcstofp.c
+- *
+- * Implementation of ISO-C99 compatible wcstod(), wcstold(), and wcstof()
+- * functions, placed into the "__mingw_" pseudo-namespace, with enhanced
+- * C99 compatibility, and codeset coverage.
+- *
+- *
+- * $Id: wcstofp.c,v 1aa8433dd381 2020/03/04 19:20:34 keith $
+- *
+- * Written by Keith Marshall <keith@users.osdn.me>
+- * Copyright (C) 2020, MinGW.org Project
+- *
+- *
+- * Permission is hereby granted, free of charge, to any person obtaining a
+- * copy of this software and associated documentation files (the "Software"),
+- * to deal in the Software without restriction, including without limitation
+- * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+- * and/or sell copies of the Software, and to permit persons to whom the
+- * Software is furnished to do so, subject to the following conditions:
+- *
+- * The above copyright notice, this permission notice, and the following
+- * disclaimer shall be included in all copies or substantial portions of
+- * the Software.
+- *
+- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+- * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+- * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+- * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OF OR OTHER
+- * DEALINGS IN THE SOFTWARE.
+- *
+- *
+- * Compile with "-D FUNCTION=wcstod -o wcstod.o", or equivalent for each
+- * of wcstold() and wcstof(), to create free-standing object modules for
+- * each supported function; additionally, compile without "-D FUNCTION",
+- * and with "-o wcstofp.o", (or with "-D FUNCTION=wcstofp -o wcstofp.o"),
+- * to create the mandatory common supporting object code module.
+- *
+- */
+-#define _ISOC99_SOURCE
+-
+-/* Parsing of floating point values, from wchar_t strings, is performed
+- * after conversion to the MBCS domain; to support any codeset with more
+- * than two bytes per code point, we require MinGW.org's extended codeset
+- * mapping API.
+- */
+-#include "wcharmap.h"
+-
+-/* Declare prototypes, visible within each derived compilation unit, for
+- * each supporting function which is to be compiled into the common unit.
+- */
+-const wchar_t *__mingw_wcstofp_prescan( const wchar_t * );
+-size_t __mingw_wcstofp_prepare( const wchar_t *, char *, size_t );
+-size_t __mingw_wcstofp_bufsize( const wchar_t * );
+-
+-/* Ensure that the function to be compiled has been specified...
+- */
+-#ifndef FUNCTION
+-/* ...or alternatively, fall back to compilation of the common "wcstofp"
+- * support code module...
+- */
+-#define FUNCTION		wcstofp
+-#endif
+-/* ...and define a symbolic selector for the latter.
+- */
+-#define wcstofp  		1
+-
+-#if FUNCTION
+-/* Default FUNCTION assignment -- compile the core support routines,
+- * common to all public API entry points.
+- */
+-const wchar_t *__mingw_wcstofp_prescan( const wchar_t *nptr )
+-{
+-  /* Helper function to locate the effective starting point of a wchar_t
+-   * string, ignoring any leading white-space.
+-   */
+-  if( nptr == NULL ) errno = EINVAL;
+-  else while( iswspace( *nptr ) ) ++nptr;
+-  return nptr;
+-}
+-
+-size_t __mingw_wcstofp_prepare ( const wchar_t *nptr, char *mbs, size_t max )
+-{
+-  /* Helper function to prepare for interpretation of a wchar_t string
+-   * representation of a floating point number; determines the size of
+-   * buffer required, and optionally converts to MBCS representation,
+-   * for interpretation by an apropriate string to binary converter.
+-   */
+-  size_t nbytes = (size_t)(0);
+-  while( *nptr != L'\0' )
+-  { /* Excluding the terminating NUL, convert wchar_t string elements
+-     * one by one...
+-     */
+-    size_t count = __mingw_wctomb_convert( mbs, max, nptr++, 1 );
+-
+-    /* ...and, for each successfully converted, without exceeding the
+-     * specified maximum conversion buffer length...
+-     */
+-    if( count != (size_t)(-1) )
+-    { /* ...optionally store its MBCS equivalent, while unconditionally
+-       * the actual buffer length requirement...
+-       */
+-      if( mbs != NULL ) { mbs += count; max -= count; }
+-      nbytes += count;
+-    }
+-    /* Bail out early, if any element cannot be converted successfully,
+-     * returning the count of MBCS bytes up to point of failure...
+-     */
+-    else return nbytes;
+-  }
+-  /* ...or similarly, the count of MBCS bytes for complete conversion,
+-   * when the entire wchar_t string can be successfully converted.
+-   */
+-  return nbytes;
+-}
+-
+-/* A wrapper around the preceding function, to determine the required
+- * buffer size, without storing the MBCS conversion; used by callers,
+- * to allocate buffers of suitable size.
+- */
+-size_t __mingw_wcstofp_bufsize( const wchar_t *nptr )
+-{ return 1 + __mingw_wcstofp_prepare( nptr, NULL, 0 ); }
+-
+-#else
+-/* Compile function code for one specific public API entry point.
+- */
+-#undef wcstod
+-#undef wcstold
+-#undef wcstof
+-
+-/* Define macros to specify the one specific entry point name...
+- */
+-#define __mingw_redirect(FUNCTION)	set(__mingw,FUNCTION)
+-
+-/* ...and the associated data type, initial value, and corresponding
+- * MBCS string to binary conversion function name.
+- */
+-#define set(FUNCTION,NAME)		FUNCTION##_##NAME
+-#define datatype(FUNCTION)		set(FUNCTION,datatype)
+-#define initval(FUNCTION)		set(FUNCTION,initval)
+-#define strtofp(FUNCTION)		set(FUNCTION,strtofp)
+-
+-/* Specify MBCS converter, data type, and initial value for the
+- * __mingw_wcstod() function.
+- */
+-#define wcstod_strtofp  		strtod
+-#define wcstod_datatype 		double
+-#define wcstod_initval  		0.0
+-
+-/* Likewise, for the __mingw_wcstold() function...
+- */
+-#define wcstold_strtofp 		strtold
+-#define wcstold_datatype		long double
+-#define wcstold_initval 		0.0L
+-
+-/* ...and the __mingw_wcstof() function.
+- */
+-#define wcstof_strtofp  		strtof
+-#define wcstof_datatype 		float
+-#define wcstof_initval  		0.0F
+-
+-/* Generic API function implementation, in terms of the above.
+- */
+-datatype(FUNCTION) __mingw_redirect(FUNCTION)
+-( const wchar_t *restrict nptr, wchar_t **restrict endptr )
+-{
+-  /* Initialize, to return appropriately typed zero, in the event
+-   * of no valid floating point representation being found.
+-   */
+-  datatype(FUNCTION) retval = initval(FUNCTION);
+-
+-  /* Advance the wchar_t string pointer, beyond any white-space
+-   * characters which may be present.
+-   */
+-  if( (nptr = __mingw_wcstofp_prescan( nptr )) != NULL )
+-  {
+-    /* We found a candidate wchar_t string for interpretation;
+-     * allocate buffer space, for conversion to an MBCS string,
+-     * with respect to the codeset for the current locale.
+-     */
+-    size_t buflen;
+-    (void)(__mingw_wctomb_codeset_init());
+-    if( (buflen = __mingw_wcstofp_bufsize( nptr )) > 0 )
+-    { char mbstr[buflen], *endmark;
+-
+-      /* Convert to MBCS, appending NUL terminator, and attempt
+-       * equivalent binary floating point interpretation.
+-       */
+-      mbstr[__mingw_wcstofp_prepare( nptr, mbstr, buflen )] = '\0';
+-      retval = strtofp(FUNCTION)( mbstr, &endmark );
+-
+-      if( endptr != NULL )
+-      { /* Caller wants to check for any junk, following the
+-	 * numeric representation within the original wchar_t
+-	 * string, but we know only the corresponding offset
+-	 * of trailing junk within the MBCS string; step along
+-	 * the wchar_t string, converting one element at a time,
+-	 * until the aggregate conversion length matches the
+-	 * known MBCS junk offset.
+-	 */
+-	char *p = mbstr;
+-	while( p < endmark )
+-	  p += __mingw_wctomb_convert( NULL, 0, nptr++, 1 );
+-	*endptr = (wchar_t *)(nptr);
+-      }
+-    }
+-  }
+-  /* Return the floating point result, whether it was interpreted
+-   * from the given wchar_t string, or remains as initial default.
+-   */
+-  return retval;
+-}
+-
+-/* Microsoft's runtime library provides its own implementation for
+- * wcstod(), but (prior to non-free MSVCR120.DLL) not for wcstof(),
+- * or wcstold(); request creation of aliases for the latter pair...
+- */
+-#define wcstof			1
+-#define wcstold 		1
+-
+-#if FUNCTION
+-/* ...then implement macros...
+- */
+-#define stringify(NAME) 	#NAME
+-#define mkstring(NAME)		stringify(NAME)
+-
+-/* ...avoiding substitution of the function names...
+- */
+-#undef wcstof
+-#undef wcstold
+-
+-/* ...to actually implement these aliases.
+- */
+-datatype(FUNCTION)
+-__attribute__((__weak__,__alias__(mkstring(__mingw_redirect(FUNCTION)))))
+-FUNCTION ( const wchar_t *restrict nptr, wchar_t **restrict endptr );
+-
+-#endif
+-#endif
+-
+-/* $RCSfile: wcstofp.c,v $: end of file */
+diff --git a/mingwex/wcstold.c b/mingwex/wcstold.c
+new file mode 100644
+index 0000000..9198303
+--- /dev/null
++++ b/mingwex/wcstold.c
+@@ -0,0 +1,65 @@
++/*  Wide char wrapper for strtold
++ *  Revision history:
++ *  6 Nov 2002	Initial version.
++ *  25 Aug 2006  Don't use strtold internal functions.
++ *
++ *  Contributor:   Danny Smith <dannysmith@users.sourceforege.net>
++ */
++
++ /* This routine has been placed in the public domain.*/
++
++#define WIN32_LEAN_AND_MEAN
++#include <windows.h>
++#include <locale.h>
++#include <wchar.h>
++#include <stdlib.h>
++#include <string.h>
++#include <mbstring.h>
++
++#include "mb_wc_common.h"
++
++long double wcstold (const wchar_t * __restrict__ wcs, wchar_t ** __restrict__ wcse)
++{
++  char * cs;
++  char * cse;
++  unsigned int i;
++  long double ret;
++  const unsigned int cp = get_codepage ();
++
++  /* Allocate enough room for (possibly) mb chars */
++  cs = (char *) malloc ((wcslen(wcs)+1) * MB_CUR_MAX);
++
++  if (cp == 0) /* C locale */
++    {
++      for (i = 0; (wcs[i] != 0) && wcs[i] <= 255; i++)
++        cs[i] = (char) wcs[i];
++      cs[i]  = '\0';
++    }
++  else
++    {
++      int nbytes = -1;
++      int mb_len = 0;
++      /* loop through till we hit null or invalid character */
++      for (i = 0; (wcs[i] != 0) && (nbytes != 0); i++)
++	{
++     	  nbytes = WideCharToMultiByte(cp, WC_COMPOSITECHECK | WC_SEPCHARS,
++				       wcs + i, 1, cs + mb_len, MB_CUR_MAX,
++				       NULL, NULL);
++	  mb_len += nbytes;
++	}
++      cs[mb_len] = '\0';
++    }
++
++  ret =  strtold (cs, &cse);
++
++  if (wcse)
++    {
++      /* Make sure temp mbstring has 0 at cse.  */
++      *cse = '\0';
++      i = _mbslen ((unsigned char*) cs); /* Number of chars, not bytes */
++      *wcse = (wchar_t *) wcs + i;
++    }
++  free (cs);
++
++  return ret;
++}
+diff --git a/mingwex/wctob.c b/mingwex/wctob.c
+index adb62d9..ee5d014 100644
+--- a/mingwex/wctob.c
++++ b/mingwex/wctob.c
+@@ -1,54 +1,21 @@
+-/*
+- * wctob.c
+- *
+- * Implementation of ISO-C99 wctob() function, supporting it on legacy
+- * Windows versions, for which MSVCRT.DLL doesn't provide it, and also
+- * replacing the Microsoft implementation, on Windows versions with an
+- * MSVCRT.DLL, or MSVCRn.DLL which does.
+- *
+- *
+- * $Id: wctob.c,v 28b17d1c4eab 2020/07/07 21:02:51 keith $
+- *
+- * Written by Keith Marshall <keith@users.osdn.me>
+- * Copyright (C) 2020, MinGW.org Project
+- *
+- *
+- * Permission is hereby granted, free of charge, to any person obtaining a
+- * copy of this software and associated documentation files (the "Software"),
+- * to deal in the Software without restriction, including without limitation
+- * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+- * and/or sell copies of the Software, and to permit persons to whom the
+- * Software is furnished to do so, subject to the following conditions:
+- *
+- * The above copyright notice, this permission notice, and the following
+- * disclaimer shall be included in all copies or substantial portions of
+- * the Software.
+- *
+- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+- * OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+- * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+- * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OF OR OTHER
+- * DEALINGS IN THE SOFTWARE.
+- *
+- */
+-#include "wcharmap.h"
+-
++#include "mb_wc_common.h"
++#include <wchar.h>
+ #include <stdio.h>
++#include <stdlib.h>
++#include <errno.h>
++#define WIN32_LEAN_AND_MEAN
++#include <windows.h>
+ 
+-int wctob( wint_t wc )
+-{ /* Implementation of ISO-C99 wctob() function, in libmingwex.a;
+-   * after first storing the effective codeset index, this performs
+-   * a wchar_t to MBCS conversion on the given single wide character
+-   * argument, capturing the conversion into a local buffer, checks
+-   * that the result occupies exactly one byte, for which the byte
+-   * value is coerced to int and returned; otherwise returns EOF.
+-   */
+-  (void)(__mingw_wctomb_codeset_init());
+-  union { unsigned char u; char c; } retval;
+-  return (__mingw_wctomb_convert( &retval.c, 1, &wc, 1 ) == 1)
+-    ? (int)(retval.u) : EOF;
++/* Return just the first byte after translating to multibyte.  */
++int wctob (wint_t wc )
++{
++    wchar_t w = wc;
++    char c;
++    int invalid_char = 0;
++    if (!WideCharToMultiByte (get_codepage(),
++			      0 /* Is this correct flag? */,
++			      &w, 1, &c, 1, NULL, &invalid_char)
++         || invalid_char)
++      return EOF;
++    return (int) c;
+ }
+-
+-/* $RCSfile: wctob.c,v $: end of file */
