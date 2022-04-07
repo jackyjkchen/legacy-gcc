@@ -44,7 +44,11 @@ downgrade_arch_flags() {
 			if ! tc_version_is_at_least 3.3 ${bver} ; then
 				append-flags '-mips2'
 			elif ! tc_version_is_at_least 3.4 ${bver} ; then
-				append-flags '-mips32'
+				if [[ ${ABI} == "n64" || ${ABI} == "n32" ]]; then
+					append-flags '-march=mips64' '-mtune=mips64'
+				else
+					append-flags '-march=mips32' '-mtune=mips32'
+				fi
 			else
 				if [[ ${ABI} == "n64" || ${ABI} == "n32" ]]; then
 					append-flags '-march=mips64' '-mtune=mips64'
