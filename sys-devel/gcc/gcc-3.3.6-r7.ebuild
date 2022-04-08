@@ -14,7 +14,9 @@ if [[ ${CATEGORY} != cross-* ]] ; then
 		alpha|m68k)
 			TOOL_PREFIX="${ARCH}-legacy"
 			;;
-		mips|sparc)
+		mips)
+			CC="gcc-3.4.6 ${CFLAGS_o32}"
+			CXX="g++-3.4.6 ${CFLAGS_o32}"
 			TOOL_PREFIX="${PROFILE_ARCH}-legacy"
 			;;
 		ppc)
@@ -28,6 +30,9 @@ if [[ ${CATEGORY} != cross-* ]] ; then
 			;;
 		sh)
 			TOOL_PREFIX="sh4-legacy"
+			;;
+		sparc)
+			TOOL_PREFIX="${PROFILE_ARCH}-legacy"
 			;;
 		*)
 			TOOL_PREFIX=""
@@ -67,8 +72,8 @@ if is_crosscompile ; then
 else
 	DEPEND="${DEPEND} ${LEGACY_DEPEND}"
 	BDEPEND="sys-devel/gcc:3.4.6"
-	CC="gcc-3.4.6"
-	CXX="g++-3.4.6"
+	CC=${CC-"gcc-3.4.6"}
+	CXX=${CXX-"g++-3.4.6"}
 fi
 
 src_prepare() {
@@ -76,7 +81,7 @@ src_prepare() {
 	toolchain_src_prepare
 
 	[[ ${ARCH} == "mips" ]] && eapply "${FILESDIR}"/${PV}/01_support-mips64.patch
-	[[ ${ARCH} == "mips" && ${DEFAULT_ABI} == "n32" ]] && eapply "${FILESDIR}"/${PV}/02_mips64-default-n32-abi.patch
+	[[ ${CATEGORY} == "cross-i686-legacy-mingw32" ]] && eapply "${FILESDIR}"/${PV}/02_support-mingw.patch
 	[[ ${ARCH} == "sh" ]] && eapply "${FILESDIR}"/${PV}/03_fix-for-sh4-install.patch
 	[[ ${ARCH} == "ppc64" || ${ARCH} == "ppc" ]] && eapply "${FILESDIR}"/${PV}/04_workaround-for-ppc64-ppc.patch
 
@@ -88,7 +93,6 @@ src_prepare() {
 	fi
 
 	[[ ${TOOL_PREFIX} != "" ]] && eapply "${FILESDIR}"/${PV}/06_workaround-for-legacy-glibc-in-non-system-dir.patch
-	[[ ${CATEGORY} == "cross-i686-legacy-mingw32" ]] && eapply "${FILESDIR}"/${PV}/07_support-mingw.patch
 }
 
 src_install() {

@@ -1,5 +1,5 @@
 diff --git a/gcc/config.gcc b/gcc/config.gcc
-index a5e659a..76e05ee 100644
+index a5e659a..2696cec 100644
 --- a/gcc/config.gcc
 +++ b/gcc/config.gcc
 @@ -1888,6 +1888,21 @@ mips*-*-netbsd*)			# NetBSD/mips, either endian.
@@ -15,7 +15,7 @@ index a5e659a..76e05ee 100644
 +	# that is installed.  What GCC thinks of as the default must
 +	# remain as ABI_32 such that the SONAMEs of the libgcc shared
 +	# libraries remain compatible with those of mips-linux-gnu.
-+	tm_defines="MIPS_ISA_DEFAULT=64 MIPS_ABI_DEFAULT=ABI_64"
++	tm_defines="MIPS_ISA_DEFAULT=32 MIPS_ABI_DEFAULT=ABI_32"
 +	target_cpu_default="MASK_ABICALLS|MASK_FLOAT64|MASK_64BIT"
 +	extra_parts="crtbegin.o crtbeginS.o crtbeginT.o crtend.o crtendS.o"
 +	gnu_ld=yes
@@ -24,6 +24,34 @@ index a5e659a..76e05ee 100644
  mips*-*-linux*)				# Linux MIPS, either endian.
          tm_file="dbxelf.h elfos.h svr4.h linux.h ${tm_file} mips/linux.h"
  	case $machine in
+diff --git a/gcc/config/fp-bit.c b/gcc/config/fp-bit.c
+index e609760..1c68a63 100644
+--- a/gcc/config/fp-bit.c
++++ b/gcc/config/fp-bit.c
+@@ -208,7 +208,11 @@ pack_d ( fp_number_type *  src)
+       exp = EXPMAX;
+       if (src->class == CLASS_QNAN || 1)
+ 	{
++#ifdef QUIET_NAN_NEGATED
++	  fraction |= QUIET_NAN - 1;
++#else
+ 	  fraction |= QUIET_NAN;
++#endif
+ 	}
+     }
+   else if (isinf (src))
+@@ -523,7 +527,11 @@ unpack_d (FLO_union_type * src, fp_number_type * dst)
+       else
+ 	{
+ 	  /* Nonzero fraction, means nan */
++#ifdef QUIET_NAN_NEGATED
++	  if ((fraction & QUIET_NAN) == 0)
++#else
+ 	  if (fraction & QUIET_NAN)
++#endif
+ 	    {
+ 	      dst->class = CLASS_QNAN;
+ 	    }
 diff --git a/gcc/config/mips/iris5.h b/gcc/config/mips/iris5.h
 index a3af82d..3ad4037 100644
 --- a/gcc/config/mips/iris5.h
@@ -80,7 +108,7 @@ index a0b9f2f..2b322f3 100644
        }								\
 diff --git a/gcc/config/mips/linux64.h b/gcc/config/mips/linux64.h
 new file mode 100644
-index 0000000..2564366
+index 0000000..6fc9255
 --- /dev/null
 +++ b/gcc/config/mips/linux64.h
 @@ -0,0 +1,76 @@
@@ -108,7 +136,7 @@ index 0000000..2564366
 +#define DRIVER_SELF_SPECS \
 +ENDIAN_SPEC, \
 +"%{mabi-fake-default:%{!mabi=*:-mabi=32}}", \
-+"%{!mabi=*:-mabi=64}", \
++"%{!mabi=*:-mabi=32}", \
 +"%{!mips*:%{!march=*:%{mabi=32:-mips1}%{mabi=n32|mabi=64:-mips3}}}"
 +
 +#undef SUBTARGET_ASM_SPEC
@@ -161,7 +189,7 @@ index 0000000..2564366
 +   sure nobody thinks we just forgot to set it to something else.  */
 +#define MIPS_TFMODE_FORMAT mips_quad_format
 diff --git a/gcc/config/mips/mips.h b/gcc/config/mips/mips.h
-index ad05be5..d882cc0 100644
+index ad05be5..7f68098 100644
 --- a/gcc/config/mips/mips.h
 +++ b/gcc/config/mips/mips.h
 @@ -719,11 +719,6 @@ extern void		sbss_section PARAMS ((void));
@@ -188,15 +216,31 @@ index ad05be5..d882cc0 100644
  /* Only ELF targets can switch the ABI.  */
  #ifndef OBJECT_FORMAT_ELF
  #undef ASM_ABI_DEFAULT_SPEC
+@@ -1227,12 +1227,12 @@ extern int mips_abi;
+ #endif
+ 
+ 
+-#define SDB_DEBUGGING_INFO 1		/* generate info for mips-tfile */
+ #define DBX_DEBUGGING_INFO 1		/* generate stabs (OSF/rose) */
+ #define MIPS_DEBUGGING_INFO 1		/* MIPS specific debugging info */
++#define DWARF2_DEBUGGING_INFO 1         /* dwarf2 debugging info */
+ 
+-#ifndef PREFERRED_DEBUGGING_TYPE	/* assume SDB_DEBUGGING_INFO */
+-#define PREFERRED_DEBUGGING_TYPE SDB_DEBUG
++#ifndef PREFERRED_DEBUGGING_TYPE
++#define PREFERRED_DEBUGGING_TYPE DWARF2_DEBUG
+ #endif
+ 
+ /* By default, turn on GDB extensions.  */
 diff --git a/gcc/config/mips/t-linux64 b/gcc/config/mips/t-linux64
 new file mode 100644
-index 0000000..1896f49
+index 0000000..f69d215
 --- /dev/null
 +++ b/gcc/config/mips/t-linux64
 @@ -0,0 +1,19 @@
-+MULTILIB_OPTIONS = mabi=n32/mabi=32/mabi=64
-+MULTILIB_DIRNAMES = n32 32 64
-+MULTILIB_OSDIRNAMES = ../lib32 ../lib ../lib64
++MULTILIB_OPTIONS = mabi=n32/mabi=32
++MULTILIB_DIRNAMES = n32 32
++MULTILIB_OSDIRNAMES = ../lib32 ../lib
 +
 +EXTRA_MULTILIB_PARTS=crtbegin.o crtend.o crtbeginS.o crtendS.o crtbeginT.o
 +
