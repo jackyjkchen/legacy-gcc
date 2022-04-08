@@ -18,7 +18,7 @@ case ${ARCH} in
 	mips)
 		CC="${CC} ${CFLAGS_o32}"
 		CXX="${CXX} ${CFLAGS_o32}"
-		TOOL_PREFIX="${PROFILE_ARCH/64/}-legacy"
+		TOOL_PREFIX="${PROFILE_ARCH}-legacy"
 		;;
 	ppc)
 		TOOL_PREFIX="powerpc-legacy"
@@ -69,6 +69,7 @@ src_prepare() {
 	toolchain_src_prepare
 
 	[[ ${TOOL_PREFIX} != "" ]] && eapply "${FILESDIR}"/${PV}/01_workaround-for-legacy-glibc-in-non-system-dir.patch
+	[[ ${ARCH} == "mips" ]] && eapply "${FILESDIR}"/${PV}/02_support-mips64.patch
 }
 
 src_install() {

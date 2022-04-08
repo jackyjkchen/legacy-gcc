@@ -1,0 +1,556 @@
+diff --git a/gcc/config.gcc b/gcc/config.gcc
+index 51ec707..b1bdbd1 100644
+--- a/gcc/config.gcc
++++ b/gcc/config.gcc
+@@ -2380,6 +2380,26 @@ mips*-*-netbsd*)			# NetBSD/mips, either endian.
+ 	esac
+ 	tmake_file="${tmake_file} mips/t-netbsd"
+ 	;;
++mips64*-*-linux*)
++	tm_file="dbxelf.h elfos.h svr4.h linux.h mips/linux.h mips/linux64.h"
++	tmake_file="t-slibgcc-elf-ver t-linux mips/t-linux mips/t-linux64"
++	case $machine in
++		mips*el-*)
++			tm_file="mips/little.h $tm_file"
++			;;
++	esac
++
++	# This default ABI is a partial lie: t-linux64 overrides the
++	# DRIVER_SELF_SPEC that sets the default abi, in the spec file
++	# that is installed.  What GCC thinks of as the default must
++	# remain as ABI_32 such that the SONAMEs of the libgcc shared
++	# libraries remain compatible with those of mips-linux-gnu.
++	tm_defines="MIPS_ISA_DEFAULT=2 MIPS_ABI_DEFAULT=ABI_32"
++	target_cpu_default="MASK_ABICALLS|MASK_FLOAT64|MASK_64BIT"
++	extra_parts="crtbegin.o crtbeginS.o crtbeginT.o crtend.o crtendS.o"
++	gnu_ld=yes
++	gas=yes
++	;;
+ mips*-*-linux*)				# Linux MIPS, either endian.
+         tm_file="dbxelf.h elfos.h svr4.h linux.h mips/linux.h"
+ 	case $machine in
+diff --git a/gcc/config/mips/_tilib.c b/gcc/config/mips/_tilib.c
+new file mode 100644
+index 0000000..7c13560
+--- /dev/null
++++ b/gcc/config/mips/_tilib.c
+@@ -0,0 +1,156 @@
++/* A few TImode functions needed for TFmode emulated arithmetic.
++   Copyright 2002, 2003 Free Software Foundation, Inc.
++   Contributed by Alexandre Oliva <aoliva@redhat.com>
++
++This file is part of GCC.
++
++GCC is free software; you can redistribute it and/or modify
++it under the terms of the GNU General Public License as published by
++the Free Software Foundation; either version 2, or (at your option)
++any later version.
++
++GCC is distributed in the hope that it will be useful,
++but WITHOUT ANY WARRANTY; without even the implied warranty of
++MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++GNU General Public License for more details.
++
++You should have received a copy of the GNU General Public License
++along with GCC; see the file COPYING.  If not, write to
++the Free Software Foundation, 59 Temple Place - Suite 330,
++Boston, MA 02111-1307, USA.  */
++
++
++#include "tconfig.h"
++
++#if _MIPS_SIM == 2 /* N32 */ || _MIPS_SIM == 3 /* 64 */
++
++typedef int TItype __attribute__ ((mode (TI)));
++typedef int DItype __attribute__ ((mode (DI)));
++typedef int SItype __attribute__ ((mode (SI)));
++
++typedef unsigned int UDItype __attribute__ ((mode (DI)));
++
++typedef union
++{
++  struct TIstruct {
++#if LIBGCC2_WORDS_BIG_ENDIAN
++    DItype high, low;
++#else
++    DItype low, high;
++#endif
++  } s;
++  TItype ll;
++} TIunion;
++
++TItype __negti2 (TItype);
++TItype __ashlti3 (TItype, int);
++#if 0
++TItype __ashrti3 (TItype, int);
++#endif
++TItype __lshrti3 (TItype, int);
++
++TItype
++__negti2 (TItype u)
++{
++  TIunion w;
++  TIunion uu;
++
++  uu.ll = u;
++
++  w.s.low = -uu.s.low;
++  w.s.high = -uu.s.high - ((UDItype) w.s.low > 0);
++
++  return w.ll;
++}
++
++TItype
++__ashlti3 (TItype u, int b)
++{
++  TIunion w;
++  int bm;
++  TIunion uu;
++
++  if (b == 0)
++    return u;
++
++  uu.ll = u;
++
++  bm = (sizeof (DItype) * BITS_PER_UNIT) - b;
++  if (bm <= 0)
++    {
++      w.s.low = 0;
++      w.s.high = (UDItype) uu.s.low << -bm;
++    }
++  else
++    {
++      UDItype carries = (UDItype) uu.s.low >> bm;
++
++      w.s.low = (UDItype) uu.s.low << b;
++      w.s.high = ((UDItype) uu.s.high << b) | carries;
++    }
++
++  return w.ll;
++}
++
++#if 0
++TItype
++__ashrti3 (TItype u, int b)
++{
++  TIunion w;
++  int bm;
++  TIunion uu;
++
++  if (b == 0)
++    return u;
++
++  uu.ll = u;
++
++  bm = (sizeof (DItype) * BITS_PER_UNIT) - b;
++  if (bm <= 0)
++    {
++      /* w.s.high = 1..1 or 0..0 */
++      w.s.high = uu.s.high >> (sizeof (DItype) * BITS_PER_UNIT - 1);
++      w.s.low = uu.s.high >> -bm;
++    }
++  else
++    {
++      UDItype carries = (UDItype) uu.s.high << bm;
++
++      w.s.high = uu.s.high >> b;
++      w.s.low = ((UDItype) uu.s.low >> b) | carries;
++    }
++
++  return w.ll;
++}
++#endif
++
++TItype
++__lshrti3 (TItype u, int b)
++{
++  TIunion w;
++  int bm;
++  TIunion uu;
++
++  if (b == 0)
++    return u;
++
++  uu.ll = u;
++
++  bm = (sizeof (DItype) * BITS_PER_UNIT) - b;
++  if (bm <= 0)
++    {
++      w.s.high = 0;
++      w.s.low = (UDItype) uu.s.high >> -bm;
++    }
++  else
++    {
++      UDItype carries = (UDItype) uu.s.high << bm;
++
++      w.s.high = (UDItype) uu.s.high >> b;
++      w.s.low = ((UDItype) uu.s.low >> b) | carries;
++    }
++
++  return w.ll;
++}
++
++#endif /* N32 or N64 */
+diff --git a/gcc/config/mips/iris5.h b/gcc/config/mips/iris5.h
+index 883450b..b00c89a 100644
+--- a/gcc/config/mips/iris5.h
++++ b/gcc/config/mips/iris5.h
+@@ -72,7 +72,7 @@ Boston, MA 02111-1307, USA.  */
+ #define CPP_PREDEFINES \
+  "-Dunix -Dmips -Dsgi -Dhost_mips -DMIPSEB -D_MIPSEB -DSYSTYPE_SVR4 \
+   -D_SVR4_SOURCE -D_MODERN_C -D__DSO__ \
+-  -D_MIPS_SIM=_MIPS_SIM_ABI32 -D_MIPS_SZPTR=32 \
++  -D_MIPS_SIM=_ABIO32 -D_MIPS_SZPTR=32 \
+   -Asystem=unix -Asystem=svr4 -Acpu=mips -Amachine=sgi"
+ 
+ #undef SUBTARGET_CPP_SPEC
+diff --git a/gcc/config/mips/iris6.h b/gcc/config/mips/iris6.h
+index 4b9771a..fbbbac4 100644
+--- a/gcc/config/mips/iris6.h
++++ b/gcc/config/mips/iris6.h
+@@ -104,7 +104,7 @@ Boston, MA 02111-1307, USA.  */
+ %{mips3: -D_MIPS_ISA=_MIPS_ISA_MIPS3} \
+ %{mips4: -D_MIPS_ISA=_MIPS_ISA_MIPS4} \
+ %{!mips*: -D_MIPS_ISA=_MIPS_ISA_MIPS3} \
+-%{mabi=32: -D_MIPS_SIM=_MIPS_SIM_ABI32}	\
++%{mabi=32: -D_MIPS_SIM=_ABIO32}	\
+ %{mabi=n32: -D_ABIN32=2 -D_MIPS_SIM=_ABIN32} \
+ %{mabi=64: -D_ABI64=3 -D_MIPS_SIM=_ABI64} \
+ %{!mabi*: -D_ABIN32=2 -D_MIPS_SIM=_ABIN32} \
+diff --git a/gcc/config/mips/linux.h b/gcc/config/mips/linux.h
+index f1ff69e..5c78bcf 100644
+--- a/gcc/config/mips/linux.h
++++ b/gcc/config/mips/linux.h
+@@ -167,10 +167,10 @@ void FN ()							\
+ %{mips3: -D_MIPS_ISA=_MIPS_ISA_MIPS3} \
+ %{mips4: -D_MIPS_ISA=_MIPS_ISA_MIPS4} \
+ %{!mips*: -D_MIPS_ISA=_MIPS_ISA_MIPS1} \
+-%{mabi=32: -D_MIPS_SIM=_MIPS_SIM_ABI32}	\
++%{mabi=32: -D_MIPS_SIM=_ABIO32}	\
+ %{mabi=n32: -D_ABIN32=2 -D_MIPS_SIM=_ABIN32} \
+ %{mabi=64: -D_ABI64=3 -D_MIPS_SIM=_ABI64} \
+-%{!mabi*: -D_MIPS_SIM=_MIPS_SIM_ABI32}	\
++%{!mabi*: -D_MIPS_SIM=_ABIO32}	\
+ %{!mint64: -D_MIPS_SZINT=32}%{mint64: -D_MIPS_SZINT=64} \
+ %{mabi=32: -D_MIPS_SZLONG=32} \
+ %{mabi=n32: -D_MIPS_SZLONG=32} \
+diff --git a/gcc/config/mips/linux64.h b/gcc/config/mips/linux64.h
+new file mode 100644
+index 0000000..20c3a26
+--- /dev/null
++++ b/gcc/config/mips/linux64.h
+@@ -0,0 +1,70 @@
++/* Definitions for MIPS running Linux-based GNU systems with ELF format
++   using n32/64 abi.
++   Copyright 2002, 2003 Free Software Foundation, Inc.
++
++This file is part of GCC.
++
++GCC is free software; you can redistribute it and/or modify
++it under the terms of the GNU General Public License as published by
++the Free Software Foundation; either version 2, or (at your option)
++any later version.
++
++GCC is distributed in the hope that it will be useful,
++but WITHOUT ANY WARRANTY; without even the implied warranty of
++MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++GNU General Public License for more details.
++
++You should have received a copy of the GNU General Public License
++along with GCC; see the file COPYING.  If not, write to
++the Free Software Foundation, 59 Temple Place - Suite 330,
++Boston, MA 02111-1307, USA.  */
++
++#define DRIVER_SELF_SPECS \
++ENDIAN_SPEC, \
++"%{mabi-fake-default:%{!mabi=*:-mabi=32}}", \
++"%{!mabi=*:-mabi=32}", \
++"%{!mips*:%{!march=*:%{mabi=32:-mips1}%{mabi=n32|mabi=64:-mips3}}}"
++
++#undef SUBTARGET_ASM_SPEC
++#define SUBTARGET_ASM_SPEC "\
++%{!fno-PIC:%{!fno-pic:-KPIC}} \
++%{fno-PIC:-non_shared} %{fno-pic:-non_shared} \
++%{mabi=64:-64} %{mabi=n32:-n32}"
++
++#undef LIB_SPEC
++#define LIB_SPEC "\
++%{shared: -lc} \
++%{!static: \
++ %{mabi=n32:-rpath-link /lib32:/usr/lib32} \
++ %{mabi=64:-rpath-link /lib64:/usr/lib64} \
++ %{mabi=32:-rpath-link /lib:/usr/lib}} \
++%{!shared: %{pthread:-lpthread} \
++  %{profile:-lc_p} %{!profile: -lc}}"
++
++#undef LINK_SPEC
++#define LINK_SPEC "\
++%{G*} %{EB} %{EL} %{mips1} %{mips2} %{mips3} %{mips4} \
++%{bestGnum} %{shared} %{non_shared} \
++%{call_shared} %{no_archive} %{exact_version} \
++ %(endian_spec) \
++  %{!shared: \
++    %{!ibcs: \
++      %{!static: \
++        %{rdynamic:-export-dynamic} \
++        %{!dynamic-linker: \
++	  %{mabi=n32: -dynamic-linker /lib32/ld.so.1} \
++	  %{mabi=64: -dynamic-linker /lib64/ld.so.1} \
++	  %{mabi=32: -dynamic-linker /lib/ld.so.1}}} \
++      %{static:-static}}} \
++%{mabi=n32:-melf32%{EB:b}%{EL:l}tsmipn32} \
++%{mabi=64:-melf64%{EB:b}%{EL:l}tsmip} \
++%{mabi=32:-melf32%{EB:b}%{EL:l}tsmip}"
++
++#undef LOCAL_LABEL_PREFIX
++#define LOCAL_LABEL_PREFIX ((mips_abi == ABI_32 || mips_abi == ABI_O64) \
++			    ? "$" : ".")
++
++/* The size in bytes of a DWARF field indicating an offset or length
++   relative to a debug info section, specified to be 4 bytes in the DWARF-2
++   specification.  The SGI/MIPS ABI defines it to be the same as PTR_SIZE.  */
++#define DWARF_OFFSET_SIZE PTR_SIZE
+diff --git a/gcc/config/mips/mips.h b/gcc/config/mips/mips.h
+index 3fb6a86..0373c9f 100644
+--- a/gcc/config/mips/mips.h
++++ b/gcc/config/mips/mips.h
+@@ -1302,12 +1302,12 @@ extern int mips_abi;
+ #endif
+ 
+ 
+-#define SDB_DEBUGGING_INFO		/* generate info for mips-tfile */
+-#define DBX_DEBUGGING_INFO		/* generate stabs (OSF/rose) */
+-#define MIPS_DEBUGGING_INFO		/* MIPS specific debugging info */
++#define DBX_DEBUGGING_INFO 1		/* generate stabs (OSF/rose) */
++#define MIPS_DEBUGGING_INFO 1		/* MIPS specific debugging info */
++#define DWARF2_DEBUGGING_INFO 1         /* dwarf2 debugging info */
+ 
+-#ifndef PREFERRED_DEBUGGING_TYPE	/* assume SDB_DEBUGGING_INFO */
+-#define PREFERRED_DEBUGGING_TYPE SDB_DEBUG
++#ifndef PREFERRED_DEBUGGING_TYPE
++#define PREFERRED_DEBUGGING_TYPE DWARF2_DEBUG
+ #endif
+ 
+ /* By default, turn on GDB extensions.  */
+diff --git a/gcc/config/mips/t-linux64 b/gcc/config/mips/t-linux64
+new file mode 100644
+index 0000000..88e7eed
+--- /dev/null
++++ b/gcc/config/mips/t-linux64
+@@ -0,0 +1,7 @@
++MULTILIB_OPTIONS = mabi=n32/mabi=32
++MULTILIB_DIRNAMES = n32 32
++MULTILIB_OSDIRNAMES = ../lib32 ../lib
++
++EXTRA_MULTILIB_PARTS=crtbegin.o crtend.o crtbeginS.o crtendS.o crtbeginT.o
++
++LIB2FUNCS_EXTRA = $(srcdir)/config/mips/_tilib.c
+diff --git a/gcc/gcc.c b/gcc/gcc.c
+index 054875b..f86f79b 100644
+--- a/gcc/gcc.c
++++ b/gcc/gcc.c
+@@ -305,6 +305,8 @@ static const char *handle_braces PARAMS ((const char *));
+ static char *save_string	PARAMS ((const char *, int));
+ static void set_collect_gcc_options PARAMS ((void));
+ static int do_spec_1		PARAMS ((const char *, int, const char *));
++static int do_spec_2		PARAMS ((const char *));
++static void do_self_spec	PARAMS ((const char *));
+ static const char *find_file	PARAMS ((const char *));
+ static int is_directory		PARAMS ((const char *, const char *, int));
+ static void validate_switches	PARAMS ((const char *));
+@@ -739,6 +741,12 @@ static const char *multilib_exclusions;
+ 
+ static const char *const multilib_defaults_raw[] = MULTILIB_DEFAULTS;
+ 
++#ifndef DRIVER_SELF_SPECS
++#define DRIVER_SELF_SPECS ""
++#endif
++
++static const char *const driver_self_specs[] = { DRIVER_SELF_SPECS };
++
+ struct user_specs
+ {
+   struct user_specs *next;
+@@ -4225,15 +4233,7 @@ do_spec (spec)
+ {
+   int value;
+ 
+-  clear_args ();
+-  arg_going = 0;
+-  delete_this_arg = 0;
+-  this_is_output_file = 0;
+-  this_is_library_file = 0;
+-  input_from_pipe = 0;
+-  suffix_subst = NULL;
+-
+-  value = do_spec_1 (spec, 0, NULL);
++  value = do_spec_2 (spec);
+ 
+   /* Force out any unfinished command.
+      If -pipe, this forces out the last command if it ended in `|'.  */
+@@ -4251,6 +4251,59 @@ do_spec (spec)
+   return value;
+ }
+ 
++static int
++do_spec_2 (spec)
++     const char *spec;
++{
++  clear_args ();
++  arg_going = 0;
++  delete_this_arg = 0;
++  this_is_output_file = 0;
++  this_is_library_file = 0;
++  input_from_pipe = 0;
++  suffix_subst = NULL;
++
++  return do_spec_1 (spec, 0, NULL);
++}
++
++/* Process the given spec string and add any new options to the end
++   of the switches/n_switches array.  */
++
++static void
++do_self_spec (spec)
++     const char *spec;
++{
++  do_spec_2 (spec);
++  do_spec_1 (" ", 0, NULL);
++
++  if (argbuf_index > 0)
++    {
++      int i, first;
++
++      first = n_switches;
++      n_switches += argbuf_index;
++      switches = xrealloc (switches,
++			   sizeof (struct switchstr) * (n_switches + 1));
++
++      switches[n_switches] = switches[first];
++      for (i = 0; i < argbuf_index; i++)
++	{
++	  struct switchstr *sw;
++
++	  /* Each switch should start with '-'.  */
++	  if (argbuf[i][0] != '-')
++	    abort ();
++
++	  sw = &switches[i + first];
++	  sw->part1 = &argbuf[i][1];
++	  sw->args = 0;
++	  sw->live_cond = SWITCH_OK;
++	  sw->validated = 0;
++	  sw->ordering = 0;
++	}
++    }
++}
++
+ /* Process the sub-spec SPEC as a portion of a larger spec.
+    This is like processing a whole spec except that we do
+    not initialize at the beginning and we do not supply a
+@@ -5900,6 +5953,12 @@ main (argc, argv)
+ 
+   process_command (argc, argv);
+ 
++  /* Process DRIVER_SELF_SPECS, adding any new options to the end
++     of the command line.  */
++
++  for (i = 0; i < ARRAY_SIZE (driver_self_specs); i++)
++    do_self_spec (driver_self_specs[i]);
++
+   /* Initialize the vector of specs to just the default.
+      This means one element containing 0s, as a terminator.  */
+ 
+diff --git a/libffi/src/mips/ffi.c b/libffi/src/mips/ffi.c
+index ca3971f..813aff1 100644
+--- a/libffi/src/mips/ffi.c
++++ b/libffi/src/mips/ffi.c
+@@ -28,7 +28,7 @@
+ 
+ #include <stdlib.h>
+ 
+-#if _MIPS_SIM == _MIPS_SIM_NABI32
++#if _MIPS_SIM == _ABIN32
+ #define FIX_ARGP \
+ FFI_ASSERT(argp <= &stack[bytes]); \
+ if (argp == &stack[bytes]) \
+@@ -55,7 +55,7 @@ static void ffi_prep_args(char *stack,
+   register char *argp;
+   register ffi_type **p_arg;
+ 
+-#if _MIPS_SIM == _MIPS_SIM_NABI32
++#if _MIPS_SIM == _ABIN32
+   /* If more than 8 double words are used, the remainder go
+      on the stack. We reorder stuff on the stack here to 
+      support this easily. */
+@@ -69,7 +69,7 @@ static void ffi_prep_args(char *stack,
+ 
+   memset(stack, 0, bytes);
+ 
+-#if _MIPS_SIM == _MIPS_SIM_NABI32
++#if _MIPS_SIM == _ABIN32
+   if ( ecif->cif->rstruct_flag != 0 )
+ #else
+   if ( ecif->cif->rtype->type == FFI_TYPE_STRUCT )
+@@ -95,7 +95,7 @@ static void ffi_prep_args(char *stack,
+ 	FIX_ARGP;
+       }
+ 
+-#if _MIPS_SIM == _MIPS_SIM_ABI32
++#if _MIPS_SIM == _ABIO32
+ #define OFFSET 0
+ #else
+ #define OFFSET sizeof(int)
+@@ -152,7 +152,7 @@ static void ffi_prep_args(char *stack,
+ 	    }
+ 	  else
+ 	    {
+-#if _MIPS_SIM == _MIPS_SIM_ABI32	      
++#if _MIPS_SIM == _ABIO32
+ 	      memcpy(argp, *p_argv, z);
+ #else
+ 	      {
+@@ -185,7 +185,7 @@ static void ffi_prep_args(char *stack,
+   return;
+ }
+ 
+-#if _MIPS_SIM == _MIPS_SIM_NABI32
++#if _MIPS_SIM == _ABIN32
+ 
+ /* The n32 spec says that if "a chunk consists solely of a double 
+    float field (but not a double, which is part of a union), it
+@@ -274,7 +274,7 @@ ffi_status ffi_prep_cif_machdep(ffi_cif *cif)
+ {
+   cif->flags = 0;
+ 
+-#if _MIPS_SIM == _MIPS_SIM_ABI32
++#if _MIPS_SIM == _ABIO32
+   /* Set the flags necessary for O32 processing */
+ 
+   if (cif->rtype->type != FFI_TYPE_STRUCT)
+@@ -329,7 +329,7 @@ ffi_status ffi_prep_cif_machdep(ffi_cif *cif)
+     }
+ #endif
+ 
+-#if _MIPS_SIM == _MIPS_SIM_NABI32
++#if _MIPS_SIM == _ABIN32
+   /* Set the flags necessary for N32 processing */
+   {
+     unsigned shift = 0;
+@@ -448,14 +448,14 @@ void ffi_call(ffi_cif *cif, void (*fn)(), void *rvalue, void **avalue)
+     
+   switch (cif->abi) 
+     {
+-#if _MIPS_SIM == _MIPS_SIM_ABI32
++#if _MIPS_SIM == _ABIO32
+     case FFI_O32:
+       ffi_call_O32(ffi_prep_args, &ecif, cif->bytes, 
+ 		   cif->flags, ecif.rvalue, fn);
+       break;
+ #endif
+ 
+-#if _MIPS_SIM == _MIPS_SIM_NABI32
++#if _MIPS_SIM == _ABIN32
+     case FFI_N32:
+       ffi_call_N32(ffi_prep_args, &ecif, cif->bytes, 
+ 		   cif->flags, ecif.rvalue, fn);
