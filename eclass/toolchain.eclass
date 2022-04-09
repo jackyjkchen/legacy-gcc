@@ -161,7 +161,7 @@ if [[ ${PN} != "kgcc64" && ${PN} != gcc-* ]] ; then
 		(tc_version_is_at_least 3.1 || tc_version_is_between 2.9 3.0) && IUSE+=" objc"
 		;;
 	ppc64)
-		tc_version_is_at_least 3.3 && IUSE+=" +cxx"
+		tc_version_is_at_least 3.2 && IUSE+=" +cxx"
 		tc_version_is_at_least 3.1 && IUSE+=" objc"
 		;;
 	sparc)
@@ -1105,6 +1105,8 @@ toolchain_src_configure() {
 	else
 		if tc-is-static-only ; then
 			confgcc+=( --disable-shared )
+		elif [[ $(tc-arch) == "ppc64" ]] && ! tc_version_is_at_least 3.3 ; then
+			confgcc+=( --enable-shared=libgcc)
 		else
 			confgcc+=( --enable-shared )
 		fi
