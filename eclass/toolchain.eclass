@@ -158,7 +158,7 @@ if [[ ${PN} != "kgcc64" && ${PN} != gcc-* ]] ; then
 	case $(tc-arch) in
 	alpha)
 		tc_version_is_at_least 2.9 && IUSE+=" +cxx"
-		(tc_version_is_at_least 3.1 || tc_version_is_between 2.9 3.0) && IUSE+=" objc"
+		tc_version_is_at_least 2.9 && IUSE+=" objc"
 		;;
 	ppc64)
 		tc_version_is_at_least 3.2 && IUSE+=" +cxx"

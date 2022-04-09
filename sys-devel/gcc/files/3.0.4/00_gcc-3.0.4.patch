@@ -451,6 +451,84 @@ index 0733dce..9e2db9b 100644
  	xmake_file=x-linux
  	extra_parts="crtbegin.o crtend.o crtbeginS.o crtendS.o"
  	if test x$enable_threads = xyes; then
+diff --git a/gcc/config/alpha/elf.h b/gcc/config/alpha/elf.h
+index a77a643..cdde394 100644
+--- a/gcc/config/alpha/elf.h
++++ b/gcc/config/alpha/elf.h
+@@ -162,6 +162,16 @@ do {									\
+   ASM_OUTPUT_SKIP((FILE), (SIZE));					\
+ } while (0)
+ 
++/* This says how to output assembler code to declare an
++   uninitialized external linkage data object.  */
++
++#undef  ASM_OUTPUT_ALIGNED_BSS
++#define ASM_OUTPUT_ALIGNED_BSS(FILE, DECL, NAME, SIZE, ALIGN)		\
++do {									\
++  ASM_GLOBALIZE_LABEL (FILE, NAME);					\
++  ASM_OUTPUT_ALIGNED_LOCAL (FILE, NAME, SIZE, ALIGN);			\
++} while (0)
++
+ /* This is the pseudo-op used to generate a 64-bit word of data with a
+    specific value in some section.  */
+ 
+@@ -397,39 +407,45 @@ void FN ()					\
+ #define DO_SELECT_SECTION(SECNUM, DECL, RELOC)			\
+   do								\
+      {								\
++       HOST_WIDE_INT size;					\
+        SECNUM = 1;						\
+        if (TREE_CODE (DECL) == FUNCTION_DECL)			\
+-	 SECNUM = 0;						\
++	 {							\
++	   SECNUM = 0;						\
++	   break;						\
++	 }							\
+        else if (TREE_CODE (DECL) == STRING_CST)			\
+ 	 {							\
+ 	   if (flag_writable_strings)				\
+ 	     SECNUM = 2;					\
++	   break;						\
+ 	 }							\
+        else if (TREE_CODE (DECL) == VAR_DECL)			\
+ 	 {							\
+-	   if (DECL_INITIAL (DECL) == NULL			\
++	   if ((flag_pic && RELOC)						\
++	 		|| !TREE_READONLY (DECL)			\
++			|| TREE_SIDE_EFFECTS (DECL)			\
++			|| !DECL_INITIAL (DECL)				\
++	  		|| (DECL_INITIAL (DECL) != error_mark_node	\
++		      	&& !TREE_CONSTANT (DECL_INITIAL (DECL))))	\
++	     SECNUM = 2;					\
++	   else if (DECL_INITIAL (DECL) == NULL			\
+ 	       || DECL_INITIAL (DECL) == error_mark_node)	\
+ 	     SECNUM = 4;					\
+-	   else if ((flag_pic && RELOC)				\
+-		    || ! TREE_READONLY (DECL)			\
+-		    || TREE_SIDE_EFFECTS (DECL)			\
+-		    || ! TREE_CONSTANT (DECL_INITIAL (DECL)))	\
+-	     SECNUM = 2;					\
+ 	 }							\
+        else if (TREE_CODE (DECL) == CONSTRUCTOR)		\
+ 	 {							\
+ 	   if ((flag_pic && RELOC)				\
+-	       || ! TREE_READONLY (DECL)			\
+ 	       || TREE_SIDE_EFFECTS (DECL)			\
+ 	       || ! TREE_CONSTANT (DECL))			\
+ 	     SECNUM = 2;					\
+ 	 }							\
+ 								\
+        /* Select small data sections based on size.  */		\
+-       if (SECNUM >= 2)						\
++       size = int_size_in_bytes (TREE_TYPE (DECL));		\
++       if (size >= 0 && size <= g_switch_value)			\
+ 	 {							\
+-	   int size = int_size_in_bytes (TREE_TYPE (DECL));	\
+-	   if (size >= 0 && size <= g_switch_value)		\
++	   if (SECNUM >= 2)				\
+ 	     SECNUM += 1;					\
+ 	 }							\
+      }								\
 diff --git a/gcc/config/alpha/linux.h b/gcc/config/alpha/linux.h
 index e2a6e60..84d2657 100644
 --- a/gcc/config/alpha/linux.h
