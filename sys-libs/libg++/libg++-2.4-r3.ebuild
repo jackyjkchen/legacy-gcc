@@ -24,14 +24,14 @@ case ${ARCH} in
 		;;
 esac
 
-DEPEND="sys-devel/gcc:2.5.8[cxx]"
+DEPEND="sys-devel/gcc:2.4.5[cxx]"
 RDEPEND="${DEPEND}"
 BDEPEND=""
 
 CHOST="${TOOL_PREFIX}-linux-gnu"
 
-CC="gcc-2.5.8"
-CXX="gcc-2.5.8"
+CC="gcc-2.4.5"
+CXX="gcc-2.4.5"
 
 src_prepare() {
 	default
@@ -40,9 +40,8 @@ src_prepare() {
 }
 
 src_configure() {
-	downgrade_arch_flags 2.5.8
+	downgrade_arch_flags 2.4.5
 	local econfargs=(
-		--build=${CHOST}
 		--host=${CHOST}
 		--target=${CHOST}
 		--prefix=/usr
@@ -60,16 +59,16 @@ src_configure() {
 
 src_compile() {
 	pushd "${WORKDIR}"/build > /dev/null
-	emake -j1 CC="${CC}" CXX="${CXX}" || die "failed to run make"
+	emake -j1 CC="${CC}" CXX="${CXX}" CFLAGS="${CFLAGS}" CXXFLAGS="${CXXFLAGS}" || die "failed to run make"
 	popd > /dev/null
 }
 
 src_install() {
 	pushd "${WORKDIR}"/build > /dev/null
 	emake -j1 DESTDIR="${ED}" install || die "failed to run make install"
-	mkdir -p "${ED}"/usr/lib/gcc-lib/${CHOST}/2.5.8/include || die
-	mv -v "${ED}"/usr/lib/g++-include "${ED}"/usr/lib/gcc-lib/${CHOST}/2.5.8/include/g++ || die
-	mv -v "${ED}"/usr/lib/libg++.a "${ED}"/usr/lib/gcc-lib/${CHOST}/2.5.8/ || die
+	mkdir -p "${ED}"/usr/lib/gcc-lib/${CHOST}/2.4.5/include || die
+	mv -v "${ED}"/usr/lib/g++-include "${ED}"/usr/lib/gcc-lib/${CHOST}/2.4.5/include/g++ || die
+	mv -v "${ED}"/usr/lib/libg++.a "${ED}"/usr/lib/gcc-lib/${CHOST}/2.4.5/ || die
 	rm -rfv "${ED}"/usr/lib/lib* "${ED}"/usr/lib/doc "${ED}"/usr/bin "${ED}"/usr/include "${ED}"/usr/man "${ED}"/usr/${CHOST}
 	popd > /dev/null
 }

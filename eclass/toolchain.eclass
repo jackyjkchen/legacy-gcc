@@ -1523,7 +1523,7 @@ gcc_do_filter_flags() {
 
 	if [[ $(tc-arch) == amd64 || $(tc-arch) == x86 ]] && ! tc_version_is_at_least 2.8 ${bver} ; then
 		filter-flags '-mtune=*' '-march=*' '-mcpu=*' '-m*' '-mno-*'
-		tc_version_is_at_least 2.0 ${bver} && append-cflags -m486
+		tc_version_is_at_least 2.0 ${bver} && append-flags -m486
 		return 0
 	fi
 

@@ -24,14 +24,14 @@ case ${ARCH} in
 		;;
 esac
 
-DEPEND="sys-devel/gcc:2.7.2[cxx]"
+DEPEND="sys-devel/gcc:2.3.3[cxx]"
 RDEPEND="${DEPEND}"
 BDEPEND=""
 
 CHOST="${TOOL_PREFIX}-linux-gnu"
 
-CC="gcc-2.7.2"
-CXX="gcc-2.7.2"
+CC="gcc-2.3.3"
+CXX="gcc-2.3.3"
 
 src_prepare() {
 	default
@@ -40,13 +40,11 @@ src_prepare() {
 }
 
 src_configure() {
-	downgrade_arch_flags 2.7.2
+	downgrade_arch_flags 2.3.3
 	local econfargs=(
-		--build=${CHOST}
 		--host=${CHOST}
 		--target=${CHOST}
 		--prefix=/usr
-		--enable-shared
 	)
 
 	mkdir -p "${WORKDIR}"/build
@@ -61,16 +59,16 @@ src_configure() {
 
 src_compile() {
 	pushd "${WORKDIR}"/build > /dev/null
-	emake CC="${CC}" CXX="${CXX}" || die "failed to run make"
+	emake -j1 CC="${CC}" CXX="${CXX}" CFLAGS="${CFLAGS}" CXXFLAGS="${CXXFLAGS}" AR=ar RANLIB=ranlib NM=nm || die "failed to run make"
 	popd > /dev/null
 }
 
 src_install() {
 	pushd "${WORKDIR}"/build > /dev/null
 	emake -j1 DESTDIR="${ED}" install || die "failed to run make install"
-	mkdir -p "${ED}"/usr/lib/gcc-lib/${CHOST}/2.7.2/include || die
-	mv -v "${ED}"/usr/lib/g++-include "${ED}"/usr/lib/gcc-lib/${CHOST}/2.7.2/include/g++ || die
-	mv -v "${ED}"/usr/lib/libstdc++* "${ED}"/usr/lib/libg++* "${ED}"/usr/lib/gcc-lib/${CHOST}/2.7.2/ || die
+	mkdir -p "${ED}"/usr/lib/gcc-lib/${CHOST}/2.3.3/include || die
+	mv -v "${ED}"/usr/lib/g++-include "${ED}"/usr/lib/gcc-lib/${CHOST}/2.3.3/include/g++ || die
+	mv -v "${ED}"/usr/lib/libg++.a "${ED}"/usr/lib/gcc-lib/${CHOST}/2.3.3/ || die
 	rm -rfv "${ED}"/usr/lib/lib* "${ED}"/usr/lib/doc "${ED}"/usr/bin "${ED}"/usr/include "${ED}"/usr/man "${ED}"/usr/${CHOST}
 	popd > /dev/null
 }
