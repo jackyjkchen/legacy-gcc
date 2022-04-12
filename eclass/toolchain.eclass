@@ -865,21 +865,26 @@ toolchain_src_configure() {
 		setup_minispecs_gcc_build_specs
 	fi
 
-	local confgcc=( --host=${CHOST} )
+	local confgcc
+	if tc_version_is_at_least 2.0 ; then
+		confgcc=( --host=${CHOST} )
 
-	if is_crosscompile || tc-is-cross-compiler ; then
-		# Straight from the GCC install doc:
-		# "GCC has code to correctly determine the correct value for target
-		# for nearly all native systems. Therefore, we highly recommend you
-		# not provide a configure target when configuring a native compiler."
-		confgcc+=( --target=${CTARGET} )
+		if is_crosscompile || tc-is-cross-compiler ; then
+			# Straight from the GCC install doc:
+			# "GCC has code to correctly determine the correct value for target
+			# for nearly all native systems. Therefore, we highly recommend you
+			# not provide a configure target when configuring a native compiler."
+			confgcc+=( --target=${CTARGET} )
+		fi
+	else
+		confgcc=( -srcdir=../${P} ${CHOST} )
 	fi
 
 	if tc_version_is_at_least 2.3 ; then
 		[[ -n ${CBUILD} ]] && confgcc+=( --build=${CBUILD} )
 	fi
 
-	tc_version_is_at_least 2.6 || confgcc+=( --target=${CTARGET} )
+	tc_version_is_between 2.0 2.6 && confgcc+=( --target=${CTARGET} )
 
 	if tc_version_is_at_least 2.3 ; then
 		confgcc+=(
@@ -1767,7 +1772,7 @@ gcc_do_filter_flags() {
 
 	if [[ $(tc-arch) == amd64 || $(tc-arch) == x86 ]] && ! tc_version_is_at_least 2.8 ${bver} ; then
 		filter-flags '-mtune=*' '-march=*' '-mcpu=*' '-m*' '-mno-*'
-		append-cflags -m486
+		tc_version_is_at_least 2.0 ${bver} && append-cflags -m486
 		return 0
 	fi
 

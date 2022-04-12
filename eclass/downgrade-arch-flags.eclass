@@ -266,7 +266,7 @@ downgrade_arch_flags() {
 
 	if ! tc_version_is_at_least 2.8 ${bver} ; then
 		filter-flags '-mtune=*' '-march=*' '-mcpu=*' '-m*' '-mno-*'
-		append-cflags -m486
+		tc_version_is_at_least 2.0 ${bver} && append-cflags -m486
 		return 0
 	fi
 }

@@ -1,6 +1,6 @@
 # 这是什么
 
-legacy-gcc是一个gentoo的自定义overlay repo，启用该repo，可以在最新的gentoo系统中安装从gcc-2.0一直到最新版本的gcc，并且链接同一个glibc，做到开箱即用，不用调整工具链参数。
+legacy-gcc是一个gentoo的自定义overlay repo，启用该repo，可以在最新的gentoo系统中安装从gcc-1.42一直到最新版本的gcc，并且链接同一个glibc，做到开箱即用，不用调整工具链参数。
 
 [支持gcc版本](https://github.com/jackyjkchen/legacy-gcc/tree/master/sys-devel/gcc)。
 
@@ -10,11 +10,11 @@ legacy-gcc是一个gentoo的自定义overlay repo，启用该repo，可以在最
 
 本项目旨在现代化的Linux运行时环境上可以原生的使用旧版本gcc，并且在修改量有限，保持原版本gcc核心特性的基础上。
 
-x86与非x86均为本项目的目标，x86目前进度较快，已经可以原生运行gcc-2.0版本，其他平台已在适配中。
+x86与非x86均为本项目的目标，x86目前进度较快，已经可以原生运行gcc-1.42版本，其他平台已在适配中。
 
 各平台目前支持情况如下：
 
-* x86：gcc-2.0及以上
+* x86：gcc-1.42及以上
 * amd64：gcc-3.1.1及以上
 * alpha：gcc-2.8.1及以上
 * aarch64：gcc-4.8.5及以上
@@ -194,6 +194,8 @@ glibc-headers版本2.5.1，应用RHEL5的兼容性补丁并删除所有不兼容
 2.0-2.1：
 * 修复过时的头文件引用，修复造成coredump的gcc自身bug。
 
+1.42:
+* 大量修复，并且目前存在一定的硬编码以解决调用路径问题
 
 # 是否影响gentoo的全局FLAGS优化？
 
