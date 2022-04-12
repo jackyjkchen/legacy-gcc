@@ -183,6 +183,9 @@ downgrade_arch_flags() {
 			[[ ${myarch} == ${arch} ]] && replace-cpu-flags ${myarch} ${rep}
 			[[ ${mytune} == ${arch} ]] && replace-cpu-flags ${mytune} ${rep}
 			case ${arch} in
+				znver*)
+					filter-flags -mno-sse4a
+					;;
 				bdver*)
 					filter-flags -mno-sse4a -mno-tbm -mno-fma4 -mno-lwp -mno-xop
 					;;
@@ -197,6 +200,9 @@ downgrade_arch_flags() {
 					;;
 			esac
 			case ${rep} in
+				znver*)
+					append-flags -mno-sse4a
+					;;
 				bdver*)
 					append-flags -mno-sse4a -mno-tbm -mno-fma4 -mno-lwp -mno-xop
 					;;
