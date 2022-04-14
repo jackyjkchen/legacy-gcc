@@ -3,13 +3,7 @@
 
 EAPI="7"
 
-PATCH_VER="5"
+PATCH_VER="1.1"
 inherit toolchain-binutils
 
 KEYWORDS="alpha amd64 arm arm64 hppa ia64 m68k mips ppc ppc64 s390 sh sparc x86"
-
-src_prepare() {
-	toolchain-binutils_src_prepare
-
-	eapply "${FILESDIR}"/${PV}/00_PR23919.patch
-}
