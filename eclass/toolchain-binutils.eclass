@@ -63,8 +63,6 @@ if tc_version_is_at_least 2.21 ; then
 	IUSE+=" +gold"
 fi
 
-CC="gcc-4.9.4"
-CXX="g++-4.9.4"
 #
 # The dependencies
 #
@@ -79,7 +77,6 @@ DEPEND="${RDEPEND}
 	sys-devel/flex
 	virtual/yacc
 "
-BDEPEND="${BDEPEND} sys-devel/gcc:4.9.4"
 RESTRICT="!test? ( test )"
 
 if is_cross ; then
@@ -196,7 +193,7 @@ toolchain-binutils_src_configure() {
 	local myconf=()
 
 	# enable gold (installed as ld.gold) and ld's plugin architecture
-	if use gold ; then
+	if in_iuse gold && use gold ; then
 		myconf+=( --enable-gold )
 	fi
 
@@ -240,7 +237,6 @@ toolchain-binutils_src_configure() {
 		--host=${CHOST}
 		--target=${CTARGET}
 		--datadir="${EPREFIX}"${DATAPATH}
-		--datarootdir="${EPREFIX}"${DATAPATH}
 		--infodir="${EPREFIX}"${DATAPATH}/info
 		--mandir="${EPREFIX}"${DATAPATH}/man
 		--bindir="${EPREFIX}"${BINPATH}
@@ -255,8 +251,6 @@ toolchain-binutils_src_configure() {
 		# Newer versions (>=2.24) make this an explicit option. #497268
 		--enable-install-libiberty
 		--disable-werror
-		--with-bugurl="$(toolchain-binutils_bugurl)"
-		--with-pkgversion="$(toolchain-binutils_pkgversion)"
 		$(use_enable static-libs static)
 		${EXTRA_ECONF}
 		# Disable modules that are in a combined binutils/gdb tree. #490566
@@ -266,6 +260,13 @@ toolchain-binutils_src_configure() {
 		--without-stage1-ldflags
 	)
 
+	if tc_version_is_at_least 2.18 ; then
+		myconf+=( 
+			--with-bugurl="$(toolchain-binutils_bugurl)"
+			--with-pkgversion="$(toolchain-binutils_pkgversion)"
+		)
+	fi
+
 	if tc_version_is_at_least 2.30 ; then
 		# mips can't do hash-style=gnu ...
 		if [[ $(tc-arch) != mips ]] ; then
@@ -273,13 +274,14 @@ toolchain-binutils_src_configure() {
 		fi
 
 		myconf+=( 
-		# Change SONAME to avoid conflict across
-		# {native,cross}/binutils, binutils-libs. #666100
-		--with-extra-soversion-suffix=gentoo-${CATEGORY}-${PN}-$(usex multitarget mt st)
+			--datarootdir="${EPREFIX}"${DATAPATH}
+			# Change SONAME to avoid conflict across
+			# {native,cross}/binutils, binutils-libs. #666100
+			--with-extra-soversion-suffix=gentoo-${CATEGORY}-${PN}-$(usex multitarget mt st)
 		)
 	fi
 
-	echo ./configure "${myconf[@]}"
+	echo "${S}"/configure "${myconf[@]}"
 	"${S}"/configure "${myconf[@]}" || die
 
 	# Prevent makeinfo from running if doc is unset.

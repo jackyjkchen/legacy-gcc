@@ -1,0 +1,570 @@
+diff --git a/bfd/elf-bfd.h b/bfd/elf-bfd.h
+index 3fba1c2..c93458c 100644
+--- a/bfd/elf-bfd.h
++++ b/bfd/elf-bfd.h
+@@ -1337,6 +1337,9 @@ struct elf_obj_tdata
+   /* Should the PT_GNU_RELRO segment be emitted?  */
+   bfd_boolean relro;
+ 
++  /* Segment flags for the PT_PAX_FLAGS segment.  */
++  unsigned int pax_flags;
++
+   /* Symbol version definitions in external objects.  */
+   Elf_Internal_Verdef *verdef;
+ 
+diff --git a/bfd/elf.c b/bfd/elf.c
+index 9e48f66..b6c12aa 100644
+--- a/bfd/elf.c
++++ b/bfd/elf.c
+@@ -1085,6 +1085,7 @@ get_segment_type (unsigned int p_type)
+     case PT_GNU_EH_FRAME: pt = "EH_FRAME"; break;
+     case PT_GNU_STACK: pt = "STACK"; break;
+     case PT_GNU_RELRO: pt = "RELRO"; break;
++    case PT_PAX_FLAGS: pt = "PAX_FLAGS"; break;
+     default: pt = NULL; break;
+     }
+   return pt;
+@@ -2606,6 +2607,9 @@ bfd_section_from_phdr (bfd *abfd, Elf_Internal_Phdr *hdr, int index)
+     case PT_GNU_RELRO:
+       return _bfd_elf_make_section_from_phdr (abfd, hdr, index, "relro");
+ 
++    case PT_PAX_FLAGS:
++      return _bfd_elf_make_section_from_phdr (abfd, hdr, index, "pax_flags");
++
+     default:
+       /* Check for any processor-specific program segment types.  */
+       bed = get_elf_backend_data (abfd);
+@@ -3933,6 +3937,20 @@ map_sections_to_segments (bfd *abfd)
+       pm = &m->next;
+     }
+ 
++    {
++      amt = sizeof (struct elf_segment_map);
++      m = bfd_zalloc (abfd, amt);
++      if (m == NULL)
++	goto error_return;
++      m->next = NULL;
++      m->p_type = PT_PAX_FLAGS;
++      m->p_flags = elf_tdata (abfd)->pax_flags;
++      m->p_flags_valid = 1;
++
++      *pm = m;
++      pm = &m->next;
++    }
++
+   free (sections);
+   sections = NULL;
+ 
+@@ -4665,6 +4683,11 @@ get_program_header_size (bfd *abfd)
+       ++segs;
+     }
+ 
++    {
++      /* We need a PT_PAX_FLAGS segment.  */
++      ++segs;
++    }
++
+   for (s = abfd->sections; s != NULL; s = s->next)
+     {
+       if ((s->flags & SEC_LOAD) != 0
+@@ -5182,7 +5205,8 @@ rewrite_elf_program_header (bfd *ibfd, bfd *obfd)
+        6. PT_TLS segment includes only SHF_TLS sections.
+        7. SHF_TLS sections are only in PT_TLS or PT_LOAD segments.
+        8. PT_DYNAMIC should not contain empty sections at the beginning
+-          (with the possible exception of .dynamic).  */
++          (with the possible exception of .dynamic).
++       9. PT_PAX_FLAGS segments does not include any sections.  */
+ #define INCLUDE_SECTION_IN_SEGMENT(section, segment, bed)		\
+   ((((segment->p_paddr							\
+       ? IS_CONTAINED_BY_LMA (section, segment, segment->p_paddr)	\
+@@ -5191,6 +5215,7 @@ rewrite_elf_program_header (bfd *ibfd, bfd *obfd)
+     || IS_COREFILE_NOTE (segment, section))				\
+    && section->output_section != NULL					\
+    && segment->p_type != PT_GNU_STACK					\
++   && segment->p_type != PT_PAX_FLAGS					\
+    && (segment->p_type != PT_TLS					\
+        || (section->flags & SEC_THREAD_LOCAL))				\
+    && (segment->p_type == PT_LOAD					\
+diff --git a/bfd/elf64-ppc.c b/bfd/elf64-ppc.c
+index 33327f4..e05a3a8 100644
+--- a/bfd/elf64-ppc.c
++++ b/bfd/elf64-ppc.c
+@@ -10789,7 +10789,12 @@ ppc64_elf_relocate_section (bfd *output_bfd,
+ 	      else if (!SYMBOL_REFERENCES_LOCAL (info, &h->elf)
+ 		       && !is_opd
+ 		       && r_type != R_PPC64_TOC)
+-		outrel.r_info = ELF64_R_INFO (h->elf.dynindx, r_type);
++		{
++		  outrel.r_info = ELF64_R_INFO (h->elf.dynindx, r_type);
++		  if (h->elf.dynindx == -1
++		      && h->elf.root.type == bfd_link_hash_undefweak)
++		  memset (&outrel, 0, sizeof outrel);
++		}
+ 	      else
+ 		{
+ 		  /* This symbol is local, or marked to become local,
+diff --git a/bfd/elflink.c b/bfd/elflink.c
+index 99f044b..8efded2 100644
+--- a/bfd/elflink.c
++++ b/bfd/elflink.c
+@@ -4977,17 +4977,31 @@ bfd_elf_size_dynamic_sections (bfd *output_bfd,
+   if (!is_elf_hash_table (info->hash))
+     return TRUE;
+ 
++  elf_tdata (output_bfd)->pax_flags = PF_NORANDEXEC;
++
++  if (info->execheap)
++    elf_tdata (output_bfd)->pax_flags |= PF_NOMPROTECT;
++  else if (info->noexecheap)
++    elf_tdata (output_bfd)->pax_flags |= PF_MPROTECT;
++
+   elf_tdata (output_bfd)->relro = info->relro;
+   if (info->execstack)
+-    elf_tdata (output_bfd)->stack_flags = PF_R | PF_W | PF_X;
++    {
++      elf_tdata (output_bfd)->stack_flags = PF_R | PF_W | PF_X;
++      elf_tdata (output_bfd)->pax_flags |= PF_EMUTRAMP;
++    }
+   else if (info->noexecstack)
+-    elf_tdata (output_bfd)->stack_flags = PF_R | PF_W;
++    {
++      elf_tdata (output_bfd)->stack_flags = PF_R | PF_W;
++      elf_tdata (output_bfd)->pax_flags |= PF_NOEMUTRAMP;
++    }
+   else
+     {
+       bfd *inputobj;
+       asection *notesec = NULL;
+       int exec = 0;
+ 
++      elf_tdata (output_bfd)->pax_flags |= PF_NOEMUTRAMP;
+       for (inputobj = info->input_bfds;
+ 	   inputobj;
+ 	   inputobj = inputobj->link_next)
+@@ -5000,7 +5014,11 @@ bfd_elf_size_dynamic_sections (bfd *output_bfd,
+ 	  if (s)
+ 	    {
+ 	      if (s->flags & SEC_CODE)
+-		exec = PF_X;
++		{
++		  elf_tdata (output_bfd)->pax_flags &= ~PF_NOEMUTRAMP;
++		  elf_tdata (output_bfd)->pax_flags |= PF_EMUTRAMP;
++		  exec = PF_X;
++		}
+ 	      notesec = s;
+ 	    }
+ 	  else
+@@ -8652,14 +8670,12 @@ bfd_elf_final_link (bfd *abfd, struct bfd_link_info *info)
+ 	goto error_return;
+ 
+       /* Check for DT_TEXTREL (late, in case the backend removes it).  */
+-      if (info->warn_shared_textrel && info->shared)
++      o = bfd_get_section_by_name (dynobj, ".dynamic");
++      if (info->warn_shared_textrel && o != NULL)
+ 	{
+ 	  bfd_byte *dyncon, *dynconend;
+ 
+ 	  /* Fix up .dynamic entries.  */
+-	  o = bfd_get_section_by_name (dynobj, ".dynamic");
+-	  BFD_ASSERT (o != NULL);
+-
+ 	  dyncon = o->contents;
+ 	  dynconend = o->contents + o->size;
+ 	  for (; dyncon < dynconend; dyncon += bed->s->sizeof_dyn)
+@@ -8671,7 +8687,7 @@ bfd_elf_final_link (bfd *abfd, struct bfd_link_info *info)
+ 	      if (dyn.d_tag == DT_TEXTREL)
+ 		{
+ 		  _bfd_error_handler
+-		    (_("warning: creating a DT_TEXTREL in a shared object."));
++		    (_("warning: creating a DT_TEXTREL in object."));
+ 		  break;
+ 		}
+ 	    }
+diff --git a/bfd/opncls.c b/bfd/opncls.c
+index b02b137..cb7ff89 100644
+--- a/bfd/opncls.c
++++ b/bfd/opncls.c
+@@ -158,6 +158,13 @@ bfd_fopen (const char *filename, const char *target, const char *mode, int fd)
+ {
+   bfd *nbfd;
+   const bfd_target *target_vec;
++  struct stat s;
++
++  if (stat (filename, &s) == 0)
++    if (S_ISDIR(s.st_mode)) {
++      bfd_set_error (bfd_error_file_not_recognized);
++      return NULL;
++    }
+ 
+   nbfd = _bfd_new_bfd ();
+   if (nbfd == NULL)
+diff --git a/binutils/readelf.c b/binutils/readelf.c
+index d8bd54f..e8503f7 100644
+--- a/binutils/readelf.c
++++ b/binutils/readelf.c
+@@ -2372,6 +2372,7 @@ get_segment_type (unsigned long p_type)
+ 			return "GNU_EH_FRAME";
+     case PT_GNU_STACK:	return "GNU_STACK";
+     case PT_GNU_RELRO:  return "GNU_RELRO";
++    case PT_PAX_FLAGS:  return "PAX_FLAGS";
+ 
+     default:
+       if ((p_type >= PT_LOPROC) && (p_type <= PT_HIPROC))
+diff --git a/configure b/configure
+index dbcbdfe..03a8972 100755
+--- a/configure
++++ b/configure
+@@ -1276,7 +1276,7 @@ case "${target}" in
+   am33_2.0-*-linux*)
+     noconfigdirs="$noconfigdirs ${libgcj} target-newlib target-libgloss"
+     ;;
+-  sh-*-linux*)
++  sh*-*-linux*)
+     noconfigdirs="$noconfigdirs ${libgcj} target-newlib target-libgloss"
+     ;;    
+   sh*-*-pe|mips*-*-pe|*arm-wince-pe)
+@@ -1584,7 +1584,7 @@ case "${target}" in
+   romp-*-*)
+     noconfigdirs="$noconfigdirs bfd binutils ld gas opcodes target-libgloss ${libgcj}"
+     ;;
+-  sh-*-* | sh64-*-*)
++  sh*-*-* | sh64-*-*)
+     case "${host}" in
+       i[3456789]86-*-vsta) ;; # don't add gprof back in
+       i[3456789]86-*-go32*) ;; # don't add gprof back in
+diff --git a/configure.in b/configure.in
+index 76daff9..9a228f2 100644
+--- a/configure.in
++++ b/configure.in
+@@ -468,7 +468,7 @@ case "${target}" in
+   am33_2.0-*-linux*)
+     noconfigdirs="$noconfigdirs ${libgcj} target-newlib target-libgloss"
+     ;;
+-  sh-*-linux*)
++  sh*-*-linux*)
+     noconfigdirs="$noconfigdirs ${libgcj} target-newlib target-libgloss"
+     ;;    
+   sh*-*-pe|mips*-*-pe|*arm-wince-pe)
+@@ -776,7 +776,7 @@ case "${target}" in
+   romp-*-*)
+     noconfigdirs="$noconfigdirs bfd binutils ld gas opcodes target-libgloss ${libgcj}"
+     ;;
+-  sh-*-* | sh64-*-*)
++  sh*-*-* | sh64-*-*)
+     case "${host}" in
+       i[[3456789]]86-*-vsta) ;; # don't add gprof back in
+       i[[3456789]]86-*-go32*) ;; # don't add gprof back in
+diff --git a/gprof/Makefile.in b/gprof/Makefile.in
+index 328a3da..7c5310b 100644
+--- a/gprof/Makefile.in
++++ b/gprof/Makefile.in
+@@ -799,6 +799,9 @@ uninstall-man: uninstall-man1
+ 
+ diststuff: $(BUILT_SOURCES) info $(man_MANS)
+ 
++# This empty rule is a hack against gmake patched by Apple.
++%.o:%.m
++
+ .m.c:
+ 	awk -f $(srcdir)/gen-c-prog.awk > ./$*.c \
+ 	    FUNCTION=`(echo $*|sed -e 's,.*/,,g' -e 's/_bl//')`_blurb \
+diff --git a/include/bfdlink.h b/include/bfdlink.h
+index f4b7aa7..4efaf87 100644
+--- a/include/bfdlink.h
++++ b/include/bfdlink.h
+@@ -318,6 +318,14 @@ struct bfd_link_info
+   /* TRUE if PT_GNU_RELRO segment should be created.  */
+   unsigned int relro: 1;
+ 
++  /* TRUE if PT_PAX_FLAGS segment should be created with PF_NOMPROTECT
++     flags.  */
++  unsigned int execheap: 1;
++
++  /* TRUE if PT_PAX_FLAGS segment should be created with PF_MPROTECT
++     flags.  */
++  unsigned int noexecheap: 1;
++
+   /* TRUE if we should warn when adding a DT_TEXTREL to a shared object.  */
+   unsigned int warn_shared_textrel: 1;
+ 
+diff --git a/include/elf/common.h b/include/elf/common.h
+index b11171b..2f073eb 100644
+--- a/include/elf/common.h
++++ b/include/elf/common.h
+@@ -304,12 +304,29 @@
+ #define PT_SUNW_EH_FRAME PT_GNU_EH_FRAME      /* Solaris uses the same value */
+ #define PT_GNU_STACK	(PT_LOOS + 0x474e551) /* Stack flags */
+ #define PT_GNU_RELRO	(PT_LOOS + 0x474e552) /* Read-only after relocation */
++#define PT_PAX_FLAGS	(PT_LOOS + 0x5041580) /* PaX flags */
+ 
+ /* Program segment permissions, in program header p_flags field.  */
+ 
+ #define PF_X		(1 << 0)	/* Segment is executable */
+ #define PF_W		(1 << 1)	/* Segment is writable */
+ #define PF_R		(1 << 2)	/* Segment is readable */
++
++/* Flags to control PaX behavior.  */
++
++#define PF_PAGEEXEC	(1 << 4)	/* Enable  PAGEEXEC */
++#define PF_NOPAGEEXEC	(1 << 5)	/* Disable PAGEEXEC */
++#define PF_SEGMEXEC	(1 << 6)	/* Enable  SEGMEXEC */
++#define PF_NOSEGMEXEC	(1 << 7)	/* Disable SEGMEXEC */
++#define PF_MPROTECT	(1 << 8)	/* Enable  MPROTECT */
++#define PF_NOMPROTECT	(1 << 9)	/* Disable MPROTECT */
++#define PF_RANDEXEC	(1 << 10)	/* Enable  RANDEXEC */
++#define PF_NORANDEXEC	(1 << 11)	/* Disable RANDEXEC */
++#define PF_EMUTRAMP	(1 << 12)	/* Enable  EMUTRAMP */
++#define PF_NOEMUTRAMP	(1 << 13)	/* Disable EMUTRAMP */
++#define PF_RANDMMAP	(1 << 14)	/* Enable  RANDMMAP */
++#define PF_NORANDMMAP	(1 << 15)	/* Disable RANDMMAP */
++
+ /* #define PF_MASKOS	0x0F000000    *//* OS-specific reserved bits */
+ #define PF_MASKOS	0x0FF00000	/* New value, Oct 4, 1999 Draft */
+ #define PF_MASKPROC	0xF0000000	/* Processor-specific reserved bits */
+diff --git a/ld/emulparams/armelf.sh b/ld/emulparams/armelf.sh
+index 6dc50b2..2b6e9f1 100644
+--- a/ld/emulparams/armelf.sh
++++ b/ld/emulparams/armelf.sh
+@@ -24,7 +24,7 @@ GENERATE_SHLIB_SCRIPT=yes
+ 
+ ARCH=arm
+ MACHINE=
+-MAXPAGESIZE=256
++MAXPAGESIZE=0x8000
+ ENTRY=_start
+ EMBEDDED=yes
+ 
+diff --git a/ld/emulparams/elf64ppc.sh b/ld/emulparams/elf64ppc.sh
+index 8285723..0d03370 100644
+--- a/ld/emulparams/elf64ppc.sh
++++ b/ld/emulparams/elf64ppc.sh
+@@ -28,7 +28,8 @@ else
+   .toc		0 : { *(.toc) }"
+ fi
+ OTHER_GOT_RELOC_SECTIONS="
+-  .rela.toc	${RELOCATING-0} : { *(.rela.toc) }"
++  .rela.toc	${RELOCATING-0} : { *(.rela.toc) }
++  .rela.opd	${RELOCATING-0} : { *(.rela.opd) }"
+ OTHER_READWRITE_SECTIONS="
+   .toc1		${RELOCATING-0} :${RELOCATING+ ALIGN(8)} { *(.toc1) }
+   .opd		${RELOCATING-0} :${RELOCATING+ ALIGN(8)} { KEEP (*(.opd)) }"
+diff --git a/ld/emulparams/elf_i386.sh b/ld/emulparams/elf_i386.sh
+index af7010b..d5da9dd 100644
+--- a/ld/emulparams/elf_i386.sh
++++ b/ld/emulparams/elf_i386.sh
+@@ -12,3 +12,9 @@ GENERATE_SHLIB_SCRIPT=yes
+ GENERATE_PIE_SCRIPT=yes
+ NO_SMALL_DATA=yes
+ SEPARATE_GOTPLT=12
++
++case "$target" in
++  x86_64*-linux*)
++    LIBPATH_SUFFIX=32 
++  ;;
++esac
+diff --git a/ld/emulparams/hppa64linux.sh b/ld/emulparams/hppa64linux.sh
+index aaf8c72..7c52c88 100644
+--- a/ld/emulparams/hppa64linux.sh
++++ b/ld/emulparams/hppa64linux.sh
+@@ -13,6 +13,7 @@ MACHINE=hppa2.0w
+ ENTRY="main"
+ TEMPLATE_NAME=elf32
+ GENERATE_SHLIB_SCRIPT=yes
++GENERATE_PIE_SCRIPT=yes
+ 
+ # We really want multiple .stub sections, one for each input .text section,
+ # but for now this is good enough.
+diff --git a/ld/emultempl/elf32.em b/ld/emultempl/elf32.em
+index 1925979..1f4f515 100644
+--- a/ld/emultempl/elf32.em
++++ b/ld/emultempl/elf32.em
+@@ -970,6 +970,8 @@ cat >>e${EMULATION_NAME}.c <<EOF
+ 	      && command_line.rpath == NULL)
+ 	    {
+ 	      lib_path = (const char *) getenv ("LD_RUN_PATH");
++	      if ((lib_path) && (strlen (lib_path) == 0))
++		  lib_path = NULL;
+ 	      if (gld${EMULATION_NAME}_search_needed (lib_path, &n,
+ 						      force))
+ 		break;
+@@ -1154,6 +1156,8 @@ gld${EMULATION_NAME}_before_allocation (void)
+   rpath = command_line.rpath;
+   if (rpath == NULL)
+     rpath = (const char *) getenv ("LD_RUN_PATH");
++  if ((rpath) && (strlen (rpath) == 0))
++      rpath = NULL;
+   if (! (bfd_elf_size_dynamic_sections
+ 	 (output_bfd, command_line.soname, rpath,
+ 	  command_line.filter_shlib,
+@@ -1826,6 +1830,11 @@ cat >>e${EMULATION_NAME}.c <<EOF
+ 	  link_info.flags |= (bfd_vma) DF_BIND_NOW;
+ 	  link_info.flags_1 |= (bfd_vma) DF_1_NOW;
+ 	}
++      else if (strcmp (optarg, "lazy") == 0)
++	{
++	  link_info.flags &= ~((bfd_vma) DF_BIND_NOW);
++	  link_info.flags_1 &= ~((bfd_vma) DF_1_NOW);
++	}
+       else if (strcmp (optarg, "origin") == 0)
+ 	{
+ 	  link_info.flags |= (bfd_vma) DF_ORIGIN;
+@@ -1851,6 +1860,16 @@ cat >>e${EMULATION_NAME}.c <<EOF
+ 	  link_info.noexecstack = TRUE;
+ 	  link_info.execstack = FALSE;
+ 	}
++      else if (strcmp (optarg, "execheap") == 0)
++	{
++	  link_info.execheap = TRUE;
++	  link_info.noexecheap = FALSE;
++	}
++      else if (strcmp (optarg, "noexecheap") == 0)
++	{
++	  link_info.noexecheap = TRUE;
++	  link_info.execheap = FALSE;
++	}
+       else if (strcmp (optarg, "relro") == 0)
+ 	link_info.relro = TRUE;
+       else if (strcmp (optarg, "norelro") == 0)
+@@ -1891,8 +1910,10 @@ cat >>e${EMULATION_NAME}.c <<EOF
+   fprintf (file, _("  -z combreloc\t\tMerge dynamic relocs into one section and sort\n"));
+   fprintf (file, _("  -z defs\t\tReport unresolved symbols in object files.\n"));
+   fprintf (file, _("  -z execstack\t\tMark executable as requiring executable stack\n"));
++  fprintf (file, _("  -z execheap\t\tMark executable as requiring executable heap\n"));
+   fprintf (file, _("  -z initfirst\t\tMark DSO to be initialized first at runtime\n"));
+   fprintf (file, _("  -z interpose\t\tMark object to interpose all DSOs but executable\n"));
++  fprintf (file, _("  -z lazy\t\tMark object lazy runtime binding (default)\n"));
+   fprintf (file, _("  -z loadfltr\t\tMark object requiring immediate process\n"));
+   fprintf (file, _("  -z muldefs\t\tAllow multiple definitions\n"));
+   fprintf (file, _("  -z nocombreloc\tDon't merge dynamic relocs into one section\n"));
+@@ -1902,6 +1923,7 @@ cat >>e${EMULATION_NAME}.c <<EOF
+   fprintf (file, _("  -z nodlopen\t\tMark DSO not available to dlopen\n"));
+   fprintf (file, _("  -z nodump\t\tMark DSO not available to dldump\n"));
+   fprintf (file, _("  -z noexecstack\tMark executable as not requiring executable stack\n"));
++  fprintf (file, _("  -z noexecheap\tMark executable as not requiring executable heap\n"));
+   fprintf (file, _("  -z norelro\t\tDon't create RELRO program header\n"));
+   fprintf (file, _("  -z now\t\tMark object non-lazy runtime binding\n"));
+   fprintf (file, _("  -z origin\t\tMark object requiring immediate \$ORIGIN processing\n\t\t\t  at runtime\n"));
+diff --git a/ld/genscripts.sh b/ld/genscripts.sh
+index e9d4f15..81b78a2 100755
+--- a/ld/genscripts.sh
++++ b/ld/genscripts.sh
+@@ -189,6 +189,14 @@ if [ "x${use_sysroot}" != "xyes" ] ; then
+   ::) LIB_PATH=${tool_lib} ;;
+   *) LIB_PATH=${tool_lib}:${LIB_PATH} ;;
+   esac
++  # For multilib targets, search both $tool_lib dirs
++  if [ "x${LIBPATH_SUFFIX}" != "x" ] ; then
++    case :${LIB_PATH}: in
++      ::: | *:${tool_lib}${LIBPATH_SUFFIX}:*) ;;
++      ::) LIB_PATH=${tool_lib}${LIBPATH_SUFFIX} ;;
++      *) LIB_PATH=${tool_lib}${LIBPATH_SUFFIX}:${LIB_PATH} ;;
++    esac
++  fi
+ fi
+ 
+ LIB_SEARCH_DIRS=`echo ${LIB_PATH} | sed -e 's/:/ /g' -e 's/\([^ ][^ ]*\)/SEARCH_DIR(\\"\1\\");/g'`
+diff --git a/ld/ld.texinfo b/ld/ld.texinfo
+index 07bb0c3..a0605df 100644
+--- a/ld/ld.texinfo
++++ b/ld/ld.texinfo
+@@ -962,6 +962,12 @@ objects.
+ Marks the object that its symbol table interposes before all symbols
+ but the primary executable.
+ 
++@item lazy
++When generating an executable or shared library, mark it to tell the
++dynamic linker to defer function call resolution to the point when
++the function is called (lazy binding), rather than at load time.
++Lazy binding is the default.
++
+ @item loadfltr
+ Marks  the object that its filters be processed immediately at
+ runtime.
+diff --git a/ld/ldgram.y b/ld/ldgram.y
+index 3829e6a..f1f8195 100644
+--- a/ld/ldgram.y
++++ b/ld/ldgram.y
+@@ -1089,6 +1089,8 @@ phdr_type:
+ 			    $$ = exp_intop (0x6474e550);
+ 			  else if (strcmp (s, "PT_GNU_STACK") == 0)
+ 			    $$ = exp_intop (0x6474e551);
++			  else if (strcmp (s, "PT_PAX_FLAGS") == 0)
++			    $$ = exp_intop (0x65041580);
+ 			  else
+ 			    {
+ 			      einfo (_("\
+diff --git a/ld/ldmain.c b/ld/ldmain.c
+index db87a40..621360e 100644
+--- a/ld/ldmain.c
++++ b/ld/ldmain.c
+@@ -287,7 +287,7 @@ main (int argc, char **argv)
+   link_info.keep_memory = TRUE;
+   link_info.notice_all = FALSE;
+   link_info.nocopyreloc = FALSE;
+-  link_info.new_dtags = FALSE;
++  link_info.new_dtags = TRUE;
+   link_info.combreloc = TRUE;
+   link_info.eh_frame_hdr = FALSE;
+   link_info.relro = FALSE;
+@@ -314,7 +314,7 @@ main (int argc, char **argv)
+   link_info.flags = 0;
+   link_info.flags_1 = 0;
+   link_info.relax_pass = 1;
+-  link_info.warn_shared_textrel = FALSE;
++  link_info.warn_shared_textrel = TRUE;
+   link_info.gc_sections = FALSE;
+ 
+   ldfile_add_arch ("");
+diff --git a/ld/testsuite/lib/ld-lib.exp b/ld/testsuite/lib/ld-lib.exp
+index a0e734e..ed230ed 100644
+--- a/ld/testsuite/lib/ld-lib.exp
++++ b/ld/testsuite/lib/ld-lib.exp
+@@ -181,6 +181,10 @@ proc default_ld_simple_link { ld target objects } {
+     # symbol, since the default linker script might use ENTRY.
+     regsub -all "(^|\n)(\[^\n\]*: warning: cannot find entry symbol\[^\n\]*\n?)" $exec_output "\\1" exec_output
+ 
++    # Gentoo tweak:
++    # We want to ignore TEXTREL warnings since we force enable them by default
++    regsub -all "^lt-ld-new: warning: creating a DT_TEXTREL in object\." $exec_output "\\1" exec_output
++
+     if [string match "" $exec_output] then {
+ 	return 1
+     } else {
+diff --git a/libiberty/Makefile.in b/libiberty/Makefile.in
+index 95a8278..733c7d4 100644
+--- a/libiberty/Makefile.in
++++ b/libiberty/Makefile.in
+@@ -232,6 +232,7 @@ $(TARGETLIB): $(REQUIRED_OFILES) $(EXTRA_OFILES) $(LIBOBJS)
+ 	  $(AR) $(AR_FLAGS) $(TARGETLIB) \
+ 	    $(REQUIRED_OFILES) $(EXTRA_OFILES) $(LIBOBJS); \
+ 	  $(RANLIB) $(TARGETLIB); \
++	  cp $(TARGETLIB) ../ ; \
+ 	  cd ..; \
+ 	else true; fi
+ 
+diff --git a/libiberty/fibheap.c b/libiberty/fibheap.c
+index c032149..9eb4a31 100644
+--- a/libiberty/fibheap.c
++++ b/libiberty/fibheap.c
+@@ -34,6 +34,21 @@ Boston, MA 02110-1301, USA.  */
+ #include "libiberty.h"
+ #include "fibheap.h"
+ 
++/* FIXME: It'd be nice to configure around these, but the include files are too
++   painful.  These macros should at least be more portable than hardwired hex
++   constants. */
++
++#ifndef ULONG_MAX
++#define	ULONG_MAX	((unsigned long)(~0L))		/* 0xFFFFFFFF */
++#endif
++
++#ifndef LONG_MAX
++#define	LONG_MAX	((long)(ULONG_MAX >> 1))	/* 0x7FFFFFFF */
++#endif
++
++#ifndef LONG_MIN
++#define	LONG_MIN	((long)(~LONG_MAX))		/* 0x80000000 */
++#endif
+ 
+ #define FIBHEAPKEY_MIN	LONG_MIN
+ 
