@@ -40,7 +40,7 @@ S="${WORKDIR}"/STLport-${PV}
 
 src_unpack() {
 	mkdir -p "${S}"
-	tar -pxf "${DISTDIR}"/STLport-${PV}.tar.gz -C "${S}"
+	tar -pxf "${DISTDIR}"/STLport-${PV}.tar.gz -C "${S}" || die
 }
 
 src_prepare() {

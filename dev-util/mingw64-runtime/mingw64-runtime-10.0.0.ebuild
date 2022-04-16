@@ -60,8 +60,8 @@ pkg_setup() {
 }
 
 src_configure() {
-	CFLAGS="-O2 -pipe"
-	CXXFLAGS="-O2 -pipe"
+	CFLAGS="-O2 -pipe -s"
+	CXXFLAGS="-O2 -pipe -s"
 	CHOST=${CTARGET} strip-unsupported-flags
 	# Normally mingw-64 does not use dynamic linker.
 	# But at configure time it uses $LDFLAGS.
