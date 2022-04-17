@@ -1,0 +1,98 @@
+From 4f45f5abe77525389e0a4d9885c5bf63e2f54bc8 Mon Sep 17 00:00:00 2001
+From: Jonathan Yong <10walls@gmail.com>
+Date: Fri, 31 Oct 2014 06:46:02 +0800
+Subject: [PATCH 22/24] prevent modules from being unloaded before their dtors
+ are called
+
+---
+ libstdc++-v3/config/os/mingw32-w64/os_defines.h |  5 +++++
+ libstdc++-v3/config/os/newlib/os_defines.h      |  6 ++++++
+ libstdc++-v3/libsupc++/atexit_thread.cc         | 20 ++++++++++++++++++++
+ 3 files changed, 31 insertions(+)
+
+diff --git a/libstdc++-v3/config/os/mingw32-w64/os_defines.h b/libstdc++-v3/config/os/mingw32-w64/os_defines.h
+index fd5ad9e..41d59be 100644
+--- a/libstdc++-v3/config/os/mingw32-w64/os_defines.h
++++ b/libstdc++-v3/config/os/mingw32-w64/os_defines.h
+@@ -81,4 +81,9 @@
+ // See libstdc++/59807
+ #define _GTHREAD_USE_MUTEX_INIT_FUNC 1
+ 
++// Enable use of GetModuleHandleEx (requires Windows XP/2003) in
++// __cxa_thread_atexit to prevent modules from being unloaded before
++// their dtors are called
++#define _GLIBCXX_THREAD_ATEXIT_WIN32 1
++
+ #endif
+diff --git a/libstdc++-v3/config/os/newlib/os_defines.h b/libstdc++-v3/config/os/newlib/os_defines.h
+index 92748da..2e01d3b 100644
+--- a/libstdc++-v3/config/os/newlib/os_defines.h
++++ b/libstdc++-v3/config/os/newlib/os_defines.h
+@@ -47,6 +47,12 @@
+ 
+ // See libstdc++/20806.
+ #define _GLIBCXX_HAVE_DOS_BASED_FILESYSTEM 1
++
++// Enable use of GetModuleHandleEx (requires Windows XP/2003) in
++// __cxa_thread_atexit to prevent modules from being unloaded before
++// their dtors are called
++#define _GLIBCXX_THREAD_ATEXIT_WIN32 1
++
+ #endif
+ 
+ #endif
+diff --git a/libstdc++-v3/libsupc++/atexit_thread.cc b/libstdc++-v3/libsupc++/atexit_thread.cc
+index dff08e9..d7d84d2 100644
+--- a/libstdc++-v3/libsupc++/atexit_thread.cc
++++ b/libstdc++-v3/libsupc++/atexit_thread.cc
+@@ -25,6 +25,10 @@
+ #include <cstdlib>
+ #include <new>
+ #include "bits/gthr.h"
++#ifdef _GLIBCXX_THREAD_ATEXIT_WIN32
++#define WIN32_LEAN_AND_MEAN
++#include <windows.h>
++#endif
+ 
+ #if _GLIBCXX_HAVE___CXA_THREAD_ATEXIT_IMPL
+ 
+@@ -47,6 +51,9 @@ namespace {
+     void (*destructor)(void *);
+     void *object;
+     elt *next;
++#ifdef _GLIBCXX_THREAD_ATEXIT_WIN32
++    HMODULE dll;
++#endif
+   };
+ 
+   // Keep a per-thread list of cleanups in gthread_key storage.
+@@ -62,6 +69,11 @@ namespace {
+       {
+ 	elt *old_e = e;
+ 	e->destructor (e->object);
++#ifdef _GLIBCXX_THREAD_ATEXIT_WIN32
++	/* Decrement DLL count */
++	if (e->dll)
++	  FreeLibrary (e->dll);
++#endif
+ 	e = e->next;
+ 	delete (old_e);
+       }
+@@ -133,6 +145,14 @@ __cxxabiv1::__cxa_thread_atexit (void (*dtor)(void *), void *obj, void */*dso_ha
+   new_elt->destructor = dtor;
+   new_elt->object = obj;
+   new_elt->next = first;
++#ifdef _GLIBCXX_THREAD_ATEXIT_WIN32
++  /* Store the DLL address for a later call to FreeLibrary in new_elt and
++     increment DLL load count.  This blocks the unloading of the DLL
++     before the thread-local dtors have been called.  This does NOT help
++     if FreeLibrary/dlclose is called in excess. */
++  GetModuleHandleExW (GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
++		      (LPCWSTR) dtor, &new_elt->dll);
++#endif
+ 
+   if (__gthread_active_p ())
+     __gthread_setspecific (key, new_elt);
+-- 
+2.1.1
+

@@ -1,0 +1,234 @@
+From 0b06ec18e73dff59d5c5f84b27aa5a09e8b0914b Mon Sep 17 00:00:00 2001
+From: Jonathan Yong <10walls@gmail.com>
+Date: Sat, 28 Jun 2014 10:16:07 +0800
+Subject: [PATCH 20/24] fix gnat DLL prefix for Cygwin
+
+---
+ gcc/ada/gcc-interface/Makefile.in | 100 ++++++++++++++++++++------------------
+ 1 file changed, 52 insertions(+), 48 deletions(-)
+
+diff --git a/gcc/ada/gcc-interface/Makefile.in b/gcc/ada/gcc-interface/Makefile.in
+index e2cc4a9..6deebdf 100644
+--- a/gcc/ada/gcc-interface/Makefile.in
++++ b/gcc/ada/gcc-interface/Makefile.in
+@@ -124,12 +124,13 @@ GMEM_LIB =
+ MISCLIB =
+ OUTPUT_OPTION = -o $@
+ 
+-objext = .o
+-exeext =
+-arext  = .a
+-soext  = .so
+-shext  =
+-hyphen = -
++objext   = .o
++exeext   =
++arext    = .a
++soext    = .so
++shext    =
++hyphen   = -
++soprefix = lib
+ 
+ # Define this as & to perform parallel make on a Sequent.
+ # Note that this has some bugs, and it seems currently necessary
+@@ -1771,6 +1772,9 @@ ifeq ($(strip $(filter-out cygwin% mingw32% pe,$(target_os))),)
+   EXTRA_GNATMAKE_OBJS = mdll.o mdll-utl.o mdll-fil.o
+   soext = .dll
+   LIBRARY_VERSION := $(LIB_VERSION)
++  ifeq ($(strip $(filter-out cygwin%,$(target_os))),)
++    soprefix = cyg
++  endif
+ endif
+ 
+ # Mips Linux
+@@ -2675,16 +2679,16 @@ install-gnatlib: ../stamp-gnatlib-$(RTSDIR)
+ #     Also install the .dSYM directories if they exist (these directories
+ #     contain the debug information for the shared libraries on darwin)
+ 	for file in gnat gnarl; do \
+-	   if [ -f $(RTSDIR)/lib$${file}$(hyphen)$(LIBRARY_VERSION)$(soext) ]; then \
+-	      $(INSTALL) $(RTSDIR)/lib$${file}$(hyphen)$(LIBRARY_VERSION)$(soext) \
++	   if [ -f $(RTSDIR)/cyg$${file}$(hyphen)$(LIBRARY_VERSION)$(soext) ]; then \
++	      $(INSTALL) $(RTSDIR)/${soprefix}$${file}$(hyphen)$(LIBRARY_VERSION)$(soext) \
+ 			 $(DESTDIR)$(ADA_RTL_OBJ_DIR); \
+ 	   fi; \
+-	   if [ -f $(RTSDIR)/lib$${file}$(soext) ]; then \
+-	      $(LN_S) lib$${file}$(hyphen)$(LIBRARY_VERSION)$(soext) \
+-	      $(DESTDIR)$(ADA_RTL_OBJ_DIR)/lib$${file}$(soext); \
++	   if [ -f $(RTSDIR)/${soprefix}$${file}$(soext) ]; then \
++	      $(LN_S) ${soprefix}$${file}$(hyphen)$(LIBRARY_VERSION)$(soext) \
++	      $(DESTDIR)$(ADA_RTL_OBJ_DIR)/${soprefix}$${file}$(soext); \
+ 	   fi; \
+-	   if [ -d $(RTSDIR)/lib$${file}$(hyphen)$(LIBRARY_VERSION)$(soext).dSYM ]; then \
+-	      $(CP) -r $(RTSDIR)/lib$${file}$(hyphen)$(LIBRARY_VERSION)$(soext).dSYM \
++	   if [ -d $(RTSDIR)/${soprefix}$${file}$(hyphen)$(LIBRARY_VERSION)$(soext).dSYM ]; then \
++	      $(CP) -r $(RTSDIR)/${soprefix}$${file}$(hyphen)$(LIBRARY_VERSION)$(soext).dSYM \
+ 	        $(DESTDIR)$(ADA_RTL_OBJ_DIR); \
+ 	   fi; \
+ 	done
+@@ -2816,25 +2820,25 @@ gnatlib-shared-default:
+ 	     MULTISUBDIR="$(MULTISUBDIR)" \
+ 	     THREAD_KIND="$(THREAD_KIND)" \
+              gnatlib
+-	$(RM) $(RTSDIR)/libgna*$(soext)
++	$(RM) $(RTSDIR)/${soprefix}gna*$(soext)
+ 	cd $(RTSDIR); `echo "$(GCC_FOR_TARGET)" \
+                 | sed -e 's,\./xgcc,../../xgcc,' -e 's,-B\./,-B../../,'` -shared $(GNATLIBCFLAGS) \
+ 		$(PICFLAG_FOR_TARGET) \
+-		-o libgnat$(hyphen)$(LIBRARY_VERSION)$(soext) \
++		-o ${soprefix}gnat$(hyphen)$(LIBRARY_VERSION)$(soext) \
+ 		$(GNATRTL_NONTASKING_OBJS) $(LIBGNAT_OBJS) \
+-		$(SO_OPTS)libgnat$(hyphen)$(LIBRARY_VERSION)$(soext) \
++		$(SO_OPTS)${soprefix}gnat$(hyphen)$(LIBRARY_VERSION)$(soext) \
+ 		$(MISCLIB) -lm
+ 	cd $(RTSDIR); `echo "$(GCC_FOR_TARGET)" \
+                 | sed -e 's,\./xgcc,../../xgcc,' -e 's,-B\./,-B../../,'` -shared $(GNATLIBCFLAGS) \
+ 		$(PICFLAG_FOR_TARGET) \
+-		-o libgnarl$(hyphen)$(LIBRARY_VERSION)$(soext) \
++		-o ${soprefix}gnarl$(hyphen)$(LIBRARY_VERSION)$(soext) \
+ 		$(GNATRTL_TASKING_OBJS) \
+-		$(SO_OPTS)libgnarl$(hyphen)$(LIBRARY_VERSION)$(soext) \
++		$(SO_OPTS)cyggnarl$(hyphen)$(LIBRARY_VERSION)$(soext) \
+ 		$(THREADSLIB)
+-	cd $(RTSDIR); $(LN_S) libgnat$(hyphen)$(LIBRARY_VERSION)$(soext) \
+-		libgnat$(soext)
+-	cd $(RTSDIR); $(LN_S) libgnarl$(hyphen)$(LIBRARY_VERSION)$(soext) \
+-		libgnarl$(soext)
++	cd $(RTSDIR); $(LN_S) ${soprefix}gnat$(hyphen)$(LIBRARY_VERSION)$(soext) \
++		${soprefix}gnat$(soext)
++	cd $(RTSDIR); $(LN_S) cyggnarl$(hyphen)$(LIBRARY_VERSION)$(soext) \
++		${soprefix}gnarl$(soext)
+ 
+ gnatlib-shared-dual:
+ 	$(MAKE) $(FLAGS_TO_PASS) \
+@@ -2844,7 +2848,7 @@ gnatlib-shared-dual:
+ 	     MULTISUBDIR="$(MULTISUBDIR)" \
+ 	     THREAD_KIND="$(THREAD_KIND)" \
+              gnatlib-shared-default
+-	$(MV) $(RTSDIR)/libgna*$(soext) .
++	$(MV) $(RTSDIR)/${soprefix}gna*$(soext) .
+ 	$(RM) ../stamp-gnatlib2-$(RTSDIR)
+ 	$(MAKE) $(FLAGS_TO_PASS) \
+              GNATLIBFLAGS="$(GNATLIBFLAGS)" \
+@@ -2853,7 +2857,7 @@ gnatlib-shared-dual:
+ 	     MULTISUBDIR="$(MULTISUBDIR)" \
+ 	     THREAD_KIND="$(THREAD_KIND)" \
+              gnatlib
+-	$(MV) libgna*$(soext) $(RTSDIR)
++	$(MV) ${soprefix}gna*$(soext) $(RTSDIR)
+ 
+ gnatlib-shared-dual-win32:
+ 	$(MAKE) $(FLAGS_TO_PASS) \
+@@ -2864,7 +2868,7 @@ gnatlib-shared-dual-win32:
+ 	     MULTISUBDIR="$(MULTISUBDIR)" \
+ 	     THREAD_KIND="$(THREAD_KIND)" \
+              gnatlib-shared-win32
+-	$(MV) $(RTSDIR)/libgna*$(soext) .
++	$(MV) $(RTSDIR)/${soprefix}gna*$(soext) .
+ 	$(RM) ../stamp-gnatlib2-$(RTSDIR)
+ 	$(MAKE) $(FLAGS_TO_PASS) \
+              GNATLIBFLAGS="$(GNATLIBFLAGS)" \
+@@ -2873,7 +2877,7 @@ gnatlib-shared-dual-win32:
+ 	     MULTISUBDIR="$(MULTISUBDIR)" \
+ 	     THREAD_KIND="$(THREAD_KIND)" \
+              gnatlib
+-	$(MV) libgna*$(soext) $(RTSDIR)
++	$(MV) ${soprefix}gna*$(soext) $(RTSDIR)
+ 
+ # ??? we need to add the option to support auto-import of arrays/records to
+ # the GNATLIBFLAGS when this will be supported by GNAT. At this point we will
+@@ -2887,20 +2891,20 @@ gnatlib-shared-win32:
+ 	     MULTISUBDIR="$(MULTISUBDIR)" \
+ 	     THREAD_KIND="$(THREAD_KIND)" \
+              gnatlib
+-	$(RM) $(RTSDIR)/libgna*$(soext)
++	$(RM) $(RTSDIR)/${soprefix}gna*$(soext)
+ 	cd $(RTSDIR); `echo "$(GCC_FOR_TARGET)" \
+                 | sed -e 's,\./xgcc,../../xgcc,' -e 's,-B\./,-B../../,'` -shared -shared-libgcc \
+ 		$(PICFLAG_FOR_TARGET) \
+-		-o libgnat$(hyphen)$(LIBRARY_VERSION)$(soext) \
++		-o ${soprefix}gnat$(hyphen)$(LIBRARY_VERSION)$(soext) \
+ 		$(GNATRTL_NONTASKING_OBJS) $(LIBGNAT_OBJS) \
+-		$(SO_OPTS)libgnat$(hyphen)$(LIBRARY_VERSION)$(soext) $(MISCLIB)
++		$(SO_OPTS)${soprefix}gnat$(hyphen)$(LIBRARY_VERSION)$(soext) $(MISCLIB)
+ 	cd $(RTSDIR); `echo "$(GCC_FOR_TARGET)" \
+                 | sed -e 's,\./xgcc,../../xgcc,' -e 's,-B\./,-B../../,'` -shared -shared-libgcc \
+ 		$(PICFLAG_FOR_TARGET) \
+-		-o libgnarl$(hyphen)$(LIBRARY_VERSION)$(soext) \
++		-o ${soprefix}gnarl$(hyphen)$(LIBRARY_VERSION)$(soext) \
+ 		$(GNATRTL_TASKING_OBJS) \
+-		$(SO_OPTS)libgnarl$(hyphen)$(LIBRARY_VERSION)$(soext) \
+-		$(THREADSLIB) -Wl,libgnat$(hyphen)$(LIBRARY_VERSION)$(soext)
++		$(SO_OPTS)${soprefix}gnarl$(hyphen)$(LIBRARY_VERSION)$(soext) \
++		$(THREADSLIB) -Wl,${soprefix}gnat$(hyphen)$(LIBRARY_VERSION)$(soext)
+ 
+ gnatlib-shared-darwin:
+ 	$(MAKE) $(FLAGS_TO_PASS) \
+@@ -2910,27 +2914,27 @@ gnatlib-shared-darwin:
+ 	     MULTISUBDIR="$(MULTISUBDIR)" \
+ 	     THREAD_KIND="$(THREAD_KIND)" \
+ 	     gnatlib
+-	$(RM) $(RTSDIR)/libgnat$(soext) $(RTSDIR)/libgnarl$(soext)
++	$(RM) $(RTSDIR)/${soprefix}gnat$(soext) $(RTSDIR)/${soprefix}gnarl$(soext)
+ 	cd $(RTSDIR); `echo "$(GCC_FOR_TARGET)" \
+                 | sed -e 's,\./xgcc,../../xgcc,' -e 's,-B\./,-B../../,'` -dynamiclib $(PICFLAG_FOR_TARGET) \
+-		-o libgnat$(hyphen)$(LIBRARY_VERSION)$(soext) \
++		-o ${soprefix}gnat$(hyphen)$(LIBRARY_VERSION)$(soext) \
+ 		$(GNATRTL_NONTASKING_OBJS) $(LIBGNAT_OBJS) \
+ 		$(SO_OPTS) \
+-		-Wl,-install_name,@rpath/libgnat$(hyphen)$(LIBRARY_VERSION)$(soext) \
++		-Wl,-install_name,@rpath/${soprefix}gnat$(hyphen)$(LIBRARY_VERSION)$(soext) \
+ 		$(MISCLIB)
+ 	cd $(RTSDIR); `echo "$(GCC_FOR_TARGET)" \
+                 | sed -e 's,\./xgcc,../../xgcc,' -e 's,-B\./,-B../../,'` -dynamiclib $(PICFLAG_FOR_TARGET) \
+-		-o libgnarl$(hyphen)$(LIBRARY_VERSION)$(soext) \
++		-o ${soprefix}gnarl$(hyphen)$(LIBRARY_VERSION)$(soext) \
+ 		$(GNATRTL_TASKING_OBJS) \
+ 		$(SO_OPTS) \
+-		-Wl,-install_name,@rpath/libgnarl$(hyphen)$(LIBRARY_VERSION)$(soext) \
+-		$(THREADSLIB) -Wl,libgnat$(hyphen)$(LIBRARY_VERSION)$(soext)
+-	cd $(RTSDIR); $(LN_S) libgnat$(hyphen)$(LIBRARY_VERSION)$(soext) \
+-		libgnat$(soext)
+-	cd $(RTSDIR); $(LN_S) libgnarl$(hyphen)$(LIBRARY_VERSION)$(soext) \
+-		libgnarl$(soext)
+-	cd $(RTSDIR); dsymutil libgnat$(hyphen)$(LIBRARY_VERSION)$(soext)
+-	cd $(RTSDIR); dsymutil libgnarl$(hyphen)$(LIBRARY_VERSION)$(soext)
++		-Wl,-install_name,@rpath/${soprefix}gnarl$(hyphen)$(LIBRARY_VERSION)$(soext) \
++		$(THREADSLIB) -Wl,${soprefix}gnat$(hyphen)$(LIBRARY_VERSION)$(soext)
++	cd $(RTSDIR); $(LN_S) ${soprefix}gnat$(hyphen)$(LIBRARY_VERSION)$(soext) \
++		${soprefix}gnat$(soext)
++	cd $(RTSDIR); $(LN_S) ${soprefix}gnarl$(hyphen)$(LIBRARY_VERSION)$(soext) \
++		${soprefix}gnarl$(soext)
++	cd $(RTSDIR); dsymutil ${soprefix}gnat$(hyphen)$(LIBRARY_VERSION)$(soext)
++	cd $(RTSDIR); dsymutil ${soprefix}gnarl$(hyphen)$(LIBRARY_VERSION)$(soext)
+ 
+ gnatlib-shared-vms:
+ 	$(MAKE) $(FLAGS_TO_PASS) \
+@@ -2940,12 +2944,12 @@ gnatlib-shared-vms:
+ 	     MULTISUBDIR="$(MULTISUBDIR)" \
+ 	     THREAD_KIND="$(THREAD_KIND)" \
+              gnatlib
+-	$(RM) $(RTSDIR)/libgna*$(soext)
++	$(RM) $(RTSDIR)/${soprefix}gna*$(soext)
+ 	cd $(RTSDIR) && \
+ 	../../gnatsym -s SYMVEC_$$$$.opt \
+ 	$(LIBGNAT_OBJS) $(GNATRTL_NONTASKING_OBJS) && \
+ 	../../xgcc -g -B../../ -shared -shared-libgcc \
+-	   -o libgnat$(hyphen)$(LIBRARY_VERSION)$(soext) libgnat.a \
++	   -o ${soprefix}gnat$(hyphen)$(LIBRARY_VERSION)$(soext) libgnat.a \
+ 	   sys\$$library:trace.exe \
+ 	   --for-linker=/noinform \
+ 	   --for-linker=SYMVEC_$$$$.opt \
+@@ -2954,8 +2958,8 @@ gnatlib-shared-vms:
+ 	../../gnatsym -s SYMVEC_$$$$.opt \
+ 	$(GNATRTL_TASKING_OBJS) && \
+ 	../../xgcc -g -B../../ -shared -shared-libgcc \
+-	   -o libgnarl$(hyphen)$(LIBRARY_VERSION)$(soext) \
+-	   libgnarl.a libgnat$(hyphen)$(LIBRARY_VERSION)$(soext) \
++	   -o ${soprefix}gnarl$(hyphen)$(LIBRARY_VERSION)$(soext) \
++	   libgnarl.a ${soprefix}gnat$(hyphen)$(LIBRARY_VERSION)$(soext) \
+ 	   sys\$$library:trace.exe \
+ 	   --for-linker=/noinform \
+ 	   --for-linker=SYMVEC_$$$$.opt \
+-- 
+2.1.1
+

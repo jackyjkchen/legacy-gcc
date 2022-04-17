@@ -35,6 +35,8 @@ x86与非x86均为本项目的目标，x86目前进度较快，已经可以原�
 * sparc64：gcc-2.95.3及以上
 * mingw-w64：gcc-4.5.4以及上
 * mingw：gcc-3.3.6 - gcc-8.5.0（建议gcc-4.7及以上版本使用mingw-w64）
+* cygwin：gcc-4.9.4以及上
+* cygwin64：gcc-4.9.4以及上
 
 
 其中amd64/x86，mips64el/mipsel，mips64/mips，sparc64/sparc，mingw-w64已测试支持multilib。
