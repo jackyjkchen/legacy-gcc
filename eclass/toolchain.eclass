@@ -680,8 +680,10 @@ do_gcc_CYGWINPORTS_patches() {
 			;;
 	esac
 
-	einfo "Applying cygwin port patches ..."
-	eapply "${FILESDIR}"/${GCC_RELEASE_VER}/cygwin/*.patch
+	if [ -d "${FILESDIR}/${GCC_RELEASE_VER}/cygwin" ]; then
+		einfo "Applying cygwin port patches ..."
+		eapply "${FILESDIR}"/${GCC_RELEASE_VER}/cygwin/*.patch
+	fi
 }
 
 # configure to build with the hardened GCC specs as the default

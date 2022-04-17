@@ -19,16 +19,19 @@ case ${CTARGET} in
 		cygwin_arch=x86
 		;;
 	*)
-		die "Invalid ${CTARGET}"
 		;;
 esac
 
 DESCRIPTION=""
 HOMEPAGE=""
-SRC_URI="https://mirrors.ustc.edu.cn/cygwin/${cygwin_arch}/release/w32api-headers/w32api-headers-10.0.0-1.tar.xz
-		https://mirrors.ustc.edu.cn/cygwin/${cygwin_arch}/release/w32api-runtime/w32api-runtime-10.0.0-1.tar.xz
-		https://mirrors.ustc.edu.cn/cygwin/${cygwin_arch}/release/cygwin/cygwin-${PV}-1.tar.xz
-		https://mirrors.ustc.edu.cn/cygwin/${cygwin_arch}/release/cygwin/cygwin-devel/cygwin-devel-${PV}-1.tar.xz"
+SRC_URI="https://mirrors.ustc.edu.cn/cygwin/x86_64/release/w32api-headers/w32api-headers-10.0.0-1.tar.xz -> w32api-headers-10.0.0-1-x86_64.tar.xz
+		https://mirrors.ustc.edu.cn/cygwin/x86_64/release/w32api-runtime/w32api-runtime-10.0.0-1.tar.xz -> w32api-runtime-10.0.0-1-x86_64.tar.xz
+		https://mirrors.ustc.edu.cn/cygwin/x86_64/release/cygwin/cygwin-${PV}-1.tar.xz -> cygwin-${PV}-1-x86_64.tar.xz
+		https://mirrors.ustc.edu.cn/cygwin/x86_64/release/cygwin/cygwin-devel/cygwin-devel-${PV}-1.tar.xz -> cygwin-devel-${PV}-1-x86_64.tar.xz
+		https://mirrors.ustc.edu.cn/cygwin/x86/release/w32api-headers/w32api-headers-10.0.0-1.tar.xz -> w32api-headers-10.0.0-1-x86.tar.xz
+		https://mirrors.ustc.edu.cn/cygwin/x86/release/w32api-runtime/w32api-runtime-10.0.0-1.tar.xz -> w32api-runtime-10.0.0-1-x86.tar.xz
+		https://mirrors.ustc.edu.cn/cygwin/x86/release/cygwin/cygwin-${PV}-1.tar.xz -> cygwin-${PV}-1-x86.tar.xz
+		https://mirrors.ustc.edu.cn/cygwin/x86/release/cygwin/cygwin-devel/cygwin-devel-${PV}-1.tar.xz -> cygwin-devel-${PV}-1-x86.tar.xz"
 
 LICENSE=""
 SLOT="0"
@@ -49,10 +52,10 @@ pkg_setup() {
 
 src_unpack() {
 	mkdir -p "${S}" || die
-	tar -pxf "${DISTDIR}"/w32api-headers-10.0.0-1.tar.xz -C "${S}" || die
-	tar -pxf "${DISTDIR}"/w32api-runtime-10.0.0-1.tar.xz -C "${S}" || die
-	tar -pxf "${DISTDIR}"/cygwin-${PV}-1.tar.xz -C "${S}" || die
-	tar -pxf "${DISTDIR}"/cygwin-devel-${PV}-1.tar.xz -C "${S}" || die
+	tar -pxf "${DISTDIR}"/w32api-headers-10.0.0-1-${cygwin_arch}.tar.xz -C "${S}" || die
+	tar -pxf "${DISTDIR}"/w32api-runtime-10.0.0-1-${cygwin_arch}.tar.xz -C "${S}" || die
+	tar -pxf "${DISTDIR}"/cygwin-${PV}-1-${cygwin_arch}.tar.xz -C "${S}" || die
+	tar -pxf "${DISTDIR}"/cygwin-devel-${PV}-1-${cygwin_arch}.tar.xz -C "${S}" || die
 }
 
 src_prepare() {

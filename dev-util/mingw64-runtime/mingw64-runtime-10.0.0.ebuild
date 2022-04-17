@@ -108,7 +108,7 @@ src_compile() {
 	if ! just_headers; then
 		emake -C "${WORKDIR}/headers" install
 	fi
-	default
+	emake -j1
 }
 
 src_install() {
