@@ -25,5 +25,6 @@ fi
 src_prepare() {
 	toolchain_src_prepare
 
-	[[ ${CATEGORY} == "cross-i686-legacy-mingw32" ]] && eapply "${FILESDIR}"/${PV}/00_mingw-enable-c99-in-cpp.patch
+	eapply "${FILESDIR}"/${PV}/00_fix-mingw64-runtime-10.patch
+	[[ ${CATEGORY} == "cross-i686-legacy-mingw32" ]] && eapply "${FILESDIR}"/${PV}/01_mingw-enable-c99-in-cpp.patch
 }

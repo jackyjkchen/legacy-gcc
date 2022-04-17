@@ -41,5 +41,6 @@ src_prepare() {
 	[[ ${ARCH} == "sh" ]] && eapply "${FILESDIR}"/${PV}/01_workaround-bootstrap-for-sh4.patch
 	eapply "${FILESDIR}"/${PV}/02_fix-libgo-for-new-glibc.patch
 	eapply "${FILESDIR}"/${PV}/03_fix-sanitizer-for-new-kernel.patch
-	[[ ${CATEGORY} == "cross-i686-legacy-mingw32" ]] && eapply "${FILESDIR}"/${PV}/04_mingw-enable-c99-in-cpp.patch
+	eapply "${FILESDIR}"/${PV}/04_fix-mingw64-runtime-10.patch
+	[[ ${CATEGORY} == "cross-i686-legacy-mingw32" ]] && eapply "${FILESDIR}"/${PV}/05_mingw-enable-c99-in-cpp.patch
 }

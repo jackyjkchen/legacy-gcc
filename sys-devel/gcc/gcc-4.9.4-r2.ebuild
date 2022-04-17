@@ -43,7 +43,8 @@ src_prepare() {
 
 	[[ ${ARCH} == "mips" && ${DEFAULT_ABI} == "n64" ]] && eapply "${FILESDIR}"/${PV}/00_mips64-default-n64-abi.patch
 	[[ ${ARCH} == "sh" ]] && eapply "${FILESDIR}"/${PV}/01_workaround-bootstrap-for-sh4.patch
-	[[ ${CATEGORY} == "cross-i686-legacy-mingw32" ]] && eapply "${FILESDIR}"/${PV}/02_mingw-enable-c99-in-cpp.patch
+	eapply "${FILESDIR}"/${PV}/02_fix-mingw64-runtime-10.patch
+	[[ ${CATEGORY} == "cross-i686-legacy-mingw32" ]] && eapply "${FILESDIR}"/${PV}/03_mingw-enable-c99-in-cpp.patch
 
 	# Use -r1 for newer pieapplyet that use DRIVER_SELF_SPECS for the hardened specs.
 	[[ ${CHOST} == ${CTARGET} ]] && eapply "${FILESDIR}"/gcc-spec-env-r1.patch
