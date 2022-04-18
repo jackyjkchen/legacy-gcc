@@ -54,8 +54,8 @@ src_configure() {
 src_compile() {
 	pushd "${S}" > /dev/null
 	mkdir bin || die
-	gcc -O2 -s src/stub/stubedit.c -o bin/stubedit
-	gcc -O2 -s src/stub/stubify.c -o bin/stubify
+	cc -O2 -s src/stub/stubedit.c -o bin/stubedit
+	cc -O2 -s src/stub/stubify.c -o bin/stubify
 	popd > /dev/null
 }
 
