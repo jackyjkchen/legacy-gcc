@@ -16,3 +16,8 @@ src_prepare() {
 
 	toolchain-binutils_src_prepare
 }
+
+src_configure() {
+	downgrade_arch_flags 4.4.7
+	toolchain-binutils_src_configure
+}

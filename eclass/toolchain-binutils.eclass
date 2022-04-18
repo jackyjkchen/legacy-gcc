@@ -22,6 +22,18 @@ esac
 DESCRIPTION="Tools necessary to build programs"
 HOMEPAGE="https://sourceware.org/binutils/"
 
+#
+# The cross-compile logic
+#
+export CTARGET=${CTARGET:-${CHOST}}
+if [[ ${CTARGET} == ${CHOST} ]] ; then
+	if [[ ${CATEGORY} == cross-* ]] ; then
+		export CTARGET=${CATEGORY#cross-}
+	fi
+fi
+is_djgpp() { [[ ${CTARGET} == *-msdosdjgpp* ]] ; }
+is_cross() { [[ ${CHOST} != ${CTARGET} ]] ; }
+
 case ${PV} in
 	9999)
 		BVER="git"
@@ -32,21 +44,10 @@ case ${PV} in
 		;;
 	*)
 		BVER=${PV}
-		SRC_URI="https://mirrors.ustc.edu.cn/gnu/binutils/binutils-${BVER}.tar.bz2"
+		is_djgpp || SRC_URI="https://mirrors.ustc.edu.cn/gnu/binutils/binutils-${BVER}.tar.bz2"
 		;;
 esac
 SLOT="${BVER}"
-
-#
-# The cross-compile logic
-#
-export CTARGET=${CTARGET:-${CHOST}}
-if [[ ${CTARGET} == ${CHOST} ]] ; then
-	if [[ ${CATEGORY} == cross-* ]] ; then
-		export CTARGET=${CATEGORY#cross-}
-	fi
-fi
-is_cross() { [[ ${CHOST} != ${CTARGET} ]] ; }
 
 # General purpose version check.  Without a second arg matches up to minor version (x.x.x)
 BINUTILS_RELEASE_VER=$(ver_cut 1-3 ${BVER})
@@ -163,7 +164,6 @@ toolchain-binutils_pkgversion() {
 }
 
 toolchain-binutils_src_configure() {
-	downgrade_arch_flags 4.9.4
 	# Setup some paths
 	LIBPATH=/usr/$(get_libdir)/binutils/${CTARGET}/${BVER}
 	INCPATH=${LIBPATH}/include
@@ -243,13 +243,6 @@ toolchain-binutils_src_configure() {
 		--libdir="${EPREFIX}"${LIBPATH}
 		--libexecdir="${EPREFIX}"${LIBPATH}
 		--includedir="${EPREFIX}"${INCPATH}
-		--enable-obsolete
-		--enable-shared
-		--enable-threads
-		# Newer versions (>=2.27) offer a configure flag now.
-		--enable-relro
-		# Newer versions (>=2.24) make this an explicit option. #497268
-		--enable-install-libiberty
 		--disable-werror
 		$(use_enable static-libs static)
 		${EXTRA_ECONF}
@@ -260,6 +253,18 @@ toolchain-binutils_src_configure() {
 		--without-stage1-ldflags
 	)
 
+	if ! is_djgpp ; then
+		myconf+=( 
+			--enable-obsolete
+			--enable-shared
+			--enable-threads
+			# Newer versions (>=2.27) offer a configure flag now.
+			--enable-relro
+			# Newer versions (>=2.24) make this an explicit option. #497268
+			--enable-install-libiberty
+		)
+	fi
+
 	if tc_version_is_at_least 2.18 ; then
 		myconf+=( 
 			--with-bugurl="$(toolchain-binutils_bugurl)"
@@ -269,7 +274,7 @@ toolchain-binutils_src_configure() {
 
 	if tc_version_is_at_least 2.30 ; then
 		# mips can't do hash-style=gnu ...
-		if [[ $(tc-arch) != mips ]] ; then
+		if [[ $(tc-arch) != mips ]] && ! is_djgpp ; then
 			myconf+=( --enable-default-hash-style=gnu )
 		fi
 

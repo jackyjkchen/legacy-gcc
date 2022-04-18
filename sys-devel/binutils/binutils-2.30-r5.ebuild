@@ -18,3 +18,8 @@ src_prepare() {
 
 	eapply "${FILESDIR}"/${PV}/00_PR23919.patch
 }
+
+src_configure() {
+	downgrade_arch_flags 4.9.4
+	toolchain-binutils_src_configure
+}

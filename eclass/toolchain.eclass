@@ -55,6 +55,10 @@ is_crosscompile() {
 	[[ ${CHOST} != ${CTARGET} ]]
 }
 
+is_djgpp() {
+	[[ ${CTARGET} == *-msdosdjgpp* ]]
+}
+
 # General purpose version check.  Without a second arg matches up to minor version (x.x.x)
 tc_version_is_at_least() {
 	ver_test "${2:-${GCC_RELEASE_VER}}" -ge "$1"
@@ -524,6 +528,7 @@ toolchain_src_prepare() {
 	do_gcc_gentoo_patches
 	do_gcc_PIE_patches
 	do_gcc_CYGWINPORTS_patches
+	do_gcc_djgpp_patches
 
 	if tc_is_live ; then
 		BRANDING_GCC_PKGVERSION="${BRANDING_GCC_PKGVERSION}, commit ${EGIT_VERSION}"
@@ -683,6 +688,16 @@ do_gcc_CYGWINPORTS_patches() {
 	if [ -d "${FILESDIR}/${GCC_RELEASE_VER}/cygwin" ]; then
 		einfo "Applying cygwin port patches ..."
 		eapply "${FILESDIR}"/${GCC_RELEASE_VER}/cygwin/*.patch
+	fi
+}
+
+do_gcc_djgpp_patches() {
+	if is_djgpp ; then
+		rm -rf boehm-gc gcc/go gcc/java gcc/testsuite libffi libgo libgomp libjava libmudflap zlib
+		if [ -d "${FILESDIR}/${GCC_RELEASE_VER}/djgpp" ]; then
+			einfo "Applying djgpp port patches ..."
+			eapply "${FILESDIR}"/${GCC_RELEASE_VER}/djgpp/*.patch
+		fi
 	fi
 }
 
@@ -1062,6 +1077,10 @@ toolchain_src_configure() {
 		mingw*|*-mingw*)
 			needed_libc=mingw-runtime
 			confgcc+=( --enable-shared --enable-threads=win32 )
+			;;
+		*-msdosdjgpp*)
+			needed_libc=djgpp
+			confgcc+=( --disable-shared --enable-threads=single )
 			;;
 		avr)			 confgcc+=( --enable-shared --disable-threads );;
 		esac
