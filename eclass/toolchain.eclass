@@ -599,7 +599,7 @@ toolchain_src_prepare() {
 	fi
 
 	# Prevent libffi from being installed
-	if tc_version_is_between 3.0 4.8 ; then
+	if tc_version_is_between 3.0 4.8 && ! is_djgpp ; then
 		sed -i -e 's/\(install.*:\) install-.*recursive/\1/' "${S}"/libffi/Makefile.in || die
 		sed -i -e 's/\(install-data-am:\).*/\1/' "${S}"/libffi/include/Makefile.in || die
 	fi
@@ -1376,7 +1376,11 @@ toolchain_src_configure() {
 		confgcc+=( --disable-libquadmath )
 	fi
 
-	if tc_version_is_at_least 4.6 ; then
+	if is_djgpp ; then
+		if tc_version_is_at_least 4.8 ; then
+			confgcc+=( --enable-lto )
+		fi
+	elif tc_version_is_at_least 4.6 ; then
 		confgcc+=( --enable-lto )
 	elif tc_version_is_at_least 4.5 ; then
 		confgcc+=( --disable-lto )
