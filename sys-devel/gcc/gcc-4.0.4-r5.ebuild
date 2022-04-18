@@ -3,7 +3,9 @@
 
 EAPI=7
 
-case ${ARCH} in
+inherit toolchain-funcs
+
+case $(tc-arch) in
 	sh)
 		CC="gcc-4.1.2"
 		CXX="g++-4.1.2"
@@ -37,6 +39,6 @@ src_prepare() {
 	toolchain_src_prepare
 	use vanilla && return 0
 
-	[[ ${ARCH} == "mips" && ${DEFAULT_ABI} == "n64" ]] && eapply "${FILESDIR}"/${PV}/01_mips64-default-n64-abi.patch
-	[[ ${ARCH} == "sh" ]] && eapply "${FILESDIR}"/${PV}/02_sh4-workaround-fixproto-core.patch
+	[[ $(tc-arch) == "mips" && ${DEFAULT_ABI} == "n64" ]] && eapply "${FILESDIR}"/${PV}/01_mips64-default-n64-abi.patch
+	[[ $(tc-arch) == "sh" ]] && eapply "${FILESDIR}"/${PV}/02_sh4-workaround-fixproto-core.patch
 }

@@ -3,9 +3,11 @@
 
 EAPI=7
 
+inherit toolchain-funcs
+
 CC="gcc-3.4.6"
 CXX="g++-3.4.6"
-case ${ARCH} in
+case $(tc-arch) in
 	amd64|x86)
 		CC="${CC} ${CFLAGS_x86}"
 		CXX="${CXX} ${CFLAGS_x86}"
@@ -17,7 +19,7 @@ case ${ARCH} in
 		CFLAGS_x86=""
 		;;
 	alpha|m68k)
-		TOOL_PREFIX="${ARCH}-legacy"
+		TOOL_PREFIX="$(tc-arch)-legacy"
 		;;
 	mips)
 		CC="${CC} ${CFLAGS_o32}"

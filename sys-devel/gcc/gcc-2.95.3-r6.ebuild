@@ -3,9 +3,11 @@
 
 EAPI=7
 
+inherit toolchain-funcs
+
 CC="gcc-3.4.6"
 CXX="g++-3.4.6"
-case ${ARCH} in
+case $(tc-arch) in
 	amd64|x86)
 		CC="${CC} ${CFLAGS_x86}"
 		CXX="${CXX} ${CFLAGS_x86}"
@@ -19,10 +21,10 @@ case ${ARCH} in
 	alpha)
 		CFLAGS="${CFLAGS} -Wl,-no-relax"
 		CXXFLAGS="${CFLAGS} -Wl,-no-relax"
-		TOOL_PREFIX="${ARCH}-legacy"
+		TOOL_PREFIX="$(tc-arch)-legacy"
 		;;
 	m68k)
-		TOOL_PREFIX="${ARCH}-legacy"
+		TOOL_PREFIX="$(tc-arch)-legacy"
 		;;
 	mips)
 		CC="${CC} ${CFLAGS_o32}"
@@ -64,9 +66,9 @@ src_prepare() {
 	toolchain_src_prepare
 
 	eapply "${FILESDIR}"/${PV}/01_workaround-for-legacy-glibc-in-non-system-dir.patch
-	[[ ${ARCH} == "m68k" ]] && eapply "${FILESDIR}"/${PV}/02_m68k-debian.patch
+	[[ $(tc-arch) == "m68k" ]] && eapply "${FILESDIR}"/${PV}/02_m68k-debian.patch
 	[[ ${TOOL_PREFIX} == "sparc64-legacy" ]] && eapply "${FILESDIR}"/${PV}/03_workaround-for-sparc64.patch
-	[[ ${ARCH} == "avr" ]] && "${FILESDIR}"/${PV}/04_support-avr.patch
+	[[ $(tc-arch) == "avr" ]] && "${FILESDIR}"/${PV}/04_support-avr.patch
 	touch -r gcc/README gcc/configure.in || die
 }
 

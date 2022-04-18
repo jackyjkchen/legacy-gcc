@@ -38,7 +38,7 @@ src_prepare() {
 	toolchain_src_prepare
 
 	eapply "${FILESDIR}"/${PV}/00_fix-building-on-ppc64.patch
-	[[ ${ARCH} == "sh" ]] && eapply "${FILESDIR}"/${PV}/01_workaround-bootstrap-for-sh4.patch
+	[[ $(tc-arch) == "sh" ]] && eapply "${FILESDIR}"/${PV}/01_workaround-bootstrap-for-sh4.patch
 	use go && eapply "${FILESDIR}"/${PV}/02_fix-libgo-for-new-glibc.patch
 	use sanitize && eapply "${FILESDIR}"/${PV}/03_fix-sanitizer-for-new-kernel.patch
 	eapply "${FILESDIR}"/${PV}/04_fix-mingw64-runtime-10.patch

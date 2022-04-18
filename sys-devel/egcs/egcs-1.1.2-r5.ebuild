@@ -3,9 +3,11 @@
 
 EAPI=7
 
+inherit toolchain-funcs
+
 CC="gcc-2.95.3"
 CXX="g++-2.95.3"
-case ${ARCH} in
+case $(tc-arch) in
 	amd64|x86)
 		TOOL_PREFIX="i686-legacy"
 		CHOST_x86="${TOOL_PREFIX}-linux-gnu"
@@ -15,7 +17,7 @@ case ${ARCH} in
 		CFLAGS_x86=""
 		;;
 	alpha|m68k)
-		TOOL_PREFIX="${ARCH}-legacy"
+		TOOL_PREFIX="$(tc-arch)-legacy"
 		;;
 	ppc)
 		TOOL_PREFIX="powerpc-legacy"

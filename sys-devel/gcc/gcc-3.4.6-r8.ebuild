@@ -3,9 +3,11 @@
 
 EAPI=7
 
+inherit toolchain-funcs
+
 if [[ ${CATEGORY} != cross-* ]] ; then
 	STAGE1_GCC="sys-devel/gcc:4.4.7"
-	case ${ARCH} in
+	case $(tc-arch) in
 		amd64)
 			TOOL_PREFIX="x86_64-legacy"
 			;;
@@ -13,7 +15,7 @@ if [[ ${CATEGORY} != cross-* ]] ; then
 			TOOL_PREFIX="i686-legacy"
 			;;
 		alpha|m68k)
-			TOOL_PREFIX="${ARCH}-legacy"
+			TOOL_PREFIX="$(tc-arch)-legacy"
 			;;
 		mips|sparc)
 			TOOL_PREFIX="${PROFILE_ARCH}-legacy"
@@ -96,7 +98,7 @@ src_prepare() {
 	# libffi to install with USE="objc", even though it normally only installs
 	# if you attempt to build gcj.
 	if use objc && ! use gcj ; then
-		[[ ${ARCH} != "mips" ]] && eapply "${FILESDIR}"/${PV}/03_libffi-without-libgcj.patch
+		[[ $(tc-arch) != "mips" ]] && eapply "${FILESDIR}"/${PV}/03_libffi-without-libgcj.patch
 	fi
 
 	[[ ${TOOL_PREFIX} != "" ]] && eapply "${FILESDIR}"/${PV}/04_workaround-for-legacy-glibc-in-non-system-dir.patch

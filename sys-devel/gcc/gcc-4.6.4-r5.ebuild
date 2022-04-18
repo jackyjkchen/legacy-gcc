@@ -28,8 +28,8 @@ src_prepare() {
 	toolchain_src_prepare
 	use vanilla && return 0
 
-	eapply "${FILESDIR}"/${PV}/01_support-armhf.patch
-	[[ ${ARCH} == "mips" && ${DEFAULT_ABI} == "n64" ]] && eapply "${FILESDIR}"/${PV}/02_mips64-default-n64-abi.patch
+	[[ $(tc-arch) == "arm" ]] && eapply "${FILESDIR}"/${PV}/01_support-armhf.patch
+	[[ $(tc-arch) == "mips" && ${DEFAULT_ABI} == "n64" ]] && eapply "${FILESDIR}"/${PV}/02_mips64-default-n64-abi.patch
 	eapply "${FILESDIR}"/${PV}/03_fix-mingw64-runtime-10.patch
 	[[ ${CATEGORY} == "cross-i686-legacy-mingw32" ]] && eapply "${FILESDIR}"/${PV}/04_mingw-enable-c99-in-cpp.patch
 }

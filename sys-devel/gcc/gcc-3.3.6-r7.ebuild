@@ -3,8 +3,10 @@
 
 EAPI=7
 
+inherit toolchain-funcs
+
 if [[ ${CATEGORY} != cross-* ]] ; then
-	case ${ARCH} in
+	case $(tc-arch) in
 		amd64)
 			TOOL_PREFIX="x86_64-legacy"
 			;;
@@ -12,7 +14,7 @@ if [[ ${CATEGORY} != cross-* ]] ; then
 			TOOL_PREFIX="i686-legacy"
 			;;
 		alpha|m68k)
-			TOOL_PREFIX="${ARCH}-legacy"
+			TOOL_PREFIX="$(tc-arch)-legacy"
 			;;
 		mips)
 			CC="gcc-3.4.6 ${CFLAGS_o32}"
@@ -80,16 +82,16 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/00_gentoo-patchset.patch
 	toolchain_src_prepare
 
-	[[ ${ARCH} == "mips" ]] && eapply "${FILESDIR}"/${PV}/01_support-mips64.patch
+	[[ $(tc-arch) == "mips" ]] && eapply "${FILESDIR}"/${PV}/01_support-mips64.patch
 	[[ ${CATEGORY} == "cross-i686-legacy-mingw32" ]] && eapply "${FILESDIR}"/${PV}/02_support-mingw.patch
-	[[ ${ARCH} == "sh" ]] && eapply "${FILESDIR}"/${PV}/03_fix-for-sh4-install.patch
-	[[ ${ARCH} == "ppc64" || ${ARCH} == "ppc" ]] && eapply "${FILESDIR}"/${PV}/04_workaround-for-ppc64-ppc.patch
+	[[ $(tc-arch) == "sh" ]] && eapply "${FILESDIR}"/${PV}/03_fix-for-sh4-install.patch
+	[[ $(tc-arch) == "ppc64" || $(tc-arch) == "ppc" ]] && eapply "${FILESDIR}"/${PV}/04_workaround-for-ppc64-ppc.patch
 
 	# Anything useful and objc will require libffi. Seriously. Lets just force
 	# libffi to install with USE="objc", even though it normally only installs
 	# if you attempt to build gcj.
 	if use objc && ! use gcj ; then
-		[[ ${ARCH} != "mips" ]] && eapply "${FILESDIR}"/${PV}/05_libffi-without-libgcj.patch
+		[[ $(tc-arch) != "mips" ]] && eapply "${FILESDIR}"/${PV}/05_libffi-without-libgcj.patch
 	fi
 
 	[[ ${TOOL_PREFIX} != "" ]] && eapply "${FILESDIR}"/${PV}/06_workaround-for-legacy-glibc-in-non-system-dir.patch

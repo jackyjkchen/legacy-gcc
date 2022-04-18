@@ -29,6 +29,6 @@ src_prepare() {
 	use vanilla && return 0
 
 	eapply "${FILESDIR}"/${PV}/01_compat-new-mpfr.patch
-	[[ ${ARCH} == "mips" && ${DEFAULT_ABI} == "n64" ]] && eapply "${FILESDIR}"/${PV}/02_mips64-default-n64-abi.patch
-	[[ ${ARCH} == "sh" ]] && eapply "${FILESDIR}"/${PV}/03_sh4-fix-build.patch
+	[[ $(tc-arch) == "mips" && ${DEFAULT_ABI} == "n64" ]] && eapply "${FILESDIR}"/${PV}/02_mips64-default-n64-abi.patch
+	[[ $(tc-arch) == "sh" ]] && eapply "${FILESDIR}"/${PV}/03_sh4-fix-build.patch
 }

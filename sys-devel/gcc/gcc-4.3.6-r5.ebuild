@@ -29,7 +29,7 @@ src_prepare() {
 	toolchain_src_prepare
 	use vanilla && return 0
 
-	[[ ${ARCH} == "mips" && ${DEFAULT_ABI} == "n64" ]] && eapply "${FILESDIR}"/${PV}/01_mips64-default-n64-abi.patch
+	[[ $(tc-arch) == "mips" && ${DEFAULT_ABI} == "n64" ]] && eapply "${FILESDIR}"/${PV}/01_mips64-default-n64-abi.patch
 	[[ ${CATEGORY} == "cross-i686-legacy-mingw32" ]] && eapply "${FILESDIR}"/${PV}/02_mingw-enable-c99-in-cpp.patch
 
 	sed -i 's/use_fixproto=yes/:/' gcc/config.gcc #PR33200
