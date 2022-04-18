@@ -693,10 +693,14 @@ do_gcc_CYGWINPORTS_patches() {
 
 do_gcc_djgpp_patches() {
 	if is_djgpp ; then
-		rm -rf boehm-gc gcc/go gcc/java gcc/testsuite libffi libgo libgomp libjava libmudflap zlib
+		rm -rf boehm-gc fastjar gcc/go gcc/java gcc/testsuite gcc/treelang gotools \
+			libcilkrts libffi libgo libgomp libjava libmudflap liboffloadmic libsanitizer libvtv zlib
 		if [ -d "${FILESDIR}/${GCC_RELEASE_VER}/djgpp" ]; then
 			einfo "Applying djgpp port patches ..."
 			eapply "${FILESDIR}"/${GCC_RELEASE_VER}/djgpp/*.patch
+		fi
+		if [[ ${GCC_RELEASE_VER} == "3.4.6" ]]; then
+			chmod +x libstdc++-v3/scripts/create_testsuite_files || die
 		fi
 	fi
 }
