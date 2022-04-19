@@ -3,21 +3,6 @@
 
 EAPI=7
 
-inherit toolchain-funcs
-
-case $(tc-arch) in
-	sh)
-		CC="gcc-4.1.2"
-		CXX="g++-4.1.2"
-		STAGE1_GCC="sys-devel/gcc:4.1.2"
-		;;
-	*)
-		CC="gcc-4.4.7"
-		CXX="g++-4.4.7"
-		STAGE1_GCC="sys-devel/gcc:4.4.7"
-		;;
-esac
-
 inherit toolchain
 
 KEYWORDS="alpha amd64 hppa ia64 m68k mips ppc ppc64 s390 sh sparc x86"
@@ -31,7 +16,18 @@ if is_crosscompile ; then
 	CC="gcc-4.0.4"
 	CXX="g++-4.0.4"
 else
-	BDEPEND="${STAGE1_GCC}"
+	case $(tc-arch) in
+		sh)
+			CC="gcc-4.1.2"
+			CXX="g++-4.1.2"
+			BDEPEND="sys-devel/gcc:4.1.2"
+			;;
+		*)
+			CC="gcc-4.4.7"
+			CXX="g++-4.4.7"
+			BDEPEND="sys-devel/gcc:4.4.7"
+			;;
+	esac
 fi
 
 src_prepare() {

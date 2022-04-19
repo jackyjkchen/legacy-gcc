@@ -74,6 +74,8 @@ if is_crosscompile ; then
 else
 	DEPEND="${DEPEND} ${LEGACY_DEPEND}"
 	BDEPEND="${STAGE1_GCC}"
+	CC=${CC-"gcc-4.4.7"}
+	CXX=${CXX-"g++-4.4.7"}
 fi
 
 src_prepare() {

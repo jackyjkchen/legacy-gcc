@@ -5,51 +5,51 @@ EAPI=7
 
 inherit toolchain-funcs
 
-CC="gcc-3.4.6"
-CXX="g++-3.4.6"
-case $(tc-arch) in
-	amd64)
-		TOOL_PREFIX="x86_64-legacy"
-		;;
-	x86)
-		TOOL_PREFIX="i686-legacy"
-		;;
-	alpha|m68k)
-		TOOL_PREFIX="$(tc-arch)-legacy"
-		;;
-	mips)
-		CC="${CC} ${CFLAGS_o32}"
-		CXX="${CXX} ${CFLAGS_o32}"
-		TOOL_PREFIX="${PROFILE_ARCH}-legacy"
-		;;
-	ppc)
-		TOOL_PREFIX="powerpc-legacy"
-		;;
-	ppc64)
-		TOOL_PREFIX="powerpc64-legacy"
-		;;
-	s390)
-		TOOL_PREFIX="s390x-legacy"
-		;;
-	sparc)
-		TOOL_PREFIX="${PROFILE_ARCH}-legacy"
-		;;
-	*)
-		TOOL_PREFIX=""
-		;;
-esac
+if [[ ${CATEGORY} != cross-* ]] ; then
+	case $(tc-arch) in
+		amd64)
+			TOOL_PREFIX="x86_64-legacy"
+			;;
+		x86)
+			TOOL_PREFIX="i686-legacy"
+			;;
+		alpha|m68k)
+			TOOL_PREFIX="$(tc-arch)-legacy"
+			;;
+		mips)
+			CC="gcc-3.4.6 ${CFLAGS_o32}"
+			CXX="g++-3.4.6 ${CFLAGS_o32}"
+			TOOL_PREFIX="${PROFILE_ARCH}-legacy"
+			;;
+		ppc)
+			TOOL_PREFIX="powerpc-legacy"
+			;;
+		ppc64)
+			TOOL_PREFIX="powerpc64-legacy"
+			;;
+		s390)
+			TOOL_PREFIX="s390x-legacy"
+			;;
+		sparc)
+			TOOL_PREFIX="${PROFILE_ARCH}-legacy"
+			;;
+		*)
+			TOOL_PREFIX=""
+			;;
+	esac
 
-if [[ ${TOOL_PREFIX} != "" ]]; then
-	CBUILD="${TOOL_PREFIX}-linux-gnu"
-	CHOST=${CBUILD}
-	AS="${CHOST}-as"
-	LD="${CHOST}-ld"
-	AR="${CHOST}-ar"
-	RANLIB="${CHOST}-ranlib"
-	LEGACY_DEPEND="
-		legacy-gcc/linux-headers
-		legacy-gcc/glibc-headers
-		legacy-gcc/binutils-wrapper"
+	if [[ ${TOOL_PREFIX} != "" ]]; then
+		CBUILD="${TOOL_PREFIX}-linux-gnu"
+		CHOST=${CBUILD}
+		AS="${CHOST}-as"
+		LD="${CHOST}-ld"
+		AR="${CHOST}-ar"
+		RANLIB="${CHOST}-ranlib"
+		LEGACY_DEPEND="
+			legacy-gcc/linux-headers
+			legacy-gcc/glibc-headers
+			legacy-gcc/binutils-wrapper"
+	fi
 fi
 
 inherit toolchain
@@ -64,7 +64,17 @@ RDEPEND=">=sys-devel/binutils-2.14.90.0.6-r1"
 DEPEND="${RDEPEND}
 	amd64? ( >=sys-devel/binutils-2.15.90.0.1.1-r1 )
 	${LEGACY_DEPEND}"
-BDEPEND="sys-devel/gcc:3.4.6"
+
+if is_crosscompile ; then
+	BDEPEND="sys-devel/gcc:3.2.3"
+	CC="gcc-3.2.3"
+	CXX="g++-3.2.3"
+else
+	DEPEND="${DEPEND} ${LEGACY_DEPEND}"
+	BDEPEND="sys-devel/gcc:3.4.6"
+	CC=${CC-"gcc-3.4.6"}
+	CXX=${CXX-"g++-3.4.6"}
+fi
 
 src_prepare() {
 	eapply "${FILESDIR}"/${PV}/00_gcc-${PV}.patch
