@@ -694,7 +694,7 @@ do_gcc_CYGWINPORTS_patches() {
 do_gcc_djgpp_patches() {
 	if is_djgpp ; then
 		rm -rf boehm-gc fastjar gcc/go gcc/java gcc/treelang gotools \
-			libatomic libcilkrts libgo libgompi libitm libjava libmudflap \
+			libatomic libcilkrts libgo libgomp libitm libjava libmudflap \
 			libmpx liboffloadmic libsanitizer libvtv zlib
 		tc_version_is_at_least 7 || rm -rf gcc/testsuite
 		tc_version_is_at_least 8 || rm -rf libffi
