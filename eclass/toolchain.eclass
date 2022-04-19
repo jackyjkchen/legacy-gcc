@@ -693,8 +693,11 @@ do_gcc_CYGWINPORTS_patches() {
 
 do_gcc_djgpp_patches() {
 	if is_djgpp ; then
-		rm -rf boehm-gc fastjar gcc/go gcc/java gcc/testsuite gcc/treelang gotools \
-			libcilkrts libffi libgo libgomp libjava libmudflap liboffloadmic libsanitizer libvtv zlib
+		rm -rf boehm-gc fastjar gcc/go gcc/java gcc/treelang gotools \
+			libatomic libcilkrts libgo libgompi libitm libjava libmudflap \
+			libmpx liboffloadmic libsanitizer libvtv zlib
+		tc_version_is_at_least 7 || rm -rf gcc/testsuite
+		tc_version_is_at_least 8 || rm -rf libffi
 		if [ -d "${FILESDIR}/${GCC_RELEASE_VER}/djgpp" ]; then
 			einfo "Applying djgpp port patches ..."
 			eapply "${FILESDIR}"/${GCC_RELEASE_VER}/djgpp/*.patch

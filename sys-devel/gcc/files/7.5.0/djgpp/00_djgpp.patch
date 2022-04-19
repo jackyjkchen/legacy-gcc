@@ -1,9 +1,12 @@
 diff --git a/ChangeLog.DJGPP b/ChangeLog.DJGPP
 new file mode 100644
-index 000000000..f8ad179e2
+index 000000000..493f76da9
 --- /dev/null
 +++ b/ChangeLog.DJGPP
-@@ -0,0 +1,33 @@
+@@ -0,0 +1,36 @@
++2017-05-02   Andris Pavenis <andris.pavenis@iki.fi>
++	* Update for GCC-7.1.0
++
 +2016-02-05  Andris Pavenis <andris.pavenis@iki.fi>
 +
 +	* makepkg.pl: Include also (pku|clzero)intrin\.h into gcc*b.zip
@@ -38,21 +41,19 @@ index 000000000..f8ad179e2
 +	* gcc/ada/gcc_interface/Makefile.in: Use s-os_lib.adb instead of
 +	broken DJGPP override (s-os_lib-djgpp.adb)
 diff --git a/config/gxx-include-dir.m4 b/config/gxx-include-dir.m4
-index 4f54d427f..74bb09ffe 100644
+index 4f54d427f..954bba381 100644
 --- a/config/gxx-include-dir.m4
 +++ b/config/gxx-include-dir.m4
-@@ -8,15 +8,26 @@ dnl If you change the default here, you'll need to change the gcc and
+@@ -8,15 +8,24 @@ dnl If you change the default here, you'll need to change the gcc and
  dnl libstdc++-v3 subdirectories too.
  AC_DEFUN([TL_AC_GXX_INCLUDE_DIR],
  [
 +case "$host" in
 +  *-msdosdjgpp*)
 +    libstdcxx_incdir_base=cxx
-+    gcc_version_dir='$(shell echo $(gcc_version) | sed -e "s:\.::2g")'
 +    ;;
 +  *)
 +    libstdcxx_incdir_base=c++
-+    gcc_version_dir='$(gcc_version)'
 +    ;;
 +esac
 +
@@ -66,164 +67,15 @@ index 4f54d427f..74bb09ffe 100644
 +      yes) gxx_include_dir='$(libsubdir)/include/'${libstdcxx_incdir_base} ;;
        *)
 -	libstdcxx_incdir='c++/$(gcc_version)'
-+	libstdcxx_incdir=${libstdcxx_incdir_base}/${gcc_version_dir}
++	libstdcxx_incdir=${libstdcxx_incdir_base}/${gcc_version}
  	gxx_include_dir='include/$(libstdcxx_incdir)'
  	if test -n "$with_cross_host" && 
             test x"$with_cross_host" != x"no"; then	
-diff --git a/fixincludes/Makefile.in b/fixincludes/Makefile.in
-index 5dc1b23bc..43d0d132a 100644
---- a/fixincludes/Makefile.in
-+++ b/fixincludes/Makefile.in
-@@ -41,6 +41,8 @@ VPATH = $(srcdir)
- libdir = @libdir@
- # Directory in which GCC puts its executables.
- libexecdir = @libexecdir@
-+# GCC version for subdirectory names (editted if host requires it)
-+gcc_version_dir = @gcc_version_dir@
- 
- # End of variables for you to override.
- 
-@@ -52,9 +54,9 @@ target_noncanonical:=@target_noncanonical@
- gcc_version := $(shell cat $(srcdir)/../gcc/BASE-VER)
- 
- # Directory in which the compiler finds libraries etc.
--libsubdir = $(libdir)/gcc/$(target_noncanonical)/$(gcc_version)
-+libsubdir = $(libdir)/gcc/$(target_noncanonical)/$(gcc_version_dir)
- # Directory in which the compiler finds executables
--libexecsubdir = $(libexecdir)/gcc/$(target_noncanonical)/$(gcc_version)
-+libexecsubdir = $(libexecdir)/gcc/$(target_noncanonical)/$(gcc_version_dir)
- # Where our executable files go
- itoolsdir = $(libexecsubdir)/install-tools
- # Where our data files go
-diff --git a/fixincludes/configure b/fixincludes/configure
-index 4836cd886..462b8d525 100755
---- a/fixincludes/configure
-+++ b/fixincludes/configure
-@@ -590,6 +590,7 @@ ac_includes_default="\
- 
- ac_subst_vars='LTLIBOBJS
- LIBOBJS
-+gcc_version_dir
- MAINT
- TARGET
- target_noncanonical
-@@ -4561,6 +4562,12 @@ $as_echo "$ac_cv_path_SED" >&6; }
- # Figure out what compiler warnings we can enable.
- # See config/warnings.m4 for details.
- 
-+ac_ext=c
-+ac_cpp='$CPP $CPPFLAGS'
-+ac_compile='$CC -c $CFLAGS $CPPFLAGS conftest.$ac_ext >&5'
-+ac_link='$CC -o conftest$ac_exeext $CFLAGS $CPPFLAGS $LDFLAGS conftest.$ac_ext $LIBS >&5'
-+ac_compiler_gnu=$ac_cv_c_compiler_gnu
-+
- WARN_CFLAGS=
- save_CFLAGS="$CFLAGS"
- for real_option in -W -Wall -Wwrite-strings -Wstrict-prototypes \
-@@ -4607,6 +4614,18 @@ $as_echo "$ac_res" >&6; }
- fi
-   done
- CFLAGS="$save_CFLAGS"
-+ac_ext=c
-+ac_cpp='$CPP $CPPFLAGS'
-+ac_compile='$CC -c $CFLAGS $CPPFLAGS conftest.$ac_ext >&5'
-+ac_link='$CC -o conftest$ac_exeext $CFLAGS $CPPFLAGS $LDFLAGS conftest.$ac_ext $LIBS >&5'
-+ac_compiler_gnu=$ac_cv_c_compiler_gnu
-+
-+
-+ac_ext=c
-+ac_cpp='$CPP $CPPFLAGS'
-+ac_compile='$CC -c $CFLAGS $CPPFLAGS conftest.$ac_ext >&5'
-+ac_link='$CC -o conftest$ac_exeext $CFLAGS $CPPFLAGS $LDFLAGS conftest.$ac_ext $LIBS >&5'
-+ac_compiler_gnu=$ac_cv_c_compiler_gnu
- 
- WARN_PEDANTIC=
- # Do the check with the no- prefix removed from the warning options
-@@ -4645,10 +4664,22 @@ if test $acx_cv_prog_cc_pedantic__Wlong_long = yes; then :
- fi
- 
- fi
-+ac_ext=c
-+ac_cpp='$CPP $CPPFLAGS'
-+ac_compile='$CC -c $CFLAGS $CPPFLAGS conftest.$ac_ext >&5'
-+ac_link='$CC -o conftest$ac_exeext $CFLAGS $CPPFLAGS $LDFLAGS conftest.$ac_ext $LIBS >&5'
-+ac_compiler_gnu=$ac_cv_c_compiler_gnu
-+
- 
- 
- # Only enable with --enable-werror-always until existing warnings are
- # corrected.
-+ac_ext=c
-+ac_cpp='$CPP $CPPFLAGS'
-+ac_compile='$CC -c $CFLAGS $CPPFLAGS conftest.$ac_ext >&5'
-+ac_link='$CC -o conftest$ac_exeext $CFLAGS $CPPFLAGS $LDFLAGS conftest.$ac_ext $LIBS >&5'
-+ac_compiler_gnu=$ac_cv_c_compiler_gnu
-+
- WERROR=
- # Check whether --enable-werror-always was given.
- if test "${enable_werror_always+set}" = set; then :
-@@ -4661,6 +4692,12 @@ if test $enable_werror_always = yes; then :
-   WERROR="$WERROR${WERROR:+ }-Werror"
- fi
- 
-+ac_ext=c
-+ac_cpp='$CPP $CPPFLAGS'
-+ac_compile='$CC -c $CFLAGS $CPPFLAGS conftest.$ac_ext >&5'
-+ac_link='$CC -o conftest$ac_exeext $CFLAGS $CPPFLAGS $LDFLAGS conftest.$ac_ext $LIBS >&5'
-+ac_compiler_gnu=$ac_cv_c_compiler_gnu
-+
- 
- 
- # Determine the noncanonical target name, for directory use.
-@@ -5354,6 +5391,19 @@ cat >>confdefs.h <<_ACEOF
- _ACEOF
- 
- 
-+# For DJGPP there should not be more than 1 dot. Therefore edit
-+# version in case of DJGPP
-+case $host in
-+	i?86-*-msdosdjgpp*)
-+		gcc_version_dir='$(shell echo $(gcc_version) | sed -e "s:\.::2g")'
-+		;;
-+
-+	* )
-+		gcc_version_dir='$(gcc_version)'
-+		;;
-+esac
-+
-+
- ac_config_headers="$ac_config_headers config.h"
- 
- ac_config_files="$ac_config_files Makefile mkheaders.almost:mkheaders.in"
-diff --git a/fixincludes/configure.ac b/fixincludes/configure.ac
-index f8f352fb7..95eeb9f42 100644
---- a/fixincludes/configure.ac
-+++ b/fixincludes/configure.ac
-@@ -114,6 +114,19 @@ AC_SUBST(MAINT)
- AC_DEFINE_UNQUOTED([SED_PROGRAM], "${SED}",
-    [Defined to the best working sed program on the host system])
- 
-+# For DJGPP there should not be more than 1 dot. Therefore edit
-+# version in case of DJGPP
-+[case $host in
-+	i?86-*-msdosdjgpp*)
-+		gcc_version_dir='$(shell echo $(gcc_version) | sed -e "s:\.::2g")'
-+		;;
-+
-+	* )
-+		gcc_version_dir='$(gcc_version)'
-+		;;
-+esac]
-+AC_SUBST(gcc_version_dir)
-+
- AC_CONFIG_HEADERS(config.h, [echo timestamp > stamp-h])
- AC_CONFIG_FILES(Makefile mkheaders.almost:mkheaders.in)
- AC_OUTPUT
 diff --git a/gcc/Makefile.in b/gcc/Makefile.in
-index 51e2bc86e..a6bc7429f 100644
+index f675e073e..1f5348c34 100644
 --- a/gcc/Makefile.in
 +++ b/gcc/Makefile.in
-@@ -662,6 +662,7 @@ man7ext = .7
+@@ -674,6 +674,7 @@ man7ext = .7
  objext = .o
  exeext = @host_exeext@
  build_exeext = @build_exeext@
@@ -231,7 +83,7 @@ index 51e2bc86e..a6bc7429f 100644
  
  # Directory in which to put man pages.
  mandir = @mandir@
-@@ -2882,7 +2883,7 @@ s-fixinc_list : $(GCC_PASSES)
+@@ -2980,7 +2981,7 @@ s-fixinc_list : $(GCC_PASSES)
  # Abort if no system headers available, unless building a crosscompiler.
  # FIXME: abort unless building --without-headers would be more accurate and less ugly
  stmp-fixinc: gsyslimits.h macro_list fixinc_list \
@@ -241,77 +93,14 @@ index 51e2bc86e..a6bc7429f 100644
  	rm -rf include-fixed; mkdir include-fixed
  	-chmod a+rx include-fixed
 diff --git a/gcc/ada/adaint.c b/gcc/ada/adaint.c
-index 3053c69f5..bd2f271f8 100644
+index 0915a3ffc..2647e9527 100644
 --- a/gcc/ada/adaint.c
 +++ b/gcc/ada/adaint.c
-@@ -112,7 +112,18 @@
- extern "C" {
- #endif
- 
--#if defined (__MINGW32__) || defined (__CYGWIN__)
-+#if defined (__DJGPP__)
-+
-+/* For isalpha-like tests in the compiler, we're expected to resort to
-+   safe-ctype.h/ISALPHA.  This isn't available for the runtime library
-+   build, so we fallback on ctype.h/isalpha there.  */
-+
-+#ifdef IN_RTS
-+#include <ctype.h>
-+#define ISALPHA isalpha
-+#endif
-+
-+#elif defined (__MINGW32__) || defined (__CYGWIN__)
- 
- #include "mingw32.h"
- 
-@@ -165,15 +176,19 @@ UINT CurrentCCSEncoding;
- #include <sys/wait.h>
- #endif
- 
--#if defined (_WIN32)
-+#if defined(__DJGPP__) || defined (_WIN32)
- 
- #include <process.h>
- #include <signal.h>
- #include <dir.h>
-+#if defined(__DJGPP__)
-+#include <utime.h>
-+#else
- #include <windows.h>
- #include <accctrl.h>
- #include <aclapi.h>
- #include <tlhelp32.h>
-+#endif
- #undef DIR_SEPARATOR
- #define DIR_SEPARATOR '\\'
- 
-@@ -226,6 +241,12 @@ char __gnat_dir_separator = DIR_SEPARATOR;
- 
- char __gnat_path_separator = PATH_SEPARATOR;
- 
-+#ifdef __DJGPP__
-+int __gnat_is_djgpp = 1;
-+#else
-+int __gnat_is_djgpp = 0;
-+#endif
-+
- /* The GNAT_LIBRARY_TEMPLATE contains a list of expressions that define
-    the base filenames that libraries specified with -lsomelib options
-    may have. This is used by GNATMAKE to check whether an executable
-@@ -420,7 +441,7 @@ __gnat_readlink (char *path ATTRIBUTE_UNUSED,
- 		 char *buf ATTRIBUTE_UNUSED,
- 		 size_t bufsiz ATTRIBUTE_UNUSED)
- {
--#if defined (_WIN32) \
-+#if defined (_WIN32)		\
-   || defined(__vxworks) || defined (__PikeOS__)
-   return -1;
- #else
-@@ -532,7 +553,11 @@ __gnat_try_lock (char *dir, char *file)
+@@ -549,7 +549,11 @@ __gnat_try_lock (char *dir, char *file)
  int
  __gnat_get_maximum_file_name_length (void)
  {
-+#if defined(__DJGPP__)
++#if defined (__DJGPP__)
 +  return (_use_lfn(".")) ? -1 : 8;
 +#else
    return -1;
@@ -319,127 +108,29 @@ index 3053c69f5..bd2f271f8 100644
  }
  
  /* Return nonzero if file names are case sensitive.  */
-@@ -554,7 +579,7 @@ __gnat_get_file_names_case_sensitive (void)
- 	{
- 	  /* By default, we suppose filesystems aren't case sensitive on
- 	     Windows and Darwin (but they are on arm-darwin).  */
--#if defined (WINNT) \
-+#if defined (__DJGPP__) || defined (WINNT) \
-   || (defined (__APPLE__) && !(defined (__arm__) || defined (__arm64__)))
- 	  file_names_case_sensitive_cache = 0;
- #else
-@@ -570,7 +595,7 @@ __gnat_get_file_names_case_sensitive (void)
- int
- __gnat_get_env_vars_case_sensitive (void)
- {
--#if defined (WINNT)
-+#if defined (__DJGPP__) || defined (WINNT)
-  return 0;
- #else
-  return 1;
-@@ -580,7 +605,11 @@ __gnat_get_env_vars_case_sensitive (void)
- char
- __gnat_get_default_identifier_character_set (void)
- {
-+#if defined (__DJGPP__)
-+  return 'p';
-+#else
-   return '1';
-+#endif
+@@ -623,6 +627,17 @@ __gnat_get_current_dir (char *dir, int *length)
+        dir [*length] = DIR_SEPARATOR;
+        ++(*length);
+      }
++#ifdef __DJGPP__
++   do {
++     char *w;
++     for (w = dir; *w; ++w)
++       {
++	 if (*w == '/') {
++	   *w = '\\';
++	 }
++       }
++   } while (0);
++#endif /* __DJGPP__ */
+    dir[*length] = '\0';
  }
  
- /* Return the current working directory.  */
-@@ -1640,7 +1669,7 @@ __gnat_is_absolute_path (char *name, int length)
- #else
-   return (length != 0) &&
-      (*name == '/' || *name == DIR_SEPARATOR
--#if defined (WINNT)
-+#if defined(__DJGPP__) || defined (WINNT)
-       || (length > 1 && ISALPHA (name[0]) && name[1] == ':')
- #endif
- 	  );
-@@ -2182,7 +2211,7 @@ __gnat_portable_spawn (char *args[] ATTRIBUTE_UNUSED)
- #if defined (__vxworks) || defined(__PikeOS__)
-   return -1;
- 
--#elif defined (_WIN32)
-+#elif defined (__DJGPP__) || defined (_WIN32)
-   /* args[0] must be quotes as it could contain a full pathname with spaces */
-   char *args_0 = args[0];
-   args[0] = (char *)xmalloc (strlen (args_0) + 3);
-@@ -2554,6 +2583,20 @@ __gnat_portable_no_block_spawn (char *args[] ATTRIBUTE_UNUSED)
-   /* Not supported.  */
-   return -1;
- 
-+#elif defined(__DJGPP__)
-+  /* ??? For PC machines I (Franco) don't know the system calls to implement
-+     this routine. So I'll fake it as follows. This routine will behave
-+     exactly like the blocking portable_spawn and will systematically return
-+     a pid of 0 unless the spawned task did not complete successfully, in
-+     which case we return a pid of -1.  To synchronize with this the
-+     portable_wait below systematically returns a pid of 0 and reports that
-+     the subprocess terminated successfully. */
-+
-+  if (spawnvp (P_WAIT, args[0], args) != 0)
-+    return -1;
-+  else
-+    return 0;
-+
- #elif defined (_WIN32)
- 
-   HANDLE h = NULL;
-@@ -2597,6 +2640,9 @@ __gnat_portable_wait (int *process_status)
- 
-   pid = win32_wait (&status);
- 
-+#elif defined (__DJGPP__)
-+  /* ??? See corresponding comment in portable_no_block_spawn.  */
-+
- #else
- 
-   pid = waitpid (-1, &status, 0);
-diff --git a/gcc/ada/ctrl_c.c b/gcc/ada/ctrl_c.c
-index 7f8d177d1..d4fc551bb 100644
---- a/gcc/ada/ctrl_c.c
-+++ b/gcc/ada/ctrl_c.c
-@@ -92,8 +92,8 @@ __gnat_install_int_handler (void (*proc) (void))
-   if (sigint_intercepted == 0)
-     {
-       act.sa_handler = __gnat_int_handler;
--#if defined (__Lynx__) || defined (VMS)
--      /* LynxOS and VMS do not support SA_RESTART. */
-+#if defined (__Lynx__) || defined (VMS) || defined(__DJGPP__)
-+      /* LynxOS, VMS or DJGPP do not support SA_RESTART. */
-       act.sa_flags = 0;
- #else
-       act.sa_flags = SA_RESTART;
-diff --git a/gcc/ada/env.c b/gcc/ada/env.c
-index 846987667..3786776de 100644
---- a/gcc/ada/env.c
-+++ b/gcc/ada/env.c
-@@ -275,6 +275,8 @@ void __gnat_unsetenv (char *name)
-   sprintf (expression, "%s=", name);
-   putenv (expression);
-   free (expression);
-+#elif defined (__DJGPP__) && __DJGPP__==2 && __DJGPP_MINOR__<4
-+  putenv(name);
- #else
-   unsetenv (name);
- #endif
-@@ -302,7 +304,7 @@ void __gnat_clearenv (void)
- #elif defined (__MINGW32__) || defined (__FreeBSD__) || defined (__APPLE__) \
-    || (defined (__vxworks) && defined (__RTP__)) || defined (__CYGWIN__) \
-    || defined (__NetBSD__) || defined (__OpenBSD__) || defined (__rtems__) \
--   || defined (__DragonFly__)
-+   || defined (__DJGPP__) || defined (__DragonFly__)
-   /* On Windows, FreeBSD and MacOS there is no function to clean all the
-      environment but there is a "clean" way to unset a variable. So go
-      through the environ table and call __gnat_unsetenv on all entries */
 diff --git a/gcc/ada/gcc-interface/Make-lang.in b/gcc/ada/gcc-interface/Make-lang.in
-index c3d5893d1..ec3ed6d5f 100644
+index eb0489b4a..166a74326 100644
 --- a/gcc/ada/gcc-interface/Make-lang.in
 +++ b/gcc/ada/gcc-interface/Make-lang.in
-@@ -1007,7 +1007,7 @@ ada/generated/gnatvsn.ads: ada/gnatvsn.ads BASE-VER ada/GNAT_DATE
+@@ -1008,7 +1008,7 @@ ada/generated/gnatvsn.ads: ada/gnatvsn.ads BASE-VER ada/GNAT_DATE
  	s=`cat $(srcdir)/BASE-VER | sed -e "s/\([0-9]*\)\.\([0-9]*\)\..*/-\1\2/g"`; \
  	d=`if test -f $(srcdir)/ada/GNAT_DATE; then \
             cat $(srcdir)/ada/GNAT_DATE; else date +%Y%m%d; fi`; \
@@ -448,91 +139,8 @@ index c3d5893d1..ec3ed6d5f 100644
  
  ada/gnatvsn.o : ada/gnatvsn.adb ada/generated/gnatvsn.ads
  	$(CC) -c $(ALL_ADAFLAGS) -Iada/generated -I../ada/generated $(ADA_INCLUDES) $< $(OUTPUT_OPTION)
-diff --git a/gcc/ada/gcc-interface/Makefile.in b/gcc/ada/gcc-interface/Makefile.in
-index 598b262d9..c7ccbdfe4 100644
---- a/gcc/ada/gcc-interface/Makefile.in
-+++ b/gcc/ada/gcc-interface/Makefile.in
-@@ -1762,6 +1762,23 @@ ifeq ($(strip $(filter-out elf eabi eabispe,$(target_os))),)
-   indepsw.adb<indepsw-gnu.adb
- endif
- 
-+ifeq ($(strip $(filter-out %djgpp,$(target_os))),)
-+  GNATRTL_SOCKETS_OBJS =
-+
-+  LIBGNAT_TARGET_PAIRS = \
-+	a-intnam.ads<a-intnam-dummy.ads \
-+	s-inmaop.adb<s-inmaop-dummy.adb \
-+	s-intman.adb<s-intman-dummy.adb \
-+	s-osinte.ads<s-osinte-dummy.ads \
-+	s-osprim.adb<s-osprim-unix.adb \
-+	s-taprop.adb<s-taprop-dummy.adb \
-+	s-taspri.ads<s-taspri-dummy.ads \
-+	system.ads<system-djgpp.ads \
-+	$(DUMMY_SOCKETS_TARGET_PAIRS)
-+
-+  EH_MECHANISM=-gcc
-+endif
-+
- # Cygwin/Mingw32
- ifeq ($(strip $(filter-out cygwin% mingw32% pe,$(target_os))),)
-   # Cygwin provides a full Posix environment, and so we use the default
-diff --git a/gcc/ada/gsocket.h b/gcc/ada/gsocket.h
-index 31a3ccff1..96cb1b3e1 100644
---- a/gcc/ada/gsocket.h
-+++ b/gcc/ada/gsocket.h
-@@ -29,7 +29,7 @@
-  *                                                                          *
-  ****************************************************************************/
- 
--#if defined(VTHREADS) || defined(__PikeOS__)
-+#if defined(VTHREADS) || defined(__DJGPP__) || defined(__PikeOS__)
- 
- /* Sockets not supported on these platforms.  */
- #undef HAVE_SOCKETS
-diff --git a/gcc/ada/init.c b/gcc/ada/init.c
-index 2f01c8dce..5093707d7 100644
---- a/gcc/ada/init.c
-+++ b/gcc/ada/init.c
-@@ -2493,6 +2493,37 @@ __gnat_install_handler (void)
-   __gnat_handler_installed = 1;
- }
- 
-+#elif defined (__DJGPP__)
-+
-+/***************************************/
-+/* FIXME: this is only a draft version */
-+/***************************************/
-+
-+struct timestruc_t
-+{
-+   time_t  tv_sec;
-+   long    tv_nsec;
-+};
-+
-+
-+int
-+nanosleep (struct timestruc_t *Rqtp, struct timestruc_t *Rmtp);
-+
-+int
-+nanosleep (struct timestruc_t *Rqtp, struct timestruc_t *Rmtp)
-+{
-+    usleep (1000000*Rqtp->tv_sec+Rqtp->tv_nsec/1000);
-+    if (Rmtp) { Rmtp->tv_sec = Rmtp->tv_nsec=0; }
-+    return 0;
-+}
-+
-+
-+void
-+__gnat_install_handler ()
-+{
-+  __gnat_handler_installed = 1;
-+}
-+
- #elif defined(__ANDROID__)
- 
- /*******************/
 diff --git a/gcc/ada/s-os_lib.adb b/gcc/ada/s-os_lib.adb
-index 15f1fa757..f22e5a186 100644
+index 36064e97b..18bfb4840 100644
 --- a/gcc/ada/s-os_lib.adb
 +++ b/gcc/ada/s-os_lib.adb
 @@ -71,7 +71,7 @@ package body System.OS_Lib is
@@ -544,351 +152,8 @@ index 15f1fa757..f22e5a186 100644
     --  Used to initialize Current_Temp_File_Name and Temp_File_Name_Last_Digit
  
     Current_Temp_File_Name : String := First_Temp_File_Name;
-@@ -2026,6 +2026,13 @@ package body System.OS_Lib is
-                              not Case_Sensitive
-                                and then Get_File_Names_Case_Sensitive = 0;
- 
-+      function Is_Directory_Separator (C : Character) return Boolean;
-+      --  Test whether provided character is directory separator
-+
-+      function Is_Djgpp_Special_Path (Path : String) return Boolean;
-+      --  Test whether provided path is DJGPP special path (/dev/...).
-+      --  Returns false in all other cases also when not DJGPP.
-+
-       function Final_Value (S : String) return String;
-       --  Make final adjustment to the returned string. This function strips
-       --  trailing directory separators, and folds returned string to lower
-@@ -2036,6 +2043,28 @@ package body System.OS_Lib is
-       --  if not already present, otherwise return current working directory
-       --  with terminating directory separator.
- 
-+      ----------------------------
-+      -- Is_Directory_Separator --
-+      ----------------------------
-+
-+      function Is_Directory_Separator (C : Character) return Boolean is
-+      begin
-+         return C = '/'
-+           or else C = Directory_Separator;
-+      end Is_Directory_Separator;
-+
-+      ---------------------------
-+      -- Is_Djgpp_Special_Path --
-+      ---------------------------
-+
-+      function Is_Djgpp_Special_Path (Path : String) return Boolean is
-+      begin
-+         return Is_Djgpp /= 0
-+           and then Is_Directory_Separator (Path (Path'First))
-+           and then Path (Path'First + 1 .. Path'First + 3) = "dev"
-+           and then Is_Directory_Separator (Path (Path'First + 4));
-+      end Is_Djgpp_Special_Path;
-+
-       -----------------
-       -- Final_Value --
-       -----------------
-@@ -2199,8 +2228,11 @@ package body System.OS_Lib is
-       end File_Name_Conversion;
- 
-       --  Replace all '/' by Directory Separators (this is for Windows)
-+      --  No need to do that however for DJGPP
- 
--      if Directory_Separator /= '/' then
-+      if Directory_Separator /= '/'
-+        and then Is_Djgpp = 0
-+      then
-          for Index in 1 .. End_Path loop
-             if Path_Buffer (Index) = '/' then
-                Path_Buffer (Index) := Directory_Separator;
-@@ -2221,6 +2253,7 @@ package body System.OS_Lib is
- 
-          if Path_Buffer (1) = Directory_Separator
-            and then Path_Buffer (2) /= Directory_Separator
-+           and then not Is_Djgpp_Special_Path (Path_Buffer)
-          then
-             declare
-                Cur_Dir : constant String := Get_Directory ("");
-diff --git a/gcc/ada/s-os_lib.ads b/gcc/ada/s-os_lib.ads
-index 985f492eb..e1a055a96 100644
---- a/gcc/ada/s-os_lib.ads
-+++ b/gcc/ada/s-os_lib.ads
-@@ -1056,9 +1056,12 @@ package System.OS_Lib is
-    Path_Separator : constant Character;
-    --  The character to separate paths in an environment variable value
- 
-+   Is_Djgpp : constant Integer;
-+
- private
-    pragma Import (C, Path_Separator, "__gnat_path_separator");
-    pragma Import (C, Directory_Separator, "__gnat_dir_separator");
-+   pragma Import (C, Is_Djgpp, "__gnat_is_djgpp");
-    pragma Import (C, Current_Time, "__gnat_current_time");
- 
-    type OS_Time is
-diff --git a/gcc/ada/sysdep.c b/gcc/ada/sysdep.c
-index 465007eb1..bfabf30e8 100644
---- a/gcc/ada/sysdep.c
-+++ b/gcc/ada/sysdep.c
-@@ -126,7 +126,7 @@ extern struct tm *localtime_r(const time_t *, struct tm *);
- 
- */
- 
--#if defined (WINNT) || defined (__CYGWIN__)
-+#if defined (WINNT) || defined (__CYGWIN__) || defined(__DJGPP__)
- 
- const char __gnat_text_translation_required = 1;
- 
-@@ -137,6 +137,11 @@ const char __gnat_text_translation_required = 1;
- #define WIN_SETMODE _setmode
- #endif
- 
-+#if defined(__DJGPP__)
-+#include <io.h>
-+#define _setmode setmode
-+#endif /* __DJGPP__ */
-+
- void
- __gnat_set_binary_mode (int handle)
- {
-@@ -149,6 +154,30 @@ __gnat_set_text_mode (int handle)
-   WIN_SETMODE (handle, O_TEXT);
- }
- 
-+#ifdef __DJGPP__
-+void
-+__gnat_set_mode (int handle, int mode)
-+{
-+  /*  the values here must be synchronized with
-+      System.File_Control_Block.Content_Encodding:
-+
-+      None         = 0
-+      Default_Text = 1
-+      Text         = 2
-+      U8text       = 3
-+      Wtext        = 4
-+      U16text      = 5  */
-+
-+ switch (mode) {
-+    case 0 : setmode(handle, O_BINARY);          break;
-+    case 1 : setmode(handle, O_TEXT);            break;
-+    case 2 : setmode(handle, O_TEXT);            break;
-+    case 3 : setmode(handle, O_TEXT);            break;
-+    case 4 : setmode(handle, O_BINARY);          break;
-+    case 5 : setmode(handle, O_BINARY);          break;
-+ }
-+}
-+#else
- void
- __gnat_set_mode (int handle, int mode)
- {
-@@ -171,6 +200,7 @@ __gnat_set_mode (int handle, int mode)
-     case 5 : WIN_SETMODE (handle, _O_U16TEXT);         break;
-  }
- }
-+#endif
- 
- #ifdef __CYGWIN__
- 
-@@ -603,7 +633,29 @@ long __gnat_invalid_tzoff = 259273;
- 
- /* Definition of __gnat_localtime_r used by a-calend.adb */
- 
--#if defined (__MINGW32__)
-+#if defined (__DJGPP__)
-+
-+/* FIXME: this is draft version only. Fix me if that is not correct  */
-+/*        or not complete (AP)                                       */
-+
-+extern void
-+__gnat_localtime_tzoff (const time_t *, long *);
-+
-+void
-+__gnat_localtime_tzoff (const time_t *timer, long *off)
-+{
-+  struct tm *tmp;
-+
-+  tmp = localtime (timer);
-+  *off = (long) -tmp->tm_gmtoff;
-+
-+  /* Correct the offset if Daylight Saving Time is in effect */
-+
-+  if (tmp->tm_isdst > 0)
-+    *off = *off + 3600;
-+}
-+
-+#elif defined (__MINGW32__)
- 
- /* Reentrant localtime for Windows. */
- 
-diff --git a/gcc/ada/system-djgpp.ads b/gcc/ada/system-djgpp.ads
-new file mode 100644
-index 000000000..245723105
---- /dev/null
-+++ b/gcc/ada/system-djgpp.ads
-@@ -0,0 +1,148 @@
-+------------------------------------------------------------------------------
-+--                                                                          --
-+--                        GNAT RUN-TIME COMPONENTS                          --
-+--                                                                          --
-+--                               S Y S T E M                                --
-+--                                                                          --
-+--                                 S p e c                                  --
-+--                            (DJGPP Version)                             --
-+--                                                                          --
-+--          Copyright (C) 1992-2015, Free Software Foundation, Inc.         --
-+--                                                                          --
-+-- This specification is derived from the Ada Reference Manual for use with --
-+-- GNAT. The copyright notice above, and the license provisions that follow --
-+-- apply solely to the  contents of the part following the private keyword. --
-+--                                                                          --
-+-- GNAT is free software;  you can  redistribute it  and/or modify it under --
-+-- terms of the  GNU General Public License as published  by the Free Soft- --
-+-- ware  Foundation;  either version 3,  or (at your option) any later ver- --
-+-- sion.  GNAT is distributed in the hope that it will be useful, but WITH- --
-+-- OUT ANY WARRANTY;  without even the  implied warranty of MERCHANTABILITY --
-+-- or FITNESS FOR A PARTICULAR PURPOSE.                                     --
-+--                                                                          --
-+-- As a special exception under Section 7 of GPL version 3, you are granted --
-+-- additional permissions described in the GCC Runtime Library Exception,   --
-+-- version 3.1, as published by the Free Software Foundation.               --
-+--                                                                          --
-+-- You should have received a copy of the GNU General Public License and    --
-+-- a copy of the GCC Runtime Library Exception along with this program;     --
-+-- see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see    --
-+-- <http://www.gnu.org/licenses/>.                                          --
-+--                                                                          --
-+-- GNAT was originally developed  by the GNAT team at  New York University. --
-+-- Extensive contributions were provided by Ada Core Technologies Inc.      --
-+--                                                                          --
-+------------------------------------------------------------------------------
-+
-+package System is
-+   pragma Pure;
-+   --  Note that we take advantage of the implementation permission to make
-+   --  this unit Pure instead of Preelaborable; see RM 13.7.1(15). In Ada
-+   --  2005, this is Pure in any case (AI-362).
-+
-+   pragma No_Elaboration_Code_All;
-+   --  Allow the use of that restriction in units that WITH this unit
-+
-+   type Name is (SYSTEM_NAME_GNAT);
-+   System_Name : constant Name := SYSTEM_NAME_GNAT;
-+
-+   --  System-Dependent Named Numbers
-+
-+   Min_Int               : constant := Long_Long_Integer'First;
-+   Max_Int               : constant := Long_Long_Integer'Last;
-+
-+   Max_Binary_Modulus    : constant := 2 ** Long_Long_Integer'Size;
-+   Max_Nonbinary_Modulus : constant := 2 ** Integer'Size - 1;
-+
-+   Max_Base_Digits       : constant := Long_Long_Float'Digits;
-+   Max_Digits            : constant := Long_Long_Float'Digits;
-+
-+   Max_Mantissa          : constant := 63;
-+   Fine_Delta            : constant := 2.0 ** (-Max_Mantissa);
-+
-+   Tick                  : constant := 0.01;
-+
-+   --  Storage-related Declarations
-+
-+   type Address is private;
-+   pragma Preelaborable_Initialization (Address);
-+   Null_Address : constant Address;
-+
-+   Storage_Unit : constant := 8;
-+   Word_Size    : constant := 32;
-+   Memory_Size  : constant := 2 ** 32;
-+
-+   --  Address comparison
-+
-+   function "<"  (Left, Right : Address) return Boolean;
-+   function "<=" (Left, Right : Address) return Boolean;
-+   function ">"  (Left, Right : Address) return Boolean;
-+   function ">=" (Left, Right : Address) return Boolean;
-+   function "="  (Left, Right : Address) return Boolean;
-+
-+   pragma Import (Intrinsic, "<");
-+   pragma Import (Intrinsic, "<=");
-+   pragma Import (Intrinsic, ">");
-+   pragma Import (Intrinsic, ">=");
-+   pragma Import (Intrinsic, "=");
-+
-+   --  Other System-Dependent Declarations
-+
-+   type Bit_Order is (High_Order_First, Low_Order_First);
-+   Default_Bit_Order : constant Bit_Order := Low_Order_First;
-+   pragma Warnings (Off, Default_Bit_Order); -- kill constant condition warning
-+
-+   --  Priority-related Declarations (RM D.1)
-+
-+   Max_Priority           : constant Positive := 30;
-+   Max_Interrupt_Priority : constant Positive := 31;
-+
-+   subtype Any_Priority       is Integer      range  0 .. 31;
-+   subtype Priority           is Any_Priority range  0 .. 30;
-+   subtype Interrupt_Priority is Any_Priority range 31 .. 31;
-+
-+   Default_Priority : constant Priority := 15;
-+
-+private
-+
-+   type Address is mod Memory_Size;
-+   Null_Address : constant Address := 0;
-+
-+   --------------------------------------
-+   -- System Implementation Parameters --
-+   --------------------------------------
-+
-+   --  These parameters provide information about the target that is used
-+   --  by the compiler. They are in the private part of System, where they
-+   --  can be accessed using the special circuitry in the Targparm unit
-+   --  whose source should be consulted for more detailed descriptions
-+   --  of the individual switch values.
-+
-+   Backend_Divide_Checks     : constant Boolean := False;
-+   Backend_Overflow_Checks   : constant Boolean := True;
-+   Command_Line_Args         : constant Boolean := True;
-+   Configurable_Run_Time     : constant Boolean := False;
-+   Denorm                    : constant Boolean := True;
-+   Duration_32_Bits          : constant Boolean := False;
-+   Exit_Status_Supported     : constant Boolean := True;
-+   Fractional_Fixed_Ops      : constant Boolean := False;
-+   Frontend_Layout           : constant Boolean := False;
-+   Machine_Overflows         : constant Boolean := False;
-+   Machine_Rounds            : constant Boolean := True;
-+   Preallocated_Stacks       : constant Boolean := False;
-+   Signed_Zeros              : constant Boolean := True;
-+   Stack_Check_Default       : constant Boolean := False;
-+   Stack_Check_Probes        : constant Boolean := True;
-+   Stack_Check_Limits        : constant Boolean := False;
-+   Support_Aggregates        : constant Boolean := True;
-+   Support_Atomic_Primitives : constant Boolean := False;
-+   Support_Composite_Assign  : constant Boolean := True;
-+   Support_Composite_Compare : constant Boolean := True;
-+   Support_Long_Shifts       : constant Boolean := True;
-+   Always_Compatible_Rep     : constant Boolean := False;
-+   Suppress_Standard_Library : constant Boolean := False;
-+   Use_Ada_Main_Program_Name : constant Boolean := False;
-+   Frontend_Exceptions       : constant Boolean := False;
-+   ZCX_By_Default            : constant Boolean := False;
-+
-+end System;
-diff --git a/gcc/ada/terminals.c b/gcc/ada/terminals.c
-index d72eb0988..7d2dacfed 100644
---- a/gcc/ada/terminals.c
-+++ b/gcc/ada/terminals.c
-@@ -31,7 +31,7 @@
- 
- /* First all usupported platforms. Add stubs for exported routines. */
- 
--#if defined (VMS) || defined (__vxworks) || defined (__Lynx__) \
-+#if defined (VMS) || defined(__DJGPP__) || defined (__vxworks) || defined (__Lynx__) \
-   || defined (__ANDROID__) || defined (__PikeOS__)
- 
- #define ATTRIBUTE_UNUSED __attribute__((unused))
 diff --git a/gcc/config.host b/gcc/config.host
-index 5b3c75714..c9dc0e18a 100644
+index 6b28f3033..98caf6ce6 100644
 --- a/gcc/config.host
 +++ b/gcc/config.host
 @@ -220,12 +220,17 @@ case ${host} in
@@ -909,12 +174,30 @@ index 5b3c75714..c9dc0e18a 100644
      ;;
    i[34567]86-*-cygwin* | x86_64-*-cygwin*)
      host_xm_file=i386/xm-cygwin.h
+diff --git a/gcc/config.in b/gcc/config.in
+index eca3fd810..529cc530c 100644
+--- a/gcc/config.in
++++ b/gcc/config.in
+@@ -660,11 +660,13 @@
+ #undef HAVE_AS_SPARC5_VIS4
+ #endif
+ 
++
+ /* Define if your assembler supports SPARC6 instructions. */
+ #ifndef USED_FOR_TARGET
+ #undef HAVE_AS_SPARC6
+ #endif
+ 
++
+ /* Define if your assembler and linker support GOTDATA_OP relocs. */
+ #ifndef USED_FOR_TARGET
+ #undef HAVE_AS_SPARC_GOTDATA_OP
 diff --git a/gcc/config/i386/x-djgpp b/gcc/config/i386/x-djgpp
 new file mode 100644
-index 000000000..4ebbded6f
+index 000000000..822d2007d
 --- /dev/null
 +++ b/gcc/config/i386/x-djgpp
-@@ -0,0 +1,23 @@
+@@ -0,0 +1,17 @@
 +#-----------------------------------------------------------------------------
 +# The following code is copied from config/mh-djgpp as one may 
 +# want to run make in gcc build directory instead of toplevel 
@@ -929,58 +212,39 @@ index 000000000..4ebbded6f
 +target_alias=djgpp
 +endif
 +
-+# The version string must be modified to contain just one dot
-+# because DOS filenames can only have one dot when long filenames
-+# are not available.
-+#
-+version := $(shell echo $(version) | sed -e 's:\.::2g')
-+
 +# on DJGPP the 'ln -s' does not work correctly
 +LN = cp -p
 +LN_S = cp -p
 diff --git a/gcc/config/i386/xm-djgpp.h b/gcc/config/i386/xm-djgpp.h
-index 94e6ff614..2c07acf27 100644
+index de0dace17..57c037a7d 100644
 --- a/gcc/config/i386/xm-djgpp.h
 +++ b/gcc/config/i386/xm-djgpp.h
-@@ -30,7 +30,9 @@ along with GCC; see the file COPYING3.  If not see
+@@ -30,6 +30,8 @@ along with GCC; see the file COPYING3.  If not see
  #undef NATIVE_SYSTEM_HEADER_DIR
  #define NATIVE_SYSTEM_HEADER_DIR "/dev/env/DJDIR/include/"
  
--/* Search for as.exe and ld.exe in DJGPP's binary directory.  */
 +//#undef PREFIX_INCLUDE_DIR
 +
-+/* Search for as.exe and ld.exe in DJGPP's binary directory.  */ 
+ /* Search for as.exe and ld.exe in DJGPP's binary directory.  */
  #undef MD_EXEC_PREFIX
  #define MD_EXEC_PREFIX "/dev/env/DJDIR/bin/"
- 
-@@ -43,7 +45,7 @@ along with GCC; see the file COPYING3.  If not see
- #undef STANDARD_STARTFILE_PREFIX_2
- #define STANDARD_STARTFILE_PREFIX_1 "/dev/env/DJDIR/lib/"
- 
--/* Make sure that gcc will not look for .h files in /usr/local/include
-+/* Make sure that gcc will not look for .h files in /usr/local/include 
-    unless user explicitly requests it.  */
- #undef LOCAL_INCLUDE_DIR
- 
-@@ -105,7 +107,12 @@ along with GCC; see the file COPYING3.  If not see
-       _fixpath ((PATH), fixed_path);		\
-       strcat (fixed_path, "/");			\
+@@ -107,6 +109,11 @@ along with GCC; see the file COPYING3.  If not see
        (PATH) = xstrdup (fixed_path);		\
--    }
-+    } 
-+
+     }
+ 
 +/* Rename libstdc++ to libstdcxx as the first name is not valid for DOS */
 +#define LIBSTDCXX "stdcxx"
 +#define LIBSTDCXX_PROFILE "stdcxx"
 +#define LIBSTDCXX_STATIC "stdcxx"
- 
++
  #undef MAX_OFILE_ALIGNMENT
  #define MAX_OFILE_ALIGNMENT 128
+ 
 diff --git a/gcc/configure b/gcc/configure
-index b4caeeb81..c8de3445a 100755
+index 5dab9142e..62295ba2d 100755
 --- a/gcc/configure
 +++ b/gcc/configure
-@@ -813,6 +813,7 @@ LDFLAGS
+@@ -815,6 +815,7 @@ LDFLAGS
  CFLAGS
  CC
  GENINSRC
@@ -988,7 +252,7 @@ index b4caeeb81..c8de3445a 100755
  CROSS_SYSTEM_HEADER_DIR
  TARGET_SYSTEM_ROOT_DEFINE
  TARGET_SYSTEM_ROOT
-@@ -3557,11 +3558,14 @@ fi
+@@ -3569,11 +3570,14 @@ fi
  
  
  # This logic must match libstdc++-v3/acinclude.m4:GLIBCXX_EXPORT_INSTALL_INFO.
@@ -1005,29 +269,29 @@ index b4caeeb81..c8de3445a 100755
      if test x$host != x$target; then
         libstdcxx_incdir="$target_alias/$libstdcxx_incdir"
      fi
-@@ -18460,7 +18464,7 @@ else
+@@ -18433,7 +18437,7 @@ else
    lt_dlunknown=0; lt_dlno_uscore=1; lt_dlneed_uscore=2
    lt_status=$lt_dlunknown
    cat > conftest.$ac_ext <<_LT_EOF
--#line 18463 "configure"
-+#line 18467 "configure"
+-#line 18436 "configure"
++#line 18440 "configure"
  #include "confdefs.h"
  
  #if HAVE_DLFCN_H
-@@ -18566,7 +18570,7 @@ else
+@@ -18539,7 +18543,7 @@ else
    lt_dlunknown=0; lt_dlno_uscore=1; lt_dlneed_uscore=2
    lt_status=$lt_dlunknown
    cat > conftest.$ac_ext <<_LT_EOF
--#line 18569 "configure"
-+#line 18573 "configure"
+-#line 18542 "configure"
++#line 18546 "configure"
  #include "confdefs.h"
  
  #if HAVE_DLFCN_H
 diff --git a/gcc/configure.ac b/gcc/configure.ac
-index 4bda5318c..b5f2ef212 100644
+index e1fa8af5e..023382dd8 100644
 --- a/gcc/configure.ac
 +++ b/gcc/configure.ac
-@@ -203,11 +203,14 @@ no)	;;
+@@ -206,11 +206,14 @@ no)	;;
  esac])
  
  # This logic must match libstdc++-v3/acinclude.m4:GLIBCXX_EXPORT_INSTALL_INFO.
@@ -1045,7 +309,7 @@ index 4bda5318c..b5f2ef212 100644
         libstdcxx_incdir="$target_alias/$libstdcxx_incdir"
      fi
 diff --git a/gcc/gcov-tool.c b/gcc/gcov-tool.c
-index 043966a5d..3cdaf31a3 100644
+index 74e77b90d..a0e85f722 100644
 --- a/gcc/gcov-tool.c
 +++ b/gcc/gcov-tool.c
 @@ -56,11 +56,18 @@ static bool verbose;
@@ -1081,10 +345,10 @@ index 043966a5d..3cdaf31a3 100644
  #endif
 diff --git a/gcc/gengtype-lex.c b/gcc/gengtype-lex.c
 deleted file mode 100644
-index 021c1cb4e..000000000
+index 1eb0bd41a..000000000
 --- a/gcc/gengtype-lex.c
 +++ /dev/null
-@@ -1,2941 +0,0 @@
+@@ -1,2903 +0,0 @@
 -#include "bconfig.h"
 -#line 2 "gengtype-lex.c"
 -
@@ -1096,8 +360,8 @@ index 021c1cb4e..000000000
 -
 -#define FLEX_SCANNER
 -#define YY_FLEX_MAJOR_VERSION 2
--#define YY_FLEX_MINOR_VERSION 6
--#define YY_FLEX_SUBMINOR_VERSION 1
+-#define YY_FLEX_MINOR_VERSION 5
+-#define YY_FLEX_SUBMINOR_VERSION 37
 -#if YY_FLEX_SUBMINOR_VERSION > 0
 -#define FLEX_BETA
 -#endif
@@ -1176,13 +440,25 @@ index 021c1cb4e..000000000
 -
 -#endif /* ! FLEXINT_H */
 -
--/* TODO: this is always defined, so inline it */
--#define yyconst const
+-#ifdef __cplusplus
 -
--#if defined(__GNUC__) && __GNUC__ >= 3
--#define yynoreturn __attribute__((__noreturn__))
+-/* The "const" storage-class-modifier is valid. */
+-#define YY_USE_CONST
+-
+-#else	/* ! __cplusplus */
+-
+-/* C99 requires __STDC__ to be defined as 1. */
+-#if defined (__STDC__)
+-
+-#define YY_USE_CONST
+-
+-#endif	/* defined (__STDC__) */
+-#endif	/* ! __cplusplus */
+-
+-#ifdef YY_USE_CONST
+-#define yyconst const
 -#else
--#define yynoreturn
+-#define yyconst
 -#endif
 -
 -/* Returned upon end-of-file. */
@@ -1218,15 +494,7 @@ index 021c1cb4e..000000000
 -
 -/* Size of default input buffer. */
 -#ifndef YY_BUF_SIZE
--#ifdef __ia64__
--/* On IA-64, the buffer size is 16k, not 8k.
-- * Moreover, YY_BUF_SIZE is 2*YY_READ_BUF_SIZE in the general case.
-- * Ditto for the __ia64__ case accordingly.
-- */
--#define YY_BUF_SIZE 32768
--#else
 -#define YY_BUF_SIZE 16384
--#endif /* __ia64__ */
 -#endif
 -
 -/* The state buf must be large enough to hold one state per character in the main buffer.
@@ -1243,7 +511,7 @@ index 021c1cb4e..000000000
 -typedef size_t yy_size_t;
 -#endif
 -
--extern int yyleng;
+-extern yy_size_t yyleng;
 -
 -extern FILE *yyin, *yyout;
 -
@@ -1252,14 +520,13 @@ index 021c1cb4e..000000000
 -#define EOB_ACT_LAST_MATCH 2
 -
 -    #define YY_LESS_LINENO(n)
--    #define YY_LINENO_REWIND_TO(ptr)
 -    
 -/* Return all but the first "n" matched characters back to the input stream. */
 -#define yyless(n) \
 -	do \
 -		{ \
 -		/* Undo effects of setting up yytext. */ \
--        yy_size_t yyless_macro_arg = (n); \
+-        int yyless_macro_arg = (n); \
 -        YY_LESS_LINENO(yyless_macro_arg);\
 -		*yy_cp = (yy_hold_char); \
 -		YY_RESTORE_YY_MORE_OFFSET \
@@ -1338,7 +605,7 @@ index 021c1cb4e..000000000
 -/* Stack of input buffers. */
 -static size_t yy_buffer_stack_top = 0; /**< index of top of stack. */
 -static size_t yy_buffer_stack_max = 0; /**< capacity of stack. */
--static YY_BUFFER_STATE * yy_buffer_stack = NULL; /**< Stack as an array. */
+-static YY_BUFFER_STATE * yy_buffer_stack = 0; /**< Stack as an array. */
 -
 -/* We provide macros for accessing buffer states in case in the
 - * future we want to put the buffer states in a more general
@@ -1358,10 +625,10 @@ index 021c1cb4e..000000000
 -/* yy_hold_char holds the character lost when yytext is formed. */
 -static char yy_hold_char;
 -static int yy_n_chars;		/* number of characters read into yy_ch_buf */
--int yyleng;
+-yy_size_t yyleng;
 -
 -/* Points to current character in buffer. */
--static char *yy_c_buf_p = NULL;
+-static char *yy_c_buf_p = (char *) 0;
 -static int yy_init = 0;		/* whether we need to initialize */
 -static int yy_start = 0;	/* start state number */
 -
@@ -1386,7 +653,7 @@ index 021c1cb4e..000000000
 -
 -YY_BUFFER_STATE yy_scan_buffer (char *base,yy_size_t size  );
 -YY_BUFFER_STATE yy_scan_string (yyconst char *yy_str  );
--YY_BUFFER_STATE yy_scan_bytes (yyconst char *bytes,int len  );
+-YY_BUFFER_STATE yy_scan_bytes (yyconst char *bytes,yy_size_t len  );
 -
 -void *yyalloc (yy_size_t  );
 -void *yyrealloc (void *,yy_size_t  );
@@ -1418,12 +685,12 @@ index 021c1cb4e..000000000
 -
 -/* Begin user sect3 */
 -
--#define yywrap() (/*CONSTCOND*/1)
+-#define yywrap() 1
 -#define YY_SKIP_YYWRAP
 -
 -typedef unsigned char YY_CHAR;
 -
--FILE *yyin = NULL, *yyout = NULL;
+-FILE *yyin = (FILE *) 0, *yyout = (FILE *) 0;
 -
 -typedef int yy_state_type;
 -
@@ -1432,15 +699,12 @@ index 021c1cb4e..000000000
 -int yylineno = 1;
 -
 -extern char *yytext;
--#ifdef yytext_ptr
--#undef yytext_ptr
--#endif
 -#define yytext_ptr yytext
 -
 -static yy_state_type yy_get_previous_state (void );
 -static yy_state_type yy_try_NUL_trans (yy_state_type current_state  );
 -static int yy_get_next_buffer (void );
--static void yynoreturn yy_fatal_error (yyconst char* msg  );
+-static void yy_fatal_error (yyconst char msg[]  );
 -
 -/* Done after the current pattern has been matched and before the
 - * corresponding action - sets up yytext.
@@ -1466,7 +730,7 @@ index 021c1cb4e..000000000
 -        0,    0,    0,    0,    0,    0,    0,    0,   54,   41,
 -       38,   50,   41,   50,   39,   41,   41,   39,   39,   39,
 -       39,   39,   35,    9,    9,   33,   35,   15,   35,   33,
--       35,   25,   35,   35,   35,   35,   35,   35,   35,   35,
+-       33,   25,   35,   35,   35,   35,   35,   35,   35,   35,
 -       14,   35,   35,   35,   35,   35,   35,   35,   35,   35,
 -       35,   35,   35,   35,   13,    9,   35,   46,   44,   51,
 -       51,    0,   42,    0,    0,    0,   43,   36,   43,    0,
@@ -1526,7 +790,7 @@ index 021c1cb4e..000000000
 -        0,   45,    0,    0,    0,    0,    0,    0,    0,    0
 -    } ;
 -
--static yyconst YY_CHAR yy_ec[256] =
+-static yyconst flex_int32_t yy_ec[256] =
 -    {   0,
 -        1,    1,    1,    1,    1,    1,    1,    1,    2,    3,
 -        2,    2,    2,    1,    1,    1,    1,    1,    1,    1,
@@ -1558,7 +822,7 @@ index 021c1cb4e..000000000
 -        1,    1,    1,    1,    1
 -    } ;
 -
--static yyconst YY_CHAR yy_meta[68] =
+-static yyconst flex_int32_t yy_meta[68] =
 -    {   0,
 -        1,    2,    3,    1,    1,    1,    1,    1,    1,    4,
 -        5,    1,    1,    6,    6,    7,    8,    9,    9,    9,
@@ -1569,7 +833,7 @@ index 021c1cb4e..000000000
 -       11,   11,   11,   11,   11,   11,    1
 -    } ;
 -
--static yyconst flex_uint16_t yy_base[608] =
+-static yyconst flex_int16_t yy_base[608] =
 -    {   0,
 -        0,   67,  134,   16,   16,   17,   18,   20, 1232, 2403,
 -     2403,   19, 1191,   19,   31,   41,   43,   32,   33,   34,
@@ -1711,7 +975,7 @@ index 021c1cb4e..000000000
 -      560,  560,  560,  560,  560,  560,  560
 -    } ;
 -
--static yyconst flex_uint16_t yy_nxt[2471] =
+-static yyconst flex_int16_t yy_nxt[2471] =
 -    {   0,
 -       10,   10,   11,   10,   12,   10,   10,   13,   10,   10,
 -       10,   10,   14,   10,   10,   10,   10,   56,   59,   59,
@@ -2275,10 +1539,10 @@ index 021c1cb4e..000000000
 -#define YY_MORE_ADJ 0
 -#define YY_RESTORE_YY_MORE_OFFSET
 -char *yytext;
--#line 1 "/d/gcc-6.5.0/gcc-6.5.0/gcc/gengtype-lex.l"
+-#line 1 "/space/rguenther/gcc-7.5.0/gcc-7.5.0/gcc/gengtype-lex.l"
 -/* -*- indented-text -*- */
 -/* Process source files and output type information.
--   Copyright (C) 2002-2016 Free Software Foundation, Inc.
+-   Copyright (C) 2002-2017 Free Software Foundation, Inc.
 -
 -This file is part of GCC.
 -
@@ -2296,7 +1560,7 @@ index 021c1cb4e..000000000
 -along with GCC; see the file COPYING3.  If not see
 -<http://www.gnu.org/licenses/>.  */
 -#define YY_NO_INPUT 1
--#line 24 "/d/gcc-6.5.0/gcc-6.5.0/gcc/gengtype-lex.l"
+-#line 24 "/space/rguenther/gcc-7.5.0/gcc-7.5.0/gcc/gengtype-lex.l"
 -#ifdef HOST_GENERATOR_FILE
 -#include "config.h"
 -#define GENERATOR_FILE 1
@@ -2362,19 +1626,19 @@ index 021c1cb4e..000000000
 -
 -FILE *yyget_in (void );
 -
--void yyset_in  (FILE * _in_str  );
+-void yyset_in  (FILE * in_str  );
 -
 -FILE *yyget_out (void );
 -
--void yyset_out  (FILE * _out_str  );
+-void yyset_out  (FILE * out_str  );
 -
--			int yyget_leng (void );
+-yy_size_t yyget_leng (void );
 -
 -char *yyget_text (void );
 -
 -int yyget_lineno (void );
 -
--void yyset_lineno (int _line_number  );
+-void yyset_lineno (int line_number  );
 -
 -/* Macros after this point can all be overridden by user definitions in
 - * section 1.
@@ -2386,10 +1650,6 @@ index 021c1cb4e..000000000
 -#else
 -extern int yywrap (void );
 -#endif
--#endif
--
--#ifndef YY_NO_UNPUT
--    
 -#endif
 -
 -#ifndef yytext_ptr
@@ -2412,12 +1672,7 @@ index 021c1cb4e..000000000
 -
 -/* Amount of stuff to slurp up with each read. */
 -#ifndef YY_READ_BUF_SIZE
--#ifdef __ia64__
--/* On IA-64, the buffer size is 16k, not 8k */
--#define YY_READ_BUF_SIZE 16384
--#else
 -#define YY_READ_BUF_SIZE 8192
--#endif /* __ia64__ */
 -#endif
 -
 -/* Copy whatever the last rule matched to the standard output. */
@@ -2425,7 +1680,7 @@ index 021c1cb4e..000000000
 -/* This used to be an fputs(), but since the string might contain NUL's,
 - * we now use fwrite().
 - */
--#define ECHO do { if (fwrite( yytext, (size_t) yyleng, 1, yyout )) {} } while (0)
+-#define ECHO do { if (fwrite( yytext, yyleng, 1, yyout )) {} } while (0)
 -#endif
 -
 -/* Gets input and stuffs it into "buf".  number of characters read, or YY_NULL,
@@ -2436,7 +1691,7 @@ index 021c1cb4e..000000000
 -	if ( YY_CURRENT_BUFFER_LVALUE->yy_is_interactive ) \
 -		{ \
 -		int c = '*'; \
--		int n; \
+-		size_t n; \
 -		for ( n = 0; n < max_size && \
 -			     (c = getc( yyin )) != EOF && c != '\n'; ++n ) \
 -			buf[n] = (char) c; \
@@ -2449,7 +1704,7 @@ index 021c1cb4e..000000000
 -	else \
 -		{ \
 -		errno=0; \
--		while ( (result = (int) fread(buf, 1, (yy_size_t) max_size, yyin)) == 0 && ferror(yyin)) \
+-		while ( (result = (int) fread(buf, 1, max_size, yyin))==0 && ferror(yyin)) \
 -			{ \
 -			if( errno != EINTR) \
 -				{ \
@@ -2504,7 +1759,7 @@ index 021c1cb4e..000000000
 -
 -/* Code executed at the end of each rule. */
 -#ifndef YY_BREAK
--#define YY_BREAK /*LINTED*/break;
+-#define YY_BREAK break;
 -#endif
 -
 -#define YY_RULE_SETUP \
@@ -2517,10 +1772,23 @@ index 021c1cb4e..000000000
 - */
 -YY_DECL
 -{
--	yy_state_type yy_current_state;
--	char *yy_cp, *yy_bp;
--	int yy_act;
+-	register yy_state_type yy_current_state;
+-	register char *yy_cp, *yy_bp;
+-	register int yy_act;
 -    
+-#line 66 "/space/rguenther/gcc-7.5.0/gcc-7.5.0/gcc/gengtype-lex.l"
+-
+-  /* Do this on entry to yylex():  */
+-  *yylval = 0;
+-  if (lexer_toplevel_done)
+-    {
+-      BEGIN(INITIAL);
+-      lexer_toplevel_done = 0;
+-    }
+-
+-  /* Things we look for in skipping mode: */
+-#line 1439 "gengtype-lex.c"
+-
 -	if ( !(yy_init) )
 -		{
 -		(yy_init) = 1;
@@ -2547,21 +1815,7 @@ index 021c1cb4e..000000000
 -		yy_load_buffer_state( );
 -		}
 -
--	{
--#line 66 "/d/gcc-6.5.0/gcc-6.5.0/gcc/gengtype-lex.l"
--
--  /* Do this on entry to yylex():  */
--  *yylval = 0;
--  if (lexer_toplevel_done)
--    {
--      BEGIN(INITIAL);
--      lexer_toplevel_done = 0;
--    }
--
--  /* Things we look for in skipping mode: */
--#line 1475 "gengtype-lex.c"
--
--	while ( /*CONSTCOND*/1 )		/* loops until end-of-file is reached */
+-	while ( 1 )		/* loops until end-of-file is reached */
 -		{
 -		yy_cp = (yy_c_buf_p);
 -
@@ -2578,7 +1832,7 @@ index 021c1cb4e..000000000
 -yy_match:
 -		do
 -			{
--			YY_CHAR yy_c = yy_ec[YY_SC_TO_UI(*yy_cp)] ;
+-			register YY_CHAR yy_c = yy_ec[YY_SC_TO_UI(*yy_cp)];
 -			if ( yy_accept[yy_current_state] )
 -				{
 -				(yy_last_accepting_state) = yy_current_state;
@@ -2616,11 +1870,10 @@ index 021c1cb4e..000000000
 -case 1:
 -/* rule 1 can match eol */
 -*yy_cp = (yy_hold_char); /* undo effects of setting up yytext */
--YY_LINENO_REWIND_TO(yy_cp - 1);
 -(yy_c_buf_p) = yy_cp -= 1;
 -YY_DO_BEFORE_ACTION; /* set up yytext again */
 -YY_RULE_SETUP
--#line 77 "/d/gcc-6.5.0/gcc-6.5.0/gcc/gengtype-lex.l"
+-#line 77 "/space/rguenther/gcc-7.5.0/gcc-7.5.0/gcc/gengtype-lex.l"
 -{
 -  BEGIN(in_struct);
 -  return TYPEDEF;
@@ -2629,11 +1882,10 @@ index 021c1cb4e..000000000
 -case 2:
 -/* rule 2 can match eol */
 -*yy_cp = (yy_hold_char); /* undo effects of setting up yytext */
--YY_LINENO_REWIND_TO(yy_cp - 1);
 -(yy_c_buf_p) = yy_cp -= 1;
 -YY_DO_BEFORE_ACTION; /* set up yytext again */
 -YY_RULE_SETUP
--#line 81 "/d/gcc-6.5.0/gcc-6.5.0/gcc/gengtype-lex.l"
+-#line 81 "/space/rguenther/gcc-7.5.0/gcc-7.5.0/gcc/gengtype-lex.l"
 -{
 -  BEGIN(in_struct);
 -  return STRUCT;
@@ -2642,11 +1894,10 @@ index 021c1cb4e..000000000
 -case 3:
 -/* rule 3 can match eol */
 -*yy_cp = (yy_hold_char); /* undo effects of setting up yytext */
--YY_LINENO_REWIND_TO(yy_cp - 1);
 -(yy_c_buf_p) = yy_cp -= 1;
 -YY_DO_BEFORE_ACTION; /* set up yytext again */
 -YY_RULE_SETUP
--#line 85 "/d/gcc-6.5.0/gcc-6.5.0/gcc/gengtype-lex.l"
+-#line 85 "/space/rguenther/gcc-7.5.0/gcc-7.5.0/gcc/gengtype-lex.l"
 -{
 -  BEGIN(in_struct);
 -  return UNION;
@@ -2655,11 +1906,10 @@ index 021c1cb4e..000000000
 -case 4:
 -/* rule 4 can match eol */
 -*yy_cp = (yy_hold_char); /* undo effects of setting up yytext */
--YY_LINENO_REWIND_TO(yy_cp - 1);
 -(yy_c_buf_p) = yy_cp -= 1;
 -YY_DO_BEFORE_ACTION; /* set up yytext again */
 -YY_RULE_SETUP
--#line 89 "/d/gcc-6.5.0/gcc-6.5.0/gcc/gengtype-lex.l"
+-#line 89 "/space/rguenther/gcc-7.5.0/gcc-7.5.0/gcc/gengtype-lex.l"
 -{
 -  BEGIN(in_struct);
 -  return STRUCT;
@@ -2668,11 +1918,10 @@ index 021c1cb4e..000000000
 -case 5:
 -/* rule 5 can match eol */
 -*yy_cp = (yy_hold_char); /* undo effects of setting up yytext */
--YY_LINENO_REWIND_TO(yy_cp - 1);
 -(yy_c_buf_p) = yy_cp -= 1;
 -YY_DO_BEFORE_ACTION; /* set up yytext again */
 -YY_RULE_SETUP
--#line 93 "/d/gcc-6.5.0/gcc-6.5.0/gcc/gengtype-lex.l"
+-#line 93 "/space/rguenther/gcc-7.5.0/gcc-7.5.0/gcc/gengtype-lex.l"
 -{
 -  BEGIN(in_struct);
 -  return EXTERN;
@@ -2681,11 +1930,10 @@ index 021c1cb4e..000000000
 -case 6:
 -/* rule 6 can match eol */
 -*yy_cp = (yy_hold_char); /* undo effects of setting up yytext */
--YY_LINENO_REWIND_TO(yy_cp - 1);
 -(yy_c_buf_p) = yy_cp -= 1;
 -YY_DO_BEFORE_ACTION; /* set up yytext again */
 -YY_RULE_SETUP
--#line 97 "/d/gcc-6.5.0/gcc-6.5.0/gcc/gengtype-lex.l"
+-#line 97 "/space/rguenther/gcc-7.5.0/gcc-7.5.0/gcc/gengtype-lex.l"
 -{
 -  BEGIN(in_struct);
 -  return STATIC;
@@ -2696,54 +1944,52 @@ index 021c1cb4e..000000000
 -
 -case 7:
 -YY_RULE_SETUP
--#line 105 "/d/gcc-6.5.0/gcc-6.5.0/gcc/gengtype-lex.l"
+-#line 105 "/space/rguenther/gcc-7.5.0/gcc-7.5.0/gcc/gengtype-lex.l"
 -{ BEGIN(in_struct_comment); }
 -	YY_BREAK
 -case 8:
 -/* rule 8 can match eol */
 -YY_RULE_SETUP
--#line 106 "/d/gcc-6.5.0/gcc-6.5.0/gcc/gengtype-lex.l"
+-#line 106 "/space/rguenther/gcc-7.5.0/gcc-7.5.0/gcc/gengtype-lex.l"
 -{ lexer_line.line++; }
 -	YY_BREAK
 -case 9:
 -/* rule 9 can match eol */
 -YY_RULE_SETUP
--#line 108 "/d/gcc-6.5.0/gcc-6.5.0/gcc/gengtype-lex.l"
+-#line 108 "/space/rguenther/gcc-7.5.0/gcc-7.5.0/gcc/gengtype-lex.l"
 -{ update_lineno (yytext, yyleng); }
 -	YY_BREAK
 -case 10:
 -/* rule 10 can match eol */
 -YY_RULE_SETUP
--#line 109 "/d/gcc-6.5.0/gcc-6.5.0/gcc/gengtype-lex.l"
+-#line 109 "/space/rguenther/gcc-7.5.0/gcc-7.5.0/gcc/gengtype-lex.l"
 -{ lexer_line.line++; }
 -	YY_BREAK
 -case 11:
 -/* rule 11 can match eol */
 -*yy_cp = (yy_hold_char); /* undo effects of setting up yytext */
--YY_LINENO_REWIND_TO(yy_bp + 5);
 -(yy_c_buf_p) = yy_cp = yy_bp + 5;
 -YY_DO_BEFORE_ACTION; /* set up yytext again */
 -YY_RULE_SETUP
--#line 111 "/d/gcc-6.5.0/gcc-6.5.0/gcc/gengtype-lex.l"
+-#line 111 "/space/rguenther/gcc-7.5.0/gcc-7.5.0/gcc/gengtype-lex.l"
 -/* don't care */
 -	YY_BREAK
 -case 12:
 -/* rule 12 can match eol */
 -*yy_cp = (yy_hold_char); /* undo effects of setting up yytext */
--YY_LINENO_REWIND_TO(yy_cp - 1);
 -(yy_c_buf_p) = yy_cp -= 1;
 -YY_DO_BEFORE_ACTION; /* set up yytext again */
--#line 113 "/d/gcc-6.5.0/gcc-6.5.0/gcc/gengtype-lex.l"
+-#line 113 "/space/rguenther/gcc-7.5.0/gcc-7.5.0/gcc/gengtype-lex.l"
 -case 13:
 -/* rule 13 can match eol */
--#line 114 "/d/gcc-6.5.0/gcc-6.5.0/gcc/gengtype-lex.l"
+-#line 114 "/space/rguenther/gcc-7.5.0/gcc-7.5.0/gcc/gengtype-lex.l"
 -case 14:
 -/* rule 14 can match eol */
--#line 115 "/d/gcc-6.5.0/gcc-6.5.0/gcc/gengtype-lex.l"
+-#line 115 "/space/rguenther/gcc-7.5.0/gcc-7.5.0/gcc/gengtype-lex.l"
 -case 15:
 -/* rule 15 can match eol */
 -YY_RULE_SETUP
--#line 115 "/d/gcc-6.5.0/gcc-6.5.0/gcc/gengtype-lex.l"
+-#line 115 "/space/rguenther/gcc-7.5.0/gcc-7.5.0/gcc/gengtype-lex.l"
 -{
 -    *yylval = XDUPVAR (const char, yytext, yyleng, yyleng + 1);
 -    return IGNORABLE_CXX_KEYWORD;
@@ -2752,109 +1998,99 @@ index 021c1cb4e..000000000
 -case 16:
 -/* rule 16 can match eol */
 -*yy_cp = (yy_hold_char); /* undo effects of setting up yytext */
--YY_LINENO_REWIND_TO(yy_bp + 3);
 -(yy_c_buf_p) = yy_cp = yy_bp + 3;
 -YY_DO_BEFORE_ACTION; /* set up yytext again */
 -YY_RULE_SETUP
--#line 119 "/d/gcc-6.5.0/gcc-6.5.0/gcc/gengtype-lex.l"
+-#line 119 "/space/rguenther/gcc-7.5.0/gcc-7.5.0/gcc/gengtype-lex.l"
 -{ return GTY_TOKEN; }
 -	YY_BREAK
 -case 17:
 -/* rule 17 can match eol */
 -*yy_cp = (yy_hold_char); /* undo effects of setting up yytext */
--YY_LINENO_REWIND_TO(yy_bp + 5);
 -(yy_c_buf_p) = yy_cp = yy_bp + 5;
 -YY_DO_BEFORE_ACTION; /* set up yytext again */
 -YY_RULE_SETUP
--#line 120 "/d/gcc-6.5.0/gcc-6.5.0/gcc/gengtype-lex.l"
+-#line 120 "/space/rguenther/gcc-7.5.0/gcc-7.5.0/gcc/gengtype-lex.l"
 -{ return UNION; }
 -	YY_BREAK
 -case 18:
 -/* rule 18 can match eol */
 -*yy_cp = (yy_hold_char); /* undo effects of setting up yytext */
--YY_LINENO_REWIND_TO(yy_bp + 6);
 -(yy_c_buf_p) = yy_cp = yy_bp + 6;
 -YY_DO_BEFORE_ACTION; /* set up yytext again */
 -YY_RULE_SETUP
--#line 121 "/d/gcc-6.5.0/gcc-6.5.0/gcc/gengtype-lex.l"
+-#line 121 "/space/rguenther/gcc-7.5.0/gcc-7.5.0/gcc/gengtype-lex.l"
 -{ return STRUCT; }
 -	YY_BREAK
 -case 19:
 -/* rule 19 can match eol */
 -*yy_cp = (yy_hold_char); /* undo effects of setting up yytext */
--YY_LINENO_REWIND_TO(yy_bp + 5);
 -(yy_c_buf_p) = yy_cp = yy_bp + 5;
 -YY_DO_BEFORE_ACTION; /* set up yytext again */
 -YY_RULE_SETUP
--#line 122 "/d/gcc-6.5.0/gcc-6.5.0/gcc/gengtype-lex.l"
+-#line 122 "/space/rguenther/gcc-7.5.0/gcc-7.5.0/gcc/gengtype-lex.l"
 -{ return STRUCT; }
 -	YY_BREAK
 -case 20:
 -/* rule 20 can match eol */
 -*yy_cp = (yy_hold_char); /* undo effects of setting up yytext */
--YY_LINENO_REWIND_TO(yy_bp + 7);
 -(yy_c_buf_p) = yy_cp = yy_bp + 7;
 -YY_DO_BEFORE_ACTION; /* set up yytext again */
 -YY_RULE_SETUP
--#line 123 "/d/gcc-6.5.0/gcc-6.5.0/gcc/gengtype-lex.l"
+-#line 123 "/space/rguenther/gcc-7.5.0/gcc-7.5.0/gcc/gengtype-lex.l"
 -{ return TYPEDEF; }
 -	YY_BREAK
 -case 21:
 -/* rule 21 can match eol */
 -*yy_cp = (yy_hold_char); /* undo effects of setting up yytext */
--YY_LINENO_REWIND_TO(yy_bp + 4);
 -(yy_c_buf_p) = yy_cp = yy_bp + 4;
 -YY_DO_BEFORE_ACTION; /* set up yytext again */
 -YY_RULE_SETUP
--#line 124 "/d/gcc-6.5.0/gcc-6.5.0/gcc/gengtype-lex.l"
+-#line 124 "/space/rguenther/gcc-7.5.0/gcc-7.5.0/gcc/gengtype-lex.l"
 -{ return ENUM; }
 -	YY_BREAK
 -case 22:
 -/* rule 22 can match eol */
 -*yy_cp = (yy_hold_char); /* undo effects of setting up yytext */
--YY_LINENO_REWIND_TO(yy_bp + 9);
 -(yy_c_buf_p) = yy_cp = yy_bp + 9;
 -YY_DO_BEFORE_ACTION; /* set up yytext again */
 -YY_RULE_SETUP
--#line 125 "/d/gcc-6.5.0/gcc-6.5.0/gcc/gengtype-lex.l"
+-#line 125 "/space/rguenther/gcc-7.5.0/gcc-7.5.0/gcc/gengtype-lex.l"
 -{ return PTR_ALIAS; }
 -	YY_BREAK
 -case 23:
 -/* rule 23 can match eol */
 -*yy_cp = (yy_hold_char); /* undo effects of setting up yytext */
--YY_LINENO_REWIND_TO(yy_bp + 10);
 -(yy_c_buf_p) = yy_cp = yy_bp + 10;
 -YY_DO_BEFORE_ACTION; /* set up yytext again */
 -YY_RULE_SETUP
--#line 126 "/d/gcc-6.5.0/gcc-6.5.0/gcc/gengtype-lex.l"
+-#line 126 "/space/rguenther/gcc-7.5.0/gcc-7.5.0/gcc/gengtype-lex.l"
 -{ return NESTED_PTR; }
 -	YY_BREAK
 -case 24:
 -/* rule 24 can match eol */
 -*yy_cp = (yy_hold_char); /* undo effects of setting up yytext */
--YY_LINENO_REWIND_TO(yy_bp + 4);
 -(yy_c_buf_p) = yy_cp = yy_bp + 4;
 -YY_DO_BEFORE_ACTION; /* set up yytext again */
 -YY_RULE_SETUP
--#line 127 "/d/gcc-6.5.0/gcc-6.5.0/gcc/gengtype-lex.l"
+-#line 127 "/space/rguenther/gcc-7.5.0/gcc-7.5.0/gcc/gengtype-lex.l"
 -{ return USER_GTY; }
 -	YY_BREAK
 -case 25:
 -YY_RULE_SETUP
--#line 128 "/d/gcc-6.5.0/gcc-6.5.0/gcc/gengtype-lex.l"
+-#line 128 "/space/rguenther/gcc-7.5.0/gcc-7.5.0/gcc/gengtype-lex.l"
 -{ return NUM; }
 -	YY_BREAK
 -case 26:
 -/* rule 26 can match eol */
 -*yy_cp = (yy_hold_char); /* undo effects of setting up yytext */
--YY_LINENO_REWIND_TO(yy_cp - 1);
 -(yy_c_buf_p) = yy_cp -= 1;
 -YY_DO_BEFORE_ACTION; /* set up yytext again */
--#line 131 "/d/gcc-6.5.0/gcc-6.5.0/gcc/gengtype-lex.l"
+-#line 131 "/space/rguenther/gcc-7.5.0/gcc-7.5.0/gcc/gengtype-lex.l"
 -case 27:
 -/* rule 27 can match eol */
 -YY_RULE_SETUP
--#line 131 "/d/gcc-6.5.0/gcc-6.5.0/gcc/gengtype-lex.l"
+-#line 131 "/space/rguenther/gcc-7.5.0/gcc-7.5.0/gcc/gengtype-lex.l"
 -{
 -  size_t len;
 -
@@ -2869,11 +2105,10 @@ index 021c1cb4e..000000000
 -case 28:
 -/* rule 28 can match eol */
 -*yy_cp = (yy_hold_char); /* undo effects of setting up yytext */
--YY_LINENO_REWIND_TO(yy_cp - 1);
 -(yy_c_buf_p) = yy_cp -= 1;
 -YY_DO_BEFORE_ACTION; /* set up yytext again */
 -YY_RULE_SETUP
--#line 142 "/d/gcc-6.5.0/gcc-6.5.0/gcc/gengtype-lex.l"
+-#line 142 "/space/rguenther/gcc-7.5.0/gcc-7.5.0/gcc/gengtype-lex.l"
 -{
 -  *yylval = XDUPVAR (const char, yytext, yyleng, yyleng+1);
 -  return ID;
@@ -2882,7 +2117,7 @@ index 021c1cb4e..000000000
 -case 29:
 -/* rule 29 can match eol */
 -YY_RULE_SETUP
--#line 147 "/d/gcc-6.5.0/gcc-6.5.0/gcc/gengtype-lex.l"
+-#line 147 "/space/rguenther/gcc-7.5.0/gcc-7.5.0/gcc/gengtype-lex.l"
 -{
 -  *yylval = XDUPVAR (const char, yytext+1, yyleng-2, yyleng-1);
 -  return STRING;
@@ -2892,7 +2127,7 @@ index 021c1cb4e..000000000
 -case 30:
 -/* rule 30 can match eol */
 -YY_RULE_SETUP
--#line 152 "/d/gcc-6.5.0/gcc-6.5.0/gcc/gengtype-lex.l"
+-#line 152 "/space/rguenther/gcc-7.5.0/gcc-7.5.0/gcc/gengtype-lex.l"
 -{
 -  *yylval = XDUPVAR (const char, yytext+1, yyleng-2, yyleng-1);
 -  return ARRAY;
@@ -2901,7 +2136,7 @@ index 021c1cb4e..000000000
 -case 31:
 -/* rule 31 can match eol */
 -YY_RULE_SETUP
--#line 156 "/d/gcc-6.5.0/gcc-6.5.0/gcc/gengtype-lex.l"
+-#line 156 "/space/rguenther/gcc-7.5.0/gcc-7.5.0/gcc/gengtype-lex.l"
 -{
 -  *yylval = XDUPVAR (const char, yytext+1, yyleng-2, yyleng);
 -  return CHAR;
@@ -2909,24 +2144,24 @@ index 021c1cb4e..000000000
 -	YY_BREAK
 -case 32:
 -YY_RULE_SETUP
--#line 161 "/d/gcc-6.5.0/gcc-6.5.0/gcc/gengtype-lex.l"
+-#line 161 "/space/rguenther/gcc-7.5.0/gcc-7.5.0/gcc/gengtype-lex.l"
 -{ return ELLIPSIS; }
 -	YY_BREAK
 -case 33:
 -YY_RULE_SETUP
--#line 162 "/d/gcc-6.5.0/gcc-6.5.0/gcc/gengtype-lex.l"
+-#line 162 "/space/rguenther/gcc-7.5.0/gcc-7.5.0/gcc/gengtype-lex.l"
 -{ return yytext[0]; }
 -	YY_BREAK
 -/* ignore pp-directives */
 -case 34:
 -/* rule 34 can match eol */
 -YY_RULE_SETUP
--#line 165 "/d/gcc-6.5.0/gcc-6.5.0/gcc/gengtype-lex.l"
+-#line 165 "/space/rguenther/gcc-7.5.0/gcc-7.5.0/gcc/gengtype-lex.l"
 -{lexer_line.line++;}
 -	YY_BREAK
 -case 35:
 -YY_RULE_SETUP
--#line 167 "/d/gcc-6.5.0/gcc-6.5.0/gcc/gengtype-lex.l"
+-#line 167 "/space/rguenther/gcc-7.5.0/gcc-7.5.0/gcc/gengtype-lex.l"
 -{
 -  error_at_line (&lexer_line, "unexpected character `%s'", yytext);
 -}
@@ -2934,88 +2169,86 @@ index 021c1cb4e..000000000
 -
 -case 36:
 -YY_RULE_SETUP
--#line 172 "/d/gcc-6.5.0/gcc-6.5.0/gcc/gengtype-lex.l"
+-#line 172 "/space/rguenther/gcc-7.5.0/gcc-7.5.0/gcc/gengtype-lex.l"
 -{ BEGIN(in_comment); }
 -	YY_BREAK
 -case 37:
 -/* rule 37 can match eol */
 -YY_RULE_SETUP
--#line 173 "/d/gcc-6.5.0/gcc-6.5.0/gcc/gengtype-lex.l"
+-#line 173 "/space/rguenther/gcc-7.5.0/gcc-7.5.0/gcc/gengtype-lex.l"
 -{ lexer_line.line++; }
 -	YY_BREAK
 -case 38:
 -/* rule 38 can match eol */
 -YY_RULE_SETUP
--#line 174 "/d/gcc-6.5.0/gcc-6.5.0/gcc/gengtype-lex.l"
+-#line 174 "/space/rguenther/gcc-7.5.0/gcc-7.5.0/gcc/gengtype-lex.l"
 -{ lexer_line.line++; }
 -	YY_BREAK
 -case 39:
--#line 176 "/d/gcc-6.5.0/gcc-6.5.0/gcc/gengtype-lex.l"
+-#line 176 "/space/rguenther/gcc-7.5.0/gcc-7.5.0/gcc/gengtype-lex.l"
 -case 40:
 -/* rule 40 can match eol */
--#line 177 "/d/gcc-6.5.0/gcc-6.5.0/gcc/gengtype-lex.l"
+-#line 177 "/space/rguenther/gcc-7.5.0/gcc-7.5.0/gcc/gengtype-lex.l"
 -case 41:
 -/* rule 41 can match eol */
 -YY_RULE_SETUP
--#line 177 "/d/gcc-6.5.0/gcc-6.5.0/gcc/gengtype-lex.l"
+-#line 177 "/space/rguenther/gcc-7.5.0/gcc-7.5.0/gcc/gengtype-lex.l"
 -/* do nothing */
 -	YY_BREAK
 -case 42:
 -/* rule 42 can match eol */
 -YY_RULE_SETUP
--#line 178 "/d/gcc-6.5.0/gcc-6.5.0/gcc/gengtype-lex.l"
+-#line 178 "/space/rguenther/gcc-7.5.0/gcc-7.5.0/gcc/gengtype-lex.l"
 -{ update_lineno (yytext, yyleng); }
 -	YY_BREAK
 -case 43:
 -/* rule 43 can match eol */
 -*yy_cp = (yy_hold_char); /* undo effects of setting up yytext */
--YY_LINENO_REWIND_TO(yy_bp + 1);
 -(yy_c_buf_p) = yy_cp = yy_bp + 1;
 -YY_DO_BEFORE_ACTION; /* set up yytext again */
 -YY_RULE_SETUP
--#line 179 "/d/gcc-6.5.0/gcc-6.5.0/gcc/gengtype-lex.l"
+-#line 179 "/space/rguenther/gcc-7.5.0/gcc-7.5.0/gcc/gengtype-lex.l"
 -/* do nothing */
 -	YY_BREAK
 -
 -case 44:
 -/* rule 44 can match eol */
 -YY_RULE_SETUP
--#line 182 "/d/gcc-6.5.0/gcc-6.5.0/gcc/gengtype-lex.l"
+-#line 182 "/space/rguenther/gcc-7.5.0/gcc-7.5.0/gcc/gengtype-lex.l"
 -{ lexer_line.line++; }
 -	YY_BREAK
 -case 45:
--#line 184 "/d/gcc-6.5.0/gcc-6.5.0/gcc/gengtype-lex.l"
+-#line 184 "/space/rguenther/gcc-7.5.0/gcc-7.5.0/gcc/gengtype-lex.l"
 -case 46:
 -YY_RULE_SETUP
--#line 184 "/d/gcc-6.5.0/gcc-6.5.0/gcc/gengtype-lex.l"
+-#line 184 "/space/rguenther/gcc-7.5.0/gcc-7.5.0/gcc/gengtype-lex.l"
 -/* do nothing */
 -	YY_BREAK
 -case 47:
 -/* rule 47 can match eol */
 -*yy_cp = (yy_hold_char); /* undo effects of setting up yytext */
--YY_LINENO_REWIND_TO(yy_bp + 1);
 -(yy_c_buf_p) = yy_cp = yy_bp + 1;
 -YY_DO_BEFORE_ACTION; /* set up yytext again */
 -YY_RULE_SETUP
--#line 185 "/d/gcc-6.5.0/gcc-6.5.0/gcc/gengtype-lex.l"
+-#line 185 "/space/rguenther/gcc-7.5.0/gcc-7.5.0/gcc/gengtype-lex.l"
 -/* do nothing */
 -	YY_BREAK
 -
 -case 48:
 -YY_RULE_SETUP
--#line 188 "/d/gcc-6.5.0/gcc-6.5.0/gcc/gengtype-lex.l"
+-#line 188 "/space/rguenther/gcc-7.5.0/gcc-7.5.0/gcc/gengtype-lex.l"
 -{ BEGIN(INITIAL); } 
 -	YY_BREAK
 -case 49:
 -YY_RULE_SETUP
--#line 189 "/d/gcc-6.5.0/gcc-6.5.0/gcc/gengtype-lex.l"
+-#line 189 "/space/rguenther/gcc-7.5.0/gcc-7.5.0/gcc/gengtype-lex.l"
 -{ BEGIN(in_struct); }
 -	YY_BREAK
 -case 50:
--#line 192 "/d/gcc-6.5.0/gcc-6.5.0/gcc/gengtype-lex.l"
+-#line 192 "/space/rguenther/gcc-7.5.0/gcc-7.5.0/gcc/gengtype-lex.l"
 -case 51:
 -YY_RULE_SETUP
--#line 192 "/d/gcc-6.5.0/gcc-6.5.0/gcc/gengtype-lex.l"
+-#line 192 "/space/rguenther/gcc-7.5.0/gcc-7.5.0/gcc/gengtype-lex.l"
 -{
 -  error_at_line (&lexer_line, 
 -		 "unterminated comment or string; unexpected EOF");
@@ -3024,15 +2257,15 @@ index 021c1cb4e..000000000
 -case 52:
 -/* rule 52 can match eol */
 -YY_RULE_SETUP
--#line 197 "/d/gcc-6.5.0/gcc-6.5.0/gcc/gengtype-lex.l"
+-#line 197 "/space/rguenther/gcc-7.5.0/gcc-7.5.0/gcc/gengtype-lex.l"
 -/* do nothing */
 -	YY_BREAK
 -case 53:
 -YY_RULE_SETUP
--#line 199 "/d/gcc-6.5.0/gcc-6.5.0/gcc/gengtype-lex.l"
+-#line 199 "/space/rguenther/gcc-7.5.0/gcc-7.5.0/gcc/gengtype-lex.l"
 -YY_FATAL_ERROR( "flex scanner jammed" );
 -	YY_BREAK
--#line 1948 "gengtype-lex.c"
+-#line 1917 "gengtype-lex.c"
 -case YY_STATE_EOF(INITIAL):
 -case YY_STATE_EOF(in_struct):
 -case YY_STATE_EOF(in_struct_comment):
@@ -3167,7 +2400,6 @@ index 021c1cb4e..000000000
 -			"fatal flex scanner internal error--no action found" );
 -	} /* end of action switch */
 -		} /* end of scanning one token */
--	} /* end of user's declarations */
 -} /* end of yylex */
 -
 -/* yy_get_next_buffer - try to read in a new buffer
@@ -3179,9 +2411,9 @@ index 021c1cb4e..000000000
 - */
 -static int yy_get_next_buffer (void)
 -{
--    	char *dest = YY_CURRENT_BUFFER_LVALUE->yy_ch_buf;
--	char *source = (yytext_ptr);
--	yy_size_t number_to_move, i;
+-    	register char *dest = YY_CURRENT_BUFFER_LVALUE->yy_ch_buf;
+-	register char *source = (yytext_ptr);
+-	register int number_to_move, i;
 -	int ret_val;
 -
 -	if ( (yy_c_buf_p) > &YY_CURRENT_BUFFER_LVALUE->yy_ch_buf[(yy_n_chars) + 1] )
@@ -3210,7 +2442,7 @@ index 021c1cb4e..000000000
 -	/* Try to read more data. */
 -
 -	/* First move last chars to start of buffer. */
--	number_to_move = (yy_size_t) ((yy_c_buf_p) - (yytext_ptr)) - 1;
+-	number_to_move = (int) ((yy_c_buf_p) - (yytext_ptr)) - 1;
 -
 -	for ( i = 0; i < number_to_move; ++i )
 -		*(dest++) = *(source++);
@@ -3237,7 +2469,7 @@ index 021c1cb4e..000000000
 -
 -			if ( b->yy_is_our_buffer )
 -				{
--				int new_size = b->yy_buf_size * 2;
+-				yy_size_t new_size = b->yy_buf_size * 2;
 -
 -				if ( new_size <= 0 )
 -					b->yy_buf_size += b->yy_buf_size / 8;
@@ -3246,11 +2478,11 @@ index 021c1cb4e..000000000
 -
 -				b->yy_ch_buf = (char *)
 -					/* Include room in for 2 EOB chars. */
--					yyrealloc((void *) b->yy_ch_buf,(yy_size_t) (b->yy_buf_size + 2)  );
+-					yyrealloc((void *) b->yy_ch_buf,b->yy_buf_size + 2  );
 -				}
 -			else
 -				/* Can't grow it, we don't own it. */
--				b->yy_ch_buf = NULL;
+-				b->yy_ch_buf = 0;
 -
 -			if ( ! b->yy_ch_buf )
 -				YY_FATAL_ERROR(
@@ -3258,7 +2490,7 @@ index 021c1cb4e..000000000
 -
 -			(yy_c_buf_p) = &b->yy_ch_buf[yy_c_buf_p_offset];
 -
--			num_to_read = YY_CURRENT_BUFFER_LVALUE->yy_buf_size -
+-			num_to_read = (int) YY_CURRENT_BUFFER_LVALUE->yy_buf_size -
 -						number_to_move - 1;
 -
 -			}
@@ -3295,7 +2527,7 @@ index 021c1cb4e..000000000
 -	if ((int) ((yy_n_chars) + number_to_move) > YY_CURRENT_BUFFER_LVALUE->yy_buf_size) {
 -		/* Extend the array by 50%, plus the number we really need. */
 -		int new_size = (yy_n_chars) + number_to_move + ((yy_n_chars) >> 1);
--		YY_CURRENT_BUFFER_LVALUE->yy_ch_buf = (char *) yyrealloc((void *) YY_CURRENT_BUFFER_LVALUE->yy_ch_buf,(yy_size_t) new_size  );
+-		YY_CURRENT_BUFFER_LVALUE->yy_ch_buf = (char *) yyrealloc((void *) YY_CURRENT_BUFFER_LVALUE->yy_ch_buf,new_size  );
 -		if ( ! YY_CURRENT_BUFFER_LVALUE->yy_ch_buf )
 -			YY_FATAL_ERROR( "out of dynamic memory in yy_get_next_buffer()" );
 -	}
@@ -3313,15 +2545,15 @@ index 021c1cb4e..000000000
 -
 -    static yy_state_type yy_get_previous_state (void)
 -{
--	yy_state_type yy_current_state;
--	char *yy_cp;
+-	register yy_state_type yy_current_state;
+-	register char *yy_cp;
 -    
 -	yy_current_state = (yy_start);
 -	yy_current_state += YY_AT_BOL();
 -
 -	for ( yy_cp = (yytext_ptr) + YY_MORE_ADJ; yy_cp < (yy_c_buf_p); ++yy_cp )
 -		{
--		YY_CHAR yy_c = (*yy_cp ? yy_ec[YY_SC_TO_UI(*yy_cp)] : 1);
+-		register YY_CHAR yy_c = (*yy_cp ? yy_ec[YY_SC_TO_UI(*yy_cp)] : 1);
 -		if ( yy_accept[yy_current_state] )
 -			{
 -			(yy_last_accepting_state) = yy_current_state;
@@ -3346,10 +2578,10 @@ index 021c1cb4e..000000000
 - */
 -    static yy_state_type yy_try_NUL_trans  (yy_state_type yy_current_state )
 -{
--	int yy_is_jam;
--    	char *yy_cp = (yy_c_buf_p);
+-	register int yy_is_jam;
+-    	register char *yy_cp = (yy_c_buf_p);
 -
--	YY_CHAR yy_c = 1;
+-	register YY_CHAR yy_c = 1;
 -	if ( yy_accept[yy_current_state] )
 -		{
 -		(yy_last_accepting_state) = yy_current_state;
@@ -3366,10 +2598,6 @@ index 021c1cb4e..000000000
 -
 -		return yy_is_jam ? 0 : yy_current_state;
 -}
--
--#ifndef YY_NO_UNPUT
--
--#endif
 -
 -#ifndef YY_NO_INPUT
 -#ifdef __cplusplus
@@ -3395,7 +2623,7 @@ index 021c1cb4e..000000000
 -
 -		else
 -			{ /* need more input */
--			int offset = (yy_c_buf_p) - (yytext_ptr);
+-			yy_size_t offset = (yy_c_buf_p) - (yytext_ptr);
 -			++(yy_c_buf_p);
 -
 -			switch ( yy_get_next_buffer(  ) )
@@ -3419,7 +2647,7 @@ index 021c1cb4e..000000000
 -				case EOB_ACT_END_OF_FILE:
 -					{
 -					if ( yywrap( ) )
--						return 0;
+-						return EOF;
 -
 -					if ( ! (yy_did_buffer_switch_on_eof) )
 -						YY_NEW_FILE;
@@ -3527,7 +2755,7 @@ index 021c1cb4e..000000000
 -	/* yy_ch_buf has to be 2 characters longer than the size given because
 -	 * we need to put in 2 end-of-buffer characters.
 -	 */
--	b->yy_ch_buf = (char *) yyalloc((yy_size_t) (b->yy_buf_size + 2)  );
+-	b->yy_ch_buf = (char *) yyalloc(b->yy_buf_size + 2  );
 -	if ( ! b->yy_ch_buf )
 -		YY_FATAL_ERROR( "out of dynamic memory in yy_create_buffer()" );
 -
@@ -3669,7 +2897,7 @@ index 021c1cb4e..000000000
 - */
 -static void yyensure_buffer_stack (void)
 -{
--	int num_to_alloc;
+-	yy_size_t num_to_alloc;
 -    
 -	if (!(yy_buffer_stack)) {
 -
@@ -3677,7 +2905,7 @@ index 021c1cb4e..000000000
 -		 * scanner will even need a stack. We use 2 instead of 1 to avoid an
 -		 * immediate realloc on the next call.
 -         */
--      num_to_alloc = 1; /* After all that talk, this was set to 1 anyways... */
+-		num_to_alloc = 1;
 -		(yy_buffer_stack) = (struct yy_buffer_state**)yyalloc
 -								(num_to_alloc * sizeof(struct yy_buffer_state*)
 -								);
@@ -3694,7 +2922,7 @@ index 021c1cb4e..000000000
 -	if ((yy_buffer_stack_top) >= ((yy_buffer_stack_max)) - 1){
 -
 -		/* Increase the buffer to prepare for a possible push. */
--		yy_size_t grow_size = 8 /* arbitrary grow size */;
+-		int grow_size = 8 /* arbitrary grow size */;
 -
 -		num_to_alloc = (yy_buffer_stack_max) + grow_size;
 -		(yy_buffer_stack) = (struct yy_buffer_state**)yyrealloc
@@ -3724,16 +2952,16 @@ index 021c1cb4e..000000000
 -	     base[size-2] != YY_END_OF_BUFFER_CHAR ||
 -	     base[size-1] != YY_END_OF_BUFFER_CHAR )
 -		/* They forgot to leave room for the EOB's. */
--		return NULL;
+-		return 0;
 -
 -	b = (YY_BUFFER_STATE) yyalloc(sizeof( struct yy_buffer_state )  );
 -	if ( ! b )
 -		YY_FATAL_ERROR( "out of dynamic memory in yy_scan_buffer()" );
 -
--	b->yy_buf_size = (int) (size - 2);	/* "- 2" to take care of EOB's */
+-	b->yy_buf_size = size - 2;	/* "- 2" to take care of EOB's */
 -	b->yy_buf_pos = b->yy_ch_buf = base;
 -	b->yy_is_our_buffer = 0;
--	b->yy_input_file = NULL;
+-	b->yy_input_file = 0;
 -	b->yy_n_chars = b->yy_buf_size;
 -	b->yy_is_interactive = 0;
 -	b->yy_at_bol = 1;
@@ -3766,12 +2994,12 @@ index 021c1cb4e..000000000
 - * 
 - * @return the newly allocated buffer state object.
 - */
--YY_BUFFER_STATE yy_scan_bytes  (yyconst char * yybytes, int  _yybytes_len )
+-YY_BUFFER_STATE yy_scan_bytes  (yyconst char * yybytes, yy_size_t  _yybytes_len )
 -{
 -	YY_BUFFER_STATE b;
 -	char *buf;
 -	yy_size_t n;
--	yy_size_t i;
+-	int i;
 -    
 -	/* Get memory for full buffer, including space for trailing EOB's. */
 -	n = (yy_size_t) _yybytes_len + 2;
@@ -3800,9 +3028,9 @@ index 021c1cb4e..000000000
 -#define YY_EXIT_FAILURE 2
 -#endif
 -
--static void yynoreturn yy_fatal_error (yyconst char* msg )
+-static void yy_fatal_error (yyconst char* msg )
 -{
--			(void) fprintf( stderr, "%s\n", msg );
+-    	(void) fprintf( stderr, "%s\n", msg );
 -	exit( YY_EXIT_FAILURE );
 -}
 -
@@ -3813,7 +3041,7 @@ index 021c1cb4e..000000000
 -	do \
 -		{ \
 -		/* Undo effects of setting up yytext. */ \
--        yy_size_t yyless_macro_arg = (n); \
+-        int yyless_macro_arg = (n); \
 -        YY_LESS_LINENO(yyless_macro_arg);\
 -		yytext[yyleng] = (yy_hold_char); \
 -		(yy_c_buf_p) = yytext + yyless_macro_arg; \
@@ -3853,7 +3081,7 @@ index 021c1cb4e..000000000
 -/** Get the length of the current token.
 - * 
 - */
--int yyget_leng  (void)
+-yy_size_t yyget_leng  (void)
 -{
 -        return yyleng;
 -}
@@ -3868,29 +3096,29 @@ index 021c1cb4e..000000000
 -}
 -
 -/** Set the current line number.
-- * @param _line_number line number
+- * @param line_number
 - * 
 - */
--void yyset_lineno (int  _line_number )
+-void yyset_lineno (int  line_number )
 -{
 -    
--    yylineno = _line_number;
+-    yylineno = line_number;
 -}
 -
 -/** Set the input stream. This does not discard the current
 - * input buffer.
-- * @param _in_str A readable stream.
+- * @param in_str A readable stream.
 - * 
 - * @see yy_switch_to_buffer
 - */
--void yyset_in (FILE *  _in_str )
+-void yyset_in (FILE *  in_str )
 -{
--        yyin = _in_str ;
+-        yyin = in_str ;
 -}
 -
--void yyset_out (FILE *  _out_str )
+-void yyset_out (FILE *  out_str )
 -{
--        yyout = _out_str ;
+-        yyout = out_str ;
 -}
 -
 -int yyget_debug  (void)
@@ -3898,9 +3126,9 @@ index 021c1cb4e..000000000
 -        return yy_flex_debug;
 -}
 -
--void yyset_debug (int  _bdebug )
+-void yyset_debug (int  bdebug )
 -{
--        yy_flex_debug = _bdebug ;
+-        yy_flex_debug = bdebug ;
 -}
 -
 -static int yy_init_globals (void)
@@ -3909,10 +3137,10 @@ index 021c1cb4e..000000000
 -     * This function is called from yylex_destroy(), so don't allocate here.
 -     */
 -
--    (yy_buffer_stack) = NULL;
+-    (yy_buffer_stack) = 0;
 -    (yy_buffer_stack_top) = 0;
 -    (yy_buffer_stack_max) = 0;
--    (yy_c_buf_p) = NULL;
+-    (yy_c_buf_p) = (char *) 0;
 -    (yy_init) = 0;
 -    (yy_start) = 0;
 -
@@ -3921,8 +3149,8 @@ index 021c1cb4e..000000000
 -    yyin = stdin;
 -    yyout = stdout;
 -#else
--    yyin = NULL;
--    yyout = NULL;
+-    yyin = (FILE *) 0;
+-    yyout = (FILE *) 0;
 -#endif
 -
 -    /* For future reference: Set errno on error, since we are called by
@@ -3960,8 +3188,7 @@ index 021c1cb4e..000000000
 -#ifndef yytext_ptr
 -static void yy_flex_strncpy (char* s1, yyconst char * s2, int n )
 -{
--		
--	int i;
+-	register int i;
 -	for ( i = 0; i < n; ++i )
 -		s1[i] = s2[i];
 -}
@@ -3970,7 +3197,7 @@ index 021c1cb4e..000000000
 -#ifdef YY_NEED_STRLEN
 -static int yy_flex_strlen (yyconst char * s )
 -{
--	int n;
+-	register int n;
 -	for ( n = 0; s[n]; ++n )
 -		;
 -
@@ -3980,12 +3207,11 @@ index 021c1cb4e..000000000
 -
 -void *yyalloc (yy_size_t  size )
 -{
--			return malloc(size);
+-	return (void *) malloc( size );
 -}
 -
 -void *yyrealloc  (void * ptr, yy_size_t  size )
 -{
--		
 -	/* The cast to (char *) in the following accommodates both
 -	 * implementations that use char* generic pointers, and those
 -	 * that use void* generic pointers.  It works with the latter
@@ -3993,17 +3219,17 @@ index 021c1cb4e..000000000
 -	 * any pointer type to void*, and deal with argument conversions
 -	 * as though doing an assignment.
 -	 */
--	return realloc(ptr, size);
+-	return (void *) realloc( (char *) ptr, size );
 -}
 -
 -void yyfree (void * ptr )
 -{
--			free( (char *) ptr );	/* see yyrealloc() for (char *) cast */
+-	free( (char *) ptr );	/* see yyrealloc() for (char *) cast */
 -}
 -
 -#define YYTABLES_NAME "yytables"
 -
--#line 199 "/d/gcc-6.5.0/gcc-6.5.0/gcc/gengtype-lex.l"
+-#line 199 "/space/rguenther/gcc-7.5.0/gcc-7.5.0/gcc/gengtype-lex.l"
 -
 -
 -
@@ -4027,7 +3253,7 @@ index 021c1cb4e..000000000
 -}
 -
 diff --git a/gcc/ginclude/float.h b/gcc/ginclude/float.h
-index 862f7cc40..647207c99 100644
+index 658017fd6..e6504b94d 100644
 --- a/gcc/ginclude/float.h
 +++ b/gcc/ginclude/float.h
 @@ -25,6 +25,10 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
@@ -4041,30 +3267,8 @@ index 862f7cc40..647207c99 100644
  #ifndef _FLOAT_H___
  #define _FLOAT_H___
  
-diff --git a/gcc/ginclude/stdint-wrap.h b/gcc/ginclude/stdint-wrap.h
-index 83b6f70c8..3d628338d 100644
---- a/gcc/ginclude/stdint-wrap.h
-+++ b/gcc/ginclude/stdint-wrap.h
-@@ -6,7 +6,16 @@
- #  undef __STDC_CONSTANT_MACROS
- #  define __STDC_CONSTANT_MACROS
- # endif
--# include_next <stdint.h>
-+# if defined(__DJGPP__)
-+#  include <sys/version.h>
-+#  if __DJGPP__<2 || (__DJGPP__==2 && __DJGPP_MINOR__<=3)
-+#   include "stdint-gcc.h"
-+#  else
-+#   include_next <stdint.h>
-+#  endif   	
-+# else
-+#  include_next <stdint.h>
-+# endif
- #else
- # include "stdint-gcc.h"
- #endif
 diff --git a/include/libiberty.h b/include/libiberty.h
-index a9c885fc6..e56e20b37 100644
+index 7a796124b..0eb73f665 100644
 --- a/include/libiberty.h
 +++ b/include/libiberty.h
 @@ -108,6 +108,7 @@ extern int countargv (char * const *);
@@ -4075,1056 +3279,12 @@ index a9c885fc6..e56e20b37 100644
   || defined (__DragonFly__) || defined (HAVE_DECL_BASENAME) 
  extern char *basename (const char *) ATTRIBUTE_RETURNS_NONNULL ATTRIBUTE_NONNULL(1);
  #else
-diff --git a/intl/configure b/intl/configure
-index 77b5eb2f2..d7af03fc7 100755
---- a/intl/configure
-+++ b/intl/configure
-@@ -609,6 +609,8 @@ CATOBJEXT
- USE_INCLUDED_LIBINTL
- BUILD_INCLUDED_LIBINTL
- INTLBISON
-+LTLIBICONV
-+LIBICONV
- GLIBC21
- ALLOCA
- EGREP
-@@ -682,9 +684,9 @@ ac_subst_files=''
- ac_user_opts='
- enable_option_checking
- enable_nls
--with_libiconv_prefix
- with_gnu_ld
- enable_rpath
-+with_libiconv_prefix
- with_included_gettext
- with_libintl_prefix
- enable_maintainer_mode
-@@ -1317,9 +1319,9 @@ Optional Features:
- Optional Packages:
-   --with-PACKAGE[=ARG]    use PACKAGE [ARG=yes]
-   --without-PACKAGE       do not use PACKAGE (same as --with-PACKAGE=no)
--  --with-libiconv-prefix=DIR
--                          search for libiconv in DIR/include and DIR/lib
-   --with-gnu-ld           assume the C compiler uses GNU ld default=no
-+  --with-libiconv-prefix[=DIR]  search for libiconv in DIR/include and DIR/lib
-+  --without-libiconv-prefix     don't search for libiconv in includedir and libdir
-   --with-included-gettext use the GNU gettext library included here
-   --with-libintl-prefix[=DIR]  search for libintl in DIR/include and DIR/lib
-   --without-libintl-prefix     don't search for libintl in includedir and libdir
-@@ -4847,136 +4849,658 @@ _ACEOF
-   fi
- 
- 
-+      if test "X$prefix" = "XNONE"; then
-+    acl_final_prefix="$ac_default_prefix"
-+  else
-+    acl_final_prefix="$prefix"
-+  fi
-+  if test "X$exec_prefix" = "XNONE"; then
-+    acl_final_exec_prefix='${prefix}'
-+  else
-+    acl_final_exec_prefix="$exec_prefix"
-+  fi
-+  acl_save_prefix="$prefix"
-+  prefix="$acl_final_prefix"
-+  eval acl_final_exec_prefix=\"$acl_final_exec_prefix\"
-+  prefix="$acl_save_prefix"
- 
--  for ac_header in argz.h limits.h locale.h nl_types.h malloc.h stddef.h \
--stdlib.h string.h unistd.h sys/param.h
--do :
--  as_ac_Header=`$as_echo "ac_cv_header_$ac_header" | $as_tr_sh`
--ac_fn_c_check_header_mongrel "$LINENO" "$ac_header" "$as_ac_Header" "$ac_includes_default"
--eval as_val=\$$as_ac_Header
--   if test "x$as_val" = x""yes; then :
--  cat >>confdefs.h <<_ACEOF
--#define `$as_echo "HAVE_$ac_header" | $as_tr_cpp` 1
--_ACEOF
- 
-+# Check whether --with-gnu-ld was given.
-+if test "${with_gnu_ld+set}" = set; then :
-+  withval=$with_gnu_ld; test "$withval" = no || with_gnu_ld=yes
-+else
-+  with_gnu_ld=no
- fi
- 
--done
-+# Prepare PATH_SEPARATOR.
-+# The user is always right.
-+if test "${PATH_SEPARATOR+set}" != set; then
-+  echo "#! /bin/sh" >conf$$.sh
-+  echo  "exit 0"   >>conf$$.sh
-+  chmod +x conf$$.sh
-+  if (PATH="/nonexistent;."; conf$$.sh) >/dev/null 2>&1; then
-+    PATH_SEPARATOR=';'
-+  else
-+    PATH_SEPARATOR=:
-+  fi
-+  rm -f conf$$.sh
-+fi
-+ac_prog=ld
-+if test "$GCC" = yes; then
-+  # Check if gcc -print-prog-name=ld gives a path.
-+  { $as_echo "$as_me:${as_lineno-$LINENO}: checking for ld used by GCC" >&5
-+$as_echo_n "checking for ld used by GCC... " >&6; }
-+  case $host in
-+  *-*-mingw*)
-+    # gcc leaves a trailing carriage return which upsets mingw
-+    ac_prog=`($CC -print-prog-name=ld) 2>&5 | tr -d '\015'` ;;
-+  *)
-+    ac_prog=`($CC -print-prog-name=ld) 2>&5` ;;
-+  esac
-+  case $ac_prog in
-+    # Accept absolute paths.
-+    [\\/]* | [A-Za-z]:[\\/]*)
-+      re_direlt='/[^/][^/]*/\.\./'
-+      # Canonicalize the path of ld
-+      ac_prog=`echo $ac_prog| sed 's%\\\\%/%g'`
-+      while echo $ac_prog | grep "$re_direlt" > /dev/null 2>&1; do
-+	ac_prog=`echo $ac_prog| sed "s%$re_direlt%/%"`
-+      done
-+      test -z "$LD" && LD="$ac_prog"
-+      ;;
-+  "")
-+    # If it fails, then pretend we aren't using GCC.
-+    ac_prog=ld
-+    ;;
-+  *)
-+    # If it is relative, then search for the first ld in PATH.
-+    with_gnu_ld=unknown
-+    ;;
-+  esac
-+elif test "$with_gnu_ld" = yes; then
-+  { $as_echo "$as_me:${as_lineno-$LINENO}: checking for GNU ld" >&5
-+$as_echo_n "checking for GNU ld... " >&6; }
-+else
-+  { $as_echo "$as_me:${as_lineno-$LINENO}: checking for non-GNU ld" >&5
-+$as_echo_n "checking for non-GNU ld... " >&6; }
-+fi
-+if test "${acl_cv_path_LD+set}" = set; then :
-+  $as_echo_n "(cached) " >&6
-+else
-+  if test -z "$LD"; then
-+  IFS="${IFS= 	}"; ac_save_ifs="$IFS"; IFS="${IFS}${PATH_SEPARATOR-:}"
-+  for ac_dir in $PATH; do
-+    test -z "$ac_dir" && ac_dir=.
-+    if test -f "$ac_dir/$ac_prog" || test -f "$ac_dir/$ac_prog$ac_exeext"; then
-+      acl_cv_path_LD="$ac_dir/$ac_prog"
-+      # Check to see if the program is GNU ld.  I'd rather use --version,
-+      # but apparently some GNU ld's only accept -v.
-+      # Break only if it was the GNU/non-GNU ld that we prefer.
-+      if "$acl_cv_path_LD" -v 2>&1 < /dev/null | egrep '(GNU|with BFD)' > /dev/null; then
-+	test "$with_gnu_ld" != no && break
-+      else
-+	test "$with_gnu_ld" != yes && break
-+      fi
-+    fi
-+  done
-+  IFS="$ac_save_ifs"
-+else
-+  acl_cv_path_LD="$LD" # Let the user override the test with a path.
-+fi
-+fi
- 
--  for ac_func in feof_unlocked fgets_unlocked getc_unlocked getcwd getegid \
--geteuid getgid getuid mempcpy munmap putenv setenv setlocale stpcpy \
--strcasecmp strdup strtoul tsearch __argz_count __argz_stringify __argz_next \
--__fsetlocking
--do :
--  as_ac_var=`$as_echo "ac_cv_func_$ac_func" | $as_tr_sh`
--ac_fn_c_check_func "$LINENO" "$ac_func" "$as_ac_var"
--eval as_val=\$$as_ac_var
--   if test "x$as_val" = x""yes; then :
--  cat >>confdefs.h <<_ACEOF
--#define `$as_echo "HAVE_$ac_func" | $as_tr_cpp` 1
--_ACEOF
-+LD="$acl_cv_path_LD"
-+if test -n "$LD"; then
-+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: $LD" >&5
-+$as_echo "$LD" >&6; }
-+else
-+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
-+$as_echo "no" >&6; }
-+fi
-+test -z "$LD" && as_fn_error "no acceptable ld found in \$PATH" "$LINENO" 5
-+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking if the linker ($LD) is GNU ld" >&5
-+$as_echo_n "checking if the linker ($LD) is GNU ld... " >&6; }
-+if test "${acl_cv_prog_gnu_ld+set}" = set; then :
-+  $as_echo_n "(cached) " >&6
-+else
-+  # I'd rather use --version here, but apparently some GNU ld's only accept -v.
-+if $LD -v 2>&1 </dev/null | egrep '(GNU|with BFD)' 1>&5; then
-+  acl_cv_prog_gnu_ld=yes
-+else
-+  acl_cv_prog_gnu_ld=no
-+fi
-+fi
-+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $acl_cv_prog_gnu_ld" >&5
-+$as_echo "$acl_cv_prog_gnu_ld" >&6; }
-+with_gnu_ld=$acl_cv_prog_gnu_ld
-+
-+
-+
-+                                                { $as_echo "$as_me:${as_lineno-$LINENO}: checking for shared library run path origin" >&5
-+$as_echo_n "checking for shared library run path origin... " >&6; }
-+if test "${acl_cv_rpath+set}" = set; then :
-+  $as_echo_n "(cached) " >&6
-+else
-+
-+    CC="$CC" GCC="$GCC" LDFLAGS="$LDFLAGS" LD="$LD" with_gnu_ld="$with_gnu_ld" \
-+    ${CONFIG_SHELL-/bin/sh} "$ac_aux_dir/config.rpath" "$host" > conftest.sh
-+    . ./conftest.sh
-+    rm -f ./conftest.sh
-+    acl_cv_rpath=done
- 
- fi
--done
-+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $acl_cv_rpath" >&5
-+$as_echo "$acl_cv_rpath" >&6; }
-+  wl="$acl_cv_wl"
-+  libext="$acl_cv_libext"
-+  shlibext="$acl_cv_shlibext"
-+  hardcode_libdir_flag_spec="$acl_cv_hardcode_libdir_flag_spec"
-+  hardcode_libdir_separator="$acl_cv_hardcode_libdir_separator"
-+  hardcode_direct="$acl_cv_hardcode_direct"
-+  hardcode_minus_L="$acl_cv_hardcode_minus_L"
-+    # Check whether --enable-rpath was given.
-+if test "${enable_rpath+set}" = set; then :
-+  enableval=$enable_rpath; :
-+else
-+  enable_rpath=yes
-+fi
-+
-+
- 
- 
- 
- 
- 
-+
-+    use_additional=yes
-+
-+  acl_save_prefix="$prefix"
-+  prefix="$acl_final_prefix"
-+  acl_save_exec_prefix="$exec_prefix"
-+  exec_prefix="$acl_final_exec_prefix"
-+
-+    eval additional_includedir=\"$includedir\"
-+    eval additional_libdir=\"$libdir\"
-+
-+  exec_prefix="$acl_save_exec_prefix"
-+  prefix="$acl_save_prefix"
-+
-+
- # Check whether --with-libiconv-prefix was given.
- if test "${with_libiconv_prefix+set}" = set; then :
-   withval=$with_libiconv_prefix;
--    for dir in `echo "$withval" | tr : ' '`; do
--      if test -d $dir/include; then LIBICONV_INCLUDE="-I$dir/include"; fi
--      if test -d $dir/lib; then LIBICONV_LIBDIR="-L$dir/lib"; fi
--    done
--
--fi
-+    if test "X$withval" = "Xno"; then
-+      use_additional=no
-+    else
-+      if test "X$withval" = "X"; then
- 
-+  acl_save_prefix="$prefix"
-+  prefix="$acl_final_prefix"
-+  acl_save_exec_prefix="$exec_prefix"
-+  exec_prefix="$acl_final_exec_prefix"
- 
--  BUILD_LIBICONV_LIBDIRS="../libiconv/lib/.libs ../libiconv/lib/_libs"
--  BUILD_LIBICONV_INCLUDE="-I../libiconv/include"
-+          eval additional_includedir=\"$includedir\"
-+          eval additional_libdir=\"$libdir\"
- 
--  { $as_echo "$as_me:${as_lineno-$LINENO}: checking for iconv" >&5
--$as_echo_n "checking for iconv... " >&6; }
--if test "${am_cv_func_iconv+set}" = set; then :
--  $as_echo_n "(cached) " >&6
--else
-+  exec_prefix="$acl_save_exec_prefix"
-+  prefix="$acl_save_prefix"
- 
--    am_cv_func_iconv="no, consider installing GNU libiconv"
--    am_cv_lib_iconv=no
--    am_cv_use_build_libiconv=no
--    am_cv_build_libiconv_path=
-+      else
-+        additional_includedir="$withval/include"
-+        additional_libdir="$withval/lib"
-+      fi
-+    fi
- 
--    # First, try to find iconv in libc.
--    cat confdefs.h - <<_ACEOF >conftest.$ac_ext
--/* end confdefs.h.  */
--#include <stdlib.h>
--#include <iconv.h>
--int
--main ()
--{
--iconv_t cd = iconv_open("","");
--         iconv(cd,NULL,NULL,NULL,NULL);
--         iconv_close(cd);
--  ;
--  return 0;
--}
--_ACEOF
--if ac_fn_c_try_link "$LINENO"; then :
--  am_cv_func_iconv=yes
- fi
--rm -f core conftest.err conftest.$ac_objext \
--    conftest$ac_exeext conftest.$ac_ext
- 
--    # If libiconv is part of the build tree, then try using it over
--    # any system libiconv.
--    if test "$am_cv_func_iconv" != yes && test -d ../libiconv; then
--      for lib_dir in $BUILD_LIBICONV_LIBDIRS; do
--        am_save_LIBS="$LIBS"
--        am_save_CPPFLAGS="$CPPFLAGS"
--        LIBS="$LIBS $lib_dir/libiconv.a"
--        CPPFLAGS="$CPPFLAGS $BUILD_LIBICONV_INCLUDE"
--        cat confdefs.h - <<_ACEOF >conftest.$ac_ext
--/* end confdefs.h.  */
--#include <stdlib.h>
--#include <iconv.h>
--int
--main ()
--{
--iconv_t cd = iconv_open("","");
--           iconv(cd,NULL,NULL,NULL,NULL);
--           iconv_close(cd);
--  ;
--  return 0;
--}
--_ACEOF
--if ac_fn_c_try_link "$LINENO"; then :
--  am_cv_use_build_libiconv=yes
--          am_cv_build_libiconv_path=$lib_dir/libiconv.a
--          am_cv_lib_iconv=yes
--          am_cv_func_iconv=yes
-+      LIBICONV=
-+  LTLIBICONV=
-+  INCICONV=
-+  rpathdirs=
-+  ltrpathdirs=
-+  names_already_handled=
-+  names_next_round='iconv '
-+  while test -n "$names_next_round"; do
-+    names_this_round="$names_next_round"
-+    names_next_round=
-+    for name in $names_this_round; do
-+      already_handled=
-+      for n in $names_already_handled; do
-+        if test "$n" = "$name"; then
-+          already_handled=yes
-+          break
-+        fi
-+      done
-+      if test -z "$already_handled"; then
-+        names_already_handled="$names_already_handled $name"
-+                        uppername=`echo "$name" | sed -e 'y|abcdefghijklmnopqrstuvwxyz./-|ABCDEFGHIJKLMNOPQRSTUVWXYZ___|'`
-+        eval value=\"\$HAVE_LIB$uppername\"
-+        if test -n "$value"; then
-+          if test "$value" = yes; then
-+            eval value=\"\$LIB$uppername\"
-+            test -z "$value" || LIBICONV="${LIBICONV}${LIBICONV:+ }$value"
-+            eval value=\"\$LTLIB$uppername\"
-+            test -z "$value" || LTLIBICONV="${LTLIBICONV}${LTLIBICONV:+ }$value"
-+          else
-+                                    :
-+          fi
-+        else
-+                              found_dir=
-+          found_la=
-+          found_so=
-+          found_a=
-+          if test $use_additional = yes; then
-+            if test -n "$shlibext" && test -f "$additional_libdir/lib$name.$shlibext"; then
-+              found_dir="$additional_libdir"
-+              found_so="$additional_libdir/lib$name.$shlibext"
-+              if test -f "$additional_libdir/lib$name.la"; then
-+                found_la="$additional_libdir/lib$name.la"
-+              fi
-+            else
-+              if test -f "$additional_libdir/lib$name.$libext"; then
-+                found_dir="$additional_libdir"
-+                found_a="$additional_libdir/lib$name.$libext"
-+                if test -f "$additional_libdir/lib$name.la"; then
-+                  found_la="$additional_libdir/lib$name.la"
-+                fi
-+              fi
-+            fi
-+          fi
-+          if test "X$found_dir" = "X"; then
-+            for x in $LDFLAGS $LTLIBICONV; do
-+
-+  acl_save_prefix="$prefix"
-+  prefix="$acl_final_prefix"
-+  acl_save_exec_prefix="$exec_prefix"
-+  exec_prefix="$acl_final_exec_prefix"
-+  eval x=\"$x\"
-+  exec_prefix="$acl_save_exec_prefix"
-+  prefix="$acl_save_prefix"
-+
-+              case "$x" in
-+                -L*)
-+                  dir=`echo "X$x" | sed -e 's/^X-L//'`
-+                  if test -n "$shlibext" && test -f "$dir/lib$name.$shlibext"; then
-+                    found_dir="$dir"
-+                    found_so="$dir/lib$name.$shlibext"
-+                    if test -f "$dir/lib$name.la"; then
-+                      found_la="$dir/lib$name.la"
-+                    fi
-+                  else
-+                    if test -f "$dir/lib$name.$libext"; then
-+                      found_dir="$dir"
-+                      found_a="$dir/lib$name.$libext"
-+                      if test -f "$dir/lib$name.la"; then
-+                        found_la="$dir/lib$name.la"
-+                      fi
-+                    fi
-+                  fi
-+                  ;;
-+              esac
-+              if test "X$found_dir" != "X"; then
-+                break
-+              fi
-+            done
-+          fi
-+          if test "X$found_dir" != "X"; then
-+                        LTLIBICONV="${LTLIBICONV}${LTLIBICONV:+ }-L$found_dir -l$name"
-+            if test "X$found_so" != "X"; then
-+                                                        if test "$enable_rpath" = no || test "X$found_dir" = "X/usr/lib"; then
-+                                LIBICONV="${LIBICONV}${LIBICONV:+ }$found_so"
-+              else
-+                                                                                haveit=
-+                for x in $ltrpathdirs; do
-+                  if test "X$x" = "X$found_dir"; then
-+                    haveit=yes
-+                    break
-+                  fi
-+                done
-+                if test -z "$haveit"; then
-+                  ltrpathdirs="$ltrpathdirs $found_dir"
-+                fi
-+                                if test "$hardcode_direct" = yes; then
-+                                                      LIBICONV="${LIBICONV}${LIBICONV:+ }$found_so"
-+                else
-+                  if test -n "$hardcode_libdir_flag_spec" && test "$hardcode_minus_L" = no; then
-+                                                            LIBICONV="${LIBICONV}${LIBICONV:+ }$found_so"
-+                                                            haveit=
-+                    for x in $rpathdirs; do
-+                      if test "X$x" = "X$found_dir"; then
-+                        haveit=yes
-+                        break
-+                      fi
-+                    done
-+                    if test -z "$haveit"; then
-+                      rpathdirs="$rpathdirs $found_dir"
-+                    fi
-+                  else
-+                                                                                haveit=
-+                    for x in $LDFLAGS $LIBICONV; do
-+
-+  acl_save_prefix="$prefix"
-+  prefix="$acl_final_prefix"
-+  acl_save_exec_prefix="$exec_prefix"
-+  exec_prefix="$acl_final_exec_prefix"
-+  eval x=\"$x\"
-+  exec_prefix="$acl_save_exec_prefix"
-+  prefix="$acl_save_prefix"
-+
-+                      if test "X$x" = "X-L$found_dir"; then
-+                        haveit=yes
-+                        break
-+                      fi
-+                    done
-+                    if test -z "$haveit"; then
-+                      LIBICONV="${LIBICONV}${LIBICONV:+ }-L$found_dir"
-+                    fi
-+                    if test "$hardcode_minus_L" != no; then
-+                                                                                        LIBICONV="${LIBICONV}${LIBICONV:+ }$found_so"
-+                    else
-+                                                                                                                                                                                LIBICONV="${LIBICONV}${LIBICONV:+ }-l$name"
-+                    fi
-+                  fi
-+                fi
-+              fi
-+            else
-+              if test "X$found_a" != "X"; then
-+                                LIBICONV="${LIBICONV}${LIBICONV:+ }$found_a"
-+              else
-+                                                LIBICONV="${LIBICONV}${LIBICONV:+ }-L$found_dir -l$name"
-+              fi
-+            fi
-+                        additional_includedir=
-+            case "$found_dir" in
-+              */lib | */lib/)
-+                basedir=`echo "X$found_dir" | sed -e 's,^X,,' -e 's,/lib/*$,,'`
-+                additional_includedir="$basedir/include"
-+                ;;
-+            esac
-+            if test "X$additional_includedir" != "X"; then
-+                                                                                                                if test "X$additional_includedir" != "X/usr/include"; then
-+                haveit=
-+                if test "X$additional_includedir" = "X/usr/local/include"; then
-+                  if test -n "$GCC"; then
-+                    case $host_os in
-+                      linux*) haveit=yes;;
-+                    esac
-+                  fi
-+                fi
-+                if test -z "$haveit"; then
-+                  for x in $CPPFLAGS $INCICONV; do
-+
-+  acl_save_prefix="$prefix"
-+  prefix="$acl_final_prefix"
-+  acl_save_exec_prefix="$exec_prefix"
-+  exec_prefix="$acl_final_exec_prefix"
-+  eval x=\"$x\"
-+  exec_prefix="$acl_save_exec_prefix"
-+  prefix="$acl_save_prefix"
-+
-+                    if test "X$x" = "X-I$additional_includedir"; then
-+                      haveit=yes
-+                      break
-+                    fi
-+                  done
-+                  if test -z "$haveit"; then
-+                    if test -d "$additional_includedir"; then
-+                                            INCICONV="${INCICONV}${INCICONV:+ }-I$additional_includedir"
-+                    fi
-+                  fi
-+                fi
-+              fi
-+            fi
-+                        if test -n "$found_la"; then
-+                                                        save_libdir="$libdir"
-+              case "$found_la" in
-+                */* | *\\*) . "$found_la" ;;
-+                *) . "./$found_la" ;;
-+              esac
-+              libdir="$save_libdir"
-+                            for dep in $dependency_libs; do
-+                case "$dep" in
-+                  -L*)
-+                    additional_libdir=`echo "X$dep" | sed -e 's/^X-L//'`
-+                                                                                                                                                                if test "X$additional_libdir" != "X/usr/lib"; then
-+                      haveit=
-+                      if test "X$additional_libdir" = "X/usr/local/lib"; then
-+                        if test -n "$GCC"; then
-+                          case $host_os in
-+                            linux*) haveit=yes;;
-+                          esac
-+                        fi
-+                      fi
-+                      if test -z "$haveit"; then
-+                        haveit=
-+                        for x in $LDFLAGS $LIBICONV; do
-+
-+  acl_save_prefix="$prefix"
-+  prefix="$acl_final_prefix"
-+  acl_save_exec_prefix="$exec_prefix"
-+  exec_prefix="$acl_final_exec_prefix"
-+  eval x=\"$x\"
-+  exec_prefix="$acl_save_exec_prefix"
-+  prefix="$acl_save_prefix"
-+
-+                          if test "X$x" = "X-L$additional_libdir"; then
-+                            haveit=yes
-+                            break
-+                          fi
-+                        done
-+                        if test -z "$haveit"; then
-+                          if test -d "$additional_libdir"; then
-+                                                        LIBICONV="${LIBICONV}${LIBICONV:+ }-L$additional_libdir"
-+                          fi
-+                        fi
-+                        haveit=
-+                        for x in $LDFLAGS $LTLIBICONV; do
-+
-+  acl_save_prefix="$prefix"
-+  prefix="$acl_final_prefix"
-+  acl_save_exec_prefix="$exec_prefix"
-+  exec_prefix="$acl_final_exec_prefix"
-+  eval x=\"$x\"
-+  exec_prefix="$acl_save_exec_prefix"
-+  prefix="$acl_save_prefix"
-+
-+                          if test "X$x" = "X-L$additional_libdir"; then
-+                            haveit=yes
-+                            break
-+                          fi
-+                        done
-+                        if test -z "$haveit"; then
-+                          if test -d "$additional_libdir"; then
-+                                                        LTLIBICONV="${LTLIBICONV}${LTLIBICONV:+ }-L$additional_libdir"
-+                          fi
-+                        fi
-+                      fi
-+                    fi
-+                    ;;
-+                  -R*)
-+                    dir=`echo "X$dep" | sed -e 's/^X-R//'`
-+                    if test "$enable_rpath" != no; then
-+                                                                  haveit=
-+                      for x in $rpathdirs; do
-+                        if test "X$x" = "X$dir"; then
-+                          haveit=yes
-+                          break
-+                        fi
-+                      done
-+                      if test -z "$haveit"; then
-+                        rpathdirs="$rpathdirs $dir"
-+                      fi
-+                                                                  haveit=
-+                      for x in $ltrpathdirs; do
-+                        if test "X$x" = "X$dir"; then
-+                          haveit=yes
-+                          break
-+                        fi
-+                      done
-+                      if test -z "$haveit"; then
-+                        ltrpathdirs="$ltrpathdirs $dir"
-+                      fi
-+                    fi
-+                    ;;
-+                  -l*)
-+                                        names_next_round="$names_next_round "`echo "X$dep" | sed -e 's/^X-l//'`
-+                    ;;
-+                  *.la)
-+                                                                                names_next_round="$names_next_round "`echo "X$dep" | sed -e 's,^X.*/,,' -e 's,^lib,,' -e 's,\.la$,,'`
-+                    ;;
-+                  *)
-+                                        LIBICONV="${LIBICONV}${LIBICONV:+ }$dep"
-+                    LTLIBICONV="${LTLIBICONV}${LTLIBICONV:+ }$dep"
-+                    ;;
-+                esac
-+              done
-+            fi
-+          else
-+                                                            LIBICONV="${LIBICONV}${LIBICONV:+ }-l$name"
-+            LTLIBICONV="${LTLIBICONV}${LTLIBICONV:+ }-l$name"
-+          fi
-+        fi
-+      fi
-+    done
-+  done
-+  if test "X$rpathdirs" != "X"; then
-+    if test -n "$hardcode_libdir_separator"; then
-+                        alldirs=
-+      for found_dir in $rpathdirs; do
-+        alldirs="${alldirs}${alldirs:+$hardcode_libdir_separator}$found_dir"
-+      done
-+            acl_save_libdir="$libdir"
-+      libdir="$alldirs"
-+      eval flag=\"$hardcode_libdir_flag_spec\"
-+      libdir="$acl_save_libdir"
-+      LIBICONV="${LIBICONV}${LIBICONV:+ }$flag"
-+    else
-+            for found_dir in $rpathdirs; do
-+        acl_save_libdir="$libdir"
-+        libdir="$found_dir"
-+        eval flag=\"$hardcode_libdir_flag_spec\"
-+        libdir="$acl_save_libdir"
-+        LIBICONV="${LIBICONV}${LIBICONV:+ }$flag"
-+      done
-+    fi
-+  fi
-+  if test "X$ltrpathdirs" != "X"; then
-+            for found_dir in $ltrpathdirs; do
-+      LTLIBICONV="${LTLIBICONV}${LTLIBICONV:+ }-R$found_dir"
-+    done
-+  fi
-+
-+
-+
-+
-+  for ac_header in argz.h limits.h locale.h nl_types.h malloc.h stddef.h \
-+stdlib.h string.h unistd.h sys/param.h
-+do :
-+  as_ac_Header=`$as_echo "ac_cv_header_$ac_header" | $as_tr_sh`
-+ac_fn_c_check_header_mongrel "$LINENO" "$ac_header" "$as_ac_Header" "$ac_includes_default"
-+eval as_val=\$$as_ac_Header
-+   if test "x$as_val" = x""yes; then :
-+  cat >>confdefs.h <<_ACEOF
-+#define `$as_echo "HAVE_$ac_header" | $as_tr_cpp` 1
-+_ACEOF
-+
-+fi
-+
-+done
-+
-+  for ac_func in feof_unlocked fgets_unlocked getc_unlocked getcwd getegid \
-+geteuid getgid getuid mempcpy munmap putenv setenv setlocale stpcpy \
-+strcasecmp strdup strtoul tsearch __argz_count __argz_stringify __argz_next \
-+__fsetlocking
-+do :
-+  as_ac_var=`$as_echo "ac_cv_func_$ac_func" | $as_tr_sh`
-+ac_fn_c_check_func "$LINENO" "$ac_func" "$as_ac_var"
-+eval as_val=\$$as_ac_var
-+   if test "x$as_val" = x""yes; then :
-+  cat >>confdefs.h <<_ACEOF
-+#define `$as_echo "HAVE_$ac_func" | $as_tr_cpp` 1
-+_ACEOF
-+
-+fi
-+done
-+
-+
-+
-+
-+
-+
-+
-+  { $as_echo "$as_me:${as_lineno-$LINENO}: checking for iconv" >&5
-+$as_echo_n "checking for iconv... " >&6; }
-+if test "${am_cv_func_iconv+set}" = set; then :
-+  $as_echo_n "(cached) " >&6
-+else
-+
-+    am_cv_func_iconv="no, consider installing GNU libiconv"
-+    am_cv_lib_iconv=no
-+                    am_save_CPPFLAGS="$CPPFLAGS"
-+    CPPFLAGS="$CPPFLAGS $INCICONV"
-+    cat confdefs.h - <<_ACEOF >conftest.$ac_ext
-+/* end confdefs.h.  */
-+#include <stdlib.h>
-+#include <iconv.h>
-+int
-+main ()
-+{
-+iconv_t cd = iconv_open("","");
-+       iconv(cd,NULL,NULL,NULL,NULL);
-+       iconv_close(cd);
-+  ;
-+  return 0;
-+}
-+_ACEOF
-+if ac_fn_c_try_link "$LINENO"; then :
-+  am_cv_func_iconv=yes
-+fi
-+rm -f core conftest.err conftest.$ac_objext \
-+    conftest$ac_exeext conftest.$ac_ext
-+    CPPFLAGS="$am_save_CPPFLAGS"
-+
-+    if test "$am_cv_func_iconv" != yes && test -d ../libiconv; then
-+      for _libs in .libs _libs; do
-+        am_save_CPPFLAGS="$CPPFLAGS"
-+        am_save_LIBS="$LIBS"
-+        CPPFLAGS="$CPPFLAGS -I../libiconv/include"
-+        LIBS="$LIBS ../libiconv/lib/$_libs/libiconv.a"
-+        cat confdefs.h - <<_ACEOF >conftest.$ac_ext
-+/* end confdefs.h.  */
-+#include <stdlib.h>
-+#include <iconv.h>
-+int
-+main ()
-+{
-+iconv_t cd = iconv_open("","");
-+           iconv(cd,NULL,NULL,NULL,NULL);
-+           iconv_close(cd);
-+  ;
-+  return 0;
-+}
-+_ACEOF
-+if ac_fn_c_try_link "$LINENO"; then :
-+  INCICONV="-I../libiconv/include"
-+          LIBICONV='${top_builddir}'/../libiconv/lib/$_libs/libiconv.a
-+          LTLIBICONV='${top_builddir}'/../libiconv/lib/libiconv.la
-+          am_cv_lib_iconv=yes
-+          am_cv_func_iconv=yes
- fi
- rm -f core conftest.err conftest.$ac_objext \
-     conftest$ac_exeext conftest.$ac_ext
--        LIBS="$am_save_LIBS"
-         CPPFLAGS="$am_save_CPPFLAGS"
--        if test "$am_cv_use_build_libiconv" = "yes"; then
-+        LIBS="$am_save_LIBS"
-+        if test "$am_cv_func_iconv" = "yes"; then
-           break
-         fi
-       done
-     fi
- 
--    # If iconv was not in libc, try -liconv.  In this case, arrange to
--    # look in the libiconv prefix, if it was specified by the user.
-     if test "$am_cv_func_iconv" != yes; then
-       am_save_CPPFLAGS="$CPPFLAGS"
-       am_save_LIBS="$LIBS"
--      if test -n "$LIBICONV_INCLUDE"; then
--        CPPFLAGS="$CPPFLAGS $LIBICONV_INCLUDE"
--        LIBS="$LIBS $LIBICONV_LIBDIR"
--      fi
--      LIBS="$LIBS -liconv"
-+      CPPFLAGS="$LIBS $INCICONV"
-+      LIBS="$LIBS $LIBICONV"
-       cat confdefs.h - <<_ACEOF >conftest.$ac_ext
- /* end confdefs.h.  */
- #include <stdlib.h>
-@@ -4997,35 +5521,54 @@ if ac_fn_c_try_link "$LINENO"; then :
- fi
- rm -f core conftest.err conftest.$ac_objext \
-     conftest$ac_exeext conftest.$ac_ext
--      LIBS="$am_save_LIBS"
-       CPPFLAGS="$am_save_CPPFLAGS"
-+      LIBS="$am_save_LIBS"
-     fi
- 
- fi
- { $as_echo "$as_me:${as_lineno-$LINENO}: result: $am_cv_func_iconv" >&5
- $as_echo "$am_cv_func_iconv" >&6; }
-+  if test "$am_cv_func_iconv" = yes; then
-+
-+$as_echo "#define HAVE_ICONV 1" >>confdefs.h
- 
--  # Set the various flags based on the cache variables.  We can't rely
--  # on the flags to remain set from the above code, due to caching.
--  LIBICONV=
-+  fi
-   if test "$am_cv_lib_iconv" = yes; then
--    LIBICONV="-liconv"
-+
-+  for element in $INCICONV; do
-+    haveit=
-+    for x in $CPPFLAGS; do
-+
-+  acl_save_prefix="$prefix"
-+  prefix="$acl_final_prefix"
-+  acl_save_exec_prefix="$exec_prefix"
-+  exec_prefix="$acl_final_exec_prefix"
-+  eval x=\"$x\"
-+  exec_prefix="$acl_save_exec_prefix"
-+  prefix="$acl_save_prefix"
-+
-+      if test "X$x" = "X$element"; then
-+        haveit=yes
-+        break
-+      fi
-+    done
-+    if test -z "$haveit"; then
-+      CPPFLAGS="${CPPFLAGS}${CPPFLAGS:+ }$element"
-+    fi
-+  done
-+
-+    { $as_echo "$as_me:${as_lineno-$LINENO}: checking how to link with libiconv" >&5
-+$as_echo_n "checking how to link with libiconv... " >&6; }
-+    { $as_echo "$as_me:${as_lineno-$LINENO}: result: $LIBICONV" >&5
-+$as_echo "$LIBICONV" >&6; }
-   else
--    LIBICONV_LIBDIR=
--    LIBICONV_INCLUDE=
-+    LIBICONV=
-+    LTLIBICONV=
-   fi
--  if test "$am_cv_use_build_libiconv" = yes; then
--    LIBICONV="$am_cv_build_libiconv_path"
--    LIBICONV_LIBDIR=""
--    LIBICONV_INCLUDE="$BUILD_LIBICONV_INCLUDE"
--  fi
--  CPPFLAGS="$CPPFLAGS $LIBICONV_INCLUDE"
--  LIBS="$LIBS $LIBICONV_LIBDIR $LIBICONV"
- 
--  if test "$am_cv_func_iconv" = yes; then
- 
--$as_echo "#define HAVE_ICONV 1" >>confdefs.h
- 
-+  if test "$am_cv_func_iconv" = yes; then
-     { $as_echo "$as_me:${as_lineno-$LINENO}: checking for iconv declaration" >&5
- $as_echo_n "checking for iconv declaration... " >&6; }
-     if test "${am_cv_proto_iconv+set}" = set; then :
-@@ -5208,164 +5751,6 @@ $as_echo "$ac_prog_version" >&6; }
-   fi
- 
- 
--      if test "X$prefix" = "XNONE"; then
--    acl_final_prefix="$ac_default_prefix"
--  else
--    acl_final_prefix="$prefix"
--  fi
--  if test "X$exec_prefix" = "XNONE"; then
--    acl_final_exec_prefix='${prefix}'
--  else
--    acl_final_exec_prefix="$exec_prefix"
--  fi
--  acl_save_prefix="$prefix"
--  prefix="$acl_final_prefix"
--  eval acl_final_exec_prefix=\"$acl_final_exec_prefix\"
--  prefix="$acl_save_prefix"
--
--
--# Check whether --with-gnu-ld was given.
--if test "${with_gnu_ld+set}" = set; then :
--  withval=$with_gnu_ld; test "$withval" = no || with_gnu_ld=yes
--else
--  with_gnu_ld=no
--fi
--
--# Prepare PATH_SEPARATOR.
--# The user is always right.
--if test "${PATH_SEPARATOR+set}" != set; then
--  echo "#! /bin/sh" >conf$$.sh
--  echo  "exit 0"   >>conf$$.sh
--  chmod +x conf$$.sh
--  if (PATH="/nonexistent;."; conf$$.sh) >/dev/null 2>&1; then
--    PATH_SEPARATOR=';'
--  else
--    PATH_SEPARATOR=:
--  fi
--  rm -f conf$$.sh
--fi
--ac_prog=ld
--if test "$GCC" = yes; then
--  # Check if gcc -print-prog-name=ld gives a path.
--  { $as_echo "$as_me:${as_lineno-$LINENO}: checking for ld used by GCC" >&5
--$as_echo_n "checking for ld used by GCC... " >&6; }
--  case $host in
--  *-*-mingw*)
--    # gcc leaves a trailing carriage return which upsets mingw
--    ac_prog=`($CC -print-prog-name=ld) 2>&5 | tr -d '\015'` ;;
--  *)
--    ac_prog=`($CC -print-prog-name=ld) 2>&5` ;;
--  esac
--  case $ac_prog in
--    # Accept absolute paths.
--    [\\/]* | [A-Za-z]:[\\/]*)
--      re_direlt='/[^/][^/]*/\.\./'
--      # Canonicalize the path of ld
--      ac_prog=`echo $ac_prog| sed 's%\\\\%/%g'`
--      while echo $ac_prog | grep "$re_direlt" > /dev/null 2>&1; do
--	ac_prog=`echo $ac_prog| sed "s%$re_direlt%/%"`
--      done
--      test -z "$LD" && LD="$ac_prog"
--      ;;
--  "")
--    # If it fails, then pretend we aren't using GCC.
--    ac_prog=ld
--    ;;
--  *)
--    # If it is relative, then search for the first ld in PATH.
--    with_gnu_ld=unknown
--    ;;
--  esac
--elif test "$with_gnu_ld" = yes; then
--  { $as_echo "$as_me:${as_lineno-$LINENO}: checking for GNU ld" >&5
--$as_echo_n "checking for GNU ld... " >&6; }
--else
--  { $as_echo "$as_me:${as_lineno-$LINENO}: checking for non-GNU ld" >&5
--$as_echo_n "checking for non-GNU ld... " >&6; }
--fi
--if test "${acl_cv_path_LD+set}" = set; then :
--  $as_echo_n "(cached) " >&6
--else
--  if test -z "$LD"; then
--  IFS="${IFS= 	}"; ac_save_ifs="$IFS"; IFS="${IFS}${PATH_SEPARATOR-:}"
--  for ac_dir in $PATH; do
--    test -z "$ac_dir" && ac_dir=.
--    if test -f "$ac_dir/$ac_prog" || test -f "$ac_dir/$ac_prog$ac_exeext"; then
--      acl_cv_path_LD="$ac_dir/$ac_prog"
--      # Check to see if the program is GNU ld.  I'd rather use --version,
--      # but apparently some GNU ld's only accept -v.
--      # Break only if it was the GNU/non-GNU ld that we prefer.
--      if "$acl_cv_path_LD" -v 2>&1 < /dev/null | egrep '(GNU|with BFD)' > /dev/null; then
--	test "$with_gnu_ld" != no && break
--      else
--	test "$with_gnu_ld" != yes && break
--      fi
--    fi
--  done
--  IFS="$ac_save_ifs"
--else
--  acl_cv_path_LD="$LD" # Let the user override the test with a path.
--fi
--fi
--
--LD="$acl_cv_path_LD"
--if test -n "$LD"; then
--  { $as_echo "$as_me:${as_lineno-$LINENO}: result: $LD" >&5
--$as_echo "$LD" >&6; }
--else
--  { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
--$as_echo "no" >&6; }
--fi
--test -z "$LD" && as_fn_error "no acceptable ld found in \$PATH" "$LINENO" 5
--{ $as_echo "$as_me:${as_lineno-$LINENO}: checking if the linker ($LD) is GNU ld" >&5
--$as_echo_n "checking if the linker ($LD) is GNU ld... " >&6; }
--if test "${acl_cv_prog_gnu_ld+set}" = set; then :
--  $as_echo_n "(cached) " >&6
--else
--  # I'd rather use --version here, but apparently some GNU ld's only accept -v.
--if $LD -v 2>&1 </dev/null | egrep '(GNU|with BFD)' 1>&5; then
--  acl_cv_prog_gnu_ld=yes
--else
--  acl_cv_prog_gnu_ld=no
--fi
--fi
--{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $acl_cv_prog_gnu_ld" >&5
--$as_echo "$acl_cv_prog_gnu_ld" >&6; }
--with_gnu_ld=$acl_cv_prog_gnu_ld
--
--
--
--                                                { $as_echo "$as_me:${as_lineno-$LINENO}: checking for shared library run path origin" >&5
--$as_echo_n "checking for shared library run path origin... " >&6; }
--if test "${acl_cv_rpath+set}" = set; then :
--  $as_echo_n "(cached) " >&6
--else
--
--    CC="$CC" GCC="$GCC" LDFLAGS="$LDFLAGS" LD="$LD" with_gnu_ld="$with_gnu_ld" \
--    ${CONFIG_SHELL-/bin/sh} "$ac_aux_dir/config.rpath" "$host" > conftest.sh
--    . ./conftest.sh
--    rm -f ./conftest.sh
--    acl_cv_rpath=done
--
--fi
--{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $acl_cv_rpath" >&5
--$as_echo "$acl_cv_rpath" >&6; }
--  wl="$acl_cv_wl"
--  libext="$acl_cv_libext"
--  shlibext="$acl_cv_shlibext"
--  hardcode_libdir_flag_spec="$acl_cv_hardcode_libdir_flag_spec"
--  hardcode_libdir_separator="$acl_cv_hardcode_libdir_separator"
--  hardcode_direct="$acl_cv_hardcode_direct"
--  hardcode_minus_L="$acl_cv_hardcode_minus_L"
--    # Check whether --enable-rpath was given.
--if test "${enable_rpath+set}" = set; then :
--  enableval=$enable_rpath; :
--else
--  enable_rpath=yes
--fi
--
--
--
- 
- 
- 
-diff --git a/libada/Makefile.in b/libada/Makefile.in
-index 89c566b11..64aa6be2b 100644
---- a/libada/Makefile.in
-+++ b/libada/Makefile.in
-@@ -68,6 +68,12 @@ GCC_DIR=$(MULTIBUILDTOP)../../$(host_subdir)/gcc
- 
- target_noncanonical:=@target_noncanonical@
- version := $(shell cat $(srcdir)/../gcc/BASE-VER)
-+
-+ifneq ($(findstring djgpp, $(build)),)
-+tmp_version := $(shell echo $(version) | sed -e 's:\.::2g')
-+version := $(tmp_version)
-+endif
-+
- libsubdir := $(libdir)/gcc/$(target_noncanonical)/$(version)$(MULTISUBDIR)
- ADA_RTS_DIR=$(GCC_DIR)/ada/rts$(subst /,_,$(MULTISUBDIR))
- ADA_RTS_SUBDIR=./rts$(subst /,_,$(MULTISUBDIR))
 diff --git a/libcpp/files.c b/libcpp/files.c
-index 5aa8d1ac9..3d7ee75fd 100644
+index 969a53103..3c07d60a6 100644
 --- a/libcpp/files.c
 +++ b/libcpp/files.c
-@@ -727,6 +727,10 @@ read_file_guts (cpp_reader *pfile, _cpp_file *file)
-     cpp_error (pfile, CPP_DL_WARNING,
+@@ -740,6 +740,10 @@ read_file_guts (cpp_reader *pfile, _cpp_file *file, source_location loc)
+     cpp_error_at (pfile, CPP_DL_WARNING, loc,
  	       "%s is shorter than expected", file->path);
  
 +/* For DOS we should handle DOS EOF character (0x1A, ^Z). It is
@@ -5134,35 +3294,8 @@ index 5aa8d1ac9..3d7ee75fd 100644
    file->buffer = _cpp_convert_input (pfile,
  				     CPP_OPTION (pfile, input_charset),
  				     buf, size + 16, total,
-@@ -1651,7 +1655,7 @@ static char *
- remap_filename (cpp_reader *pfile, _cpp_file *file)
- {
-   const char *fname, *p;
--  char *new_dir;
-+  char *new_dir, *p3;
-   cpp_dir *dir;
-   size_t index, len;
- 
-@@ -1680,9 +1684,15 @@ remap_filename (cpp_reader *pfile, _cpp_file *file)
- 	return NULL;
- 
-       len = dir->len + (p - fname + 1);
--      new_dir = XNEWVEC (char, len + 1);
-+      new_dir = XNEWVEC (char, len + 2);
-+      p3 = new_dir + dir->len;
-       memcpy (new_dir, dir->name, dir->len);
--      memcpy (new_dir + dir->len, fname, p - fname + 1);
-+      if (dir->len && !IS_DIR_SEPARATOR(dir->name[dir->len - 1]))
-+	{
-+	  *p3++ = '/';
-+	  len++;
-+	}
-+      memcpy (p3, fname, p - fname + 1);
-       new_dir[len] = '\0';
- 
-       dir = make_cpp_dir (pfile, new_dir, dir->sysp);
 diff --git a/libcpp/lex.c b/libcpp/lex.c
-index b789686f1..0ba782eca 100644
+index e0fb9e822..58007fca3 100644
 --- a/libcpp/lex.c
 +++ b/libcpp/lex.c
 @@ -502,6 +502,13 @@ init_vectorized_lexer (void)
@@ -5188,176 +3321,8 @@ index b789686f1..0ba782eca 100644
    search_line_fast = impl;
  }
  
-diff --git a/libdecnumber/configure b/libdecnumber/configure
-index 964837d28..35baf0798 100755
---- a/libdecnumber/configure
-+++ b/libdecnumber/configure
-@@ -3272,6 +3272,12 @@ test -n "$AUTOHEADER" || AUTOHEADER="$MISSING autoheader"
- # See config/warnings.m4 for details.
- 
- 
-+ac_ext=c
-+ac_cpp='$CPP $CPPFLAGS'
-+ac_compile='$CC -c $CFLAGS $CPPFLAGS conftest.$ac_ext >&5'
-+ac_link='$CC -o conftest$ac_exeext $CFLAGS $CPPFLAGS $LDFLAGS conftest.$ac_ext $LIBS >&5'
-+ac_compiler_gnu=$ac_cv_c_compiler_gnu
-+
- WARN_CFLAGS=
- save_CFLAGS="$CFLAGS"
- for real_option in -W -Wall -Wwrite-strings -Wstrict-prototypes \
-@@ -3318,6 +3324,18 @@ $as_echo "$ac_res" >&6; }
- fi
-   done
- CFLAGS="$save_CFLAGS"
-+ac_ext=c
-+ac_cpp='$CPP $CPPFLAGS'
-+ac_compile='$CC -c $CFLAGS $CPPFLAGS conftest.$ac_ext >&5'
-+ac_link='$CC -o conftest$ac_exeext $CFLAGS $CPPFLAGS $LDFLAGS conftest.$ac_ext $LIBS >&5'
-+ac_compiler_gnu=$ac_cv_c_compiler_gnu
-+
-+
-+ac_ext=c
-+ac_cpp='$CPP $CPPFLAGS'
-+ac_compile='$CC -c $CFLAGS $CPPFLAGS conftest.$ac_ext >&5'
-+ac_link='$CC -o conftest$ac_exeext $CFLAGS $CPPFLAGS $LDFLAGS conftest.$ac_ext $LIBS >&5'
-+ac_compiler_gnu=$ac_cv_c_compiler_gnu
- 
- WARN_PEDANTIC=
- # Do the check with the no- prefix removed from the warning options
-@@ -3356,10 +3374,22 @@ if test $acx_cv_prog_cc_pedantic__Wlong_long = yes; then :
- fi
- 
- fi
-+ac_ext=c
-+ac_cpp='$CPP $CPPFLAGS'
-+ac_compile='$CC -c $CFLAGS $CPPFLAGS conftest.$ac_ext >&5'
-+ac_link='$CC -o conftest$ac_exeext $CFLAGS $CPPFLAGS $LDFLAGS conftest.$ac_ext $LIBS >&5'
-+ac_compiler_gnu=$ac_cv_c_compiler_gnu
-+
- 
- 
- # Only enable with --enable-werror-always until existing warnings are
- # corrected.
-+ac_ext=c
-+ac_cpp='$CPP $CPPFLAGS'
-+ac_compile='$CC -c $CFLAGS $CPPFLAGS conftest.$ac_ext >&5'
-+ac_link='$CC -o conftest$ac_exeext $CFLAGS $CPPFLAGS $LDFLAGS conftest.$ac_ext $LIBS >&5'
-+ac_compiler_gnu=$ac_cv_c_compiler_gnu
-+
- WERROR=
- # Check whether --enable-werror-always was given.
- if test "${enable_werror_always+set}" = set; then :
-@@ -3372,6 +3402,12 @@ if test $enable_werror_always = yes; then :
-   WERROR="$WERROR${WERROR:+ }-Werror"
- fi
- 
-+ac_ext=c
-+ac_cpp='$CPP $CPPFLAGS'
-+ac_compile='$CC -c $CFLAGS $CPPFLAGS conftest.$ac_ext >&5'
-+ac_link='$CC -o conftest$ac_exeext $CFLAGS $CPPFLAGS $LDFLAGS conftest.$ac_ext $LIBS >&5'
-+ac_compiler_gnu=$ac_cv_c_compiler_gnu
-+
- 
- 
- # Checks for header files.
-diff --git a/libgcc/Makefile.in b/libgcc/Makefile.in
-index f09b39b0e..b6e668f07 100644
---- a/libgcc/Makefile.in
-+++ b/libgcc/Makefile.in
-@@ -186,7 +186,7 @@ STRIP = @STRIP@
- STRIP_FOR_TARGET = $(STRIP)
- 
- # Directory in which the compiler finds libraries etc.
--libsubdir = $(libdir)/gcc/$(real_host_noncanonical)/$(version)@accel_dir_suffix@
-+libsubdir = $(libdir)/gcc/$(real_host_noncanonical)/@gcc_version_alias@@accel_dir_suffix@
- # Used to install the shared libgcc.
- slibdir = @slibdir@
- # Maybe used for DLLs on Windows targets.
-@@ -214,7 +214,7 @@ export slibdir
- export toolexecdir
- export toolexeclibdir
- 
--version := $(shell cat $(srcdir)/../gcc/BASE-VER)
-+gcc_version := $(shell cat $(srcdir)/../gcc/BASE-VER)
- 
- ifeq ($(decimal_float),yes)
- ifeq ($(enable_decimal_float),bid)
-diff --git a/libgcc/configure b/libgcc/configure
-index 04ff07636..86129b418 100644
---- a/libgcc/configure
-+++ b/libgcc/configure
-@@ -592,6 +592,7 @@ LIPO
- AR
- toolexeclibdir
- toolexecdir
-+gcc_version_alias
- target_subdir
- host_subdir
- build_subdir
-@@ -2616,6 +2617,19 @@ fi
- target_subdir=${target_noncanonical}
- 
- 
-+# Convert GCC version string (to be used as directory name)
-+# Does nothing except for DJGPP
-+case "$build" in
-+  *-msdosdjgpp*)
-+     gcc_version_alias='$(shell echo $(gcc_version) | sed -e "s:\.::2g")'
-+     ;;
-+  *)
-+     gcc_version_alias='$(gcc_version)'
-+     ;;
-+esac
-+
-+
-+
- # Calculate toolexeclibdir
- # Also toolexecdir, though it's only used in toolexeclibdir
- case ${version_specific_libs} in
-@@ -2624,7 +2638,7 @@ case ${version_specific_libs} in
-     # and header files if --enable-version-specific-runtime-libs option
-     # is selected.
-     toolexecdir='$(libdir)/gcc/$(target_noncanonical)'
--    toolexeclibdir='$(toolexecdir)/$(gcc_version)$(MULTISUBDIR)'
-+    toolexeclibdir='$(toolexecdir)/$(gcc_version_alias)$(MULTISUBDIR)'
-     ;;
-   no)
-     if test -n "$with_cross_host" &&
-diff --git a/libgcc/configure.ac b/libgcc/configure.ac
-index 58b67790c..a0c270a18 100644
---- a/libgcc/configure.ac
-+++ b/libgcc/configure.ac
-@@ -148,6 +148,19 @@ ACX_NONCANONICAL_HOST
- ACX_NONCANONICAL_TARGET
- GCC_TOPLEV_SUBDIRS
- 
-+# Convert GCC version string (to be used as directory name)
-+# Does nothing except for DJGPP
-+case "$build" in
-+  *-msdosdjgpp*)
-+     gcc_version_alias='$(shell echo $(gcc_version) | sed -e "s:\.::2g")'
-+     ;;
-+  *)
-+     gcc_version_alias='$(gcc_version)'
-+     ;; 
-+esac
-+
-+AC_SUBST(gcc_version_alias)
-+
- # Calculate toolexeclibdir
- # Also toolexecdir, though it's only used in toolexeclibdir
- case ${version_specific_libs} in
-@@ -156,7 +169,7 @@ case ${version_specific_libs} in
-     # and header files if --enable-version-specific-runtime-libs option
-     # is selected.
-     toolexecdir='$(libdir)/gcc/$(target_noncanonical)'
--    toolexeclibdir='$(toolexecdir)/$(gcc_version)$(MULTISUBDIR)'
-+    toolexeclibdir='$(toolexecdir)/$(gcc_version_alias)$(MULTISUBDIR)'
-     ;;
-   no)
-     if test -n "$with_cross_host" &&
 diff --git a/libgcc/libgcov-util.c b/libgcc/libgcov-util.c
-index 7b3bc31ec..611af6662 100644
+index fd1d1ddb0..0678afbfc 100644
 --- a/libgcc/libgcov-util.c
 +++ b/libgcc/libgcov-util.c
 @@ -388,7 +388,11 @@ read_gcda_file (const char *filename)
@@ -5372,234 +3337,11 @@ index 7b3bc31ec..611af6662 100644
                 int type)
  {
    int filename_len;
-diff --git a/libgfortran/Makefile.am b/libgfortran/Makefile.am
-index 39d3e11d2..89ce2ebf9 100644
---- a/libgfortran/Makefile.am
-+++ b/libgfortran/Makefile.am
-@@ -43,14 +43,14 @@ libgfortran_la_LDFLAGS = -version-info `grep -v '^\#' $(srcdir)/libtool-version`
- libgfortran_la_DEPENDENCIES = $(version_dep) libgfortran.spec $(LIBQUADLIB_DEP)
- 
- cafexeclib_LTLIBRARIES = libcaf_single.la
--cafexeclibdir = $(libdir)/gcc/$(target_alias)/$(gcc_version)$(MULTISUBDIR)
-+cafexeclibdir = $(libdir)/gcc/$(target_alias)/$(gcc_version_alias)$(MULTISUBDIR)
- libcaf_single_la_SOURCES = caf/single.c
- libcaf_single_la_LDFLAGS = -static
- libcaf_single_la_DEPENDENCIES = caf/libcaf.h
- libcaf_single_la_LINK = $(LINK) $(libcaf_single_la_LDFLAGS)
- 
- if IEEE_SUPPORT
--fincludedir = $(libdir)/gcc/$(target_alias)/$(gcc_version)$(MULTISUBDIR)/finclude
-+fincludedir = $(libdir)/gcc/$(target_alias)/$(gcc_version_alias)$(MULTISUBDIR)/finclude
- nodist_finclude_HEADERS = ieee_arithmetic.mod ieee_exceptions.mod ieee_features.mod
- endif
- 
-diff --git a/libgfortran/Makefile.in b/libgfortran/Makefile.in
-index 7ed080cf7..b45ff7060 100644
---- a/libgfortran/Makefile.in
-+++ b/libgfortran/Makefile.in
-@@ -136,8 +136,9 @@ am__aclocal_m4_deps = $(top_srcdir)/../config/depstand.m4 \
- 	$(top_srcdir)/../ltversion.m4 $(top_srcdir)/../lt~obsolete.m4 \
- 	$(top_srcdir)/acinclude.m4 $(top_srcdir)/../config/acx.m4 \
- 	$(top_srcdir)/../config/no-executables.m4 \
--	$(top_srcdir)/../config/math.m4 $(top_srcdir)/../libtool.m4 \
--	$(top_srcdir)/configure.ac
-+	$(top_srcdir)/../config/math.m4 \
-+	$(top_srcdir)/../config/ax_check_define.m4 \
-+	$(top_srcdir)/../libtool.m4 $(top_srcdir)/configure.ac
- am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
- 	$(ACLOCAL_M4)
- am__CONFIG_DISTCLEAN_FILES = config.status config.cache config.log \
-@@ -543,6 +544,7 @@ enable_shared = @enable_shared@
- enable_static = @enable_static@
- exec_prefix = @exec_prefix@
- extra_ldflags_libgfortran = @extra_ldflags_libgfortran@
-+gcc_version_alias = @gcc_version_alias@
- host = @host@
- host_alias = @host_alias@
- host_cpu = @host_cpu@
-@@ -604,12 +606,12 @@ libgfortran_la_LDFLAGS = -version-info `grep -v '^\#' $(srcdir)/libtool-version`
- 
- libgfortran_la_DEPENDENCIES = $(version_dep) libgfortran.spec $(LIBQUADLIB_DEP)
- cafexeclib_LTLIBRARIES = libcaf_single.la
--cafexeclibdir = $(libdir)/gcc/$(target_alias)/$(gcc_version)$(MULTISUBDIR)
-+cafexeclibdir = $(libdir)/gcc/$(target_alias)/$(gcc_version_alias)$(MULTISUBDIR)
- libcaf_single_la_SOURCES = caf/single.c
- libcaf_single_la_LDFLAGS = -static
- libcaf_single_la_DEPENDENCIES = caf/libcaf.h
- libcaf_single_la_LINK = $(LINK) $(libcaf_single_la_LDFLAGS)
--@IEEE_SUPPORT_TRUE@fincludedir = $(libdir)/gcc/$(target_alias)/$(gcc_version)$(MULTISUBDIR)/finclude
-+@IEEE_SUPPORT_TRUE@fincludedir = $(libdir)/gcc/$(target_alias)/$(gcc_version_alias)$(MULTISUBDIR)/finclude
- @IEEE_SUPPORT_TRUE@nodist_finclude_HEADERS = ieee_arithmetic.mod ieee_exceptions.mod ieee_features.mod
- AM_CPPFLAGS = -iquote$(srcdir)/io -I$(srcdir)/$(MULTISRCTOP)../gcc \
- 	      -I$(srcdir)/$(MULTISRCTOP)../gcc/config $(LIBQUADINCLUDE) \
-diff --git a/libgfortran/configure b/libgfortran/configure
-index db607eb59..184326f10 100755
---- a/libgfortran/configure
-+++ b/libgfortran/configure
-@@ -653,6 +653,7 @@ AM_CFLAGS
- AM_FCFLAGS
- toolexeclibdir
- toolexecdir
-+gcc_version_alias
- EGREP
- GREP
- CPP
-@@ -673,6 +674,8 @@ CPPFLAGS
- LDFLAGS
- CFLAGS
- CC
-+DJGPP_FALSE
-+DJGPP_TRUE
- multi_basedir
- MAINT
- MAINTAINER_MODE_FALSE
-@@ -3461,6 +3464,16 @@ fi
- ac_config_commands="$ac_config_commands default-1"
- 
- 
-+# Add test for DJGPP
-+ if echo $build | grep msdosdjgpp; then
-+  DJGPP_TRUE=
-+  DJGPP_FALSE='#'
-+else
-+  DJGPP_TRUE='#'
-+  DJGPP_FALSE=
-+fi
-+
-+
- # Handy for debugging:
- #AC_MSG_NOTICE($build / $host / $target / $host_alias / $target_alias); sleep 5
- 
-@@ -4920,6 +4933,19 @@ $as_echo "$ac_cv_safe_to_define___extensions__" >&6; }
- 
- 
- 
-+# Convert GCC version string (to be used as directory name)
-+# Does nothing except for DJGPP
-+case "$build" in
-+  *-msdosdjgpp*)
-+     gcc_version_alias='$(shell echo $(gcc_version) | sed -e "s:\.::2g")'
-+     ;;
-+  *)
-+     gcc_version_alias='$(gcc_version)'
-+     ;;
-+esac
-+
-+
-+
- # Calculate toolexeclibdir
- # Also toolexecdir, though it's only used in toolexeclibdir
- case ${version_specific_libs} in
-@@ -4928,7 +4954,7 @@ case ${version_specific_libs} in
-     # and header files if --enable-version-specific-runtime-libs option
-     # is selected.
-     toolexecdir='$(libdir)/gcc/$(target_alias)'
--    toolexeclibdir='$(toolexecdir)/$(gcc_version)$(MULTISUBDIR)'
-+    toolexeclibdir='$(toolexecdir)/$(gcc_version_alias)$(MULTISUBDIR)'
-     ;;
-   no)
-     if test -n "$with_cross_host" &&
-@@ -12363,7 +12389,7 @@ else
-   lt_dlunknown=0; lt_dlno_uscore=1; lt_dlneed_uscore=2
-   lt_status=$lt_dlunknown
-   cat > conftest.$ac_ext <<_LT_EOF
--#line 12366 "configure"
-+#line 12392 "configure"
- #include "confdefs.h"
- 
- #if HAVE_DLFCN_H
-@@ -12469,7 +12495,7 @@ else
-   lt_dlunknown=0; lt_dlno_uscore=1; lt_dlneed_uscore=2
-   lt_status=$lt_dlunknown
-   cat > conftest.$ac_ext <<_LT_EOF
--#line 12472 "configure"
-+#line 12498 "configure"
- #include "confdefs.h"
- 
- #if HAVE_DLFCN_H
-@@ -26406,6 +26432,10 @@ if test -z "${MAINTAINER_MODE_TRUE}" && test -z "${MAINTAINER_MODE_FALSE}"; then
-   as_fn_error "conditional \"MAINTAINER_MODE\" was never defined.
- Usually this means the macro was only invoked conditionally." "$LINENO" 5
- fi
-+if test -z "${DJGPP_TRUE}" && test -z "${DJGPP_FALSE}"; then
-+  as_fn_error "conditional \"DJGPP\" was never defined.
-+Usually this means the macro was only invoked conditionally." "$LINENO" 5
-+fi
- if test -z "${AMDEP_TRUE}" && test -z "${AMDEP_FALSE}"; then
-   as_fn_error "conditional \"AMDEP\" was never defined.
- Usually this means the macro was only invoked conditionally." "$LINENO" 5
-diff --git a/libgfortran/configure.ac b/libgfortran/configure.ac
-index 5a264942b..ae9eeef31 100644
---- a/libgfortran/configure.ac
-+++ b/libgfortran/configure.ac
-@@ -72,6 +72,9 @@ AM_INIT_AUTOMAKE([1.9.6 no-define foreign no-dist -Wall -Wno-portability])
- AM_MAINTAINER_MODE
- AM_ENABLE_MULTILIB(, ..)
- 
-+# Add test for DJGPP
-+AM_CONDITIONAL(DJGPP,echo $build | grep msdosdjgpp)
-+
- # Handy for debugging:
- #AC_MSG_NOTICE($build / $host / $target / $host_alias / $target_alias); sleep 5
- 
-@@ -87,6 +90,19 @@ fi
- 
- AC_USE_SYSTEM_EXTENSIONS
- 
-+# Convert GCC version string (to be used as directory name)
-+# Does nothing except for DJGPP
-+case "$build" in
-+  *-msdosdjgpp*)
-+     gcc_version_alias='$(shell echo $(gcc_version) | sed -e "s:\.::2g")'
-+     ;;
-+  *)
-+     gcc_version_alias='$(gcc_version)'
-+     ;; 
-+esac
-+
-+AC_SUBST(gcc_version_alias)
-+
- # Calculate toolexeclibdir
- # Also toolexecdir, though it's only used in toolexeclibdir
- case ${version_specific_libs} in
-@@ -95,7 +111,7 @@ case ${version_specific_libs} in
-     # and header files if --enable-version-specific-runtime-libs option
-     # is selected.
-     toolexecdir='$(libdir)/gcc/$(target_alias)'
--    toolexeclibdir='$(toolexecdir)/$(gcc_version)$(MULTISUBDIR)'
-+    toolexeclibdir='$(toolexecdir)/$(gcc_version_alias)$(MULTISUBDIR)'
-     ;;
-   no)
-     if test -n "$with_cross_host" &&
-diff --git a/libgfortran/generated/spacing_r10.c b/libgfortran/generated/spacing_r10.c
-index 75a7b2626..cce825d3b 100644
---- a/libgfortran/generated/spacing_r10.c
-+++ b/libgfortran/generated/spacing_r10.c
-@@ -26,7 +26,6 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
- #include "libgfortran.h"
- 
- 
--
- #define MATHFUNC(funcname) funcname ## l
- 
- #if defined (HAVE_GFC_REAL_10) && defined (HAVE_FREXPL)
-@@ -46,7 +45,11 @@ spacing_r10 (GFC_REAL_10 s, int p, int emin, GFC_REAL_10 tiny)
- #if defined (HAVE_LDEXPL)
-   return MATHFUNC(ldexp) (1., e);
- #else
-+#if defined(HAVE_SCALBNL)
-   return MATHFUNC(scalbn) (1., e);
-+#else
-+  return scalbn(1., e);
-+#endif
- #endif
- }
- 
 diff --git a/libgfortran/intrinsics/chmod.c b/libgfortran/intrinsics/chmod.c
-index 5aae77b05..5d49c406b 100644
+index d08418d77..109e15ff3 100644
 --- a/libgfortran/intrinsics/chmod.c
 +++ b/libgfortran/intrinsics/chmod.c
-@@ -451,7 +451,7 @@ clause_done:
+@@ -443,7 +443,7 @@ clause_done:
  	if ((ugo[2] || honor_umask) && !rwxXstugo[8])
  	  file_mode = (file_mode & ~(S_IROTH | S_IWOTH | S_IXOTH))
  		      | (new_mode & (S_IROTH | S_IWOTH | S_IXOTH));
@@ -5608,7 +3350,7 @@ index 5aae77b05..5d49c406b 100644
  	if (is_dir && rwxXstugo[5])
  	  file_mode |= S_ISVTX;
  	else if (!is_dir)
-@@ -463,7 +463,7 @@ clause_done:
+@@ -455,7 +455,7 @@ clause_done:
        {
  	/* Clear '-'.  */
  	file_mode &= ~new_mode;
@@ -5617,7 +3359,7 @@ index 5aae77b05..5d49c406b 100644
  	if (rwxXstugo[5] || !is_dir)
  	  file_mode &= ~S_ISVTX;
  #endif
-@@ -471,7 +471,7 @@ clause_done:
+@@ -463,7 +463,7 @@ clause_done:
      else if (set_mode == 3)
        {
  	file_mode |= new_mode;
@@ -5627,10 +3369,10 @@ index 5aae77b05..5d49c406b 100644
  	  file_mode |= S_ISVTX;
  	else if (!is_dir)
 diff --git a/libgfortran/io/unix.c b/libgfortran/io/unix.c
-index aed668471..db05951cd 100644
+index 993797e6d..6eabee4ef 100644
 --- a/libgfortran/io/unix.c
 +++ b/libgfortran/io/unix.c
-@@ -212,6 +212,9 @@ typedef struct
+@@ -218,6 +218,9 @@ typedef struct
  }
  unix_stream;
  
@@ -5639,13 +3381,13 @@ index aed668471..db05951cd 100644
 +#endif
  
  /* fix_fd()-- Given a file descriptor, make sure it is not one of the
-  * standard descriptors, returning a non-standard descriptor.  If the
-@@ -1166,8 +1169,13 @@ tempfile_open (const char *tempdir, char **fname)
-   char * template = xmalloc (tempdirlen + 23);
+    standard descriptors, returning a non-standard descriptor.  If the
+@@ -1195,8 +1198,13 @@ tempfile_open (const char *tempdir, char **fname)
+   char *template = xmalloc (tempdirlen + 23);
  
  #ifdef HAVE_MKSTEMP
 +#ifdef __DJGPP__
-+  /* Default filename is too long for DOS. */
++  /* Default filename is too long for DOS */
 +  snprintf (template, tempdirlen + 23, "%s/gfXXXXXX", tempdir);
 +#else
    snprintf (template, tempdirlen + 23, "%s%sgfortrantmpXXXXXX", 
@@ -5654,7 +3396,7 @@ index aed668471..db05951cd 100644
  
  #ifdef HAVE_UMASK
    /* Temporarily set the umask such that the file has 0600 permissions.  */
-@@ -1483,6 +1491,13 @@ open_external (st_parameter_open *opp, unit_flags *flags)
+@@ -1562,6 +1570,13 @@ open_external (st_parameter_open *opp, unit_flags *flags)
      return NULL;
    fd = fix_fd (fd);
  
@@ -5665,23 +3407,21 @@ index aed668471..db05951cd 100644
 +    }
 +#endif
 +
-   return fd_to_stream (fd, flags->form == FORM_UNFORMATTED);
- }
+   if (open_share (opp, fd, flags) < 0)
+     return NULL;
  
 diff --git a/libiberty/config/mh-djgpp b/libiberty/config/mh-djgpp
 new file mode 100644
-index 000000000..829a268b6
+index 000000000..ad4518f38
 --- /dev/null
 +++ b/libiberty/config/mh-djgpp
-@@ -0,0 +1,3 @@
+@@ -0,0 +1 @@
 +EXTRA_OFILES=asprintf.o mempcpy.o mkstemps.o sigsetmask.o strndup.o strverscmp.o vasprintf.o
-+# Only DJGPP v2.04pre have snprinf() and vsnprintf(). Therefore take also them
-+EXTRA_OFILES+=snprintf.o vsnprintf.o
 diff --git a/libiberty/configure b/libiberty/configure
-index bde78ffd2..a90195824 100755
+index 868793558..c0d2e8e42 100755
 --- a/libiberty/configure
 +++ b/libiberty/configure
-@@ -5078,6 +5078,7 @@ case "${host}" in
+@@ -5079,6 +5079,7 @@ case "${host}" in
    *-*-freebsd2.2.[012])	frag=mh-fbsd21 ;;
    i370-*-opened*)       frag=mh-openedition ;;
    i[34567]86-*-windows*)	frag=mh-windows ;;
@@ -5690,10 +3430,10 @@ index bde78ffd2..a90195824 100755
  
  if [ -n "${frag}" ]; then
 diff --git a/libiberty/configure.ac b/libiberty/configure.ac
-index 9d3f2988d..8af6b552f 100644
+index 1aa0c7c7f..fcdf8d890 100644
 --- a/libiberty/configure.ac
 +++ b/libiberty/configure.ac
-@@ -211,6 +211,7 @@ case "${host}" in
+@@ -212,6 +212,7 @@ case "${host}" in
    *-*-freebsd2.2.[[012]])	frag=mh-fbsd21 ;;
    i370-*-opened*)       frag=mh-openedition ;;
    i[[34567]]86-*-windows*)	frag=mh-windows ;;
@@ -5702,362 +3442,57 @@ index 9d3f2988d..8af6b552f 100644
  
  if [[ -n "${frag}" ]]; then
 diff --git a/libiberty/make-relative-prefix.c b/libiberty/make-relative-prefix.c
-index fe639d18b..88d3be025 100644
+index f74bbdc90..4b2020e55 100644
 --- a/libiberty/make-relative-prefix.c
 +++ b/libiberty/make-relative-prefix.c
-@@ -82,6 +82,7 @@ relative prefix can be found, return @code{NULL}.
- #  define HAVE_DOS_BASED_FILE_SYSTEM
- #  define HAVE_HOST_EXECUTABLE_SUFFIX
- #  define HOST_EXECUTABLE_SUFFIX ".exe"
-+#  define FILENAME_COMPARE strcasecmp
- #  ifndef DIR_SEPARATOR_2 
- #    define DIR_SEPARATOR_2 '\\'
- #  endif
-@@ -97,6 +98,10 @@ relative prefix can be found, return @code{NULL}.
- 	(((ch) == DIR_SEPARATOR) || ((ch) == DIR_SEPARATOR_2))
- #endif
+@@ -65,6 +65,7 @@ relative prefix can be found, return @code{NULL}.
  
-+#ifndef FILENAME_COMPARE
-+#  define FILENAME_COMPARE strcmp
-+#endif
-+
- #define DIR_UP ".."
+ #include "ansidecl.h"
+ #include "libiberty.h"
++#include "filenames.h"
  
- static char *save_string (const char *, int);
-@@ -334,7 +339,7 @@ make_relative_prefix_1 (const char *progname, const char *bin_prefix,
+ #ifndef R_OK
+ #define R_OK 4
+@@ -337,7 +338,7 @@ make_relative_prefix_1 (const char *progname, const char *bin_prefix,
      {
        for (i = 0; i < bin_num; i++)
  	{
 -	  if (strcmp (prog_dirs[i], bin_dirs[i]) != 0)
-+	  if (FILENAME_COMPARE (prog_dirs[i], bin_dirs[i]) != 0)
++	  if (FILENAME_CMP (prog_dirs[i], bin_dirs[i]) != 0)
  	    break;
  	}
  
-@@ -350,7 +355,7 @@ make_relative_prefix_1 (const char *progname, const char *bin_prefix,
+@@ -353,7 +354,7 @@ make_relative_prefix_1 (const char *progname, const char *bin_prefix,
    n = (prefix_num < bin_num) ? prefix_num : bin_num;
    for (common = 0; common < n; common++)
      {
 -      if (strcmp (bin_dirs[common], prefix_dirs[common]) != 0)
-+      if (FILENAME_COMPARE (bin_dirs[common], prefix_dirs[common]) != 0)
++      if (FILENAME_CMP (bin_dirs[common], prefix_dirs[common]) != 0)
  	break;
      }
  
 diff --git a/libiberty/make-temp-file.c b/libiberty/make-temp-file.c
-index 244cc23c5..73c0df04c 100644
+index 98e215d15..1c2defad7 100644
 --- a/libiberty/make-temp-file.c
 +++ b/libiberty/make-temp-file.c
-@@ -55,6 +55,29 @@ extern int mkstemps (char *, int);
- #define DIR_SEPARATOR '/'
+@@ -47,6 +47,7 @@ Boston, MA 02110-1301, USA.  */
  #endif
  
-+#if defined (_WIN32) || defined (__MSDOS__) \
-+    || defined (__DJGPP__) || defined (__OS2__)
-+#  define HAVE_DOS_BASED_FILE_SYSTEM
-+#  ifndef DIR_SEPARATOR_2 
-+#    define DIR_SEPARATOR_2 '\\'
-+#  endif
-+#endif
-+
-+/* Define IS_DIR_SEPARATOR. VMS uses '::', ':', '[...]' and '<...>' to
-+   separate the different components of a file specification.  It's a
-+   bit of a stretch to call ':', ']' and '>' directory separators, so
-+   just define the test to find the file name component.  */
-+#ifdef VMS
-+#  define IS_DIR_SEPARATOR(ch) ((ch) == ':' || (ch) == ']' || (ch) == '>')
-+#else
-+#  ifndef DIR_SEPARATOR_2
-+#    define IS_DIR_SEPARATOR(ch) ((ch) == DIR_SEPARATOR)
-+#  else
-+#    define IS_DIR_SEPARATOR(ch) \
-+	(((ch) == DIR_SEPARATOR) || ((ch) == DIR_SEPARATOR_2))
-+#  endif
-+#endif
-+
- /* Name of temporary file.
-    mktemp requires 6 trailing X's.  */
- #define TEMP_FILE "ccXXXXXX"
-@@ -143,7 +166,8 @@ choose_tmpdir (void)
+ #include "libiberty.h"
++#include "filenames.h"
+ extern int mkstemps (char *, int);
+ 
+ /* '/' works just fine on MS-DOS based systems.  */
+@@ -142,7 +143,8 @@ choose_tmpdir (void)
        len = strlen (base);
        tmpdir = XNEWVEC (char, len + 2);
        strcpy (tmpdir, base);
 -      tmpdir[len] = DIR_SEPARATOR;
-+      if (len>0 && !IS_DIR_SEPARATOR(tmpdir[len-1]))   
++      if (len>0 && !IS_DIR_SEPARATOR(tmpdir[len-1]))
 +          tmpdir[len] = DIR_SEPARATOR;
        tmpdir[len+1] = '\0';
        memoized_tmpdir = tmpdir;
  #else /* defined(_WIN32) && !defined(__CYGWIN__) */
-diff --git a/libobjc/Makefile.in b/libobjc/Makefile.in
-index b61823c58..bba2e513e 100644
---- a/libobjc/Makefile.in
-+++ b/libobjc/Makefile.in
-@@ -38,6 +38,8 @@ multi_basedir = @multi_basedir@
- toolexecdir = @toolexecdir@
- # Toolexecdir is used only by toolexeclibdir
- toolexeclibdir = @toolexeclibdir@
-+# Editted (if neccessary) GCC version string
-+gcc_version_dir = @gcc_version_dir@
- 
- includedirname = @includedirname@
- libsuffix = @libsuffix@
-@@ -50,7 +52,7 @@ top_builddir = .
- -include ../boehm-gc/threads.mk
- 
- libdir = $(exec_prefix)/lib
--libsubdir = $(libdir)/gcc/$(target_noncanonical)/$(gcc_version)
-+libsubdir = $(libdir)/gcc/$(target_noncanonical)/$(gcc_version_dir)
- 
- # Multilib support variables.
- MULTISRCTOP =
-diff --git a/libobjc/configure b/libobjc/configure
-index 55fcc33db..bb9e2d2fe 100755
---- a/libobjc/configure
-+++ b/libobjc/configure
-@@ -600,6 +600,7 @@ ac_includes_default="\
- 
- ac_subst_vars='LTLIBOBJS
- LIBOBJS
-+gcc_version_dir
- SET_MAKE
- CPP
- OTOOL64
-@@ -8543,7 +8544,7 @@ _LT_EOF
- 	if $NM -V 2>&1 | $GREP 'GNU' > /dev/null; then
- 	  export_symbols_cmds='$NM -Bpg $libobjs $convenience | awk '\''{ if (((\$ 2 == "T") || (\$ 2 == "D") || (\$ 2 == "B") || (\$ 2 == "W")) && (substr(\$ 3,1,1) != ".")) { print \$ 3 } }'\'' | sort -u > $export_symbols'
- 	else
--	  export_symbols_cmds='$NM -BCpg $libobjs $convenience | awk '\''{ if (((\$ 2 == "T") || (\$ 2 == "D") || (\$ 2 == "B")) && (substr(\$ 3,1,1) != ".")) { print \$ 3 } }'\'' | sort -u > $export_symbols'
-+	  export_symbols_cmds='$NM -BCpg $libobjs $convenience | awk '\''{ if (((\$ 2 == "T") || (\$ 2 == "D") || (\$ 2 == "B") || (\$ 2 == "L")) && (substr(\$ 3,1,1) != ".")) { print \$ 3 } }'\'' | sort -u > $export_symbols'
- 	fi
- 	aix_use_runtimelinking=no
- 
-@@ -10598,7 +10599,7 @@ else
-   lt_dlunknown=0; lt_dlno_uscore=1; lt_dlneed_uscore=2
-   lt_status=$lt_dlunknown
-   cat > conftest.$ac_ext <<_LT_EOF
--#line 10601 "configure"
-+#line 10602 "configure"
- #include "confdefs.h"
- 
- #if HAVE_DLFCN_H
-@@ -10704,7 +10705,7 @@ else
-   lt_dlunknown=0; lt_dlno_uscore=1; lt_dlneed_uscore=2
-   lt_status=$lt_dlunknown
-   cat > conftest.$ac_ext <<_LT_EOF
--#line 10707 "configure"
-+#line 10708 "configure"
- #include "confdefs.h"
- 
- #if HAVE_DLFCN_H
-@@ -11462,6 +11463,19 @@ $as_echo "#define HAVE_TLS 1" >>confdefs.h
- 
-   fi
- 
-+# For DJGPP there should not be more than 1 dot. Therefore edit
-+# version in case of DJGPP
-+case $build in
-+	i?86-*-msdosdjgpp*)
-+		gcc_version_dir='$(shell echo $(gcc_version) | sed -e "s:\.::2g")'
-+		;;
-+
-+	* )
-+		gcc_version_dir='$(gcc_version)'
-+		;;
-+esac
-+
-+
- 
-   { $as_echo "$as_me:${as_lineno-$LINENO}: checking if the type of bitfields matters" >&5
- $as_echo_n "checking if the type of bitfields matters... " >&6; }
-diff --git a/libobjc/configure.ac b/libobjc/configure.ac
-index 9dbc16cb9..2c2604f4d 100644
---- a/libobjc/configure.ac
-+++ b/libobjc/configure.ac
-@@ -212,6 +212,19 @@ AC_CHECK_HEADERS(sched.h)
- # Check if we have thread-local storage
- GCC_CHECK_TLS
- 
-+# For DJGPP there should not be more than 1 dot. Therefore edit
-+# version in case of DJGPP
-+[case $build in
-+	i?86-*-msdosdjgpp*)
-+		gcc_version_dir='$(shell echo $(gcc_version) | sed -e "s:\.::2g")'
-+		;;
-+
-+	* )
-+		gcc_version_dir='$(gcc_version)'
-+		;;
-+esac]
-+AC_SUBST(gcc_version_dir)
-+
- gt_BITFIELD_TYPE_MATTERS
- 
- # ------
-diff --git a/libquadmath/Makefile.am b/libquadmath/Makefile.am
-index 5c4d3e2ec..cf4a7d963 100644
---- a/libquadmath/Makefile.am
-+++ b/libquadmath/Makefile.am
-@@ -41,7 +41,7 @@ libquadmath_la_LDFLAGS = -version-info `grep -v '^\#' $(srcdir)/libtool-version`
- libquadmath_la_DEPENDENCIES = $(version_dep) $(libquadmath_la_LIBADD)
- 
- nodist_libsubinclude_HEADERS = quadmath.h quadmath_weak.h
--libsubincludedir = $(libdir)/gcc/$(target_alias)/$(gcc_version)/include
-+libsubincludedir = $(libdir)/gcc/$(target_alias)/$(gcc_version_alias)/include
- 
- libquadmath_la_SOURCES = \
-   math/x2y2m1q.c math/isinf_nsq.c math/acoshq.c math/fmodq.c \
-diff --git a/libquadmath/Makefile.in b/libquadmath/Makefile.in
-index 94e8014d1..32b8d33de 100644
---- a/libquadmath/Makefile.in
-+++ b/libquadmath/Makefile.in
-@@ -300,6 +300,7 @@ dvidir = @dvidir@
- enable_shared = @enable_shared@
- enable_static = @enable_static@
- exec_prefix = @exec_prefix@
-+gcc_version_alias = @gcc_version_alias@
- host = @host@
- host_alias = @host_alias@
- host_cpu = @host_cpu@
-@@ -354,7 +355,7 @@ AUTOMAKE_OPTIONS = 1.8 foreign
- 
- @BUILD_LIBQUADMATH_TRUE@libquadmath_la_DEPENDENCIES = $(version_dep) $(libquadmath_la_LIBADD)
- @BUILD_LIBQUADMATH_TRUE@nodist_libsubinclude_HEADERS = quadmath.h quadmath_weak.h
--@BUILD_LIBQUADMATH_TRUE@libsubincludedir = $(libdir)/gcc/$(target_alias)/$(gcc_version)/include
-+@BUILD_LIBQUADMATH_TRUE@libsubincludedir = $(libdir)/gcc/$(target_alias)/$(gcc_version_alias)/include
- @BUILD_LIBQUADMATH_TRUE@libquadmath_la_SOURCES = \
- @BUILD_LIBQUADMATH_TRUE@  math/x2y2m1q.c math/isinf_nsq.c math/acoshq.c math/fmodq.c \
- @BUILD_LIBQUADMATH_TRUE@  math/acosq.c math/frexpq.c \
-diff --git a/libquadmath/configure b/libquadmath/configure
-index 851302e72..5f0fdda07 100755
---- a/libquadmath/configure
-+++ b/libquadmath/configure
-@@ -613,6 +613,7 @@ LIBQUAD_USE_SYMVER_FALSE
- LIBQUAD_USE_SYMVER_TRUE
- toolexeclibdir
- toolexecdir
-+gcc_version_alias
- MAINT
- MAINTAINER_MODE_FALSE
- MAINTAINER_MODE_TRUE
-@@ -8513,7 +8514,7 @@ _LT_EOF
- 	if $NM -V 2>&1 | $GREP 'GNU' > /dev/null; then
- 	  export_symbols_cmds='$NM -Bpg $libobjs $convenience | awk '\''{ if (((\$ 2 == "T") || (\$ 2 == "D") || (\$ 2 == "B") || (\$ 2 == "W")) && (substr(\$ 3,1,1) != ".")) { print \$ 3 } }'\'' | sort -u > $export_symbols'
- 	else
--	  export_symbols_cmds='$NM -BCpg $libobjs $convenience | awk '\''{ if (((\$ 2 == "T") || (\$ 2 == "D") || (\$ 2 == "B")) && (substr(\$ 3,1,1) != ".")) { print \$ 3 } }'\'' | sort -u > $export_symbols'
-+	  export_symbols_cmds='$NM -BCpg $libobjs $convenience | awk '\''{ if (((\$ 2 == "T") || (\$ 2 == "D") || (\$ 2 == "B") || (\$ 2 == "L")) && (substr(\$ 3,1,1) != ".")) { print \$ 3 } }'\'' | sort -u > $export_symbols'
- 	fi
- 	aix_use_runtimelinking=no
- 
-@@ -10568,7 +10569,7 @@ else
-   lt_dlunknown=0; lt_dlno_uscore=1; lt_dlneed_uscore=2
-   lt_status=$lt_dlunknown
-   cat > conftest.$ac_ext <<_LT_EOF
--#line 10571 "configure"
-+#line 10572 "configure"
- #include "confdefs.h"
- 
- #if HAVE_DLFCN_H
-@@ -10674,7 +10675,7 @@ else
-   lt_dlunknown=0; lt_dlno_uscore=1; lt_dlneed_uscore=2
-   lt_status=$lt_dlunknown
-   cat > conftest.$ac_ext <<_LT_EOF
--#line 10677 "configure"
-+#line 10678 "configure"
- #include "confdefs.h"
- 
- #if HAVE_DLFCN_H
-@@ -11913,6 +11914,19 @@ ac_link='$CC -o conftest$ac_exeext $CFLAGS $CPPFLAGS $LDFLAGS conftest.$ac_ext $
- ac_compiler_gnu=$ac_cv_c_compiler_gnu
- 
- 
-+# Convert GCC version string (to be used as directory name)
-+# Does nothing except for DJGPP
-+case "$build" in
-+  *-msdosdjgpp*)
-+     gcc_version_alias='$(shell echo $(gcc_version) | sed -e "s:\.::2g")'
-+     ;;
-+  *)
-+     gcc_version_alias='$(gcc_version)'
-+     ;;
-+esac
-+
-+
-+
- # Calculate toolexeclibdir
- # Also toolexecdir, though it's only used in toolexeclibdir
- case ${version_specific_libs} in
-@@ -11921,7 +11935,7 @@ case ${version_specific_libs} in
-     # and header files if --enable-version-specific-runtime-libs option
-     # is selected.
-     toolexecdir='$(libdir)/gcc/$(target_alias)'
--    toolexeclibdir='$(toolexecdir)/$(gcc_version)$(MULTISUBDIR)'
-+    toolexeclibdir='$(toolexecdir)/$(gcc_version_alias)$(MULTISUBDIR)'
-     ;;
-   no)
-     if test -n "$with_cross_host" &&
-diff --git a/libquadmath/configure.ac b/libquadmath/configure.ac
-index eb4fe8c8d..e1441fa53 100644
---- a/libquadmath/configure.ac
-+++ b/libquadmath/configure.ac
-@@ -83,6 +83,19 @@ if test "x$GCC" != "xyes"; then
- fi
- AC_PROG_CPP
- 
-+# Convert GCC version string (to be used as directory name)
-+# Does nothing except for DJGPP
-+case "$build" in
-+  *-msdosdjgpp*)
-+     gcc_version_alias='$(shell echo $(gcc_version) | sed -e "s:\.::2g")'
-+     ;;
-+  *)
-+     gcc_version_alias='$(gcc_version)'
-+     ;; 
-+esac
-+
-+AC_SUBST(gcc_version_alias)
-+
- # Calculate toolexeclibdir
- # Also toolexecdir, though it's only used in toolexeclibdir
- case ${version_specific_libs} in
-@@ -91,7 +104,7 @@ case ${version_specific_libs} in
-     # and header files if --enable-version-specific-runtime-libs option
-     # is selected.
-     toolexecdir='$(libdir)/gcc/$(target_alias)'
--    toolexeclibdir='$(toolexecdir)/$(gcc_version)$(MULTISUBDIR)'
-+    toolexeclibdir='$(toolexecdir)/$(gcc_version_alias)$(MULTISUBDIR)'
-     ;;
-   no)
-     if test -n "$with_cross_host" &&
-diff --git a/libquadmath/printf/printf_fphex.c b/libquadmath/printf/printf_fphex.c
-index fc960f38e..c460a8339 100644
---- a/libquadmath/printf/printf_fphex.c
-+++ b/libquadmath/printf/printf_fphex.c
-@@ -30,6 +30,11 @@
- #include "_itoa.h"
- #include "_itowa.h"
- 
-+#if defined(__DJGPP__) && __DJGPP__==2 && __DJGPP_MINOR__<4
-+/* Have to somehow pull in ssize_t from sys/djtypes.h */
-+#include <unistd.h>
-+#endif
-+
- 
- /* Macros for doing the actual output.  */
- 
-diff --git a/libquadmath/printf/quadmath-printf.c b/libquadmath/printf/quadmath-printf.c
-index b70f432cc..f0ddd91f0 100644
---- a/libquadmath/printf/quadmath-printf.c
-+++ b/libquadmath/printf/quadmath-printf.c
-@@ -24,6 +24,11 @@ Boston, MA 02110-1301, USA.  */
- #include <stdio.h>
- #include "quadmath-printf.h"
- 
-+#if defined(__DJGPP__) && __DJGPP__==2 && __DJGPP_MINOR__<4
-+/* Have to somehow pull in ssize_t from sys/djtypes.h */
-+#include <unistd.h>
-+#endif
-+
- /* Read a simple integer from a string and update the string pointer.
-    It is assumed that the first character is a digit.  */
- static unsigned int
 diff --git a/libquadmath/printf/quadmath-printf.h b/libquadmath/printf/quadmath-printf.h
 index 32ebcec92..96498b7c4 100644
 --- a/libquadmath/printf/quadmath-printf.h
@@ -6081,135 +3516,11 @@ index 32ebcec92..96498b7c4 100644
  #define L_(x) L##x
  #else
  #define L_(x) x
-diff --git a/libssp/Makefile.am b/libssp/Makefile.am
-index 5a2ecac1f..3a5c240f0 100644
---- a/libssp/Makefile.am
-+++ b/libssp/Makefile.am
-@@ -39,7 +39,7 @@ AM_CFLAGS = -Wall
- toolexeclib_LTLIBRARIES = libssp.la libssp_nonshared.la
- 
- target_noncanonical = @target_noncanonical@
--libsubincludedir = $(libdir)/gcc/$(target_noncanonical)/$(gcc_version)/include
-+libsubincludedir = $(libdir)/gcc/$(target_noncanonical)/$(gcc_version_dir)/include
- nobase_libsubinclude_HEADERS = ssp/ssp.h ssp/string.h ssp/stdio.h ssp/unistd.h
- 
- libssp_la_SOURCES = \
-diff --git a/libssp/Makefile.in b/libssp/Makefile.in
-index 4509e301e..b6f8f1dba 100644
---- a/libssp/Makefile.in
-+++ b/libssp/Makefile.in
-@@ -235,6 +235,7 @@ dvidir = @dvidir@
- enable_shared = @enable_shared@
- enable_static = @enable_static@
- exec_prefix = @exec_prefix@
-+gcc_version_dir = @gcc_version_dir@
- host = @host@
- host_alias = @host_alias@
- host_cpu = @host_cpu@
-@@ -287,7 +288,7 @@ gcc_version := $(shell cat $(top_srcdir)/../gcc/BASE-VER)
- @LIBSSP_USE_SYMVER_SUN_TRUE@@LIBSSP_USE_SYMVER_TRUE@version_dep = ssp.map-sun
- AM_CFLAGS = -Wall
- toolexeclib_LTLIBRARIES = libssp.la libssp_nonshared.la
--libsubincludedir = $(libdir)/gcc/$(target_noncanonical)/$(gcc_version)/include
-+libsubincludedir = $(libdir)/gcc/$(target_noncanonical)/$(gcc_version_dir)/include
- nobase_libsubinclude_HEADERS = ssp/ssp.h ssp/string.h ssp/stdio.h ssp/unistd.h
- libssp_la_SOURCES = \
- 	ssp.c gets-chk.c memcpy-chk.c memmove-chk.c mempcpy-chk.c \
-diff --git a/libssp/configure b/libssp/configure
-index 44b00bad1..5831fa2b1 100755
---- a/libssp/configure
-+++ b/libssp/configure
-@@ -602,6 +602,7 @@ ac_subst_vars='am__EXEEXT_FALSE
- am__EXEEXT_TRUE
- LTLIBOBJS
- LIBOBJS
-+gcc_version_dir
- toolexeclibdir
- toolexecdir
- enable_static
-@@ -8612,7 +8613,7 @@ _LT_EOF
- 	if $NM -V 2>&1 | $GREP 'GNU' > /dev/null; then
- 	  export_symbols_cmds='$NM -Bpg $libobjs $convenience | awk '\''{ if (((\$ 2 == "T") || (\$ 2 == "D") || (\$ 2 == "B") || (\$ 2 == "W")) && (substr(\$ 3,1,1) != ".")) { print \$ 3 } }'\'' | sort -u > $export_symbols'
- 	else
--	  export_symbols_cmds='$NM -BCpg $libobjs $convenience | awk '\''{ if (((\$ 2 == "T") || (\$ 2 == "D") || (\$ 2 == "B")) && (substr(\$ 3,1,1) != ".")) { print \$ 3 } }'\'' | sort -u > $export_symbols'
-+	  export_symbols_cmds='$NM -BCpg $libobjs $convenience | awk '\''{ if (((\$ 2 == "T") || (\$ 2 == "D") || (\$ 2 == "B") || (\$ 2 == "L")) && (substr(\$ 3,1,1) != ".")) { print \$ 3 } }'\'' | sort -u > $export_symbols'
- 	fi
- 	aix_use_runtimelinking=no
- 
-@@ -10667,7 +10668,7 @@ else
-   lt_dlunknown=0; lt_dlno_uscore=1; lt_dlneed_uscore=2
-   lt_status=$lt_dlunknown
-   cat > conftest.$ac_ext <<_LT_EOF
--#line 10670 "configure"
-+#line 10671 "configure"
- #include "confdefs.h"
- 
- #if HAVE_DLFCN_H
-@@ -10773,7 +10774,7 @@ else
-   lt_dlunknown=0; lt_dlno_uscore=1; lt_dlneed_uscore=2
-   lt_status=$lt_dlunknown
-   cat > conftest.$ac_ext <<_LT_EOF
--#line 10776 "configure"
-+#line 10777 "configure"
- #include "confdefs.h"
- 
- #if HAVE_DLFCN_H
-@@ -11071,6 +11072,19 @@ else
-   multilib_arg=
- fi
- 
-+# For DJGPP there should not be more than 1 dot. Therefore edit
-+# version in case of DJGPP
-+case $build in
-+       i?86-*-msdosdjgpp*)
-+               gcc_version_dir='$(shell echo $(gcc_version) | sed -e "s:\.::2g")'
-+               ;;
-+
-+       * )
-+               gcc_version_dir='$(gcc_version)'
-+               ;;
-+esac
-+
-+
- ac_config_files="$ac_config_files Makefile ssp/ssp.h"
- 
- cat >confcache <<\_ACEOF
-diff --git a/libssp/configure.ac b/libssp/configure.ac
-index 93dfa8da4..2b252d43d 100644
---- a/libssp/configure.ac
-+++ b/libssp/configure.ac
-@@ -195,5 +195,18 @@ else
-   multilib_arg=
- fi
- 
-+# For DJGPP there should not be more than 1 dot. Therefore edit
-+# version in case of DJGPP
-+[case $build in
-+       i?86-*-msdosdjgpp*)
-+               gcc_version_dir='$(shell echo $(gcc_version) | sed -e "s:\.::2g")'
-+               ;;
-+
-+       * )
-+               gcc_version_dir='$(gcc_version)'
-+               ;;
-+esac]
-+AC_SUBST(gcc_version_dir)
-+
- AC_CONFIG_FILES([Makefile ssp/ssp.h])
- AC_OUTPUT
 diff --git a/libstdc++-v3/Makefile.in b/libstdc++-v3/Makefile.in
-index 3159b714a..d99842268 100644
+index 85d56fb6a..bdcfcb5d7 100644
 --- a/libstdc++-v3/Makefile.in
 +++ b/libstdc++-v3/Makefile.in
-@@ -260,6 +260,7 @@ dvidir = @dvidir@
- enable_shared = @enable_shared@
- enable_static = @enable_static@
- exec_prefix = @exec_prefix@
-+gcc_version_alias = @gcc_version_alias@
- glibcxx_MOFILES = @glibcxx_MOFILES@
- glibcxx_PCHFLAGS = @glibcxx_PCHFLAGS@
- glibcxx_POFILES = @glibcxx_POFILES@
-@@ -285,6 +286,7 @@ infodir = @infodir@
+@@ -289,6 +289,7 @@ infodir = @infodir@
  install_sh = @install_sh@
  libdir = @libdir@
  libexecdir = @libexecdir@
@@ -6218,10 +3529,10 @@ index 3159b714a..d99842268 100644
  localedir = @localedir@
  localstatedir = @localstatedir@
 diff --git a/libstdc++-v3/acinclude.m4 b/libstdc++-v3/acinclude.m4
-index e48cf960d..4a6020b3f 100644
+index 08319dc55..e0b358e86 100644
 --- a/libstdc++-v3/acinclude.m4
 +++ b/libstdc++-v3/acinclude.m4
-@@ -813,9 +813,22 @@ AC_DEFUN([GLIBCXX_EXPORT_INSTALL_INFO], [
+@@ -790,9 +790,20 @@ AC_DEFUN([GLIBCXX_EXPORT_INSTALL_INFO], [
      [version_specific_libs=no])
    AC_MSG_RESULT($version_specific_libs)
  
@@ -6230,45 +3541,38 @@ index e48cf960d..4a6020b3f 100644
 +  case "$build" in
 +    *-msdosdjgpp*)
 +       libstdcxx_incdir_base=cxx
-+       gcc_version_alias='$(shell echo $(gcc_version) | sed -e "s:\.::2g")'
 +       ;;
 +    *)
 +       libstdcxx_incdir_base=c++
-+       gcc_version_alias='$(gcc_version)'
 +       ;; 
 +  esac
 +
    # Default case for install directory for include files.
    if test $version_specific_libs = no && test $gxx_include_dir = no; then
 -    gxx_include_dir='include/c++/${gcc_version}'
-+    gxx_include_dir='include/$(libstdcxx_incdir_base)/${gcc_version_alias}'
++    gxx_include_dir='include/$(libstdcxx_incdir_base)/${gcc_version}'
      if test -n "$with_cross_host" &&
         test x"$with_cross_host" != x"no"; then
        gxx_include_dir='${prefix}/${target_alias}/'"$gxx_include_dir"
-@@ -831,10 +844,10 @@ AC_DEFUN([GLIBCXX_EXPORT_INSTALL_INFO], [
+@@ -808,7 +819,7 @@ AC_DEFUN([GLIBCXX_EXPORT_INSTALL_INFO], [
      # is selected.  FIXME: these variables are misnamed, there are
      # no executables installed in _toolexecdir or _toolexeclibdir.
      if test x"$gxx_include_dir" = x"no"; then
 -      gxx_include_dir='${libdir}/gcc/${host_alias}/${gcc_version}/include/c++'
-+      gxx_include_dir='${libdir}/gcc/${host_alias}/${gcc_version_alias}/include/${libstdcxx_incdir_base}'
++      gxx_include_dir='${libdir}/gcc/${host_alias}/${gcc_version}/include/${libstdcxx_incdir_base}'
      fi
      glibcxx_toolexecdir='${libdir}/gcc/${host_alias}'
--    glibcxx_toolexeclibdir='${toolexecdir}/${gcc_version}$(MULTISUBDIR)'
-+    glibcxx_toolexeclibdir='${toolexecdir}/${gcc_version_alias}$(MULTISUBDIR)'
-   fi
- 
-   # Calculate glibcxx_toolexecdir, glibcxx_toolexeclibdir
-@@ -862,6 +875,8 @@ AC_DEFUN([GLIBCXX_EXPORT_INSTALL_INFO], [
+     glibcxx_toolexeclibdir='${toolexecdir}/${gcc_version}$(MULTISUBDIR)'
+@@ -839,6 +850,7 @@ AC_DEFUN([GLIBCXX_EXPORT_INSTALL_INFO], [
    AC_SUBST(gxx_include_dir)
    AC_SUBST(glibcxx_toolexecdir)
    AC_SUBST(glibcxx_toolexeclibdir)
 +  AC_SUBST(libstdcxx_incdir_base)
-+  AC_SUBST(gcc_version_alias)
  ])
  
  
 diff --git a/libstdc++-v3/config/os/djgpp/error_constants.h b/libstdc++-v3/config/os/djgpp/error_constants.h
-index 3275b21d5..cece27f89 100644
+index 4ce342c96..b89b07cb4 100644
 --- a/libstdc++-v3/config/os/djgpp/error_constants.h
 +++ b/libstdc++-v3/config/os/djgpp/error_constants.h
 @@ -33,6 +33,15 @@
@@ -6307,19 +3611,18 @@ index 3275b21d5..cece27f89 100644
  
  #ifdef _GLIBCXX_HAVE_EOWNERDEAD
 diff --git a/libstdc++-v3/configure b/libstdc++-v3/configure
-index fe2a7e4b3..41001ba6b 100755
+index de8390703..b84e03a2e 100755
 --- a/libstdc++-v3/configure
 +++ b/libstdc++-v3/configure
-@@ -606,6 +606,8 @@ WARN_FLAGS
+@@ -607,6 +607,7 @@ WARN_FLAGS
  OPTIMIZE_CXXFLAGS
  TOPLEVEL_INCLUDES
  GLIBCXX_INCLUDES
-+gcc_version_alias
 +libstdcxx_incdir_base
  glibcxx_toolexeclibdir
  glibcxx_toolexecdir
  gxx_include_dir
-@@ -766,6 +768,8 @@ toplevel_srcdir
+@@ -771,6 +772,8 @@ toplevel_srcdir
  toplevel_builddir
  glibcxx_srcdir
  glibcxx_builddir
@@ -6328,7 +3631,7 @@ index fe2a7e4b3..41001ba6b 100755
  ac_ct_CXX
  CXXFLAGS
  CXX
-@@ -4680,6 +4684,16 @@ ac_compiler_gnu=$ac_cv_c_compiler_gnu
+@@ -4688,6 +4691,16 @@ ac_compiler_gnu=$ac_cv_c_compiler_gnu
  
  CXXFLAGS="$save_CXXFLAGS"
  
@@ -6345,88 +3648,7 @@ index fe2a7e4b3..41001ba6b 100755
  # Runs configure.host, and assorted other critical bits.  Sets
  # up critical shell variables.
  
-@@ -11598,7 +11612,7 @@ else
-   lt_dlunknown=0; lt_dlno_uscore=1; lt_dlneed_uscore=2
-   lt_status=$lt_dlunknown
-   cat > conftest.$ac_ext <<_LT_EOF
--#line 11601 "configure"
-+#line 11615 "configure"
- #include "confdefs.h"
- 
- #if HAVE_DLFCN_H
-@@ -11704,7 +11718,7 @@ else
-   lt_dlunknown=0; lt_dlno_uscore=1; lt_dlneed_uscore=2
-   lt_status=$lt_dlunknown
-   cat > conftest.$ac_ext <<_LT_EOF
--#line 11707 "configure"
-+#line 11721 "configure"
- #include "confdefs.h"
- 
- #if HAVE_DLFCN_H
-@@ -15390,7 +15404,7 @@ $as_echo "$glibcxx_cv_atomic_long_long" >&6; }
-   # Fake what AC_TRY_COMPILE does.
- 
-     cat > conftest.$ac_ext << EOF
--#line 15393 "configure"
-+#line 15407 "configure"
- int main()
- {
-   typedef bool atomic_type;
-@@ -15425,7 +15439,7 @@ $as_echo "$glibcxx_cv_atomic_bool" >&6; }
-     rm -f conftest*
- 
-     cat > conftest.$ac_ext << EOF
--#line 15428 "configure"
-+#line 15442 "configure"
- int main()
- {
-   typedef short atomic_type;
-@@ -15460,7 +15474,7 @@ $as_echo "$glibcxx_cv_atomic_short" >&6; }
-     rm -f conftest*
- 
-     cat > conftest.$ac_ext << EOF
--#line 15463 "configure"
-+#line 15477 "configure"
- int main()
- {
-   // NB: _Atomic_word not necessarily int.
-@@ -15496,7 +15510,7 @@ $as_echo "$glibcxx_cv_atomic_int" >&6; }
-     rm -f conftest*
- 
-     cat > conftest.$ac_ext << EOF
--#line 15499 "configure"
-+#line 15513 "configure"
- int main()
- {
-   typedef long long atomic_type;
-@@ -15577,7 +15591,7 @@ $as_echo "$as_me: WARNING: Performance of certain classes will degrade as a resu
-   # unnecessary for this test.
- 
-     cat > conftest.$ac_ext << EOF
--#line 15580 "configure"
-+#line 15594 "configure"
- int main()
- {
-   _Decimal32 d1;
-@@ -15619,7 +15633,7 @@ ac_compiler_gnu=$ac_cv_cxx_compiler_gnu
-   # unnecessary for this test.
- 
-     cat > conftest.$ac_ext << EOF
--#line 15622 "configure"
-+#line 15636 "configure"
- template<typename T1, typename T2>
-   struct same
-   { typedef T2 type; };
-@@ -15653,7 +15667,7 @@ $as_echo "$enable_int128" >&6; }
-     rm -f conftest*
- 
-     cat > conftest.$ac_ext << EOF
--#line 15656 "configure"
-+#line 15670 "configure"
- template<typename T1, typename T2>
-   struct same
-   { typedef T2 type; };
-@@ -81376,9 +81390,22 @@ fi
+@@ -81674,9 +81687,20 @@ fi
    { $as_echo "$as_me:${as_lineno-$LINENO}: result: $version_specific_libs" >&5
  $as_echo "$version_specific_libs" >&6; }
  
@@ -6435,44 +3657,37 @@ index fe2a7e4b3..41001ba6b 100755
 +  case "$build" in
 +    *-msdosdjgpp*)
 +       libstdcxx_incdir_base=cxx
-+       gcc_version_alias='$(shell echo $(gcc_version) | sed -e "s:\.::2g")'
 +       ;;
 +    *)
 +       libstdcxx_incdir_base=c++
-+       gcc_version_alias='$(gcc_version)'
 +       ;;
 +  esac
 +
    # Default case for install directory for include files.
    if test $version_specific_libs = no && test $gxx_include_dir = no; then
 -    gxx_include_dir='include/c++/${gcc_version}'
-+    gxx_include_dir='include/$(libstdcxx_incdir_base)/${gcc_version_alias}'
++    gxx_include_dir='include/$(libstdcxx_incdir_base)/${gcc_version}'
      if test -n "$with_cross_host" &&
         test x"$with_cross_host" != x"no"; then
        gxx_include_dir='${prefix}/${target_alias}/'"$gxx_include_dir"
-@@ -81394,10 +81421,10 @@ $as_echo "$version_specific_libs" >&6; }
+@@ -81692,7 +81716,7 @@ $as_echo "$version_specific_libs" >&6; }
      # is selected.  FIXME: these variables are misnamed, there are
      # no executables installed in _toolexecdir or _toolexeclibdir.
      if test x"$gxx_include_dir" = x"no"; then
 -      gxx_include_dir='${libdir}/gcc/${host_alias}/${gcc_version}/include/c++'
-+      gxx_include_dir='${libdir}/gcc/${host_alias}/${gcc_version_alias}/include/${libstdcxx_incdir_base}'
++      gxx_include_dir='${libdir}/gcc/${host_alias}/${gcc_version}/include/${libstdcxx_incdir_base}'
      fi
      glibcxx_toolexecdir='${libdir}/gcc/${host_alias}'
--    glibcxx_toolexeclibdir='${toolexecdir}/${gcc_version}$(MULTISUBDIR)'
-+    glibcxx_toolexeclibdir='${toolexecdir}/${gcc_version_alias}$(MULTISUBDIR)'
-   fi
- 
-   # Calculate glibcxx_toolexecdir, glibcxx_toolexeclibdir
-@@ -81429,6 +81456,8 @@ $as_echo "$gxx_include_dir" >&6; }
+     glibcxx_toolexeclibdir='${toolexecdir}/${gcc_version}$(MULTISUBDIR)'
+@@ -81727,6 +81751,7 @@ $as_echo "$gxx_include_dir" >&6; }
  
  
  
-+
 +
  # Export all the include and flag information to Makefiles.
  
    # Used for every C++ compile we perform.
-@@ -81590,6 +81619,10 @@ else
+@@ -81903,6 +81928,10 @@ else
    am__EXEEXT_FALSE=
  fi
  
@@ -6484,7 +3699,7 @@ index fe2a7e4b3..41001ba6b 100755
    as_fn_error "conditional \"MAINTAINER_MODE\" was never defined.
  Usually this means the macro was only invoked conditionally." "$LINENO" 5
 diff --git a/libstdc++-v3/configure.ac b/libstdc++-v3/configure.ac
-index b59f9926f..0c15b0d1c 100644
+index b0243d1c1..8e52d3894 100644
 --- a/libstdc++-v3/configure.ac
 +++ b/libstdc++-v3/configure.ac
 @@ -84,6 +84,9 @@ AC_PROG_CC
@@ -6498,18 +3713,10 @@ index b59f9926f..0c15b0d1c 100644
  # up critical shell variables.
  GLIBCXX_CONFIGURE
 diff --git a/libstdc++-v3/doc/Makefile.in b/libstdc++-v3/doc/Makefile.in
-index 3e729c130..f40943edf 100644
+index c98c42fce..279542828 100644
 --- a/libstdc++-v3/doc/Makefile.in
 +++ b/libstdc++-v3/doc/Makefile.in
-@@ -234,6 +234,7 @@ dvidir = @dvidir@
- enable_shared = @enable_shared@
- enable_static = @enable_static@
- exec_prefix = @exec_prefix@
-+gcc_version_alias = @gcc_version_alias@
- glibcxx_MOFILES = @glibcxx_MOFILES@
- glibcxx_PCHFLAGS = @glibcxx_PCHFLAGS@
- glibcxx_POFILES = @glibcxx_POFILES@
-@@ -263,6 +264,7 @@ infodir = "$(DESTDIR)@infodir@"
+@@ -267,6 +267,7 @@ infodir = "$(DESTDIR)@infodir@"
  install_sh = @install_sh@
  libdir = @libdir@
  libexecdir = @libexecdir@
@@ -6518,18 +3725,10 @@ index 3e729c130..f40943edf 100644
  localedir = @localedir@
  localstatedir = @localstatedir@
 diff --git a/libstdc++-v3/include/Makefile.in b/libstdc++-v3/include/Makefile.in
-index 224bd0af4..0651c3f97 100644
+index 980cabb80..7f8c955f7 100644
 --- a/libstdc++-v3/include/Makefile.in
 +++ b/libstdc++-v3/include/Makefile.in
-@@ -232,6 +232,7 @@ dvidir = @dvidir@
- enable_shared = @enable_shared@
- enable_static = @enable_static@
- exec_prefix = @exec_prefix@
-+gcc_version_alias = @gcc_version_alias@
- glibcxx_MOFILES = @glibcxx_MOFILES@
- glibcxx_PCHFLAGS = @glibcxx_PCHFLAGS@
- glibcxx_POFILES = @glibcxx_POFILES@
-@@ -257,6 +258,7 @@ infodir = @infodir@
+@@ -261,6 +261,7 @@ infodir = @infodir@
  install_sh = @install_sh@
  libdir = @libdir@
  libexecdir = @libexecdir@
@@ -6538,7 +3737,7 @@ index 224bd0af4..0651c3f97 100644
  localedir = @localedir@
  localstatedir = @localstatedir@
 diff --git a/libstdc++-v3/include/experimental/bits/fs_path.h b/libstdc++-v3/include/experimental/bits/fs_path.h
-index 243b46c7b..373d305fe 100644
+index 259788771..091a6f7ec 100644
 --- a/libstdc++-v3/include/experimental/bits/fs_path.h
 +++ b/libstdc++-v3/include/experimental/bits/fs_path.h
 @@ -53,6 +53,11 @@
@@ -6553,7 +3752,7 @@ index 243b46c7b..373d305fe 100644
  namespace std _GLIBCXX_VISIBILITY(default)
  {
  namespace experimental
-@@ -460,6 +465,8 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
+@@ -461,6 +466,8 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
      {
  #ifdef _GLIBCXX_FILESYSTEM_IS_WINDOWS
        return __ch == L'/' || __ch == preferred_separator;
@@ -6562,7 +3761,7 @@ index 243b46c7b..373d305fe 100644
  #else
        return __ch == '/';
  #endif
-@@ -826,6 +833,9 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
+@@ -831,6 +838,9 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
  #ifdef _GLIBCXX_FILESYSTEM_IS_WINDOWS
      std::replace(_M_pathname.begin(), _M_pathname.end(), L'/',
  		 preferred_separator);
@@ -6572,7 +3771,7 @@ index 243b46c7b..373d305fe 100644
  #endif
      return *this;
    }
-@@ -997,7 +1007,8 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
+@@ -1002,7 +1012,8 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
    inline bool
    path::is_absolute() const
    {
@@ -6583,18 +3782,10 @@ index 243b46c7b..373d305fe 100644
  #else
      return has_root_directory();
 diff --git a/libstdc++-v3/libsupc++/Makefile.in b/libstdc++-v3/libsupc++/Makefile.in
-index f3648ac47..a92af6637 100644
+index 7386771d4..b0393d869 100644
 --- a/libstdc++-v3/libsupc++/Makefile.in
 +++ b/libstdc++-v3/libsupc++/Makefile.in
-@@ -303,6 +303,7 @@ dvidir = @dvidir@
- enable_shared = @enable_shared@
- enable_static = @enable_static@
- exec_prefix = @exec_prefix@
-+gcc_version_alias = @gcc_version_alias@
- glibcxx_MOFILES = @glibcxx_MOFILES@
- glibcxx_PCHFLAGS = @glibcxx_PCHFLAGS@
- glibcxx_POFILES = @glibcxx_POFILES@
-@@ -328,6 +329,7 @@ infodir = @infodir@
+@@ -334,6 +334,7 @@ infodir = @infodir@
  install_sh = @install_sh@
  libdir = @libdir@
  libexecdir = @libexecdir@
@@ -6603,18 +3794,10 @@ index f3648ac47..a92af6637 100644
  localedir = @localedir@
  localstatedir = @localstatedir@
 diff --git a/libstdc++-v3/po/Makefile.in b/libstdc++-v3/po/Makefile.in
-index 13993c858..7b4c5f4c2 100644
+index d92d8b8ac..b59c834f4 100644
 --- a/libstdc++-v3/po/Makefile.in
 +++ b/libstdc++-v3/po/Makefile.in
-@@ -232,6 +232,7 @@ dvidir = @dvidir@
- enable_shared = @enable_shared@
- enable_static = @enable_static@
- exec_prefix = @exec_prefix@
-+gcc_version_alias = @gcc_version_alias@
- glibcxx_MOFILES = @glibcxx_MOFILES@
- glibcxx_PCHFLAGS = @glibcxx_PCHFLAGS@
- glibcxx_POFILES = @glibcxx_POFILES@
-@@ -257,6 +258,7 @@ infodir = @infodir@
+@@ -261,6 +261,7 @@ infodir = @infodir@
  install_sh = @install_sh@
  libdir = @libdir@
  libexecdir = @libexecdir@
@@ -6623,18 +3806,9 @@ index 13993c858..7b4c5f4c2 100644
  localedir = @localedir@
  localstatedir = @localstatedir@
 diff --git a/libstdc++-v3/python/Makefile.am b/libstdc++-v3/python/Makefile.am
-index 15ae62186..84352748d 100644
+index 80790e2e0..90f5eeab8 100644
 --- a/libstdc++-v3/python/Makefile.am
 +++ b/libstdc++-v3/python/Makefile.am
-@@ -26,7 +26,7 @@ include $(top_srcdir)/fragment.am
- if ENABLE_PYTHONDIR
- pythondir = $(prefix)/$(python_mod_dir)
- else
--pythondir = $(datadir)/gcc-$(gcc_version)/python
-+pythondir = $(datadir)/gcc-$(gcc_version_alias)/python
- endif
- 
- all-local: gdb.py
 @@ -37,6 +37,12 @@ nobase_python_DATA = \
      libstdcxx/v6/__init__.py \
      libstdcxx/__init__.py
@@ -6658,18 +3832,10 @@ index 15ae62186..84352748d 100644
  	      *-gdb.py) ;; \
  	      *.la) ;; \
 diff --git a/libstdc++-v3/python/Makefile.in b/libstdc++-v3/python/Makefile.in
-index 25b2ed487..eb18f1b18 100644
+index df8285226..8f7bbb130 100644
 --- a/libstdc++-v3/python/Makefile.in
 +++ b/libstdc++-v3/python/Makefile.in
-@@ -262,6 +262,7 @@ dvidir = @dvidir@
- enable_shared = @enable_shared@
- enable_static = @enable_static@
- exec_prefix = @exec_prefix@
-+gcc_version_alias = @gcc_version_alias@
- glibcxx_MOFILES = @glibcxx_MOFILES@
- glibcxx_PCHFLAGS = @glibcxx_PCHFLAGS@
- glibcxx_POFILES = @glibcxx_POFILES@
-@@ -287,6 +288,7 @@ infodir = @infodir@
+@@ -291,6 +291,7 @@ infodir = @infodir@
  install_sh = @install_sh@
  libdir = @libdir@
  libexecdir = @libexecdir@
@@ -6677,16 +3843,7 @@ index 25b2ed487..eb18f1b18 100644
  libtool_VERSION = @libtool_VERSION@
  localedir = @localedir@
  localstatedir = @localstatedir@
-@@ -341,7 +343,7 @@ WARN_CXXFLAGS = \
- 
- # -I/-D flags to pass when compiling.
- AM_CPPFLAGS = $(GLIBCXX_INCLUDES) $(CPPFLAGS)
--@ENABLE_PYTHONDIR_FALSE@pythondir = $(datadir)/gcc-$(gcc_version)/python
-+@ENABLE_PYTHONDIR_FALSE@pythondir = $(datadir)/gcc-$(gcc_version_alias)/python
- @ENABLE_PYTHONDIR_TRUE@pythondir = $(prefix)/$(python_mod_dir)
- nobase_python_DATA = \
-     libstdcxx/v6/printers.py \
-@@ -349,6 +351,8 @@ nobase_python_DATA = \
+@@ -353,6 +354,8 @@ nobase_python_DATA = \
      libstdcxx/v6/__init__.py \
      libstdcxx/__init__.py
  
@@ -6695,7 +3852,7 @@ index 25b2ed487..eb18f1b18 100644
  all: all-am
  
  .SUFFIXES:
-@@ -547,7 +551,7 @@ gdb.py: hook.in Makefile
+@@ -551,7 +554,7 @@ gdb.py: hook.in Makefile
  install-data-local: gdb.py
  	@$(mkdir_p) $(DESTDIR)$(toolexeclibdir)
  	@here=`pwd`; cd $(DESTDIR)$(toolexeclibdir); \
@@ -6732,7 +3889,7 @@ index 2686c8727..54a5ec862 100755
  if test ! -s "$tmp.1"; then
    exit 1
 diff --git a/libstdc++-v3/src/Makefile.am b/libstdc++-v3/src/Makefile.am
-index dce25a6bd..998468d0d 100644
+index 0d07285af..2ebca52c6 100644
 --- a/libstdc++-v3/src/Makefile.am
 +++ b/libstdc++-v3/src/Makefile.am
 @@ -34,8 +34,12 @@ SUBDIRS = c++98 c++11 $(filesystem_dir)
@@ -6784,10 +3941,10 @@ index dce25a6bd..998468d0d 100644
  # Use special rules for compatibility-ldbl.cc compilation, as we need to
  # pass -mlong-double-64.
 diff --git a/libstdc++-v3/src/Makefile.in b/libstdc++-v3/src/Makefile.in
-index 75a207a5e..2a944a556 100644
+index f0755f015..66a014353 100644
 --- a/libstdc++-v3/src/Makefile.in
 +++ b/libstdc++-v3/src/Makefile.in
-@@ -118,10 +118,17 @@ am__objects_2 = compatibility.lo compatibility-debug_list.lo \
+@@ -119,10 +119,17 @@ am__objects_2 = compatibility.lo compatibility-debug_list.lo \
  am__objects_3 = compatibility-c++0x.lo compatibility-atomic-c++0x.lo \
  	compatibility-thread-c++0x.lo compatibility-chrono.lo \
  	compatibility-condvar.lo
@@ -6807,7 +3964,7 @@ index 75a207a5e..2a944a556 100644
  libvtv_la_LIBADD =
  @VTV_CYGMIN_TRUE@am_libvtv_la_OBJECTS = vtv_stubs.lo
  libvtv_la_OBJECTS = $(am_libvtv_la_OBJECTS)
-@@ -132,7 +139,8 @@ am__depfiles_maybe =
+@@ -133,7 +140,8 @@ am__depfiles_maybe =
  CXXCOMPILE = $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) \
  	$(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS)
  CXXLD = $(CXX)
@@ -6817,15 +3974,7 @@ index 75a207a5e..2a944a556 100644
  RECURSIVE_TARGETS = all-recursive check-recursive dvi-recursive \
  	html-recursive info-recursive install-data-recursive \
  	install-dvi-recursive install-exec-recursive \
-@@ -295,6 +303,7 @@ dvidir = @dvidir@
- enable_shared = @enable_shared@
- enable_static = @enable_static@
- exec_prefix = @exec_prefix@
-+gcc_version_alias = @gcc_version_alias@
- glibcxx_MOFILES = @glibcxx_MOFILES@
- glibcxx_PCHFLAGS = @glibcxx_PCHFLAGS@
- glibcxx_POFILES = @glibcxx_POFILES@
-@@ -320,6 +329,7 @@ infodir = @infodir@
+@@ -324,6 +332,7 @@ infodir = @infodir@
  install_sh = @install_sh@
  libdir = @libdir@
  libexecdir = @libexecdir@
@@ -6833,7 +3982,7 @@ index 75a207a5e..2a944a556 100644
  libtool_VERSION = @libtool_VERSION@
  localedir = @localedir@
  localstatedir = @localstatedir@
-@@ -377,7 +387,8 @@ AM_CPPFLAGS = $(GLIBCXX_INCLUDES) $(CPPFLAGS)
+@@ -381,7 +390,8 @@ AM_CPPFLAGS = $(GLIBCXX_INCLUDES) $(CPPFLAGS)
  @ENABLE_FILESYSTEM_TS_FALSE@filesystem_dir = 
  @ENABLE_FILESYSTEM_TS_TRUE@filesystem_dir = filesystem
  SUBDIRS = c++98 c++11 $(filesystem_dir)
@@ -6843,7 +3992,7 @@ index 75a207a5e..2a944a556 100644
  
  # Cross compiler support.
  @VTV_CYGMIN_TRUE@toolexeclib_LTLIBRARIES = libvtv.la libstdc++.la
-@@ -411,23 +422,40 @@ cxx11_sources = \
+@@ -415,23 +425,40 @@ cxx11_sources = \
  	compatibility-chrono.cc \
  	compatibility-condvar.cc
  
@@ -6900,8 +4049,8 @@ index 75a207a5e..2a944a556 100644
 +@DJGPP_FALSE@libstdc___la_LINK = $(CXXLINK) $(libstdc___la_LDFLAGS)
  
  # A note on compatibility and static libraries.
- # 
-@@ -604,6 +632,8 @@ clean-toolexeclibLTLIBRARIES:
+ #
+@@ -608,6 +635,8 @@ clean-toolexeclibLTLIBRARIES:
  	done
  libstdc++.la: $(libstdc___la_OBJECTS) $(libstdc___la_DEPENDENCIES) $(EXTRA_libstdc___la_DEPENDENCIES) 
  	$(libstdc___la_LINK) $(am_libstdc___la_rpath) $(libstdc___la_OBJECTS) $(libstdc___la_LIBADD) $(LIBS)
@@ -6911,18 +4060,10 @@ index 75a207a5e..2a944a556 100644
  	$(libvtv_la_LINK) $(am_libvtv_la_rpath) $(libvtv_la_OBJECTS) $(libvtv_la_LIBADD) $(LIBS)
  
 diff --git a/libstdc++-v3/src/c++11/Makefile.in b/libstdc++-v3/src/c++11/Makefile.in
-index c8dea4bce..88b7a34bc 100644
+index 73852e75c..d2b161423 100644
 --- a/libstdc++-v3/src/c++11/Makefile.in
 +++ b/libstdc++-v3/src/c++11/Makefile.in
-@@ -270,6 +270,7 @@ dvidir = @dvidir@
- enable_shared = @enable_shared@
- enable_static = @enable_static@
- exec_prefix = @exec_prefix@
-+gcc_version_alias = @gcc_version_alias@
- glibcxx_MOFILES = @glibcxx_MOFILES@
- glibcxx_PCHFLAGS = @glibcxx_PCHFLAGS@
- glibcxx_POFILES = @glibcxx_POFILES@
-@@ -295,6 +296,7 @@ infodir = @infodir@
+@@ -299,6 +299,7 @@ infodir = @infodir@
  install_sh = @install_sh@
  libdir = @libdir@
  libexecdir = @libexecdir@
@@ -6931,18 +4072,10 @@ index c8dea4bce..88b7a34bc 100644
  localedir = @localedir@
  localstatedir = @localstatedir@
 diff --git a/libstdc++-v3/src/c++98/Makefile.in b/libstdc++-v3/src/c++98/Makefile.in
-index ab7464fdd..9f51d291a 100644
+index c0a551719..6f902d300 100644
 --- a/libstdc++-v3/src/c++98/Makefile.in
 +++ b/libstdc++-v3/src/c++98/Makefile.in
-@@ -266,6 +266,7 @@ dvidir = @dvidir@
- enable_shared = @enable_shared@
- enable_static = @enable_static@
- exec_prefix = @exec_prefix@
-+gcc_version_alias = @gcc_version_alias@
- glibcxx_MOFILES = @glibcxx_MOFILES@
- glibcxx_PCHFLAGS = @glibcxx_PCHFLAGS@
- glibcxx_POFILES = @glibcxx_POFILES@
-@@ -291,6 +292,7 @@ infodir = @infodir@
+@@ -295,6 +295,7 @@ infodir = @infodir@
  install_sh = @install_sh@
  libdir = @libdir@
  libexecdir = @libexecdir@
@@ -6950,31 +4083,11 @@ index ab7464fdd..9f51d291a 100644
  libtool_VERSION = @libtool_VERSION@
  localedir = @localedir@
  localstatedir = @localstatedir@
-@@ -840,9 +842,9 @@ parallel_settings.o: parallel_settings.cc
- @ENABLE_DUAL_ABI_TRUE@	-rm -f tmp-$@
- 
- @ENABLE_DUAL_ABI_TRUE@ios_failure.lo: ios_failure-lt.s
--@ENABLE_DUAL_ABI_TRUE@	$(LTCXXCOMPILE) -c $< -o $@
-+@ENABLE_DUAL_ABI_TRUE@	$(LTCXXCOMPILE) -g0 -c $< -o $@
- @ENABLE_DUAL_ABI_TRUE@ios_failure.o: ios_failure.s
--@ENABLE_DUAL_ABI_TRUE@	$(CXXCOMPILE) -c $<
-+@ENABLE_DUAL_ABI_TRUE@	$(CXXCOMPILE) -g0 -c $<
- 
- # Tell versions [3.59,3.63) of GNU make to not export all variables.
- # Otherwise a system limit (for SysV at least) may be exceeded.
 diff --git a/libstdc++-v3/src/filesystem/Makefile.in b/libstdc++-v3/src/filesystem/Makefile.in
-index bbc45a873..4b5023099 100644
+index 3312d0306..20c981c03 100644
 --- a/libstdc++-v3/src/filesystem/Makefile.in
 +++ b/libstdc++-v3/src/filesystem/Makefile.in
-@@ -274,6 +274,7 @@ dvidir = @dvidir@
- enable_shared = @enable_shared@
- enable_static = @enable_static@
- exec_prefix = @exec_prefix@
-+gcc_version_alias = @gcc_version_alias@
- glibcxx_MOFILES = @glibcxx_MOFILES@
- glibcxx_PCHFLAGS = @glibcxx_PCHFLAGS@
- glibcxx_POFILES = @glibcxx_POFILES@
-@@ -299,6 +300,7 @@ infodir = @infodir@
+@@ -303,6 +303,7 @@ infodir = @infodir@
  install_sh = @install_sh@
  libdir = @libdir@
  libexecdir = @libexecdir@
@@ -6983,7 +4096,7 @@ index bbc45a873..4b5023099 100644
  localedir = @localedir@
  localstatedir = @localstatedir@
 diff --git a/libstdc++-v3/src/filesystem/ops.cc b/libstdc++-v3/src/filesystem/ops.cc
-index 056fa92a0..333489d46 100644
+index 397a8d7ff..0fbf57662 100644
 --- a/libstdc++-v3/src/filesystem/ops.cc
 +++ b/libstdc++-v3/src/filesystem/ops.cc
 @@ -269,8 +269,10 @@ namespace
@@ -6998,10 +4111,10 @@ index 056fa92a0..333489d46 100644
      return file_type::unknown;
  
 diff --git a/libstdc++-v3/src/filesystem/path.cc b/libstdc++-v3/src/filesystem/path.cc
-index f6505fdf1..f22f9dc96 100644
+index 1d9e7dca1..e5ac6d3fb 100644
 --- a/libstdc++-v3/src/filesystem/path.cc
 +++ b/libstdc++-v3/src/filesystem/path.cc
-@@ -370,8 +370,13 @@ path::_M_split_cmpts()
+@@ -401,8 +401,13 @@ path::_M_split_cmpts()
  	_M_add_root_dir(0);
        ++pos;
      }
@@ -7015,20 +4128,12 @@ index f6505fdf1..f22f9dc96 100644
 +#endif
      {
        // got disk designator
-       _M_add_root_name(2);
+       if (len == 2)
 diff --git a/libstdc++-v3/testsuite/Makefile.in b/libstdc++-v3/testsuite/Makefile.in
-index 963f35d52..c3a543249 100644
+index 5797a55b7..93a94a04a 100644
 --- a/libstdc++-v3/testsuite/Makefile.in
 +++ b/libstdc++-v3/testsuite/Makefile.in
-@@ -232,6 +232,7 @@ dvidir = @dvidir@
- enable_shared = @enable_shared@
- enable_static = @enable_static@
- exec_prefix = @exec_prefix@
-+gcc_version_alias = @gcc_version_alias@
- glibcxx_MOFILES = @glibcxx_MOFILES@
- glibcxx_PCHFLAGS = @glibcxx_PCHFLAGS@
- glibcxx_POFILES = @glibcxx_POFILES@
-@@ -257,6 +258,7 @@ infodir = @infodir@
+@@ -261,6 +261,7 @@ infodir = @infodir@
  install_sh = @install_sh@
  libdir = @libdir@
  libexecdir = @libexecdir@
@@ -7037,18 +4142,18 @@ index 963f35d52..c3a543249 100644
  localedir = @localedir@
  localstatedir = @localstatedir@
 diff --git a/lto-plugin/configure b/lto-plugin/configure
-index 36201e636..18b3b3f53 100755
+index cdea9eac3..7843cd7f6 100755
 --- a/lto-plugin/configure
 +++ b/lto-plugin/configure
-@@ -9422,7 +9422,7 @@ _LT_EOF
- 	if $NM -V 2>&1 | $GREP 'GNU' > /dev/null; then
- 	  export_symbols_cmds='$NM -Bpg $libobjs $convenience | awk '\''{ if (((\$ 2 == "T") || (\$ 2 == "D") || (\$ 2 == "B") || (\$ 2 == "W")) && (substr(\$ 3,1,1) != ".")) { print \$ 3 } }'\'' | sort -u > $export_symbols'
- 	else
--	  export_symbols_cmds='$NM -BCpg $libobjs $convenience | awk '\''{ if (((\$ 2 == "T") || (\$ 2 == "D") || (\$ 2 == "B")) && (substr(\$ 3,1,1) != ".")) { print \$ 3 } }'\'' | sort -u > $export_symbols'
-+	  export_symbols_cmds='$NM -BCpg $libobjs $convenience | awk '\''{ if (((\$ 2 == "T") || (\$ 2 == "D") || (\$ 2 == "B") || (\$ 2 == "L")) && (substr(\$ 3,1,1) != ".")) { print \$ 3 } }'\'' | sort -u > $export_symbols'
- 	fi
- 	aix_use_runtimelinking=no
+@@ -5387,7 +5387,7 @@ fi
+ # Check whether --with-gcc-major-version-only was given.
+ if test "${with_gcc_major_version_only+set}" = set; then :
+   withval=$with_gcc_major_version_only; if test x$with_gcc_major_version_only = xyes ; then
+-        get_gcc_base_ver="sed -e 's/^\([0-9]*\).*\$\$/\1/'"
++        get_gcc_base_ver="sed -e 's/^\([0-9]*\).*/\1/'"
+       fi
  
+ fi
 diff --git a/lt~obsolete.m4 b/lt~obsolete.m4
 deleted file mode 100644
 index bf92b5e07..000000000
@@ -7155,14 +4260,14 @@ index bf92b5e07..000000000
 -m4_ifndef([_LT_PROG_CXX],		[AC_DEFUN([_LT_PROG_CXX])])
 diff --git a/readme.DJGPP b/readme.DJGPP
 new file mode 100644
-index 000000000..4b81e441b
+index 000000000..25e9f2bc3
 --- /dev/null
 +++ b/readme.DJGPP
-@@ -0,0 +1,300 @@
-+This is the DJGPP port of gcc-6.5.0
+@@ -0,0 +1,302 @@
++This is the DJGPP port of gcc-7.4.0
 +
 +Please read this file up to end (maybe skipping sections You don't need,
-+for example You don't need to read how to build gcc-6.5.0 from sources
++for example You don't need to read how to build gcc-7.4.0 from sources
 +if You only intend to use binary archives). Also consult DJGPP documentation
 +and FAQ where needed.
 +
@@ -7171,7 +4276,7 @@ index 000000000..4b81e441b
 +    -  DJGPP-@DJVER@.
 +    -  binutils-2.22 or above (Earlier versions will NOT work)
 +
-+Changes since release of DJGPP port of gcc-6.3.0:
++Changes since release of DJGPP port of gcc-7.1.0:
 +    - support for std::experimental::filesystem added (note that library
 +      is renamed from libstdc++fs.a to libstdcfs.a to avoid filename conflict
 +      when LFN support is not available)
@@ -7180,15 +4285,15 @@ index 000000000..4b81e441b
 +===============
 +
 +
-+Archive djcross-gcc-6.5.0.tar.bz2 contains script which modifies
-+original gcc-6.5.0 sources for DJGPP. You don't need it unless You
++Archive djcross-gcc-7.4.0.tar.bz2 contains script which modifies
++original gcc-7.4.0 sources for DJGPP. You don't need it unless You
 +want to recreate GCC source archive for DJGPP. If You are using this
-+archive and original sources of gcc-6.5.0.tar.gz, then You don't
-+need gcc650s.zip. Running these scripts under DJGPP requires
++archive and original sources of gcc-7.4.0.tar.gz, then You don't
++need gcc740s.zip. Running these scripts under DJGPP requires
 +using versions of GNU Autoconf and Automake not ported to DJGPP. As result
 +one should use different system (like Linux) for it.
 +
-+The source archive gcc650s.zip contains all the sources to build
++The source archive gcc740s.zip contains all the sources to build
 +all compilers (C, C++, Ada, Objective C, Objective C++, GNU Fortran) and also
 +also all required libraries.
 +
@@ -7199,39 +4304,39 @@ index 000000000..4b81e441b
 +
 +Binary archives are split into 4 parts:
 +
-+  gcc650b.zip  : The gcc.exe driver program and the C compiler.
++  gcc740b.zip  : The gcc.exe driver program and the C compiler.
 +                 It also contains the documentation.
 +
-+  gpp650b.zip  : The C++ compiler and libstdcxx.a together
++  gpp740b.zip  : The C++ compiler and libstdcxx.a together
 +                 with needed header files. Please note that one must
 +		 recompile all C++ sources built with any earlier GCC version
 +
-+  objc650b.zip : The Objective C and Objective C++ compilers and
++  objc740b.zip : The Objective C and Objective C++ compilers and
 +		 libobjc.a and the needed header files.
 +
-+  gfor650b.zip  : GNU Fortran compiler
++  gfor740b.zip  : GNU Fortran compiler
 +
-+  ada650b.zip : The GNU Ada compiler and development files
++  ada740b.zip : The GNU Ada compiler and development files
 +
-+The archive gcc650b.zip is required by all other binary packages
++The archive gcc740b.zip is required by all other binary packages
 +
 +Binary packages includes following documentation files:
 +
-+  Archive gcc650b.zip:
++  Archive gcc740b.zip:
 +	info/gcc.info - the use and the internals of the GNU compiler
 +	info/cpp.info - documentation of the GNU C preprocessor.
 +	info/cppinternals.info  - internals of the GNU C Preprocessor.
 +        info/gccinstall.info
 +	info/gccint.info
 +		(NEW: use install-info to add it to info/dir)
-+  Archive gpp650b.zip:
-+        gnu/gcc-6.50/libstdcxx/* - some documentation of libstdc++-v3
++  Archive gpp740b.zip:
++        gnu/gcc-7.40/libstdcxx/* - some documentation of libstdc++-v3
 +		(HTML and text formats)
-+  Archive gfor650b.zip:
++  Archive gfor740b.zip:
 +	info/gfortran.info - documentation of the GNU Fortran compiler
 +
 +
-+Installing binaries of gcc-6.5.0
++Installing binaries of gcc-7.4.0
 +=================================
 +
 +You should remove previous installation of gcc completely
@@ -7245,15 +4350,15 @@ index 000000000..4b81e441b
 +	DJGPP-@DJVER@ (djdev205.zip)
 +
 +Rrquired packages for different programming languages
-+	C 			: gcc650b.zip
++	C 			: gcc740b.zip
 +
-+	C++			: gcc650b.zip, gpp650b.zip
++	C++			: gcc740b.zip, gpp740b.zip
 +
-+	Fortran	95              : gcc650b.zip, gfor650b.zip
++	Fortran	95              : gcc740b.zip, gfor740b.zip
 +
-+	Objective C		: gcc650b.zip, objc650b.zip
++	Objective C		: gcc740b.zip, objc740b.zip
 +
-+        Ada                     : gcc650b.zip, ada650b.zip
++        Ada                     : gcc740b.zip, ada740b.zip
 +
 +Of course for ALL languages You also need at least binutils (bnu222b.zip
 +or newer) and @DJDEV@.zip (or newer when it will be released)
@@ -7290,16 +4395,16 @@ index 000000000..4b81e441b
 +the instructions under 2. when the unzipper knows about long filenames.
 +
 +
-+Rebuilding gcc-6.5.0 from the sources
++Rebuilding gcc-7.4.0 from the sources
 +======================================
 +
 +Requirements
 +------------
 +
 +-  Long filename support. I built it in DOS session under Windows 10 Home
-+   32 bit or Windows Vista Business 32 bit. Other 32 bit Windows versions
++   32 bit or Windows 10 Home 32 bit. Other 32 bit Windows versions
 +   beginning with Win95 should be hopefully OK. I have not however tested
-+   myself whether it can be build under Win98, Win2k or Win2K, WinXP
++   myself whether it can be build under Win95, Win98, Win2k or Win2K, WinXP
 +   or Win 7.
 +
 +-  plenty of physical RAM available. I guess that 1 GB should
@@ -7331,7 +4436,7 @@ index 000000000..4b81e441b
 +	GNU Texinfo 4.8 or above
 +	GNU tar 1.1.2 or above
 +	GNU binutils 2.22 (required, older versions cannot be used!!!)
-+	recent GNU GMP version (versions 6.1.0 is OK)
++	recent GNU GMP version (versions 6.1.0 and newer are OK)
 +        recent MPFR versions (versions 3.0.0 or newer are OK)
 +	recent MPC versions (versions 1.0.0 or newer are OK)
 +	Zlib-1.2.5 or above (Warning configure does not check for presence
@@ -7358,11 +4463,13 @@ index 000000000..4b81e441b
 +-  Working DJGPP installation of course:
 +   - DJGPP v2.05 is required (earlier versions are not supported)
 +   - one needs to rebuild stubify.exe to increase stack size to 1.5MB
-+     (edit src/stub/stub.asm from djlsr205.zip and rebuild stubify.exe)
++     (edit src/stub/stub.asm from djlsr205.zip and rebuild stubify.exe).
++     More recent CVS version of DJGPP v2.06 is required for building Ada
++     compiler
 +
 +If You modify some source files You may also need
 +	autoconf-2.64
-+	automake-1.11
++	automake-1.11.6
 +	(No ports available for DJGPP yet. I did all patching GCC sources
 +	and updating autoconf and automake related stuff in Linux)
 +
@@ -7373,8 +4480,8 @@ index 000000000..4b81e441b
 +Extracting the sources
 +----------------------
 +
-+At first you should unzip the archive gcc650s.zip. The sources are _NOT_
-+the complete sources like the original gcc-6.5.0 distribution. I have
++At first you should unzip the archive gcc740s.zip. The sources are _NOT_
++the complete sources like the original gcc-7.4.0 distribution. I have
 +removed many files to save disk space which are not needed for the DJGPP
 +port. However I left configuration of other machines in to make archives
 +usable to build cross-to-DJGPP compilers and DJGPP hosted cross-compilers
@@ -7384,7 +4491,7 @@ index 000000000..4b81e441b
 +Compiling gcc
 +-------------
 +
-+Directory gnu/gcc-6.50 contains all sources of gcc-6.5.0
++Directory gnu/gcc-7.40 contains all sources of gcc-7.4.0
 +
 +Sources are NOT configured.
 +
@@ -7393,7 +4500,7 @@ index 000000000..4b81e441b
 +
 +	sh djconfig.sh
 +
-+When this is done You can build gcc-6.5.0 by running script djmake.sh
++When this is done You can build gcc-7.4.0 by running script djmake.sh
 +Under Win9X You'll have to restart it some times when it will crash
 +due to Win9X DPMI descriptor leaks. You may use redir to get output in file.
 +
@@ -7425,7 +4532,7 @@ index 000000000..4b81e441b
 +Reporting bugs
 +==============
 +
-+If you found a bug in gcc-6.5.0 (gcc, gfortran, libstdc++, etc) please report it to
++If you found a bug in gcc-7.4.0 (gcc, gfortran, libstdc++, etc) please report it to
 +the GCC bug addresses and to the DJGPP mailing list (djgpp@delorie.com). We may not
 +notice bug reports sent to GCC bug reporting system only due to large amount of
 +other bugs there.
@@ -7453,7 +4560,7 @@ index 000000000..4b81e441b
 +
 +To all who have contributed new features, test results, bug-fixes to GCC
 +(see http://gcc.gnu.org/thanks.html) and also who helped with DJGPP port of
-+gcc-6.5.0
++gcc-7.4.0
 +
 +
 +Have fun with gcc
