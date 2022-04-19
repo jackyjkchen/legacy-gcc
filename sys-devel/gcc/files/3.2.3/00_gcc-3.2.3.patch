@@ -34,10 +34,23 @@ index 76d7c35..a6e456c 100644
  
  	* GCC 3.2.3 Released.
 diff --git a/gcc/Makefile.in b/gcc/Makefile.in
-index e7c29b9..4aefd9e 100644
+index e7c29b9..72a12f1 100644
 --- a/gcc/Makefile.in
 +++ b/gcc/Makefile.in
-@@ -1137,23 +1137,6 @@ c-parse.o : $(srcdir)/c-parse.c $(CONFIG_H) $(TREE_H) c-lex.h $(GGC_H) intl.h \
+@@ -290,8 +290,12 @@ exec_prefix = @exec_prefix@
+ bindir = @bindir@
+ # Directory in which to put the directories used by the compiler.
+ libdir = @libdir@
++# Directory in which GCC puts its executables.
++libexecdir = @libexecdir@
+ # Directory in which the compiler finds executables, libraries, etc.
+ libsubdir = $(libdir)/gcc-lib/$(target_alias)/$(version)
++# Directory in which the compiler finds executables
++libexecsubdir = $(libexecdir)/gcc/$(target_alias)/$(version)
+ # Used to produce a relative $(gcc_tooldir) in gcc.o
+ unlibsubdir = ../../..
+ # Directory in which to find other cross-compilation tools and headers.
+@@ -1137,23 +1141,6 @@ c-parse.o : $(srcdir)/c-parse.c $(CONFIG_H) $(TREE_H) c-lex.h $(GGC_H) intl.h \
  	$(CC) $(ALL_CFLAGS) $(ALL_CPPFLAGS) $(INCLUDES) \
  	       -c $(srcdir)/c-parse.c $(OUTPUT_OPTION)
  
@@ -61,6 +74,48 @@ index e7c29b9..4aefd9e 100644
  c-decl.o : c-decl.c $(CONFIG_H) $(SYSTEM_H) $(TREE_H) $(RTL_H) $(C_TREE_H) \
      $(GGC_H) $(TARGET_H) c-lex.h flags.h function.h output.h $(EXPR_H) \
      debug.h toplev.h intl.h $(TM_P_H) tree-inline.h $(TIMEVAR_H) c-pragma.h
+@@ -1238,6 +1225,7 @@ c-semantics.o : c-semantics.c $(CONFIG_H) $(SYSTEM_H) $(TREE_H) $(C_TREE_H) \
+ DRIVER_DEFINES = \
+   -DSTANDARD_STARTFILE_PREFIX=\"$(unlibsubdir)/\" \
+   -DSTANDARD_EXEC_PREFIX=\"$(libdir)/gcc-lib/\" \
++  -DSTANDARD_LIBEXEC_PREFIX=\"$(libexecdir)/gcc/\" \
+   -DDEFAULT_TARGET_VERSION=\"$(version)\" \
+   -DDEFAULT_TARGET_MACHINE=\"$(target_alias)\" \
+   -DSTANDARD_BINDIR_PREFIX=\"$(bindir)/\" \
+@@ -2154,6 +2142,12 @@ fixinc.sh: $(FIXINCSRCDIR)/mkfixinc.sh $(FIXINCSRCDIR)/fixincl.c \
+ 
+ # Build fixed copies of system files.
+ stmp-fixinc: fixinc.sh gsyslimits.h
++	@if test ! -d ${SYSTEM_HEADER_DIR}; then \
++	  echo The directory that should contain system headers does not exist: >&2 ; \
++	  echo "  ${SYSTEM_HEADER_DIR}" >&2 ; \
++	  if test "x${SYSTEM_HEADER_DIR}" = "x${gcc_tooldir}/sys-include"; \
++	  then sleep 1; else exit 1; fi; \
++	fi
+ 	rm -rf include; mkdir include
+ 	-chmod a+rx include
+ 	(TARGET_MACHINE='$(target)'; srcdir=`cd $(srcdir); pwd`; \
+@@ -2167,20 +2161,6 @@ stmp-fixinc: fixinc.sh gsyslimits.h
+ 	  cp $(srcdir)/gsyslimits.h include/syslimits.h; \
+ 	fi; \
+ 	chmod a+r include/syslimits.h)
+-# If $(SYSTEM_HEADER_DIR) is $(build_tooldir)/sys-include, and
+-# that directory exists, then make sure that $(libsubdir) exists.
+-# This is because cpp is compiled to find $(gcc_tooldir)/include via
+-# $(libsubdir)/$(unlibsubdir), which will only work if $(libsubdir)
+-# exists.
+-# ??? Better would be to use -isystem $(build_tooldir)/sys-include,
+-# but fixincludes does not take such arguments.
+-	if [ "$(SYSTEM_HEADER_DIR)" = "$(build_tooldir)/sys-include" ] \
+-	   && [ -d $(build_tooldir)/sys-include ]; then \
+-	  if [ -d $(libdir) ] ; then true ; else mkdir $(libdir) ; fi; \
+-	  if [ -d $(libdir)/gcc-lib ] ; then true ; else mkdir $(libdir)/gcc-lib; fi; \
+-	  if [ -d $(libdir)/gcc-lib/$(target_alias) ] ; then true ; else mkdir $(libdir)/gcc-lib/$(target_alias) ; fi; \
+-	  if [ -d $(libdir)/gcc-lib/$(target_alias)/$(version) ] ; then true ; else mkdir $(libdir)/gcc-lib/$(target_alias)/$(version) ; fi; \
+-	else true; fi
+ 	$(STAMP) stmp-fixinc
+ 
+ # Files related to the fixproto script.
 diff --git a/gcc/builtins.c b/gcc/builtins.c
 index ca39c0b..dd61baf 100644
 --- a/gcc/builtins.c
@@ -376,6 +431,28 @@ index 883a2b1..df48477 100644
  extern void expand_builtin_eh_return		PARAMS ((tree, tree));
  extern void expand_eh_return			PARAMS ((void));
  extern rtx get_exception_pointer		PARAMS ((struct function *));
+diff --git a/gcc/gcc.c b/gcc/gcc.c
+index 7845fc3..ef38b48 100644
+--- a/gcc/gcc.c
++++ b/gcc/gcc.c
+@@ -1335,6 +1335,8 @@ static const char *const standard_exec_prefix = STANDARD_EXEC_PREFIX;
+ static const char *const standard_exec_prefix_1 = "/usr/lib/gcc/";
+ static const char *md_exec_prefix = MD_EXEC_PREFIX;
+ 
++static const char *standard_libexec_prefix = STANDARD_LIBEXEC_PREFIX;
++
+ static const char *md_startfile_prefix = MD_STARTFILE_PREFIX;
+ static const char *md_startfile_prefix_1 = MD_STARTFILE_PREFIX_1;
+ static const char *const standard_startfile_prefix = STANDARD_STARTFILE_PREFIX;
+@@ -3811,6 +3813,8 @@ warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n\n"
+ 	      PREFIX_PRIORITY_LAST, 2, warn_std_ptr, 0);
+   add_prefix (&exec_prefixes, standard_exec_prefix_1, "BINUTILS",
+ 	      PREFIX_PRIORITY_LAST, 2, warn_std_ptr, 0);
++  add_prefix (&exec_prefixes, standard_libexec_prefix, "BINUTILS",
++	      PREFIX_PRIORITY_LAST, 2, warn_std_ptr, 0);
+ #endif
+ 
+   add_prefix (&startfile_prefixes, standard_exec_prefix, "BINUTILS",
 diff --git a/gcc/jump.c b/gcc/jump.c
 index c668374..3fac7a5 100644
 --- a/gcc/jump.c

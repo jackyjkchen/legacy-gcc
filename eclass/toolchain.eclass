@@ -696,14 +696,12 @@ do_gcc_djgpp_patches() {
 		rm -rf boehm-gc fastjar gcc/go gcc/java gcc/treelang gotools \
 			libatomic libcilkrts libgo libgomp libitm libjava libmudflap \
 			libmpx liboffloadmic libsanitizer libvtv zlib
+		tc_version_is_at_least 4.4 || rm -rf libssp
 		tc_version_is_at_least 7 || rm -rf gcc/testsuite
 		tc_version_is_at_least 8 || rm -rf libffi
 		if [ -d "${FILESDIR}/${GCC_RELEASE_VER}/djgpp" ]; then
 			einfo "Applying djgpp port patches ..."
 			eapply "${FILESDIR}"/${GCC_RELEASE_VER}/djgpp/*.patch
-		fi
-		if [[ ${GCC_RELEASE_VER} == "3.4.6" ]]; then
-			chmod +x libstdc++-v3/scripts/create_testsuite_files || die
 		fi
 	fi
 }
