@@ -25,9 +25,3 @@ else
 	CXX="g++-7.5.0"
 fi
 
-src_prepare() {
-	toolchain_src_prepare
-
-	eapply "${FILESDIR}"/${PV}/00_fix-mingw64-runtime-10.patch
-	[[ ${CATEGORY} == "cross-i686-legacy-mingw32" ]] && eapply "${FILESDIR}"/${PV}/01_mingw-enable-c99-in-cpp.patch
-}

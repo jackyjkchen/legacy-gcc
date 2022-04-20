@@ -55,6 +55,18 @@ is_crosscompile() {
 	[[ ${CHOST} != ${CTARGET} ]]
 }
 
+is_mingw64() {
+	[[ ${CTARGET} == *-w64-mingw* || ${CTARGET} == x86_64-*-mingw* ]]
+}
+
+is_mingw() {
+	[[ ${CTARGET} == mingw* || ${CTARGET} == *-mingw* ]] && ! is_mingw64
+}
+
+is_cygwin() {
+	[[ ${CTARGET} == *-cygwin ]]
+}
+
 is_djgpp() {
 	[[ ${CTARGET} == *-msdosdjgpp* ]]
 }
@@ -527,8 +539,10 @@ toolchain_src_prepare() {
 
 	do_gcc_gentoo_patches
 	do_gcc_PIE_patches
-	do_gcc_CYGWINPORTS_patches
-	do_gcc_djgpp_patches
+	do_gcc_MINGW64_patches
+	do_gcc_MINGW_patches
+	do_gcc_CYGWIN_patches
+	do_gcc_DJGPP_patches
 
 	if tc_is_live ; then
 		BRANDING_GCC_PKGVERSION="${BRANDING_GCC_PKGVERSION}, commit ${EGIT_VERSION}"
@@ -676,14 +690,26 @@ do_gcc_PIE_patches() {
 	BRANDING_GCC_PKGVERSION="${BRANDING_GCC_PKGVERSION}, pie-${PIE_VER}"
 }
 
-do_gcc_CYGWINPORTS_patches() {
-	case ${CTARGET} in
-		*-cygwin)
-			;;
-		*)
-			return 0
-			;;
-	esac
+do_gcc_MINGW64_patches() {
+	is_mingw64 || return 0
+
+	if [ -d "${FILESDIR}/${GCC_RELEASE_VER}/mingw64" ]; then
+		einfo "Applying mingw64 port patches ..."
+		eapply "${FILESDIR}"/${GCC_RELEASE_VER}/mingw64/*.patch
+	fi
+}
+
+do_gcc_MINGW_patches() {
+	is_mingw || return 0
+
+	if [ -d "${FILESDIR}/${GCC_RELEASE_VER}/mingw" ]; then
+		einfo "Applying mingw port patches ..."
+		eapply "${FILESDIR}"/${GCC_RELEASE_VER}/mingw/*.patch
+	fi
+}
+
+do_gcc_CYGWIN_patches() {
+	is_cygwin || return 0
 
 	if [ -d "${FILESDIR}/${GCC_RELEASE_VER}/cygwin" ]; then
 		einfo "Applying cygwin port patches ..."
@@ -691,12 +717,12 @@ do_gcc_CYGWINPORTS_patches() {
 	fi
 }
 
-do_gcc_djgpp_patches() {
+do_gcc_DJGPP_patches() {
 	if is_djgpp ; then
 		rm -rf boehm-gc fastjar gcc/go gcc/java gcc/treelang gotools \
 			libatomic libcilkrts libgo libgomp libitm libjava libmudflap \
 			libmpx liboffloadmic libsanitizer libvtv zlib
-		tc_version_is_at_least 4.4 || rm -rf libssp
+		tc_version_is_at_least 4.1 || rm -rf libssp
 		tc_version_is_at_least 7 || rm -rf gcc/testsuite
 		tc_version_is_at_least 8 || rm -rf libffi
 		if [ -d "${FILESDIR}/${GCC_RELEASE_VER}/djgpp" ]; then

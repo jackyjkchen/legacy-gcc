@@ -3,6 +3,11 @@
 
 EAPI=7
 
+ABI='default'
+DEFAULT_ABI='default'
+CFLAGS="-O2 -pipe -s"
+CXXFLAGS="-O2 -pipe -s"
+
 export CBUILD=${CBUILD:-${CHOST}}
 export CTARGET=${CTARGET:-${CHOST}}
 if [[ ${CTARGET} == ${CHOST} ]] ; then
@@ -41,8 +46,6 @@ pkg_setup() {
 
 
 src_configure() {
-	CFLAGS="-O2 -pipe -s"
-	CXXFLAGS="-O2 -pipe -s"
 	CHOST=${CTARGET} strip-unsupported-flags
 	econf \
 		--host=${CTARGET} \

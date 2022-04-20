@@ -41,6 +41,4 @@ src_prepare() {
 	[[ $(tc-arch) == "sh" ]] && eapply "${FILESDIR}"/${PV}/01_workaround-bootstrap-for-sh4.patch
 	use go && eapply "${FILESDIR}"/${PV}/02_fix-libgo-for-new-glibc.patch
 	use sanitize && eapply "${FILESDIR}"/${PV}/03_fix-sanitizer-for-new-kernel.patch
-	eapply "${FILESDIR}"/${PV}/04_fix-mingw64-runtime-10.patch
-	[[ ${CATEGORY} == "cross-i686-legacy-mingw32" ]] && eapply "${FILESDIR}"/${PV}/05_mingw-enable-c99-in-cpp.patch
 }

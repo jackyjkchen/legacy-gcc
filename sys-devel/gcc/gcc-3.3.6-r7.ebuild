@@ -82,8 +82,8 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/00_gentoo-patchset.patch
 	toolchain_src_prepare
 
-	[[ $(tc-arch) == "mips" ]] && eapply "${FILESDIR}"/${PV}/01_support-mips64.patch
-	[[ ${CATEGORY} == "cross-i686-legacy-mingw32" ]] && eapply "${FILESDIR}"/${PV}/02_support-mingw.patch
+	[[ ${TOOL_PREFIX} != "" ]] && eapply "${FILESDIR}"/${PV}/01_workaround-for-legacy-glibc-in-non-system-dir.patch
+	[[ $(tc-arch) == "mips" ]] && eapply "${FILESDIR}"/${PV}/02_support-mips64.patch
 	[[ $(tc-arch) == "sh" ]] && eapply "${FILESDIR}"/${PV}/03_fix-for-sh4-install.patch
 	[[ $(tc-arch) == "ppc64" || $(tc-arch) == "ppc" ]] && eapply "${FILESDIR}"/${PV}/04_workaround-for-ppc64-ppc.patch
 
@@ -93,8 +93,6 @@ src_prepare() {
 	if use objc && ! use gcj ; then
 		[[ $(tc-arch) != "mips" ]] && eapply "${FILESDIR}"/${PV}/05_libffi-without-libgcj.patch
 	fi
-
-	[[ ${TOOL_PREFIX} != "" ]] && eapply "${FILESDIR}"/${PV}/06_workaround-for-legacy-glibc-in-non-system-dir.patch
 }
 
 src_install() {

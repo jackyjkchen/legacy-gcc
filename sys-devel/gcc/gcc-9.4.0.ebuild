@@ -22,8 +22,3 @@ else
 	CXX="g++-9.4.0"
 fi
 
-src_prepare() {
-	toolchain_src_prepare
-
-	eapply "${FILESDIR}"/${PV}/00_fix-mingw64-runtime-10.patch
-}
