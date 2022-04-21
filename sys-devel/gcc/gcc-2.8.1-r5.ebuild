@@ -8,25 +8,25 @@ inherit toolchain-funcs
 CC="gcc-2.95.3"
 CXX="g++-2.95.3"
 case $(tc-arch) in
-	amd64|x86)
-		TOOL_PREFIX="i686-legacy"
-		CHOST_x86="${TOOL_PREFIX}-linux-gnu"
-		ABI='x86'
-		DEFAULT_ABI='x86'
-		ABI_X86='32'
-		CFLAGS_x86=""
-		;;
-	alpha|m68k)
-		TOOL_PREFIX="$(tc-arch)-legacy"
-		;;
-	ppc)
-		TOOL_PREFIX="powerpc-legacy"
-		;;
-	sparc)
-		TOOL_PREFIX="sparc-legacy"
-		;;
-	*)
-		;;
+amd64|x86)
+	TOOL_PREFIX="i686-legacy"
+	CHOST_x86="${TOOL_PREFIX}-linux-gnu"
+	ABI='x86'
+	DEFAULT_ABI='x86'
+	ABI_X86='32'
+	CFLAGS_x86=""
+	;;
+alpha|m68k)
+	TOOL_PREFIX="$(tc-arch)-legacy"
+	;;
+ppc)
+	TOOL_PREFIX="powerpc-legacy"
+	;;
+sparc)
+	TOOL_PREFIX="sparc-legacy"
+	;;
+*)
+	;;
 esac
 
 CBUILD="${TOOL_PREFIX}-linux-gnu"

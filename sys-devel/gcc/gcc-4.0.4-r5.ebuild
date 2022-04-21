@@ -17,16 +17,16 @@ if is_crosscompile ; then
 	CXX="g++-4.0.4"
 else
 	case $(tc-arch) in
-		sh)
-			CC="gcc-4.1.2"
-			CXX="g++-4.1.2"
-			BDEPEND="sys-devel/gcc:4.1.2"
-			;;
-		*)
-			CC="gcc-4.4.7"
-			CXX="g++-4.4.7"
-			BDEPEND="sys-devel/gcc:4.4.7"
-			;;
+	sh)
+		CC="gcc-4.1.2"
+		CXX="g++-4.1.2"
+		BDEPEND="sys-devel/gcc:4.1.2"
+		;;
+	*)
+		CC="gcc-4.4.7"
+		CXX="g++-4.4.7"
+		BDEPEND="sys-devel/gcc:4.4.7"
+		;;
 	esac
 fi
 

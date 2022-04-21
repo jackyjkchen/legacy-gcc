@@ -7,38 +7,38 @@ inherit toolchain-funcs
 
 if [[ ${CATEGORY} != cross-* ]] ; then
 	case $(tc-arch) in
-		amd64)
-			TOOL_PREFIX="x86_64-legacy"
-			;;
-		x86)
-			TOOL_PREFIX="i686-legacy"
-			;;
-		alpha|m68k)
-			TOOL_PREFIX="$(tc-arch)-legacy"
-			;;
-		mips)
-			CC="gcc-3.4.6 ${CFLAGS_o32}"
-			CXX="g++-3.4.6 ${CFLAGS_o32}"
-			TOOL_PREFIX="${PROFILE_ARCH}-legacy"
-			;;
-		ppc)
-			TOOL_PREFIX="powerpc-legacy"
-			;;
-		ppc64)
-			TOOL_PREFIX="powerpc64-legacy"
-			;;
-		s390)
-			TOOL_PREFIX="s390x-legacy"
-			;;
-		sh)
-			TOOL_PREFIX="sh4-legacy"
-			;;
-		sparc)
-			TOOL_PREFIX="${PROFILE_ARCH}-legacy"
-			;;
-		*)
-			TOOL_PREFIX=""
-			;;
+	amd64)
+		TOOL_PREFIX="x86_64-legacy"
+		;;
+	x86)
+		TOOL_PREFIX="i686-legacy"
+		;;
+	alpha|m68k)
+		TOOL_PREFIX="$(tc-arch)-legacy"
+		;;
+	mips)
+		CC="gcc-3.4.6 ${CFLAGS_o32}"
+		CXX="g++-3.4.6 ${CFLAGS_o32}"
+		TOOL_PREFIX="${PROFILE_ARCH}-legacy"
+		;;
+	ppc)
+		TOOL_PREFIX="powerpc-legacy"
+		;;
+	ppc64)
+		TOOL_PREFIX="powerpc64-legacy"
+		;;
+	s390)
+		TOOL_PREFIX="s390x-legacy"
+		;;
+	sh)
+		TOOL_PREFIX="sh4-legacy"
+		;;
+	sparc)
+		TOOL_PREFIX="${PROFILE_ARCH}-legacy"
+		;;
+	*)
+		TOOL_PREFIX=""
+		;;
 	esac
 
 	if [[ ${TOOL_PREFIX} != "" ]]; then

@@ -8,36 +8,36 @@ inherit toolchain-funcs
 if [[ ${CATEGORY} != cross-* ]] ; then
 	STAGE1_GCC="sys-devel/gcc:4.4.7"
 	case $(tc-arch) in
-		amd64)
-			TOOL_PREFIX="x86_64-legacy"
-			;;
-		x86)
-			TOOL_PREFIX="i686-legacy"
-			;;
-		alpha|m68k)
-			TOOL_PREFIX="$(tc-arch)-legacy"
-			;;
-		mips|sparc)
-			TOOL_PREFIX="${PROFILE_ARCH}-legacy"
-			;;
-		ppc)
-			TOOL_PREFIX="powerpc-legacy"
-			;;
-		ppc64)
-			TOOL_PREFIX="powerpc64-legacy"
-			;;
-		s390)
-			TOOL_PREFIX="s390x-legacy"
-			;;
-		sh)
-			CC="gcc-4.1.2"
-			CXX="g++-4.1.2"
-			STAGE1_GCC="sys-devel/gcc:4.1.2"
-			TOOL_PREFIX="sh4-legacy"
-			;;
-		*)
-			TOOL_PREFIX=""
-			;;
+	amd64)
+		TOOL_PREFIX="x86_64-legacy"
+		;;
+	x86)
+		TOOL_PREFIX="i686-legacy"
+		;;
+	alpha|m68k)
+		TOOL_PREFIX="$(tc-arch)-legacy"
+		;;
+	mips|sparc)
+		TOOL_PREFIX="${PROFILE_ARCH}-legacy"
+		;;
+	ppc)
+		TOOL_PREFIX="powerpc-legacy"
+		;;
+	ppc64)
+		TOOL_PREFIX="powerpc64-legacy"
+		;;
+	s390)
+		TOOL_PREFIX="s390x-legacy"
+		;;
+	sh)
+		CC="gcc-4.1.2"
+		CXX="g++-4.1.2"
+		STAGE1_GCC="sys-devel/gcc:4.1.2"
+		TOOL_PREFIX="sh4-legacy"
+		;;
+	*)
+		TOOL_PREFIX=""
+		;;
 	esac
 
 	if [[ ${TOOL_PREFIX} != "" ]]; then

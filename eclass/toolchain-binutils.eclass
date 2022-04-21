@@ -375,26 +375,6 @@ toolchain-binutils_src_install() {
 	EOF
 	newins "${T}"/env.d ${CTARGET}-${BVER}
 
-	# Handle documentation
-	if ! is_cross ; then
-		cd "${S}"
-		dodoc README
-		docinto bfd
-		dodoc bfd/ChangeLog* bfd/README bfd/PORTING bfd/TODO
-		docinto binutils
-		dodoc binutils/ChangeLog binutils/NEWS binutils/README
-		docinto gas
-		dodoc gas/ChangeLog* gas/CONTRIBUTORS gas/NEWS gas/README*
-		docinto gprof
-		dodoc gprof/ChangeLog* gprof/TEST gprof/TODO gprof/bbconv.pl
-		docinto ld
-		dodoc ld/ChangeLog* ld/README ld/NEWS ld/TODO
-		docinto libiberty
-		dodoc libiberty/ChangeLog* libiberty/README
-		docinto opcodes
-		dodoc opcodes/ChangeLog*
-	fi
-
 	# Remove shared info pages
 	rm -f "${ED}"/${DATAPATH}/info/{dir,configure.info,standards.info}
 
