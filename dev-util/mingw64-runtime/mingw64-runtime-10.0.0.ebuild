@@ -26,10 +26,7 @@ LICENSE="BSD"
 SLOT="0"
 KEYWORDS="amd64 x86"
 # USE=libraries needs working stage2 compiler: bug #665512
-IUSE="headers-only idl libraries tools"
-if [[ ${CATEGORY} == cross-x86_64-* ]] ; then
-	IUSE+=" multilib"
-fi
+IUSE="headers-only idl libraries tools multilib"
 RESTRICT="strip"
 
 S="${WORKDIR}/mingw-w64-v${PV}"
@@ -58,7 +55,7 @@ crt_use_with() {
 	just_headers && echo --without-$2 || use_with "$@"
 }
 is_multilib() {
-	in_iuse multilib && use multilib
+	use multilib
 }
 
 pkg_setup() {
