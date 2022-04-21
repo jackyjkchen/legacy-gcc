@@ -17,7 +17,7 @@ SRC_URI="https://mirror.koddos.net/djgpp/current/v2/djcrx205.zip"
 
 LICENSE=""
 SLOT="0"
-KEYWORDS="amd64 x86"
+KEYWORDS="x86"
 RESTRICT="strip"
 
 DEPEND=""
