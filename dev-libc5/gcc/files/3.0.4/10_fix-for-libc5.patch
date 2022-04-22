@@ -1,0 +1,131 @@
+diff --git a/configure b/configure
+index e2286aa..b2b501a 100755
+--- a/configure
++++ b/configure
+@@ -296,7 +296,7 @@ do
+ 	--norecursion | --no*)
+ 		norecursion=yes
+ 		;;
+-	--ol*)
++	--oldincludedir | --ol*)
+ 		oldincludedir=$optarg
+ 		diroptions="$diroptions --oldincludedir=$optarg"
+ 		;;
+diff --git a/gcc/Makefile.in b/gcc/Makefile.in
+index ac1920f..4aba5a6 100644
+--- a/gcc/Makefile.in
++++ b/gcc/Makefile.in
+@@ -1326,7 +1326,7 @@ c-dump.o: c-dump.c $(CONFIG_H) system.h $(TREE_H) $(C_TREE_H) \
+ # Language-independent files.
+ 
+ DRIVER_DEFINES = \
+-  -DSTANDARD_STARTFILE_PREFIX=\"$(unlibsubdir)/\" \
++  -DSTANDARD_STARTFILE_PREFIX=\"$(build_tooldir)/lib/\" \
+   -DSTANDARD_EXEC_PREFIX=\"$(libdir)/gcc-lib/\" \
+   -DDEFAULT_TARGET_VERSION=\"$(version)\" \
+   -DDEFAULT_TARGET_MACHINE=\"$(target_alias)\" \
+@@ -2165,8 +2165,8 @@ specs.ready: specs
+ 
+ FIXINCSRCDIR=$(srcdir)/fixinc
+ fixinc.sh: $(FIXINCSRCDIR)/mkfixinc.sh $(FIXINCSRCDIR)/fixincl.c \
+-	$(FIXINCSRCDIR)/procopen.c $(FIXINCSRCDIR)/gnu-regex.c \
+-	$(FIXINCSRCDIR)/server.c $(FIXINCSRCDIR)/gnu-regex.h \
++	$(FIXINCSRCDIR)/procopen.c \
++	$(FIXINCSRCDIR)/server.c \
+ 	$(FIXINCSRCDIR)/server.h $(FIXINCSRCDIR)/inclhack.def specs.ready
+ 	(MAKE="$(MAKE)"; srcdir=`cd $(srcdir)/fixinc && pwd` ; \
+ 	CC="$(HOST_CC)"; CFLAGS="$(HOST_CFLAGS)"; LDFLAGS="$(HOST_LDFLAGS)"; \
+diff --git a/gcc/config/i386/linux.h b/gcc/config/i386/linux.h
+index 839bccc..2ed080c 100644
+--- a/gcc/config/i386/linux.h
++++ b/gcc/config/i386/linux.h
+@@ -233,9 +233,13 @@ Boston, MA 02111-1307, USA.  */
+    state data appropriately.  See unwind-dw2.c for the structs.  */
+ 
+ #ifdef IN_LIBGCC2
++/* There's no sys/ucontext.h for some (all?) libc1, so no
++   signal-turned-exceptions for them.  There's also no configure-run for
++   the target, so we can't check on (e.g.) HAVE_SYS_UCONTEXT_H.  Using the
++   target libc1 macro should be enough.  */
++#if !(defined (USE_GNULIBC_1) || (__GLIBC__ == 2 && __GLIBC_MINOR__ == 0))
+ #include <signal.h>
+ #include <sys/ucontext.h>
+-#endif
+ 
+ #define MD_FALLBACK_FRAME_STATE_FOR(CONTEXT, FS, SUCCESS)		\
+   do {									\
+@@ -290,3 +294,5 @@ Boston, MA 02111-1307, USA.  */
+     (FS)->retaddr_column = 8;						\
+     goto SUCCESS;							\
+   } while (0)
++#endif /* not USE_GNULIBC_1 */
++#endif /* IN_LIBGCC2 */
+diff --git a/gcc/cppdefault.h b/gcc/cppdefault.h
+index db7063c..c96a407 100644
+--- a/gcc/cppdefault.h
++++ b/gcc/cppdefault.h
+@@ -22,14 +22,6 @@ Foundation, 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+ #ifndef __GCC_CPPDEFAULT__
+ #define __GCC_CPPDEFAULT__
+ 
+-/* This header contains declarations and/or #defines for all the
+-   hard-wired defaults in cpp.  Note it's used by both cpplib and
+-   tradcpp.  */
+-
+-#ifndef STANDARD_INCLUDE_DIR
+-#define STANDARD_INCLUDE_DIR "/usr/include"
+-#endif
+-
+ #ifndef STANDARD_INCLUDE_COMPONENT
+ #define STANDARD_INCLUDE_COMPONENT 0
+ #endif
+diff --git a/gcc/fixinc/Makefile.in b/gcc/fixinc/Makefile.in
+index d0dfb0c..9f4b857 100644
+--- a/gcc/fixinc/Makefile.in
++++ b/gcc/fixinc/Makefile.in
+@@ -68,12 +68,12 @@ INCLUDES = -I. -I.. -I$(srcdir) -I$(srcdir)/.. \
+ LIBERTY = ../../libiberty/libiberty.a
+ 
+ ALLOBJ = fixincl.o fixtests.o fixfixes.o server.o procopen.o \
+-      gnu-regex.o fixlib.o
++      fixlib.o
+ 
+-TESTOBJ = fixincl.o fixlib.o fixtests.o gnu-regex.o
+-FIXOBJ  = fixfixes.o fixlib.o gnu-regex.o
++TESTOBJ = fixincl.o fixlib.o fixtests.o
++FIXOBJ  = fixfixes.o fixlib.o
+ 
+-HDR = server.h gnu-regex.h fixlib.h machname.h
++HDR = server.h fixlib.h machname.h
+ FI  = fixincl@build_exeext@
+ AF  = applyfix@build_exeext@
+ 
+@@ -100,7 +100,6 @@ fixtests.o  : fixtests.c
+ fixfixes.o  : fixfixes.c $(srcdir)/fixincl.x
+ server.o    : server.c
+ procopen.o  : procopen.c
+-gnu-regex.o : gnu-regex.c
+ fixlib.o    : fixlib.c
+ 
+ #  'machname.h' is built in the build directory.
+diff --git a/include/libiberty.h b/include/libiberty.h
+index bad5587..50ee00f 100644
+--- a/include/libiberty.h
++++ b/include/libiberty.h
+@@ -202,12 +202,6 @@ extern int pwait PARAMS ((int, int *, int));
+ 
+ extern int asprintf PARAMS ((char **, const char *, ...)) ATTRIBUTE_PRINTF_2;
+ 
+-/* Like vsprintf but provides a pointer to malloc'd storage, which
+-   must be freed by the caller.  */
+-
+-extern int vasprintf PARAMS ((char **, const char *, va_list))
+-  ATTRIBUTE_PRINTF(2,0);
+-
+ #define ARRAY_SIZE(a) (sizeof (a) / sizeof ((a)[0]))
+ 
+ #ifdef __cplusplus
+diff --git a/libstdc++-v3/libmath/signbitl.c b/libstdc++-v3/libmath/__signbitl.c
+similarity index 100%
+rename from libstdc++-v3/libmath/signbitl.c
+rename to libstdc++-v3/libmath/__signbitl.c
