@@ -129,7 +129,7 @@ tc_has_feature() {
 	has "$1" "${TC_FEATURES[@]}"
 }
 
-tc_version_is_at_least 2.1 && IUSE+=" cxx"
+tc_version_is_at_least 2.1 && IUSE+=" +cxx"
 tc_version_is_at_least 2.1 && IUSE+=" objc"
 tc_version_is_between 2.9 4.0 && IUSE+=" f77"
 
@@ -415,18 +415,9 @@ toolchain-oldlibc_src_configure() {
 
 	confgcc+=( --enable-threads=single --disable-multilib --disable-shared)
 
-	# __cxa_atexit is "essential for fully standards-compliant handling of
-	# destructors", but apparently requires glibc.
-	case ${CTARGET} in
-	*-gnu*)
-		confgcc+=(
-			--enable-__cxa_atexit
-			--enable-clocale=gnu
-		)
-		;;
-	*)
-		;;
-	esac
+	confgcc+=(
+		--enable-clocale=generic
+	)
 
 	### arch options
 
