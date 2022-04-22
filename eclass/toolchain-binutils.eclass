@@ -22,6 +22,28 @@ esac
 DESCRIPTION="Tools necessary to build programs"
 HOMEPAGE="https://sourceware.org/binutils/"
 
+if [[ ${CATEGORY} != cross-* ]] ; then
+	case ${CATEGORY} in
+	dev-libc5)
+		TOOL_SUFFIX="linux-gnulibc1"
+		case $(tc-arch) in
+		amd64|x86)
+			TOOL_PREFIX="i586-legacy"
+			;;
+		*)
+			;;
+		esac
+		;;
+	*)
+		;;
+	esac
+
+	if [[ ${TOOL_PREFIX} != "" ]]; then
+		OLDLIBC="yes"
+		CTARGET="${TOOL_PREFIX}-${TOOL_SUFFIX}"
+	fi
+fi
+
 #
 # The cross-compile logic
 #
@@ -33,6 +55,7 @@ if [[ ${CTARGET} == ${CHOST} ]] ; then
 fi
 is_djgpp() { [[ ${CTARGET} == *-msdosdjgpp* ]] ; }
 is_cross() { [[ ${CHOST} != ${CTARGET} ]] ; }
+is_oldlibc() { [[ ${OLDLIBC} == "yes" ]] ; }
 
 case ${PV} in
 	9999)
@@ -80,7 +103,7 @@ DEPEND="${RDEPEND}
 "
 RESTRICT="!test? ( test )"
 
-if is_cross ; then
+if is_cross && ! is_oldlibc ; then
 	# The build assumes the host has libiberty and such when cross-compiling
 	# its build tools.  We should probably make binutils itself build a local
 	# copy to use, but until then, be lazy.
@@ -168,7 +191,7 @@ toolchain-binutils_src_configure() {
 	LIBPATH=/usr/$(get_libdir)/binutils/${CTARGET}/${BVER}
 	INCPATH=${LIBPATH}/include
 	DATAPATH=/usr/share/binutils-data/${CTARGET}/${BVER}
-	if is_cross ; then
+	if is_cross && ! is_oldlibc ; then
 		TOOLPATH=/usr/${CHOST}/${CTARGET}
 	else
 		TOOLPATH=/usr/${CTARGET}
@@ -343,7 +366,7 @@ toolchain-binutils_src_install() {
 			mv ${x} ${x/${CTARGET}-}
 		done
 
-		if [[ -d ${ED}/usr/${CHOST}/${CTARGET} ]] ; then
+		if [[ -d ${ED}/usr/${CHOST}/${CTARGET} ]] && ! is_oldlibc ; then
 			mv "${ED}"/usr/${CHOST}/${CTARGET}/include "${ED}"/${INCPATH}
 			mv "${ED}"/usr/${CHOST}/${CTARGET}/lib/* "${ED}"/${LIBPATH}/
 			rm -r "${ED}"/usr/${CHOST}/{include,lib}

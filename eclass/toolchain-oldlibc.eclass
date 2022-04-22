@@ -380,21 +380,16 @@ toolchain-oldlibc_src_configure() {
 		--enable-obsolete
 	)
 
-	if [[ "${STAGE1}" == "yes" ]] ; then
-		confgcc+=( 
-			--without-headers
-		)
-	fi
-
 	### language options
 
 	local GCC_LANG="c"
-	is_cxx && GCC_LANG+=",c++"
-	if is_objc ; then
-		GCC_LANG+=",objc"
+	if [[ "${STAGE1}" != "yes" ]] ; then
+		is_cxx && GCC_LANG+=",c++"
+		if is_objc ; then
+			GCC_LANG+=",objc"
+		fi
+		is_f77 && GCC_LANG+=",f77"
 	fi
-
-	is_f77 && GCC_LANG+=",f77"
 
 	tc_version_is_at_least 2.9 && confgcc+=( --enable-languages=${GCC_LANG} )
 
