@@ -1,0 +1,94 @@
+diff --git a/libio/Makefile.in b/libio/Makefile.in
+index c78639a..9b11abf 100644
+--- a/libio/Makefile.in
++++ b/libio/Makefile.in
+@@ -52,7 +52,7 @@ IOSTREAM_OBJECTS = builtinbuf.o filebuf.o fstream.o \
+ # These files define _IO_read etc, which are just wrappers for read(2) etc.
+ # They need to be changed to use name-space-clean (e.g. __read) versions
+ # for each specific libc.
+-OSPRIM_OBJECTS = ioprims.o iostrerror.o cleanup.o
++OSPRIM_OBJECTS = ioprims.o iostrerror.o
+ 
+ LIBIOSTREAM_OBJECTS = $(IO_OBJECTS) $(IOSTREAM_OBJECTS) $(OSPRIM_OBJECTS)
+ LIBIO_OBJECTS = $(IO_OBJECTS) $(STDIO_WRAP_OBJECTS) $(OSPRIM_OBJECTS) stdfiles.o
+diff --git a/libio/config/linux.mt b/libio/config/linux.mt
+index 25d29c5..a3bcd5b 100644
+--- a/libio/config/linux.mt
++++ b/libio/config/linux.mt
+@@ -6,9 +6,9 @@
+ # things just won't build with the bottom section uncommented.
+ 
+ # Comment this out to avoid including the stdio functions in libiostream.a:
+-LIBIOSTREAM_OBJECTS = $(IO_OBJECTS) $(IOSTREAM_OBJECTS) $(STDIO_WRAP_OBJECTS) $(OSPRIM_OBJECTS)
+-LIBIOSTREAM_DEP = $(LIBIOSTREAM_OBJECTS) stdio.list
+-LIBIOSTREAM_USE = $(LIBIOSTREAM_OBJECTS) `cat stdio.list`
++# LIBIOSTREAM_OBJECTS = $(IO_OBJECTS) $(IOSTREAM_OBJECTS) $(STDIO_WRAP_OBJECTS) $(OSPRIM_OBJECTS)
++# LIBIOSTREAM_DEP = $(LIBIOSTREAM_OBJECTS) stdio.list
++# LIBIOSTREAM_USE = $(LIBIOSTREAM_OBJECTS) `cat stdio.list`
+ 
+ # Comment the above and uncomment the below to use the code in the Linux libc:
+ # We have _G_config.h in /usr/include.
+@@ -16,7 +16,7 @@ LIBIOSTREAM_USE = $(LIBIOSTREAM_OBJECTS) `cat stdio.list`
+ 
+ # We have those in libc.a.
+ # IO_OBJECTS=
+-# STDIO_WRAP_OBJECTS=
++STDIO_WRAP_OBJECTS=
+ # OSPRIM_OBJECTS=
+ 
+ # We have the rest in /usr/include.
+diff --git a/libio/filedoalloc.c b/libio/filedoalloc.c
+index f838bb3..b5672b8 100644
+--- a/libio/filedoalloc.c
++++ b/libio/filedoalloc.c
+@@ -67,12 +67,14 @@ DEFUN(_IO_file_doallocate, (fp),
+   register char *p;
+   struct stat st;
+ 
++#if !defined(_LIBC) && !defined(__linux__)
+   /* If _IO_cleanup_registration_needed is non-zero, we should call the
+      function it points to.  This is to make sure _IO_cleanup gets called
+      on exit.  We call it from _IO_file_doallocate, since that is likely
+      to get called by any program that does buffered I/O. */
+   if (_IO_cleanup_registration_needed)
+     (*_IO_cleanup_registration_needed)();
++#endif
+   
+   if (fp->_fileno < 0 || _IO_SYSSTAT (fp, &st) < 0)
+     {
+diff --git a/libio/gen-params b/libio/gen-params
+index b6e51b0..35b0f13 100755
+--- a/libio/gen-params
++++ b/libio/gen-params
+@@ -313,7 +313,6 @@ done
+ cat <<!EOF!
+ typedef ${clock_t-int /* default */} ${macro_prefix}clock_t;
+ typedef ${dev_t-int /* default */} ${macro_prefix}dev_t;
+-typedef ${fpos_t-long /* default */} ${macro_prefix}fpos_t;
+ typedef ${gid_t-int /* default */} ${macro_prefix}gid_t;
+ typedef ${ino_t-int /* default */} ${macro_prefix}ino_t;
+ typedef ${mode_t-int /* default */} ${macro_prefix}mode_t;
+@@ -324,7 +323,6 @@ typedef ${pid_t-int /* default */} ${macro_prefix}pid_t;
+ #define __PTRDIFF_TYPE__ ${ptrdiff_t-long int /* default */}
+ #endif
+ typedef __PTRDIFF_TYPE__ ${macro_prefix}ptrdiff_t;
+-typedef ${sigset_t-int /* default */} ${macro_prefix}sigset_t;
+ #ifndef __SIZE_TYPE__
+ #define __SIZE_TYPE__ ${size_t-unsigned long /* default */}
+ #endif
+diff --git a/libio/libio.h b/libio/libio.h
+index 84a8217..b2b6367 100644
+--- a/libio/libio.h
++++ b/libio/libio.h
+@@ -28,8 +28,9 @@ the executable file might be covered by the GNU General Public License. */
+ #define _IO_STDIO_H
+ 
+ #include <_G_config.h>
+-#define _IO_pos_t _G_fpos_t /* obsolete */
+-#define _IO_fpos_t _G_fpos_t
++#define _G_fpos_t _G_off_t
++#define _IO_pos_t _G_off_t
++#define _IO_fpos_t _G_off_t
+ #define _IO_size_t _G_size_t
+ #define _IO_ssize_t _G_ssize_t
+ #define _IO_off_t _G_off_t
