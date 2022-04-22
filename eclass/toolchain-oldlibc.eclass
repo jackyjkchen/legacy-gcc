@@ -695,10 +695,10 @@ toolchain-oldlibc_src_install() {
 
 	${CTARGET}-strip -d ${D}${LIBPATH}/{*.a,*.o,32/*.a,32/*.o,n32/*.o,n32/*.a}
 	${CTARGET}-strip -s ${D}${LIBPATH}/{*.so*,32/*.so*,n32/*.so*,*.dll,32/*.dll}
-	${CHOST}-strip -s ${D}${BINPATH}/*
-	${CHOST}-strip -s ${D}${HOSTLIBPATH}/*
-	${CHOST}-strip -s ${D}${PREFIX}/libexec/gcc/${CTARGET}/${GCC_CONFIG_VER}/{*,plugin/*}
-	${CHOST}-strip -s ${D}${LIBPATH}/plugin/*.so*
+	${CHOST}-strip -s -N __gentoo_check_ldflags__ -R .comment -R .GCC.command.line -R .note.gnu.gold-version ${D}${BINPATH}/*
+	${CHOST}-strip -s -N __gentoo_check_ldflags__ -R .comment -R .GCC.command.line -R .note.gnu.gold-version ${D}${HOSTLIBPATH}/*
+	${CHOST}-strip -s -N __gentoo_check_ldflags__ -R .comment -R .GCC.command.line -R .note.gnu.gold-version ${D}${PREFIX}/libexec/gcc/${CTARGET}/${GCC_CONFIG_VER}/{*,plugin/*}
+	${CHOST}-strip -s -N __gentoo_check_ldflags__ -R .comment -R .GCC.command.line -R .note.gnu.gold-version ${D}${LIBPATH}/plugin/*.so*
 
 	cd "${S}" || die
 	rm -rf "${ED}"/usr/share/{man,info}
