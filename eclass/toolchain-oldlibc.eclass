@@ -129,31 +129,9 @@ tc_has_feature() {
 	has "$1" "${TC_FEATURES[@]}"
 }
 
-if [[ ${PN} != "kgcc64" && ${PN} != gcc-* ]] ; then
-	case $(tc-arch) in
-	alpha)
-		tc_version_is_at_least 2.9 && IUSE+=" +cxx"
-		tc_version_is_at_least 2.9 && IUSE+=" objc"
-		;;
-	ppc64)
-		tc_version_is_at_least 3.2 && IUSE+=" +cxx"
-		tc_version_is_at_least 3.1 && IUSE+=" objc"
-		;;
-	sparc)
-		tc_version_is_at_least 2.9 && IUSE+=" +cxx"
-		tc_version_is_at_least 2.8 && IUSE+=" objc"
-		;;
-	m68k)
-		tc_version_is_at_least 2.1 && IUSE+=" +cxx"
-		tc_version_is_at_least 2.4 && IUSE+=" objc"
-		;;
-	*)
-		tc_version_is_at_least 2.1 && IUSE+=" +cxx"
-		tc_version_is_at_least 2.1 && IUSE+=" objc"
-		;;
-	esac
-	tc_version_is_between 2.9 4.0 && IUSE+=" f77"
-fi
+tc_version_is_at_least 2.1 && IUSE+=" cxx"
+tc_version_is_at_least 2.1 && IUSE+=" objc"
+tc_version_is_between 2.9 4.0 && IUSE+=" f77"
 
 if [[ ${PN} == "egcs" ]] ; then
 	SLOT="${PV}"
