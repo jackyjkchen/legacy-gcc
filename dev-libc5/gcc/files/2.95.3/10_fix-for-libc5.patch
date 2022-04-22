@@ -1,0 +1,173 @@
+diff --git a/configure b/configure
+index 2b3e482..baa0239 100755
+--- a/configure
++++ b/configure
+@@ -289,7 +289,7 @@ do
+ 	--norecursion | --no*)
+ 		norecursion=yes
+ 		;;
+-	--ol*)
++	--oldincludedir | --ol*)
+ 		oldincludedir=$optarg
+ 		diroptions="$diroptions --oldincludedir=$optarg"
+ 		;;
+diff --git a/gcc/Makefile.in b/gcc/Makefile.in
+index c8cc857..35e074a 100644
+--- a/gcc/Makefile.in
++++ b/gcc/Makefile.in
+@@ -1408,7 +1408,7 @@ c-common.o : c-common.c $(CONFIG_H) system.h $(TREE_H) c-tree.h c-lex.h \
+ # Language-independent files.
+ 
+ DRIVER_DEFINES = \
+-  -DSTANDARD_STARTFILE_PREFIX=\"$(libdir)/\" \
++  -DSTANDARD_STARTFILE_PREFIX=\"$(build_tooldir)/lib/\" \
+   -DSTANDARD_EXEC_PREFIX=\"$(libdir)/gcc-lib/\" \
+   -DDEFAULT_TARGET_VERSION=\"$(version)\" \
+   -DDEFAULT_TARGET_MACHINE=\"$(target_alias)\" \
+@@ -2130,8 +2130,8 @@ stmp-headers:
+ 
+ FIXINCSRCDIR=$(srcdir)/fixinc
+ fixinc.sh: $(FIXINCSRCDIR)/mkfixinc.sh $(FIXINCSRCDIR)/fixincl.c \
+-	$(FIXINCSRCDIR)/procopen.c $(FIXINCSRCDIR)/gnu-regex.c \
+-	$(FIXINCSRCDIR)/server.c $(FIXINCSRCDIR)/gnu-regex.h \
++	$(FIXINCSRCDIR)/procopen.c \
++	$(FIXINCSRCDIR)/server.c  \
+ 	$(FIXINCSRCDIR)/server.h $(FIXINCSRCDIR)/inclhack.def 
+ 	MAKE="$(MAKE)"; srcdir=`cd $(srcdir)/fixinc; pwd` ; \
+ 	export MAKE srcdir ; \
+diff --git a/gcc/cccp.c b/gcc/cccp.c
+index 455c239..d0f8e92 100644
+--- a/gcc/cccp.c
++++ b/gcc/cccp.c
+@@ -43,10 +43,6 @@ typedef unsigned char U_CHAR;
+ #define GET_ENV_PATH_LIST(VAR,NAME)	do { (VAR) = getenv (NAME); } while (0)
+ #endif
+ 
+-#ifndef STANDARD_INCLUDE_DIR
+-# define STANDARD_INCLUDE_DIR "/usr/include"
+-#endif
+-
+ /* By default, colon separates directories in a path.  */
+ #ifndef PATH_SEPARATOR
+ # define PATH_SEPARATOR ':'
+@@ -424,7 +420,6 @@ static struct default_include {
+ #ifndef STANDARD_INCLUDE_COMPONENT
+ #define STANDARD_INCLUDE_COMPONENT 0
+ #endif
+-    { STANDARD_INCLUDE_DIR, STANDARD_INCLUDE_COMPONENT, 0, 0, 0 },
+ #endif /* not CROSS_COMPILE */
+     { 0, 0, 0, 0, 0 }
+     };
+diff --git a/gcc/cppinit.c b/gcc/cppinit.c
+index 453cc58..7ae85e8 100644
+--- a/gcc/cppinit.c
++++ b/gcc/cppinit.c
+@@ -43,10 +43,6 @@ extern char *version_string;
+ #define PATH_SEPARATOR ':'
+ #endif
+ 
+-#ifndef STANDARD_INCLUDE_DIR
+-#define STANDARD_INCLUDE_DIR "/usr/include"
+-#endif
+-
+ /* We let tm.h override the types used here, to handle trivial differences
+    such as the choice of unsigned int or long unsigned int for size_t.
+    When machines start needing nontrivial differences in the size type,
+@@ -161,7 +157,6 @@ include_defaults_array[]
+ #ifndef STANDARD_INCLUDE_COMPONENT
+ #define STANDARD_INCLUDE_COMPONENT 0
+ #endif
+-    { STANDARD_INCLUDE_DIR, STANDARD_INCLUDE_COMPONENT, 0, 0 },
+ #endif /* not CROSS_COMPILE */
+     { 0, 0, 0, 0 }
+   };
+diff --git a/gcc/eh-common.h b/gcc/eh-common.h
+index c0ff7e7..2453398 100644
+--- a/gcc/eh-common.h
++++ b/gcc/eh-common.h
+@@ -40,6 +40,14 @@ Foundation, 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+    the location of 'dynamic_handler_chain'. If its location is changed, 
+    that routine must be modified as well. */
+ 
++#ifndef PARAMS
++# if defined __GNUC__ || (defined __STDC__ && __STDC__)
++#  define PARAMS(args) args
++# else
++#  define PARAMS(args) ()
++# endif  /* GCC.  */
++#endif  /* Not PARAMS.  */
++
+ struct eh_context
+ {
+   void *handler_label;
+diff --git a/gcc/fixinc/Makefile.in b/gcc/fixinc/Makefile.in
+index 9182337..cd192a3 100644
+--- a/gcc/fixinc/Makefile.in
++++ b/gcc/fixinc/Makefile.in
+@@ -58,8 +58,8 @@ INCLUDES = -I. -I.. -I$(srcdir) -I$(srcdir)/.. -I$(srcdir)/../config -I$(srcdir)
+ ##
+ ## # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+ 
+-OBJ = fixincl.o server.o gnu-regex.o procopen.o
+-HDR = server.h gnu-regex.h
++OBJ = fixincl.o server.o procopen.o
++HDR = server.h
+ LIBERTY = ../../libiberty/libiberty.a
+ 
+ SH_TARGET  = inclhack.sh fixincl.sh
+@@ -80,10 +80,6 @@ fixincl: $(OBJ)
+ 	rm -f $@ ; (echo "#! /bin/sh" ; echo exit 1 ) > $@ ; \
+ 	chmod 777 $@ ; fi
+ 
+-gnu-regex.o: gnu-regex.c
+-	-$(CC) $(CFLAGS) $(FIXINC_DEFS) $(INCLUDES) -DREGEX_MALLOC \
+-		-c $(srcdir)/gnu-regex.c
+-
+ fixincl.o : fixincl.x fixincl.c
+ server.o : server.c server.h
+ procopen.o : procopen.c server.h
+diff --git a/gcc/machmode.h b/gcc/machmode.h
+index 5814007..16af55a 100644
+--- a/gcc/machmode.h
++++ b/gcc/machmode.h
+@@ -21,6 +21,14 @@ Boston, MA 02111-1307, USA.  */
+ #ifndef HAVE_MACHINE_MODES
+ #define HAVE_MACHINE_MODES
+ 
++#ifndef PARAMS
++# if defined __GNUC__ || (defined __STDC__ && __STDC__)
++#  define PARAMS(args) args
++# else
++#  define PARAMS(args) ()
++# endif  /* GCC.  */
++#endif  /* Not PARAMS.  */
++
+ /* Strictly speaking, this isn't the proper place to include these definitions,
+    but this file is included by every GCC file. */
+ 
+diff --git a/gcc/protoize.c b/gcc/protoize.c
+index 7e9205c..4a03cad 100644
+--- a/gcc/protoize.c
++++ b/gcc/protoize.c
+@@ -226,13 +226,6 @@ static const unexpansion unexpansions[] = {
+ 
+ static const int hash_mask = (HASH_TABLE_SIZE - 1);
+ 
+-/* Make a table of default system include directories
+-   just as it is done in cccp.c.  */
+-
+-#ifndef STANDARD_INCLUDE_DIR
+-#define STANDARD_INCLUDE_DIR "/usr/include"
+-#endif
+-
+ #ifndef LOCAL_INCLUDE_DIR
+ #define LOCAL_INCLUDE_DIR "/usr/local/include"
+ #endif
+@@ -269,7 +262,6 @@ struct default_include { const char *fname;
+ #ifdef SYSTEM_INCLUDE_DIR
+     { SYSTEM_INCLUDE_DIR, 0, 0, 0 },
+ #endif
+-    { STANDARD_INCLUDE_DIR, 0, 0, 0},
+ #endif /* not CROSS_COMPILE */
+     { 0, 0, 0, 0}
+     };
