@@ -388,6 +388,7 @@ toolchain-oldlibc_src_configure() {
 		confgcc+=( 
 			--bindir="${BINPATH}"
 			--includedir="${INCLUDEPATH}"
+			--oldincludedir="${INCLUDEPATH}"
 			--datadir="${DATAPATH}"
 			--mandir="${DATAPATH}/man"
 			--infodir="${DATAPATH}/info"

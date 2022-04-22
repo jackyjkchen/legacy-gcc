@@ -1,5 +1,5 @@
 diff --git a/configure b/configure
-index 808f1a9..3275f71 100755
+index 8f5fb3a..6cf3a38 100755
 --- a/configure
 +++ b/configure
 @@ -296,7 +296,7 @@ do
@@ -12,10 +12,19 @@ index 808f1a9..3275f71 100755
  		diroptions="$diroptions --oldincludedir=$optarg"
  		;;
 diff --git a/gcc/Makefile.in b/gcc/Makefile.in
-index b44777c..127efe6 100644
+index f407f7c..e1198d9 100644
 --- a/gcc/Makefile.in
 +++ b/gcc/Makefile.in
-@@ -2384,8 +2384,8 @@ specs.ready: specs
+@@ -1223,7 +1223,7 @@ c-semantics.o : c-semantics.c $(CONFIG_H) $(SYSTEM_H) $(TREE_H) $(C_TREE_H) \
+ # Language-independent files.
+ 
+ DRIVER_DEFINES = \
+-  -DSTANDARD_STARTFILE_PREFIX=\"$(unlibsubdir)/\" \
++  -DSTANDARD_STARTFILE_PREFIX=\"$(build_tooldir)/lib/\" \
+   -DSTANDARD_EXEC_PREFIX=\"$(libdir)/gcc-lib/\" \
+   -DSTANDARD_LIBEXEC_PREFIX=\"$(libexecdir)/gcc/\" \
+   -DDEFAULT_TARGET_VERSION=\"$(version)\" \
+@@ -2131,8 +2131,8 @@ specs.ready: specs
  
  FIXINCSRCDIR=$(srcdir)/fixinc
  fixinc.sh: $(FIXINCSRCDIR)/mkfixinc.sh $(FIXINCSRCDIR)/fixincl.c \
@@ -24,23 +33,36 @@ index b44777c..127efe6 100644
 +	$(FIXINCSRCDIR)/procopen.c \
 +	$(FIXINCSRCDIR)/server.c \
  	$(FIXINCSRCDIR)/server.h $(FIXINCSRCDIR)/inclhack.def specs.ready
- 	(MAKE="$(MAKE)"; srcdir=`cd $(srcdir)/fixinc && ${PWD_COMMAND}` ; \
+ 	(MAKE="$(MAKE)"; srcdir=`cd $(srcdir)/fixinc && pwd` ; \
  	CC="$(HOST_CC)"; CFLAGS="$(HOST_CFLAGS)"; LDFLAGS="$(HOST_LDFLAGS)"; \
 diff --git a/gcc/config/i386/linux.h b/gcc/config/i386/linux.h
-index 03cb486..e50a997 100644
+index 06cd7f9..9866aea 100644
 --- a/gcc/config/i386/linux.h
 +++ b/gcc/config/i386/linux.h
-@@ -236,7 +236,7 @@ Boston, MA 02111-1307, USA.  */
-    signal-turned-exceptions for them.  There's also no configure-run for
-    the target, so we can't check on (e.g.) HAVE_SYS_UCONTEXT_H.  Using the
-    target libc1 macro should be enough.  */
--#ifndef USE_GNULIBC_1
+@@ -223,9 +223,13 @@ Boston, MA 02111-1307, USA.  */
+ 
+ #ifndef inhibit_libc
+ #ifdef IN_LIBGCC2
++/* There's no sys/ucontext.h for some (all?) libc1, so no
++   signal-turned-exceptions for them.  There's also no configure-run for
++   the target, so we can't check on (e.g.) HAVE_SYS_UCONTEXT_H.  Using the
++   target libc1 macro should be enough.  */
 +#if !(defined (USE_GNULIBC_1) || (__GLIBC__ == 2 && __GLIBC_MINOR__ == 0))
  #include <signal.h>
  #include <sys/ucontext.h>
+-#endif
  
+ #define MD_FALLBACK_FRAME_STATE_FOR(CONTEXT, FS, SUCCESS)		\
+   do {									\
+@@ -280,4 +284,6 @@ Boston, MA 02111-1307, USA.  */
+     (FS)->retaddr_column = 8;						\
+     goto SUCCESS;							\
+   } while (0)
++#endif /* not USE_GNULIBC_1 */
++#endif /* IN_LIBGCC2 */
+ #endif /* ifndef inhibit_libc  */
 diff --git a/gcc/cppdefault.h b/gcc/cppdefault.h
-index c87e27d..ae48959 100644
+index cda691d..2ea15a7 100644
 --- a/gcc/cppdefault.h
 +++ b/gcc/cppdefault.h
 @@ -22,14 +22,6 @@ Foundation, 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
@@ -59,7 +81,7 @@ index c87e27d..ae48959 100644
  #define STANDARD_INCLUDE_COMPONENT 0
  #endif
 diff --git a/gcc/fixinc/Makefile.in b/gcc/fixinc/Makefile.in
-index ca29592..1fe6d6a 100644
+index e26cbf5..cb197ac 100644
 --- a/gcc/fixinc/Makefile.in
 +++ b/gcc/fixinc/Makefile.in
 @@ -68,12 +68,12 @@ INCLUDES = -I. -I.. -I$(srcdir) -I$(srcdir)/.. \
@@ -88,20 +110,18 @@ index ca29592..1fe6d6a 100644
  
  #  'machname.h' is built in the build directory.
 diff --git a/include/libiberty.h b/include/libiberty.h
-index 676ceab..c9ca34f 100644
+index 3e0ca09..bdc8e09 100644
 --- a/include/libiberty.h
 +++ b/include/libiberty.h
-@@ -285,14 +285,6 @@ extern int pwait PARAMS ((int, int *, int));
- extern int asprintf PARAMS ((char **, const char *, ...)) ATTRIBUTE_PRINTF_2;
- #endif
+@@ -269,12 +269,6 @@ extern int pwait PARAMS ((int, int *, int));
  
--#if !HAVE_DECL_VASPRINTF
+ extern int asprintf PARAMS ((char **, const char *, ...)) ATTRIBUTE_PRINTF_2;
+ 
 -/* Like vsprintf but provides a pointer to malloc'd storage, which
 -   must be freed by the caller.  */
 -
 -extern int vasprintf PARAMS ((char **, const char *, va_list))
 -  ATTRIBUTE_PRINTF(2,0);
--#endif
 -
  #define ARRAY_SIZE(a) (sizeof (a) / sizeof ((a)[0]))
  
