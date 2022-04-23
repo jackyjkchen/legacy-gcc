@@ -10,49 +10,49 @@ SRC_URI=""
 LICENSE=""
 KEYWORDS="alpha amd64 m68k mips ppc ppc64 s390 sh sparc x86"
 case ${ARCH} in
-	amd64)
-		TOOL_PREFIX="x86_64-legacy"
-		TOOL32_PREFIX="i686-legacy"
-		AS_PARAMS="--32"
-		LD_PARAMS="-m elf_i386"
-		;;
-	x86)
-		TOOL_PREFIX="i686-legacy"
-		;;
-	alpha|m68k)
-		TOOL_PREFIX="${ARCH}-legacy"
-		;;
-	mips)
-		TOOL_PREFIX="${PROFILE_ARCH}-legacy"
-		TOOL32_PREFIX="${PROFILE_ARCH/64/}-legacy"
-		if [[ ${TOOL32_PREFIX} == mipsel-legacy ]] ; then
-			AS_PARAMS="-EL -mabi=32"
-			LD_PARAMS="-EL -melf32ltsmip"
-		elif [[ ${TOOL32_PREFIX} == mips-legacy ]] ; then
-			AS_PARAMS="-EB -mabi=32"
-			LD_PARAMS="-EB -melf32btsmip"
-		fi
-		;;
-	ppc)
-		TOOL_PREFIX="powerpc-legacy"
-		;;
-	ppc64)
-		TOOL_PREFIX="powerpc64-legacy"
-		;;
-	s390)
-		TOOL_PREFIX="s390x-legacy"
-		;;
-	sh)
-		TOOL_PREFIX="sh4-legacy"
-		;;
-	sparc)
-		TOOL_PREFIX="${PROFILE_ARCH}-legacy"
-		TOOL32_PREFIX="${PROFILE_ARCH/64/}-legacy"
-		AS_PARAMS="-32"
-		LD_PARAMS="-m elf32_sparc"
-		;;
-	*)
-		;;
+amd64)
+	TOOL_PREFIX="x86_64-legacy"
+	TOOL32_PREFIX="i686-legacy"
+	AS_PARAMS="--32"
+	LD_PARAMS="-m elf_i386"
+	;;
+x86)
+	TOOL_PREFIX="i686-legacy"
+	;;
+alpha|m68k)
+	TOOL_PREFIX="${ARCH}-legacy"
+	;;
+mips)
+	TOOL_PREFIX="${PROFILE_ARCH}-legacy"
+	TOOL32_PREFIX="${PROFILE_ARCH/64/}-legacy"
+	if [[ ${TOOL32_PREFIX} == mipsel-legacy ]] ; then
+		AS_PARAMS="-EL -mabi=32"
+		LD_PARAMS="-EL -melf32ltsmip"
+	elif [[ ${TOOL32_PREFIX} == mips-legacy ]] ; then
+		AS_PARAMS="-EB -mabi=32"
+		LD_PARAMS="-EB -melf32btsmip"
+	fi
+	;;
+ppc)
+	TOOL_PREFIX="powerpc-legacy"
+	;;
+ppc64)
+	TOOL_PREFIX="powerpc64-legacy"
+	;;
+s390)
+	TOOL_PREFIX="s390x-legacy"
+	;;
+sh)
+	TOOL_PREFIX="sh4-legacy"
+	;;
+sparc)
+	TOOL_PREFIX="${PROFILE_ARCH}-legacy"
+	TOOL32_PREFIX="${PROFILE_ARCH/64/}-legacy"
+	AS_PARAMS="-32"
+	LD_PARAMS="-m elf32_sparc"
+	;;
+*)
+	;;
 esac
 SLOT="0"
 

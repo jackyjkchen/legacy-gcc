@@ -141,10 +141,6 @@ fi
 
 #---->> DEPEND <<----
 
-RDEPEND="sys-libs/zlib"
-
-tc_version_is_at_least 3 && RDEPEND+=" virtual/libiconv"
-
 BDEPEND="
 	>=sys-devel/bison-1.875
 	>=sys-devel/flex-2.5.4
@@ -399,7 +395,7 @@ toolchain-oldlibc_src_configure() {
 		confgcc+=( --disable-werror )
 	fi
 
-	confgcc+=( --disable-nls )
+	tc_version_is_at_least 2.7 && confgcc+=( --disable-nls )
 
 	if tc_version_is_between 2.7 3.4 ; then
 		confgcc+=( --disable-libunwind-exceptions )
@@ -410,7 +406,10 @@ toolchain-oldlibc_src_configure() {
 		confgcc+=( --disable-libstdcxx-pch )
 	fi
 
-	confgcc+=( --enable-threads=single --disable-multilib --disable-shared)
+	confgcc+=( --enable-threads=single )
+	if tc_version_is_at_least 2.7 ; then
+		confgcc+=( --disable-multilib --disable-shared )
+	fi
 
 	confgcc+=(
 		--enable-clocale=generic

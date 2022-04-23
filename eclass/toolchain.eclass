@@ -1012,7 +1012,7 @@ toolchain_src_configure() {
 		confgcc+=( --enable-nls )
 		tc_version_is_at_least 2.6 && confgcc+=( --without-included-gettext )
 	else
-		confgcc+=( --disable-nls )
+		tc_version_is_at_least 2.7 && confgcc+=( --disable-nls )
 	fi
 
 	if tc_version_is_between 2.7 3.4 ; then

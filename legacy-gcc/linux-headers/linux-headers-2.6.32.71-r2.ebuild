@@ -10,32 +10,32 @@ SRC_URI="https://mirrors.ustc.edu.cn/kernel.org/linux/kernel/v2.6/longterm/v2.6.
 LICENSE=""
 KEYWORDS="alpha amd64 m68k mips ppc ppc64 s390 sh sparc x86"
 case ${ARCH} in
-	amd64)
-		TOOL_PREFIX="x86_64-legacy"
-		;;
-	x86)
-		TOOL_PREFIX="i686-legacy"
-		;;
-	alpha|m68k)
-		TOOL_PREFIX="${ARCH}-legacy"
-		;;
-	mips|sparc)
-		TOOL_PREFIX="${PROFILE_ARCH}-legacy"
-		;;
-	ppc)
-		TOOL_PREFIX="powerpc-legacy"
-		;;
-	ppc64)
-		TOOL_PREFIX="powerpc64-legacy"
-		;;
-	s390)
-		TOOL_PREFIX="s390x-legacy"
-		;;
-	sh)
-		TOOL_PREFIX="sh4-legacy"
-		;;
-	*)
-		;;
+amd64)
+	TOOL_PREFIX="x86_64-legacy"
+	;;
+x86)
+	TOOL_PREFIX="i686-legacy"
+	;;
+alpha|m68k)
+	TOOL_PREFIX="${ARCH}-legacy"
+	;;
+mips|sparc)
+	TOOL_PREFIX="${PROFILE_ARCH}-legacy"
+	;;
+ppc)
+	TOOL_PREFIX="powerpc-legacy"
+	;;
+ppc64)
+	TOOL_PREFIX="powerpc64-legacy"
+	;;
+s390)
+	TOOL_PREFIX="s390x-legacy"
+	;;
+sh)
+	TOOL_PREFIX="sh4-legacy"
+	;;
+*)
+	;;
 esac
 SLOT="0"
 

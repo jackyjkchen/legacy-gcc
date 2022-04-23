@@ -15,6 +15,7 @@ BDEPEND="${CATEGORY}/gcc:2.95.3"
 
 CC="${CTARGET}-gcc-2.95.3"
 CXX="${CTARGET}-g++-2.95.3"
+EXTRA_ECONF="--gxx-include-dir=/usr/lib/gcc-lib/${CHOST}/${PV}/include/g++"
 
 src_prepare() {
 	eapply "${FILESDIR}"/${PV}/00_gcc-${PV}.patch

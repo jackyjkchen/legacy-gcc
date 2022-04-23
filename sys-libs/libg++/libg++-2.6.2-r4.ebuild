@@ -14,14 +14,14 @@ SLOT="$(ver_cut 1-3 ${PV})"
 KEYWORDS="amd64 m68k x86"
 
 case ${ARCH} in
-	amd64|x86)
-		TOOL_PREFIX="i686-legacy"
-		;;
-	m68k)
-		TOOL_PREFIX="${ARCH}-legacy"
-		;;
-	*)
-		;;
+amd64|x86)
+	TOOL_PREFIX="i686-legacy"
+	;;
+m68k)
+	TOOL_PREFIX="${ARCH}-legacy"
+	;;
+*)
+	;;
 esac
 
 DEPEND="sys-devel/gcc:2.6.3[cxx]"
@@ -36,7 +36,8 @@ CXX="gcc-2.6.3"
 src_prepare() {
 	default
 	gnuconfig_update
-	eapply "${FILESDIR}"/${PV}/00_libgxx-${PV}.patch || die
+	eapply "${FILESDIR}"/${PV}/00_fix-for-gentoo.patch || die
+	eapply "${FILESDIR}"/${PV}/01_fix-for-new-glibc.patch || die
 }
 
 src_configure() {

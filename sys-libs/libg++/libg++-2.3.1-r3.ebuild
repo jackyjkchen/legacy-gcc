@@ -14,14 +14,14 @@ SLOT="$(ver_cut 1-3 ${PV})"
 KEYWORDS="amd64 m68k x86"
 
 case ${ARCH} in
-	amd64|x86)
-		TOOL_PREFIX="i686-legacy"
-		;;
-	m68k)
-		TOOL_PREFIX="${ARCH}-legacy"
-		;;
-	*)
-		;;
+amd64|x86)
+	TOOL_PREFIX="i686-legacy"
+	;;
+m68k)
+	TOOL_PREFIX="${ARCH}-legacy"
+	;;
+*)
+	;;
 esac
 
 DEPEND="sys-devel/gcc:2.3.3[cxx]"
