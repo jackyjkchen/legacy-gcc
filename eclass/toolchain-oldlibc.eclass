@@ -29,6 +29,16 @@ dev-libc5)
 		;;
 	esac
 	;;
+dev-libc4)
+	TOOL_SUFFIX="linuxaout"
+	case $(tc-arch) in
+	amd64|x86)
+		TOOL_PREFIX="i486-legacy"
+		;;
+	*)
+		;;
+	esac
+	;;
 *)
 	die
 	;;
