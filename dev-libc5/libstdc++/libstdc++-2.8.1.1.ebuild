@@ -33,7 +33,7 @@ CXX="${CHOST}-g++-2.8.1"
 src_prepare() {
 	default
 	gnuconfig_update
-	eapply "${FILESDIR}"/${PV}/00_libstdcxx-${PV}.patch || die
+	eapply "${FILESDIR}"/${PV}/00_fix-for-gentoo.patch || die
 }
 
 src_configure() {
