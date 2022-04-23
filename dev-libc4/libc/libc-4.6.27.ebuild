@@ -43,11 +43,11 @@ src_compile() {
 src_install() {
 	pushd "${S}" > /dev/null
 	case ${CATEGORY} in
-	dev-libc5)
-		TOOL_SUFFIX="linux-gnulibc1"
+	dev-libc4)
+		TOOL_SUFFIX="linuxaout"
 		case ${ARCH} in
 		amd64|x86)
-			TOOL_PREFIX="i586-legacy"
+			TOOL_PREFIX="i486-legacy"
 			;;
 		*)
 			die
@@ -61,6 +61,5 @@ src_install() {
 	CHOST="${TOOL_PREFIX}-${TOOL_SUFFIX}"
 	mkdir -p "${ED}"/usr/${CHOST}/ || die
 	cp -avx . "${ED}"/usr/${CHOST}/ || die
-	ln -sv libc.a "${ED}"/usr/${CHOST}/lib/libg.a || die
 	popd > /dev/null
 }
