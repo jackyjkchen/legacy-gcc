@@ -77,7 +77,6 @@ case ${PV} in
 		;;
 	*)
 		BVER=${PV}
-		is_djgpp || SRC_URI="https://mirrors.ustc.edu.cn/gnu/binutils/binutils-${BVER}.tar.bz2"
 		;;
 esac
 SLOT="${BVER}"
@@ -87,6 +86,11 @@ BINUTILS_RELEASE_VER=$(ver_cut 1-3 ${BVER})
 tc_version_is_at_least() {
 	ver_test "${2:-${BINUTILS_RELEASE_VER}}" -ge "$1"
 }
+if tc_version_is_at_least 2.12 ; then
+	is_djgpp || SRC_URI="https://mirrors.ustc.edu.cn/gnu/binutils/binutils-${BVER}.tar.bz2"
+else
+	is_djgpp || SRC_URI="https://mirrors.ustc.edu.cn/gnu/binutils/binutils-${BVER}.tar.gz"
+fi
 if tc_version_is_at_least 2.18 ; then
 	LICENSE="|| ( GPL-3 LGPL-3 )"
 else
@@ -172,7 +176,7 @@ toolchain-binutils_src_prepare() {
 	fi
 
 	# Fix po Makefile generators
-	if ! tc_version_is_at_least 2.30 ; then
+	if ! tc_version_is_at_least 2.30  && tc_version_is_at_least 2.10 ; then
 		sed -i \
 			-e '/^datadir = /s:$(prefix)/@DATADIRNAME@:@datadir@:' \
 			-e '/^gnulocaledir = /s:$(prefix)/share:$(datadir):' \

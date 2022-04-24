@@ -1,1 +1,0 @@
-../../sys-devel/binutils/binutils-2.17.ebuild
