@@ -44,7 +44,7 @@ Windows/MSDOS交叉工具链——
 
 提供额外的libc5/libc4静态工具链，可与标准glibc(libc6)工具链共存，以本地工具链形式bootstrap——
 * libc5: gcc-1.42 - gcc-3.4.6
-* libc5: gcc-1.42 - gcc-2.95.3
+* libc4: gcc-1.42 - gcc-2.95.3
 
 
 其中amd64/x86，mips64el/mipsel，mips64/mips，sparc64/sparc，mingw-w64已测试支持multilib。
