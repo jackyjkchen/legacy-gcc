@@ -31,6 +31,7 @@ dev-libc5)
 	;;
 dev-libc4)
 	TOOL_SUFFIX="linuxaout"
+	LDFLAGS="-Wl,-O1"
 	case $(tc-arch) in
 	amd64|x86)
 		TOOL_PREFIX="i486-legacy"

@@ -3,9 +3,9 @@
 
 EAPI="7"
 
-CC="gcc-3.4.6"
-CXX="g++-3.4.6"
-BDEPEND="sys-devel/gcc:3.4.6"
+CC="gcc-2.95.3"
+CXX="g++-2.95.3"
+BDEPEND="sys-devel/gcc:2.95.3"
 
 inherit toolchain-binutils
 

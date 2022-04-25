@@ -387,17 +387,19 @@ toolchain-binutils_src_install() {
 		fi
 	fi
 	insinto ${INCPATH}
-	local libiberty_headers=(
-		# Not all the libiberty headers.  See libiberty/Makefile.in:install_to_libdir.
-		demangle.h
-		dyn-string.h
-		fibheap.h
-		hashtab.h
-		libiberty.h
-		objalloc.h
-		splay-tree.h
-	)
-	doins "${libiberty_headers[@]/#/${S}/include/}"
+	if tc_version_is_at_least 2.12 ; then
+		local libiberty_headers=(
+			# Not all the libiberty headers.  See libiberty/Makefile.in:install_to_libdir.
+			demangle.h
+			dyn-string.h
+			fibheap.h
+			hashtab.h
+			libiberty.h
+			objalloc.h
+			splay-tree.h
+		)
+		doins "${libiberty_headers[@]/#/${S}/include/}"
+	fi
 	if [[ -d ${ED}/${LIBPATH}/lib ]] ; then
 		mv "${ED}"/${LIBPATH}/lib/* "${ED}"/${LIBPATH}/
 		rm -r "${ED}"/${LIBPATH}/lib
