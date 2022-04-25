@@ -48,6 +48,16 @@ src_prepare() {
 
 src_configure() {
 	pushd "${S}" > /dev/null
+	if use gcc281; then
+		downgrade_arch_flags 2.8.1
+		CC='gcc-2.8.1' CXX='g++-2.8.1' sh ./stl/config/configure || die
+		mv stlconf.h stlconf.h_gcc281 || die
+	fi
+	if use gcc272; then
+		downgrade_arch_flags 2.7.2
+		CC='gcc-2.7.2' CXX='g++-2.7.2' sh ./stl/config/configure || die
+		mv stlconf.h stlconf.h_gcc272 || die
+	fi
 	popd > /dev/null
 }
 
@@ -61,10 +71,12 @@ src_install() {
 	if use gcc281; then
 		mkdir -p "${ED}"/usr/lib/gcc-lib/${CHOST}/2.8.1/include/ || die
 		cp -avx stl "${ED}"/usr/lib/gcc-lib/${CHOST}/2.8.1/include/stlport || die
+		cp -avx stlconf.h_gcc281 "${ED}"/usr/lib/gcc-lib/${CHOST}/2.8.1/include/stlport/config/stlconf.h || die
 	fi
 	if use gcc272; then
 		mkdir -p "${ED}"/usr/lib/gcc-lib/${CHOST}/2.7.2/include/ || die
 		cp -avx stl "${ED}"/usr/lib/gcc-lib/${CHOST}/2.7.2/include/stlport || die
+		cp -avx stlconf.h_gcc272 "${ED}"/usr/lib/gcc-lib/${CHOST}/2.7.2/include/stlport/config/stlconf.h || die
 	fi
 	popd > /dev/null
 }

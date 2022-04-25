@@ -51,20 +51,20 @@ src_configure() {
 
 	echo "${S}"/configure "${econfargs[@]}"
 
-	"${S}"/configure "${econfargs[@]}" || die "failed to run configure"
+	PATH=/usr/${CHOST}/bin:${PATH} "${S}"/configure "${econfargs[@]}" || die "failed to run configure"
 
 	popd > /dev/null
 }
 
 src_compile() {
 	pushd "${WORKDIR}"/build > /dev/null
-	emake CC="${CC}" CXX="${CXX}" CFLAGS="${CFLAGS}" CXXFLAGS="${CXXFLAGS} -fvtable-thunks" || die "failed to run make"
+	PATH=/usr/${CHOST}/bin:${PATH} emake CC="${CC}" CXX="${CXX}" CFLAGS="${CFLAGS}" CXXFLAGS="${CXXFLAGS} -fvtable-thunks" || die "failed to run make"
 	popd > /dev/null
 }
 
 src_install() {
 	pushd "${WORKDIR}"/build > /dev/null
-	emake -j1 DESTDIR="${ED}" install || die "failed to run make install"
+	PATH=/usr/${CHOST}/bin:${PATH} emake -j1 DESTDIR="${ED}" install || die "failed to run make install"
 	mkdir -p "${ED}"/usr/lib/gcc-lib/${CHOST}/2.7.2/include || die
 	mv -v "${ED}"/usr/lib/g++-include "${ED}"/usr/lib/gcc-lib/${CHOST}/2.7.2/include/g++ || die
 	mv -v "${ED}"/usr/lib/libstdc++* "${ED}"/usr/lib/libg++* "${ED}"/usr/lib/gcc-lib/${CHOST}/2.7.2/ || die

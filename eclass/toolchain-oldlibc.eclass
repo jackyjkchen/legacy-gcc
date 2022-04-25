@@ -57,11 +57,6 @@ FEATURES=${FEATURES/multilib-strict/}
 #---->> globals <<----
 
 export CTARGET=${CTARGET:-${CHOST}}
-if [[ ${CTARGET} = ${CHOST} ]] ; then
-	if [[ ${CATEGORY} == cross-* ]] ; then
-		export CTARGET=${CATEGORY#cross-}
-	fi
-fi
 : ${TARGET_ABI:=${ABI}}
 : ${TARGET_MULTILIB_ABIS:=${MULTILIB_ABIS}}
 : ${TARGET_DEFAULT_ABI:=${DEFAULT_ABI}}
@@ -583,7 +578,7 @@ gcc_do_make() {
 	pushd "${WORKDIR}"/build >/dev/null
 
 	if tc_version_is_at_least 2.9 ; then
-		emake \
+		PATH=${PREFIX}/${CHOST}/bin:${PATH} emake \
 			LDFLAGS="${LDFLAGS}" \
 			STAGE1_CFLAGS="${STAGE1_CFLAGS}" \
 			LIBPATH="${LIBPATH}" \
@@ -595,7 +590,7 @@ gcc_do_make() {
 		tc_version_is_at_least 2.8 && LANGUAGES+=" gcov"
 		_tc_use_if_iuse cxx && LANGUAGES+=" c++"
 		_tc_use_if_iuse objc && LANGUAGES+=" objective-c"
-		emake \
+		PATH=${PREFIX}/${CHOST}/bin:${PATH} emake \
 			CC="${CC}" \
 			CXX="${CXX}" \
 			LANGUAGES="${LANGUAGES}" \
@@ -650,9 +645,9 @@ toolchain-oldlibc_src_install() {
 
 	# Do the 'make install' from the build directory
 	if tc_version_is_at_least 2.9 ; then
-		S="${WORKDIR}"/build emake -j1 DESTDIR="${D}" install || die
+		S="${WORKDIR}"/build PATH=${PREFIX}/${CHOST}/bin:${PATH} emake -j1 DESTDIR="${D}" install || die
 	else
-		S="${WORKDIR}"/build emake CC="${CC}" CXX="${CXX}" LANGUAGES="${LANGUAGES}" -j1 DESTDIR="${D}" install || die
+		S="${WORKDIR}"/build PATH=${PREFIX}/${CHOST}/bin:${PATH} emake CC="${CC}" CXX="${CXX}" LANGUAGES="${LANGUAGES}" -j1 DESTDIR="${D}" install || die
 	fi
 
 	# Punt some tools which are really only useful while building gcc

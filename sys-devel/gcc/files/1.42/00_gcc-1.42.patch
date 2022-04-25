@@ -1,5 +1,5 @@
 diff --git a/Makefile b/Makefile
-index 45635aa..588c65e 100644
+index 45635aa..3d129ec 100644
 --- a/Makefile
 +++ b/Makefile
 @@ -22,7 +22,7 @@
@@ -20,9 +20,12 @@ index 45635aa..588c65e 100644
  
  # CFLAGS for use with OLDCC, for compiling gnulib.
  # NOTE: -O does not work on some Unix systems!
-@@ -51,14 +51,26 @@ OLDAR = ar
+@@ -49,16 +49,28 @@ CCLIBFLAGS=-O
+ OLDAR = ar
+ 
  # CFLAGS for use with OLDCC, for compiling hard-params.
- HARD_PARAMS_FLAGS=
+-HARD_PARAMS_FLAGS=
++# HARD_PARAMS_FLAGS=
  
 +version = 1.42
 +target = ${CHOST}
@@ -50,6 +53,15 @@ index 45635aa..588c65e 100644
  # Number to put in man-page filename.
  manext = 1
  
+@@ -116,7 +128,7 @@ DIR = ../gcc
+ 
+ # On a 386 running system V.4, uncomment the following lines.
+ # INSTALL = cp
+-# HARD_PARAMS_FLAGS = -DNO_LONG_DOUBLE
++HARD_PARAMS_FLAGS = -DNO_LONG_DOUBLE
+ 
+ # If you are making gcc for the first time, and if you are compiling it with
+ # a non-gcc compiler, and if your system doesn't have a working alloca() in any
 @@ -161,6 +173,10 @@ DIR = ../gcc
  # HARD_PARAMS_FLAGS= -Anansi
  # (Says vasta@apollo.com.)
@@ -383,13 +395,18 @@ index c6ce6ff..ee1b352 100644
  }
  
 diff --git a/config.gcc b/config.gcc
-index 3f3b59b..eb15d57 100755
+index 3f3b59b..0ee7dfe 100755
 --- a/config.gcc
 +++ b/config.gcc
-@@ -120,6 +120,16 @@ then
+@@ -120,6 +120,21 @@ then
  		cpu_type=i386
  		configuration_file=xm-${machine}.h
  		;;
++	i[3456]86-*-linux*aout)         # Intel 80386's running Linux
++		cpu_type=i386
++		configuration_file=xm-i386linux.h
++		target_machine=i386linux-aout.h
++		;;
 +	i[3456]86-*-linux*libc1)             # Intel 80386's running Linux
 +		cpu_type=i386           # with ELF support
 +		configuration_file=xm-i386linux.h
@@ -403,6 +420,71 @@ index 3f3b59b..eb15d57 100755
  	i386-sysv4 | i386v4)		# for Intel 80386's running system V.4
  		machine=i386v4
  		cpu_type=i386
+diff --git a/config/i386gstabs.h b/config/i386gstabs.h
+new file mode 100644
+index 0000000..64643e7
+--- /dev/null
++++ b/config/i386gstabs.h
+@@ -0,0 +1,9 @@
++#include "tm-i386gas.h"
++
++/* We do not want to output SDB debugging information.  */
++
++#undef SDB_DEBUGGING_INFO
++
++/* We want to output DBX debugging information.  */
++
++#define DBX_DEBUGGING_INFO
+diff --git a/config/i386linux-aout.h b/config/i386linux-aout.h
+new file mode 100644
+index 0000000..73a0a2a
+--- /dev/null
++++ b/config/i386linux-aout.h
+@@ -0,0 +1,44 @@
++/* Definitions for Intel 386 running Linux
++ * Copyright (C) 1992 Free Software Foundation, Inc.
++ *
++ * Written by H.J. Lu (hlu@eecs.wsu.edu)
++ *
++ * Linux is a POSIX.1 compatible UNIX clone for i386, which uses GNU
++ * stuffs as the native stuffs.
++ */
++
++/* This is tested by i386gas.h.  */
++#define YES_UNDERSCORES
++
++#include "tm-i386gas.h"
++
++/* Specify predefined symbols in preprocessor.  */
++
++#undef CPP_PREDEFINES
++#define CPP_PREDEFINES "-Dunix -Di386 -Dlinux"
++
++#undef CPP_SPEC
++#define CPP_SPEC "%{posix:-D_POSIX_SOURCE}"
++
++#undef SIZE_TYPE
++#define SIZE_TYPE "unsigned int"
++
++#undef PTRDIFF_TYPE
++#define PTRDIFF_TYPE "int"
++
++#undef WCHAR_TYPE
++#define WCHAR_TYPE "long int"
++
++#undef WCHAR_TYPE_SIZE
++#define WCHAR_TYPE_SIZE BITS_PER_WORD
++
++#undef HAVE_ATEXIT
++#define HAVE_ATEXIT
++
++#undef LIB_SPEC
++#define LIB_SPEC "%{g*:-lg} %{!g*:%{!p:%{!pg:-lc}}%{p:-lgmon}%{pg:-lgmon}}"
++
++#undef STARTFILE_SPEC
++#define STARTFILE_SPEC  "%{pg:gcrt0.o%s} %{!pg:%{p:gcrt0.o%s} %{!p:crt0.o%s}} %{static:-static}"
++
++#define USG
 diff --git a/config/i386linux-gnulibc1.h b/config/i386linux-gnulibc1.h
 new file mode 100644
 index 0000000..eb96401
@@ -414,10 +496,10 @@ index 0000000..eb96401
 +#include "i386linux.h"
 diff --git a/config/i386linux.h b/config/i386linux.h
 new file mode 100644
-index 0000000..50ae33a
+index 0000000..76358cd
 --- /dev/null
 +++ b/config/i386linux.h
-@@ -0,0 +1,203 @@
+@@ -0,0 +1,207 @@
 +/* Definitions for Intel 386 running Linux with ELF format
 +   Copyright (C) 1994, 1995 Free Software Foundation, Inc.
 +   Contributed by Eric Youngdale.
@@ -572,7 +654,11 @@ index 0000000..50ae33a
 +#define LIBGCC_SPEC "-lgcc"
 +
 +#undef	LIB_SPEC
++#ifdef USE_GNULIBC_1
++#define LIB_SPEC "-lc %{p:-lgmon} %{pg:-lgmon} "
++#else
 +#define LIB_SPEC "-lc %{pthread:-lpthread}"
++#endif /* not USE_GNULIBC_1 */
 +
 +/* Provide a LINK_SPEC appropriate for Linux.  Here we provide support
 +   for the special GCC options -static and -shared, which allow us to

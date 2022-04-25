@@ -18,8 +18,8 @@ if [[ -f /usr/bin/${CTARGET}-gcc-3.4.6 ]] ;then
 	CXX="${CTARGET}-g++-3.4.6"
 else
 	STAGE1='yes'
-	CC="gcc-3.4.6"
-	CXX="g++-3.4.6"
+	CC="gcc-3.4.6 -m32"
+	CXX="g++-3.4.6 -m32"
 fi
 
 src_prepare() {

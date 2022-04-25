@@ -47,7 +47,7 @@ src_prepare() {
 src_configure() {
 	pushd "${S}" > /dev/null
 	downgrade_arch_flags 2.6.3
-	sh ./configure --enable-newalloc || die
+	PATH=/usr/${CHOST}/bin:${PATH} sh ./configure --enable-newalloc || die
 	popd > /dev/null
 }
 

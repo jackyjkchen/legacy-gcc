@@ -44,6 +44,26 @@ src_prepare() {
 
 src_configure() {
 	pushd "${S}" > /dev/null
+	if use gcc295; then
+		downgrade_arch_flags 2.95.3
+		CC="${CHOST}-gcc-2.95.3" CXX="${CHOST}-g++-2.95.3" sh ./stl/config/configure || die
+		mv stlconf.h stlconf.h_gcc295 || die
+	fi
+	if use egcs112; then
+		downgrade_arch_flags 2.91.66
+		CC="${CHOST}-gcc-2.91.66" CXX="${CHOST}-g++-2.91.66" sh ./stl/config/configure || die
+		mv stlconf.h stlconf.h_gcc291 || die
+	fi
+	if use gcc281; then
+		downgrade_arch_flags 2.8.1
+		CC="${CHOST}-gcc-2.8.1" CXX="${CHOST}-g++-2.8.1" sh ./stl/config/configure || die
+		mv stlconf.h stlconf.h_gcc281 || die
+	fi
+	if use gcc272; then
+		downgrade_arch_flags 2.7.2
+		CC="${CHOST}-gcc-2.7.2" CXX="${CHOST}-g++-2.7.2" sh ./stl/config/configure || die
+		mv stlconf.h stlconf.h_gcc272 || die
+	fi
 	popd > /dev/null
 }
 
@@ -57,18 +77,22 @@ src_install() {
 	if use gcc295; then
 		mkdir -p "${ED}"/usr/lib/gcc-lib/${CHOST}/2.95.3/include/ || die
 		cp -avx stl "${ED}"/usr/lib/gcc-lib/${CHOST}/2.95.3/include/stlport || die
+		cp -avx stlconf.h_gcc295 "${ED}"/usr/lib/gcc-lib/${CHOST}/2.95.3/include/stlport/config/stlconf.h || die
 	fi
 	if use egcs112; then
 		mkdir -p "${ED}"/usr/lib/gcc-lib/${CHOST}/2.91.66/include/ || die
 		cp -avx stl "${ED}"/usr/lib/gcc-lib/${CHOST}/2.91.66/include/stlport || die
+		cp -avx stlconf.h_gcc291 "${ED}"/usr/lib/gcc-lib/${CHOST}/2.91.66/include/stlport/config/stlconf.h || die
 	fi
 	if use gcc281; then
 		mkdir -p "${ED}"/usr/lib/gcc-lib/${CHOST}/2.8.1/include/ || die
 		cp -avx stl "${ED}"/usr/lib/gcc-lib/${CHOST}/2.8.1/include/stlport || die
+		cp -avx stlconf.h_gcc281 "${ED}"/usr/lib/gcc-lib/${CHOST}/2.8.1/include/stlport/config/stlconf.h || die
 	fi
 	if use gcc272; then
 		mkdir -p "${ED}"/usr/lib/gcc-lib/${CHOST}/2.7.2/include/ || die
 		cp -avx stl "${ED}"/usr/lib/gcc-lib/${CHOST}/2.7.2/include/stlport || die
+		cp -avx stlconf.h_gcc272 "${ED}"/usr/lib/gcc-lib/${CHOST}/2.7.2/include/stlport/config/stlconf.h || die
 	fi
 	popd > /dev/null
 }

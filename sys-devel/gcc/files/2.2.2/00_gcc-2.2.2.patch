@@ -790,6 +790,117 @@ index ce52432..9ce6c33 100644
  	}
      }
    else
+diff --git a/config/i386gas.h b/config/i386gas.h
+index 7136494..141a857 100644
+--- a/config/i386gas.h
++++ b/config/i386gas.h
+@@ -21,6 +21,12 @@ the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.  */
+    file. */
+ 
+ #include "i386.h"
++
++#ifndef YES_UNDERSCORES
++/* Define this now, because bsd386.h tests it.  */
++#define NO_UNDERSCORES
++#endif
++
+ /* Use the bsd assembler syntax.  */
+ /* we need to do this because gas is really a bsd style assembler,
+  * and so doesn't work well this these att-isms:
+@@ -43,13 +49,14 @@ the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.  */
+ #undef DBX_NO_XREFS
+ #undef DBX_CONTIN_LENGTH
+ 
+-/* By default, target has a 80387.  */
++/* Ask for COFF symbols.  */
+ 
+-#define TARGET_DEFAULT 1
++#define SDB_DEBUGGING_INFO
+ 
+ /* Specify predefined symbols in preprocessor.  */
+ 
+ #define CPP_PREDEFINES "-Dunix -Di386"
++#define CPP_SPEC "%{posix:-D_POSIX_SOURCE}"
+ 
+ /* Allow #sccs in preprocessor.  */
+ 
+@@ -59,14 +66,6 @@ the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.  */
+ 
+ #define ASM_OUTPUT_IDENT(FILE, NAME) fprintf (FILE, "\t.ident \"%s\"\n", NAME);
+ 
+-/* We do not want to output SDB debugging information.  */
+-
+-#undef SDB_DEBUGGING_INFO
+-
+-/* We want to output DBX debugging information.  */
+-
+-#define DBX_DEBUGGING_INFO
+-
+ /* Implicit library calls should use memcpy, not bcopy, etc.  */
+ 
+ #define TARGET_MEM_FUNCTIONS
+@@ -93,20 +92,6 @@ the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.  */
+ #define ASM_OUTPUT_LOOP_ALIGN(FILE) \
+      fprintf ((FILE), "\t.align 2,0x90\n");  /* Use log of 4 as arg.  */
+ 
+-/* Machines that use the AT&T assembler syntax
+-   also return floating point values in an FP register.  */
+-/* Define how to find the value returned by a function.
+-   VALTYPE is the data type of the value (as a tree).
+-   If the precise function being called is known, FUNC is its FUNCTION_DECL;
+-   otherwise, FUNC is 0.  */
+-
+-#define VALUE_REGNO(MODE) \
+-  (((MODE)==SFmode || (MODE)==DFmode) ? FIRST_FLOAT_REG : 0)
+-
+-/* 1 if N is a possible register number for a function value. */
+-
+-#define FUNCTION_VALUE_REGNO_P(N) ((N) == 0 || (N)== FIRST_FLOAT_REG)
+-
+ #undef ASM_FILE_START
+ #define ASM_FILE_START(FILE) \
+   fprintf (FILE, "\t.file\t\"%s\"\n", dump_base_name);
+@@ -149,3 +134,25 @@ the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.  */
+ 
+ /* Print opcodes the way that GAS expects them. */
+ #define GAS_MNEMONICS 1
++
++#ifdef NO_UNDERSCORES /* If user-symbols don't have underscores,
++			 then it must take more than `L' to identify
++			 a label that should be ignored.  */
++
++/* This is how to store into the string BUF
++   the symbol_ref name of an internal numbered label where
++   PREFIX is the class of label and NUM is the number within the class.
++   This is suitable for output with `assemble_name'.  */
++
++#undef ASM_GENERATE_INTERNAL_LABEL
++#define ASM_GENERATE_INTERNAL_LABEL(BUF,PREFIX,NUMBER)	\
++    sprintf ((BUF), ".%s%d", (PREFIX), (NUMBER))
++
++/* This is how to output an internal numbered label where
++   PREFIX is the class of label and NUM is the number within the class.  */
++
++#undef ASM_OUTPUT_INTERNAL_LABEL
++#define ASM_OUTPUT_INTERNAL_LABEL(FILE,PREFIX,NUM)	\
++  fprintf (FILE, ".%s%d:\n", PREFIX, NUM)
++
++#endif /* NO_UNDERSCORES */
+diff --git a/config/i386gstabs.h b/config/i386gstabs.h
+new file mode 100644
+index 0000000..e39b7e3
+--- /dev/null
++++ b/config/i386gstabs.h
+@@ -0,0 +1,9 @@
++#include "i386gas.h"
++
++/* We do not want to output SDB debugging information.  */
++
++#undef SDB_DEBUGGING_INFO
++
++/* We want to output DBX debugging information.  */
++
++#define DBX_DEBUGGING_INFO
 diff --git a/config/i386linux-aout.h b/config/i386linux-aout.h
 new file mode 100644
 index 0000000..a469c58

@@ -1,0 +1,198 @@
+diff --git a/gcc/cp/g++spec.c b/gcc/cp/g++spec.c
+index 806b90e..0e470a7 100644
+--- a/gcc/cp/g++spec.c
++++ b/gcc/cp/g++spec.c
+@@ -50,7 +50,7 @@ lang_specific_driver (fn, in_argc, in_argv, in_added_libraries)
+ 
+   /* This will be 0 if we encounter a situation where we should not
+      link in libstdc++.  */
+-  int library = 1;
++  int library = 0;
+ 
+   /* The number of arguments being added to what's in argv, other than
+      libraries.  We use this to track the number of times we've inserted
+diff --git a/libiberty/sigsetmask.c b/libiberty/sigsetmask.c
+index db6408d..ae2dbb6 100644
+--- a/libiberty/sigsetmask.c
++++ b/libiberty/sigsetmask.c
+@@ -12,21 +12,3 @@
+ #include <sys/types.h>
+ #include <signal.h>
+ 
+-extern void abort PARAMS ((void)) ATTRIBUTE_NORETURN;
+-
+-#ifdef SIG_SETMASK
+-int
+-DEFUN(sigsetmask,(set),
+-      int set)
+-{
+-    sigset_t new;
+-    sigset_t old;
+-    
+-    sigemptyset (&new);
+-    if (set != 0) {
+-      abort();	/* FIXME, we don't know how to translate old mask to new */
+-    }
+-    sigprocmask(SIG_SETMASK, &new, &old);
+-    return 1;	/* FIXME, we always return 1 as old value.  */
+-}
+-#endif
+diff --git a/libiberty/strsignal.c b/libiberty/strsignal.c
+index 5625323..bca5513 100644
+--- a/libiberty/strsignal.c
++++ b/libiberty/strsignal.c
+@@ -387,76 +387,6 @@ signo_max ()
+ }
+ 
+ 
+-/*
+-
+-NAME
+-
+-	strsignal -- map a signal number to a signal message string
+-
+-SYNOPSIS
+-
+-	const char *strsignal (int signo)
+-
+-DESCRIPTION
+-
+-	Maps an signal number to an signal message string, the contents of
+-	which are implementation defined.  On systems which have the external
+-	variable sys_siglist, these strings will be the same as the ones used
+-	by psignal().
+-
+-	If the supplied signal number is within the valid range of indices
+-	for the sys_siglist, but no message is available for the particular
+-	signal number, then returns the string "Signal NUM", where NUM is the
+-	signal number.
+-
+-	If the supplied signal number is not a valid index into sys_siglist,
+-	returns NULL.
+-
+-	The returned string is only guaranteed to be valid only until the
+-	next call to strsignal.
+-
+-*/
+-
+-#ifndef HAVE_STRSIGNAL
+-
+-const char *
+-strsignal (signo)
+-  int signo;
+-{
+-  const char *msg;
+-  static char buf[32];
+-
+-#ifndef HAVE_SYS_SIGLIST
+-
+-  if (signal_names == NULL)
+-    {
+-      init_signal_tables ();
+-    }
+-
+-#endif
+-
+-  if ((signo < 0) || (signo >= sys_nsig))
+-    {
+-      /* Out of range, just return NULL */
+-      msg = NULL;
+-    }
+-  else if ((sys_siglist == NULL) || (sys_siglist[signo] == NULL))
+-    {
+-      /* In range, but no sys_siglist or no entry at this index. */
+-      sprintf (buf, "Signal %d", signo);
+-      msg = (const char *) buf;
+-    }
+-  else
+-    {
+-      /* In range, and a valid message.  Just return the message. */
+-      msg = (const char *) sys_siglist[signo];
+-    }
+-  
+-  return (msg);
+-}
+-
+-#endif /* ! HAVE_STRSIGNAL */
+-
+ /*
+ 
+ NAME
+@@ -566,46 +496,6 @@ strtosigno (name)
+ }
+ 
+ 
+-/*
+-
+-NAME
+-
+-	psignal -- print message about signal to stderr
+-
+-SYNOPSIS
+-
+-	void psignal (unsigned signo, char *message);
+-
+-DESCRIPTION
+-
+-	Print to the standard error the message, followed by a colon,
+-	followed by the description of the signal specified by signo,
+-	followed by a newline.
+-*/
+-
+-#ifndef HAVE_PSIGNAL
+-
+-void
+-psignal (signo, message)
+-  unsigned signo;
+-  char *message;
+-{
+-  if (signal_names == NULL)
+-    {
+-      init_signal_tables ();
+-    }
+-  if ((signo <= 0) || (signo >= sys_nsig))
+-    {
+-      fprintf (stderr, "%s: unknown signal\n", message);
+-    }
+-  else
+-    {
+-      fprintf (stderr, "%s: %s\n", message, sys_siglist[signo]);
+-    }
+-}
+-
+-#endif	/* ! HAVE_PSIGNAL */
+-
+ 
+ /* A simple little main that does nothing but print all the signal translations
+    if MAIN is defined and this file is compiled and linked. */
+diff --git a/libiberty/vsprintf.c b/libiberty/vsprintf.c
+index bf0760c..dbb07e9 100644
+--- a/libiberty/vsprintf.c
++++ b/libiberty/vsprintf.c
+@@ -30,26 +30,3 @@ the executable file might be covered by the GNU General Public License. */
+ #include <stdio.h>
+ #include <ansidecl.h>
+ #undef vsprintf
+-
+-int
+-vsprintf (buf, format, ap)
+-     char *buf;
+-     const char *format;
+-     va_list ap;
+-{
+-  FILE b;
+-  int ret;
+-#ifdef VMS
+-  b->_flag = _IOWRT|_IOSTRG;
+-  b->_ptr = buf;
+-  b->_cnt = 12000;
+-#else
+-  b._flag = _IOWRT|_IOSTRG;
+-  b._ptr = buf;
+-  b._cnt = 12000;
+-#endif
+-  ret = _doprnt(format, ap, &b);
+-  putc('\0', &b);
+-  return ret;
+-
+-}
