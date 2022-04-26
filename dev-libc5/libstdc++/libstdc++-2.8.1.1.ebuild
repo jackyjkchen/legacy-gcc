@@ -13,19 +13,11 @@ LICENSE=""
 SLOT="$(ver_cut 1-3 ${PV})"
 KEYWORDS="amd64 x86"
 
-case ${ARCH} in
-	amd64|x86)
-		TOOL_PREFIX="i586-legacy"
-		;;
-	*)
-		;;
-esac
-
 DEPEND="${CATEGORY}/gcc:2.8.1[cxx]"
 RDEPEND="${DEPEND}"
 BDEPEND=""
 
-CHOST="${TOOL_PREFIX}-linux-gnulibc1"
+CHOST="i586-legacy-linux-gnulibc1"
 
 CC="${CHOST}-gcc-2.8.1"
 CXX="${CHOST}-g++-2.8.1"

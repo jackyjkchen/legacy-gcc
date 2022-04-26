@@ -13,14 +13,6 @@ LICENSE=""
 SLOT="$(ver_cut 1-3 ${PV})"
 KEYWORDS="amd64 x86"
 
-case ${ARCH} in
-	amd64|x86)
-		TOOL_PREFIX="i586-legacy"
-		;;
-	*)
-		;;
-esac
-
 IUSE="+gcc295 +egcs112 +gcc281 +gcc272"
 
 DEPEND="
@@ -31,7 +23,7 @@ DEPEND="
 RDEPEND="${DEPEND}"
 BDEPEND=""
 
-CHOST="${TOOL_PREFIX}-linux-gnulibc1"
+CHOST="i586-legacy-linux-gnulibc1"
 
 S="${WORKDIR}"/STLport-${PV}
 

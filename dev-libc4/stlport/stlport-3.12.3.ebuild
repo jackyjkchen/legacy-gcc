@@ -13,14 +13,6 @@ LICENSE=""
 SLOT="$(ver_cut 1-3 ${PV})"
 KEYWORDS="amd64 x86"
 
-case ${ARCH} in
-	amd64|x86)
-		TOOL_PREFIX="i486-legacy"
-		;;
-	*)
-		;;
-esac
-
 IUSE="+gcc295 +egcs112"
 
 DEPEND="
@@ -29,7 +21,7 @@ DEPEND="
 RDEPEND="${DEPEND}"
 BDEPEND=""
 
-CHOST="${TOOL_PREFIX}-linuxaout"
+CHOST="i486-legacy-linuxaout"
 
 S="${WORKDIR}"/STLport-${PV}
 
