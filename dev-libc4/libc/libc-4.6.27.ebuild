@@ -5,14 +5,15 @@ EAPI=8
 
 DESCRIPTION=""
 HOMEPAGE=""
-SRC_URI=""
+SRC_URI="https://www.win.tue.nl/~aeb/ftpdocs/linux-local/libc.archive/libc/libc-4.7.6.bin.tar.gz
+		https://www.win.tue.nl/~aeb/ftpdocs/linux-local/libc.archive/libc/inc-4.6.27.tar.gz"
 
 LICENSE=""
 SLOT="0"
 KEYWORDS="amd64 x86"
 RESTRICT="strip"
 
-DEPEND=""
+DEPEND="${CATEGORY}/linux-headers"
 RDEPEND="${DEPEND}"
 BDEPEND=""
 
@@ -20,13 +21,19 @@ S=${WORKDIR}/libc-${PV}
 
 src_unpack() {
 	mkdir -p "${S}" || die
-	tar -pxf "${FILESDIR}"/libc-${PV}.tar.xz -C "${WORKDIR}" || die
+	tar -pxf "${DISTDIR}"/libc-4.7.6.bin.tar.gz -C "${S}" || die
+	tar -pxf "${DISTDIR}"/inc-${PV}.tar.gz -C "${S}" || die
 }
 
 src_prepare() {
 	pushd "${S}" > /dev/null
 	default
-	eapply "${FILESDIR}"/00_${P}.patch || die
+	git apply -p1 < "${FILESDIR}"/00_${P}.patch || die
+	rm -r lib || die
+	mv usr/i486-linuxaout/lib usr/i486-linuxaout/include . || die
+	cp -ax usr/include . || die
+	rm -r usr || die
+	rm lib/*.so* lib/*.sa include/linux include/asm || die
 	popd > /dev/null
 }
 
@@ -42,24 +49,9 @@ src_compile() {
 
 src_install() {
 	pushd "${S}" > /dev/null
-	case ${CATEGORY} in
-	dev-libc4)
-		TOOL_SUFFIX="linuxaout"
-		case ${ARCH} in
-		amd64|x86)
-			TOOL_PREFIX="i486-legacy"
-			;;
-		*)
-			die
-			;;
-		esac
-		;;
-	*)
-		die
-		;;
-	esac
-	CHOST="${TOOL_PREFIX}-${TOOL_SUFFIX}"
+	CHOST="i486-legacy-linuxaout"
 	mkdir -p "${ED}"/usr/${CHOST}/ || die
 	cp -avx . "${ED}"/usr/${CHOST}/ || die
+	ln -sv libc.a "${ED}"/usr/${CHOST}/lib/libg.a || die
 	popd > /dev/null
 }

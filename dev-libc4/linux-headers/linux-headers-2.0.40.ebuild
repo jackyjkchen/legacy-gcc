@@ -9,13 +9,6 @@ SRC_URI="https://mirrors.ustc.edu.cn/kernel.org/linux/kernel/v2.0/linux-${PV}.ta
 
 LICENSE=""
 KEYWORDS="amd64 x86"
-case ${ARCH} in
-amd64|x86)
-	TOOL_PREFIX="i586-legacy"
-	;;
-*)
-	;;
-esac
 SLOT="0"
 
 DEPEND=""
@@ -40,7 +33,7 @@ src_compile() {
 }
 
 src_install() {
-	TARGET_PREFIX="${TOOL_PREFIX}-linux-gnulibc1"
+	TARGET_PREFIX="i486-legacy-linuxaout"
 	UNIX_PREFIX="/usr"
 	mkdir -p ${ED}/${UNIX_PREFIX}/${TARGET_PREFIX}/include || die
 	cp -HR include/asm ${ED}/${UNIX_PREFIX}/${TARGET_PREFIX}/include || die

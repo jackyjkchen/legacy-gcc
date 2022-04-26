@@ -1,0 +1,33 @@
+diff --git a/include/asm-i386/posix_types.h b/include/asm-i386/posix_types.h
+index 712ef70..47eb3cc 100644
+--- a/include/asm-i386/posix_types.h
++++ b/include/asm-i386/posix_types.h
+@@ -35,6 +35,8 @@ typedef struct {
+ #endif /* !defined(__KERNEL__) && !defined(__USE_ALL) */
+ } __kernel_fsid_t;
+ 
++#if defined(__KERNEL__) || !defined(__GLIBC__) || (__GLIBC__ < 2)
++
+ #undef	__FD_SET
+ #define __FD_SET(fd,fdsetp) \
+ 		__asm__ __volatile__("btsl %1,%0": \
+@@ -55,9 +57,15 @@ typedef struct {
+ 
+ #undef	__FD_ZERO
+ #define __FD_ZERO(fdsetp) \
+-		__asm__ __volatile__("cld ; rep ; stosl" \
+-			:"=m" (*(__kernel_fd_set *) (fdsetp)) \
+-			:"a" (0), "c" (__FDSET_LONGS), \
+-			"D" ((__kernel_fd_set *) (fdsetp)) :"cx","di")
++do { \
++	int __d0, __d1; \
++	__asm__ __volatile__("cld ; rep ; stosl" \
++			:"=m" (*(__kernel_fd_set *) (fdsetp)), \
++			  "=&c" (__d0), "=&D" (__d1) \
++			:"a" (0), "1" (__FDSET_LONGS), \
++			"2" ((__kernel_fd_set *) (fdsetp)) : "memory"); \
++} while (0)
++
++#endif /* defined(__KERNEL__) || !defined(__GLIBC__) || (__GLIBC__ < 2) */
+ 
+ #endif
