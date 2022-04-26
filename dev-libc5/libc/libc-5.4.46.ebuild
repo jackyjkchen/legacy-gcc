@@ -5,14 +5,14 @@ EAPI=8
 
 DESCRIPTION=""
 HOMEPAGE=""
-SRC_URI=""
+SRC_URI="https://mirrors.ustc.edu.cn/kernel.org/linux/libs/libc5/old/libc-${PV}.bin.tar.gz"
 
 LICENSE=""
 SLOT="0"
 KEYWORDS="amd64 x86"
 RESTRICT="strip"
 
-DEPEND=""
+DEPEND="${CATEGORY}/linux-headers"
 RDEPEND="${DEPEND}"
 BDEPEND=""
 
@@ -20,12 +20,16 @@ S=${WORKDIR}/libc-${PV}
 
 src_unpack() {
 	mkdir -p "${S}" || die
-	tar -pxf "${FILESDIR}"/libc-${PV}.tar.xz -C "${WORKDIR}" || die
+	tar -pxf "${DISTDIR}"/libc-${PV}.bin.tar.gz -C "${S}" || die
 }
 
 src_prepare() {
 	pushd "${S}" > /dev/null
 	default
+	rm -r lib || die
+	mv usr/lib usr/include . || die
+	rm -r usr || die
+	rm lib/*.so || die
 	eapply "${FILESDIR}"/00_${P}.patch || die
 	popd > /dev/null
 }
