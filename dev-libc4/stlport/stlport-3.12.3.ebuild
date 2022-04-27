@@ -56,13 +56,13 @@ src_install() {
 	pushd "${S}" > /dev/null
 	if use gcc295; then
 		mkdir -p "${ED}"/usr/lib/gcc-lib/${CHOST}/2.95.3/include/ || die
-		cp -avx stl "${ED}"/usr/lib/gcc-lib/${CHOST}/2.95.3/include/g++-v2 || die
-		cp -avx stlconf.h_gcc295 "${ED}"/usr/lib/gcc-lib/${CHOST}/2.95.3/include/g++-v2/config/stlconf.h || die
+		cp -ax stl "${ED}"/usr/lib/gcc-lib/${CHOST}/2.95.3/include/g++-v2 || die
+		cp -ax stlconf.h_gcc295 "${ED}"/usr/lib/gcc-lib/${CHOST}/2.95.3/include/g++-v2/config/stlconf.h || die
 	fi
 	if use egcs112; then
 		mkdir -p "${ED}"/usr/lib/gcc-lib/${CHOST}/2.91.66/include/ || die
-		cp -avx stl "${ED}"/usr/lib/gcc-lib/${CHOST}/2.91.66/include/g++-v2 || die
-		cp -avx stlconf.h_gcc291 "${ED}"/usr/lib/gcc-lib/${CHOST}/2.91.66/include/g++-v2/config/stlconf.h || die
+		cp -ax stl "${ED}"/usr/lib/gcc-lib/${CHOST}/2.91.66/include/g++-v2 || die
+		cp -ax stlconf.h_gcc291 "${ED}"/usr/lib/gcc-lib/${CHOST}/2.91.66/include/g++-v2/config/stlconf.h || die
 	fi
 	popd > /dev/null
 }

@@ -66,7 +66,7 @@ src_compile() {
 src_install() {
 	pushd "${S}" > /dev/null
 	mkdir -p "${ED}"/usr/lib/gcc-lib/${CHOST}/2.91.66/include/ || die
-	cp -avx lib/libstlport_gcc.* "${ED}"/usr/lib/gcc-lib/${CHOST}/2.91.66/ || die
-	cp -avx stlport "${ED}"/usr/lib/gcc-lib/${CHOST}/2.91.66/include/ || die
+	cp -ax lib/libstlport_gcc.* "${ED}"/usr/lib/gcc-lib/${CHOST}/2.91.66/ || die
+	cp -ax stlport "${ED}"/usr/lib/gcc-lib/${CHOST}/2.91.66/include/ || die
 	popd > /dev/null
 }

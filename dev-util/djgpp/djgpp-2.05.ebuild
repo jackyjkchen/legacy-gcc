@@ -62,7 +62,7 @@ src_compile() {
 src_install() {
 	pushd "${S}" > /dev/null
 	mkdir -p "${ED}"/usr/${CTARGET}/dev/env/DJDIR/ || die
-	cp -avx bin include lib "${ED}"/usr/${CTARGET}/ || die
+	cp -ax bin include lib "${ED}"/usr/${CTARGET}/ || die
 	ln -sv include "${ED}"/usr/${CTARGET}/sys-include || die
 	ln -sv ../../../include "${ED}"/usr/${CTARGET}/dev/env/DJDIR/include || die
 	popd > /dev/null

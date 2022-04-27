@@ -70,13 +70,13 @@ src_install() {
 	pushd "${S}" > /dev/null
 	if use gcc281; then
 		mkdir -p "${ED}"/usr/lib/gcc-lib/${CHOST}/2.8.1/include/ || die
-		cp -avx stl "${ED}"/usr/lib/gcc-lib/${CHOST}/2.8.1/include/stlport || die
-		cp -avx stlconf.h_gcc281 "${ED}"/usr/lib/gcc-lib/${CHOST}/2.8.1/include/stlport/config/stlconf.h || die
+		cp -ax stl "${ED}"/usr/lib/gcc-lib/${CHOST}/2.8.1/include/stlport || die
+		cp -ax stlconf.h_gcc281 "${ED}"/usr/lib/gcc-lib/${CHOST}/2.8.1/include/stlport/config/stlconf.h || die
 	fi
 	if use gcc272; then
 		mkdir -p "${ED}"/usr/lib/gcc-lib/${CHOST}/2.7.2/include/ || die
-		cp -avx stl "${ED}"/usr/lib/gcc-lib/${CHOST}/2.7.2/include/stlport || die
-		cp -avx stlconf.h_gcc272 "${ED}"/usr/lib/gcc-lib/${CHOST}/2.7.2/include/stlport/config/stlconf.h || die
+		cp -ax stl "${ED}"/usr/lib/gcc-lib/${CHOST}/2.7.2/include/stlport || die
+		cp -ax stlconf.h_gcc272 "${ED}"/usr/lib/gcc-lib/${CHOST}/2.7.2/include/stlport/config/stlconf.h || die
 	fi
 	popd > /dev/null
 }

@@ -77,7 +77,7 @@ src_compile() {
 src_install() {
 	pushd "${S}" > /dev/null
 	mkdir -p "${ED}"/usr/${CTARGET}/ || die
-	cp -avx . "${ED}"/usr/${CTARGET}/ || die
+	cp -ax . "${ED}"/usr/${CTARGET}/ || die
 	ln -sv usr/include/w32api "${ED}"/usr/${CTARGET}/include
 	ln -sv usr/lib/w32api "${ED}"/usr/${CTARGET}/lib
 	popd > /dev/null
