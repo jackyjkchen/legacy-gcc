@@ -10,13 +10,14 @@ legacy-gcc是一个gentoo的自定义overlay repo，启用该repo，可以在最
 
 本项目旨在现代化的Linux运行时环境上可以原生的使用旧版本gcc，并且在修改量有限，保持原版本gcc核心特性的基础上。
 
-x86与非x86均为本项目的目标，x86目前进度较快，已经可以原生运行gcc-1.42版本，其他平台已在适配中。
+x86与非x86均为本项目的目标，x86已经可以基于系统glibc原生运行gcc-1.42版本，其他平台已在适配中。
 
 各平台目前支持情况如下：
 
-Linux本地工具链——
+Linux glibc本地工具链——
 * x86：>=gcc-1.42
 * amd64：>=gcc-3.1.1
+* amd64-x32：>=gcc-4.7.4
 * alpha：>=gcc-2.8.1
 * aarch64：>=gcc-4.8.5
 * armel：>=gcc-4.1.2
@@ -35,6 +36,8 @@ Linux本地工具链——
 * sparc：>=gcc-2.8.1
 * sparc64：>=gcc-2.95.3
 
+其中amd64/x86/x32，mips64el/mipsel，mips64/mips，sparc64/sparc已测试支持multilib。
+
 Windows/MSDOS交叉工具链——
 * mingw-w64：>=gcc-4.5.4
 * mingw：>=gcc-3.3.6 - gcc-8.5.0（建议gcc-4.7及以上版本使用mingw-w64）
@@ -42,12 +45,14 @@ Windows/MSDOS交叉工具链——
 * cygwin：>=gcc-4.9.4
 * djgpp：gcc-3.3.6 - gcc-3.4.6，gcc-4.1.2，gcc-4.4.7 - gcc-9.4.0
 
+其中mingw-w64支持multilib。
+
 提供额外的libc5/libc4静态工具链，可与标准glibc(libc6)工具链共存，以本地工具链形式bootstrap——
 * libc5: gcc-1.42 - gcc-3.4.6
 * libc4: gcc-1.42 - gcc-2.95.3
 
+libc5为ELF格式，libc4为aout格式.
 
-其中amd64/x86，mips64el/mipsel，mips64/mips，sparc64/sparc，mingw-w64已测试支持multilib。
 
 # 使用方法
 
