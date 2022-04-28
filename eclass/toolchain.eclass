@@ -1625,7 +1625,7 @@ gcc-multilib-configure() {
 	if [[ -n ${list} ]] ; then
 		case ${CTARGET} in
 		x86_64*)
-			tc_version_is_at_least 4.8 && confgcc+=( --with-multilib-list=${list:1} )
+			tc_version_is_at_least 4.7 && confgcc+=( --with-multilib-list=${list:1} )
 			;;
 		esac
 	fi
