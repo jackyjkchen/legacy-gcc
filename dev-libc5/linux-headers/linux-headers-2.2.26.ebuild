@@ -22,6 +22,7 @@ S=${WORKDIR}/linux-${PV}
 src_prepare() {
 	pushd "${S}" > /dev/null
 	default
+	eapply "${FILESDIR}"/00_${P}.patch || die
 	popd > /dev/null
 }
 
