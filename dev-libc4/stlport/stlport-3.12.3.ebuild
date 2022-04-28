@@ -13,11 +13,13 @@ LICENSE=""
 SLOT="$(ver_cut 1-3 ${PV})"
 KEYWORDS="amd64 x86"
 
-IUSE="+gcc295 +egcs112"
+IUSE="+gcc295 +egcs112 +gcc281 +gcc272"
 
 DEPEND="
 	gcc295? ( ${CATEGORY}/gcc:2.95.3[cxx] )
-	egcs112? ( ${CATEGORY}/egcs:1.1.2[cxx] )"
+	egcs112? ( ${CATEGORY}/egcs:1.1.2[cxx] )
+	gcc281? ( ${CATEGORY}/gcc:2.8.1[cxx] ${CATEGORY}/libio:2.8.1 )
+	gcc272? ( ${CATEGORY}/gcc:2.7.2[cxx] ${CATEGORY}/libio:2.7.2 )"
 RDEPEND="${DEPEND}"
 BDEPEND=""
 
@@ -34,16 +36,6 @@ src_prepare() {
 
 src_configure() {
 	pushd "${S}" > /dev/null
-	if use gcc295; then
-		downgrade_arch_flags 2.95.3
-		CC="${CHOST}-gcc-2.95.3" CXX="${CHOST}-g++-2.95.3" sh ./stl/config/configure --enable-newalloc || die
-		mv stlconf.h stlconf.h_gcc295 || die
-	fi
-	if use egcs112; then
-		downgrade_arch_flags 2.91.66
-		CC="${CHOST}-gcc-2.91.66" CXX="${CHOST}-g++-2.91.66" sh ./stl/config/configure --enable-newalloc || die
-		mv stlconf.h stlconf.h_gcc291 || die
-	fi
 	popd > /dev/null
 }
 
@@ -57,12 +49,23 @@ src_install() {
 	if use gcc295; then
 		mkdir -p "${ED}"/usr/lib/gcc-lib/${CHOST}/2.95.3/include/ || die
 		cp -ax stl "${ED}"/usr/lib/gcc-lib/${CHOST}/2.95.3/include/g++-v2 || die
-		cp -ax stlconf.h_gcc295 "${ED}"/usr/lib/gcc-lib/${CHOST}/2.95.3/include/g++-v2/config/stlconf.h || die
+		cp -ax ${FILESDIR}/${PV}/stlconf.h_gcc295 "${ED}"/usr/lib/gcc-lib/${CHOST}/2.95.3/include/g++-v2/config/stlconf.h || die
 	fi
 	if use egcs112; then
 		mkdir -p "${ED}"/usr/lib/gcc-lib/${CHOST}/2.91.66/include/ || die
 		cp -ax stl "${ED}"/usr/lib/gcc-lib/${CHOST}/2.91.66/include/g++-v2 || die
-		cp -ax stlconf.h_gcc291 "${ED}"/usr/lib/gcc-lib/${CHOST}/2.91.66/include/g++-v2/config/stlconf.h || die
+		cp -ax ${FILESDIR}/${PV}/stlconf.h_gcc291 "${ED}"/usr/lib/gcc-lib/${CHOST}/2.91.66/include/g++-v2/config/stlconf.h || die
+	fi
+	if use gcc281; then
+		mkdir -p "${ED}"/usr/lib/gcc-lib/${CHOST}/2.8.1/include/ || die
+		cp -ax stl "${ED}"/usr/lib/gcc-lib/${CHOST}/2.8.1/include/g++-v2 || die
+		cp -ax ${FILESDIR}/${PV}/stlconf.h_gcc281 "${ED}"/usr/lib/gcc-lib/${CHOST}/2.8.1/include/g++-v2/config/stlconf.h || die
+	fi
+	if use gcc272; then
+		mkdir -p "${ED}"/usr/lib/gcc-lib/${CHOST}/2.7.2/include/ || die
+		cp -ax stl "${ED}"/usr/lib/gcc-lib/${CHOST}/2.7.2/include/g++ || die
+		cp -ax ${FILESDIR}/${PV}/stlconf.h_gcc272 "${ED}"/usr/lib/gcc-lib/${CHOST}/2.7.2/include/g++/config/stlconf.h || die
+		rm -v "${ED}"/usr/lib/gcc-lib/${CHOST}/2.7.2/include/g++/new || die
 	fi
 	popd > /dev/null
 }

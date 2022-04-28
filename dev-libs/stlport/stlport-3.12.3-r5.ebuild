@@ -30,8 +30,8 @@ esac
 IUSE="+gcc281 +gcc272"
 
 DEPEND="
-	gcc281? ( sys-devel/gcc:2.8.1[cxx] )
-	gcc272? ( sys-devel/gcc:2.7.2[cxx] )"
+	gcc281? ( sys-devel/gcc:2.8.1[cxx] sys-libs/libstdc++:2.8.1 )
+	gcc272? ( sys-devel/gcc:2.7.2[cxx] sys-libs/libg++:2.7.2  )"
 RDEPEND="${DEPEND}"
 BDEPEND=""
 
@@ -77,6 +77,8 @@ src_install() {
 		mkdir -p "${ED}"/usr/lib/gcc-lib/${CHOST}/2.7.2/include/ || die
 		cp -ax stl "${ED}"/usr/lib/gcc-lib/${CHOST}/2.7.2/include/stlport || die
 		cp -ax stlconf.h_gcc272 "${ED}"/usr/lib/gcc-lib/${CHOST}/2.7.2/include/stlport/config/stlconf.h || die
+		ln -sv g++/new "${ED}"/usr/lib/gcc-lib/${CHOST}/2.7.2/include/ || die
+		ln -sv g++/new.h "${ED}"/usr/lib/gcc-lib/${CHOST}/2.7.2/include/ || die
 	fi
 	popd > /dev/null
 }

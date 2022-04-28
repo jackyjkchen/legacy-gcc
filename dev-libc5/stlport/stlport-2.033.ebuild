@@ -13,7 +13,8 @@ LICENSE=""
 SLOT="$(ver_cut 1-3 ${PV})"
 KEYWORDS="amd64 x86"
 
-DEPEND="${CATEGORY}/gcc:2.6.3[cxx]"
+DEPEND="${CATEGORY}/gcc:2.6.3[cxx]
+		${CATEGORY}/libg++:2.6.2"
 RDEPEND="${DEPEND}"
 BDEPEND=""
 
