@@ -59,7 +59,7 @@ src_configure() {
 
 src_compile() {
 	pushd "${S}" > /dev/null
-	rm -rfv README* *.c configure config.log config/configure.in
+	rm -rfv README* *.c config.log
 	popd > /dev/null
 }
 

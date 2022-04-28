@@ -14,11 +14,11 @@ SLOT="$(ver_cut 1-3 ${PV})"
 KEYWORDS="amd64 x86"
 
 DEPEND="${CATEGORY}/gcc:2.6.3[cxx]
-		${CATEGORY}/libg++:2.6.2"
+		${CATEGORY}/libio:2.6.2"
 RDEPEND="${DEPEND}"
 BDEPEND=""
 
-CHOST="i586-legacy-linux-gnulibc1"
+CHOST="i486-legacy-linuxaout"
 
 CC="${CHOST}-gcc-2.6,3"
 CXX="${CHOST}-g++-2.6.3"
@@ -40,19 +40,19 @@ src_prepare() {
 src_configure() {
 	pushd "${S}" > /dev/null
 	downgrade_arch_flags 2.6.3
-	PATH=/usr/${CHOST}/bin:${PATH} sh ./configure --enable-newalloc || die
 	popd > /dev/null
 }
 
 src_compile() {
 	pushd "${S}" > /dev/null
-	rm -rfv README* *.c config.log
+	rm -rfv README* *.c config.log stlconf.h
+	cp -ax ${FILESDIR}/${PV}/stlconf.h_gcc263 stlconf.h || die
 	popd > /dev/null
 }
 
 src_install() {
 	pushd "${S}" > /dev/null
 	mkdir -p "${ED}"/usr/lib/gcc-lib/${CHOST}/2.6.3/include/ || die
-	cp -ax . "${ED}"/usr/lib/gcc-lib/${CHOST}/2.6.3/include/stlport || die
+	cp -ax . "${ED}"/usr/lib/gcc-lib/${CHOST}/2.6.3/include/g++ || die
 	popd > /dev/null
 }
