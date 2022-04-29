@@ -12,7 +12,7 @@ SLOT="0"
 KEYWORDS="amd64 x86"
 RESTRICT="strip"
 
-DEPEND="${CATEGORY}/gcc"
+DEPEND="${CATEGORY}/gcc:2.95.3"
 RDEPEND="${DEPEND}"
 BDEPEND=""
 
@@ -39,9 +39,9 @@ src_configure() {
 src_compile() {
 	pushd "${S}" > /dev/null
 	INCLUDES="-Iinclude -Isysdeps/linux/i386 -I."
-	${CHOST}-gcc -O2 -s -c ${INCLUDES} sysdeps/linux/poll.c || die
-	${CHOST}-gcc -O2 -s -c ${INCLUDES} sysdeps/linux/__errno_loc.c || die
-	${CHOST}-gcc -O2 -s -c ${INCLUDES} sysdeps/linux/__syscall_poll.S || die
+	${CHOST}-gcc-2.95.3 -O2 -s -c ${INCLUDES} sysdeps/linux/poll.c || die
+	${CHOST}-gcc-2.95.3 -O2 -s -c ${INCLUDES} sysdeps/linux/__errno_loc.c || die
+	${CHOST}-gcc-2.95.3 -O2 -s -c ${INCLUDES} sysdeps/linux/__syscall_poll.S || die
 	${CHOST}-ar rc libpoll.a poll.o __errno_loc.o __syscall_poll.o || die
 	popd > /dev/null
 }
