@@ -61,6 +61,7 @@ src_unpack() {
 src_prepare() {
 	pushd "${S}" > /dev/null
 	default
+	eapply "${FILESDIR}"/${PV}/00_fix-gcc-47.patch
 	popd > /dev/null
 }
 

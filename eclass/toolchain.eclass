@@ -717,7 +717,7 @@ do_gcc_CYGWIN_patches() {
 		einfo "Applying cygwin port patches ..."
 		eapply "${FILESDIR}"/${GCC_RELEASE_VER}/cygwin/*.patch
 	fi
-	[[ ${CTARGET} == x86_64*-cygwin ]] && \
+	[[ ${CTARGET} == x86_64-*-cygwin ]] && \
 	if [ -d "${FILESDIR}/${GCC_RELEASE_VER}/cygwin64" ]; then
 		einfo "Applying cygwin64 port patches ..."
 		eapply "${FILESDIR}"/${GCC_RELEASE_VER}/cygwin64/*.patch
@@ -1178,10 +1178,25 @@ toolchain_src_configure() {
 	*-musl*)
 		confgcc+=( --enable-__cxa_atexit )
 		;;
-	*-gnu*|*-cygwin)
+	*-gnu*)
 		confgcc+=(
 			--enable-__cxa_atexit
 			--enable-clocale=gnu
+		)
+		;;
+	*-cygwin)
+		if tc_version_is_at_least 4.8 ; then
+			confgcc+=( --enable-__cxa_atexit )
+		else
+			confgcc+=( --disable-__cxa_atexit --disable-libitm )
+		fi
+		confgcc+=(
+			--enable-clocale=gnu
+			--with-dwarf2
+		)
+		[[ ${CTARGET} == x86_64-*-cygwin ]] || \
+		confgcc+=(
+			--disable-sjlj-exceptions
 		)
 		;;
 	*-solaris*)
