@@ -42,8 +42,8 @@ Windows/MSDOS交叉工具链——
 * mingw-w64：>=gcc-4.5.4
 * mingw：>=gcc-3.3.6 - gcc-8.5.0（建议gcc-4.7及以上版本使用mingw-w64）
 * cygwin64：>=gcc-4.8.5
-* cygwin：>=gcc-4.8.5
-* djgpp：gcc-3.3.6 - gcc-3.4.6，gcc-4.1.2，gcc-4.4.7 - gcc-9.4.0
+* cygwin：gcc-4.5.4，>=gcc-4.7.4
+* djgpp：gcc-3.3.6，gcc-3.4.6，gcc-4.1.2，gcc-4.4.7 - gcc-9.4.0
 
 其中mingw-w64支持multilib。
 
