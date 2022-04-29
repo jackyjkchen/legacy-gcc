@@ -717,6 +717,11 @@ do_gcc_CYGWIN_patches() {
 		einfo "Applying cygwin port patches ..."
 		eapply "${FILESDIR}"/${GCC_RELEASE_VER}/cygwin/*.patch
 	fi
+	[[ ${CTARGET} == x86_64*-cygwin ]] && \
+	if [ -d "${FILESDIR}/${GCC_RELEASE_VER}/cygwin64" ]; then
+		einfo "Applying cygwin64 port patches ..."
+		eapply "${FILESDIR}"/${GCC_RELEASE_VER}/cygwin64/*.patch
+	fi
 }
 
 do_gcc_DJGPP_patches() {
