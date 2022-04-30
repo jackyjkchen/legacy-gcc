@@ -5,9 +5,13 @@
 #include <stdlib.h>
 #include <string.h>
 
-static size_t count[256] = { 0 };
-
-static size_t max_count = 0;
+#ifdef _WIN64
+static unsigned __int64 max_count = 0;
+static unsigned __int64 count[256] = { 0 };
+#else
+static unsigned long max_count = 0;
+static unsigned long count[256] = { 0 };
+#endif
 
 static void read_file(const char *filename) {
     unsigned char buf[BUFSIZ] = { 0 };
@@ -32,22 +36,19 @@ static void read_file(const char *filename) {
     fclose(fp);
 }
 
-static void print_number() {
+static void print_number(void) {
     int i = 0;
 
     puts("Statistics:");
     for (i = 0; i < 256; ++i) {
-#if __STDC_VERSION__ >= 199901L
-/* Use C99 standard %zu for size_t */
-        printf(" 0x%02X  %zu\n", i, count[i]);
-#elif _WIN64
+#if _WIN64
 /* Windows LLP64 model, long == 32bit, only long long == 64bit */
-        printf(" 0x%02X  %llu\r\n", i, (unsigned __int64)count[i]);
+        printf(" 0x%02X  %llu\r\n", i, (unsigned __int64)(count[i]));
 #else
 /* Posix LP64 model, unsigned long == wordsize == size_t */
 /* Windowsy 32bit platform, unsigned long == size_t == 32bit */
 /* WIN/DOS 16bit platform, unsigned long > unsigned int == size_t == 16bit */
-        printf(" 0x%02X  %lu\n", i, (unsigned long)count[i]);
+        printf(" 0x%02X  %lu\n", i, (unsigned long)(count[i]));
 #endif
         if (max_count < count[i]) {
             max_count = count[i];
@@ -55,7 +56,7 @@ static void print_number() {
     }
 }
 
-static void print_histogram() {
+static void print_histogram(void) {
     int i = 0;
 
     puts("Histogram:");
@@ -68,7 +69,7 @@ static void print_histogram() {
 
 int main(int argc, char **argv) {
     if (argc != 2) {
-        fprintf(stderr, "Usage: ./byte_count <file>\n");
+        fprintf(stderr, "Usage: ./byte_cnt <file>\n");
         return -1;
     }
 
@@ -76,4 +77,6 @@ int main(int argc, char **argv) {
     print_number();
     puts("");
     print_histogram();
+
+    return 0;
 }
