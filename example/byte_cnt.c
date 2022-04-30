@@ -8,6 +8,9 @@
 #ifdef _WIN64
 static unsigned __int64 max_count = 0;
 static unsigned __int64 count[256] = { 0 };
+#elif COUNT64
+static unsigned long long max_count = 0;
+static unsigned long long count[256] = { 0 };
 #else
 static unsigned long max_count = 0;
 static unsigned long count[256] = { 0 };
@@ -44,6 +47,9 @@ static void print_number(void) {
 #if _WIN64
 /* Windows LLP64 model, long == 32bit, only long long == 64bit */
         printf(" 0x%02X  %llu\r\n", i, (unsigned __int64)(count[i]));
+#elif COUNT64
+/* Support 64bit count in 32bit platform */
+        printf(" 0x%02X  %llu\r\n", i, (unsigned long long)(count[i]));
 #else
 /* Posix LP64 model, unsigned long == wordsize == size_t */
 /* Windowsy 32bit platform, unsigned long == size_t == 32bit */
