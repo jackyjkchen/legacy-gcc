@@ -20,6 +20,7 @@ static unsigned long long count[256] = { 0 };
 static unsigned long max_count = 0;
 static unsigned long count[256] = { 0 };
 #endif
+static unsigned char overflow[256] = { 0 };
 
 static void read_file(const char *filename) {
     unsigned char buf[BUFSIZ] = { 0 };
@@ -38,7 +39,12 @@ static void read_file(const char *filename) {
             break;
         }
         for (i = 0; i < rd_len; ++i) {
-            count[buf[i]]++;
+            unsigned char pos = buf[i];
+            count[pos]++;
+            if (count[pos] == 0) {
+                fprintf(stderr, "0x%02X count overflow!\n", pos);
+                overflow[pos] = 1;
+            }
         }
     }
     fclose(fp);
@@ -49,21 +55,25 @@ static void print_number(void) {
 
     puts("Statistics:");
     for (i = 0; i < 256; ++i) {
+        const char *msg = "";
+        if (overflow[i] != 0) {
+            msg = " overflow!";
+        }
 #if _WIN64
 /* Windows LLP64 model, long == 32bit, only long long == 64bit */
-        printf(" 0x%02X  %llu\r\n", i, (unsigned __int64)(count[i]));
+        printf(" 0x%02X  %llu%s\r\n", i, (unsigned __int64)(count[i]), msg);
 #elif COUNT64
 /* Support 64bit count in 32bit platform */
 #if defined(_MSC_VER) || defined(__BORLANDC__) || defined(__WATCOMC__)
-        printf(" 0x%02X  %llu\r\n", i, (unsigned __int64)(count[i]));
+        printf(" 0x%02X  %llu%s\r\n", i, (unsigned __int64)(count[i]), msg);
 #elif
-        printf(" 0x%02X  %llu\r\n", i, (unsigned long long)(count[i]));
+        printf(" 0x%02X  %llu%s\n", i, (unsigned long long)(count[i]), msg);
 #endif
 #else
 /* Posix LP64 model, unsigned long == wordsize == size_t */
 /* Windowsy 32bit platform, unsigned long == size_t == 32bit */
 /* WIN/DOS 16bit platform, unsigned long > unsigned int == size_t == 16bit */
-        printf(" 0x%02X  %lu\n", i, (unsigned long)(count[i]));
+        printf(" 0x%02X  %lu%s\n", i, (unsigned long)(count[i]), msg);
 #endif
         if (max_count < count[i]) {
             max_count = count[i];
