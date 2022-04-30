@@ -45,7 +45,12 @@ Windows/MSDOS交叉工具链——
 * cygwin：gcc-4.5.4，>=gcc-4.7.4
 * djgpp：gcc-3.3.6，gcc-3.4.6，gcc-4.1.2，gcc-4.4.7 - gcc-9.4.0
 
-其中mingw-w64支持multilib。
+
+mingw-w64支持multilib，64位使用SEH异常机制（4.8以上版本），32位使用SJLJ异常机制（包括4.8以下的64位版本），保障与Windows系统DLL的最佳兼容性。
+
+mingw仅支持32位，使用SJLJ异常机制，与mingw官方二进制发布一致。
+
+cygwin64/cygwin不支持multilib，使用DWARF-2异常机制，与cygwin官方二进制发布一致。
 
 提供额外的libc5/libc4静态工具链，可与标准glibc(libc6)工具链共存，以本地工具链形式bootstrap——
 * libc5: gcc-1.42 - gcc-3.4.6
