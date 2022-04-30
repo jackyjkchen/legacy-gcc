@@ -742,6 +742,33 @@ index ef116ef..e41ae75 100644
    n_args = GET_RTX_LENGTH (code);
    fmt = GET_RTX_FORMAT (code);
  
+diff --git a/config/att386.h b/config/att386.h
+index a259074..f07bbe0 100644
+--- a/config/att386.h
++++ b/config/att386.h
+@@ -66,6 +66,7 @@ the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.  */
+ 
+ #define ASM_NO_SKIP_IN_TEXT 1
+ 
++#undef BSS_SECTION_FUNCTION  /* Override the definition from svr3.h.  */
+ #define BSS_SECTION_FUNCTION \
+ void								\
+ bss_section ()							\
+@@ -84,12 +85,14 @@ bss_section ()							\
+    PREFIX is the class of label and NUM is the number within the class.
+    This is suitable for output with `assemble_name'.  */
+ 
++#undef ASM_GENERATE_INTERNAL_LABEL
+ #define ASM_GENERATE_INTERNAL_LABEL(BUF,PREFIX,NUMBER)	\
+   sprintf ((BUF), ".%s%d", (PREFIX), (NUMBER))
+ 
+ /* This is how to output an internal numbered label where
+    PREFIX is the class of label and NUM is the number within the class.  */
+ 
++#undef ASM_OUTPUT_INTERNAL_LABEL
+ #define ASM_OUTPUT_INTERNAL_LABEL(FILE,PREFIX,NUM)	\
+   fprintf (FILE, ".%s%d:\n", PREFIX, NUM)
+ 
 diff --git a/config/i386.h b/config/i386.h
 index 9878b50..8bdf6e3 100644
 --- a/config/i386.h
@@ -2037,7 +2064,7 @@ index 412f7b7..de68251 100644
 +#define AS3_SHIFT_DOUBLE(a,b,c,d) AS3 (a,b,c,d)
 +
 diff --git a/config/svr4.h b/config/svr4.h
-index 77328f1..7377944 100644
+index 77328f1..7f0cbad 100644
 --- a/config/svr4.h
 +++ b/config/svr4.h
 @@ -1,8 +1,7 @@
@@ -2203,7 +2230,7 @@ index 77328f1..7377944 100644
  /* System V Release 4 uses DWARF debugging info.  */
  
  #define DWARF_DEBUGGING_INFO
-@@ -235,6 +246,59 @@ do {				 				\
+@@ -235,6 +246,75 @@ do {				 				\
  
  #undef DBX_REGISTER_NUMBER
  
@@ -2247,6 +2274,22 @@ index 77328f1..7377944 100644
 +  }									\
 +while (0)
 +
++/* Like block addresses, stabs line numbers are relative to the
++   current function.  */
++
++#define ASM_OUTPUT_SOURCE_LINE(file, line)				\
++do									\
++  {									\
++    static int sym_lineno = 1;						\
++    fprintf (file, ".stabn 68,0,%d,.LM%d-",				\
++	     line, sym_lineno);						\
++    assemble_name (file,						\
++		   XSTR (XEXP (DECL_RTL (current_function_decl), 0), 0));\
++    fprintf (file, "\n.LM%d:\n", sym_lineno);				\
++    sym_lineno += 1;							\
++  }									\
++while (0)
++
 +/* In order for relative line numbers to work, we must output the
 +   stabs entry for the function name first.  */
 +
@@ -2263,7 +2306,7 @@ index 77328f1..7377944 100644
  /* Define the actual types of some ANSI-mandated types.  (These
     definitions should work for most SVR4 systems).  */
  
-@@ -250,10 +314,15 @@ do {				 				\
+@@ -250,10 +330,15 @@ do {				 				\
  #undef WCHAR_TYPE_SIZE
  #define WCHAR_TYPE_SIZE BITS_PER_WORD
  
@@ -2281,7 +2324,7 @@ index 77328f1..7377944 100644
  
  /* This is how to begin an assembly language file.  Most svr4 assemblers want
     at least a .file directive to come first, and some want to see a .version
-@@ -269,8 +338,11 @@ do {				 				\
+@@ -269,8 +354,11 @@ do {				 				\
  /* This is how to allocate empty space in some section.  The .zero
     pseudo-op is used for this on most svr4 assemblers.  */
  
@@ -2294,7 +2337,7 @@ index 77328f1..7377944 100644
  
  /* This is how to output a reference to a user-level label named NAME.
     `assemble_name' uses this.
-@@ -281,6 +353,54 @@ do {				 				\
+@@ -281,6 +369,54 @@ do {				 				\
  #undef ASM_OUTPUT_LABELREF
  #define ASM_OUTPUT_LABELREF(FILE,NAME) fprintf (FILE, "%s", NAME)
  
@@ -2349,7 +2392,7 @@ index 77328f1..7377944 100644
  /* The standard SVR4 assembler seems to require that certain builtin
     library routines (e.g. .udiv) be explicitly declared as .globl
     in each assembly file where they are referenced.  */
-@@ -293,10 +413,12 @@ do {				 				\
+@@ -293,10 +429,12 @@ do {				 				\
     the linker seems to want the alignment of data objects
     to depend on their types.  We do exactly that here.  */
  
@@ -2363,7 +2406,7 @@ index 77328f1..7377944 100644
    assemble_name ((FILE), (NAME));					\
    fprintf ((FILE), ",%u,%u\n", (SIZE), (ALIGN) / BITS_PER_UNIT);	\
  } while (0)
-@@ -306,13 +428,15 @@ do {									\
+@@ -306,13 +444,15 @@ do {									\
     the linker seems to want the alignment of data objects
     to depend on their types.  We do exactly that here.  */
  
@@ -2382,7 +2425,7 @@ index 77328f1..7377944 100644
  } while (0)
  
  /* This is the pseudo-op used to generate a 32-bit word of data with a
-@@ -339,16 +463,33 @@ do {									\
+@@ -339,16 +479,33 @@ do {									\
  #define USE_CONST_SECTION	1
  
  #define CONST_SECTION_ASM_OP	".section\t.rodata"
@@ -2423,7 +2466,7 @@ index 77328f1..7377944 100644
  
  /* A default list of other sections which we might be "in" at any given
     time.  For targets that use additional sections (e.g. .tdesc) you
-@@ -370,7 +511,7 @@ do {									\
+@@ -370,7 +527,7 @@ do {									\
  
  #define READONLY_DATA_SECTION() const_section ()
  
@@ -2432,7 +2475,7 @@ index 77328f1..7377944 100644
  
  #define CONST_SECTION_FUNCTION						\
  void									\
-@@ -391,7 +532,7 @@ ctors_section ()							\
+@@ -391,7 +548,7 @@ ctors_section ()							\
  {									\
    if (in_section != in_ctors)						\
      {									\
@@ -2441,7 +2484,7 @@ index 77328f1..7377944 100644
        in_section = in_ctors;						\
      }									\
  }
-@@ -402,7 +543,7 @@ dtors_section ()							\
+@@ -402,7 +559,7 @@ dtors_section ()							\
  {									\
    if (in_section != in_dtors)						\
      {									\
@@ -2450,7 +2493,7 @@ index 77328f1..7377944 100644
        in_section = in_dtors;						\
      }									\
  }
-@@ -444,7 +585,10 @@ dtors_section ()							\
+@@ -444,7 +601,10 @@ dtors_section ()							\
    else if (TREE_CODE (DECL) == VAR_DECL)				\
      {									\
        if ((flag_pic && RELOC)						\
@@ -2462,7 +2505,7 @@ index 77328f1..7377944 100644
  	data_section ();						\
        else								\
  	const_section ();						\
-@@ -471,6 +615,12 @@ dtors_section ()							\
+@@ -471,6 +631,12 @@ dtors_section ()							\
  #define TYPE_ASM_OP	".type"
  #define SIZE_ASM_OP	".size"
  
@@ -2475,7 +2518,7 @@ index 77328f1..7377944 100644
  /* The following macro defines the format used to output the second
     operand of the .type assembler directive.  Different svr4 assemblers
     expect various different forms for this operand.  The one given here
-@@ -479,11 +629,22 @@ dtors_section ()							\
+@@ -479,11 +645,22 @@ dtors_section ()							\
  
  #define TYPE_OPERAND_FMT	"@%s"
  
@@ -2500,7 +2543,7 @@ index 77328f1..7377944 100644
  
  #define ASM_DECLARE_FUNCTION_NAME(FILE, NAME, DECL)			\
    do {									\
-@@ -492,24 +653,7 @@ dtors_section ()							\
+@@ -492,24 +669,7 @@ dtors_section ()							\
      putc (',', FILE);							\
      fprintf (FILE, TYPE_OPERAND_FMT, "function");			\
      putc ('\n', FILE);							\
@@ -2526,7 +2569,7 @@ index 77328f1..7377944 100644
      ASM_OUTPUT_LABEL(FILE, NAME);					\
    } while (0)
  
-@@ -529,7 +673,7 @@ dtors_section ()							\
+@@ -529,7 +689,7 @@ dtors_section ()							\
          fprintf (FILE, ",");						\
  	assemble_name (FILE, label);					\
          fprintf (FILE, "-");						\
@@ -2535,7 +2578,7 @@ index 77328f1..7377944 100644
  	putc ('\n', FILE);						\
        }									\
    } while (0)
-@@ -545,10 +689,11 @@ dtors_section ()							\
+@@ -545,10 +705,11 @@ dtors_section ()							\
     in the table.  Note that we can use standard UN*X escape
     sequences for many control characters, but we don't use
     \a to represent BEL because some svr4 assemblers (e.g. on
@@ -2549,7 +2592,7 @@ index 77328f1..7377944 100644
  \0\0\"\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\
  \0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\\\0\0\0\
  \0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\1\
-@@ -669,3 +814,6 @@ dtors_section ()							\
+@@ -669,3 +830,6 @@ dtors_section ()							\
          fprintf ((FILE), "\"\n");					\
      }									\
    while (0)
@@ -3161,24 +3204,6 @@ index 9b91e6c..0a30340 100644
  #endif
  
  #endif /* defined(CRT_END) */
-diff --git a/dwarfout.c b/dwarfout.c
-index addeec9..0a3bdbd 100644
---- a/dwarfout.c
-+++ b/dwarfout.c
-@@ -48,13 +48,6 @@ extern time_t time ();
- #endif /* !defined(POSIX) */
- #endif /* defined(DWARF_TIMESTAMPS) */
- 
--#if defined(USG) || defined(POSIX)
--#include <string.h>
--#else
--#include <strings.h>
--#define strrchr rindex
--#endif
--
- char *getpwd ();
- 
- 
 diff --git a/emit-rtl.c b/emit-rtl.c
 index 6a9d6d5..772a7ac 100644
 --- a/emit-rtl.c
@@ -3328,7 +3353,7 @@ index 620a425..6dae348 100644
  /* Given an rtx that may include add and multiply operations,
     generate them as insns and return a pseudo-reg containing the value.
 diff --git a/final.c b/final.c
-index 923158a..29e03a3 100644
+index 923158a..378ba6c 100644
 --- a/final.c
 +++ b/final.c
 @@ -43,9 +43,13 @@ the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.  */
@@ -3346,7 +3371,15 @@ index 923158a..29e03a3 100644
  #include "rtl.h"
  #include "regs.h"
  #include "insn-config.h"
-@@ -2119,18 +2123,23 @@ output_addr_const (file, x)
+@@ -57,6 +61,7 @@ the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.  */
+ #include "real.h"
+ #include "output.h"
+ #include "hard-reg-set.h"
++#include "tree.h"
+ 
+ #ifndef ASM_STABD_OP
+ #define ASM_STABD_OP ".stabd"
+@@ -2119,18 +2124,23 @@ output_addr_const (file, x)
     Also supported are %d, %x, %s, %e, %f, %g and %%.  */
  
  void

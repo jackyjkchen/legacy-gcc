@@ -713,6 +713,18 @@ index 6f5c5e9..a305a93 100644
    n_args = GET_RTX_LENGTH (code);
    fmt = GET_RTX_FORMAT (code);
  
+diff --git a/config/att386.h b/config/att386.h
+index 6cc7816..f07bbe0 100644
+--- a/config/att386.h
++++ b/config/att386.h
+@@ -66,6 +66,7 @@ the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.  */
+ 
+ #define ASM_NO_SKIP_IN_TEXT 1
+ 
++#undef BSS_SECTION_FUNCTION  /* Override the definition from svr3.h.  */
+ #define BSS_SECTION_FUNCTION \
+ void								\
+ bss_section ()							\
 diff --git a/config/i386.c b/config/i386.c
 index e1b6c19..e2d4c26 100644
 --- a/config/i386.c
@@ -2247,7 +2259,7 @@ index 0000000..61bc4ae
 +     : "%d0", "%d2", "%d3");						\
 +}
 diff --git a/config/svr4.h b/config/svr4.h
-index 382171b..7377944 100644
+index 382171b..7f0cbad 100644
 --- a/config/svr4.h
 +++ b/config/svr4.h
 @@ -1,8 +1,7 @@
@@ -2396,7 +2408,7 @@ index 382171b..7377944 100644
  /* System V Release 4 uses DWARF debugging info.  */
  
  #define DWARF_DEBUGGING_INFO
-@@ -235,6 +246,59 @@ do {				 				\
+@@ -235,6 +246,75 @@ do {				 				\
  
  #undef DBX_REGISTER_NUMBER
  
@@ -2440,6 +2452,22 @@ index 382171b..7377944 100644
 +  }									\
 +while (0)
 +
++/* Like block addresses, stabs line numbers are relative to the
++   current function.  */
++
++#define ASM_OUTPUT_SOURCE_LINE(file, line)				\
++do									\
++  {									\
++    static int sym_lineno = 1;						\
++    fprintf (file, ".stabn 68,0,%d,.LM%d-",				\
++	     line, sym_lineno);						\
++    assemble_name (file,						\
++		   XSTR (XEXP (DECL_RTL (current_function_decl), 0), 0));\
++    fprintf (file, "\n.LM%d:\n", sym_lineno);				\
++    sym_lineno += 1;							\
++  }									\
++while (0)
++
 +/* In order for relative line numbers to work, we must output the
 +   stabs entry for the function name first.  */
 +
@@ -2456,7 +2484,7 @@ index 382171b..7377944 100644
  /* Define the actual types of some ANSI-mandated types.  (These
     definitions should work for most SVR4 systems).  */
  
-@@ -315,6 +379,28 @@ do {									\
+@@ -315,6 +395,28 @@ do {									\
    sprintf (LABEL, "*.%s%d", PREFIX, NUM);				\
  } while (0)
  
@@ -2485,7 +2513,7 @@ index 382171b..7377944 100644
  /* The standard SVR4 assembler seems to require that certain builtin
     library routines (e.g. .udiv) be explicitly declared as .globl
     in each assembly file where they are referenced.  */
-@@ -377,16 +463,33 @@ do {									\
+@@ -377,16 +479,33 @@ do {									\
  #define USE_CONST_SECTION	1
  
  #define CONST_SECTION_ASM_OP	".section\t.rodata"
@@ -2526,7 +2554,7 @@ index 382171b..7377944 100644
  
  /* A default list of other sections which we might be "in" at any given
     time.  For targets that use additional sections (e.g. .tdesc) you
-@@ -408,7 +511,7 @@ do {									\
+@@ -408,7 +527,7 @@ do {									\
  
  #define READONLY_DATA_SECTION() const_section ()
  
@@ -2535,7 +2563,7 @@ index 382171b..7377944 100644
  
  #define CONST_SECTION_FUNCTION						\
  void									\
-@@ -482,7 +585,10 @@ dtors_section ()							\
+@@ -482,7 +601,10 @@ dtors_section ()							\
    else if (TREE_CODE (DECL) == VAR_DECL)				\
      {									\
        if ((flag_pic && RELOC)						\
@@ -2547,7 +2575,7 @@ index 382171b..7377944 100644
  	data_section ();						\
        else								\
  	const_section ();						\
-@@ -508,7 +614,12 @@ dtors_section ()							\
+@@ -508,7 +630,12 @@ dtors_section ()							\
  
  #define TYPE_ASM_OP	".type"
  #define SIZE_ASM_OP	".size"
@@ -2561,7 +2589,7 @@ index 382171b..7377944 100644
  
  /* The following macro defines the format used to output the second
     operand of the .type assembler directive.  Different svr4 assemblers
-@@ -546,24 +657,6 @@ dtors_section ()							\
+@@ -546,24 +673,6 @@ dtors_section ()							\
      ASM_OUTPUT_LABEL(FILE, NAME);					\
    } while (0)
  
@@ -2586,7 +2614,7 @@ index 382171b..7377944 100644
  /* This is how to declare the size of a function.  */
  
  #define ASM_DECLARE_FUNCTION_SIZE(FILE, FNAME, DECL)			\
-@@ -596,10 +689,11 @@ dtors_section ()							\
+@@ -596,10 +705,11 @@ dtors_section ()							\
     in the table.  Note that we can use standard UN*X escape
     sequences for many control characters, but we don't use
     \a to represent BEL because some svr4 assemblers (e.g. on
@@ -2600,7 +2628,7 @@ index 382171b..7377944 100644
  \0\0\"\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\
  \0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\\\0\0\0\
  \0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\1\
-@@ -720,3 +814,6 @@ dtors_section ()							\
+@@ -720,3 +830,6 @@ dtors_section ()							\
          fprintf ((FILE), "\"\n");					\
      }									\
    while (0)
@@ -3230,24 +3258,6 @@ index 0b8fc36..0a30340 100644
  #endif
  
  #endif /* defined(CRT_END) */
-diff --git a/dwarfout.c b/dwarfout.c
-index 3ab4c7a..8517117 100644
---- a/dwarfout.c
-+++ b/dwarfout.c
-@@ -53,13 +53,6 @@ extern time_t time ();
- #endif /* !defined(POSIX) */
- #endif /* defined(DWARF_TIMESTAMPS) */
- 
--#if defined(USG) || defined(POSIX)
--#include <string.h>
--#else
--#include <strings.h>
--#define strrchr rindex
--#endif
--
- extern char *getpwd ();
- 
- /* IMPORTANT NOTE: Please see the file README.DWARF for important details
 diff --git a/emit-rtl.c b/emit-rtl.c
 index 95f276f..614a238 100644
 --- a/emit-rtl.c
@@ -3397,7 +3407,7 @@ index da440ec..dbdd92e 100644
  /* Given an rtx that may include add and multiply operations,
     generate them as insns and return a pseudo-reg containing the value.
 diff --git a/final.c b/final.c
-index b77b548..9a162b1 100644
+index b77b548..7e847a6 100644
 --- a/final.c
 +++ b/final.c
 @@ -43,9 +43,13 @@ the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.  */
@@ -3415,7 +3425,15 @@ index b77b548..9a162b1 100644
  #include "rtl.h"
  #include "regs.h"
  #include "insn-config.h"
-@@ -2145,18 +2149,23 @@ output_addr_const (file, x)
+@@ -57,6 +61,7 @@ the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.  */
+ #include "real.h"
+ #include "output.h"
+ #include "hard-reg-set.h"
++#include "tree.h"
+ 
+ #ifndef ASM_STABD_OP
+ #define ASM_STABD_OP ".stabd"
+@@ -2145,18 +2150,23 @@ output_addr_const (file, x)
     Also supported are %d, %x, %s, %e, %f, %g and %%.  */
  
  void
