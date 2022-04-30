@@ -9,8 +9,13 @@
 static unsigned __int64 max_count = 0;
 static unsigned __int64 count[256] = { 0 };
 #elif COUNT64
+#if defined(_MSC_VER) || defined(__BORLANDC__) || defined(__WATCOMC__)
+static unsigned __int64 max_count = 0;
+static unsigned __int64 count[256] = { 0 };
+#else
 static unsigned long long max_count = 0;
 static unsigned long long count[256] = { 0 };
+#endif
 #else
 static unsigned long max_count = 0;
 static unsigned long count[256] = { 0 };
@@ -49,7 +54,11 @@ static void print_number(void) {
         printf(" 0x%02X  %llu\r\n", i, (unsigned __int64)(count[i]));
 #elif COUNT64
 /* Support 64bit count in 32bit platform */
+#if defined(_MSC_VER) || defined(__BORLANDC__) || defined(__WATCOMC__)
+        printf(" 0x%02X  %llu\r\n", i, (unsigned __int64)(count[i]));
+#elif
         printf(" 0x%02X  %llu\r\n", i, (unsigned long long)(count[i]));
+#endif
 #else
 /* Posix LP64 model, unsigned long == wordsize == size_t */
 /* Windowsy 32bit platform, unsigned long == size_t == 32bit */
