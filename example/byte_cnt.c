@@ -23,7 +23,7 @@ static unsigned long count[256] = { 0 };
 static unsigned char overflow[256] = { 0 };
 
 static void read_file(const char *filename) {
-    unsigned char buf[BUFSIZ] = { 0 };
+    unsigned char buf[BUFSIZ];
     FILE *fp = fopen(filename, "rb");
 
     if (fp == NULL) {
@@ -31,6 +31,7 @@ static void read_file(const char *filename) {
         exit(-1);
     }
 
+    memset(buf, 0x00, BUFSIZ);
     while (1) {
         size_t i = 0, rd_len = 0;
 
@@ -40,6 +41,7 @@ static void read_file(const char *filename) {
         }
         for (i = 0; i < rd_len; ++i) {
             unsigned char pos = buf[i];
+
             count[pos]++;
             if (count[pos] == 0) {
                 fprintf(stderr, "0x%02X count overflow!\n", pos);
@@ -56,6 +58,7 @@ static void print_number(void) {
     puts("Statistics:");
     for (i = 0; i < 256; ++i) {
         const char *msg = "";
+
         if (overflow[i] != 0) {
             msg = " overflow!";
         }
@@ -86,8 +89,11 @@ static void print_histogram(void) {
 
     puts("Histogram:");
     for (i = 0; i < 256; ++i) {
-        char syms[80] = { 0 };
-        memset(syms, '+', (int)(73 * ((double)count[i] / (double)max_count)));
+        char syms[80];
+        int len = (int)(73 * ((double)count[i] / (double)max_count));
+
+        memset(syms, '+', len);
+        syms[len] = 0x00;
         printf(" 0x%02X  %s\n", i, syms);
     }
 }
