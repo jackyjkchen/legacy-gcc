@@ -19,6 +19,5 @@ int main(void) {
 void goodbye(void)
    /* This function is called at normal program termination */
 {
-    printf("The function goodbye was called \
-at program termination\n");
+    printf("The function goodbye was called at program termination\n");
 }
