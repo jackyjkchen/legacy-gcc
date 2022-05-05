@@ -33,8 +33,8 @@ BDEPEND=""
 
 CHOST="${TOOL_PREFIX}-linux-gnu"
 
-CC="gcc-2.6,3"
-CXX="g++-2.6.3"
+CC="${CHOST}-gcc-2.6,3"
+CXX="${CHOST}-g++-2.6.3"
 
 S="${WORKDIR}"/STLport-${PV}
 

@@ -33,8 +33,8 @@ BDEPEND=""
 
 CHOST="${TOOL_PREFIX}-linux-gnu"
 
-CC="gcc-2.95.3"
-CXX="g++-2.95.3"
+CC="${CHOST}-gcc-2.95.3"
+CXX="${CHOST}-g++-2.95.3"
 
 S="${WORKDIR}"/STLport-${PV}
 
@@ -52,13 +52,13 @@ src_configure() {
 
 src_compile() {
 	pushd "${S}"/build/lib > /dev/null
-	emake -j1 CC="${CC} ${CFLAGS}" CXX="${CXX} ${CXXFLAGS}" -f gcc.mak depend
+	emake -j1 CC="${CC} ${CFLAGS}" CXX="${CXX} ${CXXFLAGS}" AR="${CHOST}-ar" RANLIB="${CHOST}-ranlib" NM="${CHOST}-nm" -f gcc.mak depend
 	case ${ARCH} in
 		ppc)
-			emake CC="${CC} ${CFLAGS}" CXX="${CXX} ${CXXFLAGS}" -f gcc.mak release-static
+			emake CC="${CC} ${CFLAGS}" CXX="${CXX} ${CXXFLAGS}" AR="${CHOST}-ar" RANLIB="${CHOST}-ranlib" NM="${CHOST}-nm" -f gcc.mak release-static
 			;;
 		*)
-			emake CC="${CC} ${CFLAGS}" CXX="${CXX} ${CXXFLAGS}" -f gcc.mak release-shared release-static
+			emake CC="${CC} ${CFLAGS}" CXX="${CXX} ${CXXFLAGS}" AR="${CHOST}-ar" RANLIB="${CHOST}-ranlib" NM="${CHOST}-nm" -f gcc.mak release-shared release-static
 			;;
 	esac
 	popd > /dev/null

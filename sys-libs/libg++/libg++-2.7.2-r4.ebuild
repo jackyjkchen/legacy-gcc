@@ -30,8 +30,8 @@ BDEPEND=""
 
 CHOST="${TOOL_PREFIX}-linux-gnu"
 
-CC="gcc-2.7.2"
-CXX="gcc-2.7.2"
+CC="${CHOST}-gcc-2.7.2"
+CXX="${CHOST}-gcc-2.7.2"
 
 src_prepare() {
 	default
@@ -62,7 +62,7 @@ src_configure() {
 
 src_compile() {
 	pushd "${WORKDIR}"/build > /dev/null
-	emake CC="${CC}" CXX="${CXX}" CFLAGS="${CFLAGS}" CXXFLAGS="${CXXFLAGS} -fvtable-thunks" || die "failed to run make"
+	emake -j1 CC="${CC}" CXX="${CXX}" CFLAGS="${CFLAGS}" CXXFLAGS="${CXXFLAGS}" AR="${CHOST}-ar" RANLIB="${CHOST}-ranlib" NM="${CHOST}-nm" || die "failed to run make"
 	popd > /dev/null
 }
 

@@ -30,8 +30,8 @@ BDEPEND=""
 
 CHOST="${TOOL_PREFIX}-linux-gnu"
 
-CC="gcc-2.5.8"
-CXX="gcc-2.5.8"
+CC="${CHOST}-gcc-2.5.8"
+CXX="${CHOST}-gcc-2.5.8"
 
 src_prepare() {
 	default
@@ -61,7 +61,7 @@ src_configure() {
 
 src_compile() {
 	pushd "${WORKDIR}"/build > /dev/null
-	emake -j1 CC="${CC}" CXX="${CXX}" CFLAGS="${CFLAGS}" CXXFLAGS="${CXXFLAGS}" || die "failed to run make"
+	emake -j1 CC="${CC}" CXX="${CXX}" CFLAGS="${CFLAGS}" CXXFLAGS="${CXXFLAGS}" AR="${CHOST}-ar" RANLIB="${CHOST}-ranlib" NM="${CHOST}-nm" || die "failed to run make"
 	popd > /dev/null
 }
 

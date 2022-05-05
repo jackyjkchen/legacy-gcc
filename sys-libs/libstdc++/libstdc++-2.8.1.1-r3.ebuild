@@ -36,8 +36,8 @@ BDEPEND=""
 
 CHOST="${TOOL_PREFIX}-linux-gnu"
 
-CC="gcc-2.8.1"
-CXX="g++-2.8.1"
+CC="${CHOST}-gcc-2.8.1"
+CXX="${CHOST}-g++-2.8.1"
 
 src_prepare() {
 	default

@@ -33,8 +33,8 @@ BDEPEND=""
 
 CHOST="${TOOL_PREFIX}-linux-gnu"
 
-CC="gcc-2.91.66"
-CXX="g++-2.91.66"
+CC="${CHOST}-gcc-2.91.66"
+CXX="${CHOST}-g++-2.91.66"
 
 S="${WORKDIR}"/STLport-${PV}
 
@@ -55,10 +55,10 @@ src_compile() {
 	pushd "${S}"/src > /dev/null
 	case ${ARCH} in
 		ppc)
-			emake CC="${CC} ${CFLAGS}" CXX="${CXX} ${CXXFLAGS} -pthread -fexceptions" DYN_LINK='${CXX} ${CXXFLAGS} -pthread -fexceptions -shared -o' -f gcc-linux.mak release_static
+			emake CC="${CC} ${CFLAGS}" CXX="${CXX} ${CXXFLAGS} -pthread -fexceptions" AR="${CHOST}-ar" RANLIB="${CHOST}-ranlib" NM="${CHOST}-nm" DYN_LINK='${CXX} ${CXXFLAGS} -pthread -fexceptions -shared -o' -f gcc-linux.mak release_static
 			;;
 		*)
-			emake CC="${CC} ${CFLAGS}" CXX="${CXX} ${CXXFLAGS} -pthread -fexceptions" DYN_LINK='${CXX} ${CXXFLAGS} -pthread -fexceptions -shared -o' -f gcc-linux.mak release_dynamic release_static
+			emake CC="${CC} ${CFLAGS}" CXX="${CXX} ${CXXFLAGS} -pthread -fexceptions" AR="${CHOST}-ar" RANLIB="${CHOST}-ranlib" NM="${CHOST}-nm" DYN_LINK='${CXX} ${CXXFLAGS} -pthread -fexceptions -shared -o' -f gcc-linux.mak release_dynamic release_static
 	esac
 	popd > /dev/null
 }
