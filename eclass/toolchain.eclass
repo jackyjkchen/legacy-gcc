@@ -1190,8 +1190,16 @@ toolchain_src_configure() {
 		else
 			confgcc+=( --disable-__cxa_atexit --disable-libitm )
 		fi
+		if tc_version_is_at_least 4.0 ; then
+			confgcc+=( 
+				--enable-clocale=gnu
+			)
+		else
+			confgcc+=( 
+				--enable-clocale=generic
+			)
+		fi
 		confgcc+=(
-			--enable-clocale=gnu
 			--with-dwarf2
 		)
 		[[ ${CTARGET} == x86_64-*-cygwin ]] || \
