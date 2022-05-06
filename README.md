@@ -43,6 +43,7 @@ Windows/MSDOS交叉工具链——
 * mingw：gcc-3.3.6 - gcc-8.5.0（建议gcc-4.7及以上版本使用mingw-w64）
 * cygwin64：>=gcc-4.8.5
 * cygwin：>=gcc-4.5.4
+* cygwin-legacy：gcc-4.3.6 - gcc-4.4.7（可用于Win9x）
 * djgpp：gcc-3.3.6，gcc-3.4.6，gcc-4.1.2，gcc-4.4.7 - gcc-9.4.0
 
 

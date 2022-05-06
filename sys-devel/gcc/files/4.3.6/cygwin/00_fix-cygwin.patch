@@ -1,0 +1,3082 @@
+diff --git a/boehm-gc/Makefile.am b/boehm-gc/Makefile.am
+index 567d5979..5b39a5a1 100644
+--- a/boehm-gc/Makefile.am
++++ b/boehm-gc/Makefile.am
+@@ -105,6 +105,8 @@ AM_MAKEFLAGS = \
+ 	"LD=$(LD)" \
+ 	"LIBCFLAGS=$(LIBCFLAGS)" \
+ 	"NM=$(NM)" \
++	"OBJDUMP=$(OBJDUMP)" \
++	"OBJDUMP_FOR_TARGET=$(OBJDUMP_FOR_TARGET)" \
+ 	"PICFLAG=$(PICFLAG)" \
+ 	"RANLIB=$(RANLIB)" \
+ 	"DESTDIR=$(DESTDIR)"
+diff --git a/boehm-gc/Makefile.in b/boehm-gc/Makefile.in
+index db1fa0f4..c2145e23 100644
+--- a/boehm-gc/Makefile.in
++++ b/boehm-gc/Makefile.in
+@@ -342,6 +342,8 @@ AM_MAKEFLAGS = \
+ 	"LD=$(LD)" \
+ 	"LIBCFLAGS=$(LIBCFLAGS)" \
+ 	"NM=$(NM)" \
++	"OBJDUMP=$(OBJDUMP)" \
++	"OBJDUMP_FOR_TARGET=$(OBJDUMP_FOR_TARGET)" \
+ 	"PICFLAG=$(PICFLAG)" \
+ 	"RANLIB=$(RANLIB)" \
+ 	"DESTDIR=$(DESTDIR)"
+diff --git a/boehm-gc/win32_threads.c b/boehm-gc/win32_threads.c
+index ba53d86f..ffb34e0a 100644
+--- a/boehm-gc/win32_threads.c
++++ b/boehm-gc/win32_threads.c
+@@ -753,6 +753,12 @@ int GC_pthread_detach(pthread_t thread)
+     return result;
+ }
+ 
++GC_PTR GC_get_thread_stack_base()
++{
++  extern GC_PTR _tlsbase __asm__ ("%fs:4");
++  return _tlsbase;
++}
++
+ #else /* !CYGWIN32 */
+ 
+ /*
+diff --git a/configure.ac b/configure.ac
+index 093b2c9b..ea0e480d 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -681,7 +681,7 @@ case "${target}" in
+     ;;    
+   *-*-cygwin*)
+     target_configdirs="$target_configdirs target-libtermcap target-winsup"
+-    noconfigdirs="$noconfigdirs target-gperf target-libgloss ${libgcj}"
++    noconfigdirs="$noconfigdirs target-gperf target-libgloss"
+     # always build newlib if winsup directory is present.
+     if test -d "$srcdir/winsup/cygwin"; then
+       skipdirs=`echo " ${skipdirs} " | sed -e 's/ target-newlib / /'`
+diff --git a/gcc/DEV-PHASE b/gcc/DEV-PHASE
+index e69de29b..65b2df87 100644
+--- a/gcc/DEV-PHASE
++++ b/gcc/DEV-PHASE
+@@ -0,0 +1 @@
++beta
+diff --git a/gcc/ada/Makefile.in b/gcc/ada/Makefile.in
+index c1c7cf2e..9aad706a 100644
+--- a/gcc/ada/Makefile.in
++++ b/gcc/ada/Makefile.in
+@@ -198,6 +198,10 @@ TARGET_ADA_SRCS =
+ # Type of tools build we are doing; default is not compiling tools.
+ TOOLSCASE =
+ 
++# Which install goal to use.
++INSTALL_GNATLIB_MAIN  = install-gnatlib
++INSTALL_GNATLIB_WIN32 = unused-install-gnatlib
++
+ # End of variables for you to override.
+ 
+ all: all.indirect
+@@ -273,7 +277,7 @@ ADA_INCLUDES_FOR_SUBDIR = -I. -I$(fsrcdir)
+ 	$(CC) -c -x assembler $< $(OUTPUT_OPTION)
+ 
+ .c.o:
+-	$(CC) -c $(ALL_CFLAGS) $(ADA_CFLAGS) $(ALL_CPPFLAGS) $(INCLUDES) $< \
++	$(CC) -c $(ALL_CFLAGS) $(ALL_ADA_CFLAGS) $(ALL_CPPFLAGS) $(INCLUDES) $< \
+ 	  $(OUTPUT_OPTION)
+ 
+ .adb.o:
+@@ -1298,7 +1302,7 @@ endif
+   LIBRARY_VERSION := $(subst .,_,$(LIB_VERSION))
+ endif
+ 
+-ifeq ($(strip $(filter-out cygwin32% mingw32% pe,$(osys))),)
++ifeq ($(strip $(filter-out cygwin% mingw% pe,$(osys))),)
+   LIBGNAT_TARGET_PAIRS = \
+   a-dirval.adb<a-dirval-mingw.adb \
+   a-excpol.adb<a-excpol-abort.adb \
+@@ -1311,8 +1315,6 @@ ifeq ($(strip $(filter-out cygwin32% mingw32% pe,$(osys))),)
+   s-tasinf.adb<s-tasinf-mingw.adb \
+   s-tasinf.ads<s-tasinf-mingw.ads \
+   g-bytswa.adb<g-bytswa-x86.adb \
+-  g-socthi.ads<g-socthi-mingw.ads \
+-  g-socthi.adb<g-socthi-mingw.adb \
+   g-stsifd.adb<g-stsifd-sockets.adb \
+   g-soccon.ads<g-soccon-mingw.ads \
+   g-soliop.ads<g-soliop-mingw.ads
+@@ -1342,7 +1344,24 @@ ifeq ($(strip $(filter-out cygwin32% mingw32% pe,$(osys))),)
+     EXTRA_GNATRTL_NONTASKING_OBJS = g-regist.o
+     EXTRA_GNATRTL_TASKING_OBJS=a-exetim.o
+ 
+-    MISCLIB = -lwsock32
++    # Which install goal to use.
++    INSTALL_GNATLIB_MAIN  = unused-install-gnatlib
++    INSTALL_GNATLIB_WIN32 = install-gnatlib
++
++    # Mingw uses winsock-based sockets; cygwin uses POSIX sockets.
++    #ifneq ($(strip $(filter-out cygwin%,$(osys))),)
++    # However it doesn't seem to work too well, so use winsock for both.
++      LIBGNAT_TARGET_PAIRS += \
++      g-socthi.ads<g-socthi-mingw.ads \
++      g-socthi.adb<g-socthi-mingw.adb
++      MISCLIB = -lwsock32
++    #endif
++
++    # Set shared lib prefix (lib for mingw, cyg for cygwin)
++    WIN32_SHARED_LIB_PREFIX=lib
++    ifneq ($(strip $(filter cygwin%,$(osys))),)
++      WIN32_SHARED_LIB_PREFIX=cyg
++    endif
+ 
+     # ??? This will be replaced by gnatlib-shared-dual-win32 when GNAT
+     # auto-import support for array/record will be done.
+@@ -1797,7 +1816,7 @@ gnatbl.o: gnatbl.c adaint.h
+ 	  true; \
+ 	fi
+ 
+-install-gnatlib: ../stamp-gnatlib
++$(INSTALL_GNATLIB_MAIN): ../stamp-gnatlib
+ #	Create the directory before deleting it, in case the directory is
+ #	a list of directories (as it may be on VMS). This ensures we are
+ #	deleting the right one.
+@@ -1839,6 +1858,48 @@ install-gnatlib: ../stamp-gnatlib
+ 	cd $(DESTDIR)$(ADA_INCLUDE_DIR); $(CHMOD) a-wx *.adb
+ 	cd $(DESTDIR)$(ADA_INCLUDE_DIR); $(CHMOD) a-wx *.ads
+ 
++$(INSTALL_GNATLIB_WIN32): ../stamp-gnatlib
++#	Create the directory before deleting it, in case the directory is
++#	a list of directories (as it may be on VMS). This ensures we are
++#	deleting the right one.  This is the win32 version.
++	-$(MKDIR) $(DESTDIR)$(ADA_RTL_OBJ_DIR)
++	-$(MKDIR) $(DESTDIR)$(ADA_INCLUDE_DIR)
++	$(RMDIR) $(DESTDIR)$(ADA_RTL_OBJ_DIR)
++	$(RMDIR) $(DESTDIR)$(ADA_INCLUDE_DIR)
++	-$(MKDIR) $(DESTDIR)$(ADA_RTL_OBJ_DIR)
++	-$(MKDIR) $(DESTDIR)$(ADA_INCLUDE_DIR)
++	for file in rts/*.ali; do \
++	    $(INSTALL_DATA_DATE) $$file $(DESTDIR)$(ADA_RTL_OBJ_DIR); \
++	done
++	-$(INSTALL_DATA) rts/g-trasym$(objext) $(DESTDIR)$(ADA_RTL_OBJ_DIR)
++	-cd rts; for file in *$(arext);do \
++	    $(INSTALL_DATA) $$file $(DESTDIR)$(ADA_RTL_OBJ_DIR); \
++	    $(RANLIB_FOR_TARGET) $(DESTDIR)$(ADA_RTL_OBJ_DIR)/$$file; \
++	done
++	-$(foreach file, $(EXTRA_ADALIB_FILES), \
++	    $(INSTALL_DATA_DATE) rts/$(file) $(DESTDIR)$(ADA_RTL_OBJ_DIR) && \
++	) true
++#     Install the shared libraries, if any, using $(INSTALL) instead
++#     of $(INSTALL_DATA). The latter may force a mode inappropriate
++#     for shared libraries on some targets, e.g. on HP-UX where the x
++#     permission is required.  We are win32 here.
++	for file in gnat gnarl; do \
++	   if [ -f rts/$(WIN32_SHARED_LIB_PREFIX)$${file}$(hyphen)$(LIBRARY_VERSION)$(soext) ]; then \
++	      $(INSTALL) rts/$(WIN32_SHARED_LIB_PREFIX)$${file}$(hyphen)$(LIBRARY_VERSION)$(soext) \
++			 $(DESTDIR)$(bindir); \
++	   fi; \
++	   if [ -f rts/$(WIN32_SHARED_LIB_PREFIX)$${file}$(soext) ]; then \
++	      $(LN_S) $(WIN32_SHARED_LIB_PREFIX)$${file}$(hyphen)$(LIBRARY_VERSION)$(soext) \
++	      $(DESTDIR)$(bindir)/lib$${file}$(soext); \
++	   fi; \
++	done
++# This copy must be done preserving the date on the original file.
++	for file in rts/*.ad?; do \
++	    $(INSTALL_DATA_DATE) $$file $(DESTDIR)$(ADA_INCLUDE_DIR); \
++	done
++	cd $(DESTDIR)$(ADA_INCLUDE_DIR); $(CHMOD) a-wx *.adb
++	cd $(DESTDIR)$(ADA_INCLUDE_DIR); $(CHMOD) a-wx *.ads
++
+ ../stamp-gnatlib2:
+ 	$(RM) rts/s-*.ali
+ 	$(RM) rts/s-*$(objext)
+@@ -1995,14 +2056,18 @@ gnatlib-shared-win32:
+              gnatlib
+ 	$(RM) rts/libgna*$(soext)
+ 	cd rts; ../../xgcc -B../../ -shared $(TARGET_LIBGCC2_CFLAGS) \
+-		-o libgnat$(hyphen)$(LIBRARY_VERSION)$(soext) \
++		-o $(WIN32_SHARED_LIB_PREFIX)gnat$(hyphen)$(LIBRARY_VERSION)$(soext) \
++		-Wl,--out-implib,libgnat$(soext)$(arext) \
+ 		$(GNATRTL_NONTASKING_OBJS) $(LIBGNAT_OBJS) \
+-		$(SO_OPTS)libgnat$(hyphen)$(LIBRARY_VERSION)$(soext) $(MISCLIB)
++		$(SO_OPTS)$(WIN32_SHARED_LIB_PREFIX)gnat$(hyphen)$(LIBRARY_VERSION)$(soext) $(MISCLIB) \
++		-Wl,--enable-auto-import
+ 	cd rts; ../../xgcc -B../../ -shared $(TARGET_LIBGCC2_CFLAGS) \
+-		-o libgnarl$(hyphen)$(LIBRARY_VERSION)$(soext) \
++		-o $(WIN32_SHARED_LIB_PREFIX)gnarl$(hyphen)$(LIBRARY_VERSION)$(soext) \
++		-Wl,--out-implib,libgnarl$(soext)$(arext) \
+ 		$(GNATRTL_TASKING_OBJS) \
+-		$(SO_OPTS)libgnarl$(hyphen)$(LIBRARY_VERSION)$(soext) \
+-		$(THREADSLIB) -Wl,libgnat$(hyphen)$(LIBRARY_VERSION)$(soext)
++		$(SO_OPTS)$(WIN32_SHARED_LIB_PREFIX)gnarl$(hyphen)$(LIBRARY_VERSION)$(soext) $(MISCLIB) \
++		-L. $(THREADSLIB) -Wl,libgnat$(soext)$(arext) \
++		-Wl,--enable-auto-import
+ 
+ gnatlib-shared-darwin:
+ 	$(MAKE) $(FLAGS_TO_PASS) \
+@@ -2186,37 +2251,37 @@ raise.o   : raise.c raise.h
+ vx_stack_info.o : vx_stack_info.c
+ 
+ gen-soccon: gen-soccon.c gsocket.h
+-	$(CC) $(ALL_CFLAGS) $(ADA_CFLAGS) $(ALL_CPPFLAGS) $(INCLUDES) \
++	$(CC) $(ALL_CFLAGS) $(ALL_ADA_CFLAGS) $(ALL_CPPFLAGS) $(INCLUDES) \
+ 		-UIN_GCC -DTARGET=\"$(target_alias)\" \
+ 		$< $(OUTPUT_OPTION)
+ 
+ cio.o     : cio.c
+-	$(CC) -c $(ALL_CFLAGS) $(ADA_CFLAGS) \
++	$(CC) -c $(ALL_CFLAGS) $(ALL_ADA_CFLAGS) \
+ 	         $(ALL_CPPFLAGS) $(INCLUDES) $< $(OUTPUT_OPTION)
+ 
+ init.o    : init.c adaint.h raise.h
+-	$(CC) -c $(ALL_CFLAGS) $(ADA_CFLAGS) \
++	$(CC) -c $(ALL_CFLAGS) $(ALL_ADA_CFLAGS) \
+ 	         $(ALL_CPPFLAGS) $(INCLUDES) $< $(OUTPUT_OPTION)
+ 
+ initialize.o : initialize.c raise.h
+-	$(CC) -c $(ALL_CFLAGS) $(ADA_CFLAGS) \
++	$(CC) -c $(ALL_CFLAGS) $(ALL_ADA_CFLAGS) \
+ 	         $(ALL_CPPFLAGS) $(INCLUDES) $< $(OUTPUT_OPTION)
+ 
+ targext.o : targext.c
+-	$(CC) -c $(ALL_CFLAGS) $(ADA_CFLAGS) \
++	$(CC) -c $(ALL_CFLAGS) $(ALL_ADA_CFLAGS) \
+ 		$(ALL_CPPFLAGS) $(INCLUDES_FOR_SUBDIR) \
+ 		$< $(OUTPUT_OPTION)
+ 
+ # No optimization to compile this file as optimizations (-O1 or above) breaks
+ # the SEH handling on Windows. The reasons are not clear.
+ seh_init.o : seh_init.c raise.h
+-	$(CC) -c $(ALL_CFLAGS) $(ADA_CFLAGS) -O0 \
++	$(CC) -c $(ALL_CFLAGS) $(ALL_ADA_CFLAGS) -O0 \
+ 	         $(ALL_CPPFLAGS) $(INCLUDES) $< $(OUTPUT_OPTION)
+ 
+ # Need to keep the frame pointer in this file to pop the stack properly on
+ # some targets.
+ tracebak.o  : tracebak.c tb-alvms.c tb-alvxw.c tb-gcc.c
+-	$(CC) -c $(ALL_CFLAGS) $(ADA_CFLAGS) $(ALL_CPPFLAGS) $(INCLUDES) \
++	$(CC) -c $(ALL_CFLAGS) $(ALL_ADA_CFLAGS) $(ALL_CPPFLAGS) $(INCLUDES) \
+ 	      -fno-omit-frame-pointer $< $(OUTPUT_OPTION)
+ 
+ # In GNU Make, ignore whether `stage*' exists.
+diff --git a/gcc/ada/gsocket.h b/gcc/ada/gsocket.h
+index bfdf1233..fbddf799 100644
+--- a/gcc/ada/gsocket.h
++++ b/gcc/ada/gsocket.h
+@@ -173,7 +173,7 @@
+  * VxWorks and VMS).
+  */
+ 
+-#if defined (_AIX) || defined (__FreeBSD__) || defined (__hpux__) || defined (__osf__) || defined (_WIN32) || defined (__APPLE__)
++#if defined (_AIX) || defined (__FreeBSD__) || defined (__hpux__) || defined (__osf__) || defined (__CYGWIN__) || defined (_WIN32) || defined (__APPLE__)
+ # define HAVE_THREAD_SAFE_GETxxxBYyyy 1
+ #elif defined (sgi) || defined (linux) || (defined (sun) && defined (__SVR4) && !defined (__vxworks))
+ # define HAVE_GETxxxBYyyy_R 1
+diff --git a/gcc/ada/initialize.c b/gcc/ada/initialize.c
+index a84f7535..a7481a03 100644
+--- a/gcc/ada/initialize.c
++++ b/gcc/ada/initialize.c
+@@ -192,6 +192,40 @@ __gnat_initialize (void *eh ATTRIBUTE_UNUSED)
+   __main ();
+ }
+ 
++#elif defined (__CYGWIN__)
++
++/* We must call __main to run the static ctors, or DW2 EH, amongst
++   other things, will fail.  */
++
++/***************************************/
++/* __gnat_initialize (Cygwin Version) */
++/***************************************/
++
++extern void __main (void);
++
++void
++__gnat_initialize (void *eh ATTRIBUTE_UNUSED)
++{
++  __main ();
++
++   /* Initialize floating-point coprocessor. This call is needed because
++      the MS libraries default to 64-bit precision instead of 80-bit
++      precision, and we require the full precision for proper operation,
++      given that we have set Max_Digits etc with this in mind */
++   __gnat_init_float ();
++
++   /* Note that we do not activate this for the compiler itself to avoid a
++      bootstrap path problem.  Older version of gnatbind will generate a call
++      to __gnat_initialize() without argument. Therefore we cannot use eh in
++      this case.  It will be possible to remove the following #ifdef at some
++      point.  */
++#ifdef IN_RTS
++   /* Install the Structured Exception handler.  */
++   if (eh)
++     __gnat_install_SEH_handler (eh);
++#endif
++}
++
+ #else
+ 
+ /* For all other versions of GNAT, the initialize routine and handler
+diff --git a/gcc/ada/sysdep.c b/gcc/ada/sysdep.c
+index cf51ebea..6b810de4 100644
+--- a/gcc/ada/sysdep.c
++++ b/gcc/ada/sysdep.c
+@@ -397,7 +397,7 @@ getc_immediate_common (FILE *stream,
+ {
+ #if defined (linux) || defined (sun) || defined (sgi) || defined (__EMX__) \
+     || (defined (__osf__) && ! defined (__alpha_vxworks)) \
+-    || defined (__CYGWIN32__) || defined (__MACHTEN__) || defined (__hpux__) \
++    || defined (__CYGWIN__) || defined (__MACHTEN__) || defined (__hpux__) \
+     || defined (_AIX) || (defined (__svr4__) && defined (i386)) \
+     || defined (__Lynx__) || defined (__FreeBSD__) || defined (__OpenBSD__)
+   char c;
+@@ -684,6 +684,40 @@ rts_get_nShowCmd (void)
+ }
+ 
+ #endif /* WINNT */
++
++#ifdef __CYGWIN__
++
++size_t _msize(void *memblock)
++{
++  return (size_t) malloc_usable_size (memblock);
++}
++
++#include <windows.h>
++
++int
++__gnat_is_windows_xp (void)
++{
++  static int is_win_xp=0, is_win_xp_checked=0;
++
++  if (!is_win_xp_checked)
++    {
++      OSVERSIONINFO version;
++
++      is_win_xp_checked = 1;
++
++      memset (&version, 0, sizeof (version));
++      version.dwOSVersionInfoSize = sizeof (version);
++
++      is_win_xp = GetVersionEx (&version)
++        && version.dwPlatformId == VER_PLATFORM_WIN32_NT
++        && (version.dwMajorVersion > 5
++            || (version.dwMajorVersion == 5 && version.dwMinorVersion >= 1));
++    }
++  return is_win_xp;
++}
++
++#endif /* __CYGWIN__ */
++
+ #ifdef VMS
+ 
+ /* This gets around a problem with using the old threads library on VMS 7.0. */
+diff --git a/gcc/ada/system-mingw.ads b/gcc/ada/system-mingw.ads
+index 56d0fea4..2fc6d0aa 100644
+--- a/gcc/ada/system-mingw.ads
++++ b/gcc/ada/system-mingw.ads
+@@ -141,7 +141,7 @@ private
+    Always_Compatible_Rep     : constant Boolean := True;
+    Suppress_Standard_Library : constant Boolean := False;
+    Use_Ada_Main_Program_Name : constant Boolean := False;
+-   ZCX_By_Default            : constant Boolean := False;
++   ZCX_By_Default            : constant Boolean := True;
+    GCC_ZCX_Support           : constant Boolean := True;
+ 
+    ---------------------------
+diff --git a/gcc/config.gcc b/gcc/config.gcc
+index 49677426..f8956925 100644
+--- a/gcc/config.gcc
++++ b/gcc/config.gcc
+@@ -1374,8 +1374,8 @@ i[34567]86-*-pe | i[34567]86-*-cygwin*)
+ 	target_gtfiles="\$(srcdir)/config/i386/winnt.c"
+ 	extra_options="${extra_options} i386/cygming.opt"
+ 	extra_objs="winnt.o winnt-stubs.o"
+-	c_target_objs=cygwin2.o
+-	cxx_target_objs="cygwin2.o winnt-cxx.o"
++	c_target_objs=
++	cxx_target_objs=winnt-cxx.o
+ 	extra_gcc_objs=cygwin1.o
+ 	if test x$enable_threads = xyes; then
+ 		thread_file='posix'
+@@ -1396,6 +1396,7 @@ i[34567]86-*-mingw32* | x86_64-*-mingw32*)
+ 	  tmake_file="${tmake_file} i386/t-gthr-win32"
+ 	  ;;
+ 	esac
++	extra_parts="crtbegin.o crtend.o crtfastmath.o"
+ 	case ${target} in
+ 		*mingw32crt*)
+ 			tm_file="${tm_file} i386/crtdll.h"
+diff --git a/gcc/config/i386/cygming-crtbegin.c b/gcc/config/i386/cygming-crtbegin.c
+index f44f64a4..4ab235a9 100644
+--- a/gcc/config/i386/cygming-crtbegin.c
++++ b/gcc/config/i386/cygming-crtbegin.c
+@@ -65,6 +65,12 @@ extern void _Jv_RegisterClasses (const void *) TARGET_ATTRIBUTE_WEAK;
+ # define EH_FRAME_SECTION_CONST
+ #endif
+ 
++/* We need to indirect through a variable, as gcc assumes
++ that a function label used as a constant is never zero.  */
++void (*register_frame_info_ptr) (const void *, struct object *) = __register_frame_info;
++void *(*deregister_frame_info_ptr) (const void *) = __deregister_frame_info;
++void (*jv_registerclasses_ptr) (const void *) = _Jv_RegisterClasses;
++
+ /* Stick a label at the beginning of the frame unwind info so we can
+    register/deregister it with the exception handling library code.  */
+ #if DWARF2_UNWIND_INFO
+@@ -93,15 +99,30 @@ __gcc_register_frame (void)
+ /* Weak undefined symbols won't be pulled in from dlls; hence
+    we first test if the dll is already loaded and, if so,
+    get the symbol's address at run-time.  If the dll is not loaded,
+-   fallback to weak linkage to static archive.  */
++   fallback to weak linkage to static archive.  Fallback also
++   if the DLL is loaded but does not export the routine.   */
+ 
+-  void (*register_frame_fn) (const void *, struct object *);
++  void (*register_frame_fn) (const void *, struct object *) = 0;
+   HANDLE h = GetModuleHandle (LIBGCC_SONAME);
+   if (h)
+     register_frame_fn = (void (*) (const void *, struct object *))
+ 			GetProcAddress (h, "__register_frame_info");
+-  else 
+-    register_frame_fn = __register_frame_info;
++  /* Can't use
++
++  if (!register_frame_fn)
++    register_frame_fn = register_frame_info_ptr;
++
++  directly, as gcc infers that the address of a function cannot
++  be zero, but in the case of an unlinked weak definition it can.
++  It would clearly be undefined code to use the address of an
++  unlinked weak function in a function call context, but I don't
++  know whether gcc is right to infer it's always non-zero when
++  being taken as a pointer-to-function constant.  */
++  if (!register_frame_fn)
++    register_frame_fn = register_frame_info_ptr;
++
++  /* We use weak references so as to not pull in all the EH machinery
++  unless it's actually required by something else in the final link.  */
+   if (register_frame_fn)
+      register_frame_fn (__EH_FRAME_BEGIN__, &obj);
+ #endif
+@@ -109,13 +130,13 @@ __gcc_register_frame (void)
+ #if TARGET_USE_JCR_SECTION 
+   if (__JCR_LIST__[0])
+     {
+-      void (*register_class_fn) (const void *);
++      void (*register_class_fn) (const void *) = 0;
+       HANDLE h = GetModuleHandle (LIBGCJ_SONAME);
+       if (h)
+ 	register_class_fn = (void (*) (const void *))
+ 			     GetProcAddress (h, "_Jv_RegisterClasses");
+-      else
+-	register_class_fn = _Jv_RegisterClasses;
++      if (!register_class_fn)
++	register_class_fn = jv_registerclasses_ptr;
+ 
+       if (register_class_fn)
+ 	register_class_fn (__JCR_LIST__);
+@@ -127,13 +148,13 @@ void
+ __gcc_deregister_frame (void)
+ {
+ #if DWARF2_UNWIND_INFO
+-  void *  (*deregister_frame_fn) (const void *);
++  void *  (*deregister_frame_fn) (const void *) = 0;
+   HANDLE h = GetModuleHandle (LIBGCC_SONAME);
+   if (h)
+     deregister_frame_fn = (void* (*) (const void *))
+ 			  GetProcAddress (h, "__deregister_frame_info");
+-  else 
+-    deregister_frame_fn = __deregister_frame_info;
++  if (!deregister_frame_fn)
++    deregister_frame_fn = deregister_frame_info_ptr;
+   if (deregister_frame_fn)
+      deregister_frame_fn (__EH_FRAME_BEGIN__);
+ #endif
+diff --git a/gcc/config/i386/cygwin.h b/gcc/config/i386/cygwin.h
+index 1af48805..08a6d67f 100644
+--- a/gcc/config/i386/cygwin.h
++++ b/gcc/config/i386/cygwin.h
+@@ -51,7 +51,8 @@ along with GCC; see the file COPYING3.  If not see
+ 
+ #undef LIBGCC_SPEC
+ #define LIBGCC_SPEC \
+-  "%{mno-cygwin: %{mthreads:-lmingwthrd} -lmingw32} -lgcc	\
++  "%{mno-cygwin: %{mthreads:-lmingwthrd} -lmingw32} \
++   %{shared-libgcc:-lgcc_s} -lgcc \
+    %{mno-cygwin:-lmoldname -lmingwex -lmsvcrt}"
+ 
+ /* We have to dynamic link to get to the system DLLs.  All of libc, libm and
+@@ -68,6 +69,19 @@ along with GCC; see the file COPYING3.  If not see
+   %{mwindows:-lgdi32 -lcomdlg32} \
+   -luser32 -lkernel32 -ladvapi32 -lshell32"
+ 
++/* Weak symbols do not get resolved if using a Windows dll import lib.
++   Make the unwind registration references strong undefs.  */
++#if DWARF2_UNWIND_INFO
++#define SHARED_LIBGCC_UNDEFS_SPEC \
++ "%{shared-libgcc: -u ___register_frame_info -u ___deregister_frame_info}"
++#else
++#define SHARED_LIBGCC_UNDEFS_SPEC ""
++#endif
++
++#undef  SUBTARGET_EXTRA_SPECS
++#define SUBTARGET_EXTRA_SPECS						\
++  { "shared_libgcc_undefs", SHARED_LIBGCC_UNDEFS_SPEC }
++
+ #define LINK_SPEC "\
+   %{mwindows:--subsystem windows} \
+   %{mconsole:--subsystem console} \
+@@ -75,9 +89,10 @@ along with GCC; see the file COPYING3.  If not see
+   %{shared: --shared} %{mdll:--dll} \
+   %{static:-Bstatic} %{!static:-Bdynamic} \
+   %{shared|mdll: -e \
+-    %{mno-cygwin:_DllMainCRTStartup@12} \
+-    %{!mno-cygwin:__cygwin_dll_entry@12}}\
+-  %{!mno-cygwin:--dll-search-prefix=cyg}"
++    %{mno-cygwin:_DllMainCRTStartup@12 --enable-auto-image-base} \
++    %{!mno-cygwin:__cygwin_dll_entry@12 --enable-auto-image-base}}\
++  %{!mno-cygwin:--dll-search-prefix=cyg}\
++  %(shared_libgcc_undefs)"
+ 
+ /* Allocate space for all of the machine-spec-specific stuff.
+    Allocate enough space for cygwin -> mingw32  munging plus
+@@ -242,3 +257,28 @@ while (0)
+    and the -pthread flag is not recognized.  */
+ #undef GOMP_SELF_SPECS
+ #define GOMP_SELF_SPECS ""
++
++/* This must be kept in synch with the definition of SHLIB_SONAME
++   in the t-cygwin makefile fragment.  */
++#define LIBGCC_SONAME "cyggcc_s-1.dll"
++
++#undef CYGWIN_ENABLE_EXECUTE_STACK
++#define CYGWIN_ENABLE_EXECUTE_STACK     \
++extern void __enable_execute_stack (void *);    \
++void         \
++__enable_execute_stack (void *addr)					\
++{									\
++  MEMORY_BASIC_INFORMATION b;						\
++  if (!VirtualQuery (addr, &b, sizeof(b)))				\
++    abort ();								\
++  VirtualProtect (b.BaseAddress, b.RegionSize, PAGE_EXECUTE_READWRITE,	\
++		  &b.Protect);						\
++}
++
++#undef ENABLE_EXECUTE_STACK
++#define ENABLE_EXECUTE_STACK CYGWIN_ENABLE_EXECUTE_STACK
++
++#ifdef IN_LIBGCC2
++#include <windows.h>
++#endif
++
+diff --git a/gcc/config/i386/cygwin1.c b/gcc/config/i386/cygwin1.c
+index fb8657ac..c9fab4ed 100644
+--- a/gcc/config/i386/cygwin1.c
++++ b/gcc/config/i386/cygwin1.c
+@@ -38,16 +38,8 @@ mingw_scan (int argc ATTRIBUTE_UNUSED,
+       putenv (xstrdup ("GCC_CYGWIN_WIN32=1"));
+     else if (strcmp (*argv, "-mno-cygwin") == 0)
+       {
+-	char *p = strstr (*spec_machine, "-cygwin");
+-	if (p)
+-	  {
+-	    int len = p - *spec_machine;
+-	    char *s = xmalloc (strlen (*spec_machine) + 3);
+-	    memcpy (s, *spec_machine, len);
+-	    strcpy (s + len, "-mingw32");
+-	    *spec_machine = s;
+-	  }
+-	putenv (xstrdup ("GCC_CYGWIN_MINGW=1"));
++	fatal ("The -mno-cygwin flag has been removed; use a "
++	  "mingw-targeted cross-compiler.\n");
+       }
+   return;
+ }
+diff --git a/gcc/config/i386/cygwin2.c b/gcc/config/i386/cygwin2.c
+deleted file mode 100644
+index c48e2a52..00000000
+--- a/gcc/config/i386/cygwin2.c
++++ /dev/null
+@@ -1,66 +0,0 @@
+-/* Helper routines for cygwin-specific command-line parsing.
+-   Contributed by Christopher Faylor (cgf@redhat.com)
+-   Copyright 2003, 2007 Free Software Foundation, Inc.
+-
+-This file is part of GCC.
+-
+-GCC is free software; you can redistribute it and/or modify
+-it under the terms of the GNU General Public License as published by
+-the Free Software Foundation; either version 3, or (at your option)
+-any later version.
+-
+-GCC is distributed in the hope that it will be useful,
+-but WITHOUT ANY WARRANTY; without even the implied warranty of
+-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+-GNU General Public License for more details.
+-
+-You should have received a copy of the GNU General Public License
+-along with GCC; see the file COPYING3.  If not see
+-<http://www.gnu.org/licenses/>.  */
+-
+-#include "config.h"
+-#include "system.h"
+-#include "coretypes.h"
+-#include "tm.h"
+-
+-#include "safe-ctype.h"
+-#include <string.h>
+-
+-/*
+-static void remove_w32api (void);
+-*/
+-static void add_mingw (void);
+-static void set_mingw (void) __attribute__ ((constructor));
+-
+-static void
+-add_mingw (void)
+-{
+-  char **av;
+-  char *p;
+-  for (av = cvt_to_mingw; *av; av++)
+-    {
+-      int sawcygwin = 0;
+-      while ((p = strstr (*av, "-cygwin")))
+-	{
+-	  char *over = p + sizeof ("-cygwin") - 1;
+-	  memmove (over + 1, over, strlen (over));
+-	  memcpy (p, "-mingw32", sizeof("-mingw32") - 1);
+-	  p = ++over;
+-	  while (ISALNUM (*p))
+-	    p++;
+-	  strcpy (over, p);
+-	  sawcygwin = 1;
+-	}
+-      if (!sawcygwin && !strstr (*av, "mingw"))
+-	strcat (*av, CYGWIN_MINGW_SUBDIR);
+-    }
+-}
+-
+-
+-static void
+-set_mingw (void)
+-{
+-  char *env = getenv ("GCC_CYGWIN_MINGW");
+-  if (env && *env == '1')
+-    add_mingw ();
+-}
+diff --git a/gcc/config/i386/t-cygming b/gcc/config/i386/t-cygming
+index c001a8b0..74b733a5 100644
+--- a/gcc/config/i386/t-cygming
++++ b/gcc/config/i386/t-cygming
+@@ -30,3 +30,25 @@ winnt-stubs.o: $(srcdir)/config/i386/winnt-stubs.c $(CONFIG_H) $(SYSTEM_H) coret
+ 	$(srcdir)/config/i386/winnt-stubs.c
+ 
+ STMP_FIXINC=stmp-fixinc
++
++# Effectively disable the crtbegin/end rules using crtstuff.c
++T = disable
++
++# Additional sources to handle exceptions; overridden by targets as needed.
++LIB2ADDEH = $(srcdir)/unwind-dw2.c $(srcdir)/unwind-dw2-fde.c \
++   $(srcdir)/unwind-sjlj.c $(srcdir)/gthr-gnat.c $(srcdir)/unwind-c.c \
++   # added in gcc/Makefile.in, hardcoded in libgcc.mvars: rule $(srcdir)/emutls.c
++
++crtbegin.o: $(srcdir)/config/i386/cygming-crtbegin.c $(GCC_PASSES)
++	$(GCC_FOR_TARGET) $(CRTSTUFF_CFLAGS) -fno-omit-frame-pointer -c -o crtbegin.o \
++	$(srcdir)/config/i386/cygming-crtbegin.c
++
++crtend.o: $(srcdir)/config/i386/cygming-crtend.c $(GCC_PASSES)
++	$(GCC_FOR_TARGET) $(CRTSTUFF_CFLAGS) -fno-omit-frame-pointer -c -o crtend.o  \
++	$(srcdir)/config/i386/cygming-crtend.c
++
++crtfastmath.o: $(srcdir)/config/i386/crtfastmath.c $(GCC_PASSES)
++	$(GCC_FOR_TARGET) $(LIBGCC2_CFLAGS) -msse -minline-all-stringops -c \
++		$(srcdir)/config/i386/crtfastmath.c \
++		-o crtfastmath.o
++
+diff --git a/gcc/config/i386/t-cygwin b/gcc/config/i386/t-cygwin
+index c6e77731..01a063f5 100644
+--- a/gcc/config/i386/t-cygwin
++++ b/gcc/config/i386/t-cygwin
+@@ -9,8 +9,55 @@ cygwin1.o: $(srcdir)/config/i386/cygwin1.c $(CONFIG_H) $(SYSTEM_H) coretypes.h \
+ 	$(CC) -c $(ALL_CFLAGS) $(ALL_CPPFLAGS) $(INCLUDES) \
+ 	$(srcdir)/config/i386/cygwin1.c
+ 
+-cygwin2.o: $(srcdir)/config/i386/cygwin2.c $(CONFIG_H) $(SYSTEM_H) coretypes.h \
+-  $(TM_H) $(TM_P_H)
+-	$(CC) -c $(ALL_CFLAGS) $(ALL_CPPFLAGS) $(INCLUDES) \
+-	$(srcdir)/config/i386/cygwin2.c
++
++# Build a shared libgcc DLL and import stub library for Win32.
++# We fold the static libgcc_eh into the DLL for convenience.
++# This requires libstdc++-v3 to also be a DLL, as it throws
++# during shutdown and if statically linked the eh tables from
++# the shared libgcc would already be deregistered at the time.
++
++SHLIB_EXT = .dll
++SHLIB_SOVERSION = 1
++# Ensure the #define LIBGCC_SONAME in cygwin.h is kept in sync. with this definition. 
++SHLIB_SONAME = cyggcc_s-$(SHLIB_SOVERSION).dll
++SHLIB_IMPLIBNAME = libgcc_s.dll.a
++SHLIB_OBJS = @shlib_objs@
++SHLIB_DIR = @multilib_dir@
++SHLIB_SLIBDIR_QUAL = @shlib_slibdir_qual@
++SHLIB_LC = -lcygwin -lkernel32
++
++SHLIB_LINK = \
++	cp -f libgcc.a cyggcc_t.a && \
++	${AR_FOR_TARGET} -x cyggcc_t.a _chkstk.o _ctors.o && \
++	${AR_FOR_TARGET} -d cyggcc_t.a _chkstk.o _ctors.o && \
++	${DLLTOOL_FOR_TARGET} --output-def cyggcc_s.def --export-all cyggcc_t.a libgcc_eh.a && \
++	$(GCC_FOR_TARGET) $(LIBGCC2_CFLAGS) -shared -nodefaultlibs \
++	  -o $(SHLIB_DIR)/$(SHLIB_SONAME).tmp @multilib_flags@ \
++	  -Wl,--out-implib,$(SHLIB_DIR)/$(SHLIB_IMPLIBNAME).tmp \
++	  cyggcc_s.def cyggcc_t.a libgcc_eh.a $(SHLIB_LC) && \
++	$(RM) $(SHLIB_DIR)/$(SHLIB_SONAME).tmp $(SHLIB_DIR)/$(SHLIB_IMPLIBNAME).tmp  && \
++	if [ -f $(SHLIB_DIR)/$(SHLIB_SONAME) ]; then \
++	  mv -f $(SHLIB_DIR)/$(SHLIB_SONAME) \
++		$(SHLIB_DIR)/$(SHLIB_SONAME).backup; \
++	  mv -f $(SHLIB_DIR)/$(SHLIB_IMPLIBNAME) \
++		$(SHLIB_DIR)/$(SHLIB_IMPLIBNAME).backup; \
++	else true; fi && \
++	$(GCC_FOR_TARGET) $(LIBGCC2_CFLAGS) -shared -nodefaultlibs \
++	  -o $(SHLIB_DIR)/$(SHLIB_SONAME) @multilib_flags@ \
++	  -Wl,--out-implib,$(SHLIB_DIR)/$(SHLIB_IMPLIBNAME) \
++	  cyggcc_s.def cyggcc_t.a libgcc_eh.a $(SHLIB_LC) && \
++	chmod a+x $(SHLIB_DIR)/$(SHLIB_SONAME) && \
++	${AR_FOR_TARGET} -rs  $(SHLIB_DIR)/$(SHLIB_IMPLIBNAME) _chkstk.o _ctors.o && \
++	rm -f cyggcc_t.a _chkstk.o _ctors.o cyggcc_s.def
++
++# $(slibdir) double quoted to protect it from expansion while building
++# libgcc.mk.  We want this delayed until actual install time.
++
++SHLIB_INSTALL = \
++	$$(mkinstalldirs) $$(DESTDIR)$$(slibdir)$(SHLIB_SLIBDIR_QUAL) $$(DESTDIR)$$(libdir)$(SHLIB_LIBDIR_QUAL); \
++	$(INSTALL_DATA) $(SHLIB_DIR)/$(SHLIB_SONAME) \
++	  $$(DESTDIR)$$(slibdir)$(SHLIB_SLIBDIR_QUAL)/$(SHLIB_SONAME); \
++	$(INSTALL_DATA) $(SHLIB_DIR)/$(SHLIB_IMPLIBNAME) \
++	  $$(DESTDIR)$$(libsubdir)$(SHLIB_LIBDIR_QUAL)/$(SHLIB_IMPLIBNAME); \
++	chmod a+x $$(DESTDIR)$$(slibdir)$(SHLIB_SLIBDIR_QUAL)/$(SHLIB_SONAME);
+ 
+diff --git a/gcc/cp/decl2.c b/gcc/cp/decl2.c
+index 67e80e58..56f84c30 100644
+--- a/gcc/cp/decl2.c
++++ b/gcc/cp/decl2.c
+@@ -1619,11 +1619,6 @@ import_export_class (tree ctype)
+ 	import_export = (DECL_REALLY_EXTERN (method) ? -1 : 1);
+     }
+ 
+-  /* When MULTIPLE_SYMBOL_SPACES is set, we cannot count on seeing
+-     a definition anywhere else.  */
+-  if (MULTIPLE_SYMBOL_SPACES && import_export == -1)
+-    import_export = 0;
+-
+   /* Allow back ends the chance to overrule the decision.  */
+   if (targetm.cxx.import_export_class)
+     import_export = targetm.cxx.import_export_class (ctype, import_export);
+@@ -2318,14 +2313,23 @@ import_export_decl (tree decl)
+ 	{
+ 	  class_type = type;
+ 	  import_export_class (type);
+-	  if (CLASSTYPE_INTERFACE_KNOWN (type)
+-	      && TYPE_POLYMORPHIC_P (type)
+-	      && CLASSTYPE_INTERFACE_ONLY (type)
+-	      /* If -fno-rtti was specified, then we cannot be sure
+-		 that RTTI information will be emitted with the
+-		 virtual table of the class, so we must emit it
+-		 wherever it is used.  */
+-	      && flag_rtti)
++
++	  /* Do not import tinfo nodes if the class has dllimport attribute.
++	     Dllimports do not have a constant address at compile time, so
++	     static initialization of tables with RTTI fields is a problem.
++	     Set to comdat instead.   */
++	  if (MULTIPLE_SYMBOL_SPACES
++	      && TARGET_DLLIMPORT_DECL_ATTRIBUTES
++	      && lookup_attribute ("dllimport", TYPE_ATTRIBUTES (type)))
++	    comdat_p = true;
++	  else if (CLASSTYPE_INTERFACE_KNOWN (type)
++	      	   && TYPE_POLYMORPHIC_P (type)
++	           && CLASSTYPE_INTERFACE_ONLY (type)
++	           /* If -fno-rtti was specified, then we cannot be sure
++		      that RTTI information will be emitted with the
++		      virtual table of the class, so we must emit it
++		      wherever it is used.  */
++	           && flag_rtti)
+ 	    import_p = true;
+ 	  else
+ 	    {
+diff --git a/gcc/cppdefault.c b/gcc/cppdefault.c
+index 5024f48c..8669a206 100644
+--- a/gcc/cppdefault.c
++++ b/gcc/cppdefault.c
+@@ -39,6 +39,8 @@
+ # undef STANDARD_INCLUDE_DIR
+ #else
+ # undef CROSS_INCLUDE_DIR
++# undef CROSS_INCLUDE_DIR_1
++# undef CROSS_INCLUDE_DIR_2
+ #endif
+ 
+ const struct default_include cpp_include_defaults[]
+@@ -85,6 +87,14 @@ const struct default_include cpp_include_defaults[]
+     /* One place the target system's headers might be.  */
+     { CROSS_INCLUDE_DIR, "GCC", 0, 0, 0, 0 },
+ #endif
++#ifdef CROSS_INCLUDE_DIR_1
++    /* One more place the target system's headers might be.  */
++    { CROSS_INCLUDE_DIR_1, "GCC", 0, 0, 0, 0 },
++#endif
++#ifdef CROSS_INCLUDE_DIR_2
++    /* One more place the target system's headers might be.  */
++    { CROSS_INCLUDE_DIR_2, "GCC", 0, 0, 0, 0 },
++#endif
+ #ifdef TOOL_INCLUDE_DIR
+     /* Another place the target system's headers might be.  */
+     { TOOL_INCLUDE_DIR, "BINUTILS", 0, 1, 0, 0 },
+diff --git a/gcc/dwarf2out.c b/gcc/dwarf2out.c
+index f8944e4e..e5f4291d 100644
+--- a/gcc/dwarf2out.c
++++ b/gcc/dwarf2out.c
+@@ -4367,6 +4367,7 @@ static int get_AT_flag (dw_die_ref, enum dwarf_attribute);
+ static unsigned get_AT_unsigned (dw_die_ref, enum dwarf_attribute);
+ static inline dw_die_ref get_AT_ref (dw_die_ref, enum dwarf_attribute);
+ static bool is_c_family (void);
++static bool is_c (void);
+ static bool is_cxx (void);
+ static bool is_java (void);
+ static bool is_fortran (void);
+@@ -5746,6 +5747,17 @@ is_c_family (void)
+ 	  || lang == DW_LANG_C_plus_plus || lang == DW_LANG_ObjC_plus_plus);
+ }
+ 
++/* Return TRUE if the language is C.  */
++
++static inline bool
++is_c (void)
++{
++  unsigned int lang = get_AT_unsigned (comp_unit_die, DW_AT_language);
++
++  return (lang == DW_LANG_C || lang == DW_LANG_C89
++	  || lang == DW_LANG_C99 || lang == DW_LANG_ObjC);
++}
++
+ /* Return TRUE if the language is C++.  */
+ 
+ static inline bool
+@@ -11591,7 +11603,7 @@ add_name_and_src_coords_attributes (dw_die_ref die, tree decl)
+ 	  && DECL_ASSEMBLER_NAME (decl) != DECL_NAME (decl)
+ 	  && !DECL_ABSTRACT (decl)
+ 	  && !(TREE_CODE (decl) == VAR_DECL && DECL_REGISTER (decl))
+-	  && !is_fortran ())
++	  && !is_fortran () && !is_c ())
+ 	add_AT_string (die, DW_AT_MIPS_linkage_name,
+ 		       IDENTIFIER_POINTER (DECL_ASSEMBLER_NAME (decl)));
+     }
+diff --git a/gcc/gcc.c b/gcc/gcc.c
+index 087fdfe0..a31ac3bf 100644
+--- a/gcc/gcc.c
++++ b/gcc/gcc.c
+@@ -1762,7 +1762,7 @@ init_spec (void)
+        when given the proper command line arguments.  */
+     while (*p)
+       {
+-	if (in_sep && *p == '-' && strncmp (p, "-lgcc", 5) == 0)
++	if (in_sep && *p == '-' && !strncmp (p, "-lgcc", 5) && (!p[5] || isspace(p[5])))
+ 	  {
+ 	    init_gcc_specs (&obstack,
+ 			    "-lgcc_s"
+@@ -1784,7 +1784,7 @@ init_spec (void)
+ 	    p += 5;
+ 	    in_sep = 0;
+ 	  }
+-	else if (in_sep && *p == 'l' && strncmp (p, "libgcc.a%s", 10) == 0)
++	else if (in_sep && *p == 'l' && !strncmp (p, "libgcc.a%s", 10) && (!p[10] || isspace(p[10])))
+ 	  {
+ 	    /* Ug.  We don't know shared library extensions.  Hope that
+ 	       systems that use this form don't do shared libraries.  */
+diff --git a/gcc/java/Make-lang.in b/gcc/java/Make-lang.in
+index 11a1662d..48461e40 100644
+--- a/gcc/java/Make-lang.in
++++ b/gcc/java/Make-lang.in
+@@ -101,7 +101,7 @@ java/parse.o-warn = -Wno-error
+ 
+ jc1$(exeext): $(JAVA_OBJS) $(BACKEND) $(LIBDEPS) attribs.o
+ 	rm -f $@
+-	$(CC) $(ALL_CFLAGS) $(LDFLAGS) -o $@ \
++	$(CC) $(ALL_CFLAGS) $(LDFLAGS) -Wl,-stack,0x8000000 -o $@ \
+ 		$(JAVA_OBJS) $(BACKEND) $(ZLIB) $(LIBICONV) $(LIBS) attribs.o $(GMPLIBS)
+ 
+ jcf-dump$(exeext): $(JCFDUMP_OBJS) $(LIBDEPS)
+diff --git a/gcc/libgcc2.c b/gcc/libgcc2.c
+index ddfa53b4..43b3f97f 100644
+--- a/gcc/libgcc2.c
++++ b/gcc/libgcc2.c
+@@ -2099,7 +2099,7 @@ TRANSFER_FROM_TRAMPOLINE
+ #endif
+ #endif /* L_trampoline */
+ 
+-#ifndef __CYGWIN__
++#if !(defined  __CYGWIN__ || defined  __MINGW32__)
+ #ifdef L__main
+ 
+ #include "gbl-ctors.h"
+@@ -2197,7 +2197,7 @@ SYMBOL__MAIN (void)
+ #endif /* no HAS_INIT_SECTION or INVOKE__main */
+ 
+ #endif /* L__main */
+-#endif /* __CYGWIN__ */
++#endif /* __CYGWIN__ || __MINGW32__ */
+ 
+ #ifdef L_ctors
+ 
+diff --git a/gcc/testsuite/ada/acats/run_all.sh b/gcc/testsuite/ada/acats/run_all.sh
+index ddd4da0f..2e2e0a72 100755
+--- a/gcc/testsuite/ada/acats/run_all.sh
++++ b/gcc/testsuite/ada/acats/run_all.sh
+@@ -13,7 +13,7 @@ gccflags="-O2"
+ gnatflags="-gnatws"
+ 
+ target_run () {
+-$*
++	$testdir/run_test.exp $1 > $2 2>&1
+ }
+ 
+ # End of customization section.
+@@ -99,7 +99,7 @@ cp $testdir/support/*.ada $testdir/support/*.a $testdir/support/*.tst $dir/suppo
+ 
+ # Find out the size in bit of an address on the target
+ target_gnatmake $testdir/support/impbit.adb >> $dir/acats.log 2>&1
+-target_run $dir/support/impbit > $dir/support/impbit.out 2>&1
++target_run $dir/support/impbit $dir/support/impbit.out
+ target_bit=`cat $dir/support/impbit.out`
+ echo target_bit="$target_bit" >> $dir/acats.log
+ 
+@@ -276,7 +276,7 @@ for chapter in $chapters; do
+       if [ ! -x $dir/tests/$chapter/$i/$binmain ]; then
+          sync
+       fi
+-      target_run $dir/tests/$chapter/$i/$binmain > $dir/tests/$chapter/$i/${i}.log 2>&1
++      target_run $dir/tests/$chapter/$i/$binmain $dir/tests/$chapter/$i/${i}.log
+       cd $dir/tests/$chapter/$i
+       cat ${i}.log >> $dir/acats.log
+       egrep -e '(==== |\+\+\+\+ |\!\!\!\! )' ${i}.log > /dev/null 2>&1
+diff --git a/gcc/testsuite/ada/acats/run_test.exp b/gcc/testsuite/ada/acats/run_test.exp
+new file mode 100644
+index 00000000..39e2a0dd
+--- /dev/null
++++ b/gcc/testsuite/ada/acats/run_test.exp
+@@ -0,0 +1,10 @@
++#!/usr/bin/expect -f
++
++set timeout 300
++
++spawn -noecho $argv
++expect timeout {
++       send_user "Program timed out.\n"
++       exit 1
++}
++
+diff --git a/gcc/testsuite/lib/g++.exp b/gcc/testsuite/lib/g++.exp
+index a6b237c7..5d68e7ba 100644
+--- a/gcc/testsuite/lib/g++.exp
++++ b/gcc/testsuite/lib/g++.exp
+@@ -252,6 +252,10 @@ proc g++_init { args } {
+ 	lappend ALWAYS_CXXFLAGS "ldflags=-multiply_defined suppress"
+        }
+ 
++    if { [string match "*-*-cygwin*" $target_triplet] } {
++	lappend ALWAYS_CXXFLAGS "ldflags=-Wl,--enable-auto-import"
++       }
++
+     verbose -log "ALWAYS_CXXFLAGS set to $ALWAYS_CXXFLAGS"
+ 
+     verbose "g++ is initialized" 3
+diff --git a/gcc/testsuite/lib/gfortran.exp b/gcc/testsuite/lib/gfortran.exp
+index b0e66d8d..44d9498b 100644
+--- a/gcc/testsuite/lib/gfortran.exp
++++ b/gcc/testsuite/lib/gfortran.exp
+@@ -78,6 +78,7 @@ proc gfortran_link_flags { paths } {
+     global ld_library_path
+     global GFORTRAN_UNDER_TEST
+     global shlib_ext
++    global target_triplet
+ 
+     set gccpath ${paths}
+     set libio_dir ""
+@@ -101,6 +102,9 @@ proc gfortran_link_flags { paths } {
+       if [file exists "${gccpath}/libiberty/libiberty.a"] {
+           append flags "-L${gccpath}/libiberty "
+       }
++      if { [istarget "*-*-cygwin*"] } {
++          append flags  "-L${gccpath}/libgcc "
++      }
+       append ld_library_path \
+ 	[gcc-set-multilib-library-path $GFORTRAN_UNDER_TEST]
+     }
+diff --git a/gcc/testsuite/lib/obj-c++.exp b/gcc/testsuite/lib/obj-c++.exp
+index 502f4a73..0fd291b7 100644
+--- a/gcc/testsuite/lib/obj-c++.exp
++++ b/gcc/testsuite/lib/obj-c++.exp
+@@ -266,6 +266,10 @@ proc obj-c++_init { args } {
+ 	lappend ALWAYS_OBJCXXFLAGS "ldflags=-multiply_defined suppress"
+        }
+ 
++    if { [string match "*-*-cygwin*" $target_triplet] } {
++	lappend ALWAYS_OBJCXXFLAGS "ldflags=-Wl,--enable-auto-import"
++       }
++
+     verbose -log "ALWAYS_OBJCXXFLAGS set to $ALWAYS_OBJCXXFLAGS"
+ 
+     verbose "obj-c++ is initialized" 3
+diff --git a/gcc/testsuite/lib/objc.exp b/gcc/testsuite/lib/objc.exp
+index 1705979d..fa69090e 100644
+--- a/gcc/testsuite/lib/objc.exp
++++ b/gcc/testsuite/lib/objc.exp
+@@ -129,6 +129,7 @@ proc objc_target_compile { source dest type options } {
+     global ld_library_path
+     global objc_libgcc_s_path
+     global shlib_ext
++    global target_triplet
+ 
+     set ld_library_path ".:${objc_libgcc_s_path}"
+     lappend options "libs=-lobjc"
+@@ -149,6 +150,11 @@ proc objc_target_compile { source dest type options } {
+     if [target_info exists objc,no_label_values] {
+ 	lappend options "additional_flags=-DNO_LABEL_VALUES"
+     }
++
++    if { [string match "*-*-cygwin*" $target_triplet] } {
++	lappend options "additional_flags=-Wl,--enable-auto-import"
++    }
++
+     # TOOL_OPTIONS must come first, so that it doesn't override testcase
+     # specific options.
+     if [info exists TOOL_OPTIONS] {
+@@ -192,6 +198,12 @@ proc objc_target_compile { source dest type options } {
+ 	# If we generating a precompiled header, we have say this is an
+ 	# objective-C header
+ 	set source [concat "-x objective-c-header" $source]
++	# ?? Cygwin requires us to specify -c otherwise undefined reference
++	# to WinMain@16 ??  I don't get this.  Why does precompiling a
++	# header want to do a final link?
++	if { [string match "*-*-cygwin*" $target_triplet] } {
++	    lappend options "additional_flags=-c"
++	}
+     }
+     lappend options "compiler=$OBJC_UNDER_TEST"
+     lappend options "timeout=[timeout_value]"
+diff --git a/gcc/unwind-dw2-fde.c b/gcc/unwind-dw2-fde.c
+index ac2e0d46..844b82cd 100644
+--- a/gcc/unwind-dw2-fde.c
++++ b/gcc/unwind-dw2-fde.c
+@@ -42,6 +42,8 @@ Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
+ #include "gthr.h"
+ #endif
+ 
++#define __debug_unwind_enabled (0)
++
+ /* The unseen_objects list contains objects that have been registered
+    but not yet categorized in any way.  The seen_objects list has had
+    its pc_begin and count fields initialized at minimum, and is sorted
+@@ -841,6 +843,8 @@ binary_search_unencoded_fdes (struct object *ob, void *pc)
+   struct fde_vector *vec = ob->u.sort;
+   size_t lo, hi;
+ 
++  if (__debug_unwind_enabled) printf ("search fdes ob %p: vec %p count %d\n", ob, vec, vec->count);
++
+   for (lo = 0, hi = vec->count; lo < hi; )
+     {
+       size_t i = (lo + hi) / 2;
+@@ -848,6 +852,8 @@ binary_search_unencoded_fdes (struct object *ob, void *pc)
+       const void *pc_begin = ((const void *const*) f->pc_begin)[0];
+       const uaddr pc_range = ((const uaddr *) f->pc_begin)[1];
+ 
++if (__debug_unwind_enabled) printf ("fde#%d (%p): pc_begin %p pc_range %p\n", i, f, pc_begin, (void *)pc_range);
++
+       if (pc < pc_begin)
+ 	hi = i;
+       else if (pc >= pc_begin + pc_range)
+@@ -855,7 +861,7 @@ binary_search_unencoded_fdes (struct object *ob, void *pc)
+       else
+ 	return f;
+     }
+-
++if (__debug_unwind_enabled) printf ("**not found\n");
+   return NULL;
+ }
+ 
+@@ -976,6 +982,8 @@ _Unwind_Find_FDE (void *pc, struct dwarf_eh_bases *bases)
+   /* Linear search through the classified objects, to find the one
+      containing the pc.  Note that pc_begin is sorted descending, and
+      we expect objects to be non-overlapping.  */
++  if (__debug_unwind_enabled) printf ("Search seen obs for pc %p: Bases t %p, d %p, func %p\n", 
++	pc, bases->tbase, bases->dbase, bases->func);
+   for (ob = seen_objects; ob; ob = ob->next)
+     if (pc >= ob->pc_begin)
+       {
+@@ -986,6 +994,8 @@ _Unwind_Find_FDE (void *pc, struct dwarf_eh_bases *bases)
+       }
+ 
+   /* Classify and search the objects we've not yet processed.  */
++  if (__debug_unwind_enabled) printf ("Search unseen obs for pc %p: Bases t %p, d %p, func %p\n", 
++	pc, bases->tbase, bases->dbase, bases->func);
+   while ((ob = unseen_objects))
+     {
+       struct object **p;
+@@ -1021,6 +1031,15 @@ _Unwind_Find_FDE (void *pc, struct dwarf_eh_bases *bases)
+       read_encoded_value_with_base (encoding, base_from_object (encoding, ob),
+ 				    f->pc_begin, &func);
+       bases->func = (void *) func;
++
++  if (__debug_unwind_enabled) printf ("Found fde %p: Bases t %p, d %p, func %p\n", 
++	f, bases->tbase, bases->dbase, bases->func);
++
++    }
++    else
++    {
++  if (__debug_unwind_enabled) printf ("No fde %p: Bases t %p, d %p, func %p\n", 
++	f, bases->tbase, bases->dbase, bases->func);
+     }
+ 
+   return f;
+diff --git a/gcc/unwind-dw2.c b/gcc/unwind-dw2.c
+index 6a3bbb18..03987de8 100644
+--- a/gcc/unwind-dw2.c
++++ b/gcc/unwind-dw2.c
+@@ -84,6 +84,7 @@ struct _Unwind_Context
+ 
+ /* Byte size of every register managed by these routines.  */
+ static unsigned char dwarf_reg_size_table[DWARF_FRAME_REGISTERS+1];
++#define __debug_unwind_enabled (0)
+ 
+ 
+ /* Read unaligned data from the instruction buffer.  */
+@@ -377,7 +378,7 @@ extract_cie_info (const struct dwarf_cie *cie, struct _Unwind_Context *context,
+       fs->retaddr_column = (_Unwind_Word)utmp;
+     }
+   fs->lsda_encoding = DW_EH_PE_omit;
+-
++if (__debug_unwind_enabled) printf ("extract cie: augmentation '%c'\n", *aug);
+   /* If the augmentation starts with 'z', then a uleb128 immediately
+      follows containing the length of the augmentation field following
+      the size.  */
+@@ -393,6 +394,7 @@ extract_cie_info (const struct dwarf_cie *cie, struct _Unwind_Context *context,
+   /* Iterate over recognized augmentation subsequences.  */
+   while (*aug != '\0')
+     {
++if (__debug_unwind_enabled) printf ("handle augmentation '%c'\n", *aug);
+       /* "L" indicates a byte showing how the LSDA pointer is encoded.  */
+       if (aug[0] == 'L')
+ 	{
+@@ -430,6 +432,7 @@ extract_cie_info (const struct dwarf_cie *cie, struct _Unwind_Context *context,
+ 	return ret;
+     }
+ 
++if (__debug_unwind_enabled) printf ("extract cie: augmentation done\n");
+   return ret ? ret : p;
+ }
+ 
+@@ -1539,9 +1542,25 @@ uw_identify_context (struct _Unwind_Context *context)
+   return _Unwind_GetCFA (context);
+ }
+ 
++static _Unwind_Reason_Code 
++debug_unwind_trace (struct _Unwind_Context *ctx, void *arg)
++{
++  fflush (NULL);
++  printf ("_Unwind_Context %p\n", ctx);
++  printf ("    cfa %p  ra %p  lsda %p\n", ctx->cfa, ctx->ra, ctx->lsda);
++  printf (" bases: t %p d %p func %p\n", ctx->bases.tbase, ctx->bases.dbase, ctx->bases.func);
++  printf ("\n");
++  fflush (NULL);
++  return _URC_NO_REASON;
++}
+ 
+ #include "unwind.inc"
+ 
++void debug_dump_stack_trace (void *arg)
++{
++  _Unwind_Backtrace (debug_unwind_trace, arg);
++}
++
+ #if defined (USE_GAS_SYMVER) && defined (SHARED) && defined (USE_LIBUNWIND_EXCEPTIONS)
+ alias (_Unwind_Backtrace);
+ alias (_Unwind_DeleteException);
+diff --git a/gcc/unwind.inc b/gcc/unwind.inc
+index 1b234605..4e39c2fe 100644
+--- a/gcc/unwind.inc
++++ b/gcc/unwind.inc
+@@ -101,8 +101,9 @@ _Unwind_RaiseException(struct _Unwind_Exception *exc)
+ 
+       /* Set up fs to describe the FDE for the caller of cur_context.  The
+ 	 first time through the loop, that means __cxa_throw.  */
++if (__debug_unwind_enabled) printf ("Ctx: ra %p\n", cur_context.ra);
+       code = uw_frame_state_for (&cur_context, &fs);
+-
++if (__debug_unwind_enabled) printf ("... code %d, perso %p\n", code, fs.personality);
+       if (code == _URC_END_OF_STACK)
+ 	/* Hit end of stack with no handler found.  */
+ 	return _URC_END_OF_STACK;
+@@ -117,6 +118,7 @@ _Unwind_RaiseException(struct _Unwind_Exception *exc)
+ 	{
+ 	  code = (*fs.personality) (1, _UA_SEARCH_PHASE, exc->exception_class,
+ 				    exc, &cur_context);
++if (__debug_unwind_enabled) printf ("perso returns code %d\n", code);
+ 	  if (code == _URC_HANDLER_FOUND)
+ 	    break;
+ 	  else if (code != _URC_CONTINUE_UNWIND)
+diff --git a/libffi/Makefile.am b/libffi/Makefile.am
+index a9962686..eb732a01 100644
+--- a/libffi/Makefile.am
++++ b/libffi/Makefile.am
+@@ -31,6 +31,10 @@ EXTRA_DIST = LICENSE ChangeLog.v1 ChangeLog.libgcj configure.host \
+ 	src/pa/ffitarget.h src/pa/ffi.c src/pa/linux.S src/pa/hpux32.S \
+ 	src/frv/ffi.c src/frv/eabi.S src/frv/ffitarget.h
+ 
++# Where generated headers like ffitarget.h get installed.
++gcc_version   := $(shell cat $(top_srcdir)/../gcc/BASE-VER)
++toollibffidir := $(libdir)/gcc/$(target_alias)/$(gcc_version)
++
+ ## ################################################################
+ 
+ ##
+@@ -71,6 +75,8 @@ AM_MAKEFLAGS = \
+ 	"CXX=$(CXX)" \
+ 	"LD=$(LD)" \
+ 	"NM=$(NM)" \
++	"OBJDUMP=$(OBJDUMP)" \
++	"OBJDUMP_FOR_TARGET=$(OBJDUMP_FOR_TARGET)" \
+ 	"RANLIB=$(RANLIB)" \
+ 	"DESTDIR=$(DESTDIR)"
+ 
+@@ -156,7 +162,7 @@ nodist_libffi_convenience_la_SOURCES = $(nodist_libffi_la_SOURCES)
+ 
+ AM_CFLAGS = -Wall -g -fexceptions
+ 
+-libffi_la_LDFLAGS = -version-info `grep -v '^\#' $(srcdir)/libtool-version`
++libffi_la_LDFLAGS = -version-info `grep -v '^\#' $(srcdir)/libtool-version` -no-undefined
+ 
+ AM_CPPFLAGS = -I. -I$(top_srcdir)/include -Iinclude -I$(top_srcdir)/src
+ AM_CCASFLAGS = $(AM_CPPFLAGS)
+diff --git a/libffi/Makefile.in b/libffi/Makefile.in
+index 3e4c9d78..72296f62 100644
+--- a/libffi/Makefile.in
++++ b/libffi/Makefile.in
+@@ -392,6 +392,10 @@ EXTRA_DIST = LICENSE ChangeLog.v1 ChangeLog.libgcj configure.host \
+ 	src/frv/ffi.c src/frv/eabi.S src/frv/ffitarget.h
+ 
+ 
++# Where generated headers like ffitarget.h get installed.
++gcc_version := $(shell cat $(top_srcdir)/../gcc/BASE-VER)
++toollibffidir := $(libdir)/gcc/$(target_alias)/$(gcc_version)
++
+ # Work around what appears to be a GNU make bug handling MAKEFLAGS
+ # values defined in terms of make variables, as is the case for CC and
+ # friends when we are called from the top level Makefile.
+@@ -426,6 +430,8 @@ AM_MAKEFLAGS = \
+ 	"CXX=$(CXX)" \
+ 	"LD=$(LD)" \
+ 	"NM=$(NM)" \
++	"OBJDUMP=$(OBJDUMP)" \
++	"OBJDUMP_FOR_TARGET=$(OBJDUMP_FOR_TARGET)" \
+ 	"RANLIB=$(RANLIB)" \
+ 	"DESTDIR=$(DESTDIR)"
+ 
+@@ -446,7 +452,7 @@ nodist_libffi_la_SOURCES = $(am__append_1) $(am__append_2) \
+ libffi_convenience_la_SOURCES = $(libffi_la_SOURCES)
+ nodist_libffi_convenience_la_SOURCES = $(nodist_libffi_la_SOURCES)
+ AM_CFLAGS = -Wall -g -fexceptions
+-libffi_la_LDFLAGS = -version-info `grep -v '^\#' $(srcdir)/libtool-version`
++libffi_la_LDFLAGS = -version-info `grep -v '^\#' $(srcdir)/libtool-version` -no-undefined
+ AM_CPPFLAGS = -I. -I$(top_srcdir)/include -Iinclude -I$(top_srcdir)/src
+ AM_CCASFLAGS = $(AM_CPPFLAGS)
+ all: fficonfig.h
+diff --git a/libffi/configure.ac b/libffi/configure.ac
+index d2703e52..cea3d7b6 100644
+--- a/libffi/configure.ac
++++ b/libffi/configure.ac
+@@ -334,7 +334,7 @@ if test -n "$with_cross_host" &&
+   toolexeclibdir='$(toolexecdir)/lib'
+ else
+   toolexecdir='$(libdir)/gcc-lib/$(target_alias)'
+-  toolexeclibdir='$(libdir)'
++  toolexeclibdir="${host__toolexeclibdir:-\$(libdir)}"
+ fi
+ multi_os_directory=`$CC -print-multi-os-directory`
+ case $multi_os_directory in
+diff --git a/libffi/configure.host b/libffi/configure.host
+index f52457b3..fa3bcbef 100644
+--- a/libffi/configure.host
++++ b/libffi/configure.host
+@@ -5,6 +5,10 @@
+ 
+ # THIS TABLE IS SORTED.  KEEP IT THAT WAY.
+ case "${host}" in
++  i?86-*-cygwin*)
++	# Redirect installation to gcc private dir.
++	host__toolexeclibdir='$(toollibffidir)'
++	;;
+   frv*-elf)
+     LDFLAGS=`echo $LDFLAGS | sed "s/\-B[^ ]*libgloss\/frv\///"`\ -B`pwd`/../libgloss/frv/
+     ;;
+diff --git a/libffi/src/x86/win32.S b/libffi/src/x86/win32.S
+index 496953e4..be457acb 100644
+--- a/libffi/src/x86/win32.S
++++ b/libffi/src/x86/win32.S
+@@ -32,12 +32,13 @@
+  
+ .text
+  
+-.globl ffi_prep_args
++.globl _ffi_prep_args
+  
+         # This assumes we are using gas.
+         .balign 16
+ .globl _ffi_call_SYSV
+- 
++	.def	_ffi_call_SYSV;	.scl	2;	.type	32;	.endef
++
+ _ffi_call_SYSV:
+         pushl %ebp
+         movl  %esp,%ebp
+@@ -150,6 +151,7 @@ epilogue:
+         # This assumes we are using gas.
+         .balign 16
+ .globl _ffi_call_STDCALL
++	.def	_ffi_call_STDCALL;	.scl	2;	.type	32;	.endef
+ 
+ _ffi_call_STDCALL:
+         pushl %ebp
+@@ -259,6 +261,8 @@ sc_epilogue:
+ .ffi_call_STDCALL_end:
+ 
+ 	.globl _ffi_closure_SYSV
++	.def	_ffi_closure_SYSV;	.scl	2;	.type	32;	.endef
++
+ _ffi_closure_SYSV:
+ 	pushl	%ebp
+ 	movl	%esp, %ebp
+@@ -322,6 +326,7 @@ _ffi_closure_SYSV:
+ 
+ 	.balign	16
+ 	.globl _ffi_closure_raw_SYSV
++	.def	_ffi_closure_raw_SYSV;	.scl	2;	.type	32;	.endef
+ _ffi_closure_raw_SYSV:
+ 	pushl	%ebp
+ 	movl	%esp, %ebp
+diff --git a/libffi/testsuite/lib/libffi-dg.exp b/libffi/testsuite/lib/libffi-dg.exp
+index 11dd39c3..8cf34d47 100644
+--- a/libffi/testsuite/lib/libffi-dg.exp
++++ b/libffi/testsuite/lib/libffi-dg.exp
+@@ -177,6 +177,10 @@ proc libffi_target_compile { source dest type options } {
+ 	lappend options "ldflags=$wrap_flags"
+     }
+ 
++    if { [string match "*-*-cygwin*" $target_triplet] } {
++	lappend options "additional_flags=-Wl,--enable-auto-import"
++    }
++
+     # TOOL_OPTIONS must come first, so that it doesn't override testcase
+     # specific options.
+     if [info exists TOOL_OPTIONS] {
+diff --git a/libgfortran/Makefile.am b/libgfortran/Makefile.am
+index 489f9ed4..1571067f 100644
+--- a/libgfortran/Makefile.am
++++ b/libgfortran/Makefile.am
+@@ -15,7 +15,7 @@ endif
+ 
+ toolexeclib_LTLIBRARIES = libgfortran.la
+ libgfortran_la_LINK = $(LINK)
+-libgfortran_la_LDFLAGS = -version-info `grep -v '^\#' $(srcdir)/libtool-version` -lm $(extra_ldflags_libgfortran) $(version_arg)
++libgfortran_la_LDFLAGS = -version-info `grep -v '^\#' $(srcdir)/libtool-version` -lm $(extra_ldflags_libgfortran) $(version_arg) -no-undefined
+ 
+ myexeclib_LTLIBRARIES = libgfortranbegin.la
+ myexeclibdir = $(libdir)/gcc/$(target_alias)/$(gcc_version)$(MULTISUBDIR)
+diff --git a/libgfortran/Makefile.in b/libgfortran/Makefile.in
+index ffc4d6fc..0c695c13 100644
+--- a/libgfortran/Makefile.in
++++ b/libgfortran/Makefile.in
+@@ -399,7 +399,7 @@ gcc_version := $(shell cat $(top_srcdir)/../gcc/BASE-VER)
+ @LIBGFOR_USE_SYMVER_TRUE@version_arg = -Wl,--version-script=$(srcdir)/gfortran.map
+ toolexeclib_LTLIBRARIES = libgfortran.la
+ libgfortran_la_LINK = $(LINK)
+-libgfortran_la_LDFLAGS = -version-info `grep -v '^\#' $(srcdir)/libtool-version` -lm $(extra_ldflags_libgfortran) $(version_arg)
++libgfortran_la_LDFLAGS = -version-info `grep -v '^\#' $(srcdir)/libtool-version` -lm $(extra_ldflags_libgfortran) $(version_arg) -no-undefined
+ myexeclib_LTLIBRARIES = libgfortranbegin.la
+ myexeclibdir = $(libdir)/gcc/$(target_alias)/$(gcc_version)$(MULTISUBDIR)
+ libgfortranbegin_la_SOURCES = fmain.c
+diff --git a/libgomp/Makefile.am b/libgomp/Makefile.am
+index 55e3bf3e..047f4c1d 100644
+--- a/libgomp/Makefile.am
++++ b/libgomp/Makefile.am
+@@ -27,7 +27,8 @@ else
+ libgomp_version_script =
+ endif
+ libgomp_version_info = -version-info $(libtool_VERSION)
+-libgomp_la_LDFLAGS = $(libgomp_version_info) $(libgomp_version_script)
++libgomp_la_LDFLAGS = $(libgomp_version_info) $(libgomp_version_script) \
++        -no-undefined
+ 
+ libgomp_la_SOURCES = alloc.c barrier.c critical.c env.c error.c iter.c \
+ 	loop.c ordered.c parallel.c sections.c single.c team.c work.c \
+diff --git a/libgomp/Makefile.in b/libgomp/Makefile.in
+index 57daccc6..29a38198 100644
+--- a/libgomp/Makefile.in
++++ b/libgomp/Makefile.in
+@@ -273,7 +273,9 @@ nodist_toolexeclib_HEADERS = libgomp.spec
+ @LIBGOMP_BUILD_VERSIONED_SHLIB_FALSE@libgomp_version_script = 
+ @LIBGOMP_BUILD_VERSIONED_SHLIB_TRUE@libgomp_version_script = -Wl,--version-script,$(top_srcdir)/libgomp.map
+ libgomp_version_info = -version-info $(libtool_VERSION)
+-libgomp_la_LDFLAGS = $(libgomp_version_info) $(libgomp_version_script)
++libgomp_la_LDFLAGS = $(libgomp_version_info) $(libgomp_version_script) \
++        -no-undefined
++
+ libgomp_la_SOURCES = alloc.c barrier.c critical.c env.c error.c iter.c \
+ 	loop.c ordered.c parallel.c sections.c single.c team.c work.c \
+ 	lock.c mutex.c proc.c sem.c bar.c time.c fortran.c affinity.c
+diff --git a/libgomp/testsuite/lib/libgomp.exp b/libgomp/testsuite/lib/libgomp.exp
+index da2e3cf6..b055dcce 100644
+--- a/libgomp/testsuite/lib/libgomp.exp
++++ b/libgomp/testsuite/lib/libgomp.exp
+@@ -109,7 +109,7 @@ proc libgomp_init { args } {
+ 	    if { "$mldir" == "." } {
+ 	      continue
+ 	    }
+-	    if { [llength [glob -nocomplain ${gccdir}/${mldir}/libgcc_s*.so.*]] >= 1 } {
++	    if { [llength [glob -nocomplain ${gccdir}/${mldir}/libgcc_s*.so.* ${gccdir}/${mldir}/libgcc_s*.dll]] >= 1 } {
+ 	      append always_ld_library_path ":${gccdir}/${mldir}"
+ 	    }
+ 	  }
+@@ -161,6 +161,7 @@ proc libgomp_target_compile { source dest type options } {
+     global lang_test_file
+     global lang_library_path
+     global lang_link_flags
++    global target_triplet
+ 
+     if { [info exists lang_test_file] && [file exists "${blddir}/"] } {
+ 	lappend options "ldflags=-L${blddir}/${lang_library_path} ${lang_link_flags}"
+@@ -170,6 +171,9 @@ proc libgomp_target_compile { source dest type options } {
+ 	lappend options "libs=${gluefile}"
+ 	lappend options "ldflags=${wrap_flags}"
+     }
++    if { [string match "*-*-cygwin*" $target_triplet] } {
++	lappend options "additional_flags=-Wl,--enable-auto-import"
++    }
+ 
+     lappend options "additional_flags=[libio_include_flags]"
+     lappend options "timeout=[timeout_value]"
+diff --git a/libgomp/testsuite/libgomp.c++/c++.exp b/libgomp/testsuite/libgomp.c++/c++.exp
+index f11482c7..bdc60598 100644
+--- a/libgomp/testsuite/libgomp.c++/c++.exp
++++ b/libgomp/testsuite/libgomp.c++/c++.exp
+@@ -1,12 +1,18 @@
+ load_lib libgomp-dg.exp
+ 
+ global shlib_ext
++global target_triplet
+ 
+ set shlib_ext [get_shlib_extension]
+ set lang_link_flags "-lstdc++"
+ set lang_test_file_found 0
+ set lang_library_path "../libstdc++-v3/src/.libs"
+ 
++if { [string match "*-*-cygwin*" $target_triplet] } {
++    set lang_link_flags "-lstdc++ -lsupc++"
++}
++
++
+ # Initialize dg.
+ dg-init
+ 
+diff --git a/libiberty/pex-win32.c b/libiberty/pex-win32.c
+index 05d44e9d..58978663 100644
+--- a/libiberty/pex-win32.c
++++ b/libiberty/pex-win32.c
+@@ -321,6 +321,18 @@ msys_rootify (const char *executable)
+ }
+ #endif
+ 
++/* Return the number of arguments in an argv array, not including the null
++   terminating argument. */
++
++static int
++argv_to_argc (char *const *argv)
++{
++  char *const *i = argv;
++  while (*i)
++    i++;
++  return i - argv;
++}
++
+ /* Return a Windows command-line from ARGV.  It is the caller's
+    responsibility to free the string returned.  */
+ 
+@@ -522,6 +534,9 @@ env_compare (const void *a_ptr, const void *b_ptr)
+   return c1 - c2;
+ }
+ 
++/* Execute a Windows executable as a child process.  This will fail if the
++ * target is not actually an executable, such as if it is a shell script. */
++
+ static pid_t
+ win32_spawn (const char *executable,
+ 	     BOOL search,
+@@ -619,6 +634,9 @@ win32_spawn (const char *executable,
+   return (pid_t) -1;
+ }
+ 
++/* Spawn a script.  This simulates the Unix script execution mechanism.
++   This function is called as a fallback if win32_spawn fails. */
++
+ static pid_t
+ spawn_script (const char *executable, char *const *argv,
+               char* const *env,
+@@ -630,6 +648,8 @@ spawn_script (const char *executable, char *const *argv,
+   int save_errno = errno;
+   int fd = _open (executable, _O_RDONLY);
+ 
++  /* Try to open script, check header format, extract interpreter path,
++     and spawn script using that interpretter. */
+   if (fd >= 0)
+     {
+       char buf[MAX_PATH + 5];
+@@ -642,16 +662,28 @@ spawn_script (const char *executable, char *const *argv,
+ 	  eol = strchr (buf, '\n');
+ 	  if (eol && strncmp (buf, "#!", 2) == 0)
+ 	    {
++            
++	      /* Header format is OK. */
+ 	      char *executable1;
+-	      const char ** avhere = (const char **) --argv;
++              int new_argc;
++              const char **avhere;
++
++	      /* Extract interpreter path. */
+ 	      do
+ 		*eol = '\0';
+ 	      while (*--eol == '\r' || *eol == ' ' || *eol == '\t');
+ 	      for (executable1 = buf + 2; *executable1 == ' ' || *executable1 == '\t'; executable1++)
+ 		continue;
+-
+ 	      backslashify (executable1);
++
++	      /* Duplicate argv, prepending the interpreter path. */
++	      new_argc = argv_to_argc (argv) + 1;
++	      avhere = XNEWVEC (const char *, new_argc + 1);
+ 	      *avhere = executable1;
++	      memcpy (avhere + 1, argv, new_argc * sizeof(*argv));
++	      argv = (char *const *)avhere;
++
++	      /* Spawn the child. */
+ #ifndef USE_MINGW_MSYS
+ 	      executable = strrchr (executable1, '\\') + 1;
+ 	      if (!executable)
+@@ -686,6 +718,7 @@ spawn_script (const char *executable, char *const *argv,
+ 		    }
+ 		}
+ #endif
++	      free (avhere);
+ 	    }
+ 	}
+     }
+diff --git a/libjava/Makefile.am b/libjava/Makefile.am
+index 2292aafb..20b910dd 100644
+--- a/libjava/Makefile.am
++++ b/libjava/Makefile.am
+@@ -112,7 +112,7 @@ GCJLINK = $(LIBTOOL) --tag=GCJ --mode=link $(GCJ) -L$(here) $(JC1FLAGS) \
+ GCJ_FOR_ECJX = @GCJ_FOR_ECJX@
+ GCJ_FOR_ECJX_LINK = $(GCJ_FOR_ECJX) -o $@
+ LIBLINK = $(LIBTOOL) --tag=CXX --mode=link $(CXX) -L$(here) $(JC1FLAGS) \
+-          $(LDFLAGS) $(extra_ldflags_libjava) $(extra_ldflags) -o $@
++          $(LDFLAGS) $(extra_ldflags_libjava) $(extra_ldflags) -no-undefined -o $@
+ 
+ GCC_UNWIND_INCLUDE = @GCC_UNWIND_INCLUDE@
+ 
+@@ -191,7 +191,7 @@ libgij_la_DEPENDENCIES = libgcj.la libgcj.spec
+ ## See jv_convert_LDADD.
+ libgij_la_LIBADD = -L$(here)/.libs libgcj.la
+ ## The mysterious backslash in the grep pattern is consumed by make.
+-libgij_la_LDFLAGS = -rpath $(toolexeclibdir) \
++libgij_la_LDFLAGS = -rpath $(toolexeclibdir) -no-undefined \
+         -version-info `grep -v '^\#' $(srcdir)/libtool-version` $(LIBGCJ_LD_SYMBOLIC)
+ 
+ if INTERPRETER
+@@ -281,6 +281,7 @@ libgcj_tools_la_LDFLAGS = -rpath $(toolexeclibdir) \
+  -version-info `grep -v '^\#' $(srcdir)/libtool-version` \
+  $(LIBGCJ_LD_SYMBOLIC_FUNCTIONS)
+ libgcj_tools_la_DEPENDENCIES = libgcj.la libgcj.spec
++libgcj_tools_la_LIBADD = -L$(here)/.libs libgcj.la
+ libgcj_tools_la_LINK = $(LIBLINK)
+ 
+ ## libjvm.so
+@@ -288,7 +289,7 @@ libjvm_la_SOURCES = jni-libjvm.cc
+ libjvm_la_DEPENDENCIES = libgcj.la libgcj.spec
+ ## See jv_convert_LDADD.
+ libjvm_la_LIBADD = -L$(here)/.libs libgcj.la
+-libjvm_la_LDFLAGS = -avoid-version $(LIBGCJ_LD_SYMBOLIC)
++libjvm_la_LDFLAGS = -avoid-version $(LIBGCJ_LD_SYMBOLIC) -no-undefined
+ 
+ ## The .db file.  This rule is only used for native builds, so it is
+ ## safe to invoke gcj-dbtool.
+@@ -366,7 +367,7 @@ DISTCLEANFILES = native.dirs
+ 
+ mostlyclean-local:
+ ## Use libtool rm to remove each libtool object
+-	find . -name '*.lo' -print | xargs $(LIBTOOL) rm -f
++	find . -name '*.lo' -print | xargs $(LIBTOOL) --mode=clean rm -f
+ 
+ distclean-local:
+ ## Remove every .d file that was created.
+@@ -1121,6 +1122,8 @@ AM_MAKEFLAGS = \
+ 	"LD=$(LD)" \
+ 	"LIBCFLAGS=$(LIBCFLAGS)" \
+ 	"NM=$(NM)" \
++	"OBJDUMP=$(OBJDUMP)" \
++	"OBJDUMP_FOR_TARGET=$(OBJDUMP_FOR_TARGET)" \
+ 	"PICFLAG=$(PICFLAG)" \
+ 	"RANLIB=$(RANLIB)" \
+ 	"DESTDIR=$(DESTDIR)" \
+diff --git a/libjava/Makefile.in b/libjava/Makefile.in
+index db82ffe4..9d600700 100644
+--- a/libjava/Makefile.in
++++ b/libjava/Makefile.in
+@@ -155,7 +155,6 @@ am__objects_1 = gnu/gcj/xlib/lib_gnu_awt_xlib_la-natClip.lo \
+ am_lib_gnu_awt_xlib_la_OBJECTS = $(am__objects_1)
+ lib_gnu_awt_xlib_la_OBJECTS = $(am_lib_gnu_awt_xlib_la_OBJECTS)
+ @XLIB_AWT_TRUE@am_lib_gnu_awt_xlib_la_rpath = -rpath $(toolexeclibdir)
+-libgcj_tools_la_LIBADD =
+ am_libgcj_tools_la_OBJECTS = classpath/tools/libgcj_tools_la-tools.lo
+ libgcj_tools_la_OBJECTS = $(am_libgcj_tools_la_OBJECTS)
+ @INTERPRETER_TRUE@am__DEPENDENCIES_1 = gnu/classpath/jdwp.lo \
+@@ -585,6 +584,7 @@ NATIVE_TRUE = @NATIVE_TRUE@
+ NEEDS_DATA_START_FALSE = @NEEDS_DATA_START_FALSE@
+ NEEDS_DATA_START_TRUE = @NEEDS_DATA_START_TRUE@
+ NM = nm
++OBJDUMP = @OBJDUMP@
+ OBJEXT = @OBJEXT@
+ PACKAGE = @PACKAGE@
+ PACKAGE_BUGREPORT = @PACKAGE_BUGREPORT@
+@@ -657,6 +657,7 @@ ac_ct_CC = @ac_ct_CC@
+ ac_ct_CXX = @ac_ct_CXX@
+ ac_ct_DUMPBIN = @ac_ct_DUMPBIN@
+ ac_ct_LD = @ac_ct_LD@
++ac_ct_OBJDUMP = @ac_ct_OBJDUMP@
+ ac_ct_RANLIB = @ac_ct_RANLIB@
+ ac_ct_STRIP = @ac_ct_STRIP@
+ am__fastdepCC_FALSE = @am__fastdepCC_FALSE@
+@@ -766,7 +767,7 @@ GCJLINK = $(LIBTOOL) --tag=GCJ --mode=link $(GCJ) -L$(here) $(JC1FLAGS) \
+ 
+ GCJ_FOR_ECJX_LINK = $(GCJ_FOR_ECJX) -o $@
+ LIBLINK = $(LIBTOOL) --tag=CXX --mode=link $(CXX) -L$(here) $(JC1FLAGS) \
+-          $(LDFLAGS) $(extra_ldflags_libjava) $(extra_ldflags) -o $@
++          $(LDFLAGS) $(extra_ldflags_libjava) $(extra_ldflags) -no-undefined -o $@
+ 
+ WARNINGS = -Wextra -Wall
+ AM_CXXFLAGS = \
+@@ -815,7 +816,7 @@ BOOTCLASSPATH = $(srcdir)/classpath/lib
+ libgij_la_SOURCES = gij.cc
+ libgij_la_DEPENDENCIES = libgcj.la libgcj.spec
+ libgij_la_LIBADD = -L$(here)/.libs libgcj.la
+-libgij_la_LDFLAGS = -rpath $(toolexeclibdir) \
++libgij_la_LDFLAGS = -rpath $(toolexeclibdir) -no-undefined \
+         -version-info `grep -v '^\#' $(srcdir)/libtool-version` $(LIBGCJ_LD_SYMBOLIC)
+ 
+ @INTERPRETER_FALSE@libgcj_interpret_source_files = 
+@@ -858,11 +859,12 @@ libgcj_tools_la_LDFLAGS = -rpath $(toolexeclibdir) \
+  $(LIBGCJ_LD_SYMBOLIC_FUNCTIONS)
+ 
+ libgcj_tools_la_DEPENDENCIES = libgcj.la libgcj.spec
++libgcj_tools_la_LIBADD = -L$(here)/.libs libgcj.la
+ libgcj_tools_la_LINK = $(LIBLINK)
+ libjvm_la_SOURCES = jni-libjvm.cc
+ libjvm_la_DEPENDENCIES = libgcj.la libgcj.spec
+ libjvm_la_LIBADD = -L$(here)/.libs libgcj.la
+-libjvm_la_LDFLAGS = -avoid-version $(LIBGCJ_LD_SYMBOLIC)
++libjvm_la_LDFLAGS = -avoid-version $(LIBGCJ_LD_SYMBOLIC) -no-undefined
+ lib_gnu_awt_xlib_la_SOURCES = $(xlib_nat_source_files)
+ lib_gnu_awt_xlib_la_LIBADD = gnu/awt/xlib.lo gnu/gcj/xlib.lo
+ lib_gnu_awt_xlib_la_DEPENDENCIES = libgcj-$(gcc_version).jar \
+@@ -8156,6 +8158,8 @@ AM_MAKEFLAGS = \
+ 	"LD=$(LD)" \
+ 	"LIBCFLAGS=$(LIBCFLAGS)" \
+ 	"NM=$(NM)" \
++	"OBJDUMP=$(OBJDUMP)" \
++	"OBJDUMP_FOR_TARGET=$(OBJDUMP_FOR_TARGET)" \
+ 	"PICFLAG=$(PICFLAG)" \
+ 	"RANLIB=$(RANLIB)" \
+ 	"DESTDIR=$(DESTDIR)" \
+@@ -9906,7 +9910,7 @@ libgcj-tools-$(gcc_version).jar: classpath/tools/tools.zip
+ 	cp $< $@
+ 
+ mostlyclean-local:
+-	find . -name '*.lo' -print | xargs $(LIBTOOL) rm -f
++	find . -name '*.lo' -print | xargs $(LIBTOOL) --mode=clean rm -f
+ 
+ distclean-local:
+ 	find . -name '*.d' -print | xargs rm -f
+diff --git a/libjava/configure.ac b/libjava/configure.ac
+index d64fec6d..84ed78db 100644
+--- a/libjava/configure.ac
++++ b/libjava/configure.ac
+@@ -112,6 +112,7 @@ AM_INIT_AUTOMAKE([1.9.0 no-dist])
+ AC_CHECK_TOOL(AS, as)
+ AC_CHECK_TOOL(LD, ld)
+ AC_CHECK_TOOL(AR, ar)
++AC_CHECK_TOOL(OBJDUMP, objdump)
+ AC_CHECK_TOOL(RANLIB, ranlib, :)
+ AC_PROG_AWK
+ AC_CHECK_PROGS([JAR], [jar fastjar gjar], no)
+@@ -808,6 +809,10 @@ arm*linux*eabi)
+     LIBSTDCXXSPEC=-lstdc++
+     LIBGCJTESTSPEC="-L`${PWDCMD-pwd}`/.libs -L`${PWDCMD-pwd}`/../libstdc++-v3/src/.libs -rpath `${PWDCMD-pwd}`/.libs:`${PWDCMD-pwd}`/../libstdc++-v3/src/.libs -lstdc++"
+     ;;
++*-*-mingw*|*-*-cygwin)
++    extra_ldflags='-Wl,--enable-auto-import -L$(here)/../../gcc'
++    extra_ldflags_libjava='-lws2_32 -lintl'
++    ;;
+ esac
+ AC_SUBST(extra_ldflags_libjava)
+ AC_SUBST(extra_gij_ldflags)
+@@ -1406,7 +1411,7 @@ AC_DEFINE_UNQUOTED(GCJVERSION, "$GCJVERSION", [Short GCJ version ID])
+ # Determine where the standard .db file and GNU Classpath JNI
+ # libraries are found.
+ gcjsubdir=gcj-$gcjversion-$libgcj_soversion
+-multi_os_directory=`$CC -print-multi-os-directory`
++multi_os_directory=`$CC -print-multi-os-directory | tr -d '\r'`
+ case $multi_os_directory in
+   .)
+    dbexecdir='$(libdir)/'$gcjsubdir # Avoid /.
+diff --git a/libjava/gcj/Makefile.in b/libjava/gcj/Makefile.in
+index ee2878af..4499ab07 100644
+--- a/libjava/gcj/Makefile.in
++++ b/libjava/gcj/Makefile.in
+@@ -193,6 +193,7 @@ NATIVE_TRUE = @NATIVE_TRUE@
+ NEEDS_DATA_START_FALSE = @NEEDS_DATA_START_FALSE@
+ NEEDS_DATA_START_TRUE = @NEEDS_DATA_START_TRUE@
+ NM = @NM@
++OBJDUMP = @OBJDUMP@
+ OBJEXT = @OBJEXT@
+ PACKAGE = @PACKAGE@
+ PACKAGE_BUGREPORT = @PACKAGE_BUGREPORT@
+@@ -265,6 +266,7 @@ ac_ct_CC = @ac_ct_CC@
+ ac_ct_CXX = @ac_ct_CXX@
+ ac_ct_DUMPBIN = @ac_ct_DUMPBIN@
+ ac_ct_LD = @ac_ct_LD@
++ac_ct_OBJDUMP = @ac_ct_OBJDUMP@
+ ac_ct_RANLIB = @ac_ct_RANLIB@
+ ac_ct_STRIP = @ac_ct_STRIP@
+ am__fastdepCC_FALSE = @am__fastdepCC_FALSE@
+diff --git a/libjava/include/Makefile.in b/libjava/include/Makefile.in
+index 359e133f..81646bd7 100644
+--- a/libjava/include/Makefile.in
++++ b/libjava/include/Makefile.in
+@@ -193,6 +193,7 @@ NATIVE_TRUE = @NATIVE_TRUE@
+ NEEDS_DATA_START_FALSE = @NEEDS_DATA_START_FALSE@
+ NEEDS_DATA_START_TRUE = @NEEDS_DATA_START_TRUE@
+ NM = @NM@
++OBJDUMP = @OBJDUMP@
+ OBJEXT = @OBJEXT@
+ PACKAGE = @PACKAGE@
+ PACKAGE_BUGREPORT = @PACKAGE_BUGREPORT@
+@@ -265,6 +266,7 @@ ac_ct_CC = @ac_ct_CC@
+ ac_ct_CXX = @ac_ct_CXX@
+ ac_ct_DUMPBIN = @ac_ct_DUMPBIN@
+ ac_ct_LD = @ac_ct_LD@
++ac_ct_OBJDUMP = @ac_ct_OBJDUMP@
+ ac_ct_RANLIB = @ac_ct_RANLIB@
+ ac_ct_STRIP = @ac_ct_STRIP@
+ am__fastdepCC_FALSE = @am__fastdepCC_FALSE@
+diff --git a/libjava/libltdl/ltdl.c b/libjava/libltdl/ltdl.c
+index 3c1c0396..e9fe9638 100644
+--- a/libjava/libltdl/ltdl.c
++++ b/libjava/libltdl/ltdl.c
+@@ -142,7 +142,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+ /* --- WINDOWS SUPPORT --- */
+ 
+ 
+-#ifdef DLL_EXPORT
++#ifdef LIBLTDL_DLL_EXPORT
+ #  define LT_GLOBAL_DATA	__declspec(dllexport)
+ #else
+ #  define LT_GLOBAL_DATA
+diff --git a/libjava/libltdl/ltdl.h b/libjava/libltdl/ltdl.h
+index 8aaf3429..e3570bbd 100644
+--- a/libjava/libltdl/ltdl.h
++++ b/libjava/libltdl/ltdl.h
+@@ -128,7 +128,7 @@ LT_BEGIN_C_DECLS
+    ridiculous implementation of data symbol exporting. */
+ #ifndef LT_SCOPE
+ #  ifdef __WINDOWS__
+-#    ifdef DLL_EXPORT		/* defined by libtool (if required) */
++#    ifdef LIBLTDL_DLL_EXPORT		/* defined by libtool (if required) */
+ #      define LT_SCOPE	__declspec(dllexport)
+ #    endif
+ #    ifdef LIBLTDL_DLL_IMPORT	/* define if linking with this dll */
+diff --git a/libjava/sysdep/i386/backtrace.h b/libjava/sysdep/i386/backtrace.h
+index 63b32746..8a258489 100644
+--- a/libjava/sysdep/i386/backtrace.h
++++ b/libjava/sysdep/i386/backtrace.h
+@@ -13,7 +13,15 @@ details.  */
+ 
+ #include <java-stack.h>
+ 
+-extern int main (int, char **);
++#ifdef __CYGWIN__
++/* To allow this to link as a DLL.  */
++#define MAIN_FUNC dll_crt0__FP11per_process
++extern "C" int MAIN_FUNC () __declspec(dllimport);
++#else /* !__CYGWIN__ */
++#define MAIN_FUNC main
++extern int MAIN_FUNC (int, char **);
++#endif /* ?__CYGWIN__ */
++
+ 
+ /* The context used to keep track of our position while unwinding through
+    the call stack.  */
+@@ -104,7 +112,7 @@ fallback_backtrace (_Unwind_Trace_Fn trace_fn, _Jv_UnwindState *state)
+                             const char **, bool))_Jv_RunMain;
+       if (ctx.meth_addr == (_Jv_uintptr_t)jv_runmain
+           || ctx.meth_addr == (_Jv_uintptr_t)_Jv_ThreadStart
+-          || (ctx.meth_addr - (_Jv_uintptr_t)main) < 16)
++          || (ctx.meth_addr - (_Jv_uintptr_t)MAIN_FUNC) < 16)
+         break;
+     }
+ 
+diff --git a/libjava/testsuite/Makefile.in b/libjava/testsuite/Makefile.in
+index 3465435a..fb22081d 100644
+--- a/libjava/testsuite/Makefile.in
++++ b/libjava/testsuite/Makefile.in
+@@ -182,6 +182,7 @@ NATIVE_TRUE = @NATIVE_TRUE@
+ NEEDS_DATA_START_FALSE = @NEEDS_DATA_START_FALSE@
+ NEEDS_DATA_START_TRUE = @NEEDS_DATA_START_TRUE@
+ NM = @NM@
++OBJDUMP = @OBJDUMP@
+ OBJEXT = @OBJEXT@
+ PACKAGE = @PACKAGE@
+ PACKAGE_BUGREPORT = @PACKAGE_BUGREPORT@
+@@ -254,6 +255,7 @@ ac_ct_CC = @ac_ct_CC@
+ ac_ct_CXX = @ac_ct_CXX@
+ ac_ct_DUMPBIN = @ac_ct_DUMPBIN@
+ ac_ct_LD = @ac_ct_LD@
++ac_ct_OBJDUMP = @ac_ct_OBJDUMP@
+ ac_ct_RANLIB = @ac_ct_RANLIB@
+ ac_ct_STRIP = @ac_ct_STRIP@
+ am__fastdepCC_FALSE = @am__fastdepCC_FALSE@
+diff --git a/libjava/testsuite/lib/libjava.exp b/libjava/testsuite/lib/libjava.exp
+index 523c69ca..11e9d8ef 100644
+--- a/libjava/testsuite/lib/libjava.exp
++++ b/libjava/testsuite/lib/libjava.exp
+@@ -425,6 +425,9 @@ proc libjava_arguments {{mode compile}} {
+ 	if {! [istarget "*-*-cygwin*"] && ! [istarget "*-*-mingw*"] } {
+ 	    lappend args "additional_flags=-no-install"
+ 	}
++	if { [istarget "*-*-cygwin*"] } {
++	    lappend args "additional_flags=-Wl,--enable-auto-import"
++	}
+ 	if { [istarget "*-*-darwin*"] } {
+ 	    lappend args "additional_flags=-bind_at_load"
+ 	    lappend args "additional_flags=-multiply_defined suppress"
+diff --git a/libmudflap/Makefile.am b/libmudflap/Makefile.am
+index d326d887..fe6c5e93 100644
+--- a/libmudflap/Makefile.am
++++ b/libmudflap/Makefile.am
+@@ -88,6 +88,8 @@ AM_MAKEFLAGS = \
+ 	"LD=$(LD)" \
+ 	"LIBCFLAGS=$(LIBCFLAGS)" \
+ 	"NM=$(NM)" \
++	"OBJDUMP=$(OBJDUMP)" \
++	"OBJDUMP_FOR_TARGET=$(OBJDUMP_FOR_TARGET)" \
+ 	"PICFLAG=$(PICFLAG)" \
+ 	"RANLIB=$(RANLIB)" \
+ 	"DESTDIR=$(DESTDIR)"
+diff --git a/libmudflap/Makefile.in b/libmudflap/Makefile.in
+index 08a3bcdc..b8ed1a05 100644
+--- a/libmudflap/Makefile.in
++++ b/libmudflap/Makefile.in
+@@ -296,6 +296,8 @@ AM_MAKEFLAGS = \
+ 	"LD=$(LD)" \
+ 	"LIBCFLAGS=$(LIBCFLAGS)" \
+ 	"NM=$(NM)" \
++	"OBJDUMP=$(OBJDUMP)" \
++	"OBJDUMP_FOR_TARGET=$(OBJDUMP_FOR_TARGET)" \
+ 	"PICFLAG=$(PICFLAG)" \
+ 	"RANLIB=$(RANLIB)" \
+ 	"DESTDIR=$(DESTDIR)"
+diff --git a/libobjc/Makefile.in b/libobjc/Makefile.in
+index bfddff2d..fa8cb856 100644
+--- a/libobjc/Makefile.in
++++ b/libobjc/Makefile.in
+@@ -277,12 +277,12 @@ install-pdf:
+ libobjc$(libsuffix).la: $(OBJS)
+ 	$(LIBTOOL_LINK) $(CC) -o $@ $(OBJS) \
+ 		-rpath $(toolexeclibdir) \
+-		-version-info $(LIBOBJC_VERSION) $(extra_ldflags_libobjc)
++		-version-info $(LIBOBJC_VERSION) $(extra_ldflags_libobjc) -no-undefined
+ 
+ libobjc_gc$(libsuffix).la: $(OBJS_GC)
+ 	$(LIBTOOL_LINK) $(CC) -o $@ $(OBJS_GC) \
+ 		-rpath $(toolexeclibdir) \
+-		-version-info $(LIBOBJC_GC_VERSION) $(extra_ldflags_libobjc)
++		-version-info $(LIBOBJC_GC_VERSION) $(extra_ldflags_libobjc) -no-undefined
+ 
+ #
+ # FIXME -- The following part does not fit in the libtool context. 
+diff --git a/libssp/Makefile.am b/libssp/Makefile.am
+index 085561b4..73bbee2b 100644
+--- a/libssp/Makefile.am
++++ b/libssp/Makefile.am
+@@ -35,7 +35,7 @@ libssp_la_SOURCES = \
+ libssp_la_LIBADD = 
+ libssp_la_DEPENDENCIES = $(version_dep) $(libssp_la_LIBADD)
+ libssp_la_LDFLAGS = -version-info `grep -v '^\#' $(srcdir)/libtool-version` \
+-		    $(version_arg)
++		    $(version_arg) -no-undefined
+ 
+ libssp_nonshared_la_SOURCES = \
+ 	ssp-local.c
+@@ -84,6 +84,8 @@ AM_MAKEFLAGS = \
+ 	"LD=$(LD)" \
+ 	"LIBCFLAGS=$(LIBCFLAGS)" \
+ 	"NM=$(NM)" \
++	"OBJDUMP=$(OBJDUMP)" \
++	"OBJDUMP_FOR_TARGET=$(OBJDUMP_FOR_TARGET)" \
+ 	"PICFLAG=$(PICFLAG)" \
+ 	"RANLIB=$(RANLIB)" \
+ 	"DESTDIR=$(DESTDIR)"
+diff --git a/libssp/Makefile.in b/libssp/Makefile.in
+index 8f46bb05..617ad506 100644
+--- a/libssp/Makefile.in
++++ b/libssp/Makefile.in
+@@ -233,7 +233,7 @@ libssp_la_SOURCES = \
+ libssp_la_LIBADD = 
+ libssp_la_DEPENDENCIES = $(version_dep) $(libssp_la_LIBADD)
+ libssp_la_LDFLAGS = -version-info `grep -v '^\#' $(srcdir)/libtool-version` \
+-		    $(version_arg)
++		    $(version_arg) -no-undefined
+ 
+ libssp_nonshared_la_SOURCES = \
+ 	ssp-local.c
+@@ -282,6 +282,8 @@ AM_MAKEFLAGS = \
+ 	"LD=$(LD)" \
+ 	"LIBCFLAGS=$(LIBCFLAGS)" \
+ 	"NM=$(NM)" \
++	"OBJDUMP=$(OBJDUMP)" \
++	"OBJDUMP_FOR_TARGET=$(OBJDUMP_FOR_TARGET)" \
+ 	"PICFLAG=$(PICFLAG)" \
+ 	"RANLIB=$(RANLIB)" \
+ 	"DESTDIR=$(DESTDIR)"
+diff --git a/libstdc++-v3/Makefile.am b/libstdc++-v3/Makefile.am
+index 7ab27f03..d905dc2a 100644
+--- a/libstdc++-v3/Makefile.am
++++ b/libstdc++-v3/Makefile.am
+@@ -84,6 +84,8 @@ AM_MAKEFLAGS = \
+ 	"NM=$(NM)" \
+ 	"NM_FOR_BUILD=$(NM_FOR_BUILD)" \
+ 	"NM_FOR_TARGET=$(NM_FOR_TARGET)" \
++	"OBJDUMP=$(OBJDUMP)" \
++	"OBJDUMP_FOR_TARGET=$(OBJDUMP_FOR_TARGET)" \
+ 	"DESTDIR=$(DESTDIR)" \
+ 	"WERROR=$(WERROR)"
+ 
+diff --git a/libstdc++-v3/Makefile.in b/libstdc++-v3/Makefile.in
+index ad935597..44f56194 100644
+--- a/libstdc++-v3/Makefile.in
++++ b/libstdc++-v3/Makefile.in
+@@ -339,6 +339,8 @@ AM_MAKEFLAGS = \
+ 	"NM=$(NM)" \
+ 	"NM_FOR_BUILD=$(NM_FOR_BUILD)" \
+ 	"NM_FOR_TARGET=$(NM_FOR_TARGET)" \
++	"OBJDUMP=$(OBJDUMP)" \
++	"OBJDUMP_FOR_TARGET=$(OBJDUMP_FOR_TARGET)" \
+ 	"DESTDIR=$(DESTDIR)" \
+ 	"WERROR=$(WERROR)"
+ 
+diff --git a/libstdc++-v3/acinclude.m4 b/libstdc++-v3/acinclude.m4
+index 3b068996..a200a3e0 100644
+--- a/libstdc++-v3/acinclude.m4
++++ b/libstdc++-v3/acinclude.m4
+@@ -2234,7 +2234,8 @@ AC_REQUIRE([GLIBCXX_CHECK_LINKER_FEATURES])
+ 
+ # Turn a 'yes' into a suitable default.
+ if test x$enable_symvers = xyes ; then
+-  if test $enable_shared = no || test "x$LD" = x || test x$gcc_no_link = xyes; then
++  if test $enable_shared = no || test "x$LD" = x || test x$gcc_no_link = xyes \
++      || test x$target_os = xcygwin; then
+     enable_symvers=no
+   else
+     if test $with_gnu_ld = yes ; then
+diff --git a/libstdc++-v3/config/os/mingw32/os_defines.h b/libstdc++-v3/config/os/mingw32/os_defines.h
+index 3ac8fff5..6dd9b18e 100644
+--- a/libstdc++-v3/config/os/mingw32/os_defines.h
++++ b/libstdc++-v3/config/os/mingw32/os_defines.h
+@@ -52,4 +52,10 @@
+ // See libstdc++/20806.
+ #define _GLIBCXX_HAVE_DOS_BASED_FILESYSTEM 1
+ 
++#ifdef _DLL
++#define _GLIBCXX_IMPORT __attribute__((dllimport))
++#else
++#define _GLIBCXX_IMPORT
++#endif
++
+ #endif
+diff --git a/libstdc++-v3/config/os/newlib/os_defines.h b/libstdc++-v3/config/os/newlib/os_defines.h
+index 492af4e6..c59732e3 100644
+--- a/libstdc++-v3/config/os/newlib/os_defines.h
++++ b/libstdc++-v3/config/os/newlib/os_defines.h
+@@ -40,9 +40,18 @@
+ 
+ #ifdef __CYGWIN__
+ #define _GLIBCXX_GTHREAD_USE_WEAK 0
++#define __GXX_MERGED_TYPEINFO_NAMES 0
++#define __GXX_TYPEINFO_EQUALITY_INLINE 0
+ 
+ // See libstdc++/20806.
+ #define _GLIBCXX_HAVE_DOS_BASED_FILESYSTEM 1
++
++#ifdef _DLL
++#define _GLIBCXX_IMPORT __attribute__((dllimport))
++#else
++#define _GLIBCXX_IMPORT
++#endif
++
+ #endif
+ 
+ #endif
+diff --git a/libstdc++-v3/configure b/libstdc++-v3/configure
+index 2ce2fa2c..293a2e19 100755
+--- a/libstdc++-v3/configure
++++ b/libstdc++-v3/configure
+@@ -86316,7 +86316,7 @@ _ACEOF
+ 	;;
+     esac
+     ;;
+-  *-linux* | *-uclinux* | *-gnu* | *-kfreebsd*-gnu | *-knetbsd*-gnu)
++  *-linux* | *-uclinux* | *-gnu* | *-kfreebsd*-gnu | *-knetbsd*-gnu | *-cygwin*)
+ 
+ 
+ 
+diff --git a/libstdc++-v3/configure.host b/libstdc++-v3/configure.host
+index c994b5e7..3afdba69 100644
+--- a/libstdc++-v3/configure.host
++++ b/libstdc++-v3/configure.host
+@@ -208,6 +208,7 @@ case "${host_os}" in
+     ;;
+   cygwin*)
+     os_include_dir="os/newlib"
++    OPT_LDFLAGS="-Wl,--exclude-modules-for-implib=\`cd ../libsupc++; ls *type_inf*.o -1  | tr '\012' ':'\`tinfo.o:tinfo2.o"
+     ;;
+   darwin | darwin[1-7] | darwin[1-7].*)
+     # On Darwin, performance is improved if libstdc++ is single-module.
+diff --git a/libstdc++-v3/crossconfig.m4 b/libstdc++-v3/crossconfig.m4
+index 6d0c226f..bb7ba600 100644
+--- a/libstdc++-v3/crossconfig.m4
++++ b/libstdc++-v3/crossconfig.m4
+@@ -193,7 +193,7 @@ case "${host}" in
+ 	;;
+     esac
+     ;;
+-  *-linux* | *-uclinux* | *-gnu* | *-kfreebsd*-gnu | *-knetbsd*-gnu)
++  *-linux* | *-uclinux* | *-gnu* | *-kfreebsd*-gnu | *-knetbsd*-gnu | *-cygwin*)
+     AC_CHECK_HEADERS([nan.h ieeefp.h endian.h sys/isa_defs.h \
+       machine/endian.h machine/param.h sys/machine.h sys/types.h \
+       fp.h float.h endian.h inttypes.h locale.h float.h stdint.h \
+diff --git a/libstdc++-v3/include/backward/strstream b/libstdc++-v3/include/backward/strstream
+index 18617419..05b64514 100644
+--- a/libstdc++-v3/include/backward/strstream
++++ b/libstdc++-v3/include/backward/strstream
+@@ -59,7 +59,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
+ 
+   // Class strstreambuf, a streambuf class that manages an array of char.
+   // Note that this class is not a template.
+-  class strstreambuf : public basic_streambuf<char, char_traits<char> >
++  class _GLIBCXX_IMPORT strstreambuf : public basic_streambuf<char, char_traits<char> >
+   {
+   public:
+     // Types.
+@@ -121,7 +121,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
+   };
+ 
+   // Class istrstream, an istream that manages a strstreambuf.
+-  class istrstream : public basic_istream<char>
++  class _GLIBCXX_IMPORT istrstream : public basic_istream<char>
+   {
+   public:
+     explicit istrstream(char*);
+@@ -138,7 +138,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
+   };
+ 
+   // Class ostrstream
+-  class ostrstream : public basic_ostream<char>
++  class _GLIBCXX_IMPORT ostrstream : public basic_ostream<char>
+   {
+   public:
+     ostrstream();
+@@ -155,7 +155,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
+   };
+ 
+   // Class strstream
+-  class strstream : public basic_iostream<char>
++  class _GLIBCXX_IMPORT strstream : public basic_iostream<char>
+   {
+   public:
+     typedef char                        char_type;
+diff --git a/libstdc++-v3/include/bits/basic_ios.tcc b/libstdc++-v3/include/bits/basic_ios.tcc
+index 399e93ae..68ef1ab2 100644
+--- a/libstdc++-v3/include/bits/basic_ios.tcc
++++ b/libstdc++-v3/include/bits/basic_ios.tcc
+@@ -180,10 +180,10 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
+   // which are defined via explicit instantiations elsewhere.
+   // NB:  This syntax is a GNU extension.
+ #if _GLIBCXX_EXTERN_TEMPLATE
+-  extern template class basic_ios<char>;
++  extern template class _GLIBCXX_IMPORT basic_ios<char>;
+ 
+ #ifdef _GLIBCXX_USE_WCHAR_T
+-  extern template class basic_ios<wchar_t>;
++  extern template class _GLIBCXX_IMPORT basic_ios<wchar_t>;
+ #endif
+ #endif
+ 
+diff --git a/libstdc++-v3/include/bits/basic_string.h b/libstdc++-v3/include/bits/basic_string.h
+index d78e512e..6e7ad50f 100644
+--- a/libstdc++-v3/include/bits/basic_string.h
++++ b/libstdc++-v3/include/bits/basic_string.h
+@@ -228,12 +228,8 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
+ 	void
+ 	_M_dispose(const _Alloc& __a)
+ 	{
+-#ifndef _GLIBCXX_FULLY_DYNAMIC_STRING
+-	  if (__builtin_expect(this != &_S_empty_rep(), false))
+-#endif
+-	    if (__gnu_cxx::__exchange_and_add_dispatch(&this->_M_refcount,
+-						       -1) <= 0)
+-	      _M_destroy(__a);
++	  if (__gnu_cxx::__exchange_and_add_dispatch(&this->_M_refcount, -1) <= 0)
++	    _M_destroy(__a);
+ 	}  // XXX MT
+ 
+ 	void
+@@ -242,10 +238,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
+ 	_CharT*
+ 	_M_refcopy() throw()
+ 	{
+-#ifndef _GLIBCXX_FULLY_DYNAMIC_STRING
+-	  if (__builtin_expect(this != &_S_empty_rep(), false))
+-#endif
+-            __gnu_cxx::__atomic_add_dispatch(&this->_M_refcount, 1);
++	  __gnu_cxx::__atomic_add_dispatch(&this->_M_refcount, 1);
+ 	  return _M_refdata();
+ 	}  // XXX MT
+ 
+@@ -2065,11 +2058,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
+   template<typename _CharT, typename _Traits, typename _Alloc>
+     inline basic_string<_CharT, _Traits, _Alloc>::
+     basic_string()
+-#ifndef _GLIBCXX_FULLY_DYNAMIC_STRING
+-    : _M_dataplus(_S_empty_rep()._M_refdata(), _Alloc()) { }
+-#else
+-    : _M_dataplus(_S_construct(size_type(), _CharT(), _Alloc()), _Alloc()) { }
+-#endif
++    : _M_dataplus(_S_empty_rep()._M_refcopy(), _Alloc()) { }
+ 
+   // operator+
+   /**
+diff --git a/libstdc++-v3/include/bits/basic_string.tcc b/libstdc++-v3/include/bits/basic_string.tcc
+index 062b02b5..3b2a6b0f 100644
+--- a/libstdc++-v3/include/bits/basic_string.tcc
++++ b/libstdc++-v3/include/bits/basic_string.tcc
+@@ -83,10 +83,9 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
+       _S_construct(_InIterator __beg, _InIterator __end, const _Alloc& __a,
+ 		   input_iterator_tag)
+       {
+-#ifndef _GLIBCXX_FULLY_DYNAMIC_STRING
+ 	if (__beg == __end && __a == _Alloc())
+-	  return _S_empty_rep()._M_refdata();
+-#endif
++	  return _S_empty_rep()._M_refcopy();
++
+ 	// Avoid reallocation for common case.
+ 	_CharT __buf[128];
+ 	size_type __len = 0;
+@@ -129,10 +128,9 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
+       _S_construct(_InIterator __beg, _InIterator __end, const _Alloc& __a,
+ 		   forward_iterator_tag)
+       {
+-#ifndef _GLIBCXX_FULLY_DYNAMIC_STRING
+ 	if (__beg == __end && __a == _Alloc())
+-	  return _S_empty_rep()._M_refdata();
+-#endif
++	  return _S_empty_rep()._M_refcopy();
++
+ 	// NB: Not required, but considered best practice.
+ 	if (__builtin_expect(__gnu_cxx::__is_null_pointer(__beg)
+ 			     && __beg != __end, 0))
+@@ -158,10 +156,8 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
+     basic_string<_CharT, _Traits, _Alloc>::
+     _S_construct(size_type __n, _CharT __c, const _Alloc& __a)
+     {
+-#ifndef _GLIBCXX_FULLY_DYNAMIC_STRING
+       if (__n == 0 && __a == _Alloc())
+-	return _S_empty_rep()._M_refdata();
+-#endif
++	return _S_empty_rep()._M_refcopy();
+       // Check for out_of_range and length_error exceptions.
+       _Rep* __r = _Rep::_S_create(__n, size_type(0), __a);
+       if (__n)
+@@ -429,10 +425,6 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
+     basic_string<_CharT, _Traits, _Alloc>::
+     _M_leak_hard()
+     {
+-#ifndef _GLIBCXX_FULLY_DYNAMIC_STRING
+-      if (_M_rep() == &_S_empty_rep())
+-	return;
+-#endif
+       if (_M_rep()->_M_is_shared())
+ 	_M_mutate(0, 0, 0);
+       _M_rep()->_M_set_leaked();
+diff --git a/libstdc++-v3/include/bits/c++config b/libstdc++-v3/include/bits/c++config
+index a85f3a52..11ad7514 100644
+--- a/libstdc++-v3/include/bits/c++config
++++ b/libstdc++-v3/include/bits/c++config
+@@ -295,4 +295,8 @@ _GLIBCXX_END_NAMESPACE
+ #undef min
+ #undef max
+ 
++#ifndef _GLIBCXX_IMPORT
++#define _GLIBCXX_IMPORT
++#endif
++
+ // End of prewritten config; the discovered settings follow.
+diff --git a/libstdc++-v3/include/bits/codecvt.h b/libstdc++-v3/include/bits/codecvt.h
+index 9d6655a0..b6de85e1 100644
+--- a/libstdc++-v3/include/bits/codecvt.h
++++ b/libstdc++-v3/include/bits/codecvt.h
+@@ -474,7 +474,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
+   // which are defined via explicit instantiations elsewhere.
+   // NB: This syntax is a GNU extension.
+ #if _GLIBCXX_EXTERN_TEMPLATE
+-  extern template class codecvt_byname<char, char, mbstate_t>;
++  extern template class _GLIBCXX_IMPORT codecvt_byname<char, char, mbstate_t>;
+ 
+   extern template
+     const codecvt<char, char, mbstate_t>&
+@@ -485,7 +485,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
+     has_facet<codecvt<char, char, mbstate_t> >(const locale&);
+ 
+ #ifdef _GLIBCXX_USE_WCHAR_T
+-  extern template class codecvt_byname<wchar_t, char, mbstate_t>;
++  extern template class _GLIBCXX_IMPORT codecvt_byname<wchar_t, char, mbstate_t>;
+ 
+   extern template
+     const codecvt<wchar_t, char, mbstate_t>&
+diff --git a/libstdc++-v3/include/bits/fstream.tcc b/libstdc++-v3/include/bits/fstream.tcc
+index 1ef7af50..79c0a269 100644
+--- a/libstdc++-v3/include/bits/fstream.tcc
++++ b/libstdc++-v3/include/bits/fstream.tcc
+@@ -911,16 +911,16 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
+   // which are defined via explicit instantiations elsewhere.
+   // NB:  This syntax is a GNU extension.
+ #if _GLIBCXX_EXTERN_TEMPLATE
+-  extern template class basic_filebuf<char>;
+-  extern template class basic_ifstream<char>;
+-  extern template class basic_ofstream<char>;
+-  extern template class basic_fstream<char>;
++  extern template class _GLIBCXX_IMPORT basic_filebuf<char>;
++  extern template class _GLIBCXX_IMPORT basic_ifstream<char>;
++  extern template class _GLIBCXX_IMPORT basic_ofstream<char>;
++  extern template class _GLIBCXX_IMPORT basic_fstream<char>;
+ 
+ #ifdef _GLIBCXX_USE_WCHAR_T
+-  extern template class basic_filebuf<wchar_t>;
+-  extern template class basic_ifstream<wchar_t>;
+-  extern template class basic_ofstream<wchar_t>;
+-  extern template class basic_fstream<wchar_t>;
++  extern template class _GLIBCXX_IMPORT basic_filebuf<wchar_t>;
++  extern template class _GLIBCXX_IMPORT basic_ifstream<wchar_t>;
++  extern template class _GLIBCXX_IMPORT basic_ofstream<wchar_t>;
++  extern template class _GLIBCXX_IMPORT basic_fstream<wchar_t>;
+ #endif
+ #endif
+ 
+diff --git a/libstdc++-v3/include/bits/ios_base.h b/libstdc++-v3/include/bits/ios_base.h
+index 9a06e2be..5032ad04 100644
+--- a/libstdc++-v3/include/bits/ios_base.h
++++ b/libstdc++-v3/include/bits/ios_base.h
+@@ -200,13 +200,13 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
+    *  people will only see @c ios_base when they need to specify the full
+    *  name of the various I/O flags (e.g., the openmodes).
+   */
+-  class ios_base
++  class _GLIBCXX_IMPORT ios_base
+   {
+   public:
+ 
+     // 27.4.2.1.1  Class ios_base::failure
+     /// These are thrown to indicate problems.  Doc me.
+-    class failure : public exception
++    class _GLIBCXX_IMPORT failure : public exception
+     {
+     public:
+       // _GLIBCXX_RESOLVE_LIB_DEFECTS
+@@ -526,7 +526,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
+     // Used to initialize standard streams. In theory, g++ could use
+     // -finit-priority to order this stuff correctly without going
+     // through these machinations.
+-    class Init
++    class _GLIBCXX_IMPORT Init
+     {
+       friend class ios_base;
+     public:
+diff --git a/libstdc++-v3/include/bits/istream.tcc b/libstdc++-v3/include/bits/istream.tcc
+index 440d2340..1f5b79e1 100644
+--- a/libstdc++-v3/include/bits/istream.tcc
++++ b/libstdc++-v3/include/bits/istream.tcc
+@@ -973,7 +973,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
+   // which are defined via explicit instantiations elsewhere.
+   // NB:  This syntax is a GNU extension.
+ #if _GLIBCXX_EXTERN_TEMPLATE
+-  extern template class basic_istream<char>;
++  extern template class _GLIBCXX_IMPORT basic_istream<char>;
+   extern template istream& ws(istream&);
+   extern template istream& operator>>(istream&, char&);
+   extern template istream& operator>>(istream&, char*);
+@@ -996,10 +996,10 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
+   extern template istream& istream::_M_extract(long double&);
+   extern template istream& istream::_M_extract(void*&);
+ 
+-  extern template class basic_iostream<char>;
++  extern template class _GLIBCXX_IMPORT basic_iostream<char>;
+ 
+ #ifdef _GLIBCXX_USE_WCHAR_T
+-  extern template class basic_istream<wchar_t>;
++  extern template class _GLIBCXX_IMPORT basic_istream<wchar_t>;
+   extern template wistream& ws(wistream&);
+   extern template wistream& operator>>(wistream&, wchar_t&);
+   extern template wistream& operator>>(wistream&, wchar_t*);
+@@ -1018,7 +1018,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
+   extern template wistream& wistream::_M_extract(long double&);
+   extern template wistream& wistream::_M_extract(void*&);
+ 
+-  extern template class basic_iostream<wchar_t>;
++  extern template class _GLIBCXX_IMPORT basic_iostream<wchar_t>;
+ #endif
+ #endif
+ 
+diff --git a/libstdc++-v3/include/bits/locale_classes.h b/libstdc++-v3/include/bits/locale_classes.h
+index cab58121..b5b74ba4 100644
+--- a/libstdc++-v3/include/bits/locale_classes.h
++++ b/libstdc++-v3/include/bits/locale_classes.h
+@@ -63,7 +63,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
+    *  This library supports efficient construction and copying of locales
+    *  through a reference counting implementation of the locale class.
+   */
+-  class locale
++  class _GLIBCXX_IMPORT locale
+   {
+   public:
+     // Types:
+@@ -71,9 +71,9 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
+     typedef int	category;
+ 
+     // Forward decls and friends:
+-    class facet;
+-    class id;
+-    class _Impl;
++    class _GLIBCXX_IMPORT facet;
++    class _GLIBCXX_IMPORT id;
++    class _GLIBCXX_IMPORT _Impl;
+ 
+     friend class facet;
+     friend class _Impl;
+@@ -337,7 +337,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
+    *
+    *  Facets may not be copied or assigned.
+   */
+-  class locale::facet
++  class _GLIBCXX_IMPORT locale::facet
+   {
+   private:
+     friend class locale;
+@@ -428,7 +428,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
+    *  cannot be used in a locale.  The locale::id ensures that each class
+    *  type gets a unique identifier.
+   */
+-  class locale::id
++  class _GLIBCXX_IMPORT locale::id
+   {
+   private:
+     friend class locale;
+@@ -467,7 +467,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
+ 
+ 
+   // Implementation object for locale.
+-  class locale::_Impl
++  class _GLIBCXX_IMPORT locale::_Impl
+   {
+   public:
+     // Friends.
+diff --git a/libstdc++-v3/include/bits/locale_classes.tcc b/libstdc++-v3/include/bits/locale_classes.tcc
+index 551fc90d..65d6ec41 100644
+--- a/libstdc++-v3/include/bits/locale_classes.tcc
++++ b/libstdc++-v3/include/bits/locale_classes.tcc
+@@ -246,8 +246,8 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
+   // which are defined via explicit instantiations elsewhere.
+   // NB: This syntax is a GNU extension.
+ #if _GLIBCXX_EXTERN_TEMPLATE
+-  extern template class collate<char>;
+-  extern template class collate_byname<char>;
++  extern template class _GLIBCXX_IMPORT collate<char>;
++  extern template class _GLIBCXX_IMPORT collate_byname<char>;
+ 
+   extern template
+     const collate<char>&
+@@ -258,8 +258,8 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
+     has_facet<collate<char> >(const locale&);
+ 
+ #ifdef _GLIBCXX_USE_WCHAR_T
+-  extern template class collate<wchar_t>;
+-  extern template class collate_byname<wchar_t>;
++  extern template class _GLIBCXX_IMPORT collate<wchar_t>;
++  extern template class _GLIBCXX_IMPORT collate_byname<wchar_t>;
+ 
+   extern template
+     const collate<wchar_t>&
+diff --git a/libstdc++-v3/include/bits/locale_facets.h b/libstdc++-v3/include/bits/locale_facets.h
+index cb9c021f..ff83d007 100644
+--- a/libstdc++-v3/include/bits/locale_facets.h
++++ b/libstdc++-v3/include/bits/locale_facets.h
+@@ -677,7 +677,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
+    *  optimizations as well.
+   */
+   template<>
+-    class ctype<char> : public locale::facet, public ctype_base
++    class _GLIBCXX_IMPORT ctype<char> : public locale::facet, public ctype_base
+     {
+     public:
+       // Types:
+@@ -1217,7 +1217,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
+    *  __ctype_abstract_base<wchar_t>.
+   */
+   template<>
+-    class ctype<wchar_t> : public __ctype_abstract_base<wchar_t>
++    class _GLIBCXX_IMPORT ctype<wchar_t> : public __ctype_abstract_base<wchar_t>
+     {
+     public:
+       // Types:
+diff --git a/libstdc++-v3/include/bits/locale_facets.tcc b/libstdc++-v3/include/bits/locale_facets.tcc
+index 744e373f..0c81e650 100644
+--- a/libstdc++-v3/include/bits/locale_facets.tcc
++++ b/libstdc++-v3/include/bits/locale_facets.tcc
+@@ -1277,11 +1277,11 @@ _GLIBCXX_END_LDBL_NAMESPACE
+   // which are defined via explicit instantiations elsewhere.
+   // NB: This syntax is a GNU extension.
+ #if _GLIBCXX_EXTERN_TEMPLATE
+-  extern template class numpunct<char>;
+-  extern template class numpunct_byname<char>;
+-  extern template class _GLIBCXX_LDBL_NAMESPACE num_get<char>;
+-  extern template class _GLIBCXX_LDBL_NAMESPACE num_put<char>;
+-  extern template class ctype_byname<char>;
++  extern template class _GLIBCXX_IMPORT numpunct<char>;
++  extern template class _GLIBCXX_IMPORT numpunct_byname<char>;
++  extern template class _GLIBCXX_IMPORT _GLIBCXX_LDBL_NAMESPACE num_get<char>;
++  extern template class _GLIBCXX_IMPORT _GLIBCXX_LDBL_NAMESPACE num_put<char>;
++  extern template class _GLIBCXX_IMPORT ctype_byname<char>;
+ 
+   extern template
+     const numpunct<char>&
+@@ -1312,11 +1312,11 @@ _GLIBCXX_END_LDBL_NAMESPACE
+     has_facet<num_get<char> >(const locale&);
+ 
+ #ifdef _GLIBCXX_USE_WCHAR_T
+-  extern template class numpunct<wchar_t>;
+-  extern template class numpunct_byname<wchar_t>;
+-  extern template class _GLIBCXX_LDBL_NAMESPACE num_get<wchar_t>;
+-  extern template class _GLIBCXX_LDBL_NAMESPACE num_put<wchar_t>;
+-  extern template class ctype_byname<wchar_t>;
++  extern template class _GLIBCXX_IMPORT numpunct<wchar_t>;
++  extern template class _GLIBCXX_IMPORT numpunct_byname<wchar_t>;
++  extern template class _GLIBCXX_IMPORT _GLIBCXX_LDBL_NAMESPACE num_get<wchar_t>;
++  extern template class _GLIBCXX_IMPORT _GLIBCXX_LDBL_NAMESPACE num_put<wchar_t>;
++  extern template class _GLIBCXX_IMPORT ctype_byname<wchar_t>;
+ 
+   extern template
+     const numpunct<wchar_t>&
+diff --git a/libstdc++-v3/include/bits/locale_facets_nonio.tcc b/libstdc++-v3/include/bits/locale_facets_nonio.tcc
+index 1c569ba5..110127c7 100644
+--- a/libstdc++-v3/include/bits/locale_facets_nonio.tcc
++++ b/libstdc++-v3/include/bits/locale_facets_nonio.tcc
+@@ -1175,19 +1175,19 @@ _GLIBCXX_END_LDBL_NAMESPACE
+   // which are defined via explicit instantiations elsewhere.
+   // NB: This syntax is a GNU extension.
+ #if _GLIBCXX_EXTERN_TEMPLATE
+-  extern template class moneypunct<char, false>;
+-  extern template class moneypunct<char, true>;
+-  extern template class moneypunct_byname<char, false>;
+-  extern template class moneypunct_byname<char, true>;
+-  extern template class _GLIBCXX_LDBL_NAMESPACE money_get<char>;
+-  extern template class _GLIBCXX_LDBL_NAMESPACE money_put<char>;
+-  extern template class __timepunct<char>;
+-  extern template class time_put<char>;
+-  extern template class time_put_byname<char>;
+-  extern template class time_get<char>;
+-  extern template class time_get_byname<char>;
+-  extern template class messages<char>;
+-  extern template class messages_byname<char>;
++  extern template class _GLIBCXX_IMPORT moneypunct<char, false>;
++  extern template class _GLIBCXX_IMPORT moneypunct<char, true>;
++  extern template class _GLIBCXX_IMPORT moneypunct_byname<char, false>;
++  extern template class _GLIBCXX_IMPORT moneypunct_byname<char, true>;
++  extern template class _GLIBCXX_IMPORT _GLIBCXX_LDBL_NAMESPACE money_get<char>;
++  extern template class _GLIBCXX_IMPORT _GLIBCXX_LDBL_NAMESPACE money_put<char>;
++  extern template class _GLIBCXX_IMPORT __timepunct<char>;
++  extern template class _GLIBCXX_IMPORT time_put<char>;
++  extern template class _GLIBCXX_IMPORT time_put_byname<char>;
++  extern template class _GLIBCXX_IMPORT time_get<char>;
++  extern template class _GLIBCXX_IMPORT time_get_byname<char>;
++  extern template class _GLIBCXX_IMPORT messages<char>;
++  extern template class _GLIBCXX_IMPORT messages_byname<char>;
+ 
+   extern template
+     const moneypunct<char, true>&
+@@ -1250,19 +1250,19 @@ _GLIBCXX_END_LDBL_NAMESPACE
+     has_facet<messages<char> >(const locale&);
+ 
+ #ifdef _GLIBCXX_USE_WCHAR_T
+-  extern template class moneypunct<wchar_t, false>;
+-  extern template class moneypunct<wchar_t, true>;
+-  extern template class moneypunct_byname<wchar_t, false>;
+-  extern template class moneypunct_byname<wchar_t, true>;
+-  extern template class _GLIBCXX_LDBL_NAMESPACE money_get<wchar_t>;
+-  extern template class _GLIBCXX_LDBL_NAMESPACE money_put<wchar_t>;
+-  extern template class __timepunct<wchar_t>;
+-  extern template class time_put<wchar_t>;
+-  extern template class time_put_byname<wchar_t>;
+-  extern template class time_get<wchar_t>;
+-  extern template class time_get_byname<wchar_t>;
+-  extern template class messages<wchar_t>;
+-  extern template class messages_byname<wchar_t>;
++  extern template class _GLIBCXX_IMPORT moneypunct<wchar_t, false>;
++  extern template class _GLIBCXX_IMPORT moneypunct<wchar_t, true>;
++  extern template class _GLIBCXX_IMPORT moneypunct_byname<wchar_t, false>;
++  extern template class _GLIBCXX_IMPORT moneypunct_byname<wchar_t, true>;
++  extern template class _GLIBCXX_IMPORT _GLIBCXX_LDBL_NAMESPACE money_get<wchar_t>;
++  extern template class _GLIBCXX_IMPORT _GLIBCXX_LDBL_NAMESPACE money_put<wchar_t>;
++  extern template class _GLIBCXX_IMPORT __timepunct<wchar_t>;
++  extern template class _GLIBCXX_IMPORT time_put<wchar_t>;
++  extern template class _GLIBCXX_IMPORT time_put_byname<wchar_t>;
++  extern template class _GLIBCXX_IMPORT time_get<wchar_t>;
++  extern template class _GLIBCXX_IMPORT time_get_byname<wchar_t>;
++  extern template class _GLIBCXX_IMPORT messages<wchar_t>;
++  extern template class _GLIBCXX_IMPORT messages_byname<wchar_t>;
+ 
+   extern template
+     const moneypunct<wchar_t, true>&
+diff --git a/libstdc++-v3/include/bits/ostream.tcc b/libstdc++-v3/include/bits/ostream.tcc
+index 06facc03..deffcde4 100644
+--- a/libstdc++-v3/include/bits/ostream.tcc
++++ b/libstdc++-v3/include/bits/ostream.tcc
+@@ -362,7 +362,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
+   // which are defined via explicit instantiations elsewhere.
+   // NB:  This syntax is a GNU extension.
+ #if _GLIBCXX_EXTERN_TEMPLATE
+-  extern template class basic_ostream<char>;
++  extern template class _GLIBCXX_IMPORT basic_ostream<char>;
+   extern template ostream& endl(ostream&);
+   extern template ostream& ends(ostream&);
+   extern template ostream& flush(ostream&);
+@@ -385,7 +385,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
+   extern template ostream& ostream::_M_insert(const void*);
+ 
+ #ifdef _GLIBCXX_USE_WCHAR_T
+-  extern template class basic_ostream<wchar_t>;
++  extern template class _GLIBCXX_IMPORT basic_ostream<wchar_t>;
+   extern template wostream& endl(wostream&);
+   extern template wostream& ends(wostream&);
+   extern template wostream& flush(wostream&);
+diff --git a/libstdc++-v3/include/bits/sstream.tcc b/libstdc++-v3/include/bits/sstream.tcc
+index 2a62a9cc..b9fb823e 100644
+--- a/libstdc++-v3/include/bits/sstream.tcc
++++ b/libstdc++-v3/include/bits/sstream.tcc
+@@ -260,16 +260,16 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
+   // which are defined via explicit instantiations elsewhere.
+   // NB:  This syntax is a GNU extension.
+ #if _GLIBCXX_EXTERN_TEMPLATE
+-  extern template class basic_stringbuf<char>;
+-  extern template class basic_istringstream<char>;
+-  extern template class basic_ostringstream<char>;
+-  extern template class basic_stringstream<char>;
++  extern template class _GLIBCXX_IMPORT basic_stringbuf<char>;
++  extern template class _GLIBCXX_IMPORT basic_istringstream<char>;
++  extern template class _GLIBCXX_IMPORT basic_ostringstream<char>;
++  extern template class _GLIBCXX_IMPORT basic_stringstream<char>;
+ 
+ #ifdef _GLIBCXX_USE_WCHAR_T
+-  extern template class basic_stringbuf<wchar_t>;
+-  extern template class basic_istringstream<wchar_t>;
+-  extern template class basic_ostringstream<wchar_t>;
+-  extern template class basic_stringstream<wchar_t>;
++  extern template class _GLIBCXX_IMPORT basic_stringbuf<wchar_t>;
++  extern template class _GLIBCXX_IMPORT basic_istringstream<wchar_t>;
++  extern template class _GLIBCXX_IMPORT basic_ostringstream<wchar_t>;
++  extern template class _GLIBCXX_IMPORT basic_stringstream<wchar_t>;
+ #endif
+ #endif
+ 
+diff --git a/libstdc++-v3/include/bits/streambuf.tcc b/libstdc++-v3/include/bits/streambuf.tcc
+index c4b86054..f515d0d1 100644
+--- a/libstdc++-v3/include/bits/streambuf.tcc
++++ b/libstdc++-v3/include/bits/streambuf.tcc
+@@ -151,7 +151,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
+   // which are defined via explicit instantiations elsewhere.
+   // NB:  This syntax is a GNU extension.
+ #if _GLIBCXX_EXTERN_TEMPLATE
+-  extern template class basic_streambuf<char>;
++  extern template class _GLIBCXX_IMPORT basic_streambuf<char>;
+   extern template
+     streamsize
+     __copy_streambufs(basic_streambuf<char>*,
+@@ -162,7 +162,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
+ 			  basic_streambuf<char>*, bool&);
+ 
+ #ifdef _GLIBCXX_USE_WCHAR_T
+-  extern template class basic_streambuf<wchar_t>;
++  extern template class _GLIBCXX_IMPORT basic_streambuf<wchar_t>;
+   extern template
+     streamsize
+     __copy_streambufs(basic_streambuf<wchar_t>*,
+diff --git a/libstdc++-v3/include/ext/concurrence.h b/libstdc++-v3/include/ext/concurrence.h
+index 72614c39..751cc009 100644
+--- a/libstdc++-v3/include/ext/concurrence.h
++++ b/libstdc++-v3/include/ext/concurrence.h
+@@ -65,7 +65,7 @@ _GLIBCXX_BEGIN_NAMESPACE(__gnu_cxx)
+ 
+   // NB: As this is used in libsupc++, need to only depend on
+   // exception. No stdexception classes, no use of std::string.
+-  class __concurrence_lock_error : public std::exception
++  class _GLIBCXX_IMPORT __concurrence_lock_error : public std::exception
+   {
+   public:
+     virtual char const*
+@@ -73,7 +73,7 @@ _GLIBCXX_BEGIN_NAMESPACE(__gnu_cxx)
+     { return "__gnu_cxx::__concurrence_lock_error"; }
+   };
+ 
+-  class __concurrence_unlock_error : public std::exception
++  class _GLIBCXX_IMPORT __concurrence_unlock_error : public std::exception
+   {
+   public:
+     virtual char const*
+diff --git a/libstdc++-v3/include/std/iostream b/libstdc++-v3/include/std/iostream
+index 5f2f23f1..0ef6ac3f 100644
+--- a/libstdc++-v3/include/std/iostream
++++ b/libstdc++-v3/include/std/iostream
+@@ -60,16 +60,16 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
+    *  termination.  For more information, see the HOWTO linked to above.
+   */
+   //@{
+-  extern istream cin;		///< Linked to standard input
+-  extern ostream cout;		///< Linked to standard output
+-  extern ostream cerr;		///< Linked to standard error (unbuffered)
+-  extern ostream clog;		///< Linked to standard error (buffered)
++  extern _GLIBCXX_IMPORT istream cin;		///< Linked to standard input
++  extern _GLIBCXX_IMPORT ostream cout;		///< Linked to standard output
++  extern _GLIBCXX_IMPORT ostream cerr;		///< Linked to standard error (unbuffered)
++  extern _GLIBCXX_IMPORT ostream clog;		///< Linked to standard error (buffered)
+ 
+ #ifdef _GLIBCXX_USE_WCHAR_T
+-  extern wistream wcin;		///< Linked to standard input
+-  extern wostream wcout;	///< Linked to standard output
+-  extern wostream wcerr;	///< Linked to standard error (unbuffered)
+-  extern wostream wclog;	///< Linked to standard error (buffered)
++  extern _GLIBCXX_IMPORT wistream wcin;		///< Linked to standard input
++  extern _GLIBCXX_IMPORT wostream wcout;	///< Linked to standard output
++  extern _GLIBCXX_IMPORT wostream wcerr;	///< Linked to standard error (unbuffered)
++  extern _GLIBCXX_IMPORT wostream wclog;	///< Linked to standard error (buffered)
+ #endif
+   //@}
+ 
+diff --git a/libstdc++-v3/include/std/stdexcept b/libstdc++-v3/include/std/stdexcept
+index f8e74102..e230e3aa 100644
+--- a/libstdc++-v3/include/std/stdexcept
++++ b/libstdc++-v3/include/std/stdexcept
+@@ -50,7 +50,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
+    *  program runs (e.g., violations of class invariants).
+    *  @brief One of two subclasses of exception.
+    */
+-  class logic_error : public exception 
++  class _GLIBCXX_IMPORT logic_error : public exception
+   {
+     string _M_msg;
+ 
+@@ -70,14 +70,14 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
+ 
+   /** Thrown by the library, or by you, to report domain errors (domain in
+    *  the mathematical sense).  */
+-  class domain_error : public logic_error 
++  class _GLIBCXX_IMPORT domain_error : public logic_error
+   {
+   public:
+     explicit domain_error(const string& __arg);
+   };
+ 
+   /** Thrown to report invalid arguments to functions.  */
+-  class invalid_argument : public logic_error 
++  class _GLIBCXX_IMPORT invalid_argument : public logic_error
+   {
+   public:
+     explicit invalid_argument(const string& __arg);
+@@ -85,7 +85,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
+ 
+   /** Thrown when an object is constructed that would exceed its maximum
+    *  permitted size (e.g., a basic_string instance).  */
+-  class length_error : public logic_error 
++  class _GLIBCXX_IMPORT length_error : public logic_error
+   {
+   public:
+     explicit length_error(const string& __arg);
+@@ -93,7 +93,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
+ 
+   /** This represents an argument whose value is not within the expected
+    *  range (e.g., boundary checks in basic_string).  */
+-  class out_of_range : public logic_error 
++  class _GLIBCXX_IMPORT out_of_range : public logic_error
+   {
+   public:
+     explicit out_of_range(const string& __arg);
+@@ -104,7 +104,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
+    *  the program executes.
+    *  @brief One of two subclasses of exception.
+    */
+-  class runtime_error : public exception 
++  class _GLIBCXX_IMPORT runtime_error : public exception
+   {
+     string _M_msg;
+ 
+@@ -123,7 +123,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
+   };
+ 
+   /** Thrown to indicate range errors in internal computations.  */
+-  class range_error : public runtime_error 
++  class _GLIBCXX_IMPORT range_error : public runtime_error
+   {
+   public:
+     explicit range_error(const string& __arg);
+@@ -137,7 +137,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
+   };
+ 
+   /** Thrown to indicate arithmetic underflow.  */
+-  class underflow_error : public runtime_error 
++  class _GLIBCXX_IMPORT underflow_error : public runtime_error
+   {
+   public:
+     explicit underflow_error(const string& __arg);
+diff --git a/libstdc++-v3/libsupc++/Makefile.am b/libstdc++-v3/libsupc++/Makefile.am
+index 366efa27..612c0b72 100644
+--- a/libstdc++-v3/libsupc++/Makefile.am
++++ b/libstdc++-v3/libsupc++/Makefile.am
+@@ -153,7 +153,7 @@ LTCXXCOMPILE = $(LIBTOOL) --tag CXX --tag disable-shared \
+ 	       --mode=compile $(CXX) $(TOPLEVEL_INCLUDES) \
+ 	       $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) 
+ 
+-LTLDFLAGS = $(shell $(SHELL) $(top_srcdir)/../libtool-ldflags $(LDFLAGS))
++LTLDFLAGS = $(shell $(SHELL) $(top_srcdir)/../libtool-ldflags $(LDFLAGS)) -no-undefined
+ 
+ # 3) We'd have a problem when building the shared libstdc++ object if
+ # the rules automake generates would be used.  We cannot allow g++ to
+diff --git a/libstdc++-v3/libsupc++/Makefile.in b/libstdc++-v3/libsupc++/Makefile.in
+index 1ebd8499..41265cc5 100644
+--- a/libstdc++-v3/libsupc++/Makefile.in
++++ b/libstdc++-v3/libsupc++/Makefile.in
+@@ -434,7 +434,7 @@ LTCXXCOMPILE = $(LIBTOOL) --tag CXX --tag disable-shared \
+ 	       --mode=compile $(CXX) $(TOPLEVEL_INCLUDES) \
+ 	       $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) 
+ 
+-LTLDFLAGS = $(shell $(SHELL) $(top_srcdir)/../libtool-ldflags $(LDFLAGS))
++LTLDFLAGS = $(shell $(SHELL) $(top_srcdir)/../libtool-ldflags $(LDFLAGS)) -no-undefined
+ 
+ # 3) We'd have a problem when building the shared libstdc++ object if
+ # the rules automake generates would be used.  We cannot allow g++ to
+diff --git a/libstdc++-v3/libsupc++/exception b/libstdc++-v3/libsupc++/exception
+index a7e2db78..92e7e026 100644
+--- a/libstdc++-v3/libsupc++/exception
++++ b/libstdc++-v3/libsupc++/exception
+@@ -53,7 +53,7 @@ namespace std
+    *  your own %exception classes, or use a different hierarchy, or to
+    *  throw non-class data (e.g., fundamental types).
+    */
+-  class exception 
++  class _GLIBCXX_IMPORT exception
+   {
+   public:
+     exception() throw() { }
+@@ -66,7 +66,7 @@ namespace std
+ 
+   /** If an %exception is thrown which is not listed in a function's
+    *  %exception specification, one of these may be thrown.  */
+-  class bad_exception : public exception 
++  class _GLIBCXX_IMPORT bad_exception : public exception
+   {
+   public:
+     bad_exception() throw() { }
+diff --git a/libstdc++-v3/libsupc++/new b/libstdc++-v3/libsupc++/new
+index a821783b..f96d4047 100644
+--- a/libstdc++-v3/libsupc++/new
++++ b/libstdc++-v3/libsupc++/new
+@@ -55,7 +55,7 @@ namespace std
+    *
+    *  @c bad_alloc (or classes derived from it) is used to report allocation
+    *  errors from the throwing forms of @c new.  */
+-  class bad_alloc : public exception 
++  class _GLIBCXX_IMPORT bad_alloc : public exception
+   {
+   public:
+     bad_alloc() throw() { }
+diff --git a/libstdc++-v3/libsupc++/typeinfo b/libstdc++-v3/libsupc++/typeinfo
+index 773d2f5c..83d748bc 100644
+--- a/libstdc++-v3/libsupc++/typeinfo
++++ b/libstdc++-v3/libsupc++/typeinfo
+@@ -163,7 +163,7 @@ namespace std
+    *
+    *  If you attempt an invalid @c dynamic_cast expression, an instance of
+    *  this class (or something derived from this class) is thrown.  */
+-  class bad_cast : public exception 
++  class _GLIBCXX_IMPORT bad_cast : public exception
+   {
+   public:
+     bad_cast() throw() { }
+@@ -177,7 +177,7 @@ namespace std
+   };
+   
+   /** If you use a NULL pointer in a @c typeid expression, this is thrown.  */
+-  class bad_typeid : public exception 
++  class _GLIBCXX_IMPORT bad_typeid : public exception
+   {
+   public:
+     bad_typeid () throw() { }
+diff --git a/libstdc++-v3/scripts/testsuite_flags.in b/libstdc++-v3/scripts/testsuite_flags.in
+index 457adaf4..aa31e3a9 100755
+--- a/libstdc++-v3/scripts/testsuite_flags.in
++++ b/libstdc++-v3/scripts/testsuite_flags.in
+@@ -27,6 +27,7 @@ EOF
+ BUILD_DIR=@glibcxx_builddir@
+ SRC_DIR=@glibcxx_srcdir@
+ PREFIX_DIR=@glibcxx_prefixdir@
++target=@target@
+ query=$1
+ 
+ case ${query} in
+@@ -71,6 +72,12 @@ case ${query} in
+       ;;
+     --cxxldflags)
+       SECTIONLDFLAGS="@SECTION_LDFLAGS@ @LIBICONV@"
++      case ${target} in
++	  *cygwin*)
++	  SECTIONLDFLAGS="${SECTIONLDFLAGS} -Wl,--enable-auto-import"
++	  ;;
++      esac
++
+       echo ${SECTIONLDFLAGS}
+       ;;
+     *)
+diff --git a/libstdc++-v3/src/Makefile.am b/libstdc++-v3/src/Makefile.am
+index da9998fb..7bbc81dd 100644
+--- a/libstdc++-v3/src/Makefile.am
++++ b/libstdc++-v3/src/Makefile.am
+@@ -277,7 +277,7 @@ AM_CXXFLAGS = \
+ LTCXXCOMPILE = $(LIBTOOL) --tag CXX --mode=compile $(CXX) $(INCLUDES) \
+ 	       $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) 
+ 
+-LTLDFLAGS = $(shell $(SHELL) $(top_srcdir)/../libtool-ldflags $(LDFLAGS))
++LTLDFLAGS = $(shell $(SHELL) $(top_srcdir)/../libtool-ldflags $(LDFLAGS)) -no-undefined
+ 
+ # 3) We'd have a problem when building the shared libstdc++ object if
+ # the rules automake generates would be used.  We cannot allow g++ to
+diff --git a/libstdc++-v3/src/Makefile.in b/libstdc++-v3/src/Makefile.in
+index e64265cc..e546a7dd 100644
+--- a/libstdc++-v3/src/Makefile.in
++++ b/libstdc++-v3/src/Makefile.in
+@@ -446,7 +446,7 @@ AM_CXXFLAGS = \
+ LTCXXCOMPILE = $(LIBTOOL) --tag CXX --mode=compile $(CXX) $(INCLUDES) \
+ 	       $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) 
+ 
+-LTLDFLAGS = $(shell $(SHELL) $(top_srcdir)/../libtool-ldflags $(LDFLAGS))
++LTLDFLAGS = $(shell $(SHELL) $(top_srcdir)/../libtool-ldflags $(LDFLAGS)) -no-undefined
+ 
+ # 3) We'd have a problem when building the shared libstdc++ object if
+ # the rules automake generates would be used.  We cannot allow g++ to
+diff --git a/libstdc++-v3/src/compatibility.cc b/libstdc++-v3/src/compatibility.cc
+index b29040c4..c84b5307 100644
+--- a/libstdc++-v3/src/compatibility.cc
++++ b/libstdc++-v3/src/compatibility.cc
+@@ -1,12 +1,12 @@
+ // Compatibility symbols for previous versions -*- C++ -*-
+ 
+-// Copyright (C) 2005, 2006
++// Copyright (C) 2005, 2006, 2007, 2008, 2009
+ // Free Software Foundation, Inc.
+ //
+ // This file is part of the GNU ISO C++ Library.  This library is free
+ // software; you can redistribute it and/or modify it under the
+ // terms of the GNU General Public License as published by the
+-// Free Software Foundation; either version 2, or (at your option)
++// Free Software Foundation; either version 3, or (at your option)
+ // any later version.
+ 
+ // This library is distributed in the hope that it will be useful,
+@@ -14,23 +14,19 @@
+ // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ // GNU General Public License for more details.
+ 
+-// You should have received a copy of the GNU General Public License along
+-// with this library; see the file COPYING.  If not, write to the Free
+-// Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
+-// USA.
++// Under Section 7 of GPL version 3, you are granted additional
++// permissions described in the GCC Runtime Library Exception, version
++// 3.1, as published by the Free Software Foundation.
+ 
+-// As a special exception, you may use this file as part of a free software
+-// library without restriction.  Specifically, if other files instantiate
+-// templates or use macros or inline functions from this file, or you compile
+-// this file and link it with other files to produce an executable, this
+-// file does not by itself cause the resulting executable to be covered by
+-// the GNU General Public License.  This exception does not however
+-// invalidate any other reasons why the executable file might be covered by
+-// the GNU General Public License.
++// You should have received a copy of the GNU General Public License and
++// a copy of the GCC Runtime Library Exception along with this program;
++// see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
++// <http://www.gnu.org/licenses/>.
+ 
+ #include <bits/c++config.h>
+ 
+-#if defined(_GLIBCXX_SYMVER_GNU) && defined(PIC)
++#if defined(_GLIBCXX_SYMVER_GNU) && defined(PIC) \
++    && defined(_GLIBCXX_HAVE_AS_SYMVER_DIRECTIVE)
+ #define istreambuf_iterator istreambuf_iteratorXX
+ #define basic_fstream basic_fstreamXX
+ #define basic_ifstream basic_ifstreamXX
+@@ -204,7 +200,8 @@ _GLIBCXX_END_NAMESPACE
+ 
+ // NB: These symbols renames should go into the shared library only,
+ // and only those shared libraries that support versioning.
+-#if defined(_GLIBCXX_SYMVER_GNU) && defined(PIC)
++#if defined(_GLIBCXX_SYMVER_GNU) && defined(PIC) \
++    && defined(_GLIBCXX_HAVE_AS_SYMVER_DIRECTIVE)
+ 
+ /* gcc-3.4.4
+ _ZNSt19istreambuf_iteratorIcSt11char_traitsIcEEppEv
+@@ -411,7 +408,14 @@ GLIBCXX_3.4)
+ #undef _List_node_base
+ 
+ // gcc-4.1.0
+-#ifdef _GLIBCXX_LONG_DOUBLE_COMPAT
++// Long double versions of "C" math functions. 
++#if defined (_GLIBCXX_LONG_DOUBLE_COMPAT) \
++    || (defined (__arm__) && defined (__linux__) && defined (__ARM_EABI__)) \
++    || (defined (__hppa__) && defined (__linux__)) \
++    || (defined (__m68k__) && defined (__mcoldfire__) && defined (__linux__)) \
++    || (defined (__mips__) && defined (_ABIO32) && defined (__linux__)) \
++    || (defined (__sh__) && defined (__linux__) && __SIZEOF_SIZE_T__ == 4) \
++
+ #define _GLIBCXX_MATHL_WRAPPER(name, argdecl, args, ver) \
+ extern "C" double						\
+ __ ## name ## l_wrapper argdecl					\
+diff --git a/libstdc++-v3/testsuite/lib/libstdc++.exp b/libstdc++-v3/testsuite/lib/libstdc++.exp
+index b335204b..5ef35d03 100644
+--- a/libstdc++-v3/testsuite/lib/libstdc++.exp
++++ b/libstdc++-v3/testsuite/lib/libstdc++.exp
+@@ -115,6 +115,9 @@ proc libstdc++_init { testfile } {
+ 	if { [string match "powerpc-*-darwin*" $target_triplet] } {
+ 	    append DEFAULT_CXXFLAGS " -multiply_defined suppress"
+ 	} 
++	if { [string match "*-*-cygwin*" $target_triplet] } {
++	    append DEFAULT_CXXFLAGS " -Wl,--enable-auto-import"
++	} 
+     }
+     v3track DEFAULT_CXXFLAGS 2
+ 
+@@ -135,6 +138,9 @@ proc libstdc++_init { testfile } {
+         set gccdir [file dirname $gccdir]
+ 	append ld_library_path_tmp ":${gccdir}"
+     }
++    if { [string match "*-*-cygwin*" $target_triplet] } {
++	append ld_library_path_tmp ":${blddir}/../libgcc"
++    }
+     v3track gccdir 3
+ 
+     # Locate libgomp. This is only required for parallel mode.
+diff --git a/ltmain.sh b/ltmain.sh
+index a463284f..6cd50d26 100644
+--- a/ltmain.sh
++++ b/ltmain.sh
+@@ -6287,8 +6287,12 @@ EOF
+ 
+       func_show_eval "$link_command" 'exit $?'
+ 
+-      # Now create the wrapper script.
+-      func_echo "creating $output"
++      # Now create the wrapper script.  If we don't respect opt_silent here,
++      # some of the libjava link tests think that the fact there was output
++      # generated means there must have been an error.
++      $opt_silent || {
++	func_echo "creating $output"
++      }
+ 
+       # Quote the relink command for shipping.
+       if test -n "$relink_command"; then
+@@ -7177,7 +7181,19 @@ fi\
+ 	  # place dlname in correct position for cygwin
+ 	  tdlname=$dlname
+ 	  case $host,$output,$installed,$module,$dlname in
+-	    *cygwin*,*lai,yes,no,*.dll | *mingw*,*lai,yes,no,*.dll) tdlname=../bin/$dlname ;;
++	    # Insufficient.  If the last element of the path isn't '/lib',
++	    # as in for instance when it is '4.3.2', we need to append moar dots.
++	    #*cygwin*,*lai,yes,no,*.dll | *mingw*,*lai,yes,no,*.dll) tdlname=../bin/$dlname ;;
++	    # Try this instead: 
++	    *cygwin*,*lai,yes,no,*.dll | *mingw*,*lai,yes,no,*.dll)
++	      tlibdir=$install_libdir
++	      cygming_moar_dots=
++	      while [ x`basename "$tlibdir"` != "xlib" ] ;
++	      do
++	        tlibdir=`dirname "$tlibdir"`
++	        cygming_moar_dots=../${cygming_moar_dots}
++	      done
++	      tdlname=${cygming_moar_dots}../bin/$dlname ;;
+ 	  esac
+ 	  # Do not add duplicates
+ 	  if test "$installed" = yes && test "$D"; then
+diff --git a/zlib/Makefile.am b/zlib/Makefile.am
+index 749a13c7..35a32c15 100644
+--- a/zlib/Makefile.am
++++ b/zlib/Makefile.am
+@@ -55,6 +55,8 @@ AM_MAKEFLAGS = \
+ 	"LD=$(LD)" \
+ 	"LIBCFLAGS=$(LIBCFLAGS)" \
+ 	"NM=$(NM)" \
++	"OBJDUMP=$(OBJDUMP)" \
++	"OBJDUMP_FOR_TARGET=$(OBJDUMP_FOR_TARGET)" \
+ 	"PICFLAG=$(PICFLAG)" \
+ 	"RANLIB=$(RANLIB)" \
+ 	"DESTDIR=$(DESTDIR)"
+diff --git a/zlib/Makefile.in b/zlib/Makefile.in
+index 9f1d6741..031a5a1d 100644
+--- a/zlib/Makefile.in
++++ b/zlib/Makefile.in
+@@ -54,7 +54,7 @@ am__aclocal_m4_deps = $(top_srcdir)/../config/depstand.m4 \
+ 	$(top_srcdir)/../config/lead-dot.m4 \
+ 	$(top_srcdir)/../config/multi.m4 $(top_srcdir)/../ltoptions.m4 \
+ 	$(top_srcdir)/../ltsugar.m4 $(top_srcdir)/../ltversion.m4 \
+-	$(top_srcdir)/acinclude.m4 \
++	$(top_srcdir)/../lt~obsolete.m4 $(top_srcdir)/acinclude.m4 \
+ 	$(top_srcdir)/../config/no-executables.m4 \
+ 	$(top_srcdir)/../libtool.m4 $(top_srcdir)/configure.ac
+ am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
+@@ -268,6 +268,8 @@ AM_MAKEFLAGS = \
+ 	"LD=$(LD)" \
+ 	"LIBCFLAGS=$(LIBCFLAGS)" \
+ 	"NM=$(NM)" \
++	"OBJDUMP=$(OBJDUMP)" \
++	"OBJDUMP_FOR_TARGET=$(OBJDUMP_FOR_TARGET)" \
+ 	"PICFLAG=$(PICFLAG)" \
+ 	"RANLIB=$(RANLIB)" \
+ 	"DESTDIR=$(DESTDIR)"
