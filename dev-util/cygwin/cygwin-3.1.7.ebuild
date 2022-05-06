@@ -62,7 +62,6 @@ src_prepare() {
 	pushd "${S}" > /dev/null
 	default
 	eapply "${FILESDIR}"/${PV}/00_fix-gcc-47.patch
-	eapply "${FILESDIR}"/${PV}/01_fix-gcc-44.patch
 	popd > /dev/null
 }
 
