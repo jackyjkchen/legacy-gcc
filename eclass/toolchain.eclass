@@ -2110,6 +2110,11 @@ gcc_movelibs() {
 		rmdir "${D}"${FROMDIR} >& /dev/null
 	done
 	find -depth "${ED}" -type d -exec rmdir {} + >& /dev/null
+
+	if is_mingw || is_cygwin ; then
+		mv "${ED}"/usr/${CTARGET}/bin/*.dll "${ED}${LIBPATH}"
+		mv "${ED}${BINPATH}"/*.dll "${ED}${LIBPATH}"
+	fi
 }
 
 # make sure the libtool archives have libdir set to where they actually
