@@ -1104,6 +1104,10 @@ toolchain_src_configure() {
 		*-gnu*)			 needed_libc=glibc;;
 		*-klibc)		 needed_libc=klibc;;
 		*-musl*)		 needed_libc=musl;;
+		i[3456]86-legacy-cygwin)
+			needed_libc=cygwin
+			confgcc+=( --disable-shared --enable-threads=posix --disable-symvers )
+			;;
 		*-cygwin)
 			needed_libc=cygwin
 			confgcc+=( --enable-shared --enable-threads=posix )
