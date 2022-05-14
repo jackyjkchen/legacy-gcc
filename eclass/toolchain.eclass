@@ -926,7 +926,7 @@ toolchain_src_configure() {
 	tc_version_is_between 2.0 2.6 && confgcc+=( --target=${CTARGET} )
 
 	if tc_version_is_at_least 2.3 ; then
-		confgcc+=(
+		confgcc+=( 
 			--prefix="${PREFIX}"
 		)
 	fi
