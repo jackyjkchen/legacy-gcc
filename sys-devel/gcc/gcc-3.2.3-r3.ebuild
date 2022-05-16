@@ -95,6 +95,12 @@ src_install() {
 /usr/lib/gcc-lib/${CHOST}/${PV}/32
 _EOF_
 				;;
+			mips64*-legacy)
+				cat <<-_EOF_ > "${ED}"/etc/ld.so.conf.d/08-${CHOST}-gcc-${PV}.conf || die
+/usr/lib/gcc-lib/${CHOST}/${PV}/32
+/usr/lib/gcc-lib/${CHOST}/${PV}/n32
+_EOF_
+				;;
 			*)
 				cat <<-_EOF_ > "${ED}"/etc/ld.so.conf.d/08-${CHOST}-gcc-${PV}.conf || die
 /usr/lib/gcc-lib/${CHOST}/${PV}
