@@ -87,10 +87,7 @@ src_prepare() {
 	[[ $(tc-arch) == "sh" ]] && eapply "${FILESDIR}"/${PV}/03_fix-for-sh4-install.patch
 	[[ $(tc-arch) == "ppc64" || $(tc-arch) == "ppc" ]] && eapply "${FILESDIR}"/${PV}/04_workaround-for-ppc64-ppc.patch
 
-	# Anything useful and objc will require libffi. Seriously. Lets just force
-	# libffi to install with USE="objc", even though it normally only installs
-	# if you attempt to build gcj.
-	if use objc && ! use gcj ; then
+	if use objc ; then
 		[[ $(tc-arch) != "mips" ]] && eapply "${FILESDIR}"/${PV}/05_libffi-without-libgcj.patch
 	fi
 }

@@ -96,10 +96,7 @@ src_prepare() {
 			;;
 	esac
 
-	# Anything useful and objc will require libffi. Seriously. Lets just force
-	# libffi to install with USE="objc", even though it normally only installs
-	# if you attempt to build gcj.
-	if use objc && ! use gcj ; then
+	if use objc ; then
 		[[ $(tc-arch) != "mips" ]] && eapply "${FILESDIR}"/${PV}/03_libffi-without-libgcj.patch
 	fi
 
