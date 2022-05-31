@@ -31,7 +31,7 @@ BDEPEND=""
 CHOST="${TOOL_PREFIX}-linux-gnu"
 
 CC="${CHOST}-gcc-2.3.3"
-CXX="i${CHOST}-gcc-2.3.3"
+CXX="${CHOST}-gcc-2.3.3"
 
 src_prepare() {
 	default

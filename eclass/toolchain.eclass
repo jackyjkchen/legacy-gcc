@@ -501,7 +501,7 @@ get_gcc_src_uri() {
 		fi
 	fi
 
-	if tc_version_is_at_least 9 ; then
+	if tc_version_is_at_least 10 ; then
 		[[ -n ${PATCH_VER} ]] && \
 			GCC_SRC_URI+=" $(gentoo_urls gcc-${PATCH_GCC_VER}-patches-${PATCH_VER}.tar.${TOOLCHAIN_PATCH_SUFFIX})"
 		[[ -n ${MUSL_VER} ]] && \
