@@ -967,6 +967,8 @@ toolchain_src_configure() {
 		confgcc=( -srcdir=../${P} ${CHOST} )
 	fi
 
+	local build_config_targets=()
+
 	if tc_version_is_at_least 2.3 ; then
 		[[ -n ${CBUILD} ]] && confgcc+=( --build=${CBUILD} )
 	fi
@@ -1028,7 +1030,6 @@ toolchain_src_configure() {
 	is_cxx && GCC_LANG+=",c++"
 	is_d   && GCC_LANG+=",d"
 	is_go  && GCC_LANG+=",go"
-	is_jit && GCC_LANG+=",jit"
 	if is_objc || is_objcxx ; then
 		GCC_LANG+=",objc"
 		if tc_version_is_at_least 4 ; then
@@ -1099,17 +1100,17 @@ toolchain_src_configure() {
 
 	# Build compiler itself using LTO
 	if tc_version_is_at_least 4.6 && _tc_use_if_iuse lto ; then
-		confgcc+=( --with-build-config=bootstrap-lto )
+		build_config_targets+=( bootstrap-lto )
+	fi
+
+	if tc_version_is_at_least 12 && _tc_use_if_iuse cet ; then
+		build_config_targets+=( bootstrap-cet )
 	fi
 
 	# Support to disable PCH when building libstdcxx
 	if tc_version_is_at_least 3.4 && ! _tc_use_if_iuse pch ; then
 		confgcc+=( --disable-libstdcxx-pch )
 	fi
-
-	# The JIT support requires this.
-	# But see bug #843341.
-	is_jit && confgcc+=( --enable-host-shared )
 
 	# build-id was disabled for file collisions: bug #526144
 	#
@@ -1302,7 +1303,7 @@ toolchain_src_configure() {
 			case ${CTARGET//_/-} in
 				*-hardfloat-*|*eabihf)
 					confgcc+=( --with-float=hard )
-					;;
+				;;
 			esac
 	esac
 
@@ -1315,7 +1316,7 @@ toolchain_src_configure() {
 			fi
 			;;
 		arm)
-			# bug 264534, bug #414395
+			# bug #264534, bug #414395
 			local a arm_arch=${CTARGET%%-*}
 			# Remove trailing endian variations first: eb el be bl b l
 			for a in e{b,l} {b,l}e b l ; do
@@ -1325,6 +1326,8 @@ toolchain_src_configure() {
 				fi
 			done
 
+			# Convert armv6m to armv6-m
+			[[ ${arm_arch} == armv6m ]] && arm_arch=armv6-m
 			# Convert armv7{a,r,m} to armv7-{a,r,m}
 			[[ ${arm_arch} == armv7? ]] && arm_arch=${arm_arch/7/7-}
 			# See if this is a valid --with-arch flag
@@ -1334,7 +1337,7 @@ toolchain_src_configure() {
 				confgcc+=( --with-arch=${arm_arch} )
 			fi
 
-			# Make default mode thumb for microcontroller classes #418209
+			# Make default mode thumb for microcontroller classes, bug #418209
 			[[ ${arm_arch} == *-m ]] && confgcc+=( --with-mode=thumb )
 
 			# Enable hardvfp
@@ -1362,7 +1365,7 @@ toolchain_src_configure() {
 			fi
 			;;
 		x86)
-			# Default arch for x86 is normally i386, lets give it a bump
+			# Default arch for x86 is normally i386, let's give it a bump
 			# since glibc will do so based on CTARGET anyways
 			tc_version_is_at_least 3.0 && confgcc+=( --with-arch=${CTARGET%%-*} )
 			;;
@@ -1376,12 +1379,13 @@ toolchain_src_configure() {
 			[[ ${CTARGET//_/-} == *-e500v2-* ]] && confgcc+=( --enable-e500-double )
 			;;
 		ppc64)
-			# On ppc64 big endian target gcc assumes elfv1 by default,
-			# and elfv2 on little endian
-			# but musl does not support elfv1 at all on any endian ppc64
-			# see https://git.musl-libc.org/cgit/musl/tree/INSTALL
-			# bug #704784
-			# https://gcc.gnu.org/PR93157
+			# On ppc64, the big endian target gcc assumes elfv1 by default,
+			# and elfv2 on little endian.
+			# But musl does not support elfv1 at all on any endian ppc64.
+			# See:
+			# - https://git.musl-libc.org/cgit/musl/tree/INSTALL
+			# - bug #704784
+			# - https://gcc.gnu.org/PR93157
 			[[ ${CTARGET} == powerpc64-*-musl ]] && confgcc+=( --with-abi=elfv2 )
 			# <gcc-3.4 not support -m64
 			if ! tc_version_is_at_least 3.4; then
@@ -1401,7 +1405,7 @@ toolchain_src_configure() {
 			;;
 	esac
 
-	# if the target can do biarch (-m32/-m64), enable it.  overhead should
+	# If the target can do biarch (-m32/-m64), enable it.  overhead should
 	# be small, and should simplify building of 64bit kernels in a 32bit
 	# userland by not needing sys-devel/kgcc64. bug #349405
 	case $(tc-arch) in
@@ -1435,14 +1439,14 @@ toolchain_src_configure() {
 		if in_iuse openmp ; then
 			# Make sure target has pthreads support. #326757 #335883
 			# There shouldn't be a chicken & egg problem here as openmp won't
-			# build without a C library, and you can't build that w/out
-			# already having a compiler ...
+			# build without a C library, and you can't build that w/o
+			# already having a compiler...
 			if ! is_crosscompile || \
 			   $(tc-getCPP ${CTARGET}) -E - <<<"#include <pthread.h>" >& /dev/null
 			then
 				confgcc+=( $(use_enable openmp libgomp) )
 			else
-				# Force disable as the configure script can be dumb #359855
+				# Force disable as the configure script can be dumb bug #359855
 				confgcc+=( --disable-libgomp )
 			fi
 		else
@@ -1460,7 +1464,7 @@ toolchain_src_configure() {
 			fi
 			if _tc_use_if_iuse ssp; then
 				# On some targets USE="ssp -libssp" is an invalid
-				# configuration as target libc does not provide
+				# configuration as the target libc does not provide
 				# stack_chk_* functions. Do not disable libssp there.
 				case ${CTARGET} in
 					mingw*|*-mingw*) ewarn "Not disabling libssp" ;;
@@ -1514,6 +1518,8 @@ toolchain_src_configure() {
 		confgcc+=( --disable-libquadmath )
 	fi
 
+	# This only controls whether the compiler *supports* LTO, not whether
+	# it's *built using* LTO. Hence we do it without a USE flag.
 	if is_djgpp ; then
 		if tc_version_is_at_least 4.8 ; then
 			confgcc+=( --enable-lto )
@@ -1569,6 +1575,11 @@ toolchain_src_configure() {
 
 	confgcc+=( "$@" ${EXTRA_ECONF} )
 
+	if [[ -n ${build_config_targets} ]] ; then
+		# ./configure --with-build-config='bootstrap-lto bootstrap-cet'
+		confgcc+=( --with-build-config="${build_config_targets[*]}" )
+	fi
+
 	# Nothing wrong with a good dose of verbosity
 	echo
 	einfo "PREFIX:          ${PREFIX}"
@@ -1576,27 +1587,47 @@ toolchain_src_configure() {
 	einfo "LIBPATH:         ${LIBPATH}"
 	einfo "DATAPATH:        ${DATAPATH}"
 	einfo "STDCXX_INCDIR:   ${STDCXX_INCDIR}"
-	echo
 	einfo "Languages:       ${GCC_LANG}"
-	echo
-	einfo "Configuring GCC with: ${confgcc[@]//--/\n\t--}"
 	echo
 
 	# Build in a separate build tree
-	mkdir -p "${WORKDIR}"/build
-	pushd "${WORKDIR}"/build > /dev/null
+	mkdir -p "${WORKDIR}"/build || die
+	pushd "${WORKDIR}"/build > /dev/null || die
 
 	# ...and now to do the actual configuration
 	addwrite /dev/zero
 
-	echo "${S}"/configure "${confgcc[@]}"
+	local gcc_shell="${BROOT}"/bin/bash
 	# Older gcc versions did not detect bash and re-exec itself, so force the
-	# use of bash. Newer ones will auto-detect, but this is not harmful.
-	CONFIG_SHELL="${BROOT}/bin/bash" \
-		"${BROOT}"/bin/bash "${S}"/configure "${confgcc[@]}" || die "failed to run configure"
+	# use of bash for them.
+	if tc_version_is_at_least 11.2 ; then
+		gcc_shell="${BROOT}"/bin/sh
+	fi
+
+	if is_jit ; then
+		einfo "Configuring JIT gcc"
+
+		mkdir -p "${WORKDIR}"/build-jit || die
+		pushd "${WORKDIR}"/build-jit > /dev/null || die
+		CONFIG_SHELL="${gcc_shell}" edo "${gcc_shell}" "${S}"/configure \
+				"${confgcc[@]}" \
+				--disable-libada \
+				--disable-libsanitizer \
+				--disable-libvtv \
+				--disable-libgomp \
+				--disable-libquadmath \
+				--disable-libatomic \
+				--disable-lto \
+				--disable-bootstrap \
+				--enable-host-shared \
+				--enable-languages=jit
+		popd > /dev/null || die
+	fi
+
+	CONFIG_SHELL="${gcc_shell}" edo "${gcc_shell}" "${S}"/configure "${confgcc[@]}"
 
 	# Return to whatever directory we were in before
-	popd > /dev/null
+	popd > /dev/null || die
 }
 
 gcc_do_filter_flags() {
@@ -1614,7 +1645,7 @@ gcc_do_filter_flags() {
 		append-flags -O2
 	fi
 
-	# Don't want to funk ourselves
+	# Avoid shooting self in foot
 	filter-flags '-mabi*' -m31 -m32 -m64
 
 	# bug #490738
@@ -1702,14 +1733,17 @@ setup_minispecs_gcc_build_specs() {
 	if hardened_gcc_works pie ; then
 		cat "${WORKDIR}"/specs/pie.specs >> "${WORKDIR}"/build.specs
 	fi
+
 	if hardened_gcc_works ssp ; then
 		for s in ssp sspall ; do
 			cat "${WORKDIR}"/specs/${s}.specs >> "${WORKDIR}"/build.specs
 		done
 	fi
+
 	for s in nostrict znow ; do
 		cat "${WORKDIR}"/specs/${s}.specs >> "${WORKDIR}"/build.specs
 	done
+
 	export GCC_SPECS="${WORKDIR}"/build.specs
 }
 
@@ -1732,10 +1766,11 @@ gcc-multilib-configure() {
 		local l=$(gcc-abi-map ${abi})
 		[[ -n ${l} ]] && list+=",${l}"
 	done
+
 	if [[ -n ${list} ]] ; then
 		case ${CTARGET} in
-		x86_64*)
-			tc_version_is_at_least 4.7 && confgcc+=( --with-multilib-list=${list:1} )
+			x86_64*)
+				tc_version_is_at_least 4.7 && confgcc+=( --with-multilib-list=${list:1} )
 			;;
 		esac
 	fi
@@ -1766,7 +1801,7 @@ gcc-abi-map() {
 #----> src_compile <----
 
 toolchain_src_compile() {
-	touch "${S}"/gcc/c-gperf.h
+	tc_version_is_at_least 2.9 && touch "${S}"/gcc/c-gperf.h
 
 	# Do not make manpages if we do not have perl ...
 	[[ ! -x /usr/bin/perl ]] \
@@ -1778,10 +1813,15 @@ toolchain_src_compile() {
 	unset ADAFLAGS
 
 	# Older gcc versions did not detect bash and re-exec itself, so force the
-	# use of bash.  Newer ones will auto-detect, but this is not harmful.
+	# use of bash for them.
 	# This needs to be set for compile as well, as it's used in libtool
 	# generation, which will break install otherwise (at least in 3.3.6): bug #664486
-	CONFIG_SHELL="${EPREFIX}/bin/bash" \
+	local gcc_shell="${BROOT}"/bin/bash
+	if tc_version_is_at_least 11.2 ; then
+		gcc_shell="${BROOT}"/bin/sh
+	fi
+
+	CONFIG_SHELL="${gcc_shell}" \
 		gcc_do_make ${GCC_MAKE_TARGET}
 }
 
@@ -1797,11 +1837,17 @@ gcc_do_make() {
 
 	# default target
 	if is_crosscompile || tc-is-cross-compiler ; then
-		# 3 stage bootstrapping doesnt quite work when you cant run the
-		# resulting binaries natively ^^;
+		# 3 stage bootstrapping doesn't quite work when you can't run the
+		# resulting binaries natively
 		GCC_MAKE_TARGET=${GCC_MAKE_TARGET-all}
 	else
-		if tc_version_is_at_least 3.3 && _tc_use_if_iuse pgo; then
+		if [[ ${EXTRA_ECONF} == *--disable-bootstrap* ]] ; then
+			GCC_MAKE_TARGET=${GCC_MAKE_TARGET-all}
+
+			ewarn "Disabling bootstrapping. ONLY recommended for development."
+			ewarn "This is NOT a safe configuration for endusers!"
+			ewarn "This compiler may not be safe or reliable for production use!"
+		elif tc_version_is_at_least 3.3 && _tc_use_if_iuse pgo; then
 			GCC_MAKE_TARGET=${GCC_MAKE_TARGET-profiledbootstrap}
 		elif tc_version_is_at_least 4.1 ; then
 			GCC_MAKE_TARGET=${GCC_MAKE_TARGET-bootstrap-lean}
@@ -1812,7 +1858,7 @@ gcc_do_make() {
 
 	# Older versions of GCC could not do profiledbootstrap in parallel due to
 	# collisions with profiling info.
-	if [[ ${GCC_MAKE_TARGET} == "profiledbootstrap" ]]; then
+	if [[ ${GCC_MAKE_TARGET} == "profiledbootstrap" ]] ; then
 		! tc_version_is_at_least 4.6 && export MAKEOPTS="${MAKEOPTS} -j1"
 	fi
 
@@ -1837,9 +1883,22 @@ gcc_do_make() {
 		BOOT_CFLAGS=${BOOT_CFLAGS-"${CFLAGS}"}
 	fi
 
+	if is_jit ; then
+		# TODO: docs for jit?
+		pushd "${WORKDIR}"/build-jit > /dev/null || die
+
+		einfo "Building JIT"
+		emake \
+			LDFLAGS="${LDFLAGS}" \
+			STAGE1_CFLAGS="${STAGE1_CFLAGS}" \
+			LIBPATH="${LIBPATH}" \
+			BOOT_CFLAGS="${BOOT_CFLAGS}"
+		popd > /dev/null || die
+        fi
+
 	einfo "Compiling ${PN} (${GCC_MAKE_TARGET})..."
 
-	pushd "${WORKDIR}"/build >/dev/null
+	pushd "${WORKDIR}"/build >/dev/null || die
 
 	if tc_version_is_at_least 2.9 ; then
 		emake \
@@ -1866,10 +1925,11 @@ gcc_do_make() {
 	fi
 
 	if is_ada; then
-		# Without these links it is not getting the good compiler
-		# Need to check why
+		# Without these links, it is not getting the good compiler
+		# TODO: Need to check why
 		ln -s gcc ../build/prev-gcc || die
 		ln -s ${CHOST} ../build/prev-${CHOST} || die
+
 		# Building standard ada library
 		emake -C gcc gnatlib-shared
 		# Building gnat toold
@@ -1898,24 +1958,33 @@ gcc_do_make() {
 		fi
 	fi
 
-	popd >/dev/null
+	popd >/dev/null || die
 }
 
 #---->> src_test <<----
 
 toolchain_src_test() {
-	cd "${WORKDIR}"/build
+	cd "${WORKDIR}"/build || die
+
+	# From opensuse's spec file:
+	# "asan needs a whole shadow address space"
+	ulimit -v unlimited
 
 	# 'asan' wants to be preloaded first, so does 'sandbox'.
 	# To make asan tests work disable sandbox for all of test suite.
 	# 'backtrace' tests also does not like 'libsandbox.so' presence.
 	SANDBOX_ON=0 LD_PRELOAD= emake -k check
+
+	einfo "Testing complete."
+	einfo "Please ignore any 'mail' lines in the summary output below (no mail is sent)."
+	einfo "Summary:"
+	"${S}"/contrib/test_summary
 }
 
 #---->> src_install <<----
 
 toolchain_src_install() {
-	cd "${WORKDIR}"/build
+	cd "${WORKDIR}"/build || die
 
 	# Don't allow symlinks in private gcc include dir as this can break the build
 	find gcc/include*/ -type l -delete
@@ -1950,6 +2019,30 @@ toolchain_src_install() {
 		S="${WORKDIR}"/build emake CC="${CC}" CXX="${CXX}" LANGUAGES="${LANGUAGES}" -j1 DESTDIR="${D}" install || die
 	fi
 
+	if is_jit ; then
+		# See https://gcc.gnu.org/onlinedocs/gcc-11.3.0/jit/internals/index.html#packaging-notes
+		# and bug #843341.
+		#
+		# Both of the non-JIT and JIT builds  are configured to install to $(DESTDIR)
+		# Install the configuration with --enable-host-shared first
+		# *then* the one without, so that the faster build
+		# of "cc1" et al overwrites the slower build.
+		#
+		# Do the 'make install' from the build directory
+		pushd "${WORKDIR}"/build-jit > /dev/null || die
+		S="${WORKDIR}"/build-jit emake DESTDIR="${D}" install
+
+		# Punt some tools which are really only useful while building gcc
+		find "${ED}" -name install-tools -prune -type d -exec rm -rf "{}" \;
+		# This one comes with binutils
+		find "${ED}" -name libiberty.a -delete
+
+		# Move the libraries to the proper location
+		gcc_movelibs
+
+		popd > /dev/null || die
+	fi
+
 	# Punt some tools which are really only useful while building gcc
 	find "${ED}" -name install-tools -prune -type d -exec rm -rf "{}" \;
 	# This one comes with binutils
@@ -1973,7 +2066,7 @@ toolchain_src_install() {
 	want_minispecs && copy_minispecs_gcc_specs
 
 	dodir /usr/bin
-	cd "${D}"${BINPATH}
+	cd "${D}"${BINPATH} || die
 	# Ugh: we really need to auto-detect this list.
 	#      It's constantly out of date.
 	for x in cpp gcc g++ c++ gcov g77 gfortran gccgo gnat* ; do
@@ -2146,9 +2239,10 @@ gcc_movelibs() {
 		dodir "${HOSTLIBPATH#${EPREFIX}}"
 		mv "${ED}"/usr/$(get_libdir)/libcc1* "${D}${HOSTLIBPATH}" || die
 	fi
+
 	# libgccjit gets installed to /usr/lib, not /usr/$(get_libdir). Probably
 	# due to a bug in gcc build system.
-	if is_jit ; then
+	if [[ ${PWD} == "${WORKDIR}"/build-jit ]] && is_jit ; then
 		dodir "${LIBPATH#${EPREFIX}}"
 		mv "${ED}"/usr/lib/libgccjit* "${D}${LIBPATH}" || die
 	fi
@@ -2192,6 +2286,7 @@ gcc_movelibs() {
 	for FROMDIR in ${removedirs} ; do
 		rmdir "${D}"${FROMDIR} >& /dev/null
 	done
+
 	find -depth "${ED}" -type d -exec rmdir {} + >& /dev/null
 
 	if is_mingw || is_cygwin ; then
@@ -2206,13 +2301,13 @@ gcc_movelibs() {
 fix_libtool_libdir_paths() {
 	local libpath="$1"
 
-	pushd "${D}" >/dev/null
+	pushd "${D}" >/dev/null || die
 
-	pushd "./${libpath}" >/dev/null
+	pushd "./${libpath}" >/dev/null || die
 	local dir="${PWD#${D%/}}"
 	local allarchives=$(echo *.la)
 	allarchives="\(${allarchives// /\\|}\)"
-	popd >/dev/null
+	popd >/dev/null || die
 
 	# The libdir might not have any .la files. bug #548782
 	find "./${dir}" -maxdepth 1 -name '*.la' \
@@ -2224,13 +2319,13 @@ fix_libtool_libdir_paths() {
 	find "./${dir}/" -maxdepth 1 -name '*.la' \
 		-exec sed -i -e "/^dependency_libs=/s:/[^ ]*/${allarchives}:${libpath}/\1:g" {} + || die
 
-	popd >/dev/null
+	popd >/dev/null || die
 }
 
 create_gcc_env_entry() {
 	dodir /etc/env.d/gcc
-	local gcc_envd_base="/etc/env.d/gcc/${CTARGET}-${GCC_CONFIG_VER}"
 
+	local gcc_envd_base="/etc/env.d/gcc/${CTARGET}-${GCC_CONFIG_VER}"
 	local gcc_specs_file
 	local gcc_envd_file="${ED}${gcc_envd_base}"
 	if [[ -z $1 ]] ; then
