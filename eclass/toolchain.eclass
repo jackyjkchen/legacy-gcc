@@ -19,7 +19,7 @@ _TOOLCHAIN_ECLASS=1
 DESCRIPTION="The GNU Compiler Collection"
 HOMEPAGE="https://gcc.gnu.org/"
 
-inherit fixheadtails flag-o-matic gnuconfig libtool multilib pax-utils toolchain-funcs prefix downgrade-arch-flags
+inherit edo fixheadtails flag-o-matic gnuconfig libtool multilib pax-utils toolchain-funcs prefix downgrade-arch-flags
 
 tc_is_live() {
 	[[ ${PV} == *9999* ]]
