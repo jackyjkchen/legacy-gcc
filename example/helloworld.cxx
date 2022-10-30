@@ -2,7 +2,7 @@
 
 class HelloWorld {
 public:
-    static print() {
+    static void print() {
         printf("hello, world\n");
     }
 };

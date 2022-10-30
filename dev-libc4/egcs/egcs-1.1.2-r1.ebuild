@@ -26,3 +26,7 @@ src_prepare() {
 	rm -rf libstdc++
 }
 
+src_install() {
+	toolchain-oldlibc_src_install
+	cp -ax "${WORKDIR}"/build/libio/libio*.a "${ED}"/usr/lib/gcc-lib/${CHOST}/2.91.66/ || die
+}

@@ -60,6 +60,7 @@ src_compile() {
 src_install() {
 	pushd "${WORKDIR}"/build > /dev/null
 	PATH=/usr/${CHOST}/bin:${PATH} emake -j1 DESTDIR="${ED}" install-target-libio || die "failed to run make install"
+	cp -ax libraries/libio/libio*.a "${ED}"/usr/lib/gcc-lib/${CHOST}/2.8.1/ || die
 	rm -rfv "${ED}"/usr/lib/libiberty.a "${ED}"/usr/${CHOST}
 	popd > /dev/null
 }

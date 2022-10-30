@@ -28,6 +28,7 @@ src_prepare() {
 	default
 	gnuconfig_update
 	eapply "${FILESDIR}"/${PV}/00_fix-for-gentoo.patch || die
+	eapply "${FILESDIR}"/${PV}/01_workaround-for-libc4.patch || die
 }
 
 src_configure() {
@@ -54,6 +55,9 @@ src_compile() {
 	pushd "${WORKDIR}"/build > /dev/null
 	PATH=/usr/${CHOST}/bin:${PATH} emake CC="${CC}" CXX="${CXX}" CFLAGS="${CFLAGS}" CXXFLAGS="${CXXFLAGS} -fvtable-thunks" || die "failed to run make"
 	popd > /dev/null
+	pushd "${WORKDIR}"/build/libio > /dev/null
+	${CHOST}-ar rc libiostream.a `cat iostream.list` || die
+	popd > /dev/null
 }
 
 src_install() {
@@ -62,6 +66,7 @@ src_install() {
 	mkdir -p "${ED}"/usr/lib/gcc-lib/${CHOST}/2.7.2/include || die
 	mv -v "${ED}"/usr/lib/g++-include "${ED}"/usr/lib/gcc-lib/${CHOST}/2.7.2/include/g++ || die
 	cp -ax ${S}/libstdc++/{new,new.h} "${ED}"/usr/lib/gcc-lib/${CHOST}/2.7.2/include/g++ || die
+	cp -ax libio/libio*.a "${ED}"/usr/lib/gcc-lib/${CHOST}/2.7.2/ || die
 	mkdir "${ED}"/usr/lib/gcc-lib/${CHOST}/2.7.2/include/g++/std || die
 	cp -ax ${S}/libstdc++/std/{new.h,cstddef.h} "${ED}"/usr/lib/gcc-lib/${CHOST}/2.7.2/include/g++/std || die
 	rm -rfv "${ED}"/usr/lib/lib* "${ED}"/usr/lib/doc "${ED}"/usr/bin "${ED}"/usr/include "${ED}"/usr/man "${ED}"/usr/${CHOST}
