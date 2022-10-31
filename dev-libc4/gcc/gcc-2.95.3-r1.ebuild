@@ -13,7 +13,7 @@ DEPEND="${RDEPEND}
 	${CATEGORY}/libc"
 BDEPEND="sys-devel/gcc:2.95.3"
 
-if [[ -f /usr/bin/${CTARGET}-gcc-2.95.3 ]] ;then
+if [[ -f /usr/bin/${CTARGET}-gcc-2.95.3 ]] ; then
 	CC="${CTARGET}-gcc-2.95.3"
 	CXX="${CTARGET}-g++-2.95.3"
 else
@@ -34,5 +34,7 @@ src_prepare() {
 
 src_install() {
 	toolchain-oldlibc_src_install
-	cp -ax "${WORKDIR}"/build/${CTARGET}/libio/libio*.a "${ED}"/usr/lib/gcc-lib/${CHOST}/${PV}/ || die
+	if [[ $STAGE1 != 'yes' ]] ; then
+		cp -ax "${WORKDIR}"/build/${CTARGET}/libio/libio*.a "${ED}"/usr/lib/gcc-lib/${CHOST}/${PV}/ || die
+	fi
 }
