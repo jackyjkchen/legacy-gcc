@@ -6,6 +6,10 @@
 # Toolchain Ninjas <toolchain@gentoo.org>
 # @SUPPORTED_EAPIS: 7 8
 # @BLURB: Common code for sys-devel/gcc ebuilds
+# @DESCRIPTION:
+# Common code for sys-devel/gcc ebuilds (and occasionally GCC forks, like
+# GNAT for Ada). If not building GCC itself, please use toolchain-funcs.eclass
+# instead.
 
 case ${EAPI} in
 	7) inherit eutils ;;
@@ -219,7 +223,7 @@ tc_has_feature() {
 	has "$1" "${TC_FEATURES[@]}"
 }
 
-if [[ ${PN} != "kgcc64" && ${PN} != gcc-* ]] ; then
+if [[ ${PN} != kgcc64 && ${PN} != gcc-* ]] ; then
 	IUSE+=" debug +nptl" TC_FEATURES+=( nptl )
 	[[ -n ${PIE_VER} ]] && IUSE+=" nopie"
 	[[ -n ${SPECS_VER} ]] && IUSE+=" nossp"
@@ -368,7 +372,7 @@ if tc_has_feature zstd ; then
 	RDEPEND+=" zstd? ( app-arch/zstd:= )"
 fi
 
-if tc_has_feature valgrind; then
+if tc_has_feature valgrind ; then
 	BDEPEND+=" valgrind? ( dev-util/valgrind )"
 fi
 
@@ -873,7 +877,7 @@ make_gcc_hard() {
 # Most other distros use the logic (including mainline gcc):
 #    lib   - 32bit binaries (x86)
 #    lib64 - 64bit binaries (x86_64)
-# Over time, Gentoo is migrating to the latter form.
+# Over time, Gentoo is migrating to the latter form (17.1 profiles).
 #
 # Unfortunately, due to distros picking the lib32 behavior, newer gcc
 # versions will dynamically detect whether to use lib or lib32 for its
@@ -1975,7 +1979,7 @@ toolchain_src_test() {
 	# 'backtrace' tests also does not like 'libsandbox.so' presence.
 	SANDBOX_ON=0 LD_PRELOAD= emake -k check
 
-	einfo "Testing complete."
+	einfo "Testing complete! Review the following output to check for success or failure."
 	einfo "Please ignore any 'mail' lines in the summary output below (no mail is sent)."
 	einfo "Summary:"
 	"${S}"/contrib/test_summary
