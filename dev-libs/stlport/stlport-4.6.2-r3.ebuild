@@ -67,11 +67,11 @@ src_install() {
 	pushd "${S}" > /dev/null
 	mkdir -p "${ED}"/usr/lib/gcc-lib/${CHOST}/2.91.66/include/ || die
 	ln -sv libstlport_gcc.a lib/libstlport.a || die
-	ln -sv libstlport_gcc.so.4.6 lib/libstlport_gcc.so.4 || die
-	ln -sv libstlport_gcc.so.4 lib/libstlport_gcc.so || die
-	ln -sv libstlport_gcc.so.4.6 lib/libstlport.so.4.6 || die
-	ln -sv libstlport.so.4.6 lib/libstlport.so.4 || die
-	ln -sv libstlport.so.4 lib/libstlport.so || die
+	[ -f lib/libstlport_gcc.so.4.6 ] && ( ln -sv libstlport_gcc.so.4.6 lib/libstlport_gcc.so.4 || die )
+	[ -f lib/libstlport_gcc.so.4 ] && ( ln -sv libstlport_gcc.so.4 lib/libstlport_gcc.so || die )
+	[ -f lib/libstlport_gcc.so.4.6 ] && ( ln -sv libstlport_gcc.so.4.6 lib/libstlport.so.4.6 || die )
+	[ -f lib/libstlport.so.4.6 ] && (ln -sv libstlport.so.4.6 lib/libstlport.so.4 || die )
+	[ -f lib/libstlport.so.4 ] && ( ln -sv libstlport.so.4 lib/libstlport.so || die )
 	cp -ax lib/libstlport* "${ED}"/usr/lib/gcc-lib/${CHOST}/2.91.66/ || die
 	cp -ax stlport "${ED}"/usr/lib/gcc-lib/${CHOST}/2.91.66/include/ || die
 	popd > /dev/null
