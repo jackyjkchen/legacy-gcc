@@ -4,7 +4,7 @@
 EAPI="7"
 
 inherit toolchain-binutils
-SRC_URI="https://mirror.koddos.net/djgpp/current/v2gnu/bnu2351s.zip"
+SRC_URI="http://djgpp.mirror.garr.it/current/v2gnu/bnu2351s.zip"
 
 KEYWORDS="amd64 x86"
 

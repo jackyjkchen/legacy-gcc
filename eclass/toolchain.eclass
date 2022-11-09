@@ -779,7 +779,7 @@ do_gcc_DJGPP_patches() {
 	if is_djgpp ; then
 		rm -rf boehm-gc fastjar gcc/go gcc/java gcc/treelang gotools \
 			libatomic libcilkrts libgo libgomp libitm libjava libmudflap \
-			libmpx liboffloadmic libsanitizer libvtv zlib
+			libmpx liboffloadmic libsanitizer libvtv zlib lt~obsolete.m4
 		tc_version_is_at_least 4.1 || rm -rf libssp
 		tc_version_is_at_least 7 || rm -rf gcc/testsuite
 		tc_version_is_at_least 8 || rm -rf libffi
