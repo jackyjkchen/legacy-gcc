@@ -57,7 +57,7 @@ cygwin64/cygwin/cygwin-legacy不支持multilib，使用DWARF-2异常机制，与
 * libc5: gcc-1.42 - gcc-3.4.6
 * libc4: gcc-1.42 - gcc-2.95.3
 
-libc5为ELF格式，libc4为aout格式.
+libc5为ELF格式，libc4为a.out格式，a.out格式依赖内核模块ia32_aout，仅5.0以下内核支持，对于5.0或以上内核，可使用example/ia32_aout自行编译内核模块。
 
 
 # 使用方法
@@ -195,7 +195,6 @@ glibc-headers版本2.5.1，应用RHEL5的兼容性补丁并删除所有不兼容
 
 2.95.3：
 * 将bootstrap的依赖调整到工具链i686-legacy-linux-gnu。
-* 该版本以及更低版本，g++不能完整支持C++98标准，gcc不能完整支持C99标准。
 
 2.0-2.7.2.3：
 * glibc已使用strerror替代sys_nerr/sys_errlist，适配gcc内相应代码。
