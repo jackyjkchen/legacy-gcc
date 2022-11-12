@@ -73,15 +73,6 @@ layman -L
 layman -a legacy-gcc
 ```
 
-如果你是x86-64平台，注意需要用[如下参数](https://github.com/jackyjkchen/legacy-gcc/blob/master/etc/portage/env/stack_realign)重新构建glibc的32位版本，避免因堆栈对齐问题导致的32位gcc coredump（gcc 3.0以下版本会遇到，随着glibc和x86指令集的演进，问题可能会向上移动）。
-```
-cd legacy-gcc
-mkdir -p /etc/portage/{package.env,env}
-cp -avx etc/portage/package.env/baseos /etc/portage/package.env
-cp -avx etc/portage/env/{stack_realign,stage1_cflags} /etc/portage/env
-emerge -1 sys-libs/glibc
-```
-
 现在你可以安装旧版本gcc了，比如于1992年发布，本来不支持linux，也不支持elf文件格式的gcc-2.0，现在可以正常在最新的kernel+glibc运行环境下运行：
 ```
 emerge -1a sys-devel/gcc:2.0
