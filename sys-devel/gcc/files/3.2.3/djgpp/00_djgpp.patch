@@ -293,7 +293,7 @@ index 0000000..57263ab
 +  .debug_macinfo  0 : { *(.debug_macinfo) }
 +}
 diff --git a/gcc/config/i386/djgpp.h b/gcc/config/i386/djgpp.h
-index 600a11e..52cade5 100644
+index 600a11e..4c5327c 100644
 --- a/gcc/config/i386/djgpp.h
 +++ b/gcc/config/i386/djgpp.h
 @@ -23,6 +23,11 @@ Boston, MA 02111-1307, USA.  */
@@ -358,7 +358,17 @@ index 600a11e..52cade5 100644
  %{!c:%{!M:%{!MM:%{!E:%{!S:stubify %{v} %{o*:%*} %{!o*:a.out} }}}}}"
  
  /* Always just link in 'libc.a'.  */
-@@ -188,7 +193,7 @@ Boston, MA 02111-1307, USA.  */
+@@ -178,9 +183,6 @@ Boston, MA 02111-1307, USA.  */
+ #undef PTRDIFF_TYPE
+ #define PTRDIFF_TYPE "int"
+ 
+-/* Used to be defined in xm-djgpp.h, but moved here for cross-compilers.  */
+-#define LIBSTDCXX "-lstdcxx"
+-
+ /* -mbnu210 is now ignored and obsolete. It was used to enable support for
+    weak symbols, and .gnu.linkonce support.  */
+ #undef MASK_BNU210
+@@ -188,7 +190,7 @@ Boston, MA 02111-1307, USA.  */
  
  #undef SUBTARGET_SWITCHES
  #define SUBTARGET_SWITCHES \
@@ -367,7 +377,7 @@ index 600a11e..52cade5 100644
    { "bnu210", MASK_BNU210, "Ignored (obsolete)" },
  
  /* Warn that -mbnu210 is now obsolete.  */
-@@ -240,3 +245,18 @@ do {								\
+@@ -240,3 +242,18 @@ do {								\
  								\
    DECL_SECTION_NAME (DECL) = build_string (len, string);	\
  } while (0)
@@ -435,7 +445,7 @@ index 0000000..260e668
 +LN = cp -p
 +LN_S = cp -p
 diff --git a/gcc/config/i386/xm-djgpp.h b/gcc/config/i386/xm-djgpp.h
-index 71cb116..c339338 100644
+index 71cb116..5e347bf 100644
 --- a/gcc/config/i386/xm-djgpp.h
 +++ b/gcc/config/i386/xm-djgpp.h
 @@ -30,6 +30,12 @@ Boston, MA 02111-1307, USA.  */
@@ -451,6 +461,15 @@ index 71cb116..c339338 100644
  /* System dependent initialization for collect2
     to tell system() to act like Unix.  */
  #define COLLECT2_HOST_INITIALIZATION \
+@@ -95,3 +101,8 @@ Boston, MA 02111-1307, USA.  */
+       strcat (fixed_path, "/");			\
+       (PATH) = xstrdup (fixed_path);		\
+     } 
++
++/* Rename libstdc++ to libstdcxx as the first name is not valid for DOS */
++#define LIBSTDCXX "-lstdcxx"
++#define LIBSTDCXX_PROFILE "-lstdcxx"
++
 diff --git a/gcc/configure b/gcc/configure
 index 89d3372..dee1e40 100755
 --- a/gcc/configure
@@ -3566,55 +3585,6 @@ index ef38b48..ea374b5 100644
  #if 0 /* Can cause surprises, and one can use -B./ instead.  */
        add_prefix (&startfile_prefixes, "./", NULL,
  		  PREFIX_PRIORITY_LAST, 1, NULL, 0);
-diff --git a/gcc/gcc.c.rej b/gcc/gcc.c.rej
-new file mode 100644
-index 0000000..c0b35ba
---- /dev/null
-+++ b/gcc/gcc.c.rej
-@@ -0,0 +1,43 @@
-+--- gcc/gcc.c
-++++ gcc/gcc.c
-+@@ -1339,15 +1346,20 @@ static const char *gcc_exec_prefix;
-+ #endif
-+ 
-+ static const char *const standard_exec_prefix = STANDARD_EXEC_PREFIX;
-++#ifndef __DJGPP__
-+ static const char *const standard_exec_prefix_1 = "/usr/lib/gcc/";
-++#endif
-+ static const char *md_exec_prefix = MD_EXEC_PREFIX;
-+ 
-+ static const char *md_startfile_prefix = MD_STARTFILE_PREFIX;
-+ static const char *md_startfile_prefix_1 = MD_STARTFILE_PREFIX_1;
-+ static const char *const standard_startfile_prefix = STANDARD_STARTFILE_PREFIX;
-++
-++#ifndef __DJGPP__
-++/* These prefixes are useless for DJGPP  */
-+ static const char *const standard_startfile_prefix_1 = "/lib/";
-+ static const char *const standard_startfile_prefix_2 = "/usr/lib/";
-+-
-++#endif
-+ static const char *const tooldir_base_prefix = TOOLDIR_BASE_PREFIX;
-+ static const char *tooldir_prefix;
-+ 
-+@@ -3826,14 +3848,18 @@ warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n\n"
-+ 	      PREFIX_PRIORITY_LAST, 1, warn_std_ptr, 0);
-+   add_prefix (&exec_prefixes, standard_exec_prefix, "BINUTILS",
-+ 	      PREFIX_PRIORITY_LAST, 2, warn_std_ptr, 0);
-++#ifndef __DJGPP__
-+   add_prefix (&exec_prefixes, standard_exec_prefix_1, "BINUTILS",
-+ 	      PREFIX_PRIORITY_LAST, 2, warn_std_ptr, 0);
-++#endif
-+ #endif
-+ 
-+   add_prefix (&startfile_prefixes, standard_exec_prefix, "BINUTILS",
-+ 	      PREFIX_PRIORITY_LAST, 1, warn_std_ptr, 0);
-++#ifndef __DJGPP__
-+   add_prefix (&startfile_prefixes, standard_exec_prefix_1, "BINUTILS",
-+ 	      PREFIX_PRIORITY_LAST, 1, warn_std_ptr, 0);
-++#endif
-+ 
-+   tooldir_prefix = concat (tooldir_base_prefix, spec_machine,
-+ 			   dir_separator_str, NULL);
 diff --git a/gcc/gcov.c b/gcc/gcov.c
 index 3bb2ce1..670ef69 100644
 --- a/gcc/gcov.c
