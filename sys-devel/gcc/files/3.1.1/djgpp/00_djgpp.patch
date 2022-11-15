@@ -1,0 +1,2241 @@
+diff --git a/configure b/configure
+index 8f5fb3a..9bd0863 100755
+--- a/configure
++++ b/configure
+@@ -863,7 +863,7 @@ do
+   IFS="${IFS= 	}"; save_ifs="$IFS"; IFS="${IFS}:"
+   for dir in $PATH; do
+     test -z "$dir" && dir=.
+-    if test -f $dir/$tmp; then
++    if test -x $dir/$tmp; then
+       DEFAULT_YACC="$prog"
+       break
+     fi
+@@ -882,7 +882,7 @@ do
+   IFS="${IFS=   }"; save_ifs="$IFS"; IFS="${IFS}:"
+   for dir in $PATH; do
+     test -z "$dir" && dir=.
+-    if test -f $dir/$tmp; then
++    if test -x $dir/$tmp; then
+       DEFAULT_M4="$prog"
+       break
+     fi
+@@ -901,7 +901,7 @@ do
+   IFS="${IFS= 	}"; save_ifs="$IFS"; IFS="${IFS}:"
+   for dir in $PATH; do
+     test -z "$dir" && dir=.
+-    if test -f $dir/$tmp; then
++    if test -x $dir/$tmp; then
+       DEFAULT_LEX="$prog"
+       break
+     fi
+diff --git a/configure.in b/configure.in
+index cb18281..e2b7bed 100644
+--- a/configure.in
++++ b/configure.in
+@@ -1455,10 +1455,24 @@ if test -n "${with_gxx_include_dir}"; then
+ fi
+ if test x${gxx_include_dir} = x; then
+   if test x${enable_version_specific_runtime_libs} = xyes; then
+-    gxx_include_dir='${libsubdir}/include/c++'
++    case ${host} in 
++        i[3456]86-*-msdosdjgpp)
++		gxx_include_dir='${libsubdir}/include/gxx'
++		;;
++	*)
++		gxx_include_dir='${libsubdir}/include/g++'
++		;;
++    esac
+   else
+     . ${topsrcdir}/config.if
+-    gxx_include_dir='${prefix}/include/${libstdcxx_incdir}'
++    case ${host} in
++        i[3456]86-*-msdosdjgpp)
++		gxx_include_dir='${prefix}/lang/cxx-v31'
++		;;
++	*)
++		gxx_include_dir='${prefix}/include/${libstdcxx_incdir}'
++		;;
++    esac
+   fi
+ else
+   gxx_include_dir=${gxx_include_dir}
+diff --git a/gcc/Makefile.in b/gcc/Makefile.in
+index 560cecc..238f018 100644
+--- a/gcc/Makefile.in
++++ b/gcc/Makefile.in
+@@ -2166,20 +2166,6 @@ stmp-fixinc: fixinc.sh gsyslimits.h
+ 	  cp $(srcdir)/gsyslimits.h include/syslimits.h; \
+ 	fi; \
+ 	chmod a+r include/syslimits.h)
+-# If $(SYSTEM_HEADER_DIR) is $(build_tooldir)/sys-include, and
+-# that directory exists, then make sure that $(libsubdir) exists.
+-# This is because cpp is compiled to find $(gcc_tooldir)/include via
+-# $(libsubdir)/$(unlibsubdir), which will only work if $(libsubdir)
+-# exists.
+-# ??? Better would be to use -isystem $(build_tooldir)/sys-include,
+-# but fixincludes does not take such arguments.
+-	if [ "$(SYSTEM_HEADER_DIR)" = "$(build_tooldir)/sys-include" ] \
+-	   && [ -d $(build_tooldir)/sys-include ]; then \
+-	  if [ -d $(libdir) ] ; then true ; else mkdir $(DESTDIR)$(libdir) ; fi; \
+-	  if [ -d $(libdir)/gcc-lib ] ; then true ; else mkdir $(DESTDIR)$(libdir)/gcc-lib; fi; \
+-	  if [ -d $(libdir)/gcc-lib/$(target_alias) ] ; then true ; else mkdir $(DESTDIR)$(libdir)/gcc-lib/$(target_alias) ; fi; \
+-	  if [ -d $(libdir)/gcc-lib/$(target_alias)/$(version) ] ; then true ; else mkdir $(DESTDIR)$(libdir)/gcc-lib/$(target_alias)/$(version) ; fi; \
+-	else true; fi
+ 	$(STAMP) stmp-fixinc
+ 
+ # Files related to the fixproto script.
+@@ -2977,7 +2963,10 @@ VOL_FILES=`echo $(BACKEND) $(OBJS) $(C_OBJS) $(LIBCPP_OBJS) *.c *.h gen*`
+ # Flags to pass to stage2 and later recursive makes.  Note that the
+ # WARN_CFLAGS setting can't be to the expansion of GCC_WARN_CFLAGS in
+ # the context of the stage_x rule.
++### For DJGPP we are editting version string to have no more than 1 dot
+ STAGE2_FLAGS_TO_PASS = \
++	libsubdir=$(libsubdir) \
++	gcc_version=$(gcc_version) \
+ 	CFLAGS="$(BOOT_CFLAGS)" \
+ 	LDFLAGS="$(BOOT_LDFLAGS)" \
+ 	WARN_CFLAGS="\$$(GCC_WARN_CFLAGS)" \
+@@ -2993,7 +2982,8 @@ STAGE2_FLAGS_TO_PASS = \
+ # MAKEINFO and MAKEINFOFLAGS are explicitly passed here to make them
+ # overrideable (for a bootstrap build stage1 also builds gcc.info).
+ stage1_build:
+-	$(MAKE) CC="$(CC)" libdir=$(libdir) LANGUAGES="$(BOOT_LANGUAGES)" \
++	$(MAKE) CC="$(CC)" libdir=$(libdir) libsubdir=$(libsubdir) \
++		gcc_version=$(gcc_version) LANGUAGES="$(BOOT_LANGUAGES)" \
+ 		CFLAGS="$(STAGE1_CFLAGS)" MAKEINFO="$(MAKEINFO)" \
+ 		MAKEINFOFLAGS="$(MAKEINFOFLAGS)"
+ 	$(STAMP) stage1_build
+diff --git a/gcc/config.gcc b/gcc/config.gcc
+index 51ec707..9f8978c 100644
+--- a/gcc/config.gcc
++++ b/gcc/config.gcc
+@@ -1342,6 +1342,7 @@ i[34567]86-pc-msdosdjgpp*)
+ 	xm_file=i386/xm-djgpp.h
+ 	tm_file=i386/djgpp.h
+ 	tmake_file=i386/t-djgpp
++	xmake_file=i386/x-djgpp
+ 	gnu_ld=yes
+ 	gas=yes
+ 	exeext=.exe
+diff --git a/gcc/config/i386/djgpp-x.djl b/gcc/config/i386/djgpp-x.djl
+new file mode 100644
+index 0000000..57263ab
+--- /dev/null
++++ b/gcc/config/i386/djgpp-x.djl
+@@ -0,0 +1,62 @@
++OUTPUT_FORMAT("coff-go32")
++ENTRY(start)
++SECTIONS
++{
++  .text  0x1000+SIZEOF_HEADERS : {
++    *(.text)
++    *(.text.*)
++    *(.gnu.linkonce.t*)
++    *(.const*)
++    *(.ro*)
++    *(.gnu.linkonce.r*)
++    etext  =  . ; PROVIDE(_etext = .) ;
++    . = ALIGN(0x200);
++  }
++  .data  ALIGN(0x200) : {
++    djgpp_first_ctor = . ;
++    *(SORT(.ctors.*))
++    *(.ctor)
++    *(.ctors)
++    djgpp_last_ctor = . ;
++    djgpp_first_dtor = . ;
++    *(SORT(.dtors.*))
++    *(.dtor)
++    *(.dtors)
++    djgpp_last_dtor = . ;
++    __environ = . ;
++    PROVIDE(_environ = .);
++    LONG(0)
++    *(.data)
++    *(.data.*)
++    *(.gcc_exc*)
++    ___EH_FRAME_BEGIN__ = . ;
++    *(.eh_fram*)
++    ___EH_FRAME_END__ = . ;
++    LONG(0);
++    *(.gnu.linkonce.d*)
++    edata  =  . ; PROVIDE(_edata = .) ;
++    . = ALIGN(0x200);
++  }
++  .bss  SIZEOF(.data) + ADDR(.data) :
++  { 					
++    *(.bss)
++    *(.bss.*)
++    *(.gnu.linkonce.b*)
++    *(COMMON)
++     end = . ; PROVIDE(_end = .) ;
++     . = ALIGN(0x200);
++  }
++  /* Stabs debugging sections.  */
++  .stab 0 : { *(.stab) }
++  .stabstr 0 : { *(.stabstr) }
++  /* DWARF 2 */
++  .debug_aranges  0 : { *(.debug_aranges) }
++  .debug_pubnames 0 : { *(.debug_pubnames) }
++  .debug_info     0 : { *(.debug_info) *(.gnu.linkonce.wi.*) }
++  .debug_abbrev   0 : { *(.debug_abbrev) }
++  .debug_line     0 : { *(.debug_line) }
++  .debug_frame    0 : { *(.debug_frame) }
++  .debug_str      0 : { *(.debug_str) }
++  .debug_loc      0 : { *(.debug_loc) }
++  .debug_macinfo  0 : { *(.debug_macinfo) }
++}
+diff --git a/gcc/config/i386/djgpp.h b/gcc/config/i386/djgpp.h
+index 600a11e..f6e0aa2 100644
+--- a/gcc/config/i386/djgpp.h
++++ b/gcc/config/i386/djgpp.h
+@@ -70,6 +70,8 @@ Boston, MA 02111-1307, USA.  */
+ #undef STANDARD_INCLUDE_DIR
+ #define STANDARD_INCLUDE_DIR "/dev/env/DJDIR/include/"
+ 
++#undef PREFIX_INCLUDE_DIR
++
+ /* Search for as.exe and ld.exe in DJGPP's binary directory.  */ 
+ #undef MD_EXEC_PREFIX
+ #define MD_EXEC_PREFIX "/dev/env/DJDIR/bin/"
+@@ -84,13 +86,13 @@ Boston, MA 02111-1307, USA.  */
+         (((NAME)[0] >= 'A') && ((NAME)[0] <= 'z') && ((NAME)[1] == ':')))
+ 
+ #undef CPP_PREDEFINES
+-#define CPP_PREDEFINES "-D__MSDOS__ -D__GO32__ -Asystem=msdos"
++#define CPP_PREDEFINES "-D__MSDOS__ -D__GO32__ -D__DJGPP__=2 -D__unix__ -Asystem=msdos -Asystem=unix"
+ 
+ /* Include <sys/version.h> so __DJGPP__ and __DJGPP_MINOR__ are defined.  */
+ #undef CPP_SPEC
+-#define CPP_SPEC "-remap %(cpp_cpu) %{posix:-D_POSIX_SOURCE} \
+-  %{!ansi:%{!std=c*:%{!std=i*:-DMSDOS}}} %{!ansi:%{!std=c*:%{!std=i*:-DGO32}}} \
+-  -imacros %s../include/sys/version.h"
++#define CPP_SPEC "%(cpp_cpu) %{posix:-D_POSIX_SOURCE} \
++	%{!ansi:%{!std=c*:%{!std=i*:-DMSDOS -DGO32 -DDJGPP=2 -Dunix}}} \
++	-remap -imacros %sdjgpp.ver"
+ 
+ /* We need to override link_command_spec in gcc.c so support -Tdjgpp.djl.
+    This cannot be done in LINK_SPECS as that LINK_SPECS is processed
+@@ -108,7 +110,7 @@ Boston, MA 02111-1307, USA.  */
+ \t%{static:} %{L*} %D %o\
+ \t%{!nostdlib:%{!nodefaultlibs:%G %L %G}}\
+ \t%{!A:%{!nostdlib:%{!nostartfiles:%E}}}\
+-\t-Tdjgpp.djl %{T*}}}}}}}\n\
++\t%{!T*:-Tdjgpp-x.djl} %{T*}}}}}}}\n\
+ %{!c:%{!M:%{!MM:%{!E:%{!S:stubify %{v} %{o*:%*} %{!o*:a.out} }}}}}"
+ 
+ /* Always just link in 'libc.a'.  */
+@@ -188,7 +190,7 @@ Boston, MA 02111-1307, USA.  */
+ 
+ #undef SUBTARGET_SWITCHES
+ #define SUBTARGET_SWITCHES \
+-  { "no-bnu210", -MASK_BNU210, "Ignored (obsolete)" }, \
++  { "no-bnu210", MASK_BNU210, "Ignored (obsolete)" }, \
+   { "bnu210", MASK_BNU210, "Ignored (obsolete)" },
+ 
+ /* Warn that -mbnu210 is now obsolete.  */
+@@ -240,3 +242,16 @@ do {								\
+ 								\
+   DECL_SECTION_NAME (DECL) = build_string (len, string);	\
+ } while (0)
++
++
++/*  I'm not sure whether the follwing is correct. 
++    Setting DBX_REGISTER_NUMBER only as below breaks C++ exceptions
++    when -gdwarf-2 is being used. Maybe setting DWARF_FRAME_REGNUM
++    could help. I don't know  (AP, 2002/02/01) */	
++#undef DBX_REGISTER_NUMBER
++#define DBX_REGISTER_NUMBER(n) \
++  ((write_symbols == DWARF2_DEBUG) ? svr4_dbx_register_map[n] : dbx_register_map[n])
++
++#undef DWARF_FRAME_REGNUM
++#define DWARF_FRAME_REGNUM(n) dbx_register_map[n]
++
+diff --git a/gcc/config/i386/t-djgpp b/gcc/config/i386/t-djgpp
+index 7b54b7b..f0b840a 100644
+--- a/gcc/config/i386/t-djgpp
++++ b/gcc/config/i386/t-djgpp
+@@ -1,2 +1,11 @@
+ # Location of DJGPP's header directory.
+ NATIVE_SYSTEM_HEADER_DIR=$(DJDIR)/include
++
++# We should have djgpp.ver before we can compile anything
++EXTRA_PASSES += djgpp.ver djgpp-x.djl
++
++djgpp.ver:
++	echo '#include <sys/version.h>' >djgpp.ver
++
++djgpp-x.djl:
++	cp -v $(srcdir)/config/i386/djgpp-x.djl djgpp-x.djl
+diff --git a/gcc/config/i386/x-djgpp b/gcc/config/i386/x-djgpp
+new file mode 100644
+index 0000000..260e668
+--- /dev/null
++++ b/gcc/config/i386/x-djgpp
+@@ -0,0 +1,26 @@
++#-----------------------------------------------------------------------------
++# The following code is copied from config/mh-djgpp as one may 
++# want to run make in gcc build directory instead of toplevel 
++# one (for example 'make restage2' or similar which are not available
++# from top level makefile and we should have the same substitutions 
++# in this case)           
++#-----------------------------------------------------------------------------
++
++# Shorten the target alias so when it is used to set 'libsubdir'
++# the name will work in both short and long filename environments.
++ifeq ($(findstring -pc-msdosdjgpp,$(target_alias)),-pc-msdosdjgpp)
++target_alias=djgpp
++endif
++
++# The version string must be modified to contain just one dot
++# because DOS filenames can only have one dot when long filenames
++# are not available.
++__version:=$(gcc_version)
++__version:=$(subst ., ,$(__version))
++ifeq ($(words $(__version)),3)
++gcc_version=$(word 1,$(__version)).$(word 2,$(__version))$(word 3,$(__version))
++endif
++
++# on DJGPP the 'ln -s' does not work correctly
++LN = cp -p
++LN_S = cp -p
+diff --git a/gcc/config/i386/xm-djgpp.h b/gcc/config/i386/xm-djgpp.h
+index 71cb116..c339338 100644
+--- a/gcc/config/i386/xm-djgpp.h
++++ b/gcc/config/i386/xm-djgpp.h
+@@ -30,6 +30,12 @@ Boston, MA 02111-1307, USA.  */
+ /* Allow test for DOS drive names.  */
+ #define HAVE_DOS_BASED_FILE_SYSTEM
+ 
++/* We don't want cas sensitive comparission of file names when looking
++   whether we should use relative prefix (in gcc.c). This together with
++   corresponding change to gcc/gcc.c provides that  */
++#undef FN_STRCMP
++#define FN_STRCMP(a,b) strcasecmp(a,b)
++
+ /* System dependent initialization for collect2
+    to tell system() to act like Unix.  */
+ #define COLLECT2_HOST_INITIALIZATION \
+diff --git a/gcc/configure b/gcc/configure
+index 6c9263a..fa40263 100755
+--- a/gcc/configure
++++ b/gcc/configure
+@@ -3726,6 +3726,19 @@ case "${host}" in
+   # just force it.
+   ac_cv_func_vfork_works=yes
+   ;;
++*djgpp*)
++  # For DJGPP we're using different default for gcc_gxx_include_dir
++  # We cannot set it where gcc_gxx_include_dir is initially determined as
++  # host is unknown there
++  if test x${gxx_include_dir} = x; then
++    if test x${enable_version_specific_runtime_libs} = xyes; then
++      gcc_gxx_include_dir='${libsubdir}/include/gxx'
++    else
++      topsrcdir=${srcdir}/.. . ${srcdir}/../config.if
++    gcc_gxx_include_dir="\$(libsubdir)/\$(unlibsubdir)/..\`echo \$(exec_prefix) | sed -e 's|^\$(prefix)||' -e 's|/[^/]*|/..|g'\`/lang/cxx-v31"
++    fi
++  fi
++  ;;
+ esac
+ echo $ac_n "checking for pid_t""... $ac_c" 1>&6
+ echo "configure:3732: checking for pid_t" >&5
+diff --git a/gcc/configure.in b/gcc/configure.in
+index 9cacc4a..638a9d5 100644
+--- a/gcc/configure.in
++++ b/gcc/configure.in
+@@ -654,6 +654,21 @@ case "${host}" in
+   # just force it.
+   ac_cv_func_vfork_works=yes
+   ;;
++*djgpp*)
++  # For DJGPP we're using different default for gcc_gxx_include_dir
++  # We cannot set it where gcc_gxx_include_dir is initially determined as
++  # host is unknown there
++  if test x${gxx_include_dir} = x; then
++    if test x${enable_version_specific_runtime_libs} = xyes; then
++      gcc_gxx_include_dir='${libsubdir}/include/gxx'
++    else
++      topsrcdir=${srcdir}/.. . ${srcdir}/../config.if
++changequote(<<, >>)dnl
++    gcc_gxx_include_dir="\$(libsubdir)/\$(unlibsubdir)/..\`echo \$(exec_prefix) | sed -e 's|^\$(prefix)||' -e 's|/[^/]*|/..|g'\`/lang/cxx-v31"
++changequote([, ])dnl
++    fi
++  fi
++;;
+ esac
+ AC_FUNC_VFORK
+ AC_FUNC_MMAP_ANYWHERE
+diff --git a/gcc/cppfiles.c b/gcc/cppfiles.c
+index 4c595a8..2ffcf1b 100644
+--- a/gcc/cppfiles.c
++++ b/gcc/cppfiles.c
+@@ -270,7 +270,15 @@ open_file (pfile, filename)
+      Special case: the empty string is translated to stdin.  */
+ 
+   if (filename[0] == '\0')
+-    file->fd = 0;
++    {
++      file->fd = 0;
++#ifdef __DJGPP__
++      /* For DJGPP redirected input is opened in text mode. Change it
++         to binary mode.  */
++      if (! isatty(file->fd))
++        setmode (file->fd, O_BINARY);
++#endif
++    }
+   else
+     file->fd = open (file->name, O_RDONLY | O_NOCTTY | O_BINARY, 0666);
+ 
+@@ -469,6 +477,20 @@ read_include_file (pfile, inc)
+       inc->st.st_size = offset;
+     }
+ 
++#ifdef __DJGPP__
++/* For DOS we should handle DOS EOF character (0x1A, ^Z)  */
++  do {
++    U_CHAR * dos_eof = memchr (buf, 0x1A, offset);
++    if (dos_eof) {
++      offset = dos_eof - buf;
++      buf = xrealloc (buf, offset + 1);
++      /* The lexer requires that the buffer be NUL-terminated.  */
++      buf[offset] = '\0';
++      inc->st.st_size = offset;
++    }
++  } while (0);
++#endif
++
+   inc->buffer = buf;
+   return 0;
+ 
+diff --git a/gcc/f/Make-lang.in b/gcc/f/Make-lang.in
+index 0bb5f20..cd01a3b 100644
+--- a/gcc/f/Make-lang.in
++++ b/gcc/f/Make-lang.in
+@@ -208,7 +208,7 @@ $(srcdir)/f/g77.1: $(srcdir)/f/invoke.texi
+ INTDOC_DEPS = $(srcdir)/f/intdoc.c $(srcdir)/f/intrin.h $(srcdir)/f/intrin.def
+ 
+ $(srcdir)/f/intdoc.texi: $(INTDOC_DEPS) $(srcdir)/f/intdoc.in
+-	$(MAKE) f/intdoc$(build_exeext)
++	$(MAKE) "HOST_CC=$(HOST_CC)" f/intdoc$(build_exeext)
+ 	f/intdoc$(build_exeext) > $(srcdir)/f/intdoc.texi
+ 
+ f/intdoc$(build_exeext): $(INTDOC_DEPS) f/intdoc.h0 hconfig.h $(SYSTEM_H) \
+diff --git a/gcc/fixinc/tests/base/x11/Intrinsic.h b/gcc/fixinc/tests/base/x11/Intrinsic.h
+new file mode 100644
+index 0000000..989ce06
+--- /dev/null
++++ b/gcc/fixinc/tests/base/x11/Intrinsic.h
+@@ -0,0 +1,14 @@
++/*  DO NOT EDIT THIS FILE.
++
++    It has been auto-edited by fixincludes from:
++
++	"fixinc/tests/inc/X11/Intrinsic.h"
++
++    This had to be done to correct non-standard usages in the
++    original, manufacturer supplied header file.  */
++
++
++
++#if defined( ARM_NORCROFT_HINT_CHECK )
++p_type mumble;
++#endif  /* ARM_NORCROFT_HINT_CHECK */
+diff --git a/gcc/fixinc/tests/base/x11/ShellP.h b/gcc/fixinc/tests/base/x11/ShellP.h
+new file mode 100644
+index 0000000..45e8e1f
+--- /dev/null
++++ b/gcc/fixinc/tests/base/x11/ShellP.h
+@@ -0,0 +1,21 @@
++/*  DO NOT EDIT THIS FILE.
++
++    It has been auto-edited by fixincludes from:
++
++	"fixinc/tests/inc/X11/ShellP.h"
++
++    This had to be done to correct non-standard usages in the
++    original, manufacturer supplied header file.  */
++
++
++
++#if defined( X11_CLASS_CHECK )
++struct {
++#ifdef __cplusplus
++   char *c_class;
++#else
++   char *class;
++#endif
++} mumble;
++
++#endif  /* X11_CLASS_CHECK */
+diff --git a/gcc/fixinc/tests/base/x11/Xmu.h b/gcc/fixinc/tests/base/x11/Xmu.h
+new file mode 100644
+index 0000000..5fac5db
+--- /dev/null
++++ b/gcc/fixinc/tests/base/x11/Xmu.h
+@@ -0,0 +1,16 @@
++/*  DO NOT EDIT THIS FILE.
++
++    It has been auto-edited by fixincludes from:
++
++	"fixinc/tests/inc/X11/Xmu.h"
++
++    This had to be done to correct non-standard usages in the
++    original, manufacturer supplied header file.  */
++
++
++
++#if defined( X11_SPRINTF_CHECK )
++#ifndef __STDC__
++extern char *	sprintf();
++#endif /* !defined __STDC__ */
++#endif  /* X11_SPRINTF_CHECK */
+diff --git a/gcc/gcc.c b/gcc/gcc.c
+index 054875b..1d71c97 100644
+--- a/gcc/gcc.c
++++ b/gcc/gcc.c
+@@ -146,6 +146,13 @@ static const char dir_separator_str[] = { DIR_SEPARATOR, 0 };
+ /* Flag set by cppspec.c to 1.  */
+ int is_cpp_driver;
+ 
++/* Compare file names. Normally strcmp, but could be different if file
++   system is not case sensitive  */
++
++#ifndef FN_STRCMP
++#define FN_STRCMP(a,b) strcmp(a,b)
++#endif
++
+ /* Flag saying to pass the greatest exit code returned by a sub-process
+    to the calling program.  */
+ static int pass_exit_codes;
+@@ -1332,15 +1339,20 @@ static const char *gcc_exec_prefix;
+ #endif
+ 
+ static const char *const standard_exec_prefix = STANDARD_EXEC_PREFIX;
++#ifndef __DJGPP__
+ static const char *const standard_exec_prefix_1 = "/usr/lib/gcc/";
++#endif
+ static const char *md_exec_prefix = MD_EXEC_PREFIX;
+ 
+ static const char *md_startfile_prefix = MD_STARTFILE_PREFIX;
+ static const char *md_startfile_prefix_1 = MD_STARTFILE_PREFIX_1;
+ static const char *const standard_startfile_prefix = STANDARD_STARTFILE_PREFIX;
++
++#ifndef __DJGPP__
++/* These prefixes are useless for DJGPP  */
+ static const char *const standard_startfile_prefix_1 = "/lib/";
+ static const char *const standard_startfile_prefix_2 = "/usr/lib/";
+-
++#endif
+ static const char *const tooldir_base_prefix = TOOLDIR_BASE_PREFIX;
+ static const char *tooldir_prefix;
+ 
+@@ -2249,7 +2261,7 @@ split_directories (name, ptr_num_dirs)
+   int num_dirs = 0;
+   char **dirs;
+   const char *p, *q;
+-  int ch;
++  int ch, i;
+ 
+   /* Count the number of directories.  Special case MSDOS disk names as part
+      of the initial directory.  */
+@@ -2305,6 +2317,16 @@ split_directories (name, ptr_num_dirs)
+   if (ptr_num_dirs)
+     *ptr_num_dirs = num_dirs;
+ 
++#ifdef DIR_SEPARATOR_2
++  /* If we have 2 directory separators then convert all to the
++     primary one after splitting path  */
++  for (i=0; i<num_dirs; i++)
++    {
++        char * s = strchr (dirs[i],DIR_SEPARATOR_2);
++	if (s) *s = DIR_SEPARATOR;
++    }
++#endif
++
+   return dirs;
+ }
+ 
+@@ -2417,7 +2439,7 @@ make_relative_prefix (progname, bin_prefix, prefix)
+     {
+       for (i = 0; i < bin_num; i++)
+ 	{
+-	  if (strcmp (prog_dirs[i], bin_dirs[i]) != 0)
++	  if (FN_STRCMP (prog_dirs[i], bin_dirs[i]) != 0)
+ 	    break;
+ 	}
+ 
+@@ -2437,7 +2459,7 @@ make_relative_prefix (progname, bin_prefix, prefix)
+   n = (prefix_num < bin_num) ? prefix_num : bin_num;
+   for (common = 0; common < n; common++)
+     {
+-      if (strcmp (bin_dirs[common], prefix_dirs[common]) != 0)
++      if (FN_STRCMP (bin_dirs[common], prefix_dirs[common]) != 0)
+ 	break;
+     }
+ 
+@@ -3809,14 +3831,18 @@ warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n\n"
+ 	      PREFIX_PRIORITY_LAST, 1, warn_std_ptr, 0);
+   add_prefix (&exec_prefixes, standard_exec_prefix, "BINUTILS",
+ 	      PREFIX_PRIORITY_LAST, 2, warn_std_ptr, 0);
++#ifndef __DJGPP__
+   add_prefix (&exec_prefixes, standard_exec_prefix_1, "BINUTILS",
+ 	      PREFIX_PRIORITY_LAST, 2, warn_std_ptr, 0);
++#endif
+ #endif
+ 
+   add_prefix (&startfile_prefixes, standard_exec_prefix, "BINUTILS",
+ 	      PREFIX_PRIORITY_LAST, 1, warn_std_ptr, 0);
++#ifndef __DJGPP__
+   add_prefix (&startfile_prefixes, standard_exec_prefix_1, "BINUTILS",
+ 	      PREFIX_PRIORITY_LAST, 1, warn_std_ptr, 0);
++#endif
+ 
+   tooldir_prefix = concat (tooldir_base_prefix, spec_machine,
+ 			   dir_separator_str, NULL);
+@@ -5973,10 +5999,12 @@ main (argc, argv)
+ 		      NULL, PREFIX_PRIORITY_LAST, 0, NULL, 1);
+ 	}
+ 
++#ifndef __DJGPP__
+       add_prefix (&startfile_prefixes, standard_startfile_prefix_1,
+ 		  "BINUTILS", PREFIX_PRIORITY_LAST, 0, NULL, 1);
+       add_prefix (&startfile_prefixes, standard_startfile_prefix_2,
+ 		  "BINUTILS", PREFIX_PRIORITY_LAST, 0, NULL, 1);
++#endif
+ #if 0 /* Can cause surprises, and one can use -B./ instead.  */
+       add_prefix (&startfile_prefixes, "./", NULL,
+ 		  PREFIX_PRIORITY_LAST, 1, NULL, 0);
+diff --git a/gcc/gcov.c b/gcc/gcov.c
+index 3bb2ce1..670ef69 100644
+--- a/gcc/gcov.c
++++ b/gcc/gcov.c
+@@ -1324,6 +1324,23 @@ output_data ()
+ 	     the same basename, e.g. tmp.c and tmp.h.  */
+ 	  strcat (gcov_file_name, ".gcov");
+ 
++#ifdef __DJGPP__
++     if (!_use_lfn(gcov_file_name))
++       {
++           char *s1, *s2=NULL;
++           for (s1=gcov_file_name; *s1 && *s1!='.'; s1++);
++           if (*s1) for (s2=s1+1; *s2 && *s2!='.'; s2++);
++           if (s2 && *s2=='.')
++             {
++                 int l;
++                 s1++;  l=s2-s1;  if (l>2) l=2;
++                 s1 = s1+l;  s2++;
++                 while (*s2) { *s1++=*s2++; }
++                 *s1=0;
++             }
++       }
++#endif
++
+ 	  gcov_file = fopen (gcov_file_name, "w");
+ 
+ 	  if (gcov_file == NULL)
+diff --git a/gcc/prefix.c b/gcc/prefix.c
+index 8890673..41354e0 100644
+--- a/gcc/prefix.c
++++ b/gcc/prefix.c
+@@ -273,7 +273,7 @@ update_path (path, key)
+ 
+ #ifdef UPDATE_PATH_HOST_CANONICALIZE
+   /* Perform host dependent canonicalization when needed.  */
+-  UPDATE_PATH_HOST_CANONICALIZE (path);
++  UPDATE_PATH_HOST_CANONICALIZE (result);
+ #endif
+ 
+ #ifdef DIR_SEPARATOR_2
+diff --git a/gcc/protoize.c b/gcc/protoize.c
+index 3b710a5..a15a29f 100644
+--- a/gcc/protoize.c
++++ b/gcc/protoize.c
+@@ -4288,7 +4288,7 @@ edit_file (hp)
+ #ifdef __MSDOS__
+       /* MSDOS filenames are restricted to 8.3 format, so we save `foo.c'
+          as `foo.<save_suffix>'.  */
+-      new_filename[(strlen (convert_filename) - 1] = '\0';
++      new_filename[strlen (convert_filename) - 1] = '\0';
+ #endif
+       strcat (new_filename, save_suffix);
+ 
+diff --git a/gcc/tradcpp.c b/gcc/tradcpp.c
+index e696bf0..0604dac 100644
+--- a/gcc/tradcpp.c
++++ b/gcc/tradcpp.c
+@@ -596,7 +596,8 @@ main (argc, argv)
+ 	    else
+ 	      pend[i].type = PD_FILE, pend[i].arg = argv[i + 1], i++;
+ 	  }
+-	else if (!strcmp (argv[i], "-iprefix"))
++	else if (!strcmp (argv[i], "-iprefix") 
++                 || !strcmp (argv[i], "-imacros"))
+ 	  i++; /* Ignore for compatibility */
+ 	else if (!strcmp (argv[i], "-isystem")
+ 		 || !strcmp (argv[i], "-iwithprefix")
+@@ -780,6 +781,11 @@ main (argc, argv)
+ 	no_standard_includes = 1;
+ 	break;
+ 
++      case 'r':
++	if (!strcmp (argv[i], "-remap"))
++	  ; /* Ignore for compatibility */
++	break;
++
+       case '\0': /* JF handle '-' as file name meaning stdin or stdout */
+ 	if (in_fname == NULL) {
+ 	  in_fname = "";
+diff --git a/libf2c/libI77/configure b/libf2c/libI77/configure
+index e064fba..9791a72 100755
+--- a/libf2c/libI77/configure
++++ b/libf2c/libI77/configure
+@@ -564,10 +564,15 @@ else
+   ac_cv_prog_CC="$CC" # Let the user override the test.
+ else
+   IFS="${IFS= 	}"; ac_save_ifs="$IFS"; IFS=":"
++  ac_test_flag="-f"
++  if ! test -z "$COMSPEC$ComSpec"; then
++    ac_test_flag="-x"
++    IFS="${PATH_SEPARATOR-;}"
++  fi
+   ac_dummy="$PATH"
+   for ac_dir in $ac_dummy; do
+     test -z "$ac_dir" && ac_dir=.
+-    if test -f $ac_dir/$ac_word; then
++    if test $ac_test_flag $ac_dir/$ac_word; then
+       ac_cv_prog_CC="gcc"
+       break
+     fi
+@@ -586,7 +591,7 @@ if test -z "$CC"; then
+   # Extract the first word of "cc", so it can be a program name with args.
+ set dummy cc; ac_word=$2
+ echo $ac_n "checking for $ac_word""... $ac_c" 1>&6
+-echo "configure:590: checking for $ac_word" >&5
++echo "configure:595: checking for $ac_word" >&5
+ if eval "test \"`echo '$''{'ac_cv_prog_CC'+set}'`\" = set"; then
+   echo $ac_n "(cached) $ac_c" 1>&6
+ else
+@@ -595,10 +600,15 @@ else
+ else
+   IFS="${IFS= 	}"; ac_save_ifs="$IFS"; IFS=":"
+   ac_prog_rejected=no
++  ac_test_flag="-f"
++  if ! test -z "$COMSPEC$ComSpec"; then
++    ac_test_flag="-x"
++    IFS="${PATH_SEPARATOR-;}"
++  fi
+   ac_dummy="$PATH"
+   for ac_dir in $ac_dummy; do
+     test -z "$ac_dir" && ac_dir=.
+-    if test -f $ac_dir/$ac_word; then
++    if test $ac_test_flag $ac_dir/$ac_word; then
+       if test "$ac_dir/$ac_word" = "/usr/ucb/cc"; then
+         ac_prog_rejected=yes
+ 	continue
+@@ -637,7 +647,7 @@ fi
+       # Extract the first word of "cl", so it can be a program name with args.
+ set dummy cl; ac_word=$2
+ echo $ac_n "checking for $ac_word""... $ac_c" 1>&6
+-echo "configure:641: checking for $ac_word" >&5
++echo "configure:651: checking for $ac_word" >&5
+ if eval "test \"`echo '$''{'ac_cv_prog_CC'+set}'`\" = set"; then
+   echo $ac_n "(cached) $ac_c" 1>&6
+ else
+@@ -645,10 +655,15 @@ else
+   ac_cv_prog_CC="$CC" # Let the user override the test.
+ else
+   IFS="${IFS= 	}"; ac_save_ifs="$IFS"; IFS=":"
++  ac_test_flag="-f"
++  if ! test -z "$COMSPEC$ComSpec"; then
++    ac_test_flag="-x"
++    IFS="${PATH_SEPARATOR-;}"
++  fi
+   ac_dummy="$PATH"
+   for ac_dir in $ac_dummy; do
+     test -z "$ac_dir" && ac_dir=.
+-    if test -f $ac_dir/$ac_word; then
++    if test $ac_test_flag $ac_dir/$ac_word; then
+       ac_cv_prog_CC="cl"
+       break
+     fi
+@@ -670,7 +685,7 @@ fi
+ 
+ 
+ echo $ac_n "checking whether we are using GNU C""... $ac_c" 1>&6
+-echo "configure:674: checking whether we are using GNU C" >&5
++echo "configure:689: checking whether we are using GNU C" >&5
+ if eval "test \"`echo '$''{'ac_cv_prog_gcc'+set}'`\" = set"; then
+   echo $ac_n "(cached) $ac_c" 1>&6
+ else
+@@ -679,7 +694,7 @@ else
+   yes;
+ #endif
+ EOF
+-if { ac_try='${CC-cc} -E conftest.c'; { (eval echo configure:683: \"$ac_try\") 1>&5; (eval $ac_try) 2>&5; }; } | egrep yes >/dev/null 2>&1; then
++if { ac_try='${CC-cc} -E conftest.c'; { (eval echo configure:698: \"$ac_try\") 1>&5; (eval $ac_try) 2>&5; }; } | egrep yes >/dev/null 2>&1; then
+   ac_cv_prog_gcc=yes
+ else
+   ac_cv_prog_gcc=no
+@@ -698,7 +713,7 @@ ac_test_CFLAGS="${CFLAGS+set}"
+ ac_save_CFLAGS="$CFLAGS"
+ CFLAGS=
+ echo $ac_n "checking whether ${CC-cc} accepts -g""... $ac_c" 1>&6
+-echo "configure:702: checking whether ${CC-cc} accepts -g" >&5
++echo "configure:717: checking whether ${CC-cc} accepts -g" >&5
+ if eval "test \"`echo '$''{'ac_cv_prog_cc_g'+set}'`\" = set"; then
+   echo $ac_n "(cached) $ac_c" 1>&6
+ else
+@@ -736,7 +751,7 @@ LIBTOOL='$(SHELL) ../libtool'
+ test "$AR" || AR=ar
+ 
+ echo $ac_n "checking whether ${MAKE-make} sets \${MAKE}""... $ac_c" 1>&6
+-echo "configure:740: checking whether ${MAKE-make} sets \${MAKE}" >&5
++echo "configure:755: checking whether ${MAKE-make} sets \${MAKE}" >&5
+ set dummy ${MAKE-make}; ac_make=`echo "$2" | sed 'y%./+-%__p_%'`
+ if eval "test \"`echo '$''{'ac_cv_prog_make_${ac_make}_set'+set}'`\" = set"; then
+   echo $ac_n "(cached) $ac_c" 1>&6
+@@ -766,7 +781,7 @@ fi
+ 
+ # Sanity check for the cross-compilation case:
+ echo $ac_n "checking how to run the C preprocessor""... $ac_c" 1>&6
+-echo "configure:770: checking how to run the C preprocessor" >&5
++echo "configure:785: checking how to run the C preprocessor" >&5
+ # On Suns, sometimes $CPP names a directory.
+ if test -n "$CPP" && test -d "$CPP"; then
+   CPP=
+@@ -781,13 +796,13 @@ else
+   # On the NeXT, cc -E runs the code through the compiler's parser,
+   # not just through cpp.
+   cat > conftest.$ac_ext <<EOF
+-#line 785 "configure"
++#line 800 "configure"
+ #include "confdefs.h"
+ #include <assert.h>
+ Syntax Error
+ EOF
+ ac_try="$ac_cpp conftest.$ac_ext >/dev/null 2>conftest.out"
+-{ (eval echo configure:791: \"$ac_try\") 1>&5; (eval $ac_try) 2>&5; }
++{ (eval echo configure:806: \"$ac_try\") 1>&5; (eval $ac_try) 2>&5; }
+ ac_err=`grep -v '^ *+' conftest.out | grep -v "^conftest.${ac_ext}\$"`
+ if test -z "$ac_err"; then
+   :
+@@ -798,13 +813,13 @@ else
+   rm -rf conftest*
+   CPP="${CC-cc} -E -traditional-cpp"
+   cat > conftest.$ac_ext <<EOF
+-#line 802 "configure"
++#line 817 "configure"
+ #include "confdefs.h"
+ #include <assert.h>
+ Syntax Error
+ EOF
+ ac_try="$ac_cpp conftest.$ac_ext >/dev/null 2>conftest.out"
+-{ (eval echo configure:808: \"$ac_try\") 1>&5; (eval $ac_try) 2>&5; }
++{ (eval echo configure:823: \"$ac_try\") 1>&5; (eval $ac_try) 2>&5; }
+ ac_err=`grep -v '^ *+' conftest.out | grep -v "^conftest.${ac_ext}\$"`
+ if test -z "$ac_err"; then
+   :
+@@ -815,13 +830,13 @@ else
+   rm -rf conftest*
+   CPP="${CC-cc} -nologo -E"
+   cat > conftest.$ac_ext <<EOF
+-#line 819 "configure"
++#line 834 "configure"
+ #include "confdefs.h"
+ #include <assert.h>
+ Syntax Error
+ EOF
+ ac_try="$ac_cpp conftest.$ac_ext >/dev/null 2>conftest.out"
+-{ (eval echo configure:825: \"$ac_try\") 1>&5; (eval $ac_try) 2>&5; }
++{ (eval echo configure:840: \"$ac_try\") 1>&5; (eval $ac_try) 2>&5; }
+ ac_err=`grep -v '^ *+' conftest.out | grep -v "^conftest.${ac_ext}\$"`
+ if test -z "$ac_err"; then
+   :
+@@ -847,17 +862,17 @@ echo "$ac_t""$CPP" 1>&6
+ 
+ ac_safe=`echo "stdio.h" | sed 'y%./+-%__p_%'`
+ echo $ac_n "checking for stdio.h""... $ac_c" 1>&6
+-echo "configure:851: checking for stdio.h" >&5
++echo "configure:866: checking for stdio.h" >&5
+ if eval "test \"`echo '$''{'ac_cv_header_$ac_safe'+set}'`\" = set"; then
+   echo $ac_n "(cached) $ac_c" 1>&6
+ else
+   cat > conftest.$ac_ext <<EOF
+-#line 856 "configure"
++#line 871 "configure"
+ #include "confdefs.h"
+ #include <stdio.h>
+ EOF
+ ac_try="$ac_cpp conftest.$ac_ext >/dev/null 2>conftest.out"
+-{ (eval echo configure:861: \"$ac_try\") 1>&5; (eval $ac_try) 2>&5; }
++{ (eval echo configure:876: \"$ac_try\") 1>&5; (eval $ac_try) 2>&5; }
+ ac_err=`grep -v '^ *+' conftest.out | grep -v "^conftest.${ac_ext}\$"`
+ if test -z "$ac_err"; then
+   rm -rf conftest*
+@@ -885,12 +900,12 @@ fi
+ 
+ 
+ echo $ac_n "checking for ANSI C header files""... $ac_c" 1>&6
+-echo "configure:889: checking for ANSI C header files" >&5
++echo "configure:904: checking for ANSI C header files" >&5
+ if eval "test \"`echo '$''{'ac_cv_header_stdc'+set}'`\" = set"; then
+   echo $ac_n "(cached) $ac_c" 1>&6
+ else
+   cat > conftest.$ac_ext <<EOF
+-#line 894 "configure"
++#line 909 "configure"
+ #include "confdefs.h"
+ #include <stdlib.h>
+ #include <stdarg.h>
+@@ -898,7 +913,7 @@ else
+ #include <float.h>
+ EOF
+ ac_try="$ac_cpp conftest.$ac_ext >/dev/null 2>conftest.out"
+-{ (eval echo configure:902: \"$ac_try\") 1>&5; (eval $ac_try) 2>&5; }
++{ (eval echo configure:917: \"$ac_try\") 1>&5; (eval $ac_try) 2>&5; }
+ ac_err=`grep -v '^ *+' conftest.out | grep -v "^conftest.${ac_ext}\$"`
+ if test -z "$ac_err"; then
+   rm -rf conftest*
+@@ -915,7 +930,7 @@ rm -f conftest*
+ if test $ac_cv_header_stdc = yes; then
+   # SunOS 4.x string.h does not declare mem*, contrary to ANSI.
+ cat > conftest.$ac_ext <<EOF
+-#line 919 "configure"
++#line 934 "configure"
+ #include "confdefs.h"
+ #include <string.h>
+ EOF
+@@ -933,7 +948,7 @@ fi
+ if test $ac_cv_header_stdc = yes; then
+   # ISC 2.0.2 stdlib.h does not declare free, contrary to ANSI.
+ cat > conftest.$ac_ext <<EOF
+-#line 937 "configure"
++#line 952 "configure"
+ #include "confdefs.h"
+ #include <stdlib.h>
+ EOF
+@@ -954,7 +969,7 @@ if test "$cross_compiling" = yes; then
+   :
+ else
+   cat > conftest.$ac_ext <<EOF
+-#line 958 "configure"
++#line 973 "configure"
+ #include "confdefs.h"
+ #include <ctype.h>
+ #define ISLOWER(c) ('a' <= (c) && (c) <= 'z')
+@@ -965,7 +980,7 @@ if (XOR (islower (i), ISLOWER (i)) || toupper (i) != TOUPPER (i)) exit(2);
+ exit (0); }
+ 
+ EOF
+-if { (eval echo configure:969: \"$ac_link\") 1>&5; (eval $ac_link) 2>&5; } && test -s conftest${ac_exeext} && (./conftest; exit) 2>/dev/null
++if { (eval echo configure:984: \"$ac_link\") 1>&5; (eval $ac_link) 2>&5; } && test -s conftest${ac_exeext} && (./conftest; exit) 2>/dev/null
+ then
+   :
+ else
+@@ -990,12 +1005,12 @@ fi
+ 
+ 
+ echo $ac_n "checking for posix""... $ac_c" 1>&6
+-echo "configure:994: checking for posix" >&5
++echo "configure:1009: checking for posix" >&5
+ if eval "test \"`echo '$''{'g77_cv_header_posix'+set}'`\" = set"; then
+   echo $ac_n "(cached) $ac_c" 1>&6
+ else
+   cat > conftest.$ac_ext <<EOF
+-#line 999 "configure"
++#line 1014 "configure"
+ #include "confdefs.h"
+ #include <sys/types.h>
+ #include <unistd.h>
+@@ -1021,12 +1036,12 @@ echo "$ac_t""$g77_cv_header_posix" 1>&6
+ # We can rely on the GNU library being posix-ish.  I guess checking the 
+ # header isn't actually like checking the functions, though...
+ echo $ac_n "checking for GNU library""... $ac_c" 1>&6
+-echo "configure:1025: checking for GNU library" >&5
++echo "configure:1040: checking for GNU library" >&5
+ if eval "test \"`echo '$''{'g77_cv_lib_gnu'+set}'`\" = set"; then
+   echo $ac_n "(cached) $ac_c" 1>&6
+ else
+   cat > conftest.$ac_ext <<EOF
+-#line 1030 "configure"
++#line 1045 "configure"
+ #include "confdefs.h"
+ #include <stdio.h>
+ #ifdef __GNU_LIBRARY__
+@@ -1050,12 +1065,12 @@ echo "$ac_t""$g77_cv_lib_gnu" 1>&6
+ 
+ # Apparently cygwin needs to be special-cased.
+ echo $ac_n "checking for cyg\`win'32""... $ac_c" 1>&6
+-echo "configure:1054: checking for cyg\`win'32" >&5
++echo "configure:1069: checking for cyg\`win'32" >&5
+ if eval "test \"`echo '$''{'g77_cv_sys_cygwin32'+set}'`\" = set"; then
+   echo $ac_n "(cached) $ac_c" 1>&6
+ else
+   cat > conftest.$ac_ext <<EOF
+-#line 1059 "configure"
++#line 1074 "configure"
+ #include "confdefs.h"
+ #ifdef __CYGWIN32__
+   yes
+@@ -1078,12 +1093,12 @@ echo "$ac_t""$g77_cv_sys_cygwin32" 1>&6
+ 
+ # ditto for mingw32.
+ echo $ac_n "checking for mingw32""... $ac_c" 1>&6
+-echo "configure:1082: checking for mingw32" >&5
++echo "configure:1097: checking for mingw32" >&5
+ if eval "test \"`echo '$''{'g77_cv_sys_mingw32'+set}'`\" = set"; then
+   echo $ac_n "(cached) $ac_c" 1>&6
+ else
+   cat > conftest.$ac_ext <<EOF
+-#line 1087 "configure"
++#line 1102 "configure"
+ #include "confdefs.h"
+ #ifdef __MINGW32__
+   yes
+@@ -1106,12 +1121,12 @@ echo "$ac_t""$g77_cv_sys_mingw32" 1>&6
+ 
+ 
+ echo $ac_n "checking for working const""... $ac_c" 1>&6
+-echo "configure:1110: checking for working const" >&5
++echo "configure:1125: checking for working const" >&5
+ if eval "test \"`echo '$''{'ac_cv_c_const'+set}'`\" = set"; then
+   echo $ac_n "(cached) $ac_c" 1>&6
+ else
+   cat > conftest.$ac_ext <<EOF
+-#line 1115 "configure"
++#line 1130 "configure"
+ #include "confdefs.h"
+ 
+ int main() {
+@@ -1160,7 +1175,7 @@ ccp = (char const *const *) p;
+ 
+ ; return 0; }
+ EOF
+-if { (eval echo configure:1164: \"$ac_compile\") 1>&5; (eval $ac_compile) 2>&5; }; then
++if { (eval echo configure:1179: \"$ac_compile\") 1>&5; (eval $ac_compile) 2>&5; }; then
+   rm -rf conftest*
+   ac_cv_c_const=yes
+ else
+@@ -1181,12 +1196,12 @@ EOF
+ fi
+ 
+ echo $ac_n "checking for size_t""... $ac_c" 1>&6
+-echo "configure:1185: checking for size_t" >&5
++echo "configure:1200: checking for size_t" >&5
+ if eval "test \"`echo '$''{'ac_cv_type_size_t'+set}'`\" = set"; then
+   echo $ac_n "(cached) $ac_c" 1>&6
+ else
+   cat > conftest.$ac_ext <<EOF
+-#line 1190 "configure"
++#line 1205 "configure"
+ #include "confdefs.h"
+ #include <sys/types.h>
+ #if STDC_HEADERS
+@@ -1219,12 +1234,12 @@ fi
+ # Apparently positive result on cygwin loses re. NON_UNIX_STDIO
+ # (as of cygwin b18). Likewise on mingw.
+ echo $ac_n "checking for fstat""... $ac_c" 1>&6
+-echo "configure:1223: checking for fstat" >&5
++echo "configure:1238: checking for fstat" >&5
+ if eval "test \"`echo '$''{'ac_cv_func_fstat'+set}'`\" = set"; then
+   echo $ac_n "(cached) $ac_c" 1>&6
+ else
+   cat > conftest.$ac_ext <<EOF
+-#line 1228 "configure"
++#line 1243 "configure"
+ #include "confdefs.h"
+ /* System header to define __stub macros and hopefully few prototypes,
+     which can conflict with char fstat(); below.  */
+@@ -1247,7 +1262,7 @@ fstat();
+ 
+ ; return 0; }
+ EOF
+-if { (eval echo configure:1251: \"$ac_link\") 1>&5; (eval $ac_link) 2>&5; } && test -s conftest${ac_exeext}; then
++if { (eval echo configure:1266: \"$ac_link\") 1>&5; (eval $ac_link) 2>&5; } && test -s conftest${ac_exeext}; then
+   rm -rf conftest*
+   eval "ac_cv_func_fstat=yes"
+ else
+@@ -1267,7 +1282,7 @@ else
+ fi
+ 
+ echo $ac_n "checking need for NON_UNIX_STDIO""... $ac_c" 1>&6
+-echo "configure:1271: checking need for NON_UNIX_STDIO" >&5
++echo "configure:1286: checking need for NON_UNIX_STDIO" >&5
+ if test $g77_cv_sys_cygwin32 = yes \
+   || test $g77_cv_sys_mingw32 = yes \
+   || test $ac_cv_func_fstat = no; then
+@@ -1283,12 +1298,12 @@ fi
+ for ac_func in fseeko
+ do
+ echo $ac_n "checking for $ac_func""... $ac_c" 1>&6
+-echo "configure:1287: checking for $ac_func" >&5
++echo "configure:1302: checking for $ac_func" >&5
+ if eval "test \"`echo '$''{'ac_cv_func_$ac_func'+set}'`\" = set"; then
+   echo $ac_n "(cached) $ac_c" 1>&6
+ else
+   cat > conftest.$ac_ext <<EOF
+-#line 1292 "configure"
++#line 1307 "configure"
+ #include "confdefs.h"
+ /* System header to define __stub macros and hopefully few prototypes,
+     which can conflict with char $ac_func(); below.  */
+@@ -1311,7 +1326,7 @@ $ac_func();
+ 
+ ; return 0; }
+ EOF
+-if { (eval echo configure:1315: \"$ac_link\") 1>&5; (eval $ac_link) 2>&5; } && test -s conftest${ac_exeext}; then
++if { (eval echo configure:1330: \"$ac_link\") 1>&5; (eval $ac_link) 2>&5; } && test -s conftest${ac_exeext}; then
+   rm -rf conftest*
+   eval "ac_cv_func_$ac_func=yes"
+ else
+@@ -1338,12 +1353,12 @@ done
+ for ac_func in ftello
+ do
+ echo $ac_n "checking for $ac_func""... $ac_c" 1>&6
+-echo "configure:1342: checking for $ac_func" >&5
++echo "configure:1357: checking for $ac_func" >&5
+ if eval "test \"`echo '$''{'ac_cv_func_$ac_func'+set}'`\" = set"; then
+   echo $ac_n "(cached) $ac_c" 1>&6
+ else
+   cat > conftest.$ac_ext <<EOF
+-#line 1347 "configure"
++#line 1362 "configure"
+ #include "confdefs.h"
+ /* System header to define __stub macros and hopefully few prototypes,
+     which can conflict with char $ac_func(); below.  */
+@@ -1366,7 +1381,7 @@ $ac_func();
+ 
+ ; return 0; }
+ EOF
+-if { (eval echo configure:1370: \"$ac_link\") 1>&5; (eval $ac_link) 2>&5; } && test -s conftest${ac_exeext}; then
++if { (eval echo configure:1385: \"$ac_link\") 1>&5; (eval $ac_link) 2>&5; } && test -s conftest${ac_exeext}; then
+   rm -rf conftest*
+   eval "ac_cv_func_$ac_func=yes"
+ else
+@@ -1393,12 +1408,12 @@ done
+ for ac_func in ftruncate
+ do
+ echo $ac_n "checking for $ac_func""... $ac_c" 1>&6
+-echo "configure:1397: checking for $ac_func" >&5
++echo "configure:1412: checking for $ac_func" >&5
+ if eval "test \"`echo '$''{'ac_cv_func_$ac_func'+set}'`\" = set"; then
+   echo $ac_n "(cached) $ac_c" 1>&6
+ else
+   cat > conftest.$ac_ext <<EOF
+-#line 1402 "configure"
++#line 1417 "configure"
+ #include "confdefs.h"
+ /* System header to define __stub macros and hopefully few prototypes,
+     which can conflict with char $ac_func(); below.  */
+@@ -1421,7 +1436,7 @@ $ac_func();
+ 
+ ; return 0; }
+ EOF
+-if { (eval echo configure:1425: \"$ac_link\") 1>&5; (eval $ac_link) 2>&5; } && test -s conftest${ac_exeext}; then
++if { (eval echo configure:1440: \"$ac_link\") 1>&5; (eval $ac_link) 2>&5; } && test -s conftest${ac_exeext}; then
+   rm -rf conftest*
+   eval "ac_cv_func_$ac_func=yes"
+ else
+@@ -1448,12 +1463,12 @@ done
+ for ac_func in mkstemp
+ do
+ echo $ac_n "checking for $ac_func""... $ac_c" 1>&6
+-echo "configure:1452: checking for $ac_func" >&5
++echo "configure:1467: checking for $ac_func" >&5
+ if eval "test \"`echo '$''{'ac_cv_func_$ac_func'+set}'`\" = set"; then
+   echo $ac_n "(cached) $ac_c" 1>&6
+ else
+   cat > conftest.$ac_ext <<EOF
+-#line 1457 "configure"
++#line 1472 "configure"
+ #include "confdefs.h"
+ /* System header to define __stub macros and hopefully few prototypes,
+     which can conflict with char $ac_func(); below.  */
+@@ -1476,7 +1491,7 @@ $ac_func();
+ 
+ ; return 0; }
+ EOF
+-if { (eval echo configure:1480: \"$ac_link\") 1>&5; (eval $ac_link) 2>&5; } && test -s conftest${ac_exeext}; then
++if { (eval echo configure:1495: \"$ac_link\") 1>&5; (eval $ac_link) 2>&5; } && test -s conftest${ac_exeext}; then
+   rm -rf conftest*
+   eval "ac_cv_func_$ac_func=yes"
+ else
+@@ -1503,12 +1518,12 @@ done
+ for ac_func in tempnam
+ do
+ echo $ac_n "checking for $ac_func""... $ac_c" 1>&6
+-echo "configure:1507: checking for $ac_func" >&5
++echo "configure:1522: checking for $ac_func" >&5
+ if eval "test \"`echo '$''{'ac_cv_func_$ac_func'+set}'`\" = set"; then
+   echo $ac_n "(cached) $ac_c" 1>&6
+ else
+   cat > conftest.$ac_ext <<EOF
+-#line 1512 "configure"
++#line 1527 "configure"
+ #include "confdefs.h"
+ /* System header to define __stub macros and hopefully few prototypes,
+     which can conflict with char $ac_func(); below.  */
+@@ -1531,7 +1546,7 @@ $ac_func();
+ 
+ ; return 0; }
+ EOF
+-if { (eval echo configure:1535: \"$ac_link\") 1>&5; (eval $ac_link) 2>&5; } && test -s conftest${ac_exeext}; then
++if { (eval echo configure:1550: \"$ac_link\") 1>&5; (eval $ac_link) 2>&5; } && test -s conftest${ac_exeext}; then
+   rm -rf conftest*
+   eval "ac_cv_func_$ac_func=yes"
+ else
+@@ -1558,12 +1573,12 @@ done
+ for ac_func in tmpnam
+ do
+ echo $ac_n "checking for $ac_func""... $ac_c" 1>&6
+-echo "configure:1562: checking for $ac_func" >&5
++echo "configure:1577: checking for $ac_func" >&5
+ if eval "test \"`echo '$''{'ac_cv_func_$ac_func'+set}'`\" = set"; then
+   echo $ac_n "(cached) $ac_c" 1>&6
+ else
+   cat > conftest.$ac_ext <<EOF
+-#line 1567 "configure"
++#line 1582 "configure"
+ #include "confdefs.h"
+ /* System header to define __stub macros and hopefully few prototypes,
+     which can conflict with char $ac_func(); below.  */
+@@ -1586,7 +1601,7 @@ $ac_func();
+ 
+ ; return 0; }
+ EOF
+-if { (eval echo configure:1590: \"$ac_link\") 1>&5; (eval $ac_link) 2>&5; } && test -s conftest${ac_exeext}; then
++if { (eval echo configure:1605: \"$ac_link\") 1>&5; (eval $ac_link) 2>&5; } && test -s conftest${ac_exeext}; then
+   rm -rf conftest*
+   eval "ac_cv_func_$ac_func=yes"
+ else
+@@ -1616,19 +1631,19 @@ done
+ # However, on my sunos4/gcc setup unistd.h leads us wrongly to believe
+ # we're posix-conformant, so always do the test.
+ echo $ac_n "checking for ansi/posix sprintf result""... $ac_c" 1>&6
+-echo "configure:1620: checking for ansi/posix sprintf result" >&5
++echo "configure:1635: checking for ansi/posix sprintf result" >&5
+ if test "$cross_compiling" = yes; then
+   g77_cv_sys_sprintf_ansi=no
+ else
+   cat > conftest.$ac_ext <<EOF
+-#line 1625 "configure"
++#line 1640 "configure"
+ #include "confdefs.h"
+   #include <stdio.h>
+     /* does sprintf return the number of chars transferred? */
+     main () {char foo[2]; (sprintf(foo, "1") == 1) ? exit(0) : exit(1);}
+ 
+ EOF
+-if { (eval echo configure:1632: \"$ac_link\") 1>&5; (eval $ac_link) 2>&5; } && test -s conftest${ac_exeext} && (./conftest; exit) 2>/dev/null
++if { (eval echo configure:1647: \"$ac_link\") 1>&5; (eval $ac_link) 2>&5; } && test -s conftest${ac_exeext} && (./conftest; exit) 2>/dev/null
+ then
+   g77_cv_sys_sprintf_ansi=yes
+ else
+@@ -1659,10 +1674,13 @@ fi
+ 
+ # define NON_ANSI_RW_MODES on unix (can't hurt)
+ echo $ac_n "checking NON_ANSI_RW_MODES""... $ac_c" 1>&6
+-echo "configure:1663: checking NON_ANSI_RW_MODES" >&5
++echo "configure:1678: checking NON_ANSI_RW_MODES" >&5
+ cat > conftest.$ac_ext <<EOF
+-#line 1665 "configure"
++#line 1680 "configure"
+ #include "confdefs.h"
++#ifdef __DJGPP__
++  no
++#else
+ #ifdef unix
+   yes
+ #endif
+@@ -1672,6 +1690,7 @@ cat > conftest.$ac_ext <<EOF
+ #ifdef __unix__
+   yes
+ #endif
++#endif
+ 
+ EOF
+ if (eval "$ac_cpp conftest.$ac_ext") 2>&5 |
+@@ -1706,12 +1725,12 @@ EOF
+ 
+ 
+ echo $ac_n "checking for off_t""... $ac_c" 1>&6
+-echo "configure:1710: checking for off_t" >&5
++echo "configure:1729: checking for off_t" >&5
+ if eval "test \"`echo '$''{'ac_cv_type_off_t'+set}'`\" = set"; then
+   echo $ac_n "(cached) $ac_c" 1>&6
+ else
+   cat > conftest.$ac_ext <<EOF
+-#line 1715 "configure"
++#line 1734 "configure"
+ #include "confdefs.h"
+ #include <sys/types.h>
+ #if STDC_HEADERS
+diff --git a/libf2c/libI77/configure.in b/libf2c/libI77/configure.in
+index 988a8e5..a86f33a 100644
+--- a/libf2c/libI77/configure.in
++++ b/libf2c/libI77/configure.in
+@@ -181,7 +181,10 @@ fi
+ # define NON_ANSI_RW_MODES on unix (can't hurt)
+ AC_MSG_CHECKING(NON_ANSI_RW_MODES)
+ AC_EGREP_CPP(yes,
+-[#ifdef unix
++[#ifdef __DJGPP__
++  no
++#else
++#ifdef unix
+   yes
+ #endif
+ #ifdef __unix
+@@ -190,6 +193,7 @@ AC_EGREP_CPP(yes,
+ #ifdef __unix__
+   yes
+ #endif
++#endif
+ ], is_unix=yes, is_unix=no)
+ # NON_ANSI_RW_MODES shouldn't be necessary on cygwin for binary mounts.
+ if test $g77_cv_sys_cygwin32 = yes || test $g77_cv_sys_mingw32 = yes; then
+diff --git a/libobjc/threads b/libobjc/threads
+new file mode 100644
+index 0000000..8a43683
+--- /dev/null
++++ b/libobjc/threads
+@@ -0,0 +1,377 @@
++This file describes in little detail the modifications to the
++Objective-C runtime needed to make it thread safe. 
++
++First off, kudos to Galen Hunt who is the author of this great work.
++
++If you have an comments or just want to know where to
++send me money to express your undying gratitude for threading the
++Objective-C runtime you can reach Galen at:
++
++	gchunt@cs.rochester.edu
++
++Any questions, comments, bug reports, etc. should send email either to the
++GCC bug account or to:
++
++	Scott Christley <scottc@net-community.com>
++
++* Sarray Threading:
++
++The most critical component of the Objective-C runtime is the sparse array
++structure (sarray).  Sarrays store object selectors and implementations.  
++Following in the tradition of the Objective-C runtime, my threading
++support assumes that fast message dispatching is far more important
++than *ANY* and *ALL* other operations.  The message dispatching thus
++uses *NO* locks on any kind.  In fact, if you look in sarray.h, you
++will notice that the message dispatching has not been modified.
++Instead, I have modified the sarray management functions so that all
++updates to the sarray data structure can be made in parallel will
++message dispatching.  
++
++To support concurrent message dispatching, no dynamically allocated
++sarray data structures are freed while more than one thread is
++operational.  Sarray data structures that are no longer in use are
++kept in a linked list of garbage and are released whenever the program
++is operating with a single thread.  The programmer can also flush the 
++garbage list by calling sarray_remove_garbage when the programmer can
++ensure that no message dispatching is taking place concurrently.  The
++amount of un-reclaimed sarray garbage should normally be extremely
++small in a real program as sarray structures are freed only when using
++the "poseAs" functionality and early in program initialization, which
++normally occurs while the program is single threaded.
++
++******************************************************************************
++* Static Variables:
++
++The following variables are either statically or globally defined. This list 
++does not include variables which are internal to implementation dependent 
++versions of thread-*.c.
++
++The following threading designations are used:
++	SAFE   : Implicitly thread safe.
++	SINGLE : Must only be used in single thread mode.
++	MUTEX  : Protected by single global mutex objc_runtime_mutex.
++	UNUSED : Not used in the runtime.
++
++Variable Name:			Usage:  Defined:	Also used in:
++===========================	======	============	=====================
++__objc_class_hash		MUTEX	class.c
++__objc_class_links_resolved	UNUSED	class.c		runtime.h
++__objc_class_number		MUTEX	class.c
++__objc_dangling_categories	UNUSED	init.c
++__objc_module_list		MUTEX	init.c
++__objc_selector_array		MUTEX	selector.c
++__objc_selector_hash		MUTEX	selector.c
++__objc_selector_max_index	MUTEX	selector.c	sendmsg.c runtime.h
++__objc_selector_names		MUTEX	selector.c
++__objc_thread_exit_status	SAFE	thread.c
++__objc_uninstalled_dtable	MUTEX	sendmsg.c	selector.c
++_objc_load_callback		SAFE	init.c		objc-api.h
++_objc_lookup_class		SAFE	class.c		objc-api.h
++_objc_object_alloc		SINGLE	objects.c	objc-api.h
++_objc_object_copy		SINGLE	objects.c	objc-api.h
++_objc_object_dispose		SINGLE	objects.c	objc-api.h
++frwd_sel			SAFE2	sendmsg.c
++idxsize				MUTEX	sarray.c	sendmsg.c sarray.h
++initialize_sel			SAFE2	sendmsg.c
++narrays				MUTEX	sarray.c	sendmsg.c sarray.h
++nbuckets			MUTEX	sarray.c	sendmsg.c sarray.h
++nindices			MUTEX	sarray.c	sarray.h
++previous_constructors		SAFE1	init.c
++proto_class			SAFE1	init.c
++unclaimed_categories		MUTEX	init.c
++unclaimed_proto_list		MUTEX	init.c
++uninitialized_statics		MUTEX	init.c
++
++Notes:
++1) Initialized once in unithread mode.
++2) Initialized value will always be same, guaranteed by lock on selector 
++   hash table.
++
++
++******************************************************************************
++* Frontend/Backend design:
++
++The design of the Objective-C runtime thread and mutex functions utilizes a
++frontend/backend implementation.
++
++The frontend, as characterized by the files thr.h and thr.c, is a set
++of platform independent structures and functions which represent the
++user interface.  Objective-C programs should use these structures and
++functions for their thread and mutex work if they wish to maintain a
++high degree of portability across platforms.
++
++The backend is composed of a file with the necessary code to map the ObjC
++thread and mutex to a platform specific implementation.  For example, the
++file thr-solaris.c contains the implementation for Solaris.
++
++If you are compiling libobjc as part of GCC, the thr-objc.c backend is
++always used; this backend uses GCC's gthread code.  The thread system
++is automatically configured when GCC is configured.  Important: make
++sure you configure GCC using `--enable-threads' if you want threads !
++  
++If you want to compile libobjc standalone, then you would need to
++modify the configure.in and makefiles for it; and you need to pick an
++appropriate backend file for the target platform; you make this choice
++by assigning the OBJC_THREAD_FILE make variable to the basename of the
++backend file.  For example, OBJC_THREAD_FILE=thr-posix would indicate
++that the generic posix backend file, thr-posix.c, should be compiled
++with the ObjC runtime library.  If your platform does not support
++threads then you should specify the OBJC_THREAD_FILE=thr-single
++backend file to compile the ObjC runtime library without thread or
++mutex support; note that programs which rely upon the ObjC thread and
++mutex functions will compile and link correctly but attempting to
++create a thread or mutex will result in an error.
++  
++It is questionable whether it is really necessary to have both a
++frontend and backend function for all available functionality.  On the
++one hand, it provides a clear, consistent differentiation between what
++is public and what is private with the downside of having the overhead
++of multiple functions calls.  For example, the function to have a
++thread yield the processor is objc_thread_yield; in the current
++implementation this produces a function call set:
++
++objc_thread_yield()  ->  __objc_thread_yield()  ->  system yield function
++
++This has two extra function calls over calling the platform specific function
++explicitly, but the issue is whether only the overhead of a single function
++is necessary.
++
++objc_thread_yield()  ->  system yield function
++
++This breaks the public/private dichotomy between the frontend/backend
++for the sake of efficiency.  It is possible to just use a preprocessor
++define so as to eliminate the extra function call:
++
++#define objc_thread_yield() __objc_thread_yield()
++
++This has the undesirable effect that if objc_thread_yield is actually
++turned into a function based upon future need; then ObjC programs which
++access the thread functions would need to be recompiled versus just
++being relinked.
++ 
++******************************************************************************
++* Threads:
++
++The thread system attempts to create multiple threads using whatever
++operating system or library thread support is available.  It does
++assume that all system functions are thread safe.  Notably this means
++that the system implementation of malloc and free must be thread safe.
++If a system has multiple processors, the threads are configured for
++full parallel processing.
++
++* Backend initialization functions
++
++__objc_init_thread_system(void), int
++	Initialize the thread subsystem.  Called once by __objc_exec_class.
++	Return -1 if error otherwise return 0.
++
++__objc_close_thread_system(void), int
++	Closes the thread subsystem, not currently guaranteed to be called.
++	Return -1 if error otherwise return 0.
++
++*****
++* Frontend thread functions
++* User programs should use these functions.
++
++objc_thread_detach(SEL selector, id object, id argument), objc_thread_t
++	Creates and detaches a new thread.  The new thread starts by
++	sending the given selector with a single argument to the
++	given object.
++
++objc_thread_set_priority(int priority), int
++	Sets a thread's relative priority within the program.  Valid
++	options are:
++	
++	OBJC_THREAD_INTERACTIVE_PRIORITY
++	OBJC_THREAD_BACKGROUND_PRIORITY
++	OBJC_THREAD_LOW_PRIORITY
++
++objc_thread_get_priority(void), int
++	Query a thread's priority.
++
++objc_thread_yield(void), void
++	Yields processor to another thread with equal or higher
++	priority.  It is up to the system scheduler to determine if
++	the processor is taken or not.
++
++objc_thread_exit(void), int
++	Terminates a thread.  If this is the last thread executing
++	then the program will terminate.
++
++objc_thread_id(void), int
++	Returns the current thread's id.
++
++objc_thread_set_data(void *value), int
++	Set a pointer to the thread's local storage.  Local storage is
++	thread specific.
++
++objc_thread_get_data(void), void *
++	Returns the pointer to the thread's local storage.
++
++*****
++* Backend thread functions
++* User programs should *NOT* directly call these functions.
++
++__objc_thread_detach(void (*func)(void *arg), void *arg), objc_thread_t
++	Spawns a new thread executing func, called by objc_thread_detach.
++	Return NULL if error otherwise return thread id.
++
++__objc_thread_set_priority(int priority), int
++	Set the thread's priority, called by objc_thread_set_priority.
++	Return -1 if error otherwise return 0.
++
++__objc_thread_get_priority(void), int
++	Query a thread's priority, called by objc_thread_get_priority.
++	Return -1 if error otherwise return the priority.
++
++__objc_thread_yield(void), void
++	Yields the processor, called by objc_thread_yield.
++
++__objc_thread_exit(void), int
++	Terminates the thread, called by objc_thread_exit.
++	Return -1 if error otherwise function does not return.
++
++__objc_thread_id(void), objc_thread_t
++	Returns the current thread's id, called by objc_thread_id.
++	Return -1 if error otherwise return thread id.
++
++__objc_thread_set_data(void *value), int
++	Set pointer for thread local storage, called by objc_thread_set_data.
++	Returns -1 if error otherwise return 0.
++
++__objc_thread_get_data(void), void *
++	Returns the pointer to the thread's local storage.
++	Returns NULL if error, called by objc_thread_get_data.
++
++
++******************************************************************************
++* Mutexes:
++
++Mutexes can be locked recursively.  Each locked mutex remembers
++its owner (by thread id) and how many times it has been locked.  The
++last unlock on a mutex removes the system lock and allows other
++threads to access the mutex.
++
++*****
++* Frontend mutex functions
++* User programs should use these functions.
++
++objc_mutex_allocate(void), objc_mutex_t
++	Allocates a new mutex.  Mutex is initially unlocked.
++	Return NULL if error otherwise return mutex pointer.
++
++objc_mutex_deallocate(objc_mutex_t mutex), int
++	Free a mutex.  Before freeing the mutex, makes sure that no
++	one else is using it.
++	Return -1 if error otherwise return 0.
++
++objc_mutex_lock(objc_mutex_t mutex), int
++	Locks a mutex.  As mentioned earlier, the same thread may call
++	this routine repeatedly.
++	Return -1 if error otherwise return 0.
++	
++objc_mutex_trylock(objc_mutex_t mutex), int
++	Attempts to lock a mutex.  If lock on mutex can be acquired 
++	then function operates exactly as objc_mutex_lock.
++	Return -1 if failed to acquire lock otherwise return 0.
++
++objc_mutex_unlock(objc_mutex_t mutex), int
++	Unlocks the mutex by one level.  Other threads may not acquire
++	the mutex until this thread has released all locks on it.
++	Return -1 if error otherwise return 0.
++
++*****
++* Backend mutex functions
++* User programs should *NOT* directly call these functions.
++
++__objc_mutex_allocate(objc_mutex_t mutex), int
++	Allocates a new mutex, called by objc_mutex_allocate.
++	Return -1 if error otherwise return 0.
++
++__objc_mutex_deallocate(objc_mutex_t mutex), int
++	Free a mutex, called by objc_mutex_deallocate.
++	Return -1 if error otherwise return 0.
++
++__objc_mutex_lock(objc_mutex_t mutex), int
++	Locks a mutex, called by objc_mutex_lock.
++	Return -1 if error otherwise return 0.
++	
++__objc_mutex_trylock(objc_mutex_t mutex), int
++	Attempts to lock a mutex, called by objc_mutex_trylock.
++	Return -1 if failed to acquire lock or error otherwise return 0.
++
++__objc_mutex_unlock(objc_mutex_t mutex), int
++	Unlocks the mutex, called by objc_mutex_unlock.
++	Return -1 if error otherwise return 0.
++
++******************************************************************************
++* Condition Mutexes:
++
++Mutexes can be locked recursively.  Each locked mutex remembers
++its owner (by thread id) and how many times it has been locked.  The
++last unlock on a mutex removes the system lock and allows other
++threads to access the mutex.
++
++*
++* Frontend condition mutex functions
++* User programs should use these functions.
++*
++
++objc_condition_allocate(void), objc_condition_t 
++	Allocate a condition mutex.
++	Return NULL if error otherwise return condition pointer.
++
++objc_condition_deallocate(objc_condition_t condition), int
++	Deallocate a condition. Note that this includes an implicit
++	condition_broadcast to insure that waiting threads have the 
++	opportunity to wake.  It is legal to dealloc a condition only
++	if no other thread is/will be using it. Does NOT check for
++	other threads waiting but just wakes them up.
++	Return -1 if error otherwise return 0.
++
++objc_condition_wait(objc_condition_t condition, objc_mutex_t mutex), int
++	Wait on the condition unlocking the mutex until objc_condition_signal()
++	or objc_condition_broadcast() are called for the same condition. The
++	given mutex *must* have the depth 1 so that it can be unlocked
++	here, for someone else can lock it and signal/broadcast the condition.
++	The mutex is used to lock access to the shared data that make up the
++	"condition" predicate.
++	Return -1 if error otherwise return 0.
++	
++objc_condition_broadcast(objc_condition_t condition), int
++	Wake up all threads waiting on this condition. It is recommended that 
++	the called would lock the same mutex as the threads in
++	objc_condition_wait before changing the "condition predicate"
++	and make this call and unlock it right away after this call.
++	Return -1 if error otherwise return 0.
++
++objc_condition_signal(objc_condition_t condition), int
++	Wake up one thread waiting on this condition.
++	Return -1 if error otherwise return 0.
++
++*
++* Backend condition mutex functions
++* User programs should *NOT* directly call these functions.
++*
++
++__objc_condition_allocate(objc_condition_t condition), int
++	Allocate a condition mutex, called by objc_condition_allocate.
++	Return -1 if error otherwise return 0.
++
++__objc_condition_deallocate(objc_condition_t condition), int
++	Deallocate a condition, called by objc_condition_deallocate.
++	Return -1 if error otherwise return 0.
++
++__objc_condition_wait(objc_condition_t condition, objc_mutex_t mutex), int
++	Wait on the condition, called by objc_condition_wait.
++	Return -1 if error otherwise return 0 when condition is met.
++	
++__objc_condition_broadcast(objc_condition_t condition), int
++	Wake up all threads waiting on this condition.
++	Called by objc_condition_broadcast.
++	Return -1 if error otherwise return 0.
++
++__objc_condition_signal(objc_condition_t condition), int
++	Wake up one thread waiting on this condition.
++	Called by objc_condition_signal.
++	Return -1 if error otherwise return 0.
+diff --git a/libstdc++-v3/acinclude.m4 b/libstdc++-v3/acinclude.m4
+index b41d429..94a89c1 100644
+--- a/libstdc++-v3/acinclude.m4
++++ b/libstdc++-v3/acinclude.m4
+@@ -1846,7 +1846,14 @@ AC_MSG_RESULT($version_specific_libs)
+ 
+ # Default case for install directory for include files.
+ if test $version_specific_libs = no && test $gxx_include_dir = no; then
+-  gxx_include_dir='$(prefix)'/include/c++/${gcc_version}
++  case ${build_alias} in
++       *djgpp*)
++           gxx_include_dir='$(prefix)'/lang/cxx-v31
++           ;;
++       *)
++   	   gxx_include_dir='$(prefix)'/include/g++-${libstdcxx_interface}
++ 	   ;;
++  esac
+ fi
+ 
+ # Version-specific runtime libs processing.
+@@ -1855,7 +1862,14 @@ if test $version_specific_libs = yes; then
+   # and header files if --enable-version-specific-runtime-libs option
+   # is selected.
+   if test x"$gxx_include_dir" = x"no"; then
+-    gxx_include_dir='$(libdir)/gcc-lib/$(target_alias)/'${gcc_version}/include/c++
++    case ${host_alias} in
++        *djgpp*)
++          gxx_include_dir='$(libdir)/gcc-lib/$(target_alias)/'${gcc_version}/include/gxx
++          ;;
++        *)
++          gxx_include_dir='$(libdir)/gcc-lib/$(target_alias)/'${gcc_version}/include/g++
++        ;;
++    esac
+   fi
+   glibcpp_toolexecdir='$(libdir)/gcc-lib/$(target_alias)'
+   glibcpp_toolexeclibdir='$(toolexecdir)/'${gcc_version}'$(MULTISUBDIR)'
+diff --git a/libstdc++-v3/aclocal.m4 b/libstdc++-v3/aclocal.m4
+index 7fcd658..0a5ff9d 100644
+--- a/libstdc++-v3/aclocal.m4
++++ b/libstdc++-v3/aclocal.m4
+@@ -1858,7 +1858,14 @@ AC_MSG_RESULT($version_specific_libs)
+ 
+ # Default case for install directory for include files.
+ if test $version_specific_libs = no && test $gxx_include_dir = no; then
+-  gxx_include_dir='$(prefix)'/include/c++/${gcc_version}
++  case ${build_alias} in
++       *djgpp*)
++           gxx_include_dir='$(prefix)'/lang/cxx-v31
++           ;;
++       *)
++   	   gxx_include_dir='$(prefix)'/include/g++-${libstdcxx_interface}
++ 	   ;;
++  esac
+ fi
+ 
+ # Version-specific runtime libs processing.
+@@ -1867,7 +1874,14 @@ if test $version_specific_libs = yes; then
+   # and header files if --enable-version-specific-runtime-libs option
+   # is selected.
+   if test x"$gxx_include_dir" = x"no"; then
+-    gxx_include_dir='$(libdir)/gcc-lib/$(target_alias)/'${gcc_version}/include/c++
++    case ${host_alias} in
++        *djgpp*)
++          gxx_include_dir='$(libdir)/gcc-lib/$(target_alias)/'${gcc_version}/include/gxx
++          ;;
++        *)
++          gxx_include_dir='$(libdir)/gcc-lib/$(target_alias)/'${gcc_version}/include/g++
++        ;;
++    esac
+   fi
+   glibcpp_toolexecdir='$(libdir)/gcc-lib/$(target_alias)'
+   glibcpp_toolexeclibdir='$(toolexecdir)/'${gcc_version}'$(MULTISUBDIR)'
+diff --git a/libstdc++-v3/config/os/djgpp/bits/os_defines.h b/libstdc++-v3/config/os/djgpp/bits/os_defines.h
+index ce0bf24..a55a696 100644
+--- a/libstdc++-v3/config/os/djgpp/bits/os_defines.h
++++ b/libstdc++-v3/config/os/djgpp/bits/os_defines.h
+@@ -40,6 +40,15 @@
+ 
+ // FIXME: should there be '#undef POSIX_SOURCE'?
+ 
++// FIXME: these should be implemented. 
++// But they don't for DJGPP. And we should have stuff 
++// compatible with DJGPP v2.03 ... (AP, 2001/06/05)
++
++#define __builtin_fabsl(__x) fabs(static_cast<double>(__x))
++#define __builtin_cosl(__x)  cos(static_cast<double>(__x))
++#define __builtin_sinl(__x)  sin(static_cast<double>(__x))
++#define __builtin_sqrtl(__x) sqrt(static_cast<double>(__x))
++
+ #endif
+ 
+ 
+diff --git a/libstdc++-v3/configure b/libstdc++-v3/configure
+index c29a95e..04475ba 100755
+--- a/libstdc++-v3/configure
++++ b/libstdc++-v3/configure
+@@ -1649,9 +1649,13 @@ else
+ fi
+ 
+ 
+-
+-
+-
++if test `uname` = MS-DOS ; then
++  DJGPP_TRUE=
++  DJGPP_FALSE='#'
++else
++  DJGPP_TRUE='#'
++  DJGPP_FALSE=
++fi
+ 
+ 
+ # Check whether --enable-shared or --disable-shared was given.
+@@ -8717,6 +8721,9 @@ EOF
+ EOF
+ 
+       ;;
++    *djgpp*)
++      os_include_dir="config/os/djgpp"
++ 	;;
+     *)
+       os_include_dir="config/os/newlib"
+       cat >> confdefs.h <<\EOF
+@@ -22121,7 +22128,14 @@ echo "$ac_t""$version_specific_libs" 1>&6
+ 
+ # Default case for install directory for include files.
+ if test $version_specific_libs = no && test $gxx_include_dir = no; then
+-  gxx_include_dir='$(prefix)'/include/c++/${gcc_version}
++  case ${build_alias} in
++       *djgpp*)
++           gxx_include_dir='$(prefix)'/lang/cxx-v31
++           ;;
++       *)
++   	   gxx_include_dir='$(prefix)'/include/g++-${libstdcxx_interface}
++ 	   ;;
++  esac
+ fi
+ 
+ # Version-specific runtime libs processing.
+@@ -22130,7 +22144,14 @@ if test $version_specific_libs = yes; then
+   # and header files if --enable-version-specific-runtime-libs option
+   # is selected.
+   if test x"$gxx_include_dir" = x"no"; then
+-    gxx_include_dir='$(libdir)/gcc-lib/$(target_alias)/'${gcc_version}/include/c++
++    case ${host_alias} in
++        *djgpp*)
++          gxx_include_dir='$(libdir)/gcc-lib/$(target_alias)/'${gcc_version}/include/gxx
++          ;;
++        *)
++          gxx_include_dir='$(libdir)/gcc-lib/$(target_alias)/'${gcc_version}/include/g++
++        ;;
++    esac
+   fi
+   glibcpp_toolexecdir='$(libdir)/gcc-lib/$(target_alias)'
+   glibcpp_toolexeclibdir='$(toolexecdir)/'${gcc_version}'$(MULTISUBDIR)'
+diff --git a/libstdc++-v3/configure.in b/libstdc++-v3/configure.in
+index eaa09cd..0263785 100644
+--- a/libstdc++-v3/configure.in
++++ b/libstdc++-v3/configure.in
+@@ -34,6 +34,8 @@ GLIBCPP_CONFIGURE(.)
+ AM_INIT_AUTOMAKE($PACKAGE, $gcc_version)
+ AM_CONFIG_HEADER(config.h)
+ 
++AM_CONDITIONAL(DJGPP,test `uname` = MS-DOS )
++
+ AC_LIBTOOL_DLOPEN
+ AM_PROG_LIBTOOL
+ AC_SUBST(enable_shared)
+@@ -179,6 +181,9 @@ changequote([,])dnl
+       AC_DEFINE(HAVE_SINHF)
+       AC_DEFINE(HAVE_SINHL)
+       ;;
++    *djgpp*)
++      os_include_dir="config/os/djgpp"
++ 	;;
+     *)
+       os_include_dir="config/os/newlib"
+       AC_DEFINE(HAVE_HYPOT)
+diff --git a/libstdc++-v3/src/Makefile.am b/libstdc++-v3/src/Makefile.am
+index e8fca80..f04569f 100644
+--- a/libstdc++-v3/src/Makefile.am
++++ b/libstdc++-v3/src/Makefile.am
+@@ -72,7 +72,13 @@ sources = \
+ 	fstream-inst.cc io-inst.cc istream-inst.cc ostream-inst.cc \
+ 	streambuf-inst.cc sstream-inst.cc
+ 
+-VPATH = $(top_srcdir)/src:$(top_srcdir)
++if DJGPP
++VPATH_VAL = $(top_srcdir)/src;$(top_srcdir)
++else
++VPATH_VAL = $(top_srcdir)/src:$(top_srcdir)
++endif
++
++VPATH = $(VPATH_VAL)
+ 
+ libstdc___la_SOURCES = $(sources)
+ 
+diff --git a/libstdc++-v3/src/Makefile.in b/libstdc++-v3/src/Makefile.in
+index 0d84967..c202764 100644
+--- a/libstdc++-v3/src/Makefile.in
++++ b/libstdc++-v3/src/Makefile.in
+@@ -177,6 +177,8 @@ sources = \
+ 	fstream-inst.cc io-inst.cc istream-inst.cc ostream-inst.cc \
+ 	streambuf-inst.cc sstream-inst.cc
+ 
++@DJGPP_TRUE@VPATH_VAL = $(top_srcdir)/src;$(top_srcdir)
++@DJGPP_FALSE@VPATH_VAL = $(top_srcdir)/src:$(top_srcdir)
+ 
+ VPATH = $(top_srcdir)/src:$(top_srcdir)
+ 
+diff --git a/libstdc++-v3/stamp-h.in b/libstdc++-v3/stamp-h.in
+new file mode 100644
+index 0000000..e69de29
+diff --git a/readme.DJGPP b/readme.DJGPP
+new file mode 100644
+index 0000000..886996e
+--- /dev/null
++++ b/readme.DJGPP
+@@ -0,0 +1,341 @@
++This is the port of gcc-3.1 for DJGPP.
++
++
++Please read this file up to end (maybe skipping sections You don't need,
++for example You don't need to read how to build gcc-3.1 from sources
++if You only intend to use binary archives). Also consult DJGPP documentation
++and FAQ where needed.
++
++
++Requirements to use this binary release:
++    DJGPP-2.03 or above (If You are still using earlier version 
++            then please upgrade immediatelly).	
++    binutils-2.11.2 or above. Command line option -mno-bnu210 to provide 
++	    compatibility with binutils-2.8.1 or 2.9.1 is no more
++	    supported
++
++Requirements to build gcc-3.1 from sources:
++    Long filename support. I built it in DOS session under Win98SE.
++        Win95 and (I hope) WinME should be Ok. I myself haven't tested
++	whether it can be build under Win2k or WinXP.
++    at least 128Mb of RAM for building under Win9X (Amount of available
++        DPMI memory for DOS session should be set to auto). 
++    at least DJGPP-2.03 required (You should have latest update and
++        additionally fix definition of va_list in include/sys/djtypes.h.
++	It will be fixed in DJGPP-2.04 when it will be released.
++	See patch at end of this file)
++    other GNU utilities (see below)
++
++
++Source archives
++===============
++
++Archive gcc31s2.zip contains script which modifies original gcc-3.1
++and sources for DJGPP. You don't need it unless You want to recreate
++GCC source archive for DJGPP. If You are using this archive and original 
++sources of gcc-3.1.tar.gz, then You don't need gcc304s.zip.
++    
++The source archive gcc31s.zip contains all the sources to build
++all compilers (C, C++, Objective C, GNU Fortran) and also C++
++and Fortran libraries (libstdcxx.a, libgpp.a and libg2c.a). 
++libg++ is no more supported.
++
++Most users don't need source archives at all.
++
++Binary archives
++================
++
++Binary archives are split into 5 parts:
++
++  gcc31b.zip   : The gcc.exe driver program and the C compiler.
++                 It also contains the documentation.
++
++  gpp31b.zip   : The C++ compiler and libstdcxx.a together 
++                 with needed header files 
++
++  objc31b.zip  : The Objective C compiler and libobjc.a and the needed
++                 header files.
++
++  g7731b.zip   : GNU Fortran compiler and libg2c.a and g2f.h. 
++
++
++The archive gcc31b.zip is required by all other binary packages
++
++Binary packages includes following documentation files:
++  
++  Archive gcc31b.zip:  
++	info/gcc.i* - the use and the internals of the GNU compiler
++	info/cpp.i* - documentation of the GNU C preprocessor.
++	info/cppinternals.i*  - internals of the GNU C Preprocessor.
++		(NEW: use install-info to add it to info/dir)
++  Archive gpp31b.zip:
++        gnu/gcc-3.1/libstdcxx/* - some documentation of libstdc++-v3
++		(HTML and text formats)
++  Archive g7731b.zip:
++	info/g77.i* - documentation of the GNU Fortran compiler
++
++
++Before you install gcc-3.1 binaries
++======================================
++
++You should remove previous installation of gcc or egcs completely
++(unless You really know what You are doing).
++
++Make sure You don't have following files from earlier versions
++(relative paths againt to DJGPP directory are given):
++	bin/cc1.exe		(from gcc272b.zip or gcc2721b.zip)
++	bin/cc1plus.exe		(from gpp272b.zip or gpp2721b.zip)
++	bin/f771.exe		(from g7705XXb.zip, XX are 2 digits)
++	lib/libgcc.a		(from gcc272b.zip or gcc2721b.zip)
++	lib/libobjc.a		
++	lib/specs		(from djdev201.zip or djdev202.zip) 
++	lib/libstdcxx.a		
++	lib/libgpp.a		
++
++Following packages are required for binaries:
++	binutils-2.11.2 or above (Versions before 2.11 will not work)
++
++	DJGPP-2.03 (djdev203.zip) or above. 
++
++
++Installing binaries of gcc-3.1
++=================================
++
++Needed archives for different programing languages
++	C 			: gcc31b.zip
++
++	C++			: gcc31b.zip, gpp31b.zip
++
++	Fortran	                : gcc31b.zip, g7731b.zip
++
++	Objective C		: gcc31b.zip, objc31b.zip
++
++Of course for ALL languages You also need at least binutils (bnu2112b.zip
++or newer) and djdev203.zip (or newer when it will be released)
++
++Unzip all the zip files from that directory, preserving the
++directory structure.  For example:
++
++	pkunzip -d djdev203
++or
++	unzip386 djdev203
++
++
++NOTES:  I suggest to avoid using command line option -fomit-frame-pointer
++        with gcc-3.1 as this option is rather broken.        	
++	
++
++1. Only long filenames
++----------------------
++
++Unzip the binaries with an unzip program, which can restore the long filenames
++stored in the zip archive.
++
++2. Only short filenames
++-----------------------
++
++Unzip the binaries with an unzip program which doesn't know about long
++filenames, or if your unzipper knows about them, please follow first
++the steps described in the DJGPP FAQ in the section 
++about setting the NameNumericTail to 0 __BEFORE__!!! unzipping the archives.
++
++3. Long and short filenames at the same time
++--------------------------------------------
++
++Use an unzip program which can restore the long filenames and follow
++the instructions under 2. when the unzipper knows about long filenames.
++
++
++Note for users of C++ IO classes fstream, ifstream, ofstream
++============================================================
++
++There is a regression against earlier versions of GCC (gcc-2.95.3 and
++earlier): Member functions tellp(), tellg(), seekp() and seekg()
++are broken when stream is opened not in binary mode. If You are going
++to use any similar functions You should open stream in binary mode.
++
++Don't ask me when it will be fixed as I don't know that. I'm also 
++not sure I'll spend much time trying to fix that.
++
++
++Note for users of GNU Fortran compiler
++======================================
++
++If You are getting assembler warnings like:
++
++foo.s: Assembler messages:
++foo.s:1011: Warning: rest of line ignored; first ignored character is `+'
++foo.s:1012: Warning: rest of line ignored; first ignored character is `+'
++
++when compiling FORTRAN sources, please use stabs or DWARF-2 debugging info
++instead of COFF one, for example:
++	
++	gcc -c -O2 -gstabs foo.f -o foo.o
++	gcc -c -O2 -gdwarf-2 foo.f -o foo.o
++	gcc -c -O2 -gstabs+ foo.f -o foo.o
++
++
++Rebuilding gcc-3.1 from the sources
++======================================
++
++Requirememts
++------------
++
++-  Long filename support is required. It means You should build gcc-3.1
++   under Win95 or Win98. I myself have not tested building under Win2k 
++   and WinXP
++
++-  Much of free disk space (500Mb or more, especially if
++   You are using FAT16). 
++
++-  128Mb RAM (or more) to build gcc-3.1 under Win9X. DPMI memory amount 
++   for DOS session should be set to "Auto" as genattrtab requires more 
++   than 64Mb to run.	
++
++-  Many GNU packges. Please check whether You really have them:
++	bsh204b.zip 	GNU BASH 2.0.4 or above. 
++	dif272b.zip
++	fil316b.zip or newer
++	find41b.zip
++	grep24b.zip
++	gwk306b.zip or newer
++	mak3791b.zip
++	sed304b.zip or newer
++	shl112b.zip
++	txt122b.zip or newer
++	txi42b.zip or above (You will not get info files with older versions)
++	tar112b.zip
++	bnu2112b.zip     binutils-2.11.2 or above
++	working GNU C compiler (perhaps not earlier than gcc-2.8). 
++
++   If You modify some source files You may also need
++	acnf213b.zip (using autoconf-2.50 is not tested and is not
++                      recommended)
++	amak14b.zip or amak15b.zip
++	
++   You need autoconf and automake also if You are using gcc31s2.zip.
++   However it's normally not needed for most users who builds gcc-3.1 from
++   contents of gcc31s.zip.
++
++   Usually newer versions of these packages should also work unless
++   otherwise stated above
++
++-  INFO-ZIP binary (compiled with DJGPP v2!!!) is needed for using build.sh 
++   to create binary distrubution archives. There is no problems to compile 
++   it. See http://www.info-zip.org for additional informtion
++   about INFO-ZIP. You can find DJGPP compiled binary there. 
++
++-  Working DJGPP installation of course:
++	DJGPP-2.03 and above (I applied Win2k related patches for
++		DJGPP v2.03 from http://clio.rice.edu/djgpp/win2k/main.htm);
++   	binutils-2.11.2 or above, 
++	working gcc installation (perhaps gcc-2.95 or above)
++
++-  You should have sh.exe in DJGPP bin directory as symbolic link to  
++   bash.exe (type 'ln -s bash.exe sh.exe' in that directory)
++
++
++Extracting the sources
++----------------------
++
++At first you should unzip the archive gcc31s.zip. The sources are _NOT_
++the complete sources like the original gcc-3.1 distribution. I have
++removed many files to save disk space which are not needed for the DJGPP
++port. However I left configuration of other machines in to make archives
++usable to build cross-to-DJGPP compilers
++
++
++Compiling gcc
++-------------
++
++Directory gnu/gcc-3.1 contains all sources of gcc-3.1
++
++Sources are NOT configured. 
++	
++Change to directory gnu/gcc-3.1/build.djg and configure sources
++by running script djconfig.sh. 
++
++	sh djconfig.sh
++
++When this is done You can build gcc-3.1 by running script djmake.sh
++Under Win9X You'll have to restart it some times when it will crash 
++due to Win9X DPMI descriptor leaks. You may use redir to get output in file.
++
++	sh djmake.sh bootstrap
++
++When this sucessfully ends run script djinsttmp.sh which installs
++all into directory gnu/gcc-3.1/install.djg
++
++After that change to this directory and run script makepkg.sh
++to create binary distribution packages
++	
++
++Installing newly compiled gcc
++-----------------------------
++
++It's recommended to install binary packages which are generated 
++bu makepkg.sh
++
++
++
++Available resources
++===================
++
++See following URL for additional information:
++gcc:		  http://gcc.gnu.org
++
++
++
++Reporting bugs
++==============
++
++If you found a bug in gcc-3.1 (gcc, g77, libstdc++, etc) please report it to 
++the GCC bug adresses and _NOT_ (or at least not only) in the DJGPP news group. 
++
++But if you think you found a bug in the DJGPP related things, then please 
++report it in comp.os.msdos.djgpp (the news group) or mail it to 
++djgpp@delorie.com, which is the gateway to the news group.
++
++Some possible situations:
++  - gcc says 'Internal compiler error' (or something similar)
++       more likely it is error of gcc if it is reproducible. It would 
++       be nice to test on some other system (e.g. Linux) and also with 
++       different version of compiler if possible and submit report to 
++       gcc bug address. 
++  - gcc crashes or freezes. 
++       In this situation it's hard to guess where is the problem. It may be
++       problem with gcc itself but it may be also DJGPP specific one.
++
++Please email me directly only in rare cases, if you think it is only of
++interest to me, since I'll see the reports in DJGPP mailing list.
++
++
++Thanks to
++=========
++
++To all who have contributed new features, test results, bugfixes to GCC
++(see http://gcc.gnu.org/thanks.html) and also who helped with DJGPP port of 
++gcc-3.1
++
++
++Have fun with gcc
++
++Andris Pavenis <pavenis@lanet.lv>
++
++
++
++--- include/sys/djtypes.h~1	Tue Dec 14 06:56:16 1999
+++++ include/sys/djtypes.h	Mon Feb  4 16:20:40 2002
++@@ -12,7 +12,12 @@
++ #define __DJ_ssize_t	typedef int ssize_t;
++ #define __DJ_time_t	typedef unsigned int time_t;
++ #define __DJ_uid_t	typedef int uid_t;
+++
+++#if __GNUC__>=3
+++#define __DJ_va_list    typedef __builtin_va_list va_list;
+++#else
++ #define __DJ_va_list	typedef void *va_list;
+++#endif
++ 
++ #if defined(__cplusplus) && ( (__GNUC_MINOR__ >= 8 && __GNUC__ == 2 ) || __GNUC__ >= 3 )
++ /* wchar_t is now a keyword in C++ */
