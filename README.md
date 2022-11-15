@@ -44,7 +44,7 @@ Windows/MSDOS交叉工具链——
 * cygwin64：>=gcc-4.8.5
 * cygwin：>=gcc-4.5.4
 * cygwin-legacy：gcc-3.4.6，gcc-4.3.6 - gcc-4.4.7
-* djgpp：gcc-3.0.4 - gcc-3.4.6，gcc-4.1.2 - gcc-4.2.4，gcc-4.4.7 - gcc-10.4.0
+* djgpp：gcc-3.0.4 - gcc-3.4.6，gcc-4.1.2 - gcc-10.4.0
 
 
 mingw-w64支持multilib，64位使用SEH异常机制（4.8以上版本），32位使用SJLJ异常机制（包括4.8以下的64位版本），保障与Windows系统DLL的最佳兼容性。
