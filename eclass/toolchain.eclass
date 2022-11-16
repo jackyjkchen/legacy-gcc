@@ -1294,21 +1294,27 @@ toolchain_src_configure() {
 	# users to control this feature in the event they need the support.
 	tc_version_is_at_least 4.3 && in_iuse fixed-point && confgcc+=( $(use_enable fixed-point) )
 
-	case $(tc-is-softfloat) in
-		yes)
-			confgcc+=( --with-float=soft )
-			;;
-		softfp)
-			confgcc+=( --with-float=softfp )
+	case ${CTARGET} in
+		arm*-*-linux-gnu)
 			;;
 		*)
-			# If they've explicitly opt-ed in, do hardfloat,
-			# otherwise let the gcc default kick in.
-			case ${CTARGET//_/-} in
-				*-hardfloat-*|*eabihf)
-					confgcc+=( --with-float=hard )
-				;;
+			case $(tc-is-softfloat) in
+				yes)
+					confgcc+=( --with-float=soft )
+					;;
+				softfp)
+					confgcc+=( --with-float=softfp )
+					;;
+				*)
+					# If they've explicitly opt-ed in, do hardfloat,
+					# otherwise let the gcc default kick in.
+					case ${CTARGET//_/-} in
+						*-hardfloat-*|*eabihf)
+							confgcc+=( --with-float=hard )
+					;;
+					esac
 			esac
+			;;
 	esac
 
 	local with_abi_map=()

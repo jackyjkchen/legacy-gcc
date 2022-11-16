@@ -59,6 +59,9 @@ cygwin64/cygwin/cygwin-legacy不支持multilib，使用DWARF-2异常机制，与
 
 libc5为ELF格式，libc4为a.out格式，a.out格式依赖内核模块ia32_aout，仅5.0以下内核支持，对于5.0或以上内核，可使用example/ia32_aout自行编译内核模块。
 
+亦提供arm-legacy-linux-gnu交叉工具链（arm旧ABI，与新的eabi相对，gcc-4.7.4之后不再支持）
+* arm-legacy-linux-gnu：gcc-3.3.6 - gcc-4.7.4
+
 
 # 使用方法
 

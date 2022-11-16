@@ -13,8 +13,8 @@ fi
 
 DESCRIPTION=""
 HOMEPAGE=""
-SRC_URI="https://github.com/jackyjkchen/binaries/releases/download/v0.1/w32api-3.14-1.tar.bz2
-		https://github.com/jackyjkchen/binaries/releases/download/v0.1/cygwin-1.5.25-15.tar.bz2"
+SRC_URI="https://github.com/jackyjkchen/binaries/releases/download/v0.2/w32api-3.14-1.tar.bz2
+		https://github.com/jackyjkchen/binaries/releases/download/v0.2/cygwin-1.5.25-15.tar.bz2"
 
 LICENSE=""
 SLOT="0"

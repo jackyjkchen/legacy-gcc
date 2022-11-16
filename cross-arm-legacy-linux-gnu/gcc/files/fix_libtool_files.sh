@@ -1,0 +1,1 @@
+../../../sys-devel/gcc/files/fix_libtool_files.sh
