@@ -2181,6 +2181,7 @@ toolchain_src_install() {
 			-name 'libgomp-plugin-*.la' -o \
 			-name libgfortran.la -o \
 			-name libgfortranbegin.la -o \
+			-name libgf95begin.la -o \
 			-name libmpx.la -o \
 			-name libmpxwrappers.la -o \
 			-name libitm.la -o \

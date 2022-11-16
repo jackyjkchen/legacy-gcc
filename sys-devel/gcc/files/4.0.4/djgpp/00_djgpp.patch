@@ -1,0 +1,2706 @@
+diff --git a/Makefile.in b/Makefile.in
+index f6897199..a1e07c74 100644
+--- a/Makefile.in
++++ b/Makefile.in
+@@ -79,6 +79,7 @@ gcc_version = @gcc_version@
+ # The gcc driver likes to know the arguments it was configured with.
+ TOPLEVEL_CONFIGURE_ARGUMENTS=@TOPLEVEL_CONFIGURE_ARGUMENTS@
+ 
++libstdcxx_incdir_base = @libstdcxx_incdir_base@
+ gxx_include_dir = @gxx_include_dir@
+ libstdcxx_incdir = @libstdcxx_incdir@
+ 
+diff --git a/config/gxx-include-dir.m4 b/config/gxx-include-dir.m4
+index 87a65ada..23c242e7 100644
+--- a/config/gxx-include-dir.m4
++++ b/config/gxx-include-dir.m4
+@@ -8,19 +8,22 @@ dnl If you change the default here, you'll need to change the gcc and
+ dnl libstdc++-v3 subdirectories too.
+ AC_DEFUN([TL_AC_GXX_INCLUDE_DIR],
+ [
++libstdcxx_incdir_base=c++
++
+ case "${with_gxx_include_dir}" in
+   yes)
+     AC_MSG_ERROR([--with-gxx-include-dir=[[dir]] requires a directory])
+     ;;
+   no | "")
+     case "${enable_version_specific_runtime_libs}" in
+-      yes) gxx_include_dir='${libsubdir}/include/c++' ;;
++      yes) gxx_include_dir='${libsubdir}/include/${libstdcxx_incdir_base}' ;;
+       *)
+-	libstdcxx_incdir=c++/${gcc_version}
++	libstdcxx_incdir='${libstdcxx_incdir_base}/${gcc_version}'
+ 	gxx_include_dir='${prefix}/include/'${libstdcxx_incdir} ;;
+     esac ;;
+   *) gxx_include_dir=${with_gxx_include_dir} ;;
+ esac
+ AC_SUBST(gxx_include_dir)
+ AC_SUBST(libstdcxx_incdir)
++AC_SUBST(libstdcxx_incdir_base)
+ ])
+diff --git a/config/mh-djgpp b/config/mh-djgpp
+index 88d250a7..bb93833e 100644
+--- a/config/mh-djgpp
++++ b/config/mh-djgpp
+@@ -12,3 +12,6 @@ __version:=$(subst ., ,$(__version))
+ ifeq ($(words $(__version)),3)
+ gcc_version=$(word 1,$(__version)).$(word 2,$(__version))$(word 3,$(__version))
+ endif
++
++libstdcxx_incdir_base=cxx
++
+diff --git a/fixincludes/Makefile.in b/fixincludes/Makefile.in
+index 1383ef61..e5625c05 100644
+--- a/fixincludes/Makefile.in
++++ b/fixincludes/Makefile.in
+@@ -51,10 +51,13 @@ target_noncanonical:=@target_noncanonical@
+ # The version of GCC in this tree
+ gcc_version=@gcc_version@
+ 
++# GCC version for subdirectory names (editted if host requires it)
++gcc_version_alias = @gcc_version_alias@
++
+ # Directory in which the compiler finds libraries etc.
+-libsubdir = $(libdir)/gcc/$(target_noncanonical)/$(version)
++libsubdir = $(libdir)/gcc/$(target_noncanonical)/$(gcc_version_alias)
+ # Directory in which the compiler finds executables
+-libexecsubdir = $(libexecdir)/gcc/$(target_noncanonical)/$(gcc_version)
++libexecsubdir = $(libexecdir)/gcc/$(target_noncanonical)/$(gcc_version_alias)
+ # Where our executable files go
+ itoolsdir = $(libexecsubdir)/install-tools
+ # Where our data files go
+diff --git a/fixincludes/configure b/fixincludes/configure
+index 5c2085ee..07efa15b 100755
+--- a/fixincludes/configure
++++ b/fixincludes/configure
+@@ -309,7 +309,7 @@ ac_includes_default="\
+ # include <unistd.h>
+ #endif"
+ 
+-ac_subst_vars='SHELL PATH_SEPARATOR PACKAGE_NAME PACKAGE_TARNAME PACKAGE_VERSION PACKAGE_STRING PACKAGE_BUGREPORT exec_prefix prefix program_transform_name bindir sbindir libexecdir datadir sysconfdir sharedstatedir localstatedir libdir includedir oldincludedir infodir mandir build_alias host_alias target_alias DEFS ECHO_C ECHO_N ECHO_T LIBS build build_cpu build_vendor build_os host host_cpu host_vendor host_os target target_cpu target_vendor target_os CC CFLAGS LDFLAGS CPPFLAGS ac_ct_CC EXEEXT OBJEXT target_noncanonical TARGET gcc_version_trigger gcc_version_full gcc_version CPP EGREP MAINT LIBOBJS LTLIBOBJS'
++ac_subst_vars='SHELL PATH_SEPARATOR PACKAGE_NAME PACKAGE_TARNAME PACKAGE_VERSION PACKAGE_STRING PACKAGE_BUGREPORT exec_prefix prefix program_transform_name bindir sbindir libexecdir datadir sysconfdir sharedstatedir localstatedir libdir includedir oldincludedir infodir mandir build_alias host_alias target_alias DEFS ECHO_C ECHO_N ECHO_T LIBS build build_cpu build_vendor build_os host host_cpu host_vendor host_os target target_cpu target_vendor target_os CC CFLAGS LDFLAGS CPPFLAGS ac_ct_CC EXEEXT OBJEXT target_noncanonical TARGET gcc_version_trigger gcc_version_full gcc_version CPP EGREP MAINT gcc_version_alias LIBOBJS LTLIBOBJS'
+ ac_subst_files=''
+ 
+ # Initialize some variables set by options.
+@@ -5020,6 +5020,19 @@ else
+ fi
+ 
+ 
++# For DJGPP there should not be more than 1 dot. Therefore edit
++# version in case of DJGPP
++case $host in
++	i?86-*-msdosdjgpp*)
++		gcc_version_alias='$(shell echo $(gcc_version) | sed -e "s:\.::2g")'
++		;;
++
++	* )
++		gcc_version_alias='$(gcc_version)'
++		;;
++esac
++
++
+           ac_config_headers="$ac_config_headers config.h"
+ 
+                     ac_config_files="$ac_config_files Makefile mkheaders"
+@@ -5662,6 +5675,7 @@ s,@gcc_version@,$gcc_version,;t t
+ s,@CPP@,$CPP,;t t
+ s,@EGREP@,$EGREP,;t t
+ s,@MAINT@,$MAINT,;t t
++s,@gcc_version_alias@,$gcc_version_alias,;t t
+ s,@LIBOBJS@,$LIBOBJS,;t t
+ s,@LTLIBOBJS@,$LTLIBOBJS,;t t
+ CEOF
+diff --git a/fixincludes/configure.ac b/fixincludes/configure.ac
+index 1fd7b399..08877abb 100644
+--- a/fixincludes/configure.ac
++++ b/fixincludes/configure.ac
+@@ -96,6 +96,19 @@ else
+ fi	
+ AC_SUBST(MAINT)
+ 
++# For DJGPP there should not be more than 1 dot. Therefore edit
++# version in case of DJGPP
++[case $host in
++	i?86-*-msdosdjgpp*)
++		gcc_version_alias='$(shell echo $(gcc_version) | sed -e "s:\.::2g")'
++		;;
++
++	* )
++		gcc_version_alias='$(gcc_version)'
++		;;
++esac]
++AC_SUBST(gcc_version_alias)
++
+ AC_CONFIG_HEADERS(config.h, [echo timestamp > stamp-h])
+ AC_CONFIG_FILES(Makefile mkheaders)
+ AC_OUTPUT
+diff --git a/gcc/Makefile.in b/gcc/Makefile.in
+index 35811a8b..04c13ca8 100644
+--- a/gcc/Makefile.in
++++ b/gcc/Makefile.in
+@@ -97,7 +97,11 @@ VPATH = @srcdir@
+ # pattern rule for everything.
+ # This vpath could be extended within the Make-lang fragments.
+ 
++ifneq ($(DJGPP),)
++vpath %.texi $(docdir);$(docdir)/include
++else
+ vpath %.texi $(docdir):$(docdir)/include
++endif
+ 
+ # ----
+ # Default values for variables overridden in Makefile fragments.
+@@ -420,6 +424,7 @@ OBJC_BOEHM_GC=@objc_boehm_gc@
+ GTHREAD_FLAGS=@gthread_flags@
+ extra_modes_file=@extra_modes_file@
+ host_hook_obj=@out_host_hook_obj@
++libstdcxx_incdir_base=@libstdcxx_incdir_base@
+ # Be prepared for gcc2 merges.
+ gcc_version=@gcc_version@
+ gcc_version_trigger=@gcc_version_trigger@
+@@ -2842,7 +2847,7 @@ s-macro_list : $(GCC_PASSES)
+ 
+ # Build fixed copies of system files.
+ stmp-fixinc: gsyslimits.h macro_list \
+-  ../$(build_subdir)/fixincludes/fixincl \
++  ../$(build_subdir)/fixincludes/fixincl$(exeext) \
+   ../$(build_subdir)/fixincludes/fixinc.sh
+ 	@if test ! -d ${SYSTEM_HEADER_DIR}; then \
+ 	  echo The directory that should contain system headers does not exist: >&2 ; \
+diff --git a/gcc/ada/Makefile.in b/gcc/ada/Makefile.in
+index 91c8b65b..3e091fa2 100644
+--- a/gcc/ada/Makefile.in
++++ b/gcc/ada/Makefile.in
+@@ -95,8 +95,8 @@ ECHO = echo
+ LEX = flex
+ LEXFLAGS =
+ CHMOD = chmod
+-LN = ln
+-LN_S = ln -s
++LN = @LN@
++LN_S = @LN_S@
+ CP = cp -p
+ MV = mv -f
+ RM = rm -f
+diff --git a/gcc/ada/adaint.c b/gcc/ada/adaint.c
+index f94f3bfb..ad5ed1dc 100644
+--- a/gcc/ada/adaint.c
++++ b/gcc/ada/adaint.c
+@@ -92,6 +92,9 @@
+ #endif
+ 
+ #if defined (__EMX__) || defined (MSDOS) || defined (_WIN32)
++
++#include <ctype.h>
++
+ #elif defined (VMS)
+ 
+ /* Header files and definitions for __gnat_set_file_time_name.  */
+@@ -357,7 +360,9 @@ __gnat_readlink (char *path ATTRIBUTE_UNUSED,
+ 		 char *buf ATTRIBUTE_UNUSED,
+ 		 size_t bufsiz ATTRIBUTE_UNUSED)
+ {
+-#if defined (MSDOS) || defined (_WIN32) || defined (__EMX__)
++#if defined (__DJGPP__) && (__DJGPP__>2 || (__DJGPP__==2 && __DJGPP_MINOR__>=4))
++  return readlink (path, buf, bufsiz);
++#elif defined (MSDOS) || defined (_WIN32) || defined (__EMX__)
+   return -1;
+ #elif defined (__INTERIX) || defined (VMS)
+   return -1;
+@@ -376,7 +381,10 @@ int
+ __gnat_symlink (char *oldpath ATTRIBUTE_UNUSED,
+ 		char *newpath ATTRIBUTE_UNUSED)
+ {
+-#if defined (MSDOS) || defined (_WIN32) || defined (__EMX__)
++#if defined (__DJGPP__) && (__DJGPP__>2 || (__DJGPP__==2 && __DJGPP_MINOR__>=4))
++/* Newer DJGPP versions supports symlinks */
++  return symlink (oldpath, newpath);
++#elif defined (MSDOS) || defined (_WIN32) || defined (__EMX__)
+   return -1;
+ #elif defined (__INTERIX) || defined (VMS)
+   return -1;
+@@ -469,7 +477,11 @@ int
+ __gnat_get_maximum_file_name_length (void)
+ {
+ #if defined (MSDOS)
++#ifdef __DJGPP__
++  return (_use_lfn(".")) ? -1 : 8;
++#else
+   return 8;
++#endif
+ #elif defined (VMS)
+   if (getenv ("GNAT$EXTENDED_FILE_SPECIFICATIONS"))
+     return -1;
+@@ -964,6 +976,7 @@ __gnat_file_time_fd (int fd)
+   unsigned file_hour  = fs.ft_hour;
+   unsigned file_min   = fs.ft_min;
+   unsigned file_tsec  = fs.ft_tsec;
++  return ret;
+ #endif
+ 
+   /* Calculate the seconds since epoch from the time components. First count
+@@ -1027,7 +1040,7 @@ __gnat_file_time_fd (int fd)
+ void
+ __gnat_set_file_time_name (char *name, time_t time_stamp)
+ {
+-#if defined (__EMX__) || defined (MSDOS) || defined (__vxworks)
++#if defined (__EMX__) || defined (__vxworks)
+ 
+ /* Code to implement __gnat_set_file_time_name for these systems.  */
+ 
+@@ -1259,9 +1272,10 @@ typedef struct _ile3
+ void
+ __gnat_set_env_value (char *name, char *value)
+ {
+-#ifdef MSDOS
++/* #ifdef MSDOS  */
+ 
+-#elif defined (VMS)
++/* #elif defined (VMS)  */
++#if defined (VMS)
+   struct descriptor_s name_desc;
+   /* Put in JOB table for now, so that the project stuff at least works.  */
+   struct descriptor_s table_desc = {7, 0, "LNM$JOB"};
+@@ -1543,6 +1557,9 @@ __gnat_is_symbolic_link (char *name ATTRIBUTE_UNUSED)
+ #if defined (__vxworks)
+   return 0;
+ 
++#elif defined (__DJGPP__) && __DJGPP__==2 && __DJGPP_MINOR__<4
++  return 0;  
++
+ #elif defined (_AIX) || defined (__APPLE__) || defined (__unix__)
+   int ret;
+   struct stat statbuf;
+@@ -1934,6 +1951,7 @@ __gnat_waitpid (int pid)
+   cwait (&status, pid, _WAIT_CHILD);
+ #elif defined (__EMX__) || defined (MSDOS) || defined (__vxworks)
+   /* Status is already zero, so nothing to do.  */
++  (void) pid;
+ #else
+   waitpid (pid, &status, 0);
+   status =  WEXITSTATUS (status);
+diff --git a/gcc/ada/ctrl_c.c b/gcc/ada/ctrl_c.c
+index 20dd8811..c4f86a08 100644
+--- a/gcc/ada/ctrl_c.c
++++ b/gcc/ada/ctrl_c.c
+@@ -39,6 +39,10 @@
+ #include "system.h"
+ #endif
+ 
++#ifndef SA_RESTART
++#define SA_RESTART 0
++#endif
++
+ /* Services to intercept Ctrl-C */
+ 
+ /* __gnat_install_int_handler will install the specified handler.
+diff --git a/gcc/ada/gnatbl.c b/gcc/ada/gnatbl.c
+index ead189ff..b46aa7fe 100644
+--- a/gcc/ada/gnatbl.c
++++ b/gcc/ada/gnatbl.c
+@@ -212,7 +212,7 @@ main (int argc, char **argv)
+   int  spawn_index = 0;
+ 
+ #if defined (__EMX__) || defined(MSDOS)
+-  char *tmppathval = malloc (strlen (pathval) + 3);
++  char *tmppathval = xmalloc (strlen (pathval) + 3);
+   strcpy (tmppathval, ".;");
+   pathval = strcat (tmppathval, pathval);
+ #endif
+@@ -334,7 +334,7 @@ main (int argc, char **argv)
+ 	    char *ptr = strstr (argv[i], ".exe");
+ 
+ 	    arg_len = strlen (argv[i]);
+-	    coff2exe_args[1] = malloc (arg_len + 1);
++	    coff2exe_args[1] = xmalloc (arg_len + 1);
+ 	    strcpy (coff2exe_args[1], argv[i]);
+ 	    if (ptr != NULL && strlen (ptr) == 4)
+ 	      coff2exe_args[1][arg_len-4] = 0;
+@@ -377,7 +377,7 @@ main (int argc, char **argv)
+ 
+   if (!g_present)
+     {
+-      del_command = malloc (strlen (coff2exe_args[1]) + 5);
++      del_command = xmalloc (strlen (coff2exe_args[1]) + 5);
+       sprintf (del_command, "del %s", coff2exe_args[1]);
+       retcode = system (del_command);
+     }
+diff --git a/gcc/ada/gsocket.h b/gcc/ada/gsocket.h
+index c500019b..5bbf43ee 100644
+--- a/gcc/ada/gsocket.h
++++ b/gcc/ada/gsocket.h
+@@ -62,6 +62,6 @@
+ #include "system.h"
+ #endif
+ 
+-#if !(defined (VMS) || defined (__MINGW32__) || defined(__rtems__))
++#if !(defined (VMS) || defined (__MINGW32__) || defined(__rtems__) || defined(__DJGPP__))
+ # include <sys/socket.h>
+ #endif
+diff --git a/gcc/ada/init.c b/gcc/ada/init.c
+index e41c509c..05c45e65 100644
+--- a/gcc/ada/init.c
++++ b/gcc/ada/init.c
+@@ -407,6 +407,45 @@ __gnat_initialize (void *eh ATTRIBUTE_UNUSED)
+ {
+ }
+ 
++#elif defined (__DJGPP__)
++
++/***************************************/
++/* __gnat_initialize (DJGPP version)   */
++/*                                     */
++/* FIXME: this is only a draft version */
++/***************************************/
++
++struct timestruc_t
++{
++   time_t  tv_sec;
++   long    tv_nsec;
++};
++
++
++int
++nanosleep (struct timestruc_t *Rqtp, struct timestruc_t *Rmtp);
++
++int
++nanosleep (struct timestruc_t *Rqtp, struct timestruc_t *Rmtp)
++{
++    usleep (1000000*Rqtp->tv_sec+Rqtp->tv_nsec/1000);
++    if (Rmtp) { Rmtp->tv_sec = Rmtp->tv_nsec=0; }
++    return 0;
++}
++
++
++void
++__gnat_initialize (void *eh ATTRIBUTE_UNUSED)
++{
++}
++
++
++void
++__gnat_install_handler ()
++{
++  __gnat_handler_installed = 1;
++}
++
+ /***************************************/
+ /* __gnat_initialize (RTEMS version) */
+ /***************************************/
+diff --git a/gcc/ada/sysdep.c b/gcc/ada/sysdep.c
+index e18fb227..318ea953 100644
+--- a/gcc/ada/sysdep.c
++++ b/gcc/ada/sysdep.c
+@@ -159,6 +159,11 @@ static const char *mode_write_binary_plus = "w+b";
+ static const char *mode_append_binary_plus = "a+b";
+ const char __gnat_text_translation_required = 1;
+ 
++#ifdef __DJGPP__
++#include <io.h>
++#define _setmode setmode
++#endif
++
+ void
+ __gnat_set_binary_mode (int handle)
+ {
+@@ -703,6 +708,26 @@ __gnat_localtime_r (const time_t *timer, struct tm *tp)
+ 
+ /* __gnat_localtime_r is not needed on NT and VMS */
+ 
++#else
++#if defined (__DJGPP__)
++
++/* FIXME: this is draft version only. Fix me if that is not correct  */
++/*        or not complete (AP)                                       */
++
++extern struct tm *__gnat_localtime_r PARAMS ((const time_t *, struct tm *));
++
++struct tm *
++__gnat_localtime_r (timer, tp)
++     const time_t *timer;
++     struct tm *tp;
++{
++  struct tm *tmp;
++
++  tmp = localtime (timer);
++  memcpy (tp, tmp, sizeof (struct tm));
++  return tp;
++}
++
+ #else
+ 
+ /* All other targets provide a standard localtime_r */
+@@ -717,3 +742,4 @@ __gnat_localtime_r (const time_t *timer, struct tm *tp)
+ #endif
+ #endif
+ #endif
++#endif
+diff --git a/gcc/c-common.c b/gcc/c-common.c
+index 53e18c55..7c7894fa 100644
+--- a/gcc/c-common.c
++++ b/gcc/c-common.c
+@@ -5049,8 +5049,9 @@ handle_nonnull_attribute (tree *node, tree ARG_UNUSED (name),
+ 
+       if (!get_nonnull_operand (TREE_VALUE (args), &arg_num))
+ 	{
+-	  error ("nonnull argument has invalid operand number (argument %lu)",
+-		 (unsigned long) attr_arg_num);
++	  if (!(flags & (int) ATTR_FLAG_BUILT_IN))
++	     error ("nonnull argument has invalid operand number (argument %lu)",
++		    (unsigned long) attr_arg_num);
+ 	  *no_add_attrs = true;
+ 	  return NULL_TREE;
+ 	}
+@@ -5068,16 +5069,18 @@ handle_nonnull_attribute (tree *node, tree ARG_UNUSED (name),
+ 	  if (!argument
+ 	      || TREE_CODE (TREE_VALUE (argument)) == VOID_TYPE)
+ 	    {
+-	      error ("nonnull argument with out-of-range operand number (argument %lu, operand %lu)",
+-		     (unsigned long) attr_arg_num, (unsigned long) arg_num);
++	      if (!(flags & (int) ATTR_FLAG_BUILT_IN))
++		 error ("nonnull argument with out-of-range operand number (argument %lu, operand %lu)",
++		       (unsigned long) attr_arg_num, (unsigned long) arg_num);
+ 	      *no_add_attrs = true;
+ 	      return NULL_TREE;
+ 	    }
+ 
+ 	  if (TREE_CODE (TREE_VALUE (argument)) != POINTER_TYPE)
+ 	    {
+-	      error ("nonnull argument references non-pointer operand (argument %lu, operand %lu)",
+-		   (unsigned long) attr_arg_num, (unsigned long) arg_num);
++	      if (!(flags & (int) ATTR_FLAG_BUILT_IN))
++		 error ("nonnull argument references non-pointer operand (argument %lu, operand %lu)",
++		        (unsigned long) attr_arg_num, (unsigned long) arg_num);
+ 	      *no_add_attrs = true;
+ 	      return NULL_TREE;
+ 	    }
+diff --git a/gcc/c-decl.c b/gcc/c-decl.c
+index f67c58b3..736ac06d 100644
+--- a/gcc/c-decl.c
++++ b/gcc/c-decl.c
+@@ -1193,8 +1193,10 @@ diagnose_mismatched_decls (tree newdecl, tree olddecl,
+ 	      /* If types don't match for a built-in, throw away the
+ 		 built-in.  No point in calling locate_old_decl here, it
+ 		 won't print anything.  */
++#if 0 /* for DJGPP  */
+ 	      warning ("%Jconflicting types for built-in function %qD",
+ 		       newdecl, newdecl);
++#endif
+ 	      return false;
+ 	    }
+ 	}
+diff --git a/gcc/config.host b/gcc/config.host
+index cb1e9a60..fbc97f94 100644
+--- a/gcc/config.host
++++ b/gcc/config.host
+@@ -138,9 +138,13 @@ case ${host} in
+     host_xm_file=i386/xm-djgpp.h
+     host_exeext=.exe
+     # Shorten $target_noncanonical for 8.3 filename conventions.
++    # Also update C++ include directory name and gcc version
++    # due to the same restrictions
+     case ${target} in
+       *pc-msdosdjgpp*)
+         target_noncanonical=djgpp
++	libstdcxx_incdir_base=cxx
++	gcc_version=`echo $gcc_version | sed -e 's:\.::2g'`
+         ;;
+     esac
+     ;;
+diff --git a/gcc/config/i386/djgpp.h b/gcc/config/i386/djgpp.h
+index cee9480d..bea03919 100644
+--- a/gcc/config/i386/djgpp.h
++++ b/gcc/config/i386/djgpp.h
+@@ -22,6 +22,11 @@ Boston, MA 02111-1307, USA.  */
+ /* Support generation of DWARF2 debugging info.  */
+ #define DWARF2_DEBUGGING_INFO 1
+ 
++/* Use DWARF2 debugging info by default: comment out following  */
++/* 2 lines to default to COFF debugging info  */
++#undef PREFERRED_DEBUGGING_TYPE
++#define PREFERRED_DEBUGGING_TYPE DWARF2_DEBUG
++
+ /* Don't assume anything about the header files.  */
+ #define NO_IMPLICIT_EXTERN_C
+ 
+@@ -65,6 +70,8 @@ Boston, MA 02111-1307, USA.  */
+ #undef STANDARD_INCLUDE_DIR
+ #define STANDARD_INCLUDE_DIR "/dev/env/DJDIR/include/"
+ 
++#undef PREFIX_INCLUDE_DIR
++
+ /* Search for as.exe and ld.exe in DJGPP's binary directory.  */ 
+ #undef MD_EXEC_PREFIX
+ #define MD_EXEC_PREFIX "/dev/env/DJDIR/bin/"
+@@ -73,16 +80,16 @@ Boston, MA 02111-1307, USA.  */
+ #undef MD_STARTFILE_PREFIX
+ #define MD_STARTFILE_PREFIX "/dev/env/DJDIR/lib/"
+ 
+-/* Correctly handle absolute filename detection in cp/xref.c */
+-#define FILE_NAME_ABSOLUTE_P(NAME) \
+-        (((NAME)[0] == '/') || ((NAME)[0] == '\\') || \
+-        (((NAME)[0] >= 'A') && ((NAME)[0] <= 'z') && ((NAME)[1] == ':')))
+-
+ #define TARGET_OS_CPP_BUILTINS()		\
+   do						\
+     {						\
++        if (!flag_iso)                          \
++	   builtin_define_with_int_value ("DJGPP",2);  \
++	builtin_define_with_int_value ("__DJGPP",2);   \
++	builtin_define_with_int_value ("__DJGPP__",2); \
+ 	builtin_define_std ("MSDOS");		\
+ 	builtin_define_std ("GO32");		\
++	builtin_define_std ("unix");		\
+ 	builtin_assert ("system=msdos");	\
+     }						\
+   while (0)
+@@ -90,7 +97,7 @@ Boston, MA 02111-1307, USA.  */
+ /* Include <sys/version.h> so __DJGPP__ and __DJGPP_MINOR__ are defined.  */
+ #undef CPP_SPEC
+ #define CPP_SPEC "-remap %{posix:-D_POSIX_SOURCE} \
+-  -imacros %s../include/sys/version.h"
++  %{!nostdinc:-imacros %sdjgpp.ver}"
+ 
+ /* We need to override link_command_spec in gcc.c so support -Tdjgpp.djl.
+    This cannot be done in LINK_SPECS as that LINK_SPECS is processed
+@@ -99,17 +106,19 @@ Boston, MA 02111-1307, USA.  */
+    suggested by Robert Hoehne, is to use SUBTARGET_EXTRA_SPECS instead.
+ */ 
+ 
+-#undef LINK_COMMAND_SPEC
+-#define LINK_COMMAND_SPEC \
+-"%{!fsyntax-only: \
+-%{!c:%{!M:%{!MM:%{!E:%{!S:%(linker) %l %X %{o*} %{A} %{d} %{e*} %{m} %{N} %{n} \
+-\t%{r} %{s} %{t} %{u*} %{x} %{z} %{Z}\
+-\t%{!A:%{!nostdlib:%{!nostartfiles:%S}}}\
+-\t%{static:} %{L*} %D %o\
+-\t%{!nostdlib:%{!nodefaultlibs:%G %L %G}}\
+-\t%{!A:%{!nostdlib:%{!nostartfiles:%E}}}\
+-\t-Tdjgpp.djl %{T*}}}}}}}\n\
++#ifndef LINK_COMMAND_SPEC
++#define LINK_COMMAND_SPEC "\
++%{!fsyntax-only:%{!c:%{!M:%{!MM:%{!E:%{!S:\
++    %(linker) %l " LINK_PIE_SPEC "%X %{o*} %{A} %{d} %{e*} %{m} %{N} %{n} %{r}\
++    %{s} %{t} %{u*} %{x} %{z} %{Z} %{!A:%{!nostdlib:%{!nostartfiles:%S}}}\
++    %{static:} %{L*} %(link_libgcc) %o %{fprofile-arcs|fprofile-generate:-lgcov}\
++    %{!nostdlib:%{!nodefaultlibs:%(link_gcc_c_sequence)}}\
++    %{!A:%{!nostdlib:%{!nostartfiles:%E}}}\
++    %{T*} }}}}}}\n\
+ %{!c:%{!M:%{!MM:%{!E:%{!S:stubify %{v} %{o*:%*} %{!o*:a.out} }}}}}"
++#endif
++
++
+ 
+ /* Always just link in 'libc.a'.  */
+ #undef LIB_SPEC
+@@ -168,31 +177,27 @@ Boston, MA 02111-1307, USA.  */
+ 
+ /* Used to be defined in xm-djgpp.h, but moved here for cross-compilers.  */
+ #define LIBSTDCXX "-lstdcxx"
++#define LIBSTDCXX_PROFILE "-lstdcxx"
+ 
+-/* -mbnu210 is now ignored and obsolete. It was used to enable support for
+-   weak symbols, and .gnu.linkonce support.  */
+-#undef MASK_BNU210
+-#define MASK_BNU210 (0x40000000)
+-
+-#define TARGET_VERSION fprintf (stderr, " (80386, MS-DOS DJGPP)"); 
+-
+-#undef SUBTARGET_SWITCHES
+-#define SUBTARGET_SWITCHES \
+-  { "no-bnu210", -MASK_BNU210, "Ignored (obsolete)" }, \
+-  { "bnu210", MASK_BNU210, "Ignored (obsolete)" },
+-
+-/* Warn that -mbnu210 is now obsolete.  */
+-#undef  SUBTARGET_OVERRIDE_OPTIONS
+-#define SUBTARGET_OVERRIDE_OPTIONS \
+-do \
+-  { \
+-    if (target_flags & MASK_BNU210) \
+-      {	\
+-        warning ("-mbnu210 is ignored (option is obsolete)"); \
+-      }	\
+-  } \
+-while (0)
++/* Rename libgfortranbegin.a to avoid filename conflict for DOS */
++#undef FORTRAN_INIT
++#define FORTRAN_INIT "-lgf95begin"
++
++
++#define TARGET_VERSION fprintf (stderr, " (i386, MS-DOS DJGPP)"); 
+ 
+ /* Support for C++ templates.  */
+ #undef MAKE_DECL_ONE_ONLY
+ #define MAKE_DECL_ONE_ONLY(DECL) (DECL_WEAK (DECL) = 1)
++
++#undef DBX_REGISTER_NUMBER
++#define DBX_REGISTER_NUMBER(n) svr4_dbx_register_map[n]
++
++/* Default to pcc-struct-return.  */
++#define DEFAULT_PCC_STRUCT_RETURN 1
++
++/* Copied from gcc/varasm.c.  */
++#undef ASM_DECLARE_FUNCTION_NAME
++#define ASM_DECLARE_FUNCTION_NAME(FILE, NAME, DECL)		\
++  ASM_OUTPUT_LABEL (FILE, NAME);
++
+diff --git a/gcc/config/i386/t-djgpp b/gcc/config/i386/t-djgpp
+index 7b54b7ba..42bfff58 100644
+--- a/gcc/config/i386/t-djgpp
++++ b/gcc/config/i386/t-djgpp
+@@ -1,2 +1,10 @@
+ # Location of DJGPP's header directory.
+ NATIVE_SYSTEM_HEADER_DIR=$(DJDIR)/include
++
++# We should have djgpp.ver before we can compile anything
++EXTRA_PARTS += djgpp.ver
++# djgpp.ver is needed for compilation, so we need it also here
++EXTRA_PASSES += djgpp.ver
++
++djgpp.ver:
++	echo '#include <sys/version.h>' >djgpp.ver
+diff --git a/gcc/configure b/gcc/configure
+index dea29fb1..890ad0bd 100755
+--- a/gcc/configure
++++ b/gcc/configure
+@@ -309,7 +309,7 @@ ac_includes_default="\
+ # include <unistd.h>
+ #endif"
+ 
+-ac_subst_vars='SHELL PATH_SEPARATOR PACKAGE_NAME PACKAGE_TARNAME PACKAGE_VERSION PACKAGE_STRING PACKAGE_BUGREPORT exec_prefix prefix program_transform_name bindir sbindir libexecdir datadir sysconfdir sharedstatedir localstatedir libdir includedir oldincludedir infodir mandir build_alias host_alias target_alias DEFS ECHO_C ECHO_N ECHO_T LIBS build build_cpu build_vendor build_os host host_cpu host_vendor host_os target target_cpu target_vendor target_os target_noncanonical build_subdir host_subdir target_subdir gcc_version_trigger gcc_version_full gcc_version GENINSRC CC CFLAGS LDFLAGS CPPFLAGS ac_ct_CC EXEEXT OBJEXT NO_MINUS_C_MINUS_O OUTPUT_OPTION CPP EGREP strict1_warn warn_cflags WERROR nocommon_flag TREEBROWSER valgrind_path valgrind_path_defines valgrind_command coverage_flags enable_multilib enable_shared TARGET_SYSTEM_ROOT TARGET_SYSTEM_ROOT_DEFINE CROSS_SYSTEM_HEADER_DIR onestep SET_MAKE AWK LN_S LN RANLIB ac_ct_RANLIB ranlib_flags INSTALL INSTALL_PROGRAM INSTALL_DATA make_compare_target have_mktemp_command MAKEINFO BUILD_INFO GENERATED_MANPAGES FLEX BISON NM AR stage1_cflags COLLECT2_LIBS GNAT_LIBEXC LDEXP_LIB TARGET_GETGROUPS_T LIBICONV LTLIBICONV LIBICONV_DEP manext objext gthread_flags extra_modes_file PACKAGE VERSION USE_NLS LIBINTL LIBINTL_DEP INCINTL XGETTEXT GMSGFMT POSUB CATALOGS cc_for_cross_gnattools CROSS ALL SYSTEM_HEADER_DIR inhibit_libc CC_FOR_BUILD BUILD_CFLAGS STMP_FIXINC STMP_FIXPROTO collect2 libgcc_visibility GGC zlibdir zlibinc MAINT gcc_tooldir dollar slibdir objdir subdirs srcdir all_boot_languages all_compilers all_gtfiles all_gtfiles_files_langs all_gtfiles_files_files all_lang_makefrags all_lang_makefiles all_languages all_stagestuff build_exeext build_install_headers_dir build_xm_file_list build_xm_include_list build_xm_defines check_languages cc_set_by_configure quoted_cc_set_by_configure cpp_install_dir xmake_file tmake_file extra_gcc_objs extra_headers_list extra_objs extra_parts extra_passes extra_programs float_h_file gcc_config_arguments gcc_gxx_include_dir libstdcxx_incdir host_exeext host_xm_file_list host_xm_include_list host_xm_defines out_host_hook_obj install lang_opt_files lang_specs_files lang_tree_files local_prefix md_file objc_boehm_gc out_file out_object_file stage_prefix_set_by_configure quoted_stage_prefix_set_by_configure thread_file tm_file_list tm_include_list tm_defines tm_p_file_list tm_p_include_list xm_file_list xm_include_list xm_defines c_target_objs cxx_target_objs target_cpu_default set_gcc_lib_path GMPLIBS GMPINC LIBOBJS LTLIBOBJS'
++ac_subst_vars='SHELL PATH_SEPARATOR PACKAGE_NAME PACKAGE_TARNAME PACKAGE_VERSION PACKAGE_STRING PACKAGE_BUGREPORT exec_prefix prefix program_transform_name bindir sbindir libexecdir datadir sysconfdir sharedstatedir localstatedir libdir includedir oldincludedir infodir mandir build_alias host_alias target_alias DEFS ECHO_C ECHO_N ECHO_T LIBS build build_cpu build_vendor build_os host host_cpu host_vendor host_os target target_cpu target_vendor target_os target_noncanonical build_subdir host_subdir target_subdir gcc_version_trigger gcc_version_full gcc_version libstdcxx_incdir_base GENINSRC CC CFLAGS LDFLAGS CPPFLAGS ac_ct_CC EXEEXT OBJEXT NO_MINUS_C_MINUS_O OUTPUT_OPTION CPP EGREP strict1_warn warn_cflags WERROR nocommon_flag TREEBROWSER valgrind_path valgrind_path_defines valgrind_command coverage_flags enable_multilib enable_shared TARGET_SYSTEM_ROOT TARGET_SYSTEM_ROOT_DEFINE CROSS_SYSTEM_HEADER_DIR onestep SET_MAKE AWK LN_S LN RANLIB ac_ct_RANLIB ranlib_flags INSTALL INSTALL_PROGRAM INSTALL_DATA make_compare_target have_mktemp_command MAKEINFO BUILD_INFO GENERATED_MANPAGES FLEX BISON NM AR stage1_cflags COLLECT2_LIBS GNAT_LIBEXC LDEXP_LIB TARGET_GETGROUPS_T LIBICONV LTLIBICONV LIBICONV_DEP manext objext gthread_flags extra_modes_file PACKAGE VERSION USE_NLS LIBINTL LIBINTL_DEP INCINTL XGETTEXT GMSGFMT POSUB CATALOGS cc_for_cross_gnattools CROSS ALL SYSTEM_HEADER_DIR inhibit_libc CC_FOR_BUILD BUILD_CFLAGS STMP_FIXINC STMP_FIXPROTO collect2 libgcc_visibility GGC zlibdir zlibinc MAINT gcc_tooldir dollar slibdir objdir subdirs srcdir all_boot_languages all_compilers all_gtfiles all_gtfiles_files_langs all_gtfiles_files_files all_lang_makefrags all_lang_makefiles all_languages all_stagestuff build_exeext build_install_headers_dir build_xm_file_list build_xm_include_list build_xm_defines check_languages cc_set_by_configure quoted_cc_set_by_configure cpp_install_dir xmake_file tmake_file extra_gcc_objs extra_headers_list extra_objs extra_parts extra_passes extra_programs float_h_file gcc_config_arguments gcc_gxx_include_dir libstdcxx_incdir host_exeext host_xm_file_list host_xm_include_list host_xm_defines out_host_hook_obj install lang_opt_files lang_specs_files lang_tree_files local_prefix md_file objc_boehm_gc out_file out_object_file stage_prefix_set_by_configure quoted_stage_prefix_set_by_configure thread_file tm_file_list tm_include_list tm_defines tm_p_file_list tm_p_include_list xm_file_list xm_include_list xm_defines c_target_objs cxx_target_objs target_cpu_default set_gcc_lib_path GMPLIBS GMPINC LIBOBJS LTLIBOBJS'
+ ac_subst_files='language_hooks'
+ 
+ # Initialize some variables set by options.
+@@ -1661,11 +1661,14 @@ no)	;;
+ esac
+ fi;
+ 
++libstdcxx_incdir_base=c++
++
++
+ if test x${gcc_gxx_include_dir} = x; then
+   if test x${enable_version_specific_runtime_libs} = xyes; then
+-    gcc_gxx_include_dir='${libsubdir}/include/c++'
++    gcc_gxx_include_dir='${libsubdir}/include/$(libstdcxx_incdir_base)'
+   else
+-    libstdcxx_incdir=c++/${gcc_version}
++    libstdcxx_incdir='$(libstdcxx_incdir_base)/$(gcc_version)'
+     gcc_gxx_include_dir="\$(libsubdir)/\$(unlibsubdir)/..\`echo \$(exec_prefix) | sed -e 's|^\$(prefix)||' -e 's|/[^/]*|/..|g'\`/include/"${libstdcxx_incdir}
+   fi
+ fi
+@@ -7390,7 +7393,7 @@ if test "${gcc_cv_prog_makeinfo_modern+set}" = set; then
+ else
+     ac_prog_version=`$MAKEINFO --version 2>&1 |
+                    sed -n 's/^.*GNU texinfo.* \([0-9][0-9.]*\).*$/\1/p'`
+-  echo "configure:7392: version of makeinfo is $ac_prog_version" >&5
++  echo "configure:7395: version of makeinfo is $ac_prog_version" >&5
+   case $ac_prog_version in
+     '')     gcc_cv_prog_makeinfo_modern=no;;
+     4.[2-9]*)
+@@ -16151,6 +16154,7 @@ s,@target_subdir@,$target_subdir,;t t
+ s,@gcc_version_trigger@,$gcc_version_trigger,;t t
+ s,@gcc_version_full@,$gcc_version_full,;t t
+ s,@gcc_version@,$gcc_version,;t t
++s,@libstdcxx_incdir_base@,$libstdcxx_incdir_base,;t t
+ s,@GENINSRC@,$GENINSRC,;t t
+ s,@CC@,$CC,;t t
+ s,@CFLAGS@,$CFLAGS,;t t
+diff --git a/gcc/configure.ac b/gcc/configure.ac
+index b1e2b9b8..b07d9923 100644
+--- a/gcc/configure.ac
++++ b/gcc/configure.ac
+@@ -135,11 +135,14 @@ no)	;;
+ *)	gcc_gxx_include_dir=$with_gxx_include_dir ;;
+ esac])
+ 
++libstdcxx_incdir_base=c++
++AC_SUBST(libstdcxx_incdir_base)
++
+ if test x${gcc_gxx_include_dir} = x; then
+   if test x${enable_version_specific_runtime_libs} = xyes; then
+-    gcc_gxx_include_dir='${libsubdir}/include/c++'
++    gcc_gxx_include_dir='${libsubdir}/include/$(libstdcxx_incdir_base)'
+   else
+-    libstdcxx_incdir=c++/${gcc_version}
++    libstdcxx_incdir='$(libstdcxx_incdir_base)/$(gcc_version)'
+ changequote(<<, >>)dnl
+     gcc_gxx_include_dir="\$(libsubdir)/\$(unlibsubdir)/..\`echo \$(exec_prefix) | sed -e 's|^\$(prefix)||' -e 's|/[^/]*|/..|g'\`/include/"${libstdcxx_incdir}
+ changequote([, ])dnl
+diff --git a/gcc/gcc.c b/gcc/gcc.c
+index 23b53a09..d5434f46 100644
+--- a/gcc/gcc.c
++++ b/gcc/gcc.c
+@@ -1456,18 +1456,22 @@ static const char *gcc_libexec_prefix;
+ #endif
+ 
+ static const char *const standard_exec_prefix = STANDARD_EXEC_PREFIX;
++#ifndef __DJGPP__
+ static const char *const standard_exec_prefix_1 = "/usr/libexec/gcc/";
+ static const char *const standard_exec_prefix_2 = "/usr/lib/gcc/";
++#endif
+ static const char *md_exec_prefix = MD_EXEC_PREFIX;
+ 
+ static const char *md_startfile_prefix = MD_STARTFILE_PREFIX;
+ static const char *md_startfile_prefix_1 = MD_STARTFILE_PREFIX_1;
+ static const char *const standard_startfile_prefix = STANDARD_STARTFILE_PREFIX;
++#ifndef __DJGPP__
+ static const char *const standard_startfile_prefix_1
+   = STANDARD_STARTFILE_PREFIX_1;
+ static const char *const standard_startfile_prefix_2
+   = STANDARD_STARTFILE_PREFIX_2;
+-
++#endif
++  
+ static const char *const tooldir_base_prefix = TOOLDIR_BASE_PREFIX;
+ static const char *tooldir_prefix;
+ 
+@@ -3822,16 +3826,20 @@ warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n\n"
+ 	      PREFIX_PRIORITY_LAST, 2, 0);
+   add_prefix (&exec_prefixes, standard_exec_prefix, "BINUTILS",
+ 	      PREFIX_PRIORITY_LAST, 2, 0);
++#ifndef __DJGPP__	      
+   add_prefix (&exec_prefixes, standard_exec_prefix_1, "BINUTILS",
+ 	      PREFIX_PRIORITY_LAST, 2, 0);
+   add_prefix (&exec_prefixes, standard_exec_prefix_2, "BINUTILS",
+ 	      PREFIX_PRIORITY_LAST, 2, 0);
++#endif	      
+ #endif
+ 
+   add_prefix (&startfile_prefixes, standard_exec_prefix, "BINUTILS",
+ 	      PREFIX_PRIORITY_LAST, 1, 0);
++#ifndef __DJGPP__	      
+   add_prefix (&startfile_prefixes, standard_exec_prefix_2, "BINUTILS",
+ 	      PREFIX_PRIORITY_LAST, 1, 0);
++#endif
+ 
+   tooldir_prefix = concat (tooldir_base_prefix, spec_machine,
+ 			   dir_separator_str, NULL);
+@@ -6469,6 +6477,7 @@ main (int argc, const char **argv)
+ 		      NULL, PREFIX_PRIORITY_LAST, 0, 1);
+ 	}
+ 
++#ifndef __DJGPP__	
+       if (*standard_startfile_prefix_1)
+  	add_sysrooted_prefix (&startfile_prefixes,
+ 			      standard_startfile_prefix_1, "BINUTILS",
+@@ -6477,6 +6486,7 @@ main (int argc, const char **argv)
+ 	add_sysrooted_prefix (&startfile_prefixes,
+ 			      standard_startfile_prefix_2, "BINUTILS",
+ 			      PREFIX_PRIORITY_LAST, 0, 1);
++#endif			      
+     }
+ 
+   /* Process any user specified specs in the order given on the command
+diff --git a/gcc/gcov.c b/gcc/gcov.c
+index bd80ea66..d58ccabb 100644
+--- a/gcc/gcov.c
++++ b/gcc/gcov.c
+@@ -1465,6 +1465,23 @@ make_gcov_file_name (const char *input_name, const char *src_name)
+     }
+ 
+   strcat (name, ".gcov");
++#ifdef __DJGPP__
++     if (!_use_lfn(name))
++       {
++           char *s1, *s2=NULL;
++           for (s1=name; *s1 && *s1!='.'; s1++);
++           if (*s1) for (s2=s1+1; *s2 && *s2!='.'; s2++);
++           if (s2 && *s2=='.')
++             {
++                 int l;
++                 s1++;  l=s2-s1;  if (l>2) l=2;
++                 s1 = s1+l;  s2++;
++                 while (*s2) { *s1++=*s2++; }
++                 *s1=0;
++             }
++       }
++#endif
++
+   return name;
+ }
+ 
+diff --git a/gcc/ginclude/float.h b/gcc/ginclude/float.h
+index 75fcd542..d493d117 100644
+--- a/gcc/ginclude/float.h
++++ b/gcc/ginclude/float.h
+@@ -28,6 +28,10 @@ Boston, MA 02111-1307, USA.  */
+  * ISO C Standard:  5.2.4.2.2  Characteristics of floating types <float.h>
+  */
+ 
++#ifdef __DJGPP__
++#include_next <float.h>
++#endif
++
+ #ifndef _FLOAT_H___
+ #define _FLOAT_H___
+ 
+diff --git a/gcc/protoize.c b/gcc/protoize.c
+index 328c6485..a35814f6 100644
+--- a/gcc/protoize.c
++++ b/gcc/protoize.c
+@@ -4151,7 +4151,7 @@ edit_file (const hash_table_entry *hp)
+ #ifdef __MSDOS__
+       /* MSDOS filenames are restricted to 8.3 format, so we save `foo.c'
+ 	 as `foo.<save_suffix>'.  */
+-      new_filename[(strlen (convert_filename) - 1] = '\0';
++      new_filename[strlen (convert_filename) - 1] = '\0';
+ #endif
+       strcat (new_filename, save_suffix);
+ 
+diff --git a/libcpp/files.c b/libcpp/files.c
+index 6aeae42b..d6795764 100644
+--- a/libcpp/files.c
++++ b/libcpp/files.c
+@@ -40,6 +40,7 @@ Foundation, 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+ #endif
+ 
+ #ifdef __DJGPP__
++#include <io.h>
+   /* For DJGPP redirected input is opened in text mode.  */
+ #  define set_stdin_to_binary_mode() \
+      if (! isatty (0)) setmode (0, O_BINARY)
+@@ -551,6 +552,13 @@ read_file_guts (cpp_reader *pfile, _cpp_file *file)
+     cpp_error (pfile, CPP_DL_WARNING,
+ 	       "%s is shorter than expected", file->path);
+ 
++#ifdef __DJGPP__
++/* For DOS we should handle DOS EOF character (0x1A, ^Z). It is only done
++   when ^Z is last character in the file  */
++  if (total>0 && buf[total-1]==0x1A) 
++	total --;
++#endif
++  
+   file->buffer = _cpp_convert_input (pfile, CPP_OPTION (pfile, input_charset),
+ 				     buf, size, total, &file->st.st_size);
+   file->buffer_valid = true;
+diff --git a/libgfortran/Makefile.am b/libgfortran/Makefile.am
+index c3f37a8d..73427678 100644
+--- a/libgfortran/Makefile.am
++++ b/libgfortran/Makefile.am
+@@ -3,13 +3,22 @@
+ 
+ ACLOCAL_AMFLAGS = -I ../config
+ 
++if DJGPP
++toolexeclib_LTLIBRARIES = libgfortran.la libgf95begin.la
++else
+ toolexeclib_LTLIBRARIES = libgfortran.la libgfortranbegin.la
++endif
+ 
+ libgfortran_la_LDFLAGS = -version-info `grep -v '^\#' $(srcdir)/libtool-version` -lm $(extra_ldflags_libgfortran)
+ 
+ ## This should really go in the compiler lib dir, not the system lib dir.
++if DJGPP
++libgf95begin_la_SOURCES = fmain.c
++libgf95begin_la_LDFLAGS = -static
++else
+ libgfortranbegin_la_SOURCES = fmain.c
+ libgfortranbegin_la_LDFLAGS = -static
++endif
+ 
+ ## io.h conflicts with some a system header on some platforms, so
+ ## use -iquote
+diff --git a/libgfortran/Makefile.in b/libgfortran/Makefile.in
+index e3f9c45e..ebcd86a1 100644
+--- a/libgfortran/Makefile.in
++++ b/libgfortran/Makefile.in
+@@ -65,6 +65,11 @@ am__strip_dir = `echo $$p | sed -e 's|^.*/||'`;
+ am__installdirs = "$(DESTDIR)$(toolexeclibdir)"
+ toolexeclibLTLIBRARIES_INSTALL = $(INSTALL)
+ LTLIBRARIES = $(toolexeclib_LTLIBRARIES)
++libgf95begin_la_LIBADD =
++am__libgf95begin_la_SOURCES_DIST = fmain.c
++@DJGPP_TRUE@am_libgf95begin_la_OBJECTS = fmain.lo
++libgf95begin_la_OBJECTS = $(am_libgf95begin_la_OBJECTS)
++@DJGPP_TRUE@am_libgf95begin_la_rpath = -rpath $(toolexeclibdir)
+ am__objects_1 = compile_options.lo environ.lo error.lo main.lo \
+ 	memory.lo pause.lo stop.lo string.lo select.lo
+ am__objects_2 = all_l4.lo all_l8.lo
+@@ -160,9 +165,13 @@ am_libgfortran_la_OBJECTS = $(am__objects_1) $(am__objects_31) \
+ 	$(am__objects_32) $(am__objects_33) $(am__objects_34) \
+ 	$(am__objects_37)
+ libgfortran_la_OBJECTS = $(am_libgfortran_la_OBJECTS)
++@DJGPP_FALSE@am_libgfortran_la_rpath = -rpath $(toolexeclibdir)
++@DJGPP_TRUE@am_libgfortran_la_rpath = -rpath $(toolexeclibdir)
+ libgfortranbegin_la_LIBADD =
+-am_libgfortranbegin_la_OBJECTS = fmain.lo
++am__libgfortranbegin_la_SOURCES_DIST = fmain.c
++@DJGPP_FALSE@am_libgfortranbegin_la_OBJECTS = fmain.lo
+ libgfortranbegin_la_OBJECTS = $(am_libgfortranbegin_la_OBJECTS)
++@DJGPP_FALSE@am_libgfortranbegin_la_rpath = -rpath $(toolexeclibdir)
+ DEFAULT_INCLUDES = -I. -I$(srcdir) -I.
+ depcomp =
+ am__depfiles_maybe =
+@@ -184,10 +193,11 @@ LINK = $(LIBTOOL) --mode=link $(CCLD) $(AM_CFLAGS) $(CFLAGS) \
+ 	$(AM_LDFLAGS) $(LDFLAGS) -o $@
+ FCCOMPILE = $(FC) $(AM_FCFLAGS) $(FCFLAGS)
+ LTFCCOMPILE = $(LIBTOOL) --mode=compile $(FC) $(AM_FCFLAGS) $(FCFLAGS)
+-SOURCES = $(libgfortran_la_SOURCES) $(EXTRA_libgfortran_la_SOURCES) \
+-	$(libgfortranbegin_la_SOURCES)
+-DIST_SOURCES = $(libgfortran_la_SOURCES) \
++SOURCES = $(libgf95begin_la_SOURCES) $(libgfortran_la_SOURCES) \
+ 	$(EXTRA_libgfortran_la_SOURCES) $(libgfortranbegin_la_SOURCES)
++DIST_SOURCES = $(am__libgf95begin_la_SOURCES_DIST) \
++	$(libgfortran_la_SOURCES) $(EXTRA_libgfortran_la_SOURCES) \
++	$(am__libgfortranbegin_la_SOURCES_DIST)
+ MULTISRCTOP = 
+ MULTIBUILDTOP = 
+ MULTIDIRS = 
+@@ -222,6 +232,8 @@ CPP = @CPP@
+ CPPFLAGS = @CPPFLAGS@
+ CYGPATH_W = @CYGPATH_W@
+ DEFS = @DEFS@
++DJGPP_FALSE = @DJGPP_FALSE@
++DJGPP_TRUE = @DJGPP_TRUE@
+ ECHO_C = @ECHO_C@
+ ECHO_N = @ECHO_N@
+ ECHO_T = @ECHO_T@
+@@ -308,10 +320,13 @@ target_vendor = @target_vendor@
+ toolexecdir = @toolexecdir@
+ toolexeclibdir = @toolexeclibdir@
+ ACLOCAL_AMFLAGS = -I ../config
+-toolexeclib_LTLIBRARIES = libgfortran.la libgfortranbegin.la
++@DJGPP_FALSE@toolexeclib_LTLIBRARIES = libgfortran.la libgfortranbegin.la
++@DJGPP_TRUE@toolexeclib_LTLIBRARIES = libgfortran.la libgf95begin.la
+ libgfortran_la_LDFLAGS = -version-info `grep -v '^\#' $(srcdir)/libtool-version` -lm $(extra_ldflags_libgfortran)
+-libgfortranbegin_la_SOURCES = fmain.c
+-libgfortranbegin_la_LDFLAGS = -static
++@DJGPP_TRUE@libgf95begin_la_SOURCES = fmain.c
++@DJGPP_TRUE@libgf95begin_la_LDFLAGS = -static
++@DJGPP_FALSE@libgfortranbegin_la_SOURCES = fmain.c
++@DJGPP_FALSE@libgfortranbegin_la_LDFLAGS = -static
+ AM_CPPFLAGS = -iquote$(srcdir)/io
+ libgfortranincludedir = $(includedir)/gforio
+ gfor_io_src = \
+@@ -804,10 +819,12 @@ clean-toolexeclibLTLIBRARIES:
+ 	  echo "rm -f \"$${dir}/so_locations\""; \
+ 	  rm -f "$${dir}/so_locations"; \
+ 	done
++libgf95begin.la: $(libgf95begin_la_OBJECTS) $(libgf95begin_la_DEPENDENCIES) 
++	$(LINK) $(am_libgf95begin_la_rpath) $(libgf95begin_la_LDFLAGS) $(libgf95begin_la_OBJECTS) $(libgf95begin_la_LIBADD) $(LIBS)
+ libgfortran.la: $(libgfortran_la_OBJECTS) $(libgfortran_la_DEPENDENCIES) 
+-	$(FCLINK) -rpath $(toolexeclibdir) $(libgfortran_la_LDFLAGS) $(libgfortran_la_OBJECTS) $(libgfortran_la_LIBADD) $(LIBS)
++	$(FCLINK) $(am_libgfortran_la_rpath) $(libgfortran_la_LDFLAGS) $(libgfortran_la_OBJECTS) $(libgfortran_la_LIBADD) $(LIBS)
+ libgfortranbegin.la: $(libgfortranbegin_la_OBJECTS) $(libgfortranbegin_la_DEPENDENCIES) 
+-	$(LINK) -rpath $(toolexeclibdir) $(libgfortranbegin_la_LDFLAGS) $(libgfortranbegin_la_OBJECTS) $(libgfortranbegin_la_LIBADD) $(LIBS)
++	$(LINK) $(am_libgfortranbegin_la_rpath) $(libgfortranbegin_la_LDFLAGS) $(libgfortranbegin_la_OBJECTS) $(libgfortranbegin_la_LIBADD) $(LIBS)
+ 
+ mostlyclean-compile:
+ 	-rm -f *.$(OBJEXT)
+diff --git a/libgfortran/configure b/libgfortran/configure
+index b771a459..65ed8aab 100755
+--- a/libgfortran/configure
++++ b/libgfortran/configure
+@@ -308,7 +308,7 @@ ac_includes_default="\
+ # include <unistd.h>
+ #endif"
+ 
+-ac_subst_vars='SHELL PATH_SEPARATOR PACKAGE_NAME PACKAGE_TARNAME PACKAGE_VERSION PACKAGE_STRING PACKAGE_BUGREPORT exec_prefix prefix program_transform_name bindir sbindir libexecdir datadir sysconfdir sharedstatedir localstatedir libdir includedir oldincludedir infodir mandir build_alias host_alias target_alias DEFS ECHO_C ECHO_N ECHO_T LIBS build build_cpu build_vendor build_os host host_cpu host_vendor host_os target target_cpu target_vendor target_os INSTALL_PROGRAM INSTALL_SCRIPT INSTALL_DATA CYGPATH_W PACKAGE VERSION ACLOCAL AUTOCONF AUTOMAKE AUTOHEADER MAKEINFO install_sh STRIP ac_ct_STRIP INSTALL_STRIP_PROGRAM mkdir_p AWK SET_MAKE am__leading_dot AMTAR am__tar am__untar MAINTAINER_MODE_TRUE MAINTAINER_MODE_FALSE MAINT multi_basedir gcc_version_trigger gcc_version_full gcc_version toolexecdir toolexeclibdir CC ac_ct_CC EXEEXT OBJEXT AM_FCFLAGS AM_CFLAGS AS ac_ct_AS AR ac_ct_AR RANLIB ac_ct_RANLIB LN_S LIBTOOL enable_shared enable_static FC FCFLAGS LDFLAGS ac_ct_FC extra_ldflags_libgfortran CPP CPPFLAGS EGREP MATH_OBJ LIBOBJS LTLIBOBJS'
++ac_subst_vars='SHELL PATH_SEPARATOR PACKAGE_NAME PACKAGE_TARNAME PACKAGE_VERSION PACKAGE_STRING PACKAGE_BUGREPORT exec_prefix prefix program_transform_name bindir sbindir libexecdir datadir sysconfdir sharedstatedir localstatedir libdir includedir oldincludedir infodir mandir build_alias host_alias target_alias DEFS ECHO_C ECHO_N ECHO_T LIBS build build_cpu build_vendor build_os host host_cpu host_vendor host_os target target_cpu target_vendor target_os INSTALL_PROGRAM INSTALL_SCRIPT INSTALL_DATA CYGPATH_W PACKAGE VERSION ACLOCAL AUTOCONF AUTOMAKE AUTOHEADER MAKEINFO install_sh STRIP ac_ct_STRIP INSTALL_STRIP_PROGRAM mkdir_p AWK SET_MAKE am__leading_dot AMTAR am__tar am__untar MAINTAINER_MODE_TRUE MAINTAINER_MODE_FALSE MAINT multi_basedir DJGPP_TRUE DJGPP_FALSE gcc_version_trigger gcc_version_full gcc_version toolexecdir toolexeclibdir CC ac_ct_CC EXEEXT OBJEXT AM_FCFLAGS AM_CFLAGS AS ac_ct_AS AR ac_ct_AR RANLIB ac_ct_RANLIB LN_S LIBTOOL enable_shared enable_static FC FCFLAGS LDFLAGS ac_ct_FC extra_ldflags_libgfortran CPP CPPFLAGS EGREP MATH_OBJ LIBOBJS LTLIBOBJS'
+ ac_subst_files=''
+ 
+ # Initialize some variables set by options.
+@@ -1949,6 +1949,18 @@ fi
+           ac_config_commands="$ac_config_commands default-1"
+ 
+ 
++# Add test for DJGPP
++
++
++if echo $host | grep msdosdjgpp; then
++  DJGPP_TRUE=
++  DJGPP_FALSE='#'
++else
++  DJGPP_TRUE='#'
++  DJGPP_FALSE=
++fi
++
++
+ # Handy for debugging:
+ #AC_MSG_NOTICE($build / $host / $target / $host_alias / $target_alias); sleep 5
+ 
+@@ -4079,7 +4091,7 @@ test x"$pic_mode" = xno && libtool_flags="$libtool_flags --prefer-non-pic"
+ case $host in
+ *-*-irix6*)
+   # Find out which ABI we are using.
+-  echo '#line 4082 "configure"' > conftest.$ac_ext
++  echo '#line 4094 "configure"' > conftest.$ac_ext
+   if { (eval echo "$as_me:$LINENO: \"$ac_compile\"") >&5
+   (eval $ac_compile) 2>&5
+   ac_status=$?
+@@ -15093,6 +15105,13 @@ echo "$as_me: error: conditional \"MAINTAINER_MODE\" was never defined.
+ Usually this means the macro was only invoked conditionally." >&2;}
+    { (exit 1); exit 1; }; }
+ fi
++if test -z "${DJGPP_TRUE}" && test -z "${DJGPP_FALSE}"; then
++  { { echo "$as_me:$LINENO: error: conditional \"DJGPP\" was never defined.
++Usually this means the macro was only invoked conditionally." >&5
++echo "$as_me: error: conditional \"DJGPP\" was never defined.
++Usually this means the macro was only invoked conditionally." >&2;}
++   { (exit 1); exit 1; }; }
++fi
+ 
+ : ${CONFIG_STATUS=./config.status}
+ ac_clean_files_save=$ac_clean_files
+@@ -15692,6 +15711,8 @@ s,@MAINTAINER_MODE_TRUE@,$MAINTAINER_MODE_TRUE,;t t
+ s,@MAINTAINER_MODE_FALSE@,$MAINTAINER_MODE_FALSE,;t t
+ s,@MAINT@,$MAINT,;t t
+ s,@multi_basedir@,$multi_basedir,;t t
++s,@DJGPP_TRUE@,$DJGPP_TRUE,;t t
++s,@DJGPP_FALSE@,$DJGPP_FALSE,;t t
+ s,@gcc_version_trigger@,$gcc_version_trigger,;t t
+ s,@gcc_version_full@,$gcc_version_full,;t t
+ s,@gcc_version@,$gcc_version,;t t
+diff --git a/libgfortran/configure.ac b/libgfortran/configure.ac
+index 2c88aa8a..96c09c71 100644
+--- a/libgfortran/configure.ac
++++ b/libgfortran/configure.ac
+@@ -55,6 +55,9 @@ AM_INIT_AUTOMAKE([1.8.2 no-define foreign no-dependencies -Wall -Wno-portability
+ AM_MAINTAINER_MODE
+ AM_ENABLE_MULTILIB(, ..)
+ 
++# Add test for DJGPP
++AM_CONDITIONAL(DJGPP,echo $host | grep msdosdjgpp)
++
+ # Handy for debugging:
+ #AC_MSG_NOTICE($build / $host / $target / $host_alias / $target_alias); sleep 5
+ 
+diff --git a/libgfortran/io/unix.c b/libgfortran/io/unix.c
+index 22aede20..41e47083 100644
+--- a/libgfortran/io/unix.c
++++ b/libgfortran/io/unix.c
+@@ -81,6 +81,10 @@ Boston, MA 02111-1307, USA.  */
+ #define S_IWOTH 0
+ #endif
+ 
++#ifdef __DJGPP__
++#include <io.h>
++#endif
++
+ /* This implementation of stream I/O is based on the paper:
+  *
+  *  "Exploiting the advantages of mapped files for stream I/O",
+@@ -1016,7 +1020,12 @@ tempfile (void)
+ 
+   template = get_mem (strlen (tempdir) + 20);
+ 
++#ifdef __DJGPP__
++  /* Default filename is too long for DOS */
++  st_sprintf (template, "%s/gfXXXXXX", tempdir);
++#else
+   st_sprintf (template, "%s/gfortrantmpXXXXXX", tempdir);
++#endif
+ 
+ #ifdef HAVE_MKSTEMP
+ 
+@@ -1206,6 +1215,13 @@ open_external (unit_flags *flags)
+       internal_error ("open_external(): Bad action");
+     }
+ 
++#ifdef __DJGPP__
++  if (flags->form == FORM_UNFORMATTED)
++    {
++      setmode (fd, O_BINARY);
++    }
++#endif
++
+   return fd_to_stream (fd, prot, 0);
+ }
+ 
+diff --git a/libiberty/make-relative-prefix.c b/libiberty/make-relative-prefix.c
+index dc4f8d52..3a6eb49c 100644
+--- a/libiberty/make-relative-prefix.c
++++ b/libiberty/make-relative-prefix.c
+@@ -78,6 +78,7 @@ relative prefix can be found, return @code{NULL}.
+ #  define HAVE_DOS_BASED_FILE_SYSTEM
+ #  define HAVE_HOST_EXECUTABLE_SUFFIX
+ #  define HOST_EXECUTABLE_SUFFIX ".exe"
++#  define FILENAME_COMPARE strcasecmp
+ #  ifndef DIR_SEPARATOR_2 
+ #    define DIR_SEPARATOR_2 '\\'
+ #  endif
+@@ -93,6 +94,10 @@ relative prefix can be found, return @code{NULL}.
+ 	(((ch) == DIR_SEPARATOR) || ((ch) == DIR_SEPARATOR_2))
+ #endif
+ 
++#ifndef FILENAME_COMPARE
++#  define FILENAME_COMPARE strcmp
++#endif
++
+ #define DIR_UP ".."
+ 
+ static char *save_string PARAMS ((const char *, int));
+@@ -317,7 +322,7 @@ make_relative_prefix (progname, bin_prefix, prefix)
+     {
+       for (i = 0; i < bin_num; i++)
+ 	{
+-	  if (strcmp (prog_dirs[i], bin_dirs[i]) != 0)
++	  if (FILENAME_COMPARE (prog_dirs[i], bin_dirs[i]) != 0)
+ 	    break;
+ 	}
+ 
+@@ -342,7 +347,7 @@ make_relative_prefix (progname, bin_prefix, prefix)
+   n = (prefix_num < bin_num) ? prefix_num : bin_num;
+   for (common = 0; common < n; common++)
+     {
+-      if (strcmp (bin_dirs[common], prefix_dirs[common]) != 0)
++      if (FILENAME_COMPARE (bin_dirs[common], prefix_dirs[common]) != 0)
+ 	break;
+     }
+ 
+diff --git a/libiberty/make-temp-file.c b/libiberty/make-temp-file.c
+index 88335047..592e7698 100644
+--- a/libiberty/make-temp-file.c
++++ b/libiberty/make-temp-file.c
+@@ -50,6 +50,29 @@ extern int mkstemps PARAMS ((char *, int));
+ #define DIR_SEPARATOR '/'
+ #endif
+ 
++#if defined (_WIN32) || defined (__MSDOS__) \
++    || defined (__DJGPP__) || defined (__OS2__)
++#  define HAVE_DOS_BASED_FILE_SYSTEM
++#  ifndef DIR_SEPARATOR_2 
++#    define DIR_SEPARATOR_2 '\\'
++#  endif
++#endif
++
++/* Define IS_DIR_SEPARATOR. VMS uses '::', ':', '[...]' and '<...>' to
++   separate the different components of a file specification.  It's a
++   bit of a stretch to call ':', ']' and '>' directory separators, so
++   just define the test to find the file name component.  */
++#ifdef VMS
++#  define IS_DIR_SEPARATOR(ch) ((ch) == ':' || (ch) == ']' || (ch) == '>')
++#else
++#  ifndef DIR_SEPARATOR_2
++#    define IS_DIR_SEPARATOR(ch) ((ch) == DIR_SEPARATOR)
++#  else
++#    define IS_DIR_SEPARATOR(ch) \
++	(((ch) == DIR_SEPARATOR) || ((ch) == DIR_SEPARATOR_2))
++#  endif
++#endif
++
+ /* Name of temporary file.
+    mktemp requires 6 trailing X's.  */
+ #define TEMP_FILE "ccXXXXXX"
+@@ -126,7 +149,8 @@ choose_tmpdir ()
+   len = strlen (base);
+   tmpdir = xmalloc (len + 2);
+   strcpy (tmpdir, base);
+-  tmpdir[len] = DIR_SEPARATOR;
++  if (len>0 && !IS_DIR_SEPARATOR(tmpdir[len-1]))   
++      tmpdir[len] = DIR_SEPARATOR;
+   tmpdir[len+1] = '\0';
+ 
+   memoized_tmpdir = tmpdir;
+diff --git a/libobjc/Makefile.in b/libobjc/Makefile.in
+index 0c182616..febf8c96 100644
+--- a/libobjc/Makefile.in
++++ b/libobjc/Makefile.in
+@@ -39,6 +39,8 @@ toplevel_srcdir = @toplevel_srcdir@
+ toolexecdir = @toolexecdir@
+ # Toolexecdir is used only by toolexeclibdir
+ toolexeclibdir = @toolexeclibdir@
++# Editted (if neccessary) GCC version string
++gcc_version_dir = @gcc_version_alias@
+ 
+ includedirname = @includedirname@
+ libext = @libext@
+@@ -46,7 +48,7 @@ libext = @libext@
+ top_builddir = .
+ 
+ libdir = $(exec_prefix)/lib
+-libsubdir = $(libdir)/gcc/$(target_noncanonical)/$(gcc_version)
++libsubdir = $(libdir)/gcc/$(target_noncanonical)/$(gcc_version_alias)
+ 
+ # Multilib support variables.
+ MULTISRCTOP =
+diff --git a/libobjc/configure b/libobjc/configure
+index 53f109f6..f092c94c 100755
+--- a/libobjc/configure
++++ b/libobjc/configure
+@@ -309,7 +309,7 @@ ac_includes_default="\
+ # include <unistd.h>
+ #endif"
+ 
+-ac_subst_vars='SHELL PATH_SEPARATOR PACKAGE_NAME PACKAGE_TARNAME PACKAGE_VERSION PACKAGE_STRING PACKAGE_BUGREPORT exec_prefix prefix program_transform_name bindir sbindir libexecdir datadir sysconfdir sharedstatedir localstatedir libdir includedir oldincludedir infodir mandir build_alias host_alias target_alias DEFS ECHO_C ECHO_N ECHO_T LIBS VERSION OBJC_BOEHM_GC OBJC_BOEHM_GC_INCLUDES toplevel_srcdir build build_cpu build_vendor build_os host host_cpu host_vendor host_os target target_cpu target_vendor target_os target_noncanonical glibcpp_srcdir gcc_version_trigger gcc_version_full gcc_version toolexecdir toolexeclibdir includedirname libext CC ac_ct_CC EXEEXT OBJEXT CFLAGS AS ac_ct_AS AR ac_ct_AR RANLIB ac_ct_RANLIB INSTALL_PROGRAM INSTALL_SCRIPT INSTALL_DATA MAINTAINER_MODE_TRUE MAINTAINER_MODE_FALSE MAINT LN_S STRIP ac_ct_STRIP LIBTOOL SET_MAKE CPP CPPFLAGS EGREP GTHREAD_FLAGS LIBOBJS LTLIBOBJS'
++ac_subst_vars='SHELL PATH_SEPARATOR PACKAGE_NAME PACKAGE_TARNAME PACKAGE_VERSION PACKAGE_STRING PACKAGE_BUGREPORT exec_prefix prefix program_transform_name bindir sbindir libexecdir datadir sysconfdir sharedstatedir localstatedir libdir includedir oldincludedir infodir mandir build_alias host_alias target_alias DEFS ECHO_C ECHO_N ECHO_T LIBS VERSION OBJC_BOEHM_GC OBJC_BOEHM_GC_INCLUDES toplevel_srcdir build build_cpu build_vendor build_os host host_cpu host_vendor host_os target target_cpu target_vendor target_os target_noncanonical glibcpp_srcdir gcc_version_trigger gcc_version_full gcc_version toolexecdir toolexeclibdir includedirname libext CC ac_ct_CC EXEEXT OBJEXT CFLAGS AS ac_ct_AS AR ac_ct_AR RANLIB ac_ct_RANLIB INSTALL_PROGRAM INSTALL_SCRIPT INSTALL_DATA MAINTAINER_MODE_TRUE MAINTAINER_MODE_FALSE MAINT LN_S STRIP ac_ct_STRIP LIBTOOL SET_MAKE CPP CPPFLAGS EGREP GTHREAD_FLAGS gcc_version_alias LIBOBJS LTLIBOBJS'
+ ac_subst_files=''
+ 
+ # Initialize some variables set by options.
+@@ -5182,6 +5182,19 @@ echo "${ECHO_T}$ac_exception_model_name" >&6
+           ac_config_commands="$ac_config_commands default"
+ 
+ 
++# For DJGPP there should not be more than 1 dot. Therefore edit
++# version in case of DJGPP
++case $host in
++	i?86-*-msdosdjgpp*)
++		gcc_version_alias='$(shell echo $(gcc_version) | sed -e "s:\.::2g")'
++		;;
++
++	* )
++		gcc_version_alias='$(gcc_version)'
++		;;
++esac
++
++
+ cat >confcache <<\_ACEOF
+ # This file is a shell script that caches the results of configure
+ # tests run on this system so they can be shared between configure
+@@ -5872,6 +5885,7 @@ s,@CPP@,$CPP,;t t
+ s,@CPPFLAGS@,$CPPFLAGS,;t t
+ s,@EGREP@,$EGREP,;t t
+ s,@GTHREAD_FLAGS@,$GTHREAD_FLAGS,;t t
++s,@gcc_version_alias@,$gcc_version_alias,;t t
+ s,@LIBOBJS@,$LIBOBJS,;t t
+ s,@LTLIBOBJS@,$LTLIBOBJS,;t t
+ CEOF
+diff --git a/libobjc/configure.ac b/libobjc/configure.ac
+index 44637d17..6c8aa185 100644
+--- a/libobjc/configure.ac
++++ b/libobjc/configure.ac
+@@ -317,4 +317,17 @@ CONFIG_SHELL=${CONFIG_SHELL-/bin/sh}
+ ORIGINAL_LD_FOR_MULTILIBS="${ORIGINAL_LD_FOR_MULTILIBS}"
+ ]])
+ 
++# For DJGPP there should not be more than 1 dot. Therefore edit
++# version in case of DJGPP
++[case $host in
++	i?86-*-msdosdjgpp*)
++		gcc_version_alias='$(shell echo $(gcc_version) | sed -e "s:\.::2g")'
++		;;
++
++	* )
++		gcc_version_alias='$(gcc_version)'
++		;;
++esac]
++AC_SUBST(gcc_version_alias)
++
+ AC_OUTPUT
+diff --git a/libstdc++-v3/Makefile.in b/libstdc++-v3/Makefile.in
+index 1ec573e0..560cfa0e 100644
+--- a/libstdc++-v3/Makefile.in
++++ b/libstdc++-v3/Makefile.in
+@@ -1,8 +1,8 @@
+-# Makefile.in generated by automake 1.9.3 from Makefile.am.
++# Makefile.in generated by automake 1.9.5 from Makefile.am.
+ # @configure_input@
+ 
+ # Copyright (C) 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002,
+-# 2003, 2004  Free Software Foundation, Inc.
++# 2003, 2004, 2005  Free Software Foundation, Inc.
+ # This Makefile.in is free software; the Free Software Foundation
+ # gives unlimited permission to copy and/or distribute it,
+ # with or without modifications, as long as this notice is preserved.
+@@ -36,7 +36,7 @@ POST_UNINSTALL = :
+ build_triplet = @build@
+ host_triplet = @host@
+ target_triplet = @target@
+-DIST_COMMON = README $(am__configure_deps) $(srcdir)/../config.guess \
++DIST_COMMON = $(am__configure_deps) $(srcdir)/../config.guess \
+ 	$(srcdir)/../config.sub $(srcdir)/../install-sh \
+ 	$(srcdir)/../ltmain.sh $(srcdir)/../missing \
+ 	$(srcdir)/../mkinstalldirs $(srcdir)/Makefile.am \
+@@ -125,6 +125,8 @@ CYGPATH_W = @CYGPATH_W@
+ C_INCLUDE_DIR = @C_INCLUDE_DIR@
+ DEBUG_FLAGS = @DEBUG_FLAGS@
+ DEFS = @DEFS@
++DJGPP_FALSE = @DJGPP_FALSE@
++DJGPP_TRUE = @DJGPP_TRUE@
+ ECHO_C = @ECHO_C@
+ ECHO_N = @ECHO_N@
+ ECHO_T = @ECHO_T@
+@@ -408,7 +410,13 @@ uninstall-info-am:
+ #     (which will cause the Makefiles to be regenerated when you run `make');
+ # (2) otherwise, pass the desired values on the `make' command line.
+ $(RECURSIVE_TARGETS):
+-	@set fnord $$MAKEFLAGS; amf=$$2; \
++	@failcom='exit 1'; \
++	for f in x $$MAKEFLAGS; do \
++	  case $$f in \
++	    *=* | --[!k]*);; \
++	    *k*) failcom='fail=yes';; \
++	  esac; \
++	done; \
+ 	dot_seen=no; \
+ 	target=`echo $@ | sed s/-recursive//`; \
+ 	list='$(SUBDIRS)'; for subdir in $$list; do \
+@@ -420,7 +428,7 @@ $(RECURSIVE_TARGETS):
+ 	    local_target="$$target"; \
+ 	  fi; \
+ 	  (cd $$subdir && $(MAKE) $(AM_MAKEFLAGS) $$local_target) \
+-	   || case "$$amf" in *=*) exit 1;; *k*) fail=yes;; *) exit 1;; esac; \
++	  || eval $$failcom; \
+ 	done; \
+ 	if test "$$dot_seen" = "no"; then \
+ 	  $(MAKE) $(AM_MAKEFLAGS) "$$target-am" || exit 1; \
+@@ -428,7 +436,13 @@ $(RECURSIVE_TARGETS):
+ 
+ mostlyclean-recursive clean-recursive distclean-recursive \
+ maintainer-clean-recursive:
+-	@set fnord $$MAKEFLAGS; amf=$$2; \
++	@failcom='exit 1'; \
++	for f in x $$MAKEFLAGS; do \
++	  case $$f in \
++	    *=* | --[!k]*);; \
++	    *k*) failcom='fail=yes';; \
++	  esac; \
++	done; \
+ 	dot_seen=no; \
+ 	case "$@" in \
+ 	  distclean-* | maintainer-clean-*) list='$(DIST_SUBDIRS)' ;; \
+@@ -449,7 +463,7 @@ maintainer-clean-recursive:
+ 	    local_target="$$target"; \
+ 	  fi; \
+ 	  (cd $$subdir && $(MAKE) $(AM_MAKEFLAGS) $$local_target) \
+-	   || case "$$amf" in *=*) exit 1;; *k*) fail=yes;; *) exit 1;; esac; \
++	  || eval $$failcom; \
+ 	done && test -z "$$fail"
+ tags-recursive:
+ 	list='$(SUBDIRS)'; for subdir in $$list; do \
+diff --git a/libstdc++-v3/acinclude.m4 b/libstdc++-v3/acinclude.m4
+index 9fbce5f6..5f8071b2 100644
+--- a/libstdc++-v3/acinclude.m4
++++ b/libstdc++-v3/acinclude.m4
+@@ -750,11 +750,24 @@ AC_DEFUN([GLIBCXX_EXPORT_INSTALL_INFO], [
+     [version_specific_libs=no])
+   AC_MSG_RESULT($version_specific_libs)
+ 
++  # Convert GCC version string (to be used as directory name)
++  # Does nothing except for DJGPP
++  case "$host" in
++    *-msdosdjgpp*)
++       libstdcxx_incdir_base=cxx
++       gcc_version_alias='$(shell echo $(gcc_version) | sed -e "s:\.::2g")'
++       ;;
++    *)
++       libstdcxx_incdir_base=c++
++       gcc_version_alias='$(gcc_version)'
++       ;;
++  esac
++
+   # Default case for install directory for include files.
+   if test $version_specific_libs = no && test $gxx_include_dir = no; then
+-    gxx_include_dir='${prefix}'/include/c++/${gcc_version}
++    gxx_include_dir='${prefix}'/include/${libstdcxx_incdir_base}/${gcc_version_alias}
+   fi
+-
++                                                            
+   # Version-specific runtime libs processing.
+   if test $version_specific_libs = yes; then
+     # Need the gcc compiler version to know where to install libraries
+@@ -762,10 +775,10 @@ AC_DEFUN([GLIBCXX_EXPORT_INSTALL_INFO], [
+     # is selected.  FIXME: these variables are misnamed, there are
+     # no executables installed in _toolexecdir or _toolexeclibdir.
+     if test x"$gxx_include_dir" = x"no"; then
+-      gxx_include_dir='${libdir}/gcc/${host_alias}/'$gcc_version/include/c++
++      gxx_include_dir='${libdir}/gcc/${host_alias}/'$gcc_version_alias/include/${libstdcxx_incdir_base}
+     fi
+     glibcxx_toolexecdir='${libdir}/gcc/${host_alias}'
+-    glibcxx_toolexeclibdir='${toolexecdir}/'$gcc_version'$(MULTISUBDIR)'
++    glibcxx_toolexeclibdir='${toolexecdir}/'$gcc_version_alias'$(MULTISUBDIR)'
+   fi
+ 
+   # Calculate glibcxx_toolexecdir, glibcxx_toolexeclibdir
+diff --git a/libstdc++-v3/aclocal.m4 b/libstdc++-v3/aclocal.m4
+index 0111a59f..0bf3204f 100644
+--- a/libstdc++-v3/aclocal.m4
++++ b/libstdc++-v3/aclocal.m4
+@@ -1,7 +1,7 @@
+-# generated automatically by aclocal 1.9.3 -*- Autoconf -*-
++# generated automatically by aclocal 1.9.5 -*- Autoconf -*-
+ 
+-# Copyright (C) 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004
+-# Free Software Foundation, Inc.
++# Copyright (C) 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004,
++# 2005  Free Software Foundation, Inc.
+ # This file is free software; the Free Software Foundation
+ # gives unlimited permission to copy and/or distribute it,
+ # with or without modifications, as long as this notice is preserved.
+@@ -11,23 +11,11 @@
+ # even the implied warranty of MERCHANTABILITY or FITNESS FOR A
+ # PARTICULAR PURPOSE.
+ 
+-#                                                        -*- Autoconf -*-
+-# Copyright (C) 2002, 2003  Free Software Foundation, Inc.
+-# Generated from amversion.in; do not edit by hand.
+-
+-# This program is free software; you can redistribute it and/or modify
+-# it under the terms of the GNU General Public License as published by
+-# the Free Software Foundation; either version 2, or (at your option)
+-# any later version.
+-
+-# This program is distributed in the hope that it will be useful,
+-# but WITHOUT ANY WARRANTY; without even the implied warranty of
+-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+-# GNU General Public License for more details.
+-
+-# You should have received a copy of the GNU General Public License
+-# along with this program; if not, write to the Free Software
+-# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
++# Copyright (C) 2002, 2003, 2005  Free Software Foundation, Inc.
++#
++# This file is free software; the Free Software Foundation
++# gives unlimited permission to copy and/or distribute it,
++# with or without modifications, as long as this notice is preserved.
+ 
+ # AM_AUTOMAKE_VERSION(VERSION)
+ # ----------------------------
+@@ -40,26 +28,15 @@ AC_DEFUN([AM_AUTOMAKE_VERSION], [am__api_version="1.9"])
+ # Call AM_AUTOMAKE_VERSION so it can be traced.
+ # This function is AC_REQUIREd by AC_INIT_AUTOMAKE.
+ AC_DEFUN([AM_SET_CURRENT_AUTOMAKE_VERSION],
+-	 [AM_AUTOMAKE_VERSION([1.9.3])])
++	 [AM_AUTOMAKE_VERSION([1.9.5])])
+ 
+-# AM_AUX_DIR_EXPAND
++# AM_AUX_DIR_EXPAND                                         -*- Autoconf -*-
+ 
+-# Copyright (C) 2001, 2003 Free Software Foundation, Inc.
+-
+-# This program is free software; you can redistribute it and/or modify
+-# it under the terms of the GNU General Public License as published by
+-# the Free Software Foundation; either version 2, or (at your option)
+-# any later version.
+-
+-# This program is distributed in the hope that it will be useful,
+-# but WITHOUT ANY WARRANTY; without even the implied warranty of
+-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+-# GNU General Public License for more details.
+-
+-# You should have received a copy of the GNU General Public License
+-# along with this program; if not, write to the Free Software
+-# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+-# 02111-1307, USA.
++# Copyright (C) 2001, 2003, 2005  Free Software Foundation, Inc.
++#
++# This file is free software; the Free Software Foundation
++# gives unlimited permission to copy and/or distribute it,
++# with or without modifications, as long as this notice is preserved.
+ 
+ # For projects using AC_CONFIG_AUX_DIR([foo]), Autoconf sets
+ # $ac_aux_dir to `$srcdir/foo'.  In other projects, it is set to
+@@ -106,26 +83,16 @@ AC_PREREQ([2.50])dnl
+ am_aux_dir=`cd $ac_aux_dir && pwd`
+ ])
+ 
+-# AM_CONDITIONAL                                              -*- Autoconf -*-
+-
+-# Copyright (C) 1997, 2000, 2001, 2003, 2004 Free Software Foundation, Inc.
++# AM_CONDITIONAL                                            -*- Autoconf -*-
+ 
+-# This program is free software; you can redistribute it and/or modify
+-# it under the terms of the GNU General Public License as published by
+-# the Free Software Foundation; either version 2, or (at your option)
+-# any later version.
+-
+-# This program is distributed in the hope that it will be useful,
+-# but WITHOUT ANY WARRANTY; without even the implied warranty of
+-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+-# GNU General Public License for more details.
+-
+-# You should have received a copy of the GNU General Public License
+-# along with this program; if not, write to the Free Software
+-# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+-# 02111-1307, USA.
++# Copyright (C) 1997, 2000, 2001, 2003, 2004, 2005
++# Free Software Foundation, Inc.
++#
++# This file is free software; the Free Software Foundation
++# gives unlimited permission to copy and/or distribute it,
++# with or without modifications, as long as this notice is preserved.
+ 
+-# serial 6
++# serial 7
+ 
+ # AM_CONDITIONAL(NAME, SHELL-CONDITION)
+ # -------------------------------------
+@@ -149,30 +116,19 @@ AC_CONFIG_COMMANDS_PRE(
+ Usually this means the macro was only invoked conditionally.]])
+ fi])])
+ 
+-# Do all the work for Automake.                            -*- Autoconf -*-
+-
+-# This macro actually does too much some checks are only needed if
+-# your package does certain things.  But this isn't really a big deal.
++# Do all the work for Automake.                             -*- Autoconf -*-
+ 
+-# Copyright (C) 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004
++# Copyright (C) 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005
+ # Free Software Foundation, Inc.
++#
++# This file is free software; the Free Software Foundation
++# gives unlimited permission to copy and/or distribute it,
++# with or without modifications, as long as this notice is preserved.
+ 
+-# This program is free software; you can redistribute it and/or modify
+-# it under the terms of the GNU General Public License as published by
+-# the Free Software Foundation; either version 2, or (at your option)
+-# any later version.
+-
+-# This program is distributed in the hope that it will be useful,
+-# but WITHOUT ANY WARRANTY; without even the implied warranty of
+-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+-# GNU General Public License for more details.
+-
+-# You should have received a copy of the GNU General Public License
+-# along with this program; if not, write to the Free Software
+-# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+-# 02111-1307, USA.
++# serial 12
+ 
+-# serial 11
++# This macro actually does too much.  Some checks are only needed if
++# your package does certain things.  But this isn't really a big deal.
+ 
+ # AM_INIT_AUTOMAKE(PACKAGE, VERSION, [NO-DEFINE])
+ # AM_INIT_AUTOMAKE([OPTIONS])
+@@ -274,51 +230,27 @@ for _am_header in $config_headers :; do
+ done
+ echo "timestamp for $1" >`AS_DIRNAME([$1])`/stamp-h[]$_am_stamp_count])
+ 
++# Copyright (C) 2001, 2003, 2005  Free Software Foundation, Inc.
++#
++# This file is free software; the Free Software Foundation
++# gives unlimited permission to copy and/or distribute it,
++# with or without modifications, as long as this notice is preserved.
++
+ # AM_PROG_INSTALL_SH
+ # ------------------
+ # Define $install_sh.
+-
+-# Copyright (C) 2001, 2003 Free Software Foundation, Inc.
+-
+-# This program is free software; you can redistribute it and/or modify
+-# it under the terms of the GNU General Public License as published by
+-# the Free Software Foundation; either version 2, or (at your option)
+-# any later version.
+-
+-# This program is distributed in the hope that it will be useful,
+-# but WITHOUT ANY WARRANTY; without even the implied warranty of
+-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+-# GNU General Public License for more details.
+-
+-# You should have received a copy of the GNU General Public License
+-# along with this program; if not, write to the Free Software
+-# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+-# 02111-1307, USA.
+-
+ AC_DEFUN([AM_PROG_INSTALL_SH],
+ [AC_REQUIRE([AM_AUX_DIR_EXPAND])dnl
+ install_sh=${install_sh-"$am_aux_dir/install-sh"}
+ AC_SUBST(install_sh)])
+ 
+-#                                                          -*- Autoconf -*-
+-# Copyright (C) 2003  Free Software Foundation, Inc.
+-
+-# This program is free software; you can redistribute it and/or modify
+-# it under the terms of the GNU General Public License as published by
+-# the Free Software Foundation; either version 2, or (at your option)
+-# any later version.
+-
+-# This program is distributed in the hope that it will be useful,
+-# but WITHOUT ANY WARRANTY; without even the implied warranty of
+-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+-# GNU General Public License for more details.
+-
+-# You should have received a copy of the GNU General Public License
+-# along with this program; if not, write to the Free Software
+-# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+-# 02111-1307, USA.
++# Copyright (C) 2003, 2005  Free Software Foundation, Inc.
++#
++# This file is free software; the Free Software Foundation
++# gives unlimited permission to copy and/or distribute it,
++# with or without modifications, as long as this notice is preserved.
+ 
+-# serial 1
++# serial 2
+ 
+ # Check whether the underlying file-system supports filenames
+ # with a leading dot.  For instance MS-DOS doesn't.
+@@ -333,28 +265,17 @@ fi
+ rmdir .tst 2>/dev/null
+ AC_SUBST([am__leading_dot])])
+ 
+-# Add --enable-maintainer-mode option to configure.
++# Add --enable-maintainer-mode option to configure.         -*- Autoconf -*-
+ # From Jim Meyering
+ 
+-# Copyright (C) 1996, 1998, 2000, 2001, 2002, 2003, 2004
++# Copyright (C) 1996, 1998, 2000, 2001, 2002, 2003, 2004, 2005
+ # Free Software Foundation, Inc.
++#
++# This file is free software; the Free Software Foundation
++# gives unlimited permission to copy and/or distribute it,
++# with or without modifications, as long as this notice is preserved.
+ 
+-# This program is free software; you can redistribute it and/or modify
+-# it under the terms of the GNU General Public License as published by
+-# the Free Software Foundation; either version 2, or (at your option)
+-# any later version.
+-
+-# This program is distributed in the hope that it will be useful,
+-# but WITHOUT ANY WARRANTY; without even the implied warranty of
+-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+-# GNU General Public License for more details.
+-
+-# You should have received a copy of the GNU General Public License
+-# along with this program; if not, write to the Free Software
+-# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+-# 02111-1307, USA.
+-
+-# serial 3
++# serial 4
+ 
+ AC_DEFUN([AM_MAINTAINER_MODE],
+ [AC_MSG_CHECKING([whether to enable maintainer-specific portions of Makefiles])
+@@ -373,27 +294,16 @@ AC_DEFUN([AM_MAINTAINER_MODE],
+ 
+ AU_DEFUN([jm_MAINTAINER_MODE], [AM_MAINTAINER_MODE])
+ 
+-#  -*- Autoconf -*-
+-
+-
+-# Copyright (C) 1997, 1999, 2000, 2001, 2003 Free Software Foundation, Inc.
++# Fake the existence of programs that GNU maintainers use.  -*- Autoconf -*-
+ 
+-# This program is free software; you can redistribute it and/or modify
+-# it under the terms of the GNU General Public License as published by
+-# the Free Software Foundation; either version 2, or (at your option)
+-# any later version.
+-
+-# This program is distributed in the hope that it will be useful,
+-# but WITHOUT ANY WARRANTY; without even the implied warranty of
+-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+-# GNU General Public License for more details.
+-
+-# You should have received a copy of the GNU General Public License
+-# along with this program; if not, write to the Free Software
+-# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+-# 02111-1307, USA.
++# Copyright (C) 1997, 1999, 2000, 2001, 2003, 2005
++# Free Software Foundation, Inc.
++#
++# This file is free software; the Free Software Foundation
++# gives unlimited permission to copy and/or distribute it,
++# with or without modifications, as long as this notice is preserved.
+ 
+-# serial 3
++# serial 4
+ 
+ # AM_MISSING_PROG(NAME, PROGRAM)
+ # ------------------------------
+@@ -419,27 +329,16 @@ else
+ fi
+ ])
+ 
++# Copyright (C) 2003, 2004, 2005  Free Software Foundation, Inc.
++#
++# This file is free software; the Free Software Foundation
++# gives unlimited permission to copy and/or distribute it,
++# with or without modifications, as long as this notice is preserved.
++
+ # AM_PROG_MKDIR_P
+ # ---------------
+ # Check whether `mkdir -p' is supported, fallback to mkinstalldirs otherwise.
+-
+-# Copyright (C) 2003, 2004 Free Software Foundation, Inc.
+-
+-# This program is free software; you can redistribute it and/or modify
+-# it under the terms of the GNU General Public License as published by
+-# the Free Software Foundation; either version 2, or (at your option)
+-# any later version.
+-
+-# This program is distributed in the hope that it will be useful,
+-# but WITHOUT ANY WARRANTY; without even the implied warranty of
+-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+-# GNU General Public License for more details.
+-
+-# You should have received a copy of the GNU General Public License
+-# along with this program; if not, write to the Free Software
+-# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+-# 02111-1307, USA.
+-
++#
+ # Automake 1.8 used `mkdir -m 0755 -p --' to ensure that directories
+ # created by `make install' are always world readable, even if the
+ # installer happens to have an overly restrictive umask (e.g. 077).
+@@ -493,25 +392,14 @@ else
+ fi
+ AC_SUBST([mkdir_p])])
+ 
+-# Copyright (C) 1998, 1999, 2000, 2001, 2003, 2004
++# Copyright (C) 1998, 1999, 2000, 2001, 2003, 2004, 2005
+ # Free Software Foundation, Inc.
++#
++# This file is free software; the Free Software Foundation
++# gives unlimited permission to copy and/or distribute it,
++# with or without modifications, as long as this notice is preserved.
+ 
+-# This program is free software; you can redistribute it and/or modify
+-# it under the terms of the GNU General Public License as published by
+-# the Free Software Foundation; either version 2, or (at your option)
+-# any later version.
+-
+-# This program is distributed in the hope that it will be useful,
+-# but WITHOUT ANY WARRANTY; without even the implied warranty of
+-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+-# GNU General Public License for more details.
+-
+-# You should have received a copy of the GNU General Public License
+-# along with this program; if not, write to the Free Software
+-# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+-# 02111-1307, USA.
+-
+-# serial 4
++# serial 5
+ 
+ # AM_ENABLE_MULTILIB([MAKEFILE], [REL-TO-TOP-SRCDIR])
+ # ---------------------------------------------------
+@@ -562,26 +450,15 @@ multi_basedir="$multi_basedir"
+ CONFIG_SHELL=${CONFIG_SHELL-/bin/sh}
+ CC="$CC"])])dnl
+ 
+-# Helper functions for option handling.                    -*- Autoconf -*-
++# Helper functions for option handling.                     -*- Autoconf -*-
+ 
+-# Copyright (C) 2001, 2002, 2003  Free Software Foundation, Inc.
+-
+-# This program is free software; you can redistribute it and/or modify
+-# it under the terms of the GNU General Public License as published by
+-# the Free Software Foundation; either version 2, or (at your option)
+-# any later version.
+-
+-# This program is distributed in the hope that it will be useful,
+-# but WITHOUT ANY WARRANTY; without even the implied warranty of
+-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+-# GNU General Public License for more details.
+-
+-# You should have received a copy of the GNU General Public License
+-# along with this program; if not, write to the Free Software
+-# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+-# 02111-1307, USA.
++# Copyright (C) 2001, 2002, 2003, 2005  Free Software Foundation, Inc.
++#
++# This file is free software; the Free Software Foundation
++# gives unlimited permission to copy and/or distribute it,
++# with or without modifications, as long as this notice is preserved.
+ 
+-# serial 2
++# serial 3
+ 
+ # _AM_MANGLE_OPTION(NAME)
+ # -----------------------
+@@ -606,28 +483,16 @@ AC_DEFUN([_AM_SET_OPTIONS],
+ AC_DEFUN([_AM_IF_OPTION],
+ [m4_ifset(_AM_MANGLE_OPTION([$1]), [$2], [$3])])
+ 
+-#
+-# Check to make sure that the build environment is sane.
+-#
+-
+-# Copyright (C) 1996, 1997, 2000, 2001, 2003 Free Software Foundation, Inc.
+-
+-# This program is free software; you can redistribute it and/or modify
+-# it under the terms of the GNU General Public License as published by
+-# the Free Software Foundation; either version 2, or (at your option)
+-# any later version.
++# Check to make sure that the build environment is sane.    -*- Autoconf -*-
+ 
+-# This program is distributed in the hope that it will be useful,
+-# but WITHOUT ANY WARRANTY; without even the implied warranty of
+-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+-# GNU General Public License for more details.
+-
+-# You should have received a copy of the GNU General Public License
+-# along with this program; if not, write to the Free Software
+-# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+-# 02111-1307, USA.
++# Copyright (C) 1996, 1997, 2000, 2001, 2003, 2005
++# Free Software Foundation, Inc.
++#
++# This file is free software; the Free Software Foundation
++# gives unlimited permission to copy and/or distribute it,
++# with or without modifications, as long as this notice is preserved.
+ 
+-# serial 3
++# serial 4
+ 
+ # AM_SANITY_CHECK
+ # ---------------
+@@ -670,25 +535,14 @@ Check your system clock])
+ fi
+ AC_MSG_RESULT(yes)])
+ 
+-# AM_PROG_INSTALL_STRIP
+-
+-# Copyright (C) 2001, 2003 Free Software Foundation, Inc.
+-
+-# This program is free software; you can redistribute it and/or modify
+-# it under the terms of the GNU General Public License as published by
+-# the Free Software Foundation; either version 2, or (at your option)
+-# any later version.
+-
+-# This program is distributed in the hope that it will be useful,
+-# but WITHOUT ANY WARRANTY; without even the implied warranty of
+-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+-# GNU General Public License for more details.
+-
+-# You should have received a copy of the GNU General Public License
+-# along with this program; if not, write to the Free Software
+-# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+-# 02111-1307, USA.
++# Copyright (C) 2001, 2003, 2005  Free Software Foundation, Inc.
++#
++# This file is free software; the Free Software Foundation
++# gives unlimited permission to copy and/or distribute it,
++# with or without modifications, as long as this notice is preserved.
+ 
++# AM_PROG_INSTALL_STRIP
++# ---------------------
+ # One issue with vendor `install' (even GNU) is that you can't
+ # specify the program used to strip binaries.  This is especially
+ # annoying in cross-compiling environments, where the build's strip
+@@ -711,25 +565,13 @@ AC_SUBST([INSTALL_STRIP_PROGRAM])])
+ 
+ # Check how to create a tarball.                            -*- Autoconf -*-
+ 
+-# Copyright (C) 2004  Free Software Foundation, Inc.
+-
+-# This program is free software; you can redistribute it and/or modify
+-# it under the terms of the GNU General Public License as published by
+-# the Free Software Foundation; either version 2, or (at your option)
+-# any later version.
+-
+-# This program is distributed in the hope that it will be useful,
+-# but WITHOUT ANY WARRANTY; without even the implied warranty of
+-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+-# GNU General Public License for more details.
+-
+-# You should have received a copy of the GNU General Public License
+-# along with this program; if not, write to the Free Software
+-# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
+-# 02111-1307, USA.
+-
+-# serial 1
++# Copyright (C) 2004, 2005  Free Software Foundation, Inc.
++#
++# This file is free software; the Free Software Foundation
++# gives unlimited permission to copy and/or distribute it,
++# with or without modifications, as long as this notice is preserved.
+ 
++# serial 2
+ 
+ # _AM_PROG_TAR(FORMAT)
+ # --------------------
+diff --git a/libstdc++-v3/configure b/libstdc++-v3/configure
+index c4844e5e..1c8b79df 100755
+--- a/libstdc++-v3/configure
++++ b/libstdc++-v3/configure
+@@ -309,7 +309,7 @@ ac_includes_default="\
+ # include <unistd.h>
+ #endif"
+ 
+-ac_subst_vars='SHELL PATH_SEPARATOR PACKAGE_NAME PACKAGE_TARNAME PACKAGE_VERSION PACKAGE_STRING PACKAGE_BUGREPORT exec_prefix prefix program_transform_name bindir sbindir libexecdir datadir sysconfdir sharedstatedir localstatedir libdir includedir oldincludedir infodir mandir build_alias host_alias target_alias DEFS ECHO_C ECHO_N ECHO_T LIBS libtool_VERSION multi_basedir build build_cpu build_vendor build_os host host_cpu host_vendor host_os target target_cpu target_vendor target_os INSTALL_PROGRAM INSTALL_SCRIPT INSTALL_DATA CYGPATH_W PACKAGE VERSION ACLOCAL AUTOCONF AUTOMAKE AUTOHEADER MAKEINFO install_sh STRIP ac_ct_STRIP INSTALL_STRIP_PROGRAM mkdir_p AWK SET_MAKE am__leading_dot AMTAR am__tar am__untar glibcxx_builddir glibcxx_srcdir toplevel_srcdir CC ac_ct_CC EXEEXT OBJEXT CXX ac_ct_CXX CFLAGS CXXFLAGS LN_S AS ac_ct_AS AR ac_ct_AR RANLIB ac_ct_RANLIB MAINTAINER_MODE_TRUE MAINTAINER_MODE_FALSE MAINT LIBTOOL CXXCPP CPPFLAGS enable_shared enable_static GLIBCXX_HOSTED_TRUE GLIBCXX_HOSTED_FALSE GLIBCXX_BUILD_PCH_TRUE GLIBCXX_BUILD_PCH_FALSE glibcxx_PCHFLAGS CSTDIO_H BASIC_FILE_H BASIC_FILE_CC CPP EGREP check_msgfmt glibcxx_MOFILES glibcxx_POFILES glibcxx_localedir USE_NLS CLOCALE_H CMESSAGES_H CCODECVT_CC CCOLLATE_CC CCTYPE_CC CMESSAGES_CC CMONEY_CC CNUMERIC_CC CTIME_H CTIME_CC CLOCALE_CC CLOCALE_INTERNAL_H ALLOCATOR_H ALLOCATOR_NAME C_INCLUDE_DIR GLIBCXX_C_HEADERS_C_TRUE GLIBCXX_C_HEADERS_C_FALSE GLIBCXX_C_HEADERS_C_STD_TRUE GLIBCXX_C_HEADERS_C_STD_FALSE GLIBCXX_C_HEADERS_COMPATIBILITY_TRUE GLIBCXX_C_HEADERS_COMPATIBILITY_FALSE glibcxx_thread_h DEBUG_FLAGS GLIBCXX_BUILD_DEBUG_TRUE GLIBCXX_BUILD_DEBUG_FALSE EXTRA_CXX_FLAGS WERROR SECTION_FLAGS SECTION_LDFLAGS OPT_LDFLAGS LIBMATHOBJS LIBICONV SYMVER_MAP port_specific_symbol_files GLIBCXX_BUILD_VERSIONED_SHLIB_TRUE GLIBCXX_BUILD_VERSIONED_SHLIB_FALSE baseline_dir GLIBCXX_TEST_WCHAR_T_TRUE GLIBCXX_TEST_WCHAR_T_FALSE GLIBCXX_TEST_THREAD_TRUE GLIBCXX_TEST_THREAD_FALSE ATOMICITY_SRCDIR ATOMIC_WORD_SRCDIR ABI_TWEAKS_SRCDIR OS_INC_SRCDIR glibcxx_prefixdir gxx_include_dir glibcxx_toolexecdir glibcxx_toolexeclibdir GLIBCXX_INCLUDES TOPLEVEL_INCLUDES OPTIMIZE_CXXFLAGS WARN_FLAGS LIBSUPCXX_PICFLAGS LIBOBJS LTLIBOBJS'
++ac_subst_vars='SHELL PATH_SEPARATOR PACKAGE_NAME PACKAGE_TARNAME PACKAGE_VERSION PACKAGE_STRING PACKAGE_BUGREPORT exec_prefix prefix program_transform_name bindir sbindir libexecdir datadir sysconfdir sharedstatedir localstatedir libdir includedir oldincludedir infodir mandir build_alias host_alias target_alias DEFS ECHO_C ECHO_N ECHO_T LIBS libtool_VERSION multi_basedir build build_cpu build_vendor build_os host host_cpu host_vendor host_os target target_cpu target_vendor target_os INSTALL_PROGRAM INSTALL_SCRIPT INSTALL_DATA CYGPATH_W PACKAGE VERSION ACLOCAL AUTOCONF AUTOMAKE AUTOHEADER MAKEINFO install_sh STRIP ac_ct_STRIP INSTALL_STRIP_PROGRAM mkdir_p AWK SET_MAKE am__leading_dot AMTAR am__tar am__untar DJGPP_TRUE DJGPP_FALSE glibcxx_builddir glibcxx_srcdir toplevel_srcdir CC ac_ct_CC EXEEXT OBJEXT CXX ac_ct_CXX CFLAGS CXXFLAGS LN_S AS ac_ct_AS AR ac_ct_AR RANLIB ac_ct_RANLIB MAINTAINER_MODE_TRUE MAINTAINER_MODE_FALSE MAINT LIBTOOL CXXCPP CPPFLAGS enable_shared enable_static GLIBCXX_HOSTED_TRUE GLIBCXX_HOSTED_FALSE GLIBCXX_BUILD_PCH_TRUE GLIBCXX_BUILD_PCH_FALSE glibcxx_PCHFLAGS CSTDIO_H BASIC_FILE_H BASIC_FILE_CC CPP EGREP check_msgfmt glibcxx_MOFILES glibcxx_POFILES glibcxx_localedir USE_NLS CLOCALE_H CMESSAGES_H CCODECVT_CC CCOLLATE_CC CCTYPE_CC CMESSAGES_CC CMONEY_CC CNUMERIC_CC CTIME_H CTIME_CC CLOCALE_CC CLOCALE_INTERNAL_H ALLOCATOR_H ALLOCATOR_NAME C_INCLUDE_DIR GLIBCXX_C_HEADERS_C_TRUE GLIBCXX_C_HEADERS_C_FALSE GLIBCXX_C_HEADERS_C_STD_TRUE GLIBCXX_C_HEADERS_C_STD_FALSE GLIBCXX_C_HEADERS_COMPATIBILITY_TRUE GLIBCXX_C_HEADERS_COMPATIBILITY_FALSE glibcxx_thread_h DEBUG_FLAGS GLIBCXX_BUILD_DEBUG_TRUE GLIBCXX_BUILD_DEBUG_FALSE EXTRA_CXX_FLAGS WERROR SECTION_FLAGS SECTION_LDFLAGS OPT_LDFLAGS LIBMATHOBJS LIBICONV SYMVER_MAP port_specific_symbol_files GLIBCXX_BUILD_VERSIONED_SHLIB_TRUE GLIBCXX_BUILD_VERSIONED_SHLIB_FALSE baseline_dir GLIBCXX_TEST_WCHAR_T_TRUE GLIBCXX_TEST_WCHAR_T_FALSE GLIBCXX_TEST_THREAD_TRUE GLIBCXX_TEST_THREAD_FALSE ATOMICITY_SRCDIR ATOMIC_WORD_SRCDIR ABI_TWEAKS_SRCDIR OS_INC_SRCDIR glibcxx_prefixdir gxx_include_dir glibcxx_toolexecdir glibcxx_toolexeclibdir GLIBCXX_INCLUDES TOPLEVEL_INCLUDES OPTIMIZE_CXXFLAGS WARN_FLAGS LIBSUPCXX_PICFLAGS LIBOBJS LTLIBOBJS'
+ ac_subst_files=''
+ 
+ # Initialize some variables set by options.
+@@ -1962,6 +1962,19 @@ am__tar='${AMTAR} chof - "$$tardir"'; am__untar='${AMTAR} xf -'
+ 
+ 
+ 
++# Add test for DJGPP (we need to use directory separator ; instead of
++# : in VPATH when building with DJGPP)
++
++
++if case $build in *djgpp*) true ;; *) false ;; esac; then
++  DJGPP_TRUE=
++  DJGPP_FALSE='#'
++else
++  DJGPP_TRUE='#'
++  DJGPP_FALSE=
++fi
++
++
+ # Runs configure.host, finds CC, CXX, and assorted other critical bits.  Sets
+ # up critical shell variables.
+ 
+@@ -4390,7 +4403,7 @@ test x"$pic_mode" = xno && libtool_flags="$libtool_flags --prefer-non-pic"
+ case $host in
+ *-*-irix6*)
+   # Find out which ABI we are using.
+-  echo '#line 4393 "configure"' > conftest.$ac_ext
++  echo '#line 4406 "configure"' > conftest.$ac_ext
+   if { (eval echo "$as_me:$LINENO: \"$ac_compile\"") >&5
+   (eval $ac_compile) 2>&5
+   ac_status=$?
+@@ -5011,7 +5024,7 @@ fi;
+     #
+     # Fake what AC_TRY_COMPILE does.  XXX Look at redoing this new-style.
+     cat > conftest.$ac_ext << EOF
+-#line 5014 "configure"
++#line 5027 "configure"
+ struct S { ~S(); };
+ void bar();
+ void foo()
+@@ -99404,9 +99417,22 @@ fi;
+   echo "$as_me:$LINENO: result: $version_specific_libs" >&5
+ echo "${ECHO_T}$version_specific_libs" >&6
+ 
++  # Convert GCC version string (to be used as directory name)
++  # Does nothing except for DJGPP
++  case "$host" in
++    *-msdosdjgpp*)
++       libstdcxx_incdir_base=cxx
++       gcc_version_alias='$(shell echo $(gcc_version) | sed -e "s:\.::2g")'
++       ;;
++    *)
++       libstdcxx_incdir_base=c++
++       gcc_version_alias='$(gcc_version)'
++       ;;
++  esac
++
+   # Default case for install directory for include files.
+   if test $version_specific_libs = no && test $gxx_include_dir = no; then
+-    gxx_include_dir='${prefix}'/include/c++/${gcc_version}
++    gxx_include_dir='${prefix}'/include/${libstdcxx_incdir_base}/${gcc_version_alias}
+   fi
+ 
+   # Version-specific runtime libs processing.
+@@ -99416,10 +99442,10 @@ echo "${ECHO_T}$version_specific_libs" >&6
+     # is selected.  FIXME: these variables are misnamed, there are
+     # no executables installed in _toolexecdir or _toolexeclibdir.
+     if test x"$gxx_include_dir" = x"no"; then
+-      gxx_include_dir='${libdir}/gcc/${host_alias}/'$gcc_version/include/c++
++      gxx_include_dir='${libdir}/gcc/${host_alias}/'$gcc_version_alias/include/${libstdcxx_incdir_base}
+     fi
+     glibcxx_toolexecdir='${libdir}/gcc/${host_alias}'
+-    glibcxx_toolexeclibdir='${toolexecdir}/'$gcc_version'$(MULTISUBDIR)'
++    glibcxx_toolexeclibdir='${toolexecdir}/'$gcc_version_alias'$(MULTISUBDIR)'
+   fi
+ 
+   # Calculate glibcxx_toolexecdir, glibcxx_toolexeclibdir
+@@ -99592,6 +99618,13 @@ LIBOBJS=$ac_libobjs
+ LTLIBOBJS=$ac_ltlibobjs
+ 
+ 
++if test -z "${DJGPP_TRUE}" && test -z "${DJGPP_FALSE}"; then
++  { { echo "$as_me:$LINENO: error: conditional \"DJGPP\" was never defined.
++Usually this means the macro was only invoked conditionally." >&5
++echo "$as_me: error: conditional \"DJGPP\" was never defined.
++Usually this means the macro was only invoked conditionally." >&2;}
++   { (exit 1); exit 1; }; }
++fi
+ if test -z "${MAINTAINER_MODE_TRUE}" && test -z "${MAINTAINER_MODE_FALSE}"; then
+   { { echo "$as_me:$LINENO: error: conditional \"MAINTAINER_MODE\" was never defined.
+ Usually this means the macro was only invoked conditionally." >&5
+@@ -100253,6 +100286,8 @@ s,@am__leading_dot@,$am__leading_dot,;t t
+ s,@AMTAR@,$AMTAR,;t t
+ s,@am__tar@,$am__tar,;t t
+ s,@am__untar@,$am__untar,;t t
++s,@DJGPP_TRUE@,$DJGPP_TRUE,;t t
++s,@DJGPP_FALSE@,$DJGPP_FALSE,;t t
+ s,@glibcxx_builddir@,$glibcxx_builddir,;t t
+ s,@glibcxx_srcdir@,$glibcxx_srcdir,;t t
+ s,@toplevel_srcdir@,$toplevel_srcdir,;t t
+diff --git a/libstdc++-v3/configure.ac b/libstdc++-v3/configure.ac
+index dba0042d..d3927e35 100644
+--- a/libstdc++-v3/configure.ac
++++ b/libstdc++-v3/configure.ac
+@@ -60,6 +60,10 @@ fi
+ #  -Wno-portability:  ...except this one, since GNU make is now required.
+ AM_INIT_AUTOMAKE([1.9.1 no-define foreign no-dependencies -Wall -Wno-portability -Wno-override])
+ 
++# Add test for DJGPP (we need to use directory separator ; instead of
++# : in VPATH when building with DJGPP)
++AM_CONDITIONAL(DJGPP,[case $build in *djgpp*) true ;; *) false ;; esac])
++
+ # Runs configure.host, finds CC, CXX, and assorted other critical bits.  Sets
+ # up critical shell variables.
+ GLIBCXX_CONFIGURE
+diff --git a/libstdc++-v3/include/Makefile.in b/libstdc++-v3/include/Makefile.in
+index 5006dffd..6cb6bdd2 100644
+--- a/libstdc++-v3/include/Makefile.in
++++ b/libstdc++-v3/include/Makefile.in
+@@ -1,8 +1,8 @@
+-# Makefile.in generated by automake 1.9.3 from Makefile.am.
++# Makefile.in generated by automake 1.9.5 from Makefile.am.
+ # @configure_input@
+ 
+ # Copyright (C) 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002,
+-# 2003, 2004  Free Software Foundation, Inc.
++# 2003, 2004, 2005  Free Software Foundation, Inc.
+ # This Makefile.in is free software; the Free Software Foundation
+ # gives unlimited permission to copy and/or distribute it,
+ # with or without modifications, as long as this notice is preserved.
+@@ -93,6 +93,8 @@ CYGPATH_W = @CYGPATH_W@
+ C_INCLUDE_DIR = @C_INCLUDE_DIR@
+ DEBUG_FLAGS = @DEBUG_FLAGS@
+ DEFS = @DEFS@
++DJGPP_FALSE = @DJGPP_FALSE@
++DJGPP_TRUE = @DJGPP_TRUE@
+ ECHO_C = @ECHO_C@
+ ECHO_N = @ECHO_N@
+ ECHO_T = @ECHO_T@
+diff --git a/libstdc++-v3/libmath/Makefile.in b/libstdc++-v3/libmath/Makefile.in
+index fcd2c6fa..bfc17f4a 100644
+--- a/libstdc++-v3/libmath/Makefile.in
++++ b/libstdc++-v3/libmath/Makefile.in
+@@ -1,8 +1,8 @@
+-# Makefile.in generated by automake 1.9.3 from Makefile.am.
++# Makefile.in generated by automake 1.9.5 from Makefile.am.
+ # @configure_input@
+ 
+ # Copyright (C) 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002,
+-# 2003, 2004  Free Software Foundation, Inc.
++# 2003, 2004, 2005  Free Software Foundation, Inc.
+ # This Makefile.in is free software; the Free Software Foundation
+ # gives unlimited permission to copy and/or distribute it,
+ # with or without modifications, as long as this notice is preserved.
+@@ -110,6 +110,8 @@ CYGPATH_W = @CYGPATH_W@
+ C_INCLUDE_DIR = @C_INCLUDE_DIR@
+ DEBUG_FLAGS = @DEBUG_FLAGS@
+ DEFS = @DEFS@
++DJGPP_FALSE = @DJGPP_FALSE@
++DJGPP_TRUE = @DJGPP_TRUE@
+ ECHO_C = @ECHO_C@
+ ECHO_N = @ECHO_N@
+ ECHO_T = @ECHO_T@
+diff --git a/libstdc++-v3/libsupc++/Makefile.in b/libstdc++-v3/libsupc++/Makefile.in
+index 3f5157ca..098b3224 100644
+--- a/libstdc++-v3/libsupc++/Makefile.in
++++ b/libstdc++-v3/libsupc++/Makefile.in
+@@ -1,8 +1,8 @@
+-# Makefile.in generated by automake 1.9.3 from Makefile.am.
++# Makefile.in generated by automake 1.9.5 from Makefile.am.
+ # @configure_input@
+ 
+ # Copyright (C) 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002,
+-# 2003, 2004  Free Software Foundation, Inc.
++# 2003, 2004, 2005  Free Software Foundation, Inc.
+ # This Makefile.in is free software; the Free Software Foundation
+ # gives unlimited permission to copy and/or distribute it,
+ # with or without modifications, as long as this notice is preserved.
+@@ -149,6 +149,8 @@ CYGPATH_W = @CYGPATH_W@
+ C_INCLUDE_DIR = @C_INCLUDE_DIR@
+ DEBUG_FLAGS = @DEBUG_FLAGS@
+ DEFS = @DEFS@
++DJGPP_FALSE = @DJGPP_FALSE@
++DJGPP_TRUE = @DJGPP_TRUE@
+ ECHO_C = @ECHO_C@
+ ECHO_N = @ECHO_N@
+ ECHO_T = @ECHO_T@
+diff --git a/libstdc++-v3/po/Makefile.in b/libstdc++-v3/po/Makefile.in
+index 832e7370..b05546ba 100644
+--- a/libstdc++-v3/po/Makefile.in
++++ b/libstdc++-v3/po/Makefile.in
+@@ -1,8 +1,8 @@
+-# Makefile.in generated by automake 1.9.3 from Makefile.am.
++# Makefile.in generated by automake 1.9.5 from Makefile.am.
+ # @configure_input@
+ 
+ # Copyright (C) 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002,
+-# 2003, 2004  Free Software Foundation, Inc.
++# 2003, 2004, 2005  Free Software Foundation, Inc.
+ # This Makefile.in is free software; the Free Software Foundation
+ # gives unlimited permission to copy and/or distribute it,
+ # with or without modifications, as long as this notice is preserved.
+@@ -93,6 +93,8 @@ CYGPATH_W = @CYGPATH_W@
+ C_INCLUDE_DIR = @C_INCLUDE_DIR@
+ DEBUG_FLAGS = @DEBUG_FLAGS@
+ DEFS = @DEFS@
++DJGPP_FALSE = @DJGPP_FALSE@
++DJGPP_TRUE = @DJGPP_TRUE@
+ ECHO_C = @ECHO_C@
+ ECHO_N = @ECHO_N@
+ ECHO_T = @ECHO_T@
+diff --git a/libstdc++-v3/scripts/create_testsuite_files b/libstdc++-v3/scripts/create_testsuite_files
+index 582f8f5b..22dbeb34 100755
+--- a/libstdc++-v3/scripts/create_testsuite_files
++++ b/libstdc++-v3/scripts/create_testsuite_files
+@@ -35,7 +35,7 @@ dlist=`echo [0-9][0-9]*`
+ for d in [a-z]*; do
+   test -d $d && dlist="$dlist $d"
+ done
+-find $dlist "(" -type f -o -type l ")" -name "*.cc" -print | sort > $tmp.1
++find $dlist "(" -type f ")" -name "*.cc" -print | sort > $tmp.1
+ if test ! -s "$tmp.1"; then
+   exit 1
+ fi
+diff --git a/libstdc++-v3/src/Makefile.am b/libstdc++-v3/src/Makefile.am
+index a12a7739..c9d1e61c 100644
+--- a/libstdc++-v3/src/Makefile.am
++++ b/libstdc++-v3/src/Makefile.am
+@@ -25,7 +25,11 @@
+ include $(top_srcdir)/fragment.am
+ 
+ # Cross compiler support.
++if DJGPP
++toolexeclib_LTLIBRARIES = libstdcxx.la
++else
+ toolexeclib_LTLIBRARIES = libstdc++.la
++endif
+ 
+ # Symbol versioning for shared libraries.
+ if GLIBCXX_BUILD_VERSIONED_SHLIB
+@@ -142,19 +146,41 @@ sources = \
+ 	${host_sources} \
+ 	${host_sources_extra}
+ 
+-VPATH = $(top_srcdir)/src:$(top_srcdir)
++if DJGPP
++VPATH_VAL = $(top_srcdir)/src;$(top_srcdir)
++else
++VPATH_VAL = $(top_srcdir)/src:$(top_srcdir)
++endif
++
++VPATH = $(VPATH_VAL)
+ 
++if DJGPP
++libstdcxx_la_SOURCES = $(sources)
++else
+ libstdc___la_SOURCES = $(sources)
++endif
+ 
++if DJGPP
++libstdcxx_la_LIBADD = \
++	$(top_builddir)/libmath/libmath.la \
++	$(top_builddir)/libsupc++/libsupc++convenience.la
++else
+ libstdc___la_LIBADD = \
+ 	$(top_builddir)/libmath/libmath.la \
+ 	$(top_builddir)/libsupc++/libsupc++convenience.la
++endif
++
++if DJGPP
++libstdcxx_la_DEPENDENCIES = ${version_dep} $(libstdcxx_la_LIBADD)
+ 
++libstdcxx_la_LDFLAGS = \
++	-version-info $(libtool_VERSION) ${version_arg} -lm
++else
+ libstdc___la_DEPENDENCIES = ${version_dep} $(libstdc___la_LIBADD)
+ 
+ libstdc___la_LDFLAGS = \
+ 	-version-info $(libtool_VERSION) ${version_arg} -lm 
+-
++endif
+ 
+ # Use special rules for the deprecated source files so that they find
+ # deprecated include files.
+diff --git a/libstdc++-v3/src/Makefile.in b/libstdc++-v3/src/Makefile.in
+index 07918754..fd005585 100644
+--- a/libstdc++-v3/src/Makefile.in
++++ b/libstdc++-v3/src/Makefile.in
+@@ -1,8 +1,8 @@
+-# Makefile.in generated by automake 1.9.3 from Makefile.am.
++# Makefile.in generated by automake 1.9.5 from Makefile.am.
+ # @configure_input@
+ 
+ # Copyright (C) 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002,
+-# 2003, 2004  Free Software Foundation, Inc.
++# 2003, 2004, 2005  Free Software Foundation, Inc.
+ # This Makefile.in is free software; the Free Software Foundation
+ # gives unlimited permission to copy and/or distribute it,
+ # with or without modifications, as long as this notice is preserved.
+@@ -14,7 +14,7 @@
+ 
+ @SET_MAKE@
+ 
+-SOURCES = $(libstdc___la_SOURCES)
++SOURCES = $(libstdc___la_SOURCES) $(libstdcxx_la_SOURCES)
+ 
+ srcdir = @srcdir@
+ top_srcdir = @top_srcdir@
+@@ -60,6 +60,21 @@ am__strip_dir = `echo $$p | sed -e 's|^.*/||'`;
+ am__installdirs = "$(DESTDIR)$(toolexeclibdir)"
+ toolexeclibLTLIBRARIES_INSTALL = $(INSTALL)
+ LTLIBRARIES = $(toolexeclib_LTLIBRARIES)
++am__libstdc___la_SOURCES_DIST = bitmap_allocator.cc pool_allocator.cc \
++	mt_allocator.cc codecvt.cc compatibility.cc complex_io.cc \
++	ctype.cc debug.cc debug_list.cc functexcept.cc \
++	globals_locale.cc globals_io.cc ios.cc ios_failure.cc \
++	ios_init.cc ios_locale.cc limits.cc list.cc locale.cc \
++	locale_init.cc locale_facets.cc localename.cc stdexcept.cc \
++	strstream.cc tree.cc allocator-inst.cc concept-inst.cc \
++	fstream-inst.cc ext-inst.cc io-inst.cc istream-inst.cc \
++	istream.cc locale-inst.cc locale-misc-inst.cc misc-inst.cc \
++	ostream-inst.cc sstream-inst.cc streambuf-inst.cc streambuf.cc \
++	string-inst.cc valarray-inst.cc wlocale-inst.cc \
++	wstring-inst.cc atomicity.cc codecvt_members.cc \
++	collate_members.cc ctype_members.cc messages_members.cc \
++	monetary_members.cc numeric_members.cc time_members.cc \
++	basic_file.cc c++locale.cc
+ am__objects_1 = atomicity.lo codecvt_members.lo collate_members.lo \
+ 	ctype_members.lo messages_members.lo monetary_members.lo \
+ 	numeric_members.lo time_members.lo
+@@ -76,20 +91,40 @@ am__objects_3 = bitmap_allocator.lo pool_allocator.lo mt_allocator.lo \
+ 	sstream-inst.lo streambuf-inst.lo streambuf.lo string-inst.lo \
+ 	valarray-inst.lo wlocale-inst.lo wstring-inst.lo \
+ 	$(am__objects_1) $(am__objects_2)
+-am_libstdc___la_OBJECTS = $(am__objects_3)
++@DJGPP_FALSE@am_libstdc___la_OBJECTS = $(am__objects_3)
+ libstdc___la_OBJECTS = $(am_libstdc___la_OBJECTS)
++@DJGPP_FALSE@am_libstdc___la_rpath = -rpath $(toolexeclibdir)
++am__libstdcxx_la_SOURCES_DIST = bitmap_allocator.cc pool_allocator.cc \
++	mt_allocator.cc codecvt.cc compatibility.cc complex_io.cc \
++	ctype.cc debug.cc debug_list.cc functexcept.cc \
++	globals_locale.cc globals_io.cc ios.cc ios_failure.cc \
++	ios_init.cc ios_locale.cc limits.cc list.cc locale.cc \
++	locale_init.cc locale_facets.cc localename.cc stdexcept.cc \
++	strstream.cc tree.cc allocator-inst.cc concept-inst.cc \
++	fstream-inst.cc ext-inst.cc io-inst.cc istream-inst.cc \
++	istream.cc locale-inst.cc locale-misc-inst.cc misc-inst.cc \
++	ostream-inst.cc sstream-inst.cc streambuf-inst.cc streambuf.cc \
++	string-inst.cc valarray-inst.cc wlocale-inst.cc \
++	wstring-inst.cc atomicity.cc codecvt_members.cc \
++	collate_members.cc ctype_members.cc messages_members.cc \
++	monetary_members.cc numeric_members.cc time_members.cc \
++	basic_file.cc c++locale.cc
++@DJGPP_TRUE@am_libstdcxx_la_OBJECTS = $(am__objects_3)
++libstdcxx_la_OBJECTS = $(am_libstdcxx_la_OBJECTS)
++@DJGPP_TRUE@am_libstdcxx_la_rpath = -rpath $(toolexeclibdir)
+ DEFAULT_INCLUDES = -I. -I$(srcdir) -I$(top_builddir)
+ depcomp =
+ am__depfiles_maybe =
+ CXXCOMPILE = $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) \
+ 	$(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS)
+ CXXLD = $(CXX)
+-SOURCES = $(libstdc___la_SOURCES)
+-DIST_SOURCES = $(libstdc___la_SOURCES)
++SOURCES = $(libstdc___la_SOURCES) $(libstdcxx_la_SOURCES)
++DIST_SOURCES = $(am__libstdc___la_SOURCES_DIST) \
++	$(am__libstdcxx_la_SOURCES_DIST)
+ ETAGS = etags
+ CTAGS = ctags
+ DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
+-VPATH = $(top_srcdir)/src:$(top_srcdir)
++VPATH = $(VPATH_VAL)
+ ABI_TWEAKS_SRCDIR = @ABI_TWEAKS_SRCDIR@
+ ACLOCAL = @ACLOCAL@
+ ALLOCATOR_H = @ALLOCATOR_H@
+@@ -129,6 +164,8 @@ CYGPATH_W = @CYGPATH_W@
+ C_INCLUDE_DIR = @C_INCLUDE_DIR@
+ DEBUG_FLAGS = @DEBUG_FLAGS@
+ DEFS = @DEFS@
++DJGPP_FALSE = @DJGPP_FALSE@
++DJGPP_TRUE = @DJGPP_TRUE@
+ ECHO_C = @ECHO_C@
+ ECHO_N = @ECHO_N@
+ ECHO_T = @ECHO_T@
+@@ -271,9 +308,10 @@ WARN_CXXFLAGS = \
+ 
+ # -I/-D flags to pass when compiling.
+ AM_CPPFLAGS = $(GLIBCXX_INCLUDES)
++@DJGPP_FALSE@toolexeclib_LTLIBRARIES = libstdc++.la
+ 
+ # Cross compiler support.
+-toolexeclib_LTLIBRARIES = libstdc++.la
++@DJGPP_TRUE@toolexeclib_LTLIBRARIES = libstdcxx.la
+ @GLIBCXX_BUILD_VERSIONED_SHLIB_FALSE@version_arg = 
+ 
+ # Symbol versioning for shared libraries.
+@@ -350,14 +388,25 @@ sources = \
+ 	${host_sources} \
+ 	${host_sources_extra}
+ 
+-libstdc___la_SOURCES = $(sources)
+-libstdc___la_LIBADD = \
+-	$(top_builddir)/libmath/libmath.la \
+-	$(top_builddir)/libsupc++/libsupc++convenience.la
++@DJGPP_FALSE@VPATH_VAL = $(top_srcdir)/src:$(top_srcdir)
++@DJGPP_TRUE@VPATH_VAL = $(top_srcdir)/src;$(top_srcdir)
++@DJGPP_TRUE@libstdcxx_la_SOURCES = $(sources)
++@DJGPP_FALSE@libstdc___la_SOURCES = $(sources)
++@DJGPP_TRUE@libstdcxx_la_LIBADD = \
++@DJGPP_TRUE@	$(top_builddir)/libmath/libmath.la \
++@DJGPP_TRUE@	$(top_builddir)/libsupc++/libsupc++convenience.la
+ 
+-libstdc___la_DEPENDENCIES = ${version_dep} $(libstdc___la_LIBADD)
+-libstdc___la_LDFLAGS = \
+-	-version-info $(libtool_VERSION) ${version_arg} -lm 
++@DJGPP_FALSE@libstdc___la_LIBADD = \
++@DJGPP_FALSE@	$(top_builddir)/libmath/libmath.la \
++@DJGPP_FALSE@	$(top_builddir)/libsupc++/libsupc++convenience.la
++
++@DJGPP_TRUE@libstdcxx_la_DEPENDENCIES = ${version_dep} $(libstdcxx_la_LIBADD)
++@DJGPP_TRUE@libstdcxx_la_LDFLAGS = \
++@DJGPP_TRUE@	-version-info $(libtool_VERSION) ${version_arg} -lm
++
++@DJGPP_FALSE@libstdc___la_DEPENDENCIES = ${version_dep} $(libstdc___la_LIBADD)
++@DJGPP_FALSE@libstdc___la_LDFLAGS = \
++@DJGPP_FALSE@	-version-info $(libtool_VERSION) ${version_arg} -lm 
+ 
+ 
+ # Use special rules for the deprecated source files so that they find
+@@ -469,7 +518,9 @@ clean-toolexeclibLTLIBRARIES:
+ 	  rm -f "$${dir}/so_locations"; \
+ 	done
+ libstdc++.la: $(libstdc___la_OBJECTS) $(libstdc___la_DEPENDENCIES) 
+-	$(CXXLINK) -rpath $(toolexeclibdir) $(libstdc___la_LDFLAGS) $(libstdc___la_OBJECTS) $(libstdc___la_LIBADD) $(LIBS)
++	$(CXXLINK) $(am_libstdc___la_rpath) $(libstdc___la_LDFLAGS) $(libstdc___la_OBJECTS) $(libstdc___la_LIBADD) $(LIBS)
++libstdcxx.la: $(libstdcxx_la_OBJECTS) $(libstdcxx_la_DEPENDENCIES) 
++	$(CXXLINK) $(am_libstdcxx_la_rpath) $(libstdcxx_la_LDFLAGS) $(libstdcxx_la_OBJECTS) $(libstdcxx_la_LIBADD) $(LIBS)
+ 
+ mostlyclean-compile:
+ 	-rm -f *.$(OBJEXT)
+diff --git a/libstdc++-v3/testsuite/Makefile.in b/libstdc++-v3/testsuite/Makefile.in
+index 4202ad57..11332248 100644
+--- a/libstdc++-v3/testsuite/Makefile.in
++++ b/libstdc++-v3/testsuite/Makefile.in
+@@ -1,8 +1,8 @@
+-# Makefile.in generated by automake 1.9.3 from Makefile.am.
++# Makefile.in generated by automake 1.9.5 from Makefile.am.
+ # @configure_input@
+ 
+ # Copyright (C) 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002,
+-# 2003, 2004  Free Software Foundation, Inc.
++# 2003, 2004, 2005  Free Software Foundation, Inc.
+ # This Makefile.in is free software; the Free Software Foundation
+ # gives unlimited permission to copy and/or distribute it,
+ # with or without modifications, as long as this notice is preserved.
+@@ -117,6 +117,8 @@ CYGPATH_W = @CYGPATH_W@
+ C_INCLUDE_DIR = @C_INCLUDE_DIR@
+ DEBUG_FLAGS = @DEBUG_FLAGS@
+ DEFS = @DEFS@
++DJGPP_FALSE = @DJGPP_FALSE@
++DJGPP_TRUE = @DJGPP_TRUE@
+ ECHO_C = @ECHO_C@
+ ECHO_N = @ECHO_N@
+ ECHO_T = @ECHO_T@
+diff --git a/readme.DJGPP b/readme.DJGPP
+new file mode 100644
+index 00000000..a9670127
+--- /dev/null
++++ b/readme.DJGPP
+@@ -0,0 +1,327 @@
++This is the DJGPP port of gcc-4.0.1
++
++
++Please read this file up to end (maybe skipping sections You don't need,
++for example You don't need to read how to build gcc-4.0.1 from sources
++if You only intend to use binary archives). Also consult DJGPP documentation
++and FAQ where needed.
++
++
++Requirements to use this binary release:
++    DJGPP-2.04 or above. 
++    binutils-2.16 or above (Earlier versions will NOT work any more due to
++	incompatible linker scripts as linker script is no more included
++	with DJGPP port of GCC)
++
++#########################  NOTE  ##############################################
++
++This update of DJGPP port of DJGPP generates from C++ sources object files 
++that are not compatible with ones generated by any earlier releases of DJGPP
++ports of GCC before gcc-4.0.0
++
++So it's required to recompile all C++ sources after upgrade if You are 
++upgrading from version earlier than 4.0.0
++
++###############################################################################
++
++Requirements to build gcc-4.0.1 from sources:
++    Long filename support. I built it in DOS session under WinXP Pro (SP2).
++        Win95, Win98, WinME or Win2K should be Ok. I myself haven't tested
++	whether it can be build under Win98, Win2k or Win2K.
++    perhaps at least 128Mb of RAM for building (Amount of available
++        DPMI memory for DOS session should be set to auto).  
++    at least DJGPP-2.03 patchlevel 2 required
++    other GNU utilities (see below)
++
++
++Source archives
++===============
++
++Archive gcc401s2.zip contains script which modifies original gcc-4.0.1
++and sources for DJGPP. You don't need it unless You want to recreate
++GCC source archive for DJGPP. If You are using this archive and original 
++sources of gcc-4.0.1.tar.gz, then You don't need gcc401s.zip.
++    
++The source archive gcc401s.zip contains all the sources to build
++all compilers (C, C++, Objective C, GNU Fortran) and also C++
++and Fortran libraries (libstdcxx.a, libgpp.a and libg2c.a). 
++libg++ is no more supported.
++
++Most users don't need source archives at all.
++
++Binary archives
++================
++
++Binary archives are split into 5 parts:
++
++  gcc401b.zip  : The gcc.exe driver program and the C compiler.
++                 It also contains the documentation.
++
++  gpp401b.zip  : The C++ compiler and libstdcxx.a together 
++                 with needed header files. Please note that one must
++		 recompile all C++ sources built with any earlier GCC version
++
++  objc401b.zip : The Objective C compiler and libobjc.a and the needed
++                 header files.
++
++  gfor401b.zip  : GNU Fortran compiler
++
++  ada401b.zip  : Ada compiler (untested)
++
++
++The archive gcc401b.zip is required by all other binary packages
++
++Binary packages includes following documentation files:
++  
++  Archive gcc401b.zip:  
++	info/gcc.info - the use and the internals of the GNU compiler
++	info/cpp.info - documentation of the GNU C preprocessor.
++	info/cppinternals.info  - internals of the GNU C Preprocessor.
++        info/gccinstall.info
++	info/gccint.info
++		(NEW: use install-info to add it to info/dir)
++  Archive gpp401b.zip:
++        gnu/gcc-4.01/libstdcxx/* - some documentation of libstdc++-v3
++		(HTML and text formats)
++  Archive gfor401b.zip:
++	info/gfortran.info - documentation of the GNU Fortran compiler
++
++
++Before you install gcc-4.0.1 binaries
++======================================
++
++You should remove previous installation of gcc or egcs completely
++(unless You really know what You are doing).
++
++Make sure You don't have following files from earlier versions
++(relative paths againt to DJGPP directory are given):
++	bin/cc1.exe		(from gcc272b.zip or gcc2721b.zip)
++	bin/cc1plus.exe		(from gpp272b.zip or gpp2721b.zip)
++	lib/libgcc.a		(from gcc272b.zip or gcc2721b.zip)
++	lib/libobjc.a		
++	lib/specs		(from djdev201.zip or djdev202.zip) 
++	lib/libstdcxx.a		
++	lib/libgpp.a		
++
++Following packages are required for binaries:
++	binutils-2.16 or above. Linker script is no more included in DJGPP
++	    release of GCC and all earlier binutils releases for DJGPP
++	    had incompatible scripts. SO PLEASE UPGRADE.
++
++	DJGPP-2.03 patchlevel 2 or newer (djdev203.zip)
++
++
++Installing binaries of gcc-4.0.1
++=================================
++
++Needed archives for different programing languages
++	C 			: gcc401b.zip
++
++	C++			: gcc401b.zip, gpp401b.zip
++
++	Fortran	95              : gcc401b.zip, gfor401b.zip
++
++	Objective C		: gcc401b.zip, objc401b.zip
++
++	Ada			: gcc401b.zip, ada401b.zip
++
++Of course for ALL languages You also need at least binutils (bnu215b.zip
++or newer) and djdev204.zip (or newer when it will be released)
++
++Unzip all the zip files from that directory, preserving the
++directory structure.  For example:
++
++	pkunzip -d djdev203
++or
++	unzip386 djdev203
++
++
++NOTE:   For debugging GDB version 6.3 or above is recommended. 
++        (gdb-6.3 is not released for DJGPP yet though).
++
++
++1. Only long filenames
++----------------------
++
++Unzip the binaries with an unzip program, which can restore the long filenames
++stored in the zip archive.
++
++2. Only short filenames
++-----------------------
++
++Unzip the binaries with an unzip program which doesn't know about long
++filenames, or if your unzipper knows about them, please follow first
++the steps described in the DJGPP FAQ in the section 
++about setting the NameNumericTail to 0 __BEFORE__!!! unzipping the archives.
++
++3. Long and short filenames at the same time
++--------------------------------------------
++
++Use an unzip program which can restore the long filenames and follow
++the instructions under 2. when the unzipper knows about long filenames.
++
++
++Note for users of C++ IO classes fstream, ifstream, ofstream
++============================================================
++
++There is a regression against earlier versions of GCC (gcc-2.95.3 and
++earlier): Member functions tellp(), tellg(), seekp() and seekg()
++are broken when stream is opened not in binary mode. If You are going
++to use any similar functions You should open stream in binary mode.
++
++Don't ask me when it will be fixed as I don't know that. I'm also 
++not sure I'll spend much time trying to fix that.
++
++
++Rebuilding gcc-4.0.1 from the sources
++======================================
++
++Requirememts
++------------
++
++-  Long filename support is required. It means You should build gcc-4.0.1
++   under Win95, Win98, WinME, Win2000 or WinXP. I myself built gcc-4.0.1
++   under WinXP.
++
++-  Much of free disk space (600Mb or more, perhaps not possible
++   at all on FAT16 partition). 
++
++-  perhaps 128Mb RAM (or more) to build gcc-4.0.1 under Win9X. 
++   DPMI memory amount for DOS session should be set to "Auto".
++   Building on machine with only 64 Mb of memory is not tested.
++   (I used machine with 1 Gb of memory, operatind system WinXP Pro SP2)
++
++-  Many GNU packages.
++	bash-2.0.4 or above
++	GNU Diffutils 2.8 
++	GNU Fileutils-4.1
++	GNU Find 4.1.7
++	GNU grep 2.5.1
++	GNU Awk 3.1.1
++	GNU Make 3.80
++	GNU Sed 4.0.7
++	GNU shell utils 2.0.11
++	GNU Textutils 2.0
++	GNU Texinfo 4.8
++	GNU tar 1.1.2
++	GNU binutils 2.16.1
++	GNU gmp 4.1.2 (required to build GNU Fortran compiler)
++	working GNU C compiler (perhaps not earlier than gcc-3.3). 
++
++   If You modify some source files You may also need
++	autoconf-2.59 or above
++	automake-1.9.4 or above
++	(for some directories also old autoconf-2.13 and automake-1.5
++        may be needed)
++	
++   You need autoconf and automake also if You are using gcc401s2.zip.
++   However it's normally not needed for most users who builds gcc-4.0.1 from
++   contents of gcc401s.zip. In that case You need to edit script unpack-gcc
++   to specify place where old and new versions of autoconf and automake are
++   installed
++
++   Usually newer versions of these packages should also work unless
++   otherwise stated above. Older versions may work in some cases, but that
++   is not tested
++
++-  INFO-ZIP binary (compiled with DJGPP v2!!!) is needed for using build.sh 
++   to create binary distrubution archives. There is no problems to compile 
++   it. See http://www.info-zip.org for additional informtion
++   about INFO-ZIP. You can find DJGPP compiled binary there. 
++
++-  Working DJGPP installation of course:
++	DJGPP-2.03 patchlevel 2 or above, 
++	working gcc installation (gcc-3.3.0 or above, You need
++                working Ada compiler to build Ada compiler)
++
++-  You should have sh.exe in DJGPP bin directory as symbolic link to  
++   bash.exe (type 'ln -s bash.exe sh.exe' in that directory)
++
++
++Extracting the sources
++----------------------
++
++At first you should unzip the archive gcc401s.zip. The sources are _NOT_
++the complete sources like the original gcc-4.0.1 distribution. I have
++removed many files to save disk space which are not needed for the DJGPP
++port. However I left configuration of other machines in to make archives
++usable to build cross-to-DJGPP compilers and DJGPP hosted cross-compilers
++(I haven't tested it).
++
++
++Compiling gcc
++-------------
++
++Directory gnu/gcc-4.01 contains all sources of gcc-4.0.1
++
++Sources are NOT configured. 
++	
++Change to directory gnu/build.gcc and configure sources
++by running script djconfig.sh. 
++
++	sh djconfig.sh
++
++When this is done You can build gcc-4.0.1 by running script djmake.sh
++Under Win9X You'll have to restart it some times when it will crash 
++due to Win9X DPMI descriptor leaks. You may use redir to get output in file.
++
++	sh djmake.sh bootstrap
++
++When this sucessfully ends run script djinsttmp.sh which installs
++all into directory gnu/install.gcc
++
++After that change to this directory and run script makepkg.sh
++to create binary distribution packages
++	
++
++Installing newly compiled gcc
++-----------------------------
++
++It's recommended to install binary packages which are generated 
++by makepkg.sh
++
++
++
++Available resources
++===================
++
++See following URL for additional information:
++gcc:		  http://gcc.gnu.org
++
++
++
++Reporting bugs
++==============
++
++If you found a bug in gcc-4.0.1 (gcc, gfortran, libstdc++, etc) please report it to 
++the GCC bug adresses and _NOT_ (or at least not only) in the DJGPP news group. 
++
++But if you think you found a bug in the DJGPP related things, then please 
++report it in comp.os.msdos.djgpp (the news group) or mail it to 
++djgpp@delorie.com, which is the gateway to the news group.
++
++Some possible situations:
++  - gcc says 'Internal compiler error' (or something similar)
++       more likely it is error of gcc if it is reproducible. It would 
++       be nice to test on some other system (e.g. Linux) and also with 
++       different version of compiler if possible and submit report to 
++       gcc bug address. 
++  - gcc crashes or freezes. 
++       In this situation it's hard to guess where is the problem. It may be
++       problem with gcc itself but it may be also DJGPP specific one.
++
++Please email me directly only in rare cases, if you think it is only of
++interest to me, since I'll see the reports in DJGPP mailing list.
++
++
++Thanks to
++=========
++
++To all who have contributed new features, test results, bugfixes to GCC
++(see http://gcc.gnu.org/thanks.html) and also who helped with DJGPP port of 
++gcc-4.0.1
++
++
++Have fun with gcc
++
++Andris Pavenis <pavenis@latnet.lv>
