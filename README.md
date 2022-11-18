@@ -22,7 +22,7 @@ Linux glibc本地工具链——
 * aarch64：>=gcc-4.8.5
 * armel：>=gcc-4.1.2
 * armhf：>=gcc-4.4.7
-* hppa1.1：>=gcc-3.2.3
+* hppa1.1：>=gcc-3.1.1
 * m68k：>=gcc-2.2.2
 * mips：>=gcc-2.95.3
 * mipsel：>=gcc-2.95.3
@@ -170,7 +170,7 @@ gcc的历史很久远，对可执行文件格式和CPU架构的支持发生过�
 
 ## 传统组gcc（3.0.4版本及以下）
 
-该组gcc工具链调整为i686-legacy-linux-gnu，依赖如下三个软件包（自动依赖，无须手工安装）：
+该组gcc工具链调整为i686-legacy-linux-gnu（后因其他平台兼容性考虑，gcc-3.4.6及以下版本均使用legacy工具链），依赖如下三个软件包（自动依赖，无须手工安装）：
 
 legacy-gcc/binutils-wrapper
 
