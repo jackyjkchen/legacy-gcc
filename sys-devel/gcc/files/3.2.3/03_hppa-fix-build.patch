@@ -1,8 +1,141 @@
+diff --git a/gcc/config/pa/fptr.c b/gcc/config/pa/fptr.c
+new file mode 100644
+index 0000000..36ed49c
+--- /dev/null
++++ b/gcc/config/pa/fptr.c
+@@ -0,0 +1,127 @@
++/* Subroutine for function pointer canonicalization on PA-RISC with ELF32.
++   Copyright 2002 Free Software Foundation, Inc.
++   Contributed by John David Anglin (dave.anglin@nrc.ca).
++
++This file is part of GNU CC.
++
++GNU CC is free software; you can redistribute it and/or modify
++it under the terms of the GNU General Public License as published by
++the Free Software Foundation; either version 2, or (at your option)
++any later version.
++
++GNU CC is distributed in the hope that it will be useful,
++but WITHOUT ANY WARRANTY; without even the implied warranty of
++MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++GNU General Public License for more details.
++
++You should have received a copy of the GNU General Public License
++along with GNU CC; see the file COPYING.  If not, write to
++the Free Software Foundation, 59 Temple Place - Suite 330,
++Boston, MA 02111-1307, USA.  */
++
++/* WARNING: The code is this function depends on internal and undocumented
++   details of the GNU linker and dynamic loader as implemented for parisc
++   linux.  */
++
++/* This MUST match the defines sysdeps/hppa/dl-machine.h and
++   bfd/elf32-hppa.c.  */
++#define GOT_FROM_PLT_STUB (4*4)
++
++/* List of byte offsets in _dl_runtime_resolve to search for "bl" branches.
++   The first "bl" branch instruction found MUST be a call to fixup.  See
++   the define for TRAMPOLINE_TEMPLATE in sysdeps/hppa/dl-machine.h.  If
++   the trampoline template is changed, the list must be appropriately
++   updated.  The offset of -4 allows for a magic branch at the start of
++   the template should it be necessary to change the current branch
++   position.  */
++#define NOFFSETS 2
++static int fixup_branch_offset[NOFFSETS] = { 32, -4 };
++
++#define GET_FIELD(X, FROM, TO) \
++  ((X) >> (31 - (TO)) & ((1 << ((TO) - (FROM) + 1)) - 1))
++#define SIGN_EXTEND(VAL,BITS) \
++  ((int) ((VAL) >> ((BITS) - 1) ? (-1 << (BITS)) | (VAL) : (VAL)))
++
++struct link_map;
++typedef int (*fptr_t) (void);
++typedef int (*fixup_t) (struct link_map *, unsigned int);
++extern unsigned int _GLOBAL_OFFSET_TABLE_;
++
++/* __canonicalize_funcptr_for_compare must be hidden so that it is not
++   placed in the dynamic symbol table.  Like millicode functions, it
++   must be linked into all binaries in order access the got table of 
++   that binary.  However, we don't use the millicode calling convention
++   and the routine must be a normal function so that it can be compiled
++   as pic code.  */
++unsigned int __canonicalize_funcptr_for_compare (fptr_t)
++      __attribute__ ((visibility ("hidden")));
++
++unsigned int
++__canonicalize_funcptr_for_compare (fptr)
++     fptr_t fptr;
++{
++  static unsigned int fixup_plabel[2];
++  static fixup_t fixup;
++  unsigned int *plabel, *got;
++
++  /* -1 and page 0 are special.  -1 is used in crtend to mark the end of
++     a list of function pointers.  Also return immediately if the plabel
++     bit is not set in the function pointer.  In this case, the function
++     pointer points directly to the function.  */
++  if ((int) fptr == -1 || (unsigned int) fptr < 4096 || !((int) fptr & 2))
++    return (unsigned int) fptr;
++
++  /* The function pointer points to a function descriptor (plabel).  If
++     the plabel hasn't been resolved, the first word of the plabel points
++     to the entry of the PLT stub just before the global offset table.
++     The second word in the plabel contains the relocation offset for the
++     function.  */
++  plabel = (unsigned int *) ((unsigned int) fptr & ~3);
++  got = (unsigned int *) (plabel[0] + GOT_FROM_PLT_STUB);
++
++  /* Return the address of the function if the plabel has been resolved.  */
++  if (got !=  &_GLOBAL_OFFSET_TABLE_)
++    return plabel[0];
++
++  /* Initialize our plabel for calling fixup if we haven't done so already.
++     This code needs to be thread safe but we don't have to be too careful
++     as the result is invariant.  */
++  if (!fixup)
++    {
++      int i;
++      unsigned int *iptr;
++
++      /* Find the first "bl" branch in the offset search list.  This is a
++	 call to fixup or a magic branch to fixup at the beginning of the
++	 trampoline template.  The fixup function does the actual runtime
++	 resolution of function decriptors.  We only look for "bl" branches
++	 with a 17-bit pc-relative displacement.  */
++      for (i = 0; i < NOFFSETS; i++)
++	{
++	  iptr = (unsigned int *) (got[-2] + fixup_branch_offset[i]);
++	  if ((*iptr & 0xfc00e000) == 0xe8000000)
++	    break;
++	}
++
++      /* This should not happen... */
++      if (i == NOFFSETS)
++	return ~0;
++
++      /* Extract the 17-bit displacement from the instruction.  */
++      iptr += SIGN_EXTEND (GET_FIELD (*iptr, 19, 28) |
++			   GET_FIELD (*iptr, 29, 29) << 10 |
++			   GET_FIELD (*iptr, 11, 15) << 11 |
++			   GET_FIELD (*iptr, 31, 31) << 16, 17);
++
++      /* Build a plabel for an indirect call to fixup.  */
++      fixup_plabel[0] = (unsigned int) iptr + 8;  /* address of fixup */
++      fixup_plabel[1] = got[-1];		  /* ltp for fixup */
++      fixup = (fixup_t) ((int) fixup_plabel | 3);
++    }
++
++  /* Call fixup to resolve the function address.  got[1] contains the
++     link_map pointer and plabel[1] the relocation offset.  */
++  fixup ((struct link_map *) got[1], plabel[1]);
++
++  return plabel[0];
++}
 diff --git a/gcc/config/pa/pa-linux.h b/gcc/config/pa/pa-linux.h
-index 495046e..202f79e 100644
+index 3182495..b114085 100644
 --- a/gcc/config/pa/pa-linux.h
 +++ b/gcc/config/pa/pa-linux.h
-@@ -101,7 +101,7 @@ Boston, MA 02111-1307, USA.  */
+@@ -74,7 +74,7 @@ Boston, MA 02111-1307, USA.  */
     file which includes this one.  */
  
  #undef STRING_ASM_OP
@@ -11,21 +144,98 @@ index 495046e..202f79e 100644
  
  #define TEXT_SECTION_ASM_OP "\t.text"
  #define DATA_SECTION_ASM_OP "\t.data"
+diff --git a/gcc/config/pa/pa.h b/gcc/config/pa/pa.h
+index b7cc4f3..993b4b1 100644
+--- a/gcc/config/pa/pa.h
++++ b/gcc/config/pa/pa.h
+@@ -2041,3 +2041,7 @@ while (0)
+   {"cmpib_comparison_operator", {EQ, NE, LT, LE, LEU,			\
+    GT, GTU, GE}},							\
+   {"movb_comparison_operator", {EQ, NE, LT, GE}},
++
++/* We need a libcall to canonicalize function pointers on TARGET_ELF32.  */
++#define CANONICALIZE_FUNCPTR_FOR_COMPARE_LIBCALL \
++  "__canonicalize_funcptr_for_compare"
+diff --git a/gcc/config/pa/pa.md b/gcc/config/pa/pa.md
+index df26bdf..e684b50 100644
+--- a/gcc/config/pa/pa.md
++++ b/gcc/config/pa/pa.md
+@@ -7144,9 +7144,20 @@
+ 	      (clobber (reg:SI 31))])
+    (set (match_operand:SI 0 "register_operand" "")
+ 	(reg:SI 29))]
+-  "! TARGET_PORTABLE_RUNTIME && !TARGET_64BIT && !TARGET_ELF32"
++  "!TARGET_PORTABLE_RUNTIME && !TARGET_64BIT"
+   "
+ {
++  if (TARGET_ELF32)
++    {
++      rtx canonicalize_funcptr_for_compare_libfunc
++        = init_one_libfunc (CANONICALIZE_FUNCPTR_FOR_COMPARE_LIBCALL);
++
++      emit_library_call_value (canonicalize_funcptr_for_compare_libfunc,
++      			       operands[0], LCT_NORMAL, Pmode,
++			       1, operands[1], Pmode);
++      DONE;
++    }
++
+   operands[2] = gen_reg_rtx (SImode);
+   if (GET_CODE (operands[1]) != REG)
+     {
+diff --git a/gcc/config/pa/pa32-linux.h b/gcc/config/pa/pa32-linux.h
+index 81f6452..8652122 100644
+--- a/gcc/config/pa/pa32-linux.h
++++ b/gcc/config/pa/pa32-linux.h
+@@ -24,3 +24,17 @@ Boston, MA 02111-1307, USA.  */
+ 
+ #undef CPP_SPEC
+ #define CPP_SPEC "%{fPIC:-D__PIC__ -D__pic__} %{fpic:-D__PIC__ -D__pic__} %{mhppa:-D__hppa__} %{posix:-D_POSIX_SOURCE} -D_PA_RISC1_1"
++
++/* The libcall __canonicalize_funcptr_for_compare is referenced in
++   crtend.o and the reference isn't resolved in objects that don't
++   compare function pointers.  Thus, we need to play games to provide
++   a reference in crtbegin.o.  The rest of the define is the same
++   as that in crtstuff.c  */
++#define CTOR_LIST_BEGIN \
++  asm (".type __canonicalize_funcptr_for_compare,@function\n"		\
++"	.text\n"							\
++"	.word __canonicalize_funcptr_for_compare-$PIC_pcrel$0");	\
++  STATIC func_ptr __CTOR_LIST__[1]					\
++    __attribute__ ((__unused__, section(".ctors"),			\
++		    aligned(sizeof(func_ptr))))				\
++    = { (func_ptr) (-1) }
+diff --git a/gcc/config/pa/t-linux b/gcc/config/pa/t-linux
+index 400b800..601f779 100644
+--- a/gcc/config/pa/t-linux
++++ b/gcc/config/pa/t-linux
+@@ -9,6 +9,12 @@ LIB1ASMFUNCS =  _divI _divU _remI _remU _multiply \
+ 
+ LIB1ASMSRC = pa/milli32.S
+ 
++LIB2FUNCS_EXTRA=fptr.c
++
++fptr.c: $(srcdir)/config/pa/fptr.c
++	rm -f fptr.c
++	cp $(srcdir)/config/pa/fptr.c .
++
+ # Compile crtbeginS.o and crtendS.o as PIC.
+ CRTSTUFF_T_CFLAGS_S = -fPIC
+ 
 diff --git a/libffi/Makefile.am b/libffi/Makefile.am
-index 8cae053..1ab013c 100644
+index 21ba58e..d8b8cc7 100644
 --- a/libffi/Makefile.am
 +++ b/libffi/Makefile.am
-@@ -18,7 +18,8 @@ EXTRA_DIST = LICENSE ChangeLog.v1 src/mips/ffi.c src/mips/n32.S \
+@@ -15,7 +15,8 @@ EXTRA_DIST = LICENSE ChangeLog.v1 src/mips/ffi.c src/mips/n32.S \
+ 		src/powerpc/ffi_darwin.c \
+ 		src/powerpc/darwin.S src/powerpc/aix.S \
  		src/powerpc/darwin_closure.S src/powerpc/aix_closures.S \
- 		src/arm/ffi.c src/arm/sysv.S \
- 		src/s390/ffi.c src/s390/sysv.S \
--		src/sh/ffi.c src/sh/sysv.S
-+		src/sh/ffi.c src/sh/sysv.S \
+-		src/arm/ffi.c src/arm/sysv.S
++		src/arm/ffi.c src/arm/sysv.S \
 +		src/pa/ffi.c src/pa/linux.S
  
  VPATH = @srcdir@:@srcdir@/src:@srcdir@/src/@TARGETDIR@
  
-@@ -79,11 +80,7 @@ MULTICLEAN = true
+@@ -76,11 +77,7 @@ MULTICLEAN = true
  toolexeclib_LTLIBRARIES = libffi.la
  noinst_LTLIBRARIES = libffi_convenience.la
  
@@ -37,18 +247,18 @@ index 8cae053..1ab013c 100644
 +noinst_PROGRAMS = 
  
  TARGET_SRC_MIPS_GCC = src/mips/ffi.c src/mips/o32.S src/mips/n32.S
- TARGET_SRC_MIPS_LINUX = src/mips/ffi.c src/mips/o32.S
-@@ -101,6 +98,7 @@ TARGET_SRC_ARM =  src/arm/sysv.S src/arm/ffi.c
- TARGET_SRC_S390 =  src/s390/sysv.S src/s390/ffi.c
- TARGET_SRC_X86_64 = src/x86/ffi64.c src/x86/unix64.S src/x86/ffi.c src/x86/sysv.S
- TARGET_SRC_SH =  src/sh/sysv.S src/sh/ffi.c
+ TARGET_SRC_MIPS_SGI = src/mips/ffi.c src/mips/o32.s src/mips/n32.s
+@@ -94,6 +91,7 @@ TARGET_SRC_POWERPC = src/powerpc/ffi.c src/powerpc/sysv.S src/powerpc/ppc_closur
+ TARGET_SRC_POWERPC_AIX = src/powerpc/ffi_darwin.c src/powerpc/aix.S src/powerpc/aix_closures.S
+ TARGET_SRC_POWERPC_DARWIN = src/powerpc/ffi_darwin.c src/powerpc/darwin.S src/powerpc/darwin_closure.S
+ TARGET_SRC_ARM =  src/arm/sysv.S src/arm/ffi.c
 +TARGET_SRC_PA =  src/pa/linux.S src/pa/ffi.c
  
  ##libffi_la_SOURCES = src/debug.c src/prep_cif.c src/types.c $(TARGET_SRC_@TARGET@)
  ## Work around automake deficiency
-@@ -170,6 +168,10 @@ if SH
- libffi_la_SOURCES = $(libffi_la_common_SOURCES) $(TARGET_SRC_SH)
- libfficonvenience_la_SOURCES = $(libffi_la_common_SOURCES) $(TARGET_SRC_SH)
+@@ -147,6 +145,10 @@ if ARM
+ libffi_la_SOURCES = $(libffi_la_common_SOURCES) $(TARGET_SRC_ARM)
+ libffi_convenience_la_SOURCES = $(libffi_la_common_SOURCES) $(TARGET_SRC_ARM)
  endif
 +if PA
 +libffi_la_SOURCES = $(libffi_la_common_SOURCES) $(TARGET_SRC_PA)
@@ -58,18 +268,18 @@ index 8cae053..1ab013c 100644
  AM_CFLAGS = -fexceptions
  
 diff --git a/libffi/Makefile.in b/libffi/Makefile.in
-index 598d683..93ef8b6 100644
+index a2a3a00..750c6f6 100644
 --- a/libffi/Makefile.in
 +++ b/libffi/Makefile.in
-@@ -94,6 +94,7 @@ EXTRA_DIST = LICENSE ChangeLog.v1 src/mips/ffi.c src/mips/n32.S \
- 		src/x86/ffi64.c src/x86/unix64.S \
+@@ -93,6 +93,7 @@ EXTRA_DIST = LICENSE ChangeLog.v1 src/mips/ffi.c src/mips/n32.S \
+ 		src/x86/ffi.c src/x86/sysv.S src/x86/win32.S \
  		src/alpha/ffi.c src/alpha/osf.S \
  		src/m68k/ffi.c src/m68k/sysv.S \
 +		src/pa/ffi.c src/pa/linux.S \
  		src/powerpc/ffi.c src/powerpc/sysv.S \
  		src/powerpc/ppc_closure.S src/powerpc/asm.h \
  		src/powerpc/ffi_darwin.c \
-@@ -158,11 +159,7 @@ MULTICLEAN = true
+@@ -155,11 +156,7 @@ MULTICLEAN = true
  toolexeclib_LTLIBRARIES = libffi.la
  noinst_LTLIBRARIES = libffi_convenience.la
  
@@ -81,32 +291,32 @@ index 598d683..93ef8b6 100644
 +noinst_PROGRAMS = 
  
  TARGET_SRC_MIPS_GCC = src/mips/ffi.c src/mips/o32.S src/mips/n32.S
- TARGET_SRC_MIPS_LINUX = src/mips/ffi.c src/mips/o32.S
-@@ -180,6 +177,7 @@ TARGET_SRC_ARM = src/arm/sysv.S src/arm/ffi.c
- TARGET_SRC_S390 = src/s390/sysv.S src/s390/ffi.c
- TARGET_SRC_X86_64 = src/x86/ffi64.c src/x86/unix64.S src/x86/ffi.c src/x86/sysv.S
- TARGET_SRC_SH = src/sh/sysv.S src/sh/ffi.c
+ TARGET_SRC_MIPS_SGI = src/mips/ffi.c src/mips/o32.s src/mips/n32.s
+@@ -173,6 +170,7 @@ TARGET_SRC_POWERPC = src/powerpc/ffi.c src/powerpc/sysv.S src/powerpc/ppc_closur
+ TARGET_SRC_POWERPC_AIX = src/powerpc/ffi_darwin.c src/powerpc/aix.S src/powerpc/aix_closures.S
+ TARGET_SRC_POWERPC_DARWIN = src/powerpc/ffi_darwin.c src/powerpc/darwin.S src/powerpc/darwin_closure.S
+ TARGET_SRC_ARM = src/arm/sysv.S src/arm/ffi.c
 +TARGET_SRC_PA = src/pa/linux.S src/pa/ffi.c
  
  libffi_la_common_SOURCES = src/debug.c src/prep_cif.c src/types.c \
  		src/raw_api.c src/java_raw_api.c
-@@ -200,6 +198,7 @@ libffi_la_common_SOURCES = src/debug.c src/prep_cif.c src/types.c \
- @S390_TRUE@libffi_la_SOURCES = @S390_TRUE@$(libffi_la_common_SOURCES) $(TARGET_SRC_S390)
- @X86_64_TRUE@libffi_la_SOURCES = @X86_64_TRUE@$(libffi_la_common_SOURCES) $(TARGET_SRC_X86_64)
- @SH_TRUE@libffi_la_SOURCES = @SH_TRUE@$(libffi_la_common_SOURCES) $(TARGET_SRC_SH)
+@@ -189,6 +187,7 @@ libffi_la_common_SOURCES = src/debug.c src/prep_cif.c src/types.c \
+ @POWERPC_AIX_TRUE@libffi_la_SOURCES = @POWERPC_AIX_TRUE@$(libffi_la_common_SOURCES) $(TARGET_SRC_POWERPC_AIX)
+ @POWERPC_DARWIN_TRUE@libffi_la_SOURCES = @POWERPC_DARWIN_TRUE@$(libffi_la_common_SOURCES) $(TARGET_SRC_POWERPC_DARWIN)
+ @ARM_TRUE@libffi_la_SOURCES = @ARM_TRUE@$(libffi_la_common_SOURCES) $(TARGET_SRC_ARM)
 +@PA_TRUE@libffi_la_SOURCES = @PA_TRUE@$(libffi_la_common_SOURCES) $(TARGET_SRC_PA)
  @MIPS_GCC_TRUE@libffi_convenience_la_SOURCES = @MIPS_GCC_TRUE@$(libffi_la_common_SOURCES) $(TARGET_SRC_MIPS_GCC)
- @MIPS_LINUX_TRUE@libffi_convenience_la_SOURCES = @MIPS_LINUX_TRUE@$(libffi_la_common_SOURCES) $(TARGET_SRC_MIPS_LINUX)
  @MIPS_SGI_TRUE@libffi_convenience_la_SOURCES = @MIPS_SGI_TRUE@$(libffi_la_common_SOURCES) $(TARGET_SRC_MIPS_SGI)
-@@ -216,6 +215,7 @@ libffi_la_common_SOURCES = src/debug.c src/prep_cif.c src/types.c \
- @S390_TRUE@libffi_convenience_la_SOURCES = @S390_TRUE@$(libffi_la_common_SOURCES) $(TARGET_SRC_S390)
- @X86_64_TRUE@libffi_convenience_la_SOURCES = @X86_64_TRUE@$(libffi_la_common_SOURCES) $(TARGET_SRC_X86_64)
- @SH_TRUE@libfficonvenience_la_SOURCES = @SH_TRUE@$(libffi_la_common_SOURCES) $(TARGET_SRC_SH)
+ @X86_TRUE@libffi_convenience_la_SOURCES = @X86_TRUE@$(libffi_la_common_SOURCES) $(TARGET_SRC_X86)
+@@ -201,6 +200,7 @@ libffi_la_common_SOURCES = src/debug.c src/prep_cif.c src/types.c \
+ @POWERPC_AIX_TRUE@libffi_convenience_la_SOURCES = @POWERPC_AIX_TRUE@$(libffi_la_common_SOURCES) $(TARGET_SRC_POWERPC_AIX)
+ @POWERPC_DARWIN_TRUE@libffi_convenience_la_SOURCES = @POWERPC_DARWIN_TRUE@$(libffi_la_common_SOURCES) $(TARGET_SRC_POWERPC_DARWIN)
+ @ARM_TRUE@libffi_convenience_la_SOURCES = @ARM_TRUE@$(libffi_la_common_SOURCES) $(TARGET_SRC_ARM)
 +@PA_TRUE@libffi_convenience_la_SOURCES = @PA_TRUE@$(libffi_la_common_SOURCES) $(TARGET_SRC_PA)
  
  AM_CFLAGS = -fexceptions
  
-@@ -238,6 +238,9 @@ libffi_convenience_la_LIBADD =
+@@ -227,6 +227,9 @@ libffi_convenience_la_LIBADD =
  @ALPHA_TRUE@libffi_convenience_la_OBJECTS =  src/debug.lo \
  @ALPHA_TRUE@src/prep_cif.lo src/types.lo src/raw_api.lo \
  @ALPHA_TRUE@src/java_raw_api.lo src/alpha/ffi.lo src/alpha/osf.lo
@@ -116,20 +326,30 @@ index 598d683..93ef8b6 100644
  @IA64_TRUE@libffi_convenience_la_OBJECTS =  src/debug.lo src/prep_cif.lo \
  @IA64_TRUE@src/types.lo src/raw_api.lo src/java_raw_api.lo \
  @IA64_TRUE@src/ia64/ffi.lo src/ia64/unix.lo
-@@ -292,6 +295,9 @@ libffi_la_LIBADD =
- @SH_TRUE@libffi_la_OBJECTS =  src/debug.lo src/prep_cif.lo src/types.lo \
- @SH_TRUE@src/raw_api.lo src/java_raw_api.lo src/sh/sysv.lo \
- @SH_TRUE@src/sh/ffi.lo
+@@ -254,6 +257,9 @@ libffi_convenience_la_LIBADD =
+ @ARM_TRUE@libffi_convenience_la_OBJECTS =  src/debug.lo src/prep_cif.lo \
+ @ARM_TRUE@src/types.lo src/raw_api.lo src/java_raw_api.lo \
+ @ARM_TRUE@src/arm/sysv.lo src/arm/ffi.lo
++@PA_TRUE@libffi_convenience_la_OBJECTS =  src/debug.lo src/prep_cif.lo \
++@PA_TRUE@src/types.lo src/raw_api.lo src/java_raw_api.lo \
++@PA_TRUE@src/pa/linux.lo src/pa/ffi.lo
+ @POWERPC_DARWIN_TRUE@libffi_convenience_la_OBJECTS =  src/debug.lo \
+ @POWERPC_DARWIN_TRUE@src/prep_cif.lo src/types.lo src/raw_api.lo \
+ @POWERPC_DARWIN_TRUE@src/java_raw_api.lo src/powerpc/ffi_darwin.lo \
+@@ -296,6 +302,9 @@ libffi_la_LIBADD =
+ @ARM_TRUE@libffi_la_OBJECTS =  src/debug.lo src/prep_cif.lo src/types.lo \
+ @ARM_TRUE@src/raw_api.lo src/java_raw_api.lo src/arm/sysv.lo \
+ @ARM_TRUE@src/arm/ffi.lo
 +@PA_TRUE@libffi_la_OBJECTS =  src/debug.lo src/prep_cif.lo src/types.lo \
 +@PA_TRUE@src/raw_api.lo src/java_raw_api.lo \
 +@PA_TRUE@src/pa/linux.lo src/pa/ffi.lo
- @IA64_TRUE@libffi_la_OBJECTS =  src/debug.lo src/prep_cif.lo \
- @IA64_TRUE@src/types.lo src/raw_api.lo src/java_raw_api.lo \
- @IA64_TRUE@src/ia64/ffi.lo src/ia64/unix.lo
-@@ -341,10 +347,9 @@ libffi_la_LIBADD =
+ @POWERPC_DARWIN_TRUE@libffi_la_OBJECTS =  src/debug.lo src/prep_cif.lo \
  @POWERPC_DARWIN_TRUE@src/types.lo src/raw_api.lo src/java_raw_api.lo \
  @POWERPC_DARWIN_TRUE@src/powerpc/ffi_darwin.lo src/powerpc/darwin.lo \
- @POWERPC_DARWIN_TRUE@src/powerpc/darwin_closure.lo
+@@ -303,10 +312,9 @@ libffi_la_LIBADD =
+ @MIPS_SGI_TRUE@libffi_la_OBJECTS =  src/debug.lo src/prep_cif.lo \
+ @MIPS_SGI_TRUE@src/types.lo src/raw_api.lo src/java_raw_api.lo \
+ @MIPS_SGI_TRUE@src/mips/ffi.lo src/mips/o32.lo src/mips/n32.lo
 -noinst_PROGRAMS =  ffitest$(EXEEXT)
 +noinst_PROGRAMS =  
  PROGRAMS =  $(noinst_PROGRAMS)
@@ -138,7 +358,7 @@ index 598d683..93ef8b6 100644
  CFLAGS = @CFLAGS@
  COMPILE = $(CC) $(DEFS) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS)
  LTCOMPILE = $(LIBTOOL) --mode=compile $(CC) $(DEFS) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS)
-@@ -483,10 +488,6 @@ distclean-noinstPROGRAMS:
+@@ -445,10 +453,6 @@ distclean-noinstPROGRAMS:
  
  maintainer-clean-noinstPROGRAMS:
  
@@ -149,52 +369,52 @@ index 598d683..93ef8b6 100644
  # This directory's subdirectories are mostly independent; you can cd
  # into them and run `make' without going through this Makefile.
  # To change the values of `make' variables: instead of editing Makefiles,
-@@ -615,7 +616,7 @@ distdir: $(DISTFILES)
+@@ -577,7 +581,7 @@ distdir: $(DISTFILES)
  	mkdir $(distdir)
  	-chmod 777 $(distdir)
  	$(mkinstalldirs) $(distdir)/src/alpha $(distdir)/src/arm \
 -	   $(distdir)/src/m68k $(distdir)/src/mips \
 +	   $(distdir)/src/m68k $(distdir)/src/mips $(distdir)/src/pa \
- 	   $(distdir)/src/powerpc $(distdir)/src/s390 $(distdir)/src/sh \
- 	   $(distdir)/src/sparc $(distdir)/src/x86
+ 	   $(distdir)/src/powerpc $(distdir)/src/sparc \
+ 	   $(distdir)/src/x86
  	@for file in $(DISTFILES); do \
 diff --git a/libffi/configure b/libffi/configure
-index 2bd5165..7c6816a 100755
+index 0499763..624bcd1 100755
 --- a/libffi/configure
 +++ b/libffi/configure
-@@ -2473,6 +2473,7 @@ s390-*-linux-*) TARGET=S390; TARGETDIR=s390;;
- s390x-*-linux-*) TARGET=S390; TARGETDIR=s390;;
- x86_64-*-linux*) TARGET=X86_64; TARGETDIR=x86;;
- sh-*-linux* | sh[34]*-*-linux*) TARGET=SH; TARGETDIR=sh;;
+@@ -2392,6 +2392,7 @@ powerpc-*-darwin*) TARGET=POWERPC_DARWIN; TARGETDIR=powerpc;;
+ powerpc-*-aix*) TARGET=POWERPC_AIX; TARGETDIR=powerpc;;
+ rs6000-*-aix*) TARGET=POWERPC_AIX; TARGETDIR=powerpc;;
+ arm*-*-linux-*) TARGET=ARM; TARGETDIR=arm;;
 +hppa*-*-linux* | parisc-*-linux*) TARGET=PA; TARGETDIR=pa;;
  esac
  
  if test $TARGETDIR = unknown; then
 diff --git a/libffi/configure.in b/libffi/configure.in
-index 704b353..1c1a9e9 100644
+index e8ee826..12b23ad 100644
 --- a/libffi/configure.in
 +++ b/libffi/configure.in
-@@ -75,6 +75,7 @@ s390-*-linux-*) TARGET=S390; TARGETDIR=s390;;
- s390x-*-linux-*) TARGET=S390; TARGETDIR=s390;;
- x86_64-*-linux*) TARGET=X86_64; TARGETDIR=x86;;
- sh-*-linux* | sh[[34]]*-*-linux*) TARGET=SH; TARGETDIR=sh;;
+@@ -67,6 +67,7 @@ powerpc-*-darwin*) TARGET=POWERPC_DARWIN; TARGETDIR=powerpc;;
+ powerpc-*-aix*) TARGET=POWERPC_AIX; TARGETDIR=powerpc;;
+ rs6000-*-aix*) TARGET=POWERPC_AIX; TARGETDIR=powerpc;;
+ arm*-*-linux-*) TARGET=ARM; TARGETDIR=arm;;
 +hppa*-*-linux* | parisc-*-linux*) TARGET=PA; TARGETDIR=pa;;
  esac
  
  if test $TARGETDIR = unknown; then
-@@ -97,6 +98,7 @@ AM_CONDITIONAL(ARM, test x$TARGET = xARM)
- AM_CONDITIONAL(S390, test x$TARGET = xS390)
- AM_CONDITIONAL(X86_64, test x$TARGET = xX86_64)
- AM_CONDITIONAL(SH, test x$TARGET = xSH)
+@@ -85,6 +86,7 @@ AM_CONDITIONAL(POWERPC, test x$TARGET = xPOWERPC)
+ AM_CONDITIONAL(POWERPC_AIX, test x$TARGET = xPOWERPC_AIX)
+ AM_CONDITIONAL(POWERPC_DARWIN, test x$TARGET = xPOWERPC_DARWIN)
+ AM_CONDITIONAL(ARM, test x$TARGET = xARM)
 +AM_CONDITIONAL(PA, test x$TARGET = xPA)
  
- if test x$TARGET = xMIPS_LINUX; then
-   TARGET=MIPS
+ AC_HEADER_STDC
+ AC_CHECK_FUNCS(memcpy)
 diff --git a/libffi/include/ffi.h.in b/libffi/include/ffi.h.in
-index fe91ecd..8c26156 100644
+index 8097917..e19d2f5 100644
 --- a/libffi/include/ffi.h.in
 +++ b/libffi/include/ffi.h.in
-@@ -283,6 +283,12 @@ typedef enum ffi_abi {
+@@ -251,6 +251,12 @@ typedef enum ffi_abi {
    FFI_DEFAULT_ABI = FFI_SYSV,
  #endif
  
@@ -207,7 +427,7 @@ index fe91ecd..8c26156 100644
    /* Leave this for debugging purposes */
    FFI_LAST_ABI
  
-@@ -432,6 +438,16 @@ struct ffi_ia64_trampoline_struct {
+@@ -406,6 +412,16 @@ struct ffi_ia64_trampoline_struct {
  #define FFI_TRAMPOLINE_SIZE 24
  #define FFI_NATIVE_RAW_API 0
  
@@ -226,10 +446,10 @@ index fe91ecd..8c26156 100644
  #define FFI_CLOSURES 1
 diff --git a/libffi/src/ffitest.c b/libffi/src/ffitest.c
 deleted file mode 100644
-index a05b746..0000000
+index 3c32925..0000000
 --- a/libffi/src/ffitest.c
 +++ /dev/null
-@@ -1,1306 +0,0 @@
+@@ -1,966 +0,0 @@
 -/* -----------------------------------------------------------------------
 -   ffitest.c - Copyright (c) 1996, 1997, 1998, 2002, 2003  Red Hat, Inc.
 -
@@ -280,13 +500,6 @@ index a05b746..0000000
 -{
 -  return (strlen(s));
 -}
--
--#ifdef X86_WIN32
--static size_t __attribute__((stdcall)) my_stdcall_strlen(char *s)
--{
--  return (strlen(s));
--}
--#endif /* X86_WIN32 */
 -
 -static int promotion(signed char sc, signed short ss, 
 -		     unsigned char uc, unsigned short us)
@@ -351,25 +564,6 @@ index a05b746..0000000
 -  return ((f1/f2+f3/f4+f5/f6+f7/f8+f9/f10+f11/f12) * f13);
 -}
 -
--#ifdef X86_WIN32
--static float __attribute__((stdcall)) stdcall_many(float f1,
--						   float f2,
--						   float f3,
--						   float f4,
--						   float f5,
--						   float f6,
--						   float f7,
--						   float f8,
--						   float f9,
--						   float f10,
--						   float f11,
--						   float f12,
--						   float f13)
--{
--  return ((f1/f2+f3/f4+f5/f6+f7/f8+f9/f10+f11/f12) * f13);
--}
--#endif /* X86_WIN32 */
--
 -static double dblit(float f)
 -{
 -  return f/3.0;
@@ -411,33 +605,6 @@ index a05b746..0000000
 -  char c2;
 -} test_structure_5;
 -
--typedef struct
--{
--  float f;
--  double d;
--} test_structure_6;
--
--typedef struct
--{
--  float f1;
--  float f2;
--  double d;
--} test_structure_7;
--
--typedef struct
--{
--  float f1;
--  float f2;
--  float f3;
--  float f4;
--} test_structure_8;
--
--typedef struct
--{
--  float f;
--  int i;
--} test_structure_9;
--
 -static test_structure_1 struct1(test_structure_1 ts)
 -{
 -  /*@-type@*/
@@ -477,41 +644,6 @@ index a05b746..0000000
 -  ts1.c2 -= ts2.c2;
 -
 -  return ts1;
--}
--
--static test_structure_6 struct6 (test_structure_6 ts)
--{
--  ts.f += 1;
--  ts.d += 1;
--
--  return ts;
--}
--
--static test_structure_7 struct7 (test_structure_7 ts)
--{
--  ts.f1 += 1;
--  ts.f2 += 1;
--  ts.d += 1;
--
--  return ts;
--}
--
--static test_structure_8 struct8 (test_structure_8 ts)
--{
--  ts.f1 += 1;
--  ts.f2 += 1;
--  ts.f3 += 1;
--  ts.f4 += 1;
--
--  return ts;
--}
--
--static test_structure_9 struct9 (test_structure_9 ts)
--{
--  ts.f += 1;
--  ts.i += 1;
--
--  return ts;
 -}
 -
 -/* Take an int and a float argument, together with int userdata, and 	*/
@@ -636,7 +768,6 @@ index a05b746..0000000
 -				  float, float, double, int, float, float, int,
 -				  float, float, int);
 -#endif
--
 -int main(/*@unused@*/ int argc, /*@unused@*/ char *argv[])
 -{
 -  ffi_cif cif;
@@ -671,19 +802,11 @@ index a05b746..0000000
 -  ffi_type ts3_type;
 -  ffi_type ts4_type;  
 -  ffi_type ts5_type;
--  ffi_type ts6_type;
--  ffi_type ts7_type;
--  ffi_type ts8_type;
--  ffi_type ts9_type;
 -  ffi_type *ts1_type_elements[4];
 -  ffi_type *ts2_type_elements[3];
 -  ffi_type *ts3_type_elements[2];
 -  ffi_type *ts4_type_elements[4];
 -  ffi_type *ts5_type_elements[3];
--  ffi_type *ts6_type_elements[3];
--  ffi_type *ts7_type_elements[4];
--  ffi_type *ts8_type_elements[5];
--  ffi_type *ts9_type_elements[3];
 -
 -  ts1_type.size = 0;
 -  ts1_type.alignment = 0;
@@ -705,32 +828,12 @@ index a05b746..0000000
 -  ts5_type.alignment = 0;
 -  ts5_type.type = FFI_TYPE_STRUCT;
 -
--  ts6_type.size = 0;
--  ts6_type.alignment = 0;
--  ts6_type.type = FFI_TYPE_STRUCT;
--
--  ts7_type.size = 0;
--  ts7_type.alignment = 0;
--  ts7_type.type = FFI_TYPE_STRUCT;
--
--  ts8_type.size = 0;
--  ts8_type.alignment = 0;
--  ts8_type.type = FFI_TYPE_STRUCT;
--
--  ts9_type.size = 0;
--  ts9_type.alignment = 0;
--  ts9_type.type = FFI_TYPE_STRUCT;
--
 -  /*@-immediatetrans@*/
 -  ts1_type.elements = ts1_type_elements;
 -  ts2_type.elements = ts2_type_elements;
 -  ts3_type.elements = ts3_type_elements;
 -  ts4_type.elements = ts4_type_elements;
 -  ts5_type.elements = ts5_type_elements;
--  ts6_type.elements = ts6_type_elements;
--  ts7_type.elements = ts7_type_elements;
--  ts8_type.elements = ts8_type_elements;
--  ts9_type.elements = ts9_type_elements;
 -  /*@=immediatetrans@*/
 -  
 -  ts1_type_elements[0] = &ffi_type_uchar;
@@ -753,25 +856,6 @@ index a05b746..0000000
 -  ts5_type_elements[0] = &ffi_type_schar;
 -  ts5_type_elements[1] = &ffi_type_schar;
 -  ts5_type_elements[2] = NULL;
--
--  ts6_type_elements[0] = &ffi_type_float;
--  ts6_type_elements[1] = &ffi_type_double;
--  ts6_type_elements[2] = NULL;
--
--  ts7_type_elements[0] = &ffi_type_float;
--  ts7_type_elements[1] = &ffi_type_float;
--  ts7_type_elements[2] = &ffi_type_double;
--  ts7_type_elements[3] = NULL;
--
--  ts8_type_elements[0] = &ffi_type_float;
--  ts8_type_elements[1] = &ffi_type_float;
--  ts8_type_elements[2] = &ffi_type_float;
--  ts8_type_elements[3] = &ffi_type_float;
--  ts8_type_elements[4] = NULL;
--
--  ts9_type_elements[0] = &ffi_type_float;
--  ts9_type_elements[1] = &ffi_type_sint;
--  ts9_type_elements[2] = NULL;
 -
 -  ul = 0;
 -
@@ -814,7 +898,7 @@ index a05b746..0000000
 -      {
 -	ul++;
 -	ffi_call(&cif, FFI_FN(return_sc), &rint, values);
--	CHECK(rint == (ffi_arg) sc);
+-	CHECK(rint == (int) sc);
 -      }
 -
 -    args[0] = &ffi_type_uchar;
@@ -901,7 +985,7 @@ index a05b746..0000000
 -
 -    ffi_call(&cif, FFI_FN(floating), &rint, values);
 -
--    printf ("%d vs %d\n", (int)rint, floating (si1, f, d, ld, si2));
+-    printf ("%d vs %d\n", rint, floating (si1, f, d, ld, si2));
 -
 -    CHECK(rint == floating(si1, f, d, ld, si2));
 -
@@ -971,7 +1055,7 @@ index a05b746..0000000
 -		       &ffi_type_float, args) == FFI_OK);
 -
 -    /*@-usedef@*/
--    ff = many (fa[0], fa[1],
+-    ff =  many(fa[0], fa[1],
 -	       fa[2], fa[3],
 -	       fa[4], fa[5],
 -	       fa[6], fa[7],
@@ -1020,8 +1104,7 @@ index a05b746..0000000
 -	    {
 -	      ul++;
 -	      ffi_call(&cif, FFI_FN(promotion), &rint, values);
--	      CHECK((int)rint == (signed char) sc + (signed short) ss +
--		    (unsigned char) uc + (unsigned short) us);
+-	      CHECK(rint == (int) sc + (int) ss + (int) uc + (int) us);
 -	    }
 -    printf("%lu promotion tests run\n", ul);
 -  }
@@ -1068,7 +1151,8 @@ index a05b746..0000000
 -    values[0] = &ts2_arg;
 -    
 -    /* Initialize the cif */
--    CHECK(ffi_prep_cif(&cif, FFI_DEFAULT_ABI, 1, &ts2_type, args) == FFI_OK);
+-    CHECK(ffi_prep_cif(&cif, FFI_DEFAULT_ABI, 1, 
+-		       &ts2_type, args) == FFI_OK);
 -
 -    ts2_arg.d1 = 5.55;
 -    ts2_arg.d2 = 6.66;
@@ -1135,7 +1219,8 @@ index a05b746..0000000
 -    values[0] = &ts4_arg;
 -    
 -    /* Initialize the cif */
--    CHECK(ffi_prep_cif(&cif, FFI_DEFAULT_ABI, 1, &ts4_type, args) == FFI_OK);
+-    CHECK(ffi_prep_cif(&cif, FFI_DEFAULT_ABI, 1, 
+-		       &ts4_type, args) == FFI_OK);
 -
 -    ts4_arg.ui1 = 2;
 -    ts4_arg.ui2 = 3;
@@ -1165,7 +1250,8 @@ index a05b746..0000000
 -    values[1] = &ts5_arg2;
 -    
 -    /* Initialize the cif */
--    CHECK(ffi_prep_cif(&cif, FFI_DEFAULT_ABI, 2, &ts5_type, args) == FFI_OK);
+-    CHECK(ffi_prep_cif(&cif, FFI_DEFAULT_ABI, 2, 
+-		       &ts5_type, args) == FFI_OK);
 -
 -    ts5_arg1.c1 = 2;
 -    ts5_arg1.c2 = 6;
@@ -1183,213 +1269,8 @@ index a05b746..0000000
 -    free (ts5_result);
 -  }
 -
--  /* struct tests */
--  {
--    test_structure_6 ts6_arg;
--
--    /* This is a hack to get a properly aligned result buffer */
--    test_structure_6 *ts6_result = 
--      (test_structure_6 *) malloc (sizeof(test_structure_6));
--
--    args[0] = &ts6_type;
--    values[0] = &ts6_arg;
--
--    /* Initialize the cif */
--    CHECK(ffi_prep_cif(&cif, FFI_DEFAULT_ABI, 1, &ts6_type, args) == FFI_OK);
--
--    ts6_arg.f = 5.55f;
--    ts6_arg.d = 6.66;
--
--    printf ("%g\n", ts6_arg.f);
--    printf ("%g\n", ts6_arg.d);
--
--    ffi_call(&cif, FFI_FN(struct6), ts6_result, values);
--
--    printf ("%g\n", ts6_result->f);
--    printf ("%g\n", ts6_result->d);
--
--    CHECK(ts6_result->f == 5.55f + 1);
--    CHECK(ts6_result->d == 6.66 + 1);
--
--    printf("structure test 6 ok!\n");
--
--    free (ts6_result);
--  }
--
--  /* struct tests */
--  {
--    test_structure_7 ts7_arg;
--
--    /* This is a hack to get a properly aligned result buffer */
--    test_structure_7 *ts7_result = 
--      (test_structure_7 *) malloc (sizeof(test_structure_7));
--
--    args[0] = &ts7_type;
--    values[0] = &ts7_arg;
--
--    /* Initialize the cif */
--    CHECK(ffi_prep_cif(&cif, FFI_DEFAULT_ABI, 1, &ts7_type, args) == FFI_OK);
--
--    ts7_arg.f1 = 5.55f;
--    ts7_arg.f2 = 55.5f;
--    ts7_arg.d = 6.66;
--
--    printf ("%g\n", ts7_arg.f1);
--    printf ("%g\n", ts7_arg.f2);
--    printf ("%g\n", ts7_arg.d);
--
--    ffi_call(&cif, FFI_FN(struct7), ts7_result, values);
--
--    printf ("%g\n", ts7_result->f1);
--    printf ("%g\n", ts7_result->f2);
--    printf ("%g\n", ts7_result->d);
--
--    CHECK(ts7_result->f1 == 5.55f + 1);
--    CHECK(ts7_result->f2 == 55.5f + 1);
--    CHECK(ts7_result->d == 6.66 + 1);
--
--    printf("structure test 7 ok!\n");
--
--    free (ts7_result);
--  }
--
--  /* struct tests */
--  {
--    test_structure_8 ts8_arg;
--
--    /* This is a hack to get a properly aligned result buffer */
--    test_structure_8 *ts8_result = 
--      (test_structure_8 *) malloc (sizeof(test_structure_8));
--
--    args[0] = &ts8_type;
--    values[0] = &ts8_arg;
--
--    /* Initialize the cif */
--    CHECK(ffi_prep_cif(&cif, FFI_DEFAULT_ABI, 1, &ts8_type, args) == FFI_OK);
--
--    ts8_arg.f1 = 5.55f;
--    ts8_arg.f2 = 55.5f;
--    ts8_arg.f3 = -5.55f;
--    ts8_arg.f4 = -55.5f;
--
--    printf ("%g\n", ts8_arg.f1);
--    printf ("%g\n", ts8_arg.f2);
--    printf ("%g\n", ts8_arg.f3);
--    printf ("%g\n", ts8_arg.f4);
--
--    ffi_call(&cif, FFI_FN(struct8), ts8_result, values);
--
--    printf ("%g\n", ts8_result->f1);
--    printf ("%g\n", ts8_result->f2);
--    printf ("%g\n", ts8_result->f3);
--    printf ("%g\n", ts8_result->f4);
--
--    CHECK(ts8_result->f1 == 5.55f + 1);
--    CHECK(ts8_result->f2 == 55.5f + 1);
--    CHECK(ts8_result->f3 == -5.55f + 1);
--    CHECK(ts8_result->f4 == -55.5f + 1);
--
--    printf("structure test 8 ok!\n");
--
--    free (ts8_result);
--  }
--
--  /* struct tests */
--  {
--    test_structure_9 ts9_arg;
--
--    /* This is a hack to get a properly aligned result buffer */
--    test_structure_9 *ts9_result = 
--      (test_structure_9 *) malloc (sizeof(test_structure_9));
--
--    args[0] = &ts9_type;
--    values[0] = &ts9_arg;
--
--    /* Initialize the cif */
--    CHECK(ffi_prep_cif(&cif, FFI_DEFAULT_ABI, 1, &ts9_type, args) == FFI_OK);
--
--    ts9_arg.f = 5.55f;
--    ts9_arg.i = 5;
--
--    printf ("%g\n", ts9_arg.f);
--    printf ("%d\n", ts9_arg.i);
--
--    ffi_call(&cif, FFI_FN(struct9), ts9_result, values);
--
--    printf ("%g\n", ts9_result->f);
--    printf ("%d\n", ts9_result->i);
--
--    CHECK(ts9_result->f == 5.55f + 1);
--    CHECK(ts9_result->i == 5 + 1);
--
--    printf("structure test 9 ok!\n");
--
--    free (ts9_result);
--  }
--
 -#else
 -  printf("Structure passing doesn't work on Win32.\n");
--#endif /* X86_WIN32 */
--
--#ifdef X86_WIN32
--  /* stdcall strlen tests */
--  {
--    args[0] = &ffi_type_pointer;
--    values[0] = (void*) &s;
--
--    /* Initialize the cif */
--    CHECK(ffi_prep_cif(&cif, FFI_STDCALL, 1,
--		       &ffi_type_sint, args) == FFI_OK);
--
--    s = "a";
--    ffi_call(&cif, FFI_FN(my_stdcall_strlen), &rint, values);
--    CHECK(rint == 1);
--
--    s = "1234567";
--    ffi_call(&cif, FFI_FN(my_stdcall_strlen), &rint, values);
--    CHECK(rint == 7);
--
--    s = "1234567890123456789012345";
--    ffi_call(&cif, FFI_FN(my_stdcall_strlen), &rint, values);
--    CHECK(rint == 25);
--
--    printf("stdcall strlen tests passed\n");
--  }
--
--  /* stdcall many arg tests */
--  {
--    float ff;
--    float fa[13];
--
--    for (ul = 0; ul < 13; ul++)
--      {
--	args[ul] = &ffi_type_float;
--	values[ul] = &fa[ul];
--	fa[ul] = (float) ul;
--      }
--
--    /* Initialize the cif */
--    CHECK(ffi_prep_cif(&cif, FFI_STDCALL, 13,
--		       &ffi_type_float, args) == FFI_OK);
--
--    /*@-usedef@*/
--    ff =  stdcall_many(fa[0], fa[1],
--	       fa[2], fa[3],
--	       fa[4], fa[5],
--	       fa[6], fa[7],
--	       fa[8], fa[9],
--	       fa[10],fa[11],fa[12]);
--    /*@=usedef@*/
--
--    ffi_call(&cif, FFI_FN(stdcall_many), &f, values);
--
--    /*@-realcompare@*/
--    if (f - ff < FLT_EPSILON)
--    /*@=realcompare@*/
--	printf("stdcall many arg tests ok!\n");
--    else
--        CHECK(0);
--  }
 -#endif /* X86_WIN32 */
 -
 -# if FFI_CLOSURES
@@ -1527,7 +1408,6 @@ index a05b746..0000000
 -    (void) puts("\nFinished FFI_CLOSURES\n");
 -
 -# endif
--
 -  /* If we arrived here, all is good */
 -  (void) puts("\nLooks good. No surprises.\n");
 -
@@ -2467,24 +2347,31 @@ index 0000000..b1974a8
 +.LEFDE2:
 +
 diff --git a/libffi/src/prep_cif.c b/libffi/src/prep_cif.c
-index d3c89c3..06c45a4 100644
+index d53981a..8feb66d 100644
 --- a/libffi/src/prep_cif.c
 +++ b/libffi/src/prep_cif.c
-@@ -104,7 +104,7 @@ ffi_status ffi_prep_cif(/*@out@*/ /*@partial@*/ ffi_cif *cif,
+@@ -103,7 +103,7 @@ ffi_status ffi_prep_cif(/*@out@*/ /*@partial@*/ ffi_cif *cif,
+   /* Perform a sanity check on the return type */
    FFI_ASSERT(ffi_type_test(cif->rtype));
  
-   /* x86-64 and s390 stack space allocation is handled in prep_machdep.  */
--#if !defined M68K && !defined __x86_64__ && !defined S390
+-#ifndef M68K
 +#if !defined M68K && !defined __x86_64__ && !defined S390 && !defined PA
    /* Make space for the return structure pointer */
    if (cif->rtype->type == FFI_TYPE_STRUCT
  #ifdef SPARC
-@@ -123,7 +123,7 @@ ffi_status ffi_prep_cif(/*@out@*/ /*@partial@*/ ffi_cif *cif,
+@@ -122,6 +122,7 @@ ffi_status ffi_prep_cif(/*@out@*/ /*@partial@*/ ffi_cif *cif,
        if (((*ptr)->size == 0) && (initialize_aggregate((*ptr)) != FFI_OK))
  	return FFI_BAD_TYPEDEF;
  
--#if !defined __x86_64__ && !defined S390
 +#if !defined __x86_64__ && !defined S390 && !defined PA
  #ifdef SPARC
        if (((*ptr)->type == FFI_TYPE_STRUCT
  	   && ((*ptr)->size > 16 || cif->abi != FFI_V9))
+@@ -137,6 +138,7 @@ ffi_status ffi_prep_cif(/*@out@*/ /*@partial@*/ ffi_cif *cif,
+ 	  
+ 	  bytes += STACK_ARG_SIZE((*ptr)->size);
+ 	}
++#endif
+     }
+ 
+   cif->bytes = bytes;

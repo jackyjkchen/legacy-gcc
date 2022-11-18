@@ -22,7 +22,7 @@ Linux glibc本地工具链——
 * aarch64：>=gcc-4.8.5
 * armel：>=gcc-4.1.2
 * armhf：>=gcc-4.4.7
-* s390x：>=gcc-4.0.4
+* hppa1.1：>=gcc-3.2.3
 * m68k：>=gcc-2.2.2
 * mips：>=gcc-2.95.3
 * mipsel：>=gcc-2.95.3

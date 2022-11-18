@@ -1,0 +1,721 @@
+diff --git a/boehm-gc/gcconfig.h b/boehm-gc/gcconfig.h
+index 9bbd5a3..4b31e9e 100644
+--- a/boehm-gc/gcconfig.h
++++ b/boehm-gc/gcconfig.h
+@@ -466,6 +466,11 @@
+ #       define MPROTECT_VDB
+ #       ifdef __ELF__
+ #            define DYNAMIC_LOADING
++#include <features.h>
++#if defined(__GLIBC__)&& __GLIBC__>=2
++             extern int __data_start;
++#            define DATASTART ((ptr_t)(&__data_start))
++#else
+              extern char **__environ;
+ #            define DATASTART ((ptr_t)(&__environ))
+                              /* hideous kludge: __environ is the first */
+@@ -476,6 +481,7 @@
+                              /* would include .rodata, which may       */
+                              /* contain large read-only data tables    */
+                              /* that we'd rather not scan.             */
++#endif /* GLIBC2 */
+              extern int _end;
+ #            define DATAEND (&_end)
+ #       else
+diff --git a/boehm-gc/os_dep.c b/boehm-gc/os_dep.c
+index a192d35..3df90f1 100644
+--- a/boehm-gc/os_dep.c
++++ b/boehm-gc/os_dep.c
+@@ -1882,7 +1882,7 @@ SIG_PF GC_old_segv_handler;	/* Also old MSWIN32 ACCESS_VIOLATION filter */
+ #	if defined(M68K)
+           char * addr = NULL;
+ 
+-	  struct sigcontext *scp = (struct sigcontext *)(&sc);
++	  struct sigcontext *scp = (struct sigcontext *)(sc);
+ 
+ 	  int format = (scp->sc_formatvec >> 12) & 0xf;
+ 	  unsigned long *framedata = (unsigned long *)(scp + 1); 
+@@ -1894,6 +1894,10 @@ SIG_PF GC_old_segv_handler;	/* Also old MSWIN32 ACCESS_VIOLATION filter */
+ 	  } else if (format == 7) {
+ 	  	/* 68040 */
+ 	  	ea = framedata[3];
++	  	if (framedata[1] & 0x08000000) {
++	  		/* correct addr on misaligned access */
++	  		ea = (ea+4095)&(~4095);
++		}
+ 	  } else if (format == 4) {
+ 	  	/* 68060 */
+ 	  	ea = framedata[0];
+diff --git a/gcc/Makefile.in b/gcc/Makefile.in
+index 5d0a1c9..5271e9e 100644
+--- a/gcc/Makefile.in
++++ b/gcc/Makefile.in
+@@ -75,7 +75,7 @@ ALLOCA_FINISH = true
+ XCFLAGS =
+ TCFLAGS =
+ CFLAGS = -g
+-STAGE1_CFLAGS = -g @stage1_cflags@
++STAGE1_CFLAGS = -g -O @stage1_cflags@
+ BOOT_CFLAGS = -g -O2
+ 
+ # The warning flags are separate from BOOT_CFLAGS because people tend to
+diff --git a/gcc/alias.c b/gcc/alias.c
+index 060d1a5..64237ba 100644
+--- a/gcc/alias.c
++++ b/gcc/alias.c
+@@ -104,7 +104,8 @@ static alias_set_entry get_alias_set_entry PARAMS ((HOST_WIDE_INT));
+ static rtx fixed_scalar_and_varying_struct_p PARAMS ((rtx, rtx, rtx, rtx,
+ 						      int (*) (rtx, int)));
+ static int aliases_everything_p         PARAMS ((rtx));
+-static int write_dependence_p           PARAMS ((rtx, rtx, int));
++static int write_dependence_p           PARAMS ((rtx, rtx,
++						 enum machine_mode, int));
+ static int nonlocal_mentioned_p         PARAMS ((rtx));
+ 
+ static int loop_p                       PARAMS ((void));
+@@ -1793,9 +1794,10 @@ true_dependence (mem, mem_mode, x, varies)
+    (or, if WRITEP is non-zero, a write to) MEM.  */
+ 
+ static int
+-write_dependence_p (mem, x, writep)
++write_dependence_p (mem, x, x_mode, writep)
+      rtx mem;
+      rtx x;
++     enum machine_mode x_mode;
+      int writep;
+ {
+   rtx x_addr, mem_addr;
+@@ -1818,6 +1820,9 @@ write_dependence_p (mem, x, writep)
+   if (! writep && RTX_UNCHANGING_P (mem))
+     return 0;
+ 
++  if (x_mode == VOIDmode)
++    x_mode = GET_MODE (x);
++
+   x_addr = get_addr (XEXP (x, 0));
+   mem_addr = get_addr (XEXP (mem, 0));
+ 
+@@ -1830,7 +1835,7 @@ write_dependence_p (mem, x, writep)
+ 	return 0;
+     }
+ 
+-  if (! base_alias_check (x_addr, mem_addr, GET_MODE (x),
++  if (! base_alias_check (x_addr, mem_addr, x_mode,
+ 			  GET_MODE (mem)))
+     return 0;
+ 
+@@ -1838,7 +1843,7 @@ write_dependence_p (mem, x, writep)
+   mem_addr = canon_rtx (mem_addr);
+ 
+   if (!memrefs_conflict_p (SIZE_FOR_MODE (mem), mem_addr,
+-			   SIZE_FOR_MODE (x), x_addr, 0))
++			   GET_MODE_SIZE(x_mode), x_addr, 0))
+     return 0;
+ 
+   fixed_scalar 
+@@ -1852,21 +1857,23 @@ write_dependence_p (mem, x, writep)
+ /* Anti dependence: X is written after read in MEM takes place.  */
+ 
+ int
+-anti_dependence (mem, x)
++anti_dependence (mem, x, x_mode)
+      rtx mem;
++     enum machine_mode x_mode;
+      rtx x;
+ {
+-  return write_dependence_p (mem, x, /*writep=*/0);
++  return write_dependence_p (mem, x, x_mode, /*writep=*/0);
+ }
+ 
+ /* Output dependence: X is written after store in MEM takes place.  */
+ 
+ int
+-output_dependence (mem, x)
++output_dependence (mem, x, x_mode)
+      register rtx mem;
++     enum machine_mode x_mode;
+      register rtx x;
+ {
+-  return write_dependence_p (mem, x, /*writep=*/1);
++  return write_dependence_p (mem, x, x_mode, /*writep=*/1);
+ }
+ 
+ /* Returns non-zero if X mentions something which is not
+diff --git a/gcc/config/m68k/linux.h b/gcc/config/m68k/linux.h
+index bf42091..3f82ddc 100644
+--- a/gcc/config/m68k/linux.h
++++ b/gcc/config/m68k/linux.h
+@@ -306,10 +306,7 @@ do {									\
+    an operand of a function call. */
+ #undef LEGITIMATE_PIC_OPERAND_P
+ #define LEGITIMATE_PIC_OPERAND_P(X) \
+-  ((! symbolic_operand (X, VOIDmode) \
+-    && ! (GET_CODE (X) == CONST_DOUBLE && CONST_DOUBLE_MEM (X)	\
+-	  && GET_CODE (CONST_DOUBLE_MEM (X)) == MEM		\
+-	  && symbolic_operand (XEXP (CONST_DOUBLE_MEM (X), 0), VOIDmode))) \
++  (! symbolic_operand (X, VOIDmode) \
+    || (GET_CODE (X) == SYMBOL_REF && SYMBOL_REF_FLAG (X))       \
+    || PCREL_GENERAL_OPERAND_OK)
+ 
+diff --git a/gcc/config/m68k/m68k.md b/gcc/config/m68k/m68k.md
+index 2f4af6c..7ead030 100644
+--- a/gcc/config/m68k/m68k.md
++++ b/gcc/config/m68k/m68k.md
+@@ -2149,7 +2149,7 @@
+ ;;    (plus:DI (match_operand:DI 2 "general_operand" "%0")
+ ;;	(lshiftrt:DI (match_operand:DI 1 "general_operand" "ro")
+ ;;            (const_int 32))))]
+-    (plus:DI (lshiftrt:DI (match_operand:DI 1 "general_operand" "ro,r")
++    (plus:DI (lshiftrt:DI (match_operand:DI 1 "general_operand" "ro,d")
+             (const_int 32))
+         (match_operand:DI 2 "general_operand" "0,0")))]
+   ""
+@@ -2168,7 +2168,7 @@
+ ;;    (plus:DI (match_operand:DI 2 "general_operand" "%0")
+ ;;	(ashift:DI (match_operand:DI 1 "general_operand" "ro")
+ ;;            (const_int 32))))]
+-    (plus:DI (ashift:DI (match_operand:DI 1 "general_operand" "ro,r")
++    (plus:DI (ashift:DI (match_operand:DI 1 "general_operand" "ro,d")
+             (const_int 32))
+         (match_operand:DI 2 "general_operand" "0,0")))]
+   ""
+diff --git a/gcc/flow.c b/gcc/flow.c
+index 71a685e..038a027 100644
+--- a/gcc/flow.c
++++ b/gcc/flow.c
+@@ -4155,7 +4155,7 @@ insn_dead_p (pbi, x, call_ok, notes)
+ 	     rtx_equal_p does not check the alias set or flags, we also
+ 	     must have the potential for them to conflict (anti_dependence). */
+ 	  for (temp = pbi->mem_set_list; temp != 0; temp = XEXP (temp, 1))
+-	    if (anti_dependence (r, XEXP (temp, 0)))
++	    if (anti_dependence (r, XEXP (temp, 0), VOIDmode))
+ 	      {
+ 		rtx mem = XEXP (temp, 0);
+ 
+@@ -4421,7 +4421,7 @@ invalidate_mems_from_set (pbi, exp)
+     {
+       next = XEXP (temp, 1);
+       if ((GET_CODE (exp) == MEM
+-	   && output_dependence (XEXP (temp, 0), exp))
++	   && output_dependence (XEXP (temp, 0), exp, VOIDmode))
+ 	  || (GET_CODE (exp) == REG
+ 	      && reg_overlap_mentioned_p (exp, XEXP (temp, 0))))
+ 	{
+@@ -5738,7 +5738,7 @@ mark_used_regs (pbi, x, cond, insn)
+ 	      while (temp)
+ 		{
+ 		  next = XEXP (temp, 1);
+-		  if (anti_dependence (XEXP (temp, 0), x))
++		  if (anti_dependence (XEXP (temp, 0), x, VOIDmode))
+ 		    {
+ 		      /* Splice temp out of the list.  */
+ 		      if (prev)
+diff --git a/gcc/jump.c b/gcc/jump.c
+index 67bde88..095052f 100644
+--- a/gcc/jump.c
++++ b/gcc/jump.c
+@@ -2408,6 +2408,8 @@ int
+ sets_cc0_p (x)
+      rtx x ATTRIBUTE_UNUSED;
+ {
++  if (GET_RTX_CLASS (GET_CODE (x)) == 'i')
++    x = PATTERN (x);
+   if (GET_CODE (x) == SET && SET_DEST (x) == cc0_rtx)
+     return 1;
+   if (GET_CODE (x) == PARALLEL)
+diff --git a/gcc/reload.c b/gcc/reload.c
+index ffc48a5..1f8aa41 100644
+--- a/gcc/reload.c
++++ b/gcc/reload.c
+@@ -2409,6 +2409,7 @@ find_reloads (insn, replace, ind_levels, live_known, reload_reg_p)
+   char this_alternative_earlyclobber[MAX_RECOG_OPERANDS];
+   int this_alternative_matches[MAX_RECOG_OPERANDS];
+   int swapped;
++  int n_swapped;
+   int goal_alternative[MAX_RECOG_OPERANDS];
+   int this_alternative_number;
+   int goal_alternative_number = 0;
+@@ -2421,7 +2422,8 @@ find_reloads (insn, replace, ind_levels, live_known, reload_reg_p)
+   char goal_alternative_earlyclobber[MAX_RECOG_OPERANDS];
+   int goal_alternative_swapped;
+   int best;
+-  int commutative;
++  int commutative[MAX_RECOG_OPERANDS];
++  int commutative_op[MAX_RECOG_OPERANDS/2];
+   char operands_match[MAX_RECOG_OPERANDS][MAX_RECOG_OPERANDS];
+   rtx substed_operand[MAX_RECOG_OPERANDS];
+   rtx body = PATTERN (insn);
+@@ -2434,6 +2436,7 @@ find_reloads (insn, replace, ind_levels, live_known, reload_reg_p)
+   n_reloads = 0;
+   n_replacements = 0;
+   n_earlyclobbers = 0;
++  n_swapped = 0;
+   replace_reloads = replace;
+   hard_regs_live_known = live_known;
+   static_reload_reg_p = reload_reg_p;
+@@ -2487,14 +2490,12 @@ find_reloads (insn, replace, ind_levels, live_known, reload_reg_p)
+ 	  noperands * sizeof (enum machine_mode));
+   memcpy (constraints, recog_data.constraints, noperands * sizeof (char *));
+ 
+-  commutative = -1;
+-
+   /* If we will need to know, later, whether some pair of operands
+      are the same, we must compare them now and save the result.
+      Reloading the base and index registers will clobber them
+      and afterward they will fail to match.  */
+ 
+-  for (i = 0; i < noperands; i++)
++  for (i = 0, j = 0; i < noperands; i++)
+     {
+       register char *p;
+       register int c;
+@@ -2502,6 +2503,7 @@ find_reloads (insn, replace, ind_levels, live_known, reload_reg_p)
+       substed_operand[i] = recog_data.operand[i];
+       p = constraints[i];
+ 
++      commutative[i] = i;
+       modified[i] = RELOAD_READ;
+ 
+       /* Scan this operand's constraint to see if it is an output operand,
+@@ -2515,11 +2517,14 @@ find_reloads (insn, replace, ind_levels, live_known, reload_reg_p)
+ 	    modified[i] = RELOAD_READ_WRITE;
+ 	  else if (c == '%')
+ 	    {
+-	      /* The last operand should not be marked commutative.  */
+-	      if (i == noperands - 1)
++	      /* The last and the next operand should not be marked commutative.  */
++	      if (i == noperands - 1 || commutative[i] != i)
+ 		abort ();
+ 
+-	      commutative = i;
++	      n_swapped = n_swapped ? n_swapped * 2 : 2;
++	      commutative_op[j++] = i;
++	      commutative[i] = i + 1;
++	      commutative[i + 1] = i;
+ 	    }
+ 	  else if (c >= '0' && c <= '9')
+ 	    {
+@@ -2532,28 +2537,21 @@ find_reloads (insn, replace, ind_levels, live_known, reload_reg_p)
+ 	      if (c == i)
+ 		abort ();
+ 
++	      if (commutative[i] != i)
++		operands_match[c][commutative[i]]
++		  = operands_match_p (recog_data.operand[c],
++				      recog_data.operand[commutative[i]]);
++
+ 	      /* If C can be commuted with C+1, and C might need to match I,
+ 		 then C+1 might also need to match I.  */
+-	      if (commutative >= 0)
+-		{
+-		  if (c == commutative || c == commutative + 1)
+-		    {
+-		      int other = c + (c == commutative ? 1 : -1);
+-		      operands_match[other][i]
+-			= operands_match_p (recog_data.operand[other],
+-					    recog_data.operand[i]);
+-		    }
+-		  if (i == commutative || i == commutative + 1)
+-		    {
+-		      int other = i + (i == commutative ? 1 : -1);
+-		      operands_match[c][other]
+-			= operands_match_p (recog_data.operand[c],
+-					    recog_data.operand[other]);
+-		    }
+-		  /* Note that C is supposed to be less than I.
+-		     No need to consider altering both C and I because in
+-		     that case we would alter one into the other.  */
+-		}
++	      if (commutative[c] != c)
++		operands_match[commutative[c]][i]
++		  = operands_match_p (recog_data.operand[commutative[c]],
++				      recog_data.operand[i]);
++	      if (commutative[i] != i && commutative[c] != c)
++		operands_match[commutative[c]][commutative[i]]
++		  = operands_match_p (recog_data.operand[commutative[c]],
++				      recog_data.operand[commutative[i]]);
+ 	    }
+ 	}
+     }
+@@ -2714,6 +2712,8 @@ find_reloads (insn, replace, ind_levels, live_known, reload_reg_p)
+ 
+   swapped = 0;
+   goal_alternative_swapped = 0;
++  for (i = 0; i < noperands; i++)
++    commutative[i] = i;
+  try_swapped:
+ 
+   /* The constraints are made of several alternatives.
+@@ -2867,13 +2867,7 @@ find_reloads (insn, replace, ind_levels, live_known, reload_reg_p)
+ 	  while (*p && (c = *p++) != ',')
+ 	    switch (c)
+ 	      {
+-	      case '=':  case '+':  case '*':
+-		break;
+-
+-	      case '%':
+-		/* The last operand should not be marked commutative.  */
+-		if (i != noperands - 1)
+-		  commutative = i;
++	      case '=':  case '+':  case '*': case '%':
+ 		break;
+ 
+ 	      case '?':
+@@ -2903,19 +2897,10 @@ find_reloads (insn, replace, ind_levels, live_known, reload_reg_p)
+ 		   only a single reload insn will be needed to make
+ 		   the two operands win.  As a result, this alternative
+ 		   may be rejected when it is actually desirable.)  */
+-		if ((swapped && (c != commutative || i != commutative + 1))
+-		    /* If we are matching as if two operands were swapped,
+-		       also pretend that operands_match had been computed
+-		       with swapped.
+-		       But if I is the second of those and C is the first,
+-		       don't exchange them, because operands_match is valid
+-		       only on one side of its diagonal.  */
+-		    ? (operands_match
+-		       [(c == commutative || c == commutative + 1)
+-		       ? 2 * commutative + 1 - c : c]
+-		       [(i == commutative || i == commutative + 1)
+-		       ? 2 * commutative + 1 - i : i])
+-		    : operands_match[c][i])
++		/* If we are matching as if two operands were swapped,
++		   also pretend that operands_match had been computed
++		   with swapped. */
++		if (operands_match[commutative[c]][commutative[i]])
+ 		  {
+ 		    /* If we are matching a non-offsettable address where an
+ 		       offsettable address was expected, then we must reject
+@@ -3384,11 +3369,22 @@ find_reloads (insn, replace, ind_levels, live_known, reload_reg_p)
+       if (losers == 0)
+ 	{
+ 	  /* Unswap these so that they are never swapped at `finish'.  */
+-	  if (commutative >= 0)
++	  if (swapped)
+ 	    {
+-	      recog_data.operand[commutative] = substed_operand[commutative];
+-	      recog_data.operand[commutative + 1]
+-		= substed_operand[commutative + 1];
++	      int s = swapped;
++	      s ^= s >> 1;
++
++	      for (i = 0; s; i++, s >>= 1)
++		{
++		  register int c;
++
++		  if (!(s & 1))
++		    continue;
++		  c = commutative_op[i];
++
++		  recog_data.operand[c] = substed_operand[c];
++		  recog_data.operand[c + 1] = substed_operand[c + 1];
++		}
+ 	    }
+ 	  for (i = 0; i < noperands; i++)
+ 	    {
+@@ -3440,38 +3436,48 @@ find_reloads (insn, replace, ind_levels, live_known, reload_reg_p)
+      as if we had exchanged them.
+      To do this, really exchange them in operands.
+ 
+-     If we have just tried the alternatives the second time,
++     We try all the possible alternatives and after we tried the last one,
+      return operands to normal and drop through.  */
+ 
+-  if (commutative >= 0)
++  if (++swapped <= n_swapped)
+     {
+-      swapped = !swapped;
+-      if (swapped)
++      int s, t;
++      rtx x;
++
++      s = swapped - 1;
++      if (swapped < n_swapped)
++	  s ^= swapped;
++      s ^= s >> 1;
++
++      for (i = 0; s; i++, s >>= 1)
++	if (s & 1)
++	  break;
++      i = commutative_op[i];
++
++      t = commutative[i];
++      commutative[i] = commutative[i + 1];
++      commutative[i + 1] = t;
++
++      x = recog_data.operand[i];
++      recog_data.operand[i] = recog_data.operand[i + 1];
++      recog_data.operand[i + 1] = x;
++
++      if (swapped < n_swapped)
+ 	{
+ 	  register enum reg_class tclass;
+-	  register int t;
+-
+-	  recog_data.operand[commutative] = substed_operand[commutative + 1];
+-	  recog_data.operand[commutative + 1] = substed_operand[commutative];
+ 
+-	  tclass = preferred_class[commutative];
+-	  preferred_class[commutative] = preferred_class[commutative + 1];
+-	  preferred_class[commutative + 1] = tclass;
++	  tclass = preferred_class[i];
++	  preferred_class[i] = preferred_class[i + 1];
++	  preferred_class[i + 1] = tclass;
+ 
+-	  t = pref_or_nothing[commutative];
+-	  pref_or_nothing[commutative] = pref_or_nothing[commutative + 1];
+-	  pref_or_nothing[commutative + 1] = t;
++	  t = pref_or_nothing[i];
++	  pref_or_nothing[i] = pref_or_nothing[i + 1];
++	  pref_or_nothing[i + 1] = t;
+ 
+ 	  memcpy (constraints, recog_data.constraints,
+ 		  noperands * sizeof (char *));
+ 	  goto try_swapped;
+ 	}
+-      else
+-	{
+-	  recog_data.operand[commutative] = substed_operand[commutative];
+-	  recog_data.operand[commutative + 1]
+-	    = substed_operand[commutative + 1];
+-	}
+     }
+ 
+   /* The operands don't meet the constraints.
+@@ -3518,25 +3524,37 @@ find_reloads (insn, replace, ind_levels, live_known, reload_reg_p)
+ 
+   if (goal_alternative_swapped)
+     {
+-      register rtx tem;
+-
+-      tem = substed_operand[commutative];
+-      substed_operand[commutative] = substed_operand[commutative + 1];
+-      substed_operand[commutative + 1] = tem;
+-      tem = recog_data.operand[commutative];
+-      recog_data.operand[commutative] = recog_data.operand[commutative + 1];
+-      recog_data.operand[commutative + 1] = tem;
+-      tem = *recog_data.operand_loc[commutative];
+-      *recog_data.operand_loc[commutative]
+-	= *recog_data.operand_loc[commutative + 1];
+-      *recog_data.operand_loc[commutative + 1] = tem;
++      int s = goal_alternative_swapped;
++      s ^= s >> 1;
+ 
+-      for (i = 0; i < n_reloads; i++)
++      for (i = 0; s; i++, s >>= 1)
+ 	{
+-	  if (rld[i].opnum == commutative)
+-	    rld[i].opnum = commutative + 1;
+-	  else if (rld[i].opnum == commutative + 1)
+-	    rld[i].opnum = commutative;
++	  register int c;
++	  register rtx tem;
++
++	  if (!(s & 1))
++	    continue;
++	  c = commutative_op[i];
++
++	  tem = substed_operand[c];
++	  substed_operand[c] = substed_operand[c + 1];
++	  substed_operand[c + 1] = tem;
++
++	  tem = recog_data.operand[c];
++	  recog_data.operand[c] = recog_data.operand[c + 1];
++	  recog_data.operand[c + 1] = tem;
++
++	  tem = *recog_data.operand_loc[c];
++	  *recog_data.operand_loc[c] = *recog_data.operand_loc[c + 1];
++	  *recog_data.operand_loc[c + 1] = tem;
++
++	  for (j = 0; j < n_reloads; j++)
++	    {
++	      if (rld[j].opnum == c)
++		rld[j].opnum = c + 1;
++	      else if (rld[j].opnum == c + 1)
++		rld[j].opnum = c;
++	    }
+ 	}
+     }
+ 
+diff --git a/gcc/rtl.h b/gcc/rtl.h
+index ad20003..d9b369a 100644
+--- a/gcc/rtl.h
++++ b/gcc/rtl.h
+@@ -2008,8 +2008,8 @@ extern rtx canon_rtx                    PARAMS ((rtx));
+ extern int true_dependence		PARAMS ((rtx, enum machine_mode, rtx,
+ 						int (*)(rtx, int)));
+ extern int read_dependence		PARAMS ((rtx, rtx));
+-extern int anti_dependence		PARAMS ((rtx, rtx));
+-extern int output_dependence		PARAMS ((rtx, rtx));
++extern int anti_dependence		PARAMS ((rtx, rtx, enum machine_mode));
++extern int output_dependence		PARAMS ((rtx, rtx, enum machine_mode));
+ extern void mark_constant_function	PARAMS ((void));
+ extern void init_alias_once		PARAMS ((void));
+ extern void init_alias_analysis		PARAMS ((void));
+diff --git a/gcc/sched-deps.c b/gcc/sched-deps.c
+index 59f14d0..5ce08af 100644
+--- a/gcc/sched-deps.c
++++ b/gcc/sched-deps.c
+@@ -691,7 +691,7 @@ sched_analyze_1 (deps, x, insn)
+ 	  pending_mem = deps->pending_read_mems;
+ 	  while (pending)
+ 	    {
+-	      if (anti_dependence (XEXP (pending_mem, 0), dest))
++	      if (anti_dependence (XEXP (pending_mem, 0), dest, VOIDmode))
+ 		add_dependence (insn, XEXP (pending, 0), REG_DEP_ANTI);
+ 
+ 	      pending = XEXP (pending, 1);
+@@ -702,7 +702,7 @@ sched_analyze_1 (deps, x, insn)
+ 	  pending_mem = deps->pending_write_mems;
+ 	  while (pending)
+ 	    {
+-	      if (output_dependence (XEXP (pending_mem, 0), dest))
++	      if (output_dependence (XEXP (pending_mem, 0), dest, VOIDmode))
+ 		add_dependence (insn, XEXP (pending, 0), REG_DEP_OUTPUT);
+ 
+ 	      pending = XEXP (pending, 1);
+diff --git a/gcc/simplify-rtx.c b/gcc/simplify-rtx.c
+index 0bb0710..09ec24f 100644
+--- a/gcc/simplify-rtx.c
++++ b/gcc/simplify-rtx.c
+@@ -125,9 +125,9 @@ static cselib_val *cselib_lookup_mem	PARAMS ((rtx, int));
+ static rtx cselib_subst_to_values	PARAMS ((rtx));
+ static void cselib_invalidate_regno	PARAMS ((unsigned int,
+ 						 enum machine_mode));
+-static int cselib_mem_conflict_p	PARAMS ((rtx, rtx));
++static int cselib_mem_conflict_p	PARAMS ((rtx, enum machine_mode, rtx));
+ static int cselib_invalidate_mem_1	PARAMS ((void **, void *));
+-static void cselib_invalidate_mem	PARAMS ((rtx));
++static void cselib_invalidate_mem	PARAMS ((rtx, enum machine_mode));
+ static void cselib_invalidate_rtx	PARAMS ((rtx, rtx, void *));
+ static void cselib_record_set		PARAMS ((rtx, cselib_val *,
+ 						 cselib_val *));
+@@ -2082,7 +2082,7 @@ simplify_ternary_operation (code, mode, op0_mode, op0, op1, op2)
+ 	  /* See if any simplifications were possible.  */
+ 	  if (temp == const0_rtx)
+ 	    return op2;
+-	  else if (temp == const1_rtx)
++	  else if (temp == const_true_rtx)
+ 	    return op1;
+ 	  else if (temp)
+ 	    op0 = temp;
+@@ -3059,8 +3059,9 @@ cselib_invalidate_regno (regno, mode)
+    Return whether this change will invalidate VAL.  */
+ 
+ static int
+-cselib_mem_conflict_p (mem_base, val)
++cselib_mem_conflict_p (mem_base, mem_mode, val)
+      rtx mem_base;
++     enum machine_mode mem_mode;
+      rtx val;
+ {
+   enum rtx_code code;
+@@ -3085,7 +3086,7 @@ cselib_mem_conflict_p (mem_base, val)
+     case MEM:
+       if (GET_MODE (mem_base) == BLKmode
+ 	  || GET_MODE (val) == BLKmode
+-	  || anti_dependence (val, mem_base))
++	  || anti_dependence (val, mem_base, mem_mode))
+ 	return 1;
+ 
+       /* The address may contain nested MEMs.  */
+@@ -3100,12 +3101,12 @@ cselib_mem_conflict_p (mem_base, val)
+     {
+       if (fmt[i] == 'e')
+ 	{
+-	  if (cselib_mem_conflict_p (mem_base, XEXP (val, i)))
++	  if (cselib_mem_conflict_p (mem_base, mem_mode, XEXP (val, i)))
+ 	    return 1;
+ 	}
+       else if (fmt[i] == 'E')
+ 	for (j = 0; j < XVECLEN (val, i); j++)
+-	  if (cselib_mem_conflict_p (mem_base, XVECEXP (val, i, j)))
++	  if (cselib_mem_conflict_p (mem_base, mem_mode, XVECEXP (val, i, j)))
+ 	    return 1;
+     }
+ 
+@@ -3114,6 +3115,11 @@ cselib_mem_conflict_p (mem_base, val)
+ 
+ /* For the value found in SLOT, walk its locations to determine if any overlap
+    INFO (which is a MEM rtx).  */
++struct cselib_invalidate_info
++{
++  enum machine_mode mode;
++  rtx exp;
++};
+ 
+ static int
+ cselib_invalidate_mem_1 (slot, info)
+@@ -3121,7 +3127,7 @@ cselib_invalidate_mem_1 (slot, info)
+      void *info;
+ {
+   cselib_val *v = (cselib_val *) *slot;
+-  rtx mem_rtx = (rtx) info;
++  struct cselib_invalidate_info *i = (struct cselib_invalidate_info *)info;
+   struct elt_loc_list **p = &v->locs;
+   int had_locs = v->locs != 0;
+ 
+@@ -3134,7 +3140,7 @@ cselib_invalidate_mem_1 (slot, info)
+       /* MEMs may occur in locations only at the top level; below
+ 	 that every MEM or REG is substituted by its VALUE.  */
+       if (GET_CODE (x) != MEM
+-	  || ! cselib_mem_conflict_p (mem_rtx, x))
++	  || ! cselib_mem_conflict_p (i->exp, i->mode, x))
+ 	{
+ 	  p = &(*p)->next;
+ 	  continue;
+@@ -3170,10 +3176,14 @@ cselib_invalidate_mem_1 (slot, info)
+    instruction, MEM_RTX is (mem:BLK const0_rtx).  */
+ 
+ static void
+-cselib_invalidate_mem (mem_rtx)
++cselib_invalidate_mem (mem_rtx, mem_mode)
+      rtx mem_rtx;
++     enum machine_mode mem_mode;
+ {
+-  htab_traverse (hash_table, cselib_invalidate_mem_1, mem_rtx);
++  struct cselib_invalidate_info info;
++  info.exp = mem_rtx;
++  info.mode = mem_mode;
++  htab_traverse (hash_table, cselib_invalidate_mem_1, &info);
+ }
+ 
+ /* Invalidate DEST, which is being assigned to or clobbered.  The second and
+@@ -3181,11 +3191,18 @@ cselib_invalidate_mem (mem_rtx)
+    note_stores; they are ignored.  */
+ 
+ static void
+-cselib_invalidate_rtx (dest, ignore, data)
++cselib_invalidate_rtx (dest, set, data)
+      rtx dest;
+-     rtx ignore ATTRIBUTE_UNUSED;
++     rtx set;
+      void *data ATTRIBUTE_UNUSED;
+ {
++  enum machine_mode dest_mode = GET_MODE (dest);
++  if (set && GET_CODE(set) == SET)
++    {
++      if (GET_CODE (SET_DEST (set)) == SIGN_EXTRACT
++	   || GET_CODE (SET_DEST (set)) == ZERO_EXTRACT)
++	dest_mode = GET_MODE (SET_DEST (set));
++    }
+   while (GET_CODE (dest) == STRICT_LOW_PART || GET_CODE (dest) == SIGN_EXTRACT
+ 	 || GET_CODE (dest) == ZERO_EXTRACT || GET_CODE (dest) == SUBREG)
+     dest = XEXP (dest, 0);
+@@ -3193,7 +3210,7 @@ cselib_invalidate_rtx (dest, ignore, data)
+   if (GET_CODE (dest) == REG)
+     cselib_invalidate_regno (REGNO (dest), GET_MODE (dest));
+   else if (GET_CODE (dest) == MEM)
+-    cselib_invalidate_mem (dest);
++    cselib_invalidate_mem (dest, dest_mode);
+ 
+   /* Some machines don't define AUTO_INC_DEC, but they still use push
+      instructions.  We need to catch that case here in order to
+@@ -3358,7 +3375,7 @@ cselib_process_insn (insn)
+ 	  cselib_invalidate_regno (i, VOIDmode);
+ 
+       if (! CONST_CALL_P (insn))
+-	cselib_invalidate_mem (callmem);
++	cselib_invalidate_mem (callmem, VOIDmode);
+     }
+ 
+   cselib_record_sets (insn);
