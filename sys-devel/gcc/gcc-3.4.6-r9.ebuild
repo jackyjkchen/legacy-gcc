@@ -17,6 +17,9 @@ if [[ ${CATEGORY} != cross-* ]] ; then
 	alpha|m68k)
 		TOOL_PREFIX="$(tc-arch)-legacy"
 		;;
+	hppa)
+		TOOL_PREFIX="hppa1.1-legacy"
+		;;
 	mips|sparc)
 		TOOL_PREFIX="${PROFILE_ARCH}-legacy"
 		;;
@@ -56,7 +59,7 @@ fi
 
 inherit toolchain
 
-KEYWORDS="alpha amd64 ia64 m68k mips ppc ppc64 s390 sh sparc x86"
+KEYWORDS="alpha amd64 hppa ia64 m68k mips ppc ppc64 s390 sh sparc x86"
 
 # we need a proper glibc version for the Scrt1.o provided to the pie-ssp specs
 # NOTE: we SHOULD be using at least binutils 2.15.90.0.1 everywhere for proper
@@ -101,6 +104,7 @@ src_prepare() {
 	fi
 
 	[[ ${TOOL_PREFIX} != "" ]] && eapply "${FILESDIR}"/${PV}/04_workaround-for-legacy-glibc-in-non-system-dir.patch
+	[[ $(tc-arch) == "hppa" ]] && eapply "${FILESDIR}"/${PV}/05_hppa-fix-build.patch
 }
 
 src_install() {

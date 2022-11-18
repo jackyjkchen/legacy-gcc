@@ -1876,6 +1876,8 @@ gcc_do_make() {
 		STAGE1_CFLAGS=${STAGE1_CFLAGS-"${CFLAGS}"}
 	elif [[ ${GCC_BRANCH_VER} == "4.9" && $(tc-arch) == "ppc64" ]] ; then
 		STAGE1_CFLAGS=
+	elif [[ ${GCC_BRANCH_VER} == "3.4" && $(tc-arch) == "hppa" ]] ; then
+		STAGE1_CFLAGS=
 	elif [[ ${GCC_BRANCH_VER} == "3.0" ]] ; then
 		STAGE1_CFLAGS=
 	else

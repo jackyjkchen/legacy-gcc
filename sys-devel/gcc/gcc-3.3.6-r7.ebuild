@@ -16,6 +16,9 @@ if [[ ${CATEGORY} != cross-* ]] ; then
 	alpha|m68k)
 		TOOL_PREFIX="$(tc-arch)-legacy"
 		;;
+	hppa)
+		TOOL_PREFIX="hppa1.1-legacy"
+		;;
 	mips)
 		CC="gcc-3.4.6 ${CFLAGS_o32}"
 		CXX="g++-3.4.6 ${CFLAGS_o32}"
@@ -58,7 +61,7 @@ fi
 inherit toolchain
 
 # ia64 - broken static handling; USE=static emerge busybox
-KEYWORDS="alpha amd64 m68k mips ppc ppc64 s390 sh sparc x86"
+KEYWORDS="alpha amd64 hppa m68k mips ppc ppc64 s390 sh sparc x86"
 
 # NOTE: we SHOULD be using at least binutils 2.15.90.0.1 everywhere for proper
 # .eh_frame ld optimisation and symbol visibility support, but it hasnt been
@@ -90,6 +93,7 @@ src_prepare() {
 	if use objc ; then
 		[[ $(tc-arch) != "mips" ]] && eapply "${FILESDIR}"/${PV}/05_libffi-without-libgcj.patch
 	fi
+	[[ $(tc-arch) == "hppa" ]] && eapply "${FILESDIR}"/${PV}/06_hppa-fix-build.patch
 }
 
 src_install() {
