@@ -228,26 +228,26 @@ if [[ ${PN} != kgcc64 && ${PN} != gcc-* ]] ; then
 	[[ -n ${PIE_VER} ]] && IUSE+=" nopie"
 	[[ -n ${SPECS_VER} ]] && IUSE+=" nossp"
 	case $(tc-arch) in
-	alpha)
-		tc_version_is_at_least 2.9 && IUSE+=" +cxx"
-		tc_version_is_at_least 2.9 && IUSE+=" objc"
-		;;
-	ppc64)
-		tc_version_is_at_least 3.2 && IUSE+=" +cxx"
-		tc_version_is_at_least 3.1 && IUSE+=" objc"
-		;;
-	sparc)
-		tc_version_is_at_least 2.9 && IUSE+=" +cxx"
-		tc_version_is_at_least 2.8 && IUSE+=" objc"
-		;;
-	m68k)
-		tc_version_is_at_least 2.1 && IUSE+=" +cxx"
-		tc_version_is_at_least 2.4 && IUSE+=" objc"
-		;;
-	*)
-		tc_version_is_at_least 2.1 && IUSE+=" +cxx"
-		tc_version_is_at_least 2.1 && IUSE+=" objc"
-		;;
+		alpha)
+			tc_version_is_at_least 2.9 && IUSE+=" +cxx"
+			tc_version_is_at_least 2.9 && IUSE+=" objc"
+			;;
+		ppc64)
+			tc_version_is_at_least 3.2 && IUSE+=" +cxx"
+			tc_version_is_at_least 3.1 && IUSE+=" objc"
+			;;
+		sparc)
+			tc_version_is_at_least 2.9 && IUSE+=" +cxx"
+			tc_version_is_at_least 2.8 && IUSE+=" objc"
+			;;
+		m68k)
+			tc_version_is_at_least 2.1 && IUSE+=" +cxx"
+			tc_version_is_at_least 2.4 && IUSE+=" objc"
+			;;
+		*)
+			tc_version_is_at_least 2.1 && IUSE+=" +cxx"
+			tc_version_is_at_least 2.1 && IUSE+=" objc"
+			;;
 	esac
 	tc_version_is_between 2.9 4.0 && IUSE+=" f77"
 	# fortran support appeared in 4.1, but 4.1 needs outdated mpfr
@@ -291,16 +291,16 @@ if [[ ${PN} != kgcc64 && ${PN} != gcc-* ]] ; then
 
 	tc_version_is_at_least 9.0 && IUSE+=" d"
 	case $(tc-arch) in
-	amd64)
-		tc_version_is_at_least 4.6 && IUSE+=" lto"
-		;;
-	x86)
-		tc_version_is_at_least 4.7 && IUSE+=" lto"
-		;;
-	*)
-		tc_version_is_at_least 9.1 && IUSE+=" lto"
-		;;
-	esac
+		amd64)
+			tc_version_is_at_least 4.6 && IUSE+=" lto"
+			;;
+		x86)
+			tc_version_is_at_least 4.7 && IUSE+=" lto"
+			;;
+		*)
+			tc_version_is_at_least 9.1 && IUSE+=" lto"
+			;;
+		esac
 	tc_version_is_at_least 10 && IUSE+=" cet"
 	tc_version_is_at_least 10 && IUSE+=" zstd" TC_FEATURES+=( zstd )
 	tc_version_is_at_least 11 && IUSE+=" valgrind" TC_FEATURES+=( valgrind )
