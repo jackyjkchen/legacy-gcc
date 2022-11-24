@@ -3,6 +3,8 @@
 
 EAPI=7
 
+ENABLE_WERROR="yes"
+
 inherit toolchain-funcs
 
 if [[ ${CATEGORY} != cross-* ]] ; then

@@ -58,6 +58,8 @@ if [[ ${CATEGORY} != cross-* ]] ; then
 	fi
 fi
 
+ENABLE_WERROR="yes"
+
 inherit toolchain
 
 # ia64 - broken static handling; USE=static emerge busybox

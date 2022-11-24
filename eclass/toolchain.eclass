@@ -1062,7 +1062,15 @@ toolchain_src_configure() {
 	)
 
 	if tc_version_is_at_least 2.7 ; then
-		confgcc+=( --disable-werror )
+		case $(tc-arch) in
+			amd64|x86) ;;
+			*) ENABLE_WERROR="no" ;;
+		esac
+		if [[ ${ENABLE_WERROR} == "yes" ]] && ! is_crosscompile ; then
+			confgcc+=( --enable-werror )
+		else
+			confgcc+=( --disable-werror )
+		fi
 	fi
 
 	if use nls ; then

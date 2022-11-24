@@ -3,6 +3,8 @@
 
 EAPI=7
 
+ENABLE_WERROR="yes"
+
 inherit toolchain
 
 KEYWORDS="alpha amd64 arm hppa ia64 m68k mips ppc ppc64 s390 sh sparc x86"
@@ -32,6 +34,7 @@ src_prepare() {
 
 	is_djgpp || eapply "${FILESDIR}"/${PV}/01_support-armhf.patch
 	[[ $(tc-arch) == "mips" && ${DEFAULT_ABI} == "n64" ]] && eapply "${FILESDIR}"/${PV}/02_mips64-default-n64-abi.patch
+	eapply "${FILESDIR}"/${PV}/03_fix-werror.patch
 
 	sed -i 's/use_fixproto=yes/:/' gcc/config.gcc #PR33200
 }

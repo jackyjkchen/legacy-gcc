@@ -3,6 +3,8 @@
 
 EAPI=7
 
+ENABLE_WERROR="yes"
+
 inherit toolchain
 
 KEYWORDS="alpha amd64 hppa ia64 m68k mips ppc ppc64 s390 sh sparc x86"
@@ -38,4 +40,5 @@ src_prepare() {
 	[[ $(tc-arch) == "mips" && ${DEFAULT_ABI} == "n64" ]] && eapply "${FILESDIR}"/${PV}/01_mips64-default-n64-abi.patch
 	[[ $(tc-arch) == "sh" ]] && eapply "${FILESDIR}"/${PV}/02_sh4-workaround-fixproto-core.patch
 	[[ $(tc-arch) == "hppa" ]] && eapply "${FILESDIR}"/${PV}/03_hppa-fix-build.patch
+	eapply "${FILESDIR}"/${PV}/04_fix-werror.patch
 }

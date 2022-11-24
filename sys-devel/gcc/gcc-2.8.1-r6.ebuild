@@ -36,6 +36,8 @@ LD="${CHOST}-ld"
 AR="${CHOST}-ar"
 RANLIB="${CHOST}-ranlib"
 
+ENABLE_WERROR="yes"
+
 inherit toolchain
 
 KEYWORDS="alpha amd64 m68k ppc sparc x86"
