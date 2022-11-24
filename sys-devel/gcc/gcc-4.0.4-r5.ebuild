@@ -3,8 +3,6 @@
 
 EAPI=7
 
-ENABLE_WERROR="yes"
-
 inherit toolchain
 
 KEYWORDS="alpha amd64 hppa ia64 m68k mips ppc ppc64 s390 sh sparc x86"

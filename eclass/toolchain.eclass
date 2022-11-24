@@ -1063,8 +1063,8 @@ toolchain_src_configure() {
 
 	if tc_version_is_at_least 2.7 ; then
 		case $(tc-arch) in
-			amd64|x86) ;;
-			*) ENABLE_WERROR="no" ;;
+			amd64|x86) tc_version_is_at_least 4.6 || ENABLE_WERROR="yes" ;;
+			*) ;;
 		esac
 		if [[ ${ENABLE_WERROR} == "yes" ]] && ! is_crosscompile ; then
 			confgcc+=( --enable-werror )

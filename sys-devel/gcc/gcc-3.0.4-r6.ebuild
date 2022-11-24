@@ -55,8 +55,6 @@ if [[ ${TOOL_PREFIX} != "" ]]; then
 		legacy-gcc/binutils-wrapper"
 fi
 
-ENABLE_WERROR="yes"
-
 inherit toolchain
 
 KEYWORDS="alpha amd64 m68k mips ppc s390 sparc x86"
