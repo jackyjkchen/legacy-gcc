@@ -1,0 +1,89 @@
+diff --git a/gcc/testsuite/gcc.dg/pr103248.c b/gcc/testsuite/gcc.dg/pr103248.c
+new file mode 100644
+index 000000000..da6232d21
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr103248.c
+@@ -0,0 +1,8 @@
++/* { dg-do compile } */
++/* { dg-require-effective-target fixed_point } */
++/* { dg-options "-fnon-call-exceptions" } */
++
++_Accum sa;
++int c;
++
++void div_csa() { c /= sa; }
+diff --git a/gcc/testsuite/gcc.dg/torture/pr103181.c b/gcc/testsuite/gcc.dg/torture/pr103181.c
+new file mode 100644
+index 000000000..6bc705ab5
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/torture/pr103181.c
+@@ -0,0 +1,24 @@
++/* { dg-do run } */
++
++typedef unsigned char __attribute__((__vector_size__ (2))) U;
++typedef unsigned short S;
++typedef unsigned int __attribute__((__vector_size__ (64))) V;
++
++V v;
++U a, b, c;
++
++U
++foo (S s)
++{
++  v += __builtin_bswap16 (s) || (S) (a / ((U){3, 0}));
++  return b + c;
++}
++
++int
++main (void)
++{
++  U x = foo (4);
++  if (x[0] || x[1])
++    __builtin_abort ();
++  return 0;
++}
+diff --git a/gcc/tree-eh.c b/gcc/tree-eh.c
+index 3609bca6e..04a63145c 100644
+--- a/gcc/tree-eh.c
++++ b/gcc/tree-eh.c
+@@ -2435,13 +2435,35 @@ operation_could_trap_helper_p (enum tree_code op,
+     case FLOOR_MOD_EXPR:
+     case ROUND_MOD_EXPR:
+     case TRUNC_MOD_EXPR:
+-    case RDIV_EXPR:
+-      if (honor_snans)
+-	return true;
+-      if (fp_operation)
+-	return flag_trapping_math;
+       if (!TREE_CONSTANT (divisor) || integer_zerop (divisor))
+         return true;
++      if (TREE_CODE (divisor) == VECTOR_CST)
++	{
++	  /* Inspired by initializer_each_zero_or_onep.  */
++	  unsigned HOST_WIDE_INT nelts = vector_cst_encoded_nelts (divisor);
++	  if (VECTOR_CST_STEPPED_P (divisor)
++	      && !TYPE_VECTOR_SUBPARTS (TREE_TYPE (divisor))
++		    .is_constant (&nelts))
++	    return true;
++	  for (unsigned int i = 0; i < nelts; ++i)
++	    {
++	      tree elt = vector_cst_elt (divisor, i);
++	      if (integer_zerop (elt))
++		return true;
++	    }
++	}
++      return false;
++
++    case RDIV_EXPR:
++      if (fp_operation)
++	{
++	  if (honor_snans)
++	    return true;
++	  return flag_trapping_math;
++	}
++      /* Fixed point operations also use RDIV_EXPR.  */
++      if (!TREE_CONSTANT (divisor) || fixed_zerop (divisor))
++	return true;
+       return false;
+ 
+     case LT_EXPR:

@@ -1,0 +1,47 @@
+diff --git a/gcc/fold-const.c b/gcc/fold-const.c
+index 30b1d8f9e..07a20d5ff 100644
+--- a/gcc/fold-const.c
++++ b/gcc/fold-const.c
+@@ -510,7 +510,7 @@ negate_expr_p (tree t)
+       if (TREE_CODE (TREE_OPERAND (t, 1)) == INTEGER_CST)
+ 	{
+ 	  tree op1 = TREE_OPERAND (t, 1);
+-	  if (wi::to_wide (op1) == TYPE_PRECISION (type) - 1)
++	  if (wi::to_wide (op1) == element_precision (type) - 1)
+ 	    return true;
+ 	}
+       break;
+@@ -703,7 +703,7 @@ fold_negate_expr_1 (location_t loc, tree t)
+       if (TREE_CODE (TREE_OPERAND (t, 1)) == INTEGER_CST)
+ 	{
+ 	  tree op1 = TREE_OPERAND (t, 1);
+-	  if (wi::to_wide (op1) == TYPE_PRECISION (type) - 1)
++	  if (wi::to_wide (op1) == element_precision (type) - 1)
+ 	    {
+ 	      tree ntype = TYPE_UNSIGNED (type)
+ 			   ? signed_type_for (type)
+diff --git a/gcc/testsuite/gcc.dg/torture/pr100672.c b/gcc/testsuite/gcc.dg/torture/pr100672.c
+new file mode 100644
+index 000000000..cc62e71f9
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/torture/pr100672.c
+@@ -0,0 +1,19 @@
++/* { dg-do run } */
++/* { dg-additional-options "-w -Wno-psabi" } */
++
++typedef long long __attribute__((__vector_size__ (4 * sizeof (long long)))) V;
++
++V
++foo (V v)
++{
++  return -(v >> 1);
++}
++
++int
++main (void)
++{
++  V v = foo ((V) { -2, -4, -6, -8 });
++  if (v[0] != 1 || v[1] != 2 || v[2] != 3 || v[3] != 4)
++    __builtin_abort ();
++  return 0;
++}

@@ -107,6 +107,7 @@ src_prepare() {
 
 	[[ ${TOOL_PREFIX} != "" ]] && eapply "${FILESDIR}"/${PV}/04_workaround-for-legacy-glibc-in-non-system-dir.patch
 	[[ $(tc-arch) == "hppa" ]] && eapply "${FILESDIR}"/${PV}/05_hppa-fix-build.patch
+	eapply "${FILESDIR}"/${PV}/06_fix-werror.patch
 }
 
 src_install() {

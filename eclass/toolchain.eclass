@@ -703,6 +703,10 @@ toolchain_src_prepare() {
 				einfo "  ${f%%...}"
 			done
 	fi
+
+	if tc_version_is_between 4.9 10 ; then
+		eapply "${FILESDIR}"/gcc-fix-for-glibc-2_36.patch
+	fi
 }
 
 do_gcc_gentoo_patches() {
@@ -1063,7 +1067,7 @@ toolchain_src_configure() {
 
 	if tc_version_is_at_least 2.7 ; then
 		case $(tc-arch) in
-			amd64|x86) tc_version_is_at_least 4.6 || ENABLE_WERROR="yes" ;;
+			amd64|x86|ppc|ppc64|s390) tc_version_is_at_least 4.6 || ENABLE_WERROR="yes" ;;
 			*) ;;
 		esac
 		if [[ ${ENABLE_WERROR} == "yes" ]] && ! is_crosscompile ; then

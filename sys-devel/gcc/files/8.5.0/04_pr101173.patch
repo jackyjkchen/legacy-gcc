@@ -1,0 +1,284 @@
+diff --git a/gcc/gimple-loop-interchange.cc b/gcc/gimple-loop-interchange.cc
+index 19510ad24..3cf14c16e 100644
+--- a/gcc/gimple-loop-interchange.cc
++++ b/gcc/gimple-loop-interchange.cc
+@@ -1042,7 +1042,10 @@ tree_loop_interchange::valid_data_dependences (unsigned i_idx, unsigned o_idx,
+ 
+ 	  /* Be conservative, skip case if either direction at i_idx/o_idx
+ 	     levels is not '=' or '<'.  */
+-	  if (dist_vect[i_idx] < 0 || dist_vect[o_idx] < 0)
++	  if ((!DDR_REVERSED_P (ddr) && dist_vect[i_idx] < 0)
++	      || (DDR_REVERSED_P (ddr) && dist_vect[i_idx] > 0)
++	      || (!DDR_REVERSED_P (ddr) && dist_vect[o_idx] < 0)
++	      || (DDR_REVERSED_P (ddr) && dist_vect[o_idx] > 0))
+ 	    return false;
+ 	}
+     }
+diff --git a/gcc/testsuite/gcc.dg/torture/pr101173.c b/gcc/testsuite/gcc.dg/torture/pr101173.c
+new file mode 100644
+index 000000000..0c9090d66
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/torture/pr101173.c
+@@ -0,0 +1,18 @@
++/* { dg-do run } */
++/* { dg-additional-options "-floop-interchange" } */
++
++int a[6][9];
++int main()
++{
++  a[1][3] = 8;
++  for (int b = 1; b <= 5; b++)
++    for (int d = 0; d <= 5; d++)
++#pragma GCC unroll 0
++      for (int c = 0; c <= 5; c++)
++        a[b][c] = a[b][c + 2] & 216;
++  for (int e = 0; e < 6; e++)
++    for (int f = 0; f < 9; f++)
++      if (a[e][f] != 0)
++        __builtin_abort ();
++  return 0;
++}
+diff --git a/gcc/testsuite/gcc.dg/tree-ssa/loop-interchange-16.c b/gcc/testsuite/gcc.dg/tree-ssa/loop-interchange-16.c
+new file mode 100644
+index 000000000..781555e08
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/tree-ssa/loop-interchange-16.c
+@@ -0,0 +1,22 @@
++/* PR/101280 */
++/* { dg-do compile } */
++/* { dg-options "-O3 -fdump-tree-linterchange-details" } */
++
++void dummy (double *, double *);
++#define LEN_2D 32
++double aa[LEN_2D][LEN_2D], bb[LEN_2D][LEN_2D];
++double s231(int iterations)
++{
++//    loop interchange
++//    loop with data dependency
++    for (int nl = 0; nl < 100*(iterations/LEN_2D); nl++) {
++        for (int i = 0; i < LEN_2D; ++i) {
++            for (int j = 1; j < LEN_2D; j++) {
++                aa[j][i] = aa[j - 1][i] + bb[j][i];
++            }
++        }
++        dummy(aa[0],bb[0]);
++    }
++}
++
++/* { dg-final { scan-tree-dump "loops interchanged" "linterchange" } } */
+diff --git a/loop-interchange-16.c.150t.linterchange b/loop-interchange-16.c.150t.linterchange
+new file mode 100644
+index 000000000..f0df843fe
+--- /dev/null
++++ b/loop-interchange-16.c.150t.linterchange
+@@ -0,0 +1,210 @@
++
++;; Function s231 (s231, funcdef_no=0, decl_uid=1961, cgraph_uid=0, symbol_order=2)
++
++Analyzing # of iterations of loop 1
++  exit condition [1, + , 1](no_overflow) < _23
++  bounds on difference of bases: 0 ... 2147483646
++  result:
++    # of iterations (unsigned int) _23 + 4294967295, bounded by 2147483646
++Creating dr for aa[_1][i_27]
++analyze_innermost: success.
++	base_address: &aa
++	offset from base address: (ssizetype) ((sizetype) i_27 * 8)
++	constant offset from base address: 0
++	step: 256
++	base alignment: 16
++	base misalignment: 0
++	offset alignment: 8
++	step alignment: 128
++	base_object: aa
++	Access function 0: {0, +, 1}_2
++	Access function 1: {0, +, 1}_3
++Creating dr for bb[j_28][i_27]
++analyze_innermost: success.
++	base_address: &bb
++	offset from base address: (ssizetype) ((sizetype) i_27 * 8)
++	constant offset from base address: 256
++	step: 256
++	base alignment: 16
++	base misalignment: 0
++	offset alignment: 8
++	step alignment: 128
++	base_object: bb
++	Access function 0: {0, +, 1}_2
++	Access function 1: {1, +, 1}_3
++Creating dr for aa[j_28][i_27]
++analyze_innermost: success.
++	base_address: &aa
++	offset from base address: (ssizetype) ((sizetype) i_27 * 8)
++	constant offset from base address: 256
++	step: 256
++	base alignment: 16
++	base misalignment: 0
++	offset alignment: 8
++	step alignment: 128
++	base_object: aa
++	Access function 0: {0, +, 1}_2
++	Access function 1: {1, +, 1}_3
++(compute_affine_dependence
++  stmt_a: _2 = aa[_1][i_27];
++  stmt_b: aa[j_28][i_27] = _4;
++(analyze_overlapping_iterations 
++  (chrec_a = {0, +, 1}_2)
++  (chrec_b = {0, +, 1}_2)
++  (overlap_iterations_a = [0])
++  (overlap_iterations_b = [0]))
++(analyze_overlapping_iterations 
++  (chrec_a = {0, +, 1}_3)
++  (chrec_b = {1, +, 1}_3)
++(analyze_siv_subscript 
++(analyze_subscript_affine_affine 
++  (overlaps_a = [1 + 1 * x_1])
++  (overlaps_b = [0 + 1 * x_1]))
++)
++  (overlap_iterations_a = [1 + 1 * x_1])
++  (overlap_iterations_b = [0 + 1 * x_1]))
++(analyze_overlapping_iterations 
++  (chrec_a = {0, +, 1}_2)
++  (chrec_b = {0, +, 1}_2)
++  (overlap_iterations_a = [0])
++  (overlap_iterations_b = [0]))
++(analyze_overlapping_iterations 
++  (chrec_a = {1, +, 1}_3)
++  (chrec_b = {0, +, 1}_3)
++(analyze_siv_subscript 
++(analyze_subscript_affine_affine 
++  (overlaps_a = [0 + 1 * x_1])
++  (overlaps_b = [1 + 1 * x_1]))
++)
++  (overlap_iterations_a = [0 + 1 * x_1])
++  (overlap_iterations_b = [1 + 1 * x_1]))
++(build_classic_dist_vector
++  dist_vector = (  0   1 
++  )
++)
++)
++(compute_affine_dependence
++  stmt_a: _3 = bb[j_28][i_27];
++  stmt_b: aa[j_28][i_27] = _4;
++) -> no dependence
++
++Consider loop interchange for loop_nest<2 - 3>
++Access Strides for DRs:
++  aa[_1][i_27]:		<8,	256>
++  bb[j_28][i_27]:		<8,	256>
++  aa[j_28][i_27]:		<8,	256>
++
++Loop(3) carried vars:
++  Induction:  j_28 = {1, 1}_3
++  Induction:  ivtmp_9 = {31, 4294967295}_3
++
++Loop(2) carried vars:
++  Induction:  i_27 = {0, 1}_2
++  Induction:  ivtmp_32 = {32, 4294967295}_2
++
++Data ref strides:
++	mem_ref:		iloop	oloop
++	overall:		768	24
++Invariant data ref: before(0), after(0)
++All consecutive stride: before(false), after(true)
++OK to interchage with variable strides: 0
++Not OK to interchage with variable strides: 0
++Variable strides we cannot decide: 0
++Stmt cost of inner loop: 8
++Stmt cost of outer loop: 0
++Loop_pair<outer:2, inner:3> is interchanged
++
++Added canonical iv to loop 2, 30 iterations.
++Added canonical iv to loop 3, 31 iterations.
++Removing dead stmt:j_16 = j_20 + 1;
++Removing dead stmt:i_17 = i_26 + 1;
++Removing dead stmt:ivtmp_31 = ivtmp_22 - 1;
++Removing dead stmt:ivtmp_33 = ivtmp_8 - 1;
++gcc/testsuite/gcc.dg/tree-ssa/loop-interchange-16.c:13:9: note: loops interchanged in loop nest
++s231 (int iterations)
++{
++  int j;
++  int i;
++  int nl;
++  int _1;
++  double _2;
++  double _3;
++  double _4;
++  unsigned int ivtmp_5;
++  unsigned int ivtmp_6;
++  unsigned int ivtmp_7;
++  unsigned int ivtmp_8;
++  unsigned int ivtmp_21;
++  unsigned int ivtmp_22;
++  int _23;
++  int _24;
++  unsigned int ivtmp_36;
++  unsigned int ivtmp_37;
++
++  <bb 2> [local count: 129793]:
++  _24 = iterations_14(D) / 32;
++  _23 = _24 * 100;
++  if (_23 > 0)
++    goto <bb 9>; [89.00%]
++  else
++    goto <bb 8>; [11.00%]
++
++  <bb 9> [local count: 115516]:
++  goto <bb 7>; [100.00%]
++
++  <bb 12> [local count: 1006525589]:
++
++  <bb 3> [local count: 1040133706]:
++  # i_26 = PHI <0(5), i_25(12)>
++  # ivtmp_22 = PHI <32(5), ivtmp_21(12)>
++  # ivtmp_37 = PHI <32(5), ivtmp_36(12)>
++  _1 = j_20 + -1;
++  _2 = aa[_1][i_26];
++  _3 = bb[j_20][i_26];
++  _4 = _2 + _3;
++  aa[j_20][i_26] = _4;
++  ivtmp_21 = ivtmp_22 - 1;
++  i_25 = i_26 + 1;
++  ivtmp_36 = ivtmp_37 - 1;
++  if (ivtmp_36 != 0)
++    goto <bb 12>; [96.77%]
++  else
++    goto <bb 4>; [3.23%]
++
++  <bb 4> [local count: 33608119]:
++  ivtmp_7 = ivtmp_8 - 1;
++  j_12 = j_20 + 1;
++  ivtmp_5 = ivtmp_6 - 1;
++  if (ivtmp_5 != 0)
++    goto <bb 11>; [96.88%]
++  else
++    goto <bb 6>; [3.12%]
++
++  <bb 11> [local count: 32557974]:
++
++  <bb 5> [local count: 33608119]:
++  # j_20 = PHI <1(7), j_12(11)>
++  # ivtmp_8 = PHI <31(7), ivtmp_7(11)>
++  # ivtmp_6 = PHI <31(7), ivtmp_5(11)>
++  goto <bb 3>; [100.00%]
++
++  <bb 6> [local count: 1050146]:
++  dummy (&aa[0], &bb[0]);
++  nl_19 = nl_10 + 1;
++  if (nl_19 < _23)
++    goto <bb 10>; [89.00%]
++  else
++    goto <bb 8>; [11.00%]
++
++  <bb 10> [local count: 934630]:
++
++  <bb 7> [local count: 1050146]:
++  # nl_10 = PHI <0(9), nl_19(10)>
++  goto <bb 5>; [100.00%]
++
++  <bb 8> [local count: 129793]:
++  return;
++
++}
++
++
