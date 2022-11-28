@@ -704,7 +704,7 @@ toolchain_src_prepare() {
 			done
 	fi
 
-	if tc_version_is_between 4.9 10 ; then
+	if tc_version_is_between 4.9 10 && ! is_djgpp ; then
 		eapply "${FILESDIR}"/gcc-fix-for-glibc-2_36.patch
 	fi
 }
