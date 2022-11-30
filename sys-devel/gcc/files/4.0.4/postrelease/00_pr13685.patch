@@ -1,0 +1,66 @@
+diff --git a/gcc/config/i386/i386.c b/gcc/config/i386/i386.c
+index 395d0be9..dfec7451 100644
+--- a/gcc/config/i386/i386.c
++++ b/gcc/config/i386/i386.c
+@@ -1423,12 +1423,10 @@ override_options (void)
+     }
+ 
+   /* Validate -mpreferred-stack-boundary= value, or provide default.
+-     The default of 128 bits is for Pentium III's SSE __m128, but we
+-     don't want additional code to keep the stack aligned when
+-     optimizing for code size.  */
+-  ix86_preferred_stack_boundary = (optimize_size
+-				   ? TARGET_64BIT ? 128 : 32
+-				   : 128);
++     The default of 128 bits is for Pentium III's SSE __m128, We can't
++     change it because of optimize_size.  Otherwise, we can't mix object
++     files compiled with -Os and -On.  */
++  ix86_preferred_stack_boundary = 128;
+   if (ix86_preferred_stack_boundary_string)
+     {
+       i = atoi (ix86_preferred_stack_boundary_string);
+diff --git a/gcc/testsuite/gcc.target/i386/pr13685.c b/gcc/testsuite/gcc.target/i386/pr13685.c
+new file mode 100644
+index 00000000..7c4446ab
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/i386/pr13685.c
+@@ -0,0 +1,39 @@
++/* PR target/13685 */
++/* { dg-do run } */
++/* { dg-options "-Os -msse" } */
++#include <stdlib.h>
++#include <stdio.h>
++#include <xmmintrin.h>
++#include "../../gcc.dg/i386-cpuid.h"
++
++void foo (__m128 *, __m64 *, int);
++
++__m128 xmm0 = { 0 };
++__m64 mm0 = { 0 };
++
++int
++main ()
++{
++  unsigned long cpu_facilities = i386_cpuid ();
++  
++  if ((cpu_facilities & (bit_MMX | bit_SSE | bit_CMOV))
++      != (bit_MMX | bit_SSE | bit_CMOV))
++    /* If host has no SSE support, pass.  */
++    return 0;
++
++  foo (&xmm0, &mm0, 4);
++  return 0;
++}
++
++void
++foo (__m128 *dst, __m64 *src, int n)
++{
++  __m128 xmm0 = { 0 };
++  while (n > 64)
++    {
++      puts ("");
++      xmm0 = _mm_cvtpi32_ps (xmm0, *src);
++      *dst = xmm0;
++      n--;
++    }
++}

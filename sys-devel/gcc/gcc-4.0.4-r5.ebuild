@@ -39,4 +39,6 @@ src_prepare() {
 	[[ $(tc-arch) == "sh" ]] && eapply "${FILESDIR}"/${PV}/02_sh4-workaround-fixproto-core.patch
 	[[ $(tc-arch) == "hppa" ]] && eapply "${FILESDIR}"/${PV}/03_hppa-fix-build.patch
 	eapply "${FILESDIR}"/${PV}/04_fix-werror.patch
+
+	eapply "${FILESDIR}"/${PV}/postrelease/00_pr13685.patch
 }

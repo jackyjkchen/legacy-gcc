@@ -94,6 +94,8 @@ src_prepare() {
 		[[ $(tc-arch) != "mips" ]] && eapply "${FILESDIR}"/${PV}/05_libffi-without-libgcj.patch
 	fi
 	[[ $(tc-arch) == "hppa" ]] && eapply "${FILESDIR}"/${PV}/06_hppa-fix-build.patch
+
+	eapply "${FILESDIR}"/${PV}/postrelease/00_pr13685.patch
 }
 
 src_install() {
