@@ -113,7 +113,6 @@ DEPEND="${RDEPEND}
 	test? ( dev-util/dejagnu )
 	nls? ( sys-devel/gettext )
 	sys-devel/flex
-	virtual/yacc
 "
 RESTRICT="!test? ( test )"
 
