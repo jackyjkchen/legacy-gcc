@@ -36,6 +36,7 @@ fi
 
 src_prepare() {
 	toolchain_src_prepare
+	use vanilla && return 0
 
 	eapply "${FILESDIR}"/${PV}/00_fix-building-on-ppc64.patch
 	[[ $(tc-arch) == "sh" ]] && eapply "${FILESDIR}"/${PV}/01_workaround-bootstrap-for-sh4.patch

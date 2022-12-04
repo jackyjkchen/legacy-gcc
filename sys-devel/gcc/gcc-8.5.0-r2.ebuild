@@ -24,6 +24,7 @@ fi
 
 src_prepare() {
 	toolchain_src_prepare
+	use vanilla && return 0
 
 	eapply "${FILESDIR}"/${PV}/postrelease/00_pr101384.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/01_pr104510.patch

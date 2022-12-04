@@ -24,6 +24,7 @@ fi
 
 src_prepare() {
 	toolchain_src_prepare
+	use vanilla && return 0
 
 	eapply "${FILESDIR}"/${PV}/postrelease/00_pr94460.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/01_pr94383.patch
@@ -41,4 +42,10 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/13_pr68823.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/14_pr90018.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/15_pr93246.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/16_pr96369.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/17_pr99954.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/18_pr80778-84305.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/19_pr86617.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/20_pr94412.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/21_pr94509.patch
 }

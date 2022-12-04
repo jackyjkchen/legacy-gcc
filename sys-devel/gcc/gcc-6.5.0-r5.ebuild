@@ -24,6 +24,7 @@ fi
 
 src_prepare() {
 	toolchain_src_prepare
+	use vanilla && return 0
 
 	eapply "${FILESDIR}"/${PV}/00_fix-isl-version.patch
 
@@ -36,4 +37,5 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/06_pr105123.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/07_pr101442.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/08_pr68823.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/09_pr96369.patch
 }
