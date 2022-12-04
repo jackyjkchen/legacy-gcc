@@ -26,4 +26,14 @@ src_prepare() {
 	toolchain_src_prepare
 
 	eapply "${FILESDIR}"/${PV}/00_fix-isl-version.patch
+
+	eapply "${FILESDIR}"/${PV}/postrelease/00_pr94460.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/01_pr80693-81019-81020.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/02_pr88563.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/03_pr89679.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/04_pr101384.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/05_pr104510.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/06_pr105123.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/07_pr101442.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/08_pr68823.patch
 }

@@ -270,7 +270,8 @@ if [[ ${PN} != kgcc64 && ${PN} != gcc-* ]] ; then
 
 	# sanitizer support appeared in gcc-4.8, but <gcc-5 does not
 	# support modern glibc.
-	tc_version_is_at_least 5 && IUSE+=" +sanitize"  TC_FEATURES+=( sanitize )
+    # only >=gcc-8 support sanitizer in >=glibc-2.36
+	tc_version_is_at_least 8 && IUSE+=" +sanitize"  TC_FEATURES+=( sanitize )
 
 	# Note:
 	#   <gcc-4.8 supported graphite, it required forked ppl

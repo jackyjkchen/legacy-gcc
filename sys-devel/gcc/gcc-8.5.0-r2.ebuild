@@ -25,11 +25,12 @@ fi
 src_prepare() {
 	toolchain_src_prepare
 
-	eapply "${FILESDIR}"/${PV}/postrelease/00_ppc64le-pr101384.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/00_pr101384.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/01_pr104510.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/02_pr105123.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/03_pr100934.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/04_pr101173.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/05_pr103181.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/06_pr100672.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/07_pr101442.patch
 }

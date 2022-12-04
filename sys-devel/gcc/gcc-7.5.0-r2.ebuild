@@ -22,3 +22,23 @@ else
 	CXX="g++-7.5.0"
 fi
 
+src_prepare() {
+	toolchain_src_prepare
+
+	eapply "${FILESDIR}"/${PV}/postrelease/00_pr94460.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/01_pr94383.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/02_pr80693-81019-81020.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/03_pr81331.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/04_pr94130.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/05_pr94809.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/06_pr101384.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/07_pr104510.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/08_pr105123.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/09_pr81311-83937.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/10_pr101442.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/11_pr86274.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/12_pr81863.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/13_pr68823.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/14_pr90018.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/15_pr93246.patch
+}

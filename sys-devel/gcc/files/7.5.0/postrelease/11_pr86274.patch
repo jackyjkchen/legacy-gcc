@@ -1,0 +1,913 @@
+diff --git a/gcc/gimple-ssa-sprintf.c b/gcc/gimple-ssa-sprintf.c
+index ea6c9c330..51370b5a2 100644
+--- a/gcc/gimple-ssa-sprintf.c
++++ b/gcc/gimple-ssa-sprintf.c
+@@ -587,15 +587,19 @@ unsigned
+ fmtresult::type_max_digits (tree type, int base)
+ {
+   unsigned prec = TYPE_PRECISION (type);
+-  if (base == 8)
+-    return (prec + 2) / 3;
+-
+-  if (base == 16)
+-    return prec / 4;
++  switch (base)
++    {
++    case 8:
++      return (prec + 2) / 3;
++    case 10:
++      /* Decimal approximation: yields 3, 5, 10, and 20 for precision
++	 of 8, 16, 32, and 64 bits.  */
++      return prec * 301 / 1000 + 1;
++    case 16:
++      return prec / 4;
++    }
+ 
+-  /* Decimal approximation: yields 3, 5, 10, and 20 for precision
+-     of 8, 16, 32, and 64 bits.  */
+-  return prec * 301 / 1000 + 1;
++  gcc_unreachable ();
+ }
+ 
+ static bool
+@@ -1555,6 +1559,11 @@ format_floating (const directive &dir, const HOST_WIDE_INT prec[2])
+   unsigned flagmin = (1 /* for the first digit */
+ 		      + (dir.get_flag ('+') | dir.get_flag (' ')));
+ 
++  /* The minimum is 3 for "inf" and "nan" for all specifiers, plus 1
++     for the plus sign/space with the '+' and ' ' flags, respectively,
++     unless reduced below.  */
++  res.range.min = 2 + flagmin;
++
+   /* When the pound flag is set the decimal point is included in output
+      regardless of precision.  Whether or not a decimal point is included
+      otherwise depends on the specification and precision.  */
+@@ -1571,14 +1580,13 @@ format_floating (const directive &dir, const HOST_WIDE_INT prec[2])
+ 	else if (dir.prec[0] > 0)
+ 	  minprec = dir.prec[0] + !radix /* decimal point */;
+ 
+-	res.range.min = (2 /* 0x */
+-			 + flagmin
+-			 + radix
+-			 + minprec
+-			 + 3 /* p+0 */);
++	res.range.likely = (2 /* 0x */
++			    + flagmin
++			    + radix
++			    + minprec
++			    + 3 /* p+0 */);
+ 
+ 	res.range.max = format_floating_max (type, 'a', prec[1]);
+-	res.range.likely = res.range.min;
+ 
+ 	/* The unlikely maximum accounts for the longest multibyte
+ 	   decimal point character.  */
+@@ -1596,15 +1604,14 @@ format_floating (const directive &dir, const HOST_WIDE_INT prec[2])
+ 	   non-zero, decimal point.  */
+ 	HOST_WIDE_INT minprec = prec[0] ? prec[0] + !radix : 0;
+ 
+-	/* The minimum output is "[-+]1.234567e+00" regardless
++	/* The likely minimum output is "[-+]1.234567e+00" regardless
+ 	   of the value of the actual argument.  */
+-	res.range.min = (flagmin
+-			 + radix
+-			 + minprec
+-			 + 2 /* e+ */ + 2);
++	res.range.likely = (flagmin
++			    + radix
++			    + minprec
++			    + 2 /* e+ */ + 2);
+ 
+ 	res.range.max = format_floating_max (type, 'e', prec[1]);
+-	res.range.likely = res.range.min;
+ 
+ 	/* The unlikely maximum accounts for the longest multibyte
+ 	   decimal point character.  */
+@@ -1623,12 +1630,15 @@ format_floating (const directive &dir, const HOST_WIDE_INT prec[2])
+ 	   decimal point.  */
+ 	HOST_WIDE_INT minprec = prec[0] ? prec[0] + !radix : 0;
+ 
+-	/* The lower bound when precision isn't specified is 8 bytes
+-	   ("1.23456" since precision is taken to be 6).  When precision
+-	   is zero, the lower bound is 1 byte (e.g., "1").  Otherwise,
+-	   when precision is greater than zero, then the lower bound
+-	   is 2 plus precision (plus flags).  */
+-	res.range.min = flagmin + radix + minprec;
++	/* For finite numbers (i.e., not infinity or NaN) the lower bound
++	   when precision isn't specified is 8 bytes ("1.23456" since
++	   precision is taken to be 6).  When precision is zero, the lower
++	   bound is 1 byte (e.g., "1").  Otherwise, when precision is greater
++	   than zero, then the lower bound is 2 plus precision (plus flags).
++	   But in all cases, the lower bound is no greater than 3.  */
++	unsigned HOST_WIDE_INT min = flagmin + radix + minprec;
++	if (min < res.range.min)
++	  res.range.min = min;
+ 
+ 	/* Compute the upper bound for -TYPE_MAX.  */
+ 	res.range.max = format_floating_max (type, 'f', prec[1]);
+@@ -1638,7 +1648,7 @@ format_floating (const directive &dir, const HOST_WIDE_INT prec[2])
+ 	if (dir.prec[0] < 0 && dir.prec[1] > 0)
+ 	  res.range.likely = 3;
+ 	else
+-	  res.range.likely = res.range.min;
++	  res.range.likely = min;
+ 
+ 	/* The unlikely maximum accounts for the longest multibyte
+ 	   decimal point character.  */
+@@ -1656,7 +1666,9 @@ format_floating (const directive &dir, const HOST_WIDE_INT prec[2])
+ 	   the lower bound on the range of bytes (not counting flags
+ 	   or width) is 1 plus radix (i.e., either "0" or "0." for
+ 	   "%g" and "%#g", respectively, with a zero argument).  */
+-	res.range.min = flagmin + radix;
++	unsigned HOST_WIDE_INT min = flagmin + radix;
++	if (min < res.range.min)
++	  res.range.min = min;
+ 
+ 	char spec = 'g';
+ 	HOST_WIDE_INT maxprec = dir.prec[1];
+@@ -1788,6 +1800,32 @@ format_floating (const directive &dir, tree arg)
+   const REAL_VALUE_TYPE *rvp = TREE_REAL_CST_PTR (arg);
+   const real_format *rfmt = REAL_MODE_FORMAT (TYPE_MODE (TREE_TYPE (arg)));
+ 
++  if (!real_isfinite (rvp))
++    {
++      /* The format for Infinity and NaN is "[-]inf"/"[-]infinity"
++	 and "[-]nan" with the choice being implementation-defined
++	 but not locale dependent.  */
++      bool sign = dir.get_flag ('+') || real_isneg (rvp);
++      res.range.min = 3 + sign;
++
++      res.range.likely = res.range.min;
++      res.range.max = res.range.min;
++      /* The inlikely maximum is "[-/+]infinity" or "[-/+]nan".  */
++      res.range.unlikely = sign + (real_isinf (rvp) ? 8 : 3);
++
++      /* The range for infinity and NaN is known unless either width
++	 or precision is unknown.  Width has the same effect regardless
++	 of whether the argument is finite.  Precision is either ignored
++	 (e.g., Glibc) or can have an effect on the short vs long format
++	 such as inf/infinity (e.g., Solaris).  */
++      res.knownrange = dir.known_width_and_precision ();
++
++      /* Adjust the range for width but ignore precision.  */
++      res.adjust_for_width_or_precision (dir.width);
++
++      return res;
++    }
++
+   char fmtstr [40];
+   char *pfmt = fmtstr;
+ 
+diff --git a/gcc/testsuite/gcc.dg/torture/builtin-sprintf.c b/gcc/testsuite/gcc.dg/torture/builtin-sprintf.c
+new file mode 100644
+index 000000000..6f8b7a9fb
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/torture/builtin-sprintf.c
+@@ -0,0 +1,29 @@
++/* PR tree-optimization/86274 - SEGFAULT when logging std::to_string(NAN)
++   { dg-do run }
++   { dg-options "-O2 -Wall" } */
++
++#define X        "0xdeadbeef"
++#define nan(x)   __builtin_nan (x)
++
++volatile double nan_0 = nan ("0");
++volatile double nan_x = nan (X);
++
++int main (void)
++{
++  char buf[80];
++
++  /* Verify that folded results match those of the library calls.  */
++  int cst_n_0 = __builtin_sprintf (buf, "%g", nan ("0"));
++  int cst_n_x = __builtin_sprintf (buf, "%g", nan (X));
++
++  int var_n_0 = __builtin_sprintf (buf, "%g", nan_0);
++  int var_n_x = __builtin_sprintf (buf, "%g", nan_x);
++
++  if (cst_n_0 != var_n_0)
++    __builtin_abort ();
++
++  if (cst_n_x != var_n_x)
++    __builtin_abort ();
++
++  return 0;
++}
+diff --git a/gcc/testsuite/gcc.dg/tree-ssa/builtin-sprintf-9.c b/gcc/testsuite/gcc.dg/tree-ssa/builtin-sprintf-9.c
+new file mode 100644
+index 000000000..091ca17d4
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/tree-ssa/builtin-sprintf-9.c
+@@ -0,0 +1,90 @@
++/* PR tree-optimization/86274 - SEGFAULT when logging std::to_string(NAN)
++   { dg-do compile }
++   { dg-options "-O2 -Wall -fdump-tree-optimized" }  */
++
++typedef __SIZE_TYPE__ size_t;
++extern int sprintf (char*, const char*, ...);
++extern int snprintf (char*, size_t, const char*, ...);
++
++#define CAT(x, y) x ## y
++#define CONCAT(x, y) CAT (x, y)
++#define FAILNAME(name) CONCAT (call_ ## name ##_on_line_, __LINE__)
++
++#define FAIL(name) do {				\
++    extern void FAILNAME (name) (void);		\
++    FAILNAME (name)();				\
++  } while (0)
++
++/* Macro to emit a call to funcation named
++     call_in_true_branch_not_eliminated_on_line_NNN()
++   for each expression that's expected to fold to false but that
++   GCC does not fold.  The dg-final scan-tree-dump-time directive
++   at the bottom of the test verifies that no such call appears
++   in output.  */
++#define ELIM(expr)							\
++  if ((expr)) FAIL (in_true_branch_not_eliminated); else (void)0
++
++/* Macro to emit a call to a function named
++     call_made_in_{true,false}_branch_on_line_NNN()
++   for each call that's expected to be retained.  The dg-final
++   scan-tree-dump-time directive at the bottom of the test verifies
++   that the expected number of both kinds of calls appears in output
++   (a pair for each line with the invocation of the KEEP() macro.  */
++#define KEEP(expr)				\
++  if (expr)					\
++    FAIL (made_in_true_branch);			\
++  else						\
++    FAIL (made_in_false_branch)
++
++extern void sink (int, ...);
++#define sink(...) sink (0, __VA_ARGS__)
++
++#define WARN(N, expr)				\
++  do {						\
++    char a[N];					\
++    expr;					\
++    sink (a);					\
++  } while (0)
++
++
++void test_elim (double x)
++{
++  ELIM (snprintf (0, 0, "%a", x) < 3);
++  ELIM (snprintf (0, 0, "%e", x) < 3);
++  ELIM (snprintf (0, 0, "%f", x) < 3);
++  ELIM (snprintf (0, 0, "%g", x) < 1);
++
++  /* Verify that snprintf knows that NaN cannot result in fewer
++     than three characters on output.  */
++  const double nan  = __builtin_nan ("0");
++  ELIM (snprintf (0, 0, "%a", nan) < 3);
++  ELIM (snprintf (0, 0, "%e", nan) < 3);
++  ELIM (snprintf (0, 0, "%f", nan) < 3);
++  ELIM (snprintf (0, 0, "%g", nan) < 3);
++}
++
++void test_keep (int p, double x)
++{
++  KEEP (snprintf (0, 0, "%a", x) == 3);
++  KEEP (snprintf (0, 0, "%e", x) == 3);
++
++  KEEP (snprintf (0, 0, "%f", x) == 3);
++  KEEP (snprintf (0, 0, "%.*f", p, x) < 3);
++
++  KEEP (snprintf (0, 0, "%g", x) == 1);
++  KEEP (snprintf (0, 0, "%g", x) == 3);
++}
++
++void test_warn_sprintf_f (double x)
++{
++  WARN (4, sprintf (a, "%a", x));   /* { dg-warning "between 3 and 24 bytes" } */
++  WARN (4, sprintf (a, "%e", x));   /* { dg-warning "between 3 and 14 bytes" } */
++  WARN (4, sprintf (a, "%f", x));   /* { dg-warning "between 3 and 317 bytes" } */
++  WARN (4, sprintf (a, "%g", x));   /* { dg-warning "between 1 and 13 bytes" } */
++}
++
++
++/* { dg-final { scan-tree-dump-times "call_in_true_branch_not_eliminated_" 0 "optimized" } }
++   { dg-final { scan-tree-dump-times "call_made_in_true_branch_" 6 "optimized" } }
++   { dg-final { scan-tree-dump-times "call_made_in_false_branch_" 6 "optimized" } }
++ */
+diff --git a/gcc/testsuite/gcc.dg/tree-ssa/builtin-sprintf-warn-1.c b/gcc/testsuite/gcc.dg/tree-ssa/builtin-sprintf-warn-1.c
+index b4a9a6e61..bd15c3d6b 100644
+--- a/gcc/testsuite/gcc.dg/tree-ssa/builtin-sprintf-warn-1.c
++++ b/gcc/testsuite/gcc.dg/tree-ssa/builtin-sprintf-warn-1.c
+@@ -1377,7 +1377,8 @@ void test_sprintf_chk_e_nonconst (int w, int p, double d)
+   T (-1, "%*.*E",  w, p, d);
+   T (-1, "%*.*lE", w, p, d);
+ 
+-  T ( 0, "%E",          d);           /* { dg-warning "writing between 12 and 14 bytes into a region of size 0" } */
++  /* The least number of bytes %E can produce is 3 for "inf" and "nan".  */
++  T ( 0, "%E",          d);           /* { dg-warning "writing between 3 and 14 bytes into a region of size 0" } */
+   T ( 0, "%e",          d);           /* { dg-warning "into a region" } */
+   T ( 1, "%E",          d);           /* { dg-warning "into a region" } */
+   T ( 1, "%e",          d);           /* { dg-warning "into a region" } */
+@@ -1389,22 +1390,22 @@ void test_sprintf_chk_e_nonconst (int w, int p, double d)
+   T (14, "%E",          d);
+   T (14, "%e",          d);
+ 
+-  T ( 0, "%+E",         d);           /* { dg-warning "writing between 13 and 14 bytes into a region of size 0" } */
+-  T ( 0, "%-e",         d);           /* { dg-warning "writing between 12 and 14 bytes into a region of size 0" } */
+-  T ( 0, "% E",         d);           /* { dg-warning "writing between 13 and 14 bytes into a region of size 0" } */
++  T ( 0, "%+E",         d);           /* { dg-warning "writing between 4 and 14 bytes into a region of size 0" } */
++  T ( 0, "%-e",         d);           /* { dg-warning "writing between 3 and 14 bytes into a region of size 0" } */
++  T ( 0, "% E",         d);           /* { dg-warning "writing between 4 and 14 bytes into a region of size 0" } */
+ 
+-  /* The range of output of "%.0e" is between 5 and 7 bytes (not counting
++  /* The range of output of "%.0e" is between 3 and 7 bytes (not counting
+      the terminating NUL.  */
+-  T ( 5, "%.0e",        d);           /* { dg-warning "writing a terminating nul past the end" } */
++  T ( 5, "%.0e",        d);           /* { dg-warning "may write a terminating nul past the end" } */
+   T ( 6, "%.0e",        d);           /* 1e+00 */
+ 
+-  /* The range of output of "%.1e" is between 7 and 9 bytes (not counting
++  /* The range of output of "%.1e" is between 3 and 9 bytes (not counting
+      the terminating NUL.  */
+-  T ( 7, "%.1e",        d);           /* { dg-warning "writing a terminating nul past the end" } */
++  T ( 7, "%.1e",        d);           /* { dg-warning "may write a terminating nul past the end" } */
+   T ( 8, "%.1e",        d);
+ 
+-  T ( 0, "%*e",      0, d);           /* { dg-warning "writing between 12 and 14 bytes into a region of size 0" } */
+-  T ( 0, "%*e",      w, d);           /* { dg-warning "writing 12 or more bytes into a region of size 0|writing between 12 and \[0-9\]+ bytes into a region of size 0" } */
++  T ( 0, "%*e",      0, d);           /* { dg-warning "writing between 3 and 14 bytes into a region of size 0" } */
++  T ( 0, "%*e",      w, d);           /* { dg-warning "writing 3 or more bytes into a region of size 0|writing between 3 and \[0-9\]+ bytes into a region of size 0" } */
+ }
+ 
+ void test_sprintf_chk_f_nonconst (double d)
+diff --git a/gcc/testsuite/gcc.dg/tree-ssa/builtin-sprintf-warn-10.c b/gcc/testsuite/gcc.dg/tree-ssa/builtin-sprintf-warn-10.c
+index 30599ad04..82163b28d 100644
+--- a/gcc/testsuite/gcc.dg/tree-ssa/builtin-sprintf-warn-10.c
++++ b/gcc/testsuite/gcc.dg/tree-ssa/builtin-sprintf-warn-10.c
+@@ -25,60 +25,60 @@ extern void sink (int, void*);
+ /* Exercise %a.  */
+ void test_a (int w, int p, double x)
+ {
+-  T1 ("%.*a", 0);     /* { dg-warning "between 6 and 10 bytes" } */
+-  T1 ("%.*a", 1);     /* { dg-warning "between 8 and 12 bytes" } */
+-  T1 ("%.*a", 2);     /* { dg-warning "between 9 and 13 bytes" } */
+-  T1 ("%.*a", 99);    /* { dg-warning "between 106 and 110 bytes" } */
+-  T1 ("%.*a", 199);   /* { dg-warning "between 206 and 210 bytes" } */
+-  T1 ("%.*a", 1099);  /* { dg-warning "between 1106 and 1110 bytes" } */
+-
+-  T1 ("%*.a", 0);     /* { dg-warning "between 6 and 10 bytes" } */
+-  T1 ("%*.a", 1);     /* { dg-warning "between 6 and 10 bytes" } */
+-  T1 ("%*.a", 3);     /* { dg-warning "between 6 and 10 bytes" } */
++  T1 ("%.*a", 0);     /* { dg-warning "between 3 and 10 bytes" } */
++  T1 ("%.*a", 1);     /* { dg-warning "between 3 and 12 bytes" } */
++  T1 ("%.*a", 2);     /* { dg-warning "between 3 and 13 bytes" } */
++  T1 ("%.*a", 99);    /* { dg-warning "between 3 and 110 bytes" } */
++  T1 ("%.*a", 199);   /* { dg-warning "between 3 and 210 bytes" } */
++  T1 ("%.*a", 1099);  /* { dg-warning "between 3 and 1110 bytes" } */
++
++  T1 ("%*.a", 0);     /* { dg-warning "between 3 and 10 bytes" } */
++  T1 ("%*.a", 1);     /* { dg-warning "between 3 and 10 bytes" } */
++  T1 ("%*.a", 3);     /* { dg-warning "between 3 and 10 bytes" } */
+   T1 ("%*.a", 6);     /* { dg-warning "between 6 and 10 bytes" } */
+   T1 ("%*.a", 7);     /* { dg-warning "between 7 and 10 bytes" } */
+ 
+-  T1 ("%*.a", w);     /* { dg-warning "writing between 6 and 2147483648 bytes" } */
+-  T1 ("%*.0a", w);    /* { dg-warning "writing between 6 and 2147483648 bytes" } */
+-  T1 ("%*.1a", w);    /* { dg-warning "writing between 8 and 2147483648 bytes" } */
+-  T1 ("%*.2a", w);    /* { dg-warning "writing between 9 and 2147483648 bytes" } */
++  T1 ("%*.a", w);     /* { dg-warning "writing between 3 and 2147483648 bytes" } */
++  T1 ("%*.0a", w);    /* { dg-warning "writing between 3 and 2147483648 bytes" } */
++  T1 ("%*.1a", w);    /* { dg-warning "writing between 3 and 2147483648 bytes" } */
++  T1 ("%*.2a", w);    /* { dg-warning "writing between 3 and 2147483648 bytes" } */
+ 
+-  T1 ("%.*a",  p);    /* { dg-warning "writing between 6 and 2147483658 bytes" } */
+-  T1 ("%1.*a", p);    /* { dg-warning "writing between 6 and 2147483658 bytes" } */
+-  T1 ("%2.*a", p);    /* { dg-warning "writing between 6 and 2147483658 bytes" } */
+-  T1 ("%3.*a", p);    /* { dg-warning "writing between 6 and 2147483658 bytes" } */
++  T1 ("%.*a",  p);    /* { dg-warning "writing between 3 and 2147483658 bytes" } */
++  T1 ("%1.*a", p);    /* { dg-warning "writing between 3 and 2147483658 bytes" } */
++  T1 ("%2.*a", p);    /* { dg-warning "writing between 3 and 2147483658 bytes" } */
++  T1 ("%3.*a", p);    /* { dg-warning "writing between 3 and 2147483658 bytes" } */
+ 
+-  T2 ("%*.*a", w, p); /* { dg-warning "writing between 6 and 2147483658 bytes" } */
++  T2 ("%*.*a", w, p); /* { dg-warning "writing between 3 and 2147483658 bytes" } */
+ }
+ 
+ /* Exercise %e.  */
+ void test_e (int w, int p, double x)
+ {
+-  T1 ("%.*e", 0);     /* { dg-warning "between 5 and 7 bytes" } */
+-  T1 ("%.*e", 1);     /* { dg-warning "between 7 and 9 bytes" } */
+-  T1 ("%.*e", 2);     /* { dg-warning "between 8 and 10 bytes" } */
+-  T1 ("%.*e", 99);    /* { dg-warning "between 105 and 107 bytes" } */
+-  T1 ("%.*e", 199);   /* { dg-warning "between 205 and 207 bytes" } */
+-  T1 ("%.*e", 1099);  /* { dg-warning "between 1105 and 1107 bytes" } */
+-
+-  T1 ("%*.e", 0);     /* { dg-warning "between 5 and 7 bytes" } */
+-  T1 ("%*.e", 1);     /* { dg-warning "between 5 and 7 bytes" } */
+-  T1 ("%*.e", 1);     /* { dg-warning "between 5 and 7 bytes" } */
+-  T1 ("%*.e", 3);     /* { dg-warning "between 5 and 7 bytes" } */
++  T1 ("%.*e", 0);     /* { dg-warning "between 3 and 7 bytes" } */
++  T1 ("%.*e", 1);     /* { dg-warning "between 3 and 9 bytes" } */
++  T1 ("%.*e", 2);     /* { dg-warning "between 3 and 10 bytes" } */
++  T1 ("%.*e", 99);    /* { dg-warning "between 3 and 107 bytes" } */
++  T1 ("%.*e", 199);   /* { dg-warning "between 3 and 207 bytes" } */
++  T1 ("%.*e", 1099);  /* { dg-warning "between 3 and 1107 bytes" } */
++
++  T1 ("%*.e", 0);     /* { dg-warning "between 3 and 7 bytes" } */
++  T1 ("%*.e", 1);     /* { dg-warning "between 3 and 7 bytes" } */
++  T1 ("%*.e", 1);     /* { dg-warning "between 3 and 7 bytes" } */
++  T1 ("%*.e", 3);     /* { dg-warning "between 3 and 7 bytes" } */
+   T1 ("%*.e", 6);     /* { dg-warning "between 6 and 7 bytes" } */
+   T1 ("%*.e", 7);     /* { dg-warning "writing 7 bytes" } */
+ 
+-  T1 ("%*.e", w);     /* { dg-warning "writing between 5 and 2147483648 bytes" } */
+-  T1 ("%*.0e", w);    /* { dg-warning "writing between 5 and 2147483648 bytes" } */
+-  T1 ("%*.1e", w);    /* { dg-warning "writing between 7 and 2147483648 bytes" } */
+-  T1 ("%*.2e", w);    /* { dg-warning "writing between 8 and 2147483648 bytes" } */
++  T1 ("%*.e", w);     /* { dg-warning "writing between 3 and 2147483648 bytes" } */
++  T1 ("%*.0e", w);    /* { dg-warning "writing between 3 and 2147483648 bytes" } */
++  T1 ("%*.1e", w);    /* { dg-warning "writing between 3 and 2147483648 bytes" } */
++  T1 ("%*.2e", w);    /* { dg-warning "writing between 3 and 2147483648 bytes" } */
+ 
+-  T1 ("%.*e",  p);    /* { dg-warning "writing between 5 and 2147483655 bytes" } */
+-  T1 ("%1.*e", p);    /* { dg-warning "writing between 5 and 2147483655 bytes" } */
+-  T1 ("%2.*e", p);    /* { dg-warning "writing between 5 and 2147483655 bytes" } */
+-  T1 ("%3.*e", p);    /* { dg-warning "writing between 5 and 2147483655 bytes" } */
++  T1 ("%.*e",  p);    /* { dg-warning "writing between 3 and 2147483655 bytes" } */
++  T1 ("%1.*e", p);    /* { dg-warning "writing between 3 and 2147483655 bytes" } */
++  T1 ("%2.*e", p);    /* { dg-warning "writing between 3 and 2147483655 bytes" } */
++  T1 ("%3.*e", p);    /* { dg-warning "writing between 3 and 2147483655 bytes" } */
+ 
+-  T2 ("%*.*e", w, p); /* { dg-warning "writing between 5 and 2147483655 bytes" } */
++  T2 ("%*.*e", w, p); /* { dg-warning "writing between 3 and 2147483655 bytes" } */
+ }
+ 
+ /* Exercise %f.  */
+@@ -86,10 +86,10 @@ void test_f (int w, int p, double x)
+ {
+   T1 ("%.*f", 0);           /* { dg-warning "between 1 and 310 bytes" } */
+   T1 ("%.*f", 1);           /* { dg-warning "between 3 and 312 bytes" } */
+-  T1 ("%.*f", 2);           /* { dg-warning "between 4 and 313 bytes" } */
+-  T1 ("%.*f", 99);          /* { dg-warning "between 101 and 410 bytes" } */
+-  T1 ("%.*f", 199);         /* { dg-warning "between 201 and 510 bytes" } */
+-  T1 ("%.*f", 1099);        /* { dg-warning "between 1101 and 1410 bytes" } */
++  T1 ("%.*f", 2);           /* { dg-warning "between 3 and 313 bytes" } */
++  T1 ("%.*f", 99);          /* { dg-warning "between 3 and 410 bytes" } */
++  T1 ("%.*f", 199);         /* { dg-warning "between 3 and 510 bytes" } */
++  T1 ("%.*f", 1099);        /* { dg-warning "between 3 and 1410 bytes" } */
+ 
+   T2 ("%*.*f", 0, 0);       /* { dg-warning "between 1 and 310 bytes" } */
+   T2 ("%*.*f", 1, 0);       /* { dg-warning "between 1 and 310 bytes" } */
+@@ -97,13 +97,13 @@ void test_f (int w, int p, double x)
+   T2 ("%*.*f", 3, 0);       /* { dg-warning "between 3 and 310 bytes" } */
+   T2 ("%*.*f", 310, 0);     /* { dg-warning "writing 310 bytes" } */
+   T2 ("%*.*f", 311, 0);     /* { dg-warning "writing 311 bytes" } */
+-  T2 ("%*.*f", 312, 312);   /* { dg-warning "between 314 and 623 bytes" } */
+-  T2 ("%*.*f", 312, 313);   /* { dg-warning "between 315 and 624 bytes" } */
++  T2 ("%*.*f", 312, 312);   /* { dg-warning "between 312 and 623 bytes" } */
++  T2 ("%*.*f", 312, 313);   /* { dg-warning "between 312 and 624 bytes" } */
+ 
+   T1 ("%*.f", w);           /* { dg-warning "writing between 1 and 2147483648 bytes" } */
+   T1 ("%*.0f", w);          /* { dg-warning "writing between 1 and 2147483648 bytes" } */
+   T1 ("%*.1f", w);          /* { dg-warning "writing between 3 and 2147483648 bytes" } */
+-  T1 ("%*.2f", w);          /* { dg-warning "writing between 4 and 2147483648 bytes" } */
++  T1 ("%*.2f", w);          /* { dg-warning "writing between 3 and 2147483648 bytes" } */
+ 
+   T1 ("%.*f",  p);          /* { dg-warning "writing between 1 and 2147483958 bytes" } */
+   T1 ("%1.*f", p);          /* { dg-warning "writing between 1 and 2147483958 bytes" } */
+@@ -138,85 +138,85 @@ void test_g (double x)
+ /* Exercise %a.  */
+ void test_a_va (va_list va)
+ {
+-  T ("%.0a");       /* { dg-warning "between 6 and 10 bytes" } */
+-  T ("%.1a");       /* { dg-warning "between 8 and 12 bytes" } */
+-  T ("%.2a");       /* { dg-warning "between 9 and 13 bytes" } */
+-  T ("%.99a");      /* { dg-warning "between 106 and 110 bytes" } */
+-  T ("%.199a");     /* { dg-warning "between 206 and 210 bytes" } */
+-  T ("%.1099a");    /* { dg-warning "between 1106 and 1110 bytes" } */
+-
+-  T ("%0.a");       /* { dg-warning "between 6 and 10 bytes" } */
+-  T ("%1.a");       /* { dg-warning "between 6 and 10 bytes" } */
+-  T ("%3.a");       /* { dg-warning "between 6 and 10 bytes" } */
++  T ("%.0a");       /* { dg-warning "between 3 and 10 bytes" } */
++  T ("%.1a");       /* { dg-warning "between 3 and 12 bytes" } */
++  T ("%.2a");       /* { dg-warning "between 3 and 13 bytes" } */
++  T ("%.99a");      /* { dg-warning "between 3 and 110 bytes" } */
++  T ("%.199a");     /* { dg-warning "between 3 and 210 bytes" } */
++  T ("%.1099a");    /* { dg-warning "between 3 and 1110 bytes" } */
++
++  T ("%0.a");       /* { dg-warning "between 3 and 10 bytes" } */
++  T ("%1.a");       /* { dg-warning "between 3 and 10 bytes" } */
++  T ("%3.a");       /* { dg-warning "between 3 and 10 bytes" } */
+   T ("%6.a");       /* { dg-warning "between 6 and 10 bytes" } */
+   T ("%7.a");       /* { dg-warning "between 7 and 10 bytes" } */
+ 
+-  T ("%*.a");       /* { dg-warning "writing between 6 and 2147483648 bytes" } */
+-  T ("%*.0a");      /* { dg-warning "writing between 6 and 2147483648 bytes" } */
+-  T ("%*.1a");      /* { dg-warning "writing between 8 and 2147483648 bytes" } */
+-  T ("%*.2a");      /* { dg-warning "writing between 9 and 2147483648 bytes" } */
++  T ("%*.a");       /* { dg-warning "writing between 3 and 2147483648 bytes" } */
++  T ("%*.0a");      /* { dg-warning "writing between 3 and 2147483648 bytes" } */
++  T ("%*.1a");      /* { dg-warning "writing between 3 and 2147483648 bytes" } */
++  T ("%*.2a");      /* { dg-warning "writing between 3 and 2147483648 bytes" } */
+ 
+-  T ("%.*a");       /* { dg-warning "writing between 6 and 2147483658 bytes" } */
+-  T ("%1.*a");      /* { dg-warning "writing between 6 and 2147483658 bytes" } */
+-  T ("%2.*a");      /* { dg-warning "writing between 6 and 2147483658 bytes" } */
++  T ("%.*a");       /* { dg-warning "writing between 3 and 2147483658 bytes" } */
++  T ("%1.*a");      /* { dg-warning "writing between 3 and 2147483658 bytes" } */
++  T ("%2.*a");      /* { dg-warning "writing between 3 and 2147483658 bytes" } */
+   T ("%6.*a");      /* { dg-warning "writing between 6 and 2147483658 bytes" } */
+   T ("%9.*a");      /* { dg-warning "writing between 9 and 2147483658 bytes" } */
+ 
+-  T ("%*.*a");      /* { dg-warning "writing between 6 and 2147483658 bytes" } */
++  T ("%*.*a");      /* { dg-warning "writing between 3 and 2147483658 bytes" } */
+ }
+ 
+ /* Exercise %e.  */
+ void test_e_va (va_list va)
+ {
+-  T ("%e");         /* { dg-warning "between 12 and 14 bytes" } */
+-  T ("%+e");        /* { dg-warning "between 13 and 14 bytes" } */
+-  T ("% e");        /* { dg-warning "between 13 and 14 bytes" } */
+-  T ("%#e");        /* { dg-warning "between 12 and 14 bytes" } */
+-  T ("%#+e");       /* { dg-warning "between 13 and 14 bytes" } */
+-  T ("%# e");       /* { dg-warning "between 13 and 14 bytes" } */
+-
+-  T ("%.e");        /* { dg-warning "between 5 and 7 bytes" } */
+-  T ("%.0e");       /* { dg-warning "between 5 and 7 bytes" } */
+-  T ("%.1e");       /* { dg-warning "between 7 and 9 bytes" } */
+-  T ("%.2e");       /* { dg-warning "between 8 and 10 bytes" } */
+-  T ("%.99e");      /* { dg-warning "between 105 and 107 bytes" } */
+-  T ("%.199e");     /* { dg-warning "between 205 and 207 bytes" } */
+-  T ("%.1099e");    /* { dg-warning "between 1105 and 1107 bytes" } */
+-
+-  T ("%0.e");       /* { dg-warning "between 5 and 7 bytes" } */
+-  T ("%1.e");       /* { dg-warning "between 5 and 7 bytes" } */
+-  T ("%1.e");       /* { dg-warning "between 5 and 7 bytes" } */
+-  T ("%3.e");       /* { dg-warning "between 5 and 7 bytes" } */
++  T ("%e");         /* { dg-warning "between 3 and 14 bytes" } */
++  T ("%+e");        /* { dg-warning "between 4 and 14 bytes" } */
++  T ("% e");        /* { dg-warning "between 4 and 14 bytes" } */
++  T ("%#e");        /* { dg-warning "between 3 and 14 bytes" } */
++  T ("%#+e");       /* { dg-warning "between 4 and 14 bytes" } */
++  T ("%# e");       /* { dg-warning "between 4 and 14 bytes" } */
++
++  T ("%.e");        /* { dg-warning "between 3 and 7 bytes" } */
++  T ("%.0e");       /* { dg-warning "between 3 and 7 bytes" } */
++  T ("%.1e");       /* { dg-warning "between 3 and 9 bytes" } */
++  T ("%.2e");       /* { dg-warning "between 3 and 10 bytes" } */
++  T ("%.99e");      /* { dg-warning "between 3 and 107 bytes" } */
++  T ("%.199e");     /* { dg-warning "between 3 and 207 bytes" } */
++  T ("%.1099e");    /* { dg-warning "between 3 and 1107 bytes" } */
++
++  T ("%0.e");       /* { dg-warning "between 3 and 7 bytes" } */
++  T ("%1.e");       /* { dg-warning "between 3 and 7 bytes" } */
++  T ("%1.e");       /* { dg-warning "between 3 and 7 bytes" } */
++  T ("%3.e");       /* { dg-warning "between 3 and 7 bytes" } */
+   T ("%6.e");       /* { dg-warning "between 6 and 7 bytes" } */
+   T ("%7.e");       /* { dg-warning "writing 7 bytes" } */
+ 
+-  T ("%.*e");       /* { dg-warning "writing between 5 and 2147483655 bytes" } */
+-  T ("%1.*e");      /* { dg-warning "writing between 5 and 2147483655 bytes" } */
++  T ("%.*e");       /* { dg-warning "writing between 3 and 2147483655 bytes" } */
++  T ("%1.*e");      /* { dg-warning "writing between 3 and 2147483655 bytes" } */
+   T ("%6.*e");      /* { dg-warning "writing between 6 and 2147483655 bytes" } */
+   T ("%9.*e");      /* { dg-warning "writing between 9 and 2147483655 bytes" } */
+ 
+-  T ("%*.*e");      /* { dg-warning "writing between 5 and 2147483655 bytes" } */
++  T ("%*.*e");      /* { dg-warning "writing between 3 and 2147483655 bytes" } */
+ }
+ 
+ /* Exercise %f.  */
+ void test_f_va (va_list va)
+ {
+-  T ("%f");         /* { dg-warning "between 8 and 317 bytes" } */
+-  T ("%+f");        /* { dg-warning "between 9 and 317 bytes" } */
+-  T ("% f");        /* { dg-warning "between 9 and 317 bytes" } */
+-  T ("%#f");        /* { dg-warning "between 8 and 317 bytes" } */
+-  T ("%+f");        /* { dg-warning "between 9 and 317 bytes" } */
+-  T ("% f");        /* { dg-warning "between 9 and 317 bytes" } */
+-  T ("%#+f");       /* { dg-warning "between 9 and 317 bytes" } */
+-  T ("%# f");       /* { dg-warning "between 9 and 317 bytes" } */
++  T ("%f");         /* { dg-warning "between 3 and 317 bytes" } */
++  T ("%+f");        /* { dg-warning "between 4 and 317 bytes" } */
++  T ("% f");        /* { dg-warning "between 4 and 317 bytes" } */
++  T ("%#f");        /* { dg-warning "between 3 and 317 bytes" } */
++  T ("%+f");        /* { dg-warning "between 4 and 317 bytes" } */
++  T ("% f");        /* { dg-warning "between 4 and 317 bytes" } */
++  T ("%#+f");       /* { dg-warning "between 4 and 317 bytes" } */
++  T ("%# f");       /* { dg-warning "between 4 and 317 bytes" } */
+ 
+   T ("%.f");        /* { dg-warning "between 1 and 310 bytes" } */
+   T ("%.0f");       /* { dg-warning "between 1 and 310 bytes" } */
+   T ("%.1f");       /* { dg-warning "between 3 and 312 bytes" } */
+-  T ("%.2f");       /* { dg-warning "between 4 and 313 bytes" } */
+-  T ("%.99f");      /* { dg-warning "between 101 and 410 bytes" } */
+-  T ("%.199f");     /* { dg-warning "between 201 and 510 bytes" } */
+-  T ("%.1099f");    /* { dg-warning "between 1101 and 1410 bytes" } */
++  T ("%.2f");       /* { dg-warning "between 3 and 313 bytes" } */
++  T ("%.99f");      /* { dg-warning "between 3 and 410 bytes" } */
++  T ("%.199f");     /* { dg-warning "between 3 and 510 bytes" } */
++  T ("%.1099f");    /* { dg-warning "between 3 and 1410 bytes" } */
+ 
+   T ("%0.0f");      /* { dg-warning "between 1 and 310 bytes" } */
+   T ("%1.0f");      /* { dg-warning "between 1 and 310 bytes" } */
+@@ -224,8 +224,8 @@ void test_f_va (va_list va)
+   T ("%3.0f");      /* { dg-warning "between 3 and 310 bytes" } */
+   T ("%310.0f");    /* { dg-warning "writing 310 bytes" } */
+   T ("%311.0f");    /* { dg-warning "writing 311 bytes" } */
+-  T ("%312.312f");  /* { dg-warning "between 314 and 623 bytes" } */
+-  T ("%312.313f");  /* { dg-warning "between 315 and 624 bytes" } */
++  T ("%312.312f");  /* { dg-warning "between 312 and 623 bytes" } */
++  T ("%312.313f");  /* { dg-warning "between 312 and 624 bytes" } */
+ 
+   T ("%.*f");       /* { dg-warning "writing between 1 and 2147483958 bytes" } */
+   T ("%1.*f");      /* { dg-warning "writing between 1 and 2147483958 bytes" } */
+diff --git a/gcc/testsuite/gcc.dg/tree-ssa/builtin-sprintf-warn-15.c b/gcc/testsuite/gcc.dg/tree-ssa/builtin-sprintf-warn-15.c
+index 0b863a8aa..8f70e29e0 100644
+--- a/gcc/testsuite/gcc.dg/tree-ssa/builtin-sprintf-warn-15.c
++++ b/gcc/testsuite/gcc.dg/tree-ssa/builtin-sprintf-warn-15.c
+@@ -78,14 +78,14 @@ void test_unknown_width_floating (int w, double d)
+   T ( 7, "%*a", w, d);
+   T (21, "%*a", w, 3.141);
+ 
+-  T (12, "%*e",  w, d);    /* { dg-warning "writing a terminating nul" } */
+-  T (12, "%#*e", w, d);    /* { dg-warning "writing a terminating nul" } */
++  T (12, "%*e",  w, d);    /* { dg-warning "may write a terminating nul" } */
++  T (12, "%#*e", w, d);    /* { dg-warning "may write a terminating nul" } */
+   T (13, "%*e",  w, d);
+   T (13, "%#*e", w, d);
+   T (13, "%*e",  w, 3.141);
+ 
+-  T ( 8, "%*f",  w, d);   /* { dg-warning "writing a terminating nul" } */
+-  T ( 8, "%#*f", w, d);   /* { dg-warning "writing a terminating nul" } */
++  T ( 8, "%*f",  w, d);   /* { dg-warning "may write a terminating nul" } */
++  T ( 8, "%#*f", w, d);   /* { dg-warning "may write a terminating nul" } */
+   T ( 9, "%*f",  w, d);
+   T ( 9, "%#*f", w, d);
+   T ( 9, "%*f",  w, 3.141);
+@@ -113,20 +113,20 @@ void test_unknown_precision_integer (int p, int i, double d)
+ 
+ void test_unknown_precision_floating (int p, double d)
+ {
+-  T ( 0, "%.*a", R (-1, 0), d); /* { dg-warning "between 6 and 24 " } */
+-  T ( 6, "%.*a", R (-1, 0), d); /* { dg-warning "writing a terminating nul" } */
++  T ( 0, "%.*a", R (-1, 0), d); /* { dg-warning "between 3 and 24 " } */
++  T ( 6, "%.*a", R (-1, 0), d); /* { dg-warning "may write a terminating nul" } */
+   T ( 7, "%.*a", R (-1, 0), d);
+   T ( 7, "%.*a", p, d);
+   T (21, "%.*a", p, 3.141);
+ 
+-  T ( 0, "%.*e",  R (-1, 0), d); /* { dg-warning "between 5 and 14 " } */
+-  T ( 0, "%.*e",  R (-1, 6), d); /* { dg-warning "between 5 and 14 " } */
+-  T ( 5, "%.*e",  R (-1, 6), d); /* { dg-warning "writing a terminating nul" } */
++  T ( 0, "%.*e",  R (-1, 0), d); /* { dg-warning "between 3 and 14 " } */
++  T ( 0, "%.*e",  R (-1, 6), d); /* { dg-warning "between 3 and 14 " } */
++  T ( 5, "%.*e",  R (-1, 6), d); /* { dg-warning "may write a terminating nul" } */
+   T ( 6, "%.*e",  R (-1, 6), d);
+-  /* "%.0e", 0.0 results in 5 bytes: "0e+00"  */
+-  T ( 5, "%.*e",  p, d);      /* { dg-warning "writing a terminating nul" } */
+-  /* "%#.0e", 0.0 results in 6 bytes: "0.e+00"  */
+-  T ( 6, "%#.*e", p, d);      /* { dg-warning "writing a terminating nul" } */
++  /* "%.0e", 0.0 results in 3 or 5 bytes: "inf"/"nan" or "0e+00"  */
++  T ( 5, "%.*e",  p, d);      /* { dg-warning "may write a terminating nul" } */
++  /* "%#.0e", 0.0 results in 3 or 6 bytes: "inf"/"nan" or "0.e+00"  */
++  T ( 6, "%#.*e", p, d);      /* { dg-warning "may write a terminating nul" } */
+   T ( 6, "%.*e",  p, d);
+   T ( 6, "%.*e",  p, 3.141);
+   T ( 6, "%#.*e", p, 3.141);  /* { dg-warning "writing a terminating nul" } */
+@@ -190,10 +190,10 @@ void test_unknown_width_and_precision_floating (int w, int p, double d)
+   T ( 7, "%*.*a", w, p, d);
+   T (21, "%*.*a", w, p, 3.141);
+ 
+-  /* "%0.0e", 0.0 results in 5 bytes: "0e+00"  */
+-  T ( 5, "%*.*e",  w, p, d);   /* { dg-warning "writing a terminating nul" } */
+-  /* "%#0.0e", 0.0 results in 6 bytes: "0.e+00"  */
+-  T ( 6, "%#*.*e", w, p, d);   /* { dg-warning "writing a terminating nul" } */
++  /* "%0.0e", 0.0 results in 3 or 5 bytes: "inf"/"nan" or "0e+00"  */
++  T ( 5, "%*.*e",  w, p, d);   /* { dg-warning "may write a terminating nul" } */
++  /* "%#0.0e", 0.0 results in 3 or 6 bytes: "inf"/"nan" or "0.e+00"  */
++  T ( 6, "%#*.*e", w, p, d);   /* { dg-warning "may write a terminating nul" } */
+   T ( 6, "%*.*e",  w, p, d);
+   T ( 6, "%*.*e",  w, p, 3.141);
+   T ( 6, "%#*.*e", w, p, 3.141);/* { dg-warning "writing a terminating nul" } */
+diff --git a/gcc/testsuite/gcc.dg/tree-ssa/builtin-sprintf-warn-7.c b/gcc/testsuite/gcc.dg/tree-ssa/builtin-sprintf-warn-7.c
+index 31f5d4f92..0701beb81 100644
+--- a/gcc/testsuite/gcc.dg/tree-ssa/builtin-sprintf-warn-7.c
++++ b/gcc/testsuite/gcc.dg/tree-ssa/builtin-sprintf-warn-7.c
+@@ -71,16 +71,16 @@ void test_floating_a_var (double x)
+   T (0, "%*a",  INT_MIN, x);     /* { dg-warning "writing 2147483648 bytes" } */
+   T (0, "%*a",  INT_MAX, x);     /* { dg-warning "writing 2147483647 bytes" } */
+ 
+-  T (0, "%.*a", INT_MIN, x);     /* { dg-warning "writing between 6 and 24 bytes" } */
++  T (0, "%.*a", INT_MIN, x);     /* { dg-warning "writing between 3 and 24 bytes" } */
+ 
+   /* Expected output is "0x0." followed by INT_MAX digits followed by
+      "p+" followed by 1 to four digits, with a byte count in the range
+      [3 + INT_MAX + 2 + 1, 3 + INT_MAX + 2 + 4].  */
+-  T (0, "%.*a", INT_MAX, x);     /* { dg-warning "writing between 2147483654 and 2147483658 bytes" } */
++  T (0, "%.*a", INT_MAX, x);     /* { dg-warning "writing between 3 and 2147483658 bytes" } */
+ 
+   T (0, "%*.*a", INT_MIN, INT_MIN, x);   /* { dg-warning "writing 2147483648 bytes" } */
+ 
+-  T (0, "%*.*a", INT_MAX, INT_MAX, x);   /* { dg-warning "writing between 2147483654 and 2147483658 bytes" } */
++  T (0, "%*.*a", INT_MAX, INT_MAX, x);   /* { dg-warning "writing between 2147483647 and 2147483658 bytes" } */
+ }
+ 
+ void test_floating_e_cst (void)
+@@ -102,13 +102,13 @@ void test_floating_e_var (double x)
+   T (0, "%*e",  INT_MIN, x);     /* { dg-warning "writing 2147483648 bytes" } */
+   T (0, "%*e",  INT_MAX, x);     /* { dg-warning "writing 2147483647 bytes" } */
+ 
+-  T (0, "%.*e", INT_MIN, x);     /* { dg-warning "writing between 12 and 14 bytes" } */
++  T (0, "%.*e", INT_MIN, x);     /* { dg-warning "writing between 3 and 14 bytes" } */
+ 
+-  T (0, "%.*e", INT_MAX, x);     /* { dg-warning "writing between 2147483653 and 2147483655 bytes" } */
++  T (0, "%.*e", INT_MAX, x);     /* { dg-warning "writing between 3 and 2147483655 bytes" } */
+ 
+   T (0, "%*.*e", INT_MIN, INT_MIN, x);   /* { dg-warning "writing 2147483648 bytes" } */
+ 
+-  T (0, "%*.*e", INT_MAX, INT_MAX, x);   /* { dg-warning "writing between 2147483653 and 2147483655 bytes" } */
++  T (0, "%*.*e", INT_MAX, INT_MAX, x);   /* { dg-warning "writing between 2147483647 and 2147483655 bytes" } */
+ }
+ 
+ void test_floating_f_cst (void)
+@@ -130,13 +130,13 @@ void test_floating_f_var (double x)
+   T (0, "%*f",  INT_MIN, x);     /* { dg-warning "writing 2147483648 bytes" } */
+   T (0, "%*f",  INT_MAX, x);     /* { dg-warning "writing 2147483647 bytes" } */
+ 
+-  T (0, "%.*f", INT_MIN, x);     /* { dg-warning "writing between 8 and 317 bytes" } */
++  T (0, "%.*f", INT_MIN, x);     /* { dg-warning "writing between 3 and 317 bytes" } */
+ 
+-  T (0, "%.*f", INT_MAX, x);     /* { dg-warning "writing between 2147483649 and 2147483958 bytes" } */
++  T (0, "%.*f", INT_MAX, x);     /* { dg-warning "writing between 3 and 2147483958 bytes" } */
+ 
+   T (0, "%*.*f", INT_MIN, INT_MIN, x);   /* { dg-warning "writing 2147483648 bytes" } */
+ 
+-  T (0, "%*.*f", INT_MAX, INT_MAX, x);   /* { dg-warning "writing between 2147483649 and 2147483958 bytes" } */
++  T (0, "%*.*f", INT_MAX, INT_MAX, x);   /* { dg-warning "writing between 2147483647 and 2147483958 bytes" } */
+ }
+ 
+ void test_floating_g_cst (void)
+diff --git a/gcc/testsuite/gcc.dg/tree-ssa/builtin-sprintf.c b/gcc/testsuite/gcc.dg/tree-ssa/builtin-sprintf.c
+index eb27de670..f7e779a1e 100644
+--- a/gcc/testsuite/gcc.dg/tree-ssa/builtin-sprintf.c
++++ b/gcc/testsuite/gcc.dg/tree-ssa/builtin-sprintf.c
+@@ -479,12 +479,12 @@ test_a_double (double d)
+   RNG (11, 16, 17, "%.*a", 4, 6.0); /* 0xc.0000p-1 */
+   RNG (12, 17, 18, "%.*a", 5, 7.0); /* 0xe.00000p-1 */
+ 	                            /* d is in [ 0, -DBL_MAX ] */
+-  RNG ( 6, 10, 11, "%.0a", d);      /* 0x0p+0 ... -0x2p+1023 */
++  RNG ( 3, 10, 11, "%.0a", d);      /* inf/nan or 0x0p+0 ... -0x2p+1023 */
+   /* %a is poorly specified and allows for implementations divergence:
+      some (such as Glibc) trim redundant trailing zeros after decimal
+      point and others (e.g., Solaris) don't.  */
+-  RNG ( 8, 30, 31, "%.1a", d);      /* 0x0.0p+0  ... -0x2.0...0p+1023 */
+-  RNG ( 9, 30, 31, "%.2a", d);      /* 0x0.00p+0 ... -0x2.00...0p+1023 */
++  RNG ( 3, 30, 31, "%.1a", d);      /* inf or 0x0.0p+0  ... -0x2.0...0p+1023 */
++  RNG ( 3, 30, 31, "%.2a", d);      /* inf or 0x0.00p+0 ... -0x2.00...0p+1023 */
+ }
+ 
+ static void __attribute__ ((noinline, noclone))
+@@ -522,29 +522,32 @@ test_e_double (double d)
+   RNG (12, 17, 18, "%e",  1.0e-12);
+   RNG (13, 18, 19, "%e",  1.0e-123);
+ 
+-  RNG (12, 19, 20, "%e",   d);
+-  RNG ( 5, 11, 12, "%.e",  d);
+-  RNG ( 5, 12, 13, "%.0e", d);
+-  RNG ( 7, 14, 15, "%.1e", d);
+-  RNG ( 8, 15, 16, "%.2e", d);
+-  RNG ( 9, 16, 17, "%.3e", d);
+-  RNG (10, 17, 18, "%.4e", d);
+-  RNG (11, 18, 19, "%.5e", d);
+-  RNG (12, 19, 20, "%.6e", d);
+-  RNG (13, 20, 21, "%.7e", d);
+-
+-  RNG (4006, 4013, 4014, "%.4000e", d);
+-
+-  RNG ( 5,  7,  8, "%.*e", 0, d);
+-  RNG ( 7, 14, 15, "%.*e", 1, d);
+-  RNG ( 8, 15, 16, "%.*e", 2, d);
+-  RNG ( 9, 16, 17, "%.*e", 3, d);
+-  RNG (10, 17, 18, "%.*e", 4, d);
+-  RNG (11, 18, 19, "%.*e", 5, d);
+-  RNG (12, 19, 20, "%.*e", 6, d);
+-  RNG (13, 20, 21, "%.*e", 7, d);
+-
+-  RNG (4006, 4013, 4014, "%.*e", 4000, d);
++  RNG ( 3, 19, 20, "%e",   d);
++  RNG ( 3, 11, 12, "%.e",  d);
++  RNG ( 3, 12, 13, "%.0e", d);
++  RNG ( 3, 14, 15, "%.1e", d);
++  RNG ( 3, 15, 16, "%.2e", d);
++  RNG ( 3, 16, 17, "%.3e", d);
++  RNG ( 3, 17, 18, "%.4e", d);
++  RNG ( 3, 18, 19, "%.5e", d);
++  RNG ( 3, 19, 20, "%.6e", d);
++  RNG ( 3, 20, 21, "%.7e", d);
++
++  RNG ( 3, 4013, 4014, "%.4000e", d);
++
++  RNG ( 3,  7,  8, "%.*e", 0, d);
++  RNG ( 3, 14, 15, "%.*e", 1, d);
++  RNG ( 3, 15, 16, "%.*e", 2, d);
++  RNG ( 3, 16, 17, "%.*e", 3, d);
++  RNG ( 3, 17, 18, "%.*e", 4, d);
++  RNG ( 3, 18, 19, "%.*e", 5, d);
++  RNG ( 3, 19, 20, "%.*e", 6, d);
++  RNG ( 3, 20, 21, "%.*e", 7, d);
++
++  RNG ( 3, 4013, 4014, "%.*e",  4000, d);
++  RNG ( 4, 4013, 4014, "%+.*e", 4000, d);
++  RNG ( 4, 4013, 4014, "% .*e", 4000, d);
++  RNG ( 3, 4013, 4014, "%#.*e", 4000, d);
+ }
+ 
+ static void __attribute__ ((noinline, noclone))
+@@ -584,26 +587,27 @@ test_e_long_double (long double d)
+   RNG (20, 26, 27, "%.13Le",  1.0e-113L);
+ 
+   /* The following correspond to the double results plus 1 for the upper
+-     bound accounting for the four-digit exponent.  */
+-  RNG (12, 20, 21, "%Le", d);    /* 0.000000e+00 ...  -1.189732e+4932 */
+-  RNG ( 5,  8,  9, "%.Le", d);
+-  RNG ( 5,  9, 10, "%.0Le", d);
+-  RNG ( 7, 15, 16, "%.1Le", d);  /* 0.0e+00      ...  -1.2e+4932 */
+-  RNG ( 8, 16, 17, "%.2Le", d);  /* 0.00e+00     ...  -1.19e+4932 */
+-  RNG ( 9, 17, 18, "%.3Le", d);
+-  RNG (10, 18, 19, "%.4Le", d);
+-  RNG (11, 19, 20, "%.5Le", d);
+-  RNG (12, 20, 21, "%.6Le", d);  /* same as plain "%Le" */
+-  RNG (13, 21, 22, "%.7Le", d);  /* 0.0000000e+00 ... -1.1897315e+4932 */
+-
+-  RNG ( 5,  9, 10, "%.*Le", 0, d);
+-  RNG ( 7, 15, 16, "%.*Le", 1, d);
+-  RNG ( 8, 16, 17, "%.*Le", 2, d);
+-  RNG ( 9, 17, 18, "%.*Le", 3, d);
+-  RNG (10, 18, 19, "%.*Le", 4, d);
+-  RNG (11, 19, 20, "%.*Le", 5, d);
+-  RNG (12, 20, 21, "%.*Le", 6, d);
+-  RNG (13, 21, 22, "%.*Le", 7, d);
++     bound accounting for the four-digit exponent.  The lower bound is
++     for inf/nan.  */
++  RNG ( 3, 20, 21, "%Le", d);    /* inf or 0.000000e+00 ...  -1.189732e+4932 */
++  RNG ( 3,  8,  9, "%.Le", d);
++  RNG ( 3,  9, 10, "%.0Le", d);
++  RNG ( 3, 15, 16, "%.1Le", d);  /* inf or 0.0e+00      ...  -1.2e+4932 */
++  RNG ( 3, 16, 17, "%.2Le", d);  /* inf or 0.00e+00     ...  -1.19e+4932 */
++  RNG ( 3, 17, 18, "%.3Le", d);
++  RNG ( 3, 18, 19, "%.4Le", d);
++  RNG ( 3, 19, 20, "%.5Le", d);
++  RNG ( 3, 20, 21, "%.6Le", d);  /* same as plain "%Le" */
++  RNG ( 3, 21, 22, "%.7Le", d);  /* inf or 0.0000000e+00 ... -1.1897315e+4932 */
++
++  RNG ( 3,  9, 10, "%.*Le", 0, d);
++  RNG ( 3, 15, 16, "%.*Le", 1, d);
++  RNG ( 3, 16, 17, "%.*Le", 2, d);
++  RNG ( 3, 17, 18, "%.*Le", 3, d);
++  RNG ( 3, 18, 19, "%.*Le", 4, d);
++  RNG ( 3, 19, 20, "%.*Le", 5, d);
++  RNG ( 3, 20, 21, "%.*Le", 6, d);
++  RNG ( 3, 21, 22, "%.*Le", 7, d);
+ }
+ 
+ static void __attribute__ ((noinline, noclone))
+@@ -626,7 +630,10 @@ test_f_double (double d)
+   RNG (  8,  13,  14, "%f", 1.0e-12);
+   RNG (  8,  13,  14, "%f", 1.0e-123);
+ 
+-  RNG (  8, 322, 323, "%f", d);
++  RNG (  3, 322, 323, "%f",  d);
++  RNG (  4, 322, 323, "%+f", d);
++  RNG (  4, 322, 323, "% f", d);
++  RNG (  3, 322, 323, "%#f", d);
+ }
+ 
+ static void __attribute__ ((noinline, noclone))
+diff --git a/gcc/testsuite/gcc.dg/tree-ssa/pr83198.c b/gcc/testsuite/gcc.dg/tree-ssa/pr83198.c
+index f9dba2acc..cd0423990 100644
+--- a/gcc/testsuite/gcc.dg/tree-ssa/pr83198.c
++++ b/gcc/testsuite/gcc.dg/tree-ssa/pr83198.c
+@@ -7,10 +7,14 @@ void bar (void);
+ void link_error (void);
+ 
+ void
+-foo (char *x)
++foo (char *x, double y)
+ {
++  /* The expected result should not be constant but rather that
++     of the %f directive with an unknown argument, i.e., at least
++     [3, 317] (but in reality [3, 322] when taking into account
++     that the decimal point can be up to MB_LEN_MAX bytes long).  */
+   int a = __builtin_sprintf (x, "%f", 1.0Q);
+-  if (a < 8)
++  if (a < 3)
+     link_error ();
+   if (a > 13)
+     bar ();
+@@ -18,6 +22,6 @@ foo (char *x)
+     link_error ();
+ }
+ 
+-/* Verify we don't optimize return value to [8, 13].  */
++/* Verify we don't optimize return value to [3, 13].  */
+ /* { dg-final { scan-tree-dump-not "link_error \\(\\);" "optimized" } } */
+ /* { dg-final { scan-tree-dump "bar \\(\\);" "optimized" } } */
