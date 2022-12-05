@@ -28,4 +28,7 @@ src_prepare() {
 	done
 
 	toolchain_src_prepare
+	use vanilla && return 0
+
+	eapply "${FILESDIR}"/${PV}/postrelease/00_pr90320.patch
 }

@@ -1,0 +1,445 @@
+diff --git a/gcc/cfghooks.c b/gcc/cfghooks.c
+index 06c05d1fb..3bba6ced8 100644
+--- a/gcc/cfghooks.c
++++ b/gcc/cfghooks.c
+@@ -1061,7 +1061,7 @@ can_duplicate_block_p (const_basic_block bb)
+    AFTER.  */
+ 
+ basic_block
+-duplicate_block (basic_block bb, edge e, basic_block after)
++duplicate_block (basic_block bb, edge e, basic_block after, copy_bb_data *id)
+ {
+   edge s, n;
+   basic_block new_bb;
+@@ -1077,7 +1077,7 @@ duplicate_block (basic_block bb, edge e, basic_block after)
+ 
+   gcc_checking_assert (can_duplicate_block_p (bb));
+ 
+-  new_bb = cfg_hooks->duplicate_block (bb);
++  new_bb = cfg_hooks->duplicate_block (bb, id);
+   if (after)
+     move_block_after (new_bb, after);
+ 
+@@ -1349,13 +1349,14 @@ copy_bbs (basic_block *bbs, unsigned n, basic_block *new_bbs,
+   unsigned i, j;
+   basic_block bb, new_bb, dom_bb;
+   edge e;
++  copy_bb_data id;
+ 
+   /* Duplicate bbs, update dominators, assign bbs to loops.  */
+   for (i = 0; i < n; i++)
+     {
+       /* Duplicate.  */
+       bb = bbs[i];
+-      new_bb = new_bbs[i] = duplicate_block (bb, NULL, after);
++      new_bb = new_bbs[i] = duplicate_block (bb, NULL, after, &id);
+       after = new_bb;
+       bb->flags |= BB_DUPLICATED;
+       if (bb->loop_father)
+diff --git a/gcc/cfghooks.h b/gcc/cfghooks.h
+index b7912a1ed..f8cf63e7f 100644
+--- a/gcc/cfghooks.h
++++ b/gcc/cfghooks.h
+@@ -54,6 +54,19 @@ struct profile_record
+   bool run;
+ };
+ 
++typedef int_hash <unsigned short, 0> dependence_hash;
++
++/* Optional data for duplicate_block.   */
++
++struct copy_bb_data
++{
++  copy_bb_data() : dependence_map (NULL) {}
++  ~copy_bb_data () { delete dependence_map; }
++
++  /* A map from the copied BBs dependence info cliques to
++     equivalents in the BBs duplicated to.  */
++  hash_map<dependence_hash, unsigned short> *dependence_map;
++};
+ 
+ struct cfg_hooks
+ {
+@@ -112,7 +125,7 @@ struct cfg_hooks
+   bool (*can_duplicate_block_p) (const_basic_block a);
+ 
+   /* Duplicate block A.  */
+-  basic_block (*duplicate_block) (basic_block a);
++  basic_block (*duplicate_block) (basic_block a, copy_bb_data *);
+ 
+   /* Higher level functions representable by primitive operations above if
+      we didn't have some oddities in RTL and Tree representations.  */
+@@ -227,7 +240,8 @@ extern void tidy_fallthru_edges (void);
+ extern void predict_edge (edge e, enum br_predictor predictor, int probability);
+ extern bool predicted_by_p (const_basic_block bb, enum br_predictor predictor);
+ extern bool can_duplicate_block_p (const_basic_block);
+-extern basic_block duplicate_block (basic_block, edge, basic_block);
++extern basic_block duplicate_block (basic_block, edge, basic_block,
++				    copy_bb_data * = NULL);
+ extern bool block_ends_with_call_p (basic_block bb);
+ extern bool empty_block_p (basic_block);
+ extern basic_block split_block_before_cond_jump (basic_block);
+diff --git a/gcc/cfgloop.h b/gcc/cfgloop.h
+index 54e738f20..b954e7d88 100644
+--- a/gcc/cfgloop.h
++++ b/gcc/cfgloop.h
+@@ -194,6 +194,10 @@ struct GTY ((chain_next ("%h.next"))) loop {
+   /* True if the loop is part of an oacc kernels region.  */
+   bool in_oacc_kernels_region;
+ 
++  /* If this loop was inlined the main clique of the callee which does
++     not need remapping when copying the loop body.  */
++  unsigned short owned_clique;
++
+   /* For SIMD loops, this is a unique identifier of the loop, referenced
+      by IFN_GOMP_SIMD_VF, IFN_GOMP_SIMD_LANE and IFN_GOMP_SIMD_LAST_LANE
+      builtins.  */
+diff --git a/gcc/cfgloopmanip.c b/gcc/cfgloopmanip.c
+index 2bffb80e2..a4d3fdb7a 100644
+--- a/gcc/cfgloopmanip.c
++++ b/gcc/cfgloopmanip.c
+@@ -1022,6 +1022,7 @@ copy_loop_info (struct loop *loop, struct loop *target)
+   target->warned_aggressive_loop_optimizations
+     |= loop->warned_aggressive_loop_optimizations;
+   target->in_oacc_kernels_region = loop->in_oacc_kernels_region;
++  target->owned_clique = loop->owned_clique;
+ }
+ 
+ /* Copies copy of LOOP as subloop of TARGET loop, placing newly
+diff --git a/gcc/cfgrtl.c b/gcc/cfgrtl.c
+index 00a5dff4f..e9ab43da5 100644
+--- a/gcc/cfgrtl.c
++++ b/gcc/cfgrtl.c
+@@ -4198,7 +4198,7 @@ duplicate_insn_chain (rtx_insn *from, rtx_insn *to)
+ /* Create a duplicate of the basic block BB.  */
+ 
+ static basic_block
+-cfg_layout_duplicate_bb (basic_block bb)
++cfg_layout_duplicate_bb (basic_block bb, copy_bb_data *)
+ {
+   rtx_insn *insn;
+   basic_block new_bb;
+@@ -5010,9 +5010,9 @@ rtl_can_remove_branch_p (const_edge e)
+ }
+ 
+ static basic_block
+-rtl_duplicate_bb (basic_block bb)
++rtl_duplicate_bb (basic_block bb, copy_bb_data *id)
+ {
+-  bb = cfg_layout_duplicate_bb (bb);
++  bb = cfg_layout_duplicate_bb (bb, id);
+   bb->aux = NULL;
+   return bb;
+ }
+diff --git a/gcc/graphite-scop-detection.c b/gcc/graphite-scop-detection.c
+index 3ab812291..c4630463a 100644
+--- a/gcc/graphite-scop-detection.c
++++ b/gcc/graphite-scop-detection.c
+@@ -1877,9 +1877,13 @@ build_alias_set (scop_p scop)
+   int i, j;
+   int *all_vertices;
+ 
++  struct loop *nest
++    = find_common_loop (scop->scop_info->region.entry->dest->loop_father,
++			scop->scop_info->region.exit->src->loop_father);
++
+   FOR_EACH_VEC_ELT (scop->drs, i, dr1)
+     for (j = i+1; scop->drs.iterate (j, &dr2); j++)
+-      if (dr_may_alias_p (dr1->dr, dr2->dr, true))
++      if (dr_may_alias_p (dr1->dr, dr2->dr, nest))
+ 	{
+ 	  /* Dependences in the same alias set need to be handled
+ 	     by just looking at DR_ACCESS_FNs.  */
+diff --git a/gcc/lto-streamer-in.c b/gcc/lto-streamer-in.c
+index 9d110dd33..0f2d7321c 100644
+--- a/gcc/lto-streamer-in.c
++++ b/gcc/lto-streamer-in.c
+@@ -841,6 +841,7 @@ input_cfg (struct lto_input_block *ib, struct data_in *data_in,
+ 
+       /* Read OMP SIMD related info.  */
+       loop->safelen = streamer_read_hwi (ib);
++      loop->owned_clique = streamer_read_hwi (ib);
+       loop->dont_vectorize = streamer_read_hwi (ib);
+       loop->force_vectorize = streamer_read_hwi (ib);
+       loop->simduid = stream_read_tree (ib, data_in);
+diff --git a/gcc/lto-streamer-out.c b/gcc/lto-streamer-out.c
+index 57d946d15..70a9ae1d5 100644
+--- a/gcc/lto-streamer-out.c
++++ b/gcc/lto-streamer-out.c
+@@ -1927,6 +1927,7 @@ output_cfg (struct output_block *ob, struct function *fn)
+ 
+       /* Write OMP SIMD related info.  */
+       streamer_write_hwi (ob, loop->safelen);
++      streamer_write_hwi (ob, loop->owned_clique);
+       streamer_write_hwi (ob, loop->dont_vectorize);
+       streamer_write_hwi (ob, loop->force_vectorize);
+       stream_write_tree (ob, loop->simduid, true);
+diff --git a/gcc/testsuite/gcc.dg/torture/pr90328.c b/gcc/testsuite/gcc.dg/torture/pr90328.c
+new file mode 100644
+index 000000000..ccf8442bc
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/torture/pr90328.c
+@@ -0,0 +1,24 @@
++/* { dg-do run } */
++
++void g(int*__restrict x, int*y)
++{
++  *x = *y;
++}
++
++void __attribute__((noinline,noclone)) f(int* a,int* b)
++{
++  for(int i=0;i<1024;++i)
++    g(a+i,b+i);
++}
++
++int main()
++{
++  int x[1025];
++  for (int i = 0; i < 1025; ++i)
++    x[i] = i+1;
++  f(x+1, x);
++  for (int i = 0; i < 1025; ++i)
++    if (x[i] != 1)
++      __builtin_abort ();
++  return 0;
++}
+diff --git a/gcc/testsuite/gcc.dg/torture/restrict-7.c b/gcc/testsuite/gcc.dg/torture/restrict-7.c
+new file mode 100644
+index 000000000..107371098
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/torture/restrict-7.c
+@@ -0,0 +1,27 @@
++/* { dg-do run } */
++
++extern void abort (void);
++
++static inline __attribute__((always_inline)) void
++copy(int *restrict a, int *restrict b)
++{
++  *b = *a;
++  *a = 7;
++}
++
++void __attribute__((noinline))
++floppy(int mat[static 2], unsigned idxs[static 3])
++{
++  for (int i = 0; i < 3; i++)
++    copy(&mat[i%2], &mat[idxs[i]]);
++}
++
++int main()
++{
++  int mat[2] = {10, 20};
++  unsigned idxs[3] = {1, 0, 1};
++  floppy(mat, idxs);
++  if (mat[0] != 7 || mat[1] != 10)
++    abort ();
++  return 0;
++}
+diff --git a/gcc/tree-cfg.c b/gcc/tree-cfg.c
+index 983fd704f..029444b10 100644
+--- a/gcc/tree-cfg.c
++++ b/gcc/tree-cfg.c
+@@ -5848,7 +5848,7 @@ gimple_can_duplicate_bb_p (const_basic_block bb ATTRIBUTE_UNUSED)
+    preserve SSA form.  */
+ 
+ static basic_block
+-gimple_duplicate_bb (basic_block bb)
++gimple_duplicate_bb (basic_block bb, copy_bb_data *id)
+ {
+   basic_block new_bb;
+   gimple_stmt_iterator gsi_tgt;
+@@ -5914,6 +5914,39 @@ gimple_duplicate_bb (basic_block bb)
+ 		  || !DECL_HAS_VALUE_EXPR_P (base)))
+ 	    DECL_NONSHAREABLE (base) = 1;
+ 	}
++ 
++      /* If requested remap dependence info of cliques brought in
++         via inlining.  */
++      if (id)
++	for (unsigned i = 0; i < gimple_num_ops (copy); ++i)
++	  {
++	    tree op = gimple_op (copy, i);
++	    if (!op)
++	      continue;
++	    if (TREE_CODE (op) == ADDR_EXPR
++		|| TREE_CODE (op) == WITH_SIZE_EXPR)
++	      op = TREE_OPERAND (op, 0);
++	    while (handled_component_p (op))
++	      op = TREE_OPERAND (op, 0);
++	    if ((TREE_CODE (op) == MEM_REF
++		 || TREE_CODE (op) == TARGET_MEM_REF)
++		&& MR_DEPENDENCE_CLIQUE (op) > 1
++		&& MR_DEPENDENCE_CLIQUE (op) != bb->loop_father->owned_clique)
++	      {
++		if (!id->dependence_map)
++		  id->dependence_map = new hash_map<dependence_hash,
++						    unsigned short>;
++		bool existed;
++		unsigned short &newc = id->dependence_map->get_or_insert
++		    (MR_DEPENDENCE_CLIQUE (op), &existed);
++		if (!existed)
++		  {
++		    gcc_assert (MR_DEPENDENCE_CLIQUE (op) <= cfun->last_clique);
++		    newc = ++cfun->last_clique;
++		  }
++		MR_DEPENDENCE_CLIQUE (op) = newc;
++	      }
++	  }
+ 
+       /* Create new names for all the definitions created by COPY and
+ 	 add replacement mappings for each new name.  */
+diff --git a/gcc/tree-core.h b/gcc/tree-core.h
+index 41c1a9bd3..cc95b34a1 100644
+--- a/gcc/tree-core.h
++++ b/gcc/tree-core.h
+@@ -926,7 +926,9 @@ struct GTY(()) tree_base {
+        expression trees and specify known data non-dependences.  For
+        two memory references in a function they are known to not
+        alias if dependence_info.clique are equal and dependence_info.base
+-       are distinct.  */
++       are distinct.  Clique number zero means there is no information,
++       clique number one is populated from function global information
++       and thus needs no remapping on transforms like loop unrolling.  */
+     struct {
+       unsigned short clique;
+       unsigned short base;
+diff --git a/gcc/tree-data-ref.c b/gcc/tree-data-ref.c
+index 0bb01f162..f9043ef70 100644
+--- a/gcc/tree-data-ref.c
++++ b/gcc/tree-data-ref.c
+@@ -1396,7 +1396,7 @@ object_address_invariant_in_loop_p (const struct loop *loop, const_tree obj)
+ 
+ bool
+ dr_may_alias_p (const struct data_reference *a, const struct data_reference *b,
+-		bool loop_nest)
++		struct loop *loop_nest)
+ {
+   tree addr_a = DR_BASE_OBJECT (a);
+   tree addr_b = DR_BASE_OBJECT (b);
+@@ -1420,6 +1420,11 @@ dr_may_alias_p (const struct data_reference *a, const struct data_reference *b,
+ 
+   if ((TREE_CODE (addr_a) == MEM_REF || TREE_CODE (addr_a) == TARGET_MEM_REF)
+       && (TREE_CODE (addr_b) == MEM_REF || TREE_CODE (addr_b) == TARGET_MEM_REF)
++      /* For cross-iteration dependences the cliques must be valid for the
++	 whole loop, not just individual iterations.  */
++      && (!loop_nest
++	  || MR_DEPENDENCE_CLIQUE (addr_a) == 1
++	  || MR_DEPENDENCE_CLIQUE (addr_a) == loop_nest->owned_clique)
+       && MR_DEPENDENCE_CLIQUE (addr_a) == MR_DEPENDENCE_CLIQUE (addr_b)
+       && MR_DEPENDENCE_BASE (addr_a) != MR_DEPENDENCE_BASE (addr_b))
+     return false;
+@@ -1500,7 +1505,7 @@ initialize_data_dependence_relation (struct data_reference *a,
+     }
+ 
+   /* If the data references do not alias, then they are independent.  */
+-  if (!dr_may_alias_p (a, b, loop_nest.exists ()))
++  if (!dr_may_alias_p (a, b, loop_nest.exists () ? loop_nest[0] : NULL))
+     {
+       DDR_ARE_DEPENDENT (res) = chrec_known;
+       return res;
+diff --git a/gcc/tree-data-ref.h b/gcc/tree-data-ref.h
+index eb24d1648..07651bfab 100644
+--- a/gcc/tree-data-ref.h
++++ b/gcc/tree-data-ref.h
+@@ -337,7 +337,7 @@ extern tree find_data_references_in_bb (struct loop *, basic_block,
+                                         vec<data_reference_p> *);
+ 
+ extern bool dr_may_alias_p (const struct data_reference *,
+-			    const struct data_reference *, bool);
++			    const struct data_reference *, struct loop *);
+ extern bool dr_equal_offsets_p (struct data_reference *,
+                                 struct data_reference *);
+ 
+diff --git a/gcc/tree-inline.c b/gcc/tree-inline.c
+index d68d76fe3..42482c86e 100644
+--- a/gcc/tree-inline.c
++++ b/gcc/tree-inline.c
+@@ -847,7 +847,12 @@ remap_dependence_clique (copy_body_data *id, unsigned short clique)
+   bool existed;
+   unsigned short &newc = id->dependence_map->get_or_insert (clique, &existed);
+   if (!existed)
+-    newc = ++cfun->last_clique;
++    {
++      /* Clique 1 is reserved for local ones set by PTA.  */
++      if (cfun->last_clique == 0)
++	cfun->last_clique = 1;
++      newc = ++cfun->last_clique;
++    }
+   return newc;
+ }
+ 
+@@ -2616,7 +2621,11 @@ copy_loops (copy_body_data *id,
+ 	      dest_loop->simduid = remap_decl (src_loop->simduid, id);
+ 	      cfun->has_simduid_loops = true;
+ 	    }
+-
++	  if (id->src_cfun->last_clique != 0)
++	    dest_loop->owned_clique
++	      = remap_dependence_clique (id,
++					 src_loop->owned_clique
++					 ? src_loop->owned_clique : 1);
+ 	  /* Recurse.  */
+ 	  copy_loops (id, dest_loop, src_loop);
+ 	}
+diff --git a/gcc/tree-ssa-structalias.c b/gcc/tree-ssa-structalias.c
+index 7182c798a..bd20ccd42 100644
+--- a/gcc/tree-ssa-structalias.c
++++ b/gcc/tree-ssa-structalias.c
+@@ -7321,7 +7321,11 @@ maybe_set_dependence_info (tree ref, tree ptr,
+       if (MR_DEPENDENCE_CLIQUE (ref) == 0)
+ 	{
+ 	  if (clique == 0)
+-	    clique = ++cfun->last_clique;
++	    {
++	      if (cfun->last_clique == 0)
++		cfun->last_clique = 1;
++	      clique = 1;
++	    }
+ 	  if (restrict_var->ruid == 0)
+ 	    restrict_var->ruid = ++last_ruid;
+ 	  MR_DEPENDENCE_CLIQUE (ref) = clique;
+@@ -7332,12 +7336,42 @@ maybe_set_dependence_info (tree ref, tree ptr,
+   return false;
+ }
+ 
++/* Clear dependence info for the clique DATA.  */
++
++static bool
++clear_dependence_clique (gimple *, tree base, tree, void *data)
++{
++  unsigned short clique = (uintptr_t)data;
++  if ((TREE_CODE (base) == MEM_REF
++       || TREE_CODE (base) == TARGET_MEM_REF)
++      && MR_DEPENDENCE_CLIQUE (base) == clique)
++    {
++      MR_DEPENDENCE_CLIQUE (base) = 0;
++      MR_DEPENDENCE_BASE (base) = 0;
++    }
++
++  return false;
++}
++
+ /* Compute the set of independend memory references based on restrict
+    tags and their conservative propagation to the points-to sets.  */
+ 
+ static void
+ compute_dependence_clique (void)
+ {
++  /* First clear the special "local" clique.  */
++  basic_block bb;
++  if (cfun->last_clique != 0)
++    FOR_EACH_BB_FN (bb, cfun)
++      for (gimple_stmt_iterator gsi = gsi_start_bb (bb);
++	   !gsi_end_p (gsi); gsi_next (&gsi))
++	{
++	  gimple *stmt = gsi_stmt (gsi);
++	  walk_stmt_load_store_ops (stmt, (void *)(uintptr_t) 1,
++				    clear_dependence_clique,
++				    clear_dependence_clique);
++	}
++
+   unsigned short clique = 0;
+   unsigned short last_ruid = 0;
+   bitmap rvars = BITMAP_ALLOC (NULL);

@@ -1,0 +1,109 @@
+diff --git a/gcc/cp/call.c b/gcc/cp/call.c
+index f148b3908..9cff6c826 100644
+--- a/gcc/cp/call.c
++++ b/gcc/cp/call.c
+@@ -89,7 +89,7 @@ struct conversion {
+      language standards, e.g. disregarding pointer qualifiers or
+      converting integers to pointers.  */
+   BOOL_BITFIELD bad_p : 1;
+-  /* If KIND is ck_ref_bind ck_base_conv, true to indicate that a
++  /* If KIND is ck_ref_bind or ck_base, true to indicate that a
+      temporary should be created to hold the result of the
+      conversion.  */
+   BOOL_BITFIELD need_temporary_p : 1;
+@@ -103,6 +103,10 @@ struct conversion {
+      KIND is ck_base, always false.  */
+   BOOL_BITFIELD rvaluedness_matches_p: 1;
+   BOOL_BITFIELD check_narrowing: 1;
++  /* True if this conversion is taking place in a copy-initialization context
++     and we should only consider converting constructors.  Only set in
++     ck_base and ck_rvalue.  */
++  BOOL_BITFIELD copy_init_p : 1;
+   /* The type of the expression resulting from the conversion.  */
+   tree type;
+   union {
+@@ -1141,6 +1145,10 @@ standard_conversion (tree to, tree from, tree expr, bool c_cast_p,
+       conv = build_conv (ck_rvalue, from, conv);
+       if (flags & LOOKUP_PREFER_RVALUE)
+ 	conv->rvaluedness_matches_p = true;
++      /* If we're performing copy-initialization, remember to skip
++	 explicit constructors.  */
++      if (flags & LOOKUP_ONLYCONVERTING)
++	conv->copy_init_p = true;
+     }
+ 
+    /* Allow conversion between `__complex__' data types.  */
+@@ -1383,6 +1391,10 @@ standard_conversion (tree to, tree from, tree expr, bool c_cast_p,
+ 	 type.  A temporary object is created to hold the result of
+ 	 the conversion unless we're binding directly to a reference.  */
+       conv->need_temporary_p = !(flags & LOOKUP_NO_TEMP_BIND);
++      /* If we're performing copy-initialization, remember to skip
++	 explicit constructors.  */
++      if (flags & LOOKUP_ONLYCONVERTING)
++	conv->copy_init_p = true;
+     }
+   else
+     return NULL;
+@@ -6584,12 +6596,16 @@ convert_like_real (conversion *convs, tree expr, tree fn, int argnum,
+ 	 type is the same class as, or a derived class of, the class of the
+ 	 destination [is treated as direct-initialization].  [dcl.init] */
+       flags = LOOKUP_NORMAL;
++      /* This conversion is being done in the context of a user-defined
++	 conversion (i.e. the second step of copy-initialization), so
++	 don't allow any more.  */
+       if (convs->user_conv_p)
+-	/* This conversion is being done in the context of a user-defined
+-	   conversion (i.e. the second step of copy-initialization), so
+-	   don't allow any more.  */
+ 	flags |= LOOKUP_NO_CONVERSION;
+-      else
++      /* We might be performing a conversion of the argument
++	 to the user-defined conversion, i.e., not a conversion of the
++	 result of the user-defined conversion.  In which case we skip
++	 explicit constructors.  */
++      if (convs->copy_init_p)
+ 	flags |= LOOKUP_ONLYCONVERTING;
+       if (convs->rvaluedness_matches_p)
+ 	flags |= LOOKUP_PREFER_RVALUE;
+diff --git a/gcc/testsuite/g++.dg/cpp0x/explicit13.C b/gcc/testsuite/g++.dg/cpp0x/explicit13.C
+new file mode 100644
+index 000000000..cbd9a73d8
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/explicit13.C
+@@ -0,0 +1,14 @@
++// PR c++/90320
++// { dg-do compile { target c++11 } }
++
++struct M {
++  M() = default;
++  template <typename T> explicit M(T&&) = delete;
++};
++
++struct V {
++  V(M m);
++};
++
++M m;
++V v = m;
+diff --git a/gcc/testsuite/g++.dg/cpp0x/explicit14.C b/gcc/testsuite/g++.dg/cpp0x/explicit14.C
+new file mode 100644
+index 000000000..8a8adfe16
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/explicit14.C
+@@ -0,0 +1,16 @@
++// PR c++/90320
++// { dg-do compile { target c++11 } }
++
++struct B { };
++
++struct M : B {
++  M() = default;
++  template <typename T> explicit M(T&&) = delete;
++};
++
++struct V {
++  V(B);
++};
++
++M m;
++V v = m;

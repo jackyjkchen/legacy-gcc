@@ -1,0 +1,66 @@
+diff --git a/gcc/fold-const.c b/gcc/fold-const.c
+index 1cbdd5851..57a20e137 100644
+--- a/gcc/fold-const.c
++++ b/gcc/fold-const.c
+@@ -10529,11 +10529,11 @@ fold_binary_loc (location_t loc,
+ 
+       /* Convert -A / -B to A / B when the type is signed and overflow is
+ 	 undefined.  */
+-      if ((!INTEGRAL_TYPE_P (type) || TYPE_OVERFLOW_UNDEFINED (type))
++      if ((!ANY_INTEGRAL_TYPE_P (type) || TYPE_OVERFLOW_UNDEFINED (type))
+ 	  && TREE_CODE (op0) == NEGATE_EXPR
+ 	  && negate_expr_p (op1))
+ 	{
+-	  if (INTEGRAL_TYPE_P (type))
++	  if (ANY_INTEGRAL_TYPE_P (type))
+ 	    fold_overflow_warning (("assuming signed overflow does not occur "
+ 				    "when distributing negation across "
+ 				    "division"),
+@@ -10543,11 +10543,11 @@ fold_binary_loc (location_t loc,
+ 						    TREE_OPERAND (arg0, 0)),
+ 				  negate_expr (op1));
+ 	}
+-      if ((!INTEGRAL_TYPE_P (type) || TYPE_OVERFLOW_UNDEFINED (type))
++      if ((!ANY_INTEGRAL_TYPE_P (type) || TYPE_OVERFLOW_UNDEFINED (type))
+ 	  && TREE_CODE (arg1) == NEGATE_EXPR
+ 	  && negate_expr_p (op0))
+ 	{
+-	  if (INTEGRAL_TYPE_P (type))
++	  if (ANY_INTEGRAL_TYPE_P (type))
+ 	    fold_overflow_warning (("assuming signed overflow does not occur "
+ 				    "when distributing negation across "
+ 				    "division"),
+diff --git a/gcc/testsuite/gcc.c-torture/execute/pr94412.c b/gcc/testsuite/gcc.c-torture/execute/pr94412.c
+new file mode 100644
+index 000000000..6c806bbd9
+--- /dev/null
++++ b/gcc/testsuite/gcc.c-torture/execute/pr94412.c
+@@ -0,0 +1,28 @@
++/* PR middle-end/94412 */
++
++typedef unsigned V __attribute__ ((__vector_size__ (sizeof (unsigned) * 2)));
++
++void
++foo (V *v, V *w)
++{
++  *w = -*v / 11;
++}
++
++void
++bar (V *v, V *w)
++{
++  *w = -18 / -*v;
++}
++
++int
++main ()
++{
++  V a = (V) { 1, 0 };
++  V b = (V) { 3, __INT_MAX__ };
++  V c, d;
++  foo (&a, &c);
++  bar (&b, &d);
++  if (c[0] != -1U / 11 || c[1] != 0 || d[0] != 0 || d[1] != -18U / -__INT_MAX__)
++    __builtin_abort ();
++  return 0;
++}
