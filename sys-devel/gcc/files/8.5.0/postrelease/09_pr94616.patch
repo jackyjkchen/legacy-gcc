@@ -1,0 +1,144 @@
+diff --git a/gcc/cp/call.c b/gcc/cp/call.c
+index 37135bb67..b015436c8 100644
+--- a/gcc/cp/call.c
++++ b/gcc/cp/call.c
+@@ -323,15 +323,17 @@ build_call_n (tree function, int n, ...)
+ void
+ set_flags_from_callee (tree call)
+ {
+-  bool nothrow;
+-  tree decl = get_callee_fndecl (call);
++  /* Handle both CALL_EXPRs and AGGR_INIT_EXPRs.  */
++  tree decl = cp_get_callee_fndecl_nofold (call);
+ 
+   /* We check both the decl and the type; a function may be known not to
+      throw without being declared throw().  */
+-  nothrow = decl && TREE_NOTHROW (decl);
+-  if (CALL_EXPR_FN (call))
+-    nothrow |= TYPE_NOTHROW_P (TREE_TYPE (TREE_TYPE (CALL_EXPR_FN (call))));
+-  else if (internal_fn_flags (CALL_EXPR_IFN (call)) & ECF_NOTHROW)
++  bool nothrow = decl && TREE_NOTHROW (decl);
++  tree callee = cp_get_callee (call);
++  if (callee)
++    nothrow |= TYPE_NOTHROW_P (TREE_TYPE (TREE_TYPE (callee)));
++  else if (TREE_CODE (call) == CALL_EXPR
++	   && internal_fn_flags (CALL_EXPR_IFN (call)) & ECF_NOTHROW)
+     nothrow = true;
+ 
+   if (!nothrow && at_function_scope_p () && cfun && cp_function_chain)
+diff --git a/gcc/cp/tree.c b/gcc/cp/tree.c
+index 2dcc0354c..6ff506bbd 100644
+--- a/gcc/cp/tree.c
++++ b/gcc/cp/tree.c
+@@ -3018,7 +3018,7 @@ bot_manip (tree* tp, int* walk_subtrees, void* data_)
+ 
+   /* Make a copy of this node.  */
+   t = copy_tree_r (tp, walk_subtrees, NULL);
+-  if (TREE_CODE (*tp) == CALL_EXPR)
++  if (TREE_CODE (*tp) == CALL_EXPR || TREE_CODE (*tp) == AGGR_INIT_EXPR)
+     if (!processing_template_decl)
+       set_flags_from_callee (*tp);
+   if (data.clear_location && EXPR_HAS_LOCATION (*tp))
+diff --git a/gcc/testsuite/g++.dg/cpp0x/initlist-throw1.C b/gcc/testsuite/g++.dg/cpp0x/initlist-throw1.C
+new file mode 100644
+index 000000000..264c6c7a7
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/initlist-throw1.C
+@@ -0,0 +1,29 @@
++// PR c++/85363
++// { dg-do run { target c++11 } }
++
++int
++init (int f)
++{
++  throw f;
++}
++
++struct X {
++  X (int f) : n {init (f)} {}
++  int n;
++};
++
++struct P {
++  X x{20};
++};
++
++int
++main ()
++{
++  try {
++    P p {};
++  }
++  catch (int n) {
++    return 0;
++  }
++  return 1;
++}
+diff --git a/gcc/testsuite/g++.dg/cpp0x/initlist-throw2.C b/gcc/testsuite/g++.dg/cpp0x/initlist-throw2.C
+new file mode 100644
+index 000000000..2bb05834d
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/initlist-throw2.C
+@@ -0,0 +1,33 @@
++// PR c++/85363
++// { dg-do run { target c++11 } }
++
++int
++init (int f)
++{
++  throw f;
++}
++
++struct X {
++  X () : n {init (42)} {}
++  int n;
++};
++
++struct P {
++  struct R {
++    struct Q {
++      X x = {};
++    } q;
++  } r;
++};
++
++int
++main ()
++{
++  try {
++    P p {};
++  }
++  catch (int n) {
++    return 0;
++  }
++  return 1;
++}
+diff --git a/gcc/testsuite/g++.dg/cpp0x/pr94616.C b/gcc/testsuite/g++.dg/cpp0x/pr94616.C
+new file mode 100644
+index 000000000..a8fe700a9
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/pr94616.C
+@@ -0,0 +1,23 @@
++// PR c++/94616
++// { dg-do compile { target c++11 } }
++
++struct Bar {
++  Bar(int n) { if (n > 0) throw 2; }
++  ~Bar() {}
++};
++
++struct Foo {
++  Bar b1 = 0;
++  Bar b2 = 1;
++  Foo() {}
++  ~Foo() {}
++};
++
++int
++main()
++{
++  try {
++    Foo f;
++  } catch(int) {
++  }
++}
