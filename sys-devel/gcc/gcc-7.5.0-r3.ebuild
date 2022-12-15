@@ -40,8 +40,10 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/11_pr86274.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/12_pr81863.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/13_pr68823.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/14_pr84858.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/15_pr93246.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/16_pr96369.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/17_pr79622.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/18_pr80778-84305.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/19_pr86617.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/20_pr94412.patch
@@ -51,4 +53,6 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/24_pr66623.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/25_pr80533.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/26_pr44690.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/27_pr71351.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/28_pr81863.patch
 }

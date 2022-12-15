@@ -1,0 +1,68 @@
+diff --git a/gcc/graphite-scop-detection.c b/gcc/graphite-scop-detection.c
+index 77d68f2f0..6824d0cad 100644
+--- a/gcc/graphite-scop-detection.c
++++ b/gcc/graphite-scop-detection.c
+@@ -1744,7 +1744,9 @@ build_cross_bb_scalars_def (scop_p scop, tree def, basic_block def_bb,
+   gimple *use_stmt;
+   imm_use_iterator imm_iter;
+   FOR_EACH_IMM_USE_STMT (use_stmt, imm_iter, def)
+-    if (def_bb != gimple_bb (use_stmt) && !is_gimple_debug (use_stmt))
++    if ((def_bb != gimple_bb (use_stmt) && !is_gimple_debug (use_stmt))
++	/* PHIs have their effect at "BBs" on the edges.  See PR79622.  */
++	|| gimple_code (SSA_NAME_DEF_STMT (def)) == GIMPLE_PHI)
+       {
+ 	writes->safe_push (def);
+ 	DEBUG_PRINT (dp << "Adding scalar write: ";
+@@ -1758,7 +1760,8 @@ build_cross_bb_scalars_def (scop_p scop, tree def, basic_block def_bb,
+       }
+ }
+ 
+-/* Record DEF if it is used in other bbs different than DEF_BB in the SCOP.  */
++/* Record USE if it is defined in other bbs different than USE_STMT
++   in the SCOP.  */
+ 
+ static void
+ build_cross_bb_scalars_use (scop_p scop, tree use, gimple *use_stmt,
+@@ -1774,7 +1777,9 @@ build_cross_bb_scalars_use (scop_p scop, tree use, gimple *use_stmt,
+     return;
+ 
+   gimple *def_stmt = SSA_NAME_DEF_STMT (use);
+-  if (gimple_bb (def_stmt) != gimple_bb (use_stmt))
++  if (gimple_bb (def_stmt) != gimple_bb (use_stmt)
++      /* PHIs have their effect at "BBs" on the edges.  See PR79622.  */
++      || gimple_code (def_stmt) == GIMPLE_PHI)
+     {
+       DEBUG_PRINT (dp << "Adding scalar read: ";
+ 		   print_generic_expr (dump_file, use, 0);
+diff --git a/gcc/testsuite/gcc.dg/graphite/pr79622.c b/gcc/testsuite/gcc.dg/graphite/pr79622.c
+new file mode 100644
+index 000000000..d71e408a4
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/graphite/pr79622.c
+@@ -0,0 +1,26 @@
++/* { dg-do run } */
++/* { dg-options "-O2 -floop-nest-optimize" } */
++
++int bf;
++
++int
++main (void)
++{
++  int dc[5];
++
++  for (bf = 0; bf < 2; ++bf)
++    {
++      int l9, g5 = -1;
++
++      for (l9 = 0; l9 < 5; ++l9)
++	{
++	  dc[l9] = g5;
++	  g5 = (dc[l9] > 0);
++	}
++    }
++
++  if (dc[0] != -1)
++    __builtin_abort ();
++
++  return 0;
++}
