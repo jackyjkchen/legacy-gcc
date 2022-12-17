@@ -1,0 +1,136 @@
+diff --git a/gcc/combine.c b/gcc/combine.c
+index 14445f9ca..47b07a020 100644
+--- a/gcc/combine.c
++++ b/gcc/combine.c
+@@ -2561,6 +2561,16 @@ can_split_parallel_of_n_reg_sets (rtx_insn *insn, int n)
+   return true;
+ }
+ 
++/* Callback function to count autoincs.  */
++
++static int
++count_auto_inc (rtx, rtx, rtx, rtx, rtx, void *arg)
++{
++  (*((int *) arg))++;
++
++  return 0;
++}
++
+ /* Try to combine the insns I0, I1 and I2 into I3.
+    Here I0, I1 and I2 appear earlier than I3.
+    I0 and I1 can be zero; then we combine just I2 into I3, or I1 and I2 into
+@@ -2624,6 +2634,7 @@ try_combine (rtx_insn *i3, rtx_insn *i2, rtx_insn *i1, rtx_insn *i0,
+   int have_mult = 0;
+   int swap_i2i3 = 0;
+   int changed_i3_dest = 0;
++  int n_auto_inc = 0;
+ 
+   int maxreg;
+   rtx_insn *temp_insn;
+@@ -3093,6 +3104,16 @@ try_combine (rtx_insn *i3, rtx_insn *i2, rtx_insn *i1, rtx_insn *i0,
+       return 0;
+     }
+ 
++  /* Count how many auto_inc expressions there were in the original insns;
++     we need to have the same number in the resulting patterns.  */
++
++  if (i0)
++    for_each_inc_dec (PATTERN (i0), count_auto_inc, &n_auto_inc);
++  if (i1)
++    for_each_inc_dec (PATTERN (i1), count_auto_inc, &n_auto_inc);
++  for_each_inc_dec (PATTERN (i2), count_auto_inc, &n_auto_inc);
++  for_each_inc_dec (PATTERN (i3), count_auto_inc, &n_auto_inc);
++
+   /* If the set in I2 needs to be kept around, we must make a copy of
+      PATTERN (I2), so that when we substitute I1SRC for I1DEST in
+      PATTERN (I2), we are only substituting for the original I1DEST, not into
+@@ -3292,18 +3313,11 @@ try_combine (rtx_insn *i3, rtx_insn *i2, rtx_insn *i1, rtx_insn *i0,
+ 
+   if (i1 && GET_CODE (newpat) != CLOBBER)
+     {
+-      /* Check that an autoincrement side-effect on I1 has not been lost.
+-	 This happens if I1DEST is mentioned in I2 and dies there, and
+-	 has disappeared from the new pattern.  */
+-      if ((FIND_REG_INC_NOTE (i1, NULL_RTX) != 0
+-	   && i1_feeds_i2_n
+-	   && dead_or_set_p (i2, i1dest)
+-	   && !reg_overlap_mentioned_p (i1dest, newpat))
+-	   /* Before we can do this substitution, we must redo the test done
+-	      above (see detailed comments there) that ensures I1DEST isn't
+-	      mentioned in any SETs in NEWPAT that are field assignments.  */
+-	  || !combinable_i3pat (NULL, &newpat, i1dest, NULL_RTX, NULL_RTX,
+-				0, 0, 0))
++      /* Before we can do this substitution, we must redo the test done
++	 above (see detailed comments there) that ensures I1DEST isn't
++	 mentioned in any SETs in NEWPAT that are field assignments.  */
++      if (!combinable_i3pat (NULL, &newpat, i1dest, NULL_RTX, NULL_RTX,
++			     0, 0, 0))
+ 	{
+ 	  undo_all ();
+ 	  return 0;
+@@ -3333,12 +3347,8 @@ try_combine (rtx_insn *i3, rtx_insn *i2, rtx_insn *i1, rtx_insn *i0,
+ 
+   if (i0 && GET_CODE (newpat) != CLOBBER)
+     {
+-      if ((FIND_REG_INC_NOTE (i0, NULL_RTX) != 0
+-	   && ((i0_feeds_i2_n && dead_or_set_p (i2, i0dest))
+-	       || (i0_feeds_i1_n && dead_or_set_p (i1, i0dest)))
+-	   && !reg_overlap_mentioned_p (i0dest, newpat))
+-	  || !combinable_i3pat (NULL, &newpat, i0dest, NULL_RTX, NULL_RTX,
+-				0, 0, 0))
++      if (!combinable_i3pat (NULL, &newpat, i0dest, NULL_RTX, NULL_RTX,
++			     0, 0, 0))
+ 	{
+ 	  undo_all ();
+ 	  return 0;
+@@ -3359,6 +3369,20 @@ try_combine (rtx_insn *i3, rtx_insn *i2, rtx_insn *i1, rtx_insn *i0,
+       substed_i0 = 1;
+     }
+ 
++  if (n_auto_inc)
++    {
++      int new_n_auto_inc = 0;
++      for_each_inc_dec (newpat, count_auto_inc, &new_n_auto_inc);
++
++      if (n_auto_inc != new_n_auto_inc)
++	{
++	  if (dump_file && (dump_flags & TDF_DETAILS))
++	    fprintf (dump_file, "Number of auto_inc expressions changed\n");
++	  undo_all ();
++	  return 0;
++	}
++    }
++
+   /* Fail if an autoincrement side-effect has been duplicated.  Be careful
+      to count all the ways that I2SRC and I1SRC can be used.  */
+   if ((FIND_REG_INC_NOTE (i2, NULL_RTX) != 0
+diff --git a/gcc/testsuite/gcc.dg/torture/pr89794.c b/gcc/testsuite/gcc.dg/torture/pr89794.c
+new file mode 100644
+index 000000000..91bb0c413
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/torture/pr89794.c
+@@ -0,0 +1,24 @@
++/* { dg-do run } */
++
++typedef unsigned short u16;
++typedef unsigned int u32;
++typedef unsigned long long u64;
++
++u32 a, b, c, d;
++
++u32 foo (u32 f, u32 g, u32 g2, u32 g3, u16 h, u16 i)
++{
++  (void)g, (void)g2, (void)g3, (void)h;
++  d = __builtin_bswap64 (i);
++  __builtin_sub_overflow (0, d, &b);
++  __builtin_memset (&i, c, 2);
++  a = 0;
++  return b + f + i + c;
++}
++
++int main (void)
++{
++  u32 x = foo (0, 0, 0, 0, 0, 0);
++  asm ("" :: "r" (x));
++  return 0;
++}
