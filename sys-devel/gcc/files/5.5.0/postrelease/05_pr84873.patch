@@ -1,0 +1,108 @@
+diff --git a/gcc/c-family/c-gimplify.c b/gcc/c-family/c-gimplify.c
+index c6a67a1a4..5efa7602c 100644
+--- a/gcc/c-family/c-gimplify.c
++++ b/gcc/c-family/c-gimplify.c
+@@ -269,7 +269,9 @@ c_gimplify_expr (tree *expr_p, gimple_seq *pre_p ATTRIBUTE_UNUSED,
+ 				    unsigned_type_node)
+ 	    && !types_compatible_p (TYPE_MAIN_VARIANT (TREE_TYPE (*op1_p)),
+ 				    integer_type_node))
+-	  *op1_p = convert (unsigned_type_node, *op1_p);
++	  /* Make sure to unshare the result, tree sharing is invalid
++	     during gimplification.  */
++	  *op1_p = unshare_expr (convert (unsigned_type_node, *op1_p));
+ 	break;
+       }
+ 
+diff --git a/gcc/testsuite/c-c++-common/pr84873.c b/gcc/testsuite/c-c++-common/pr84873.c
+new file mode 100644
+index 000000000..5eb8a8df8
+--- /dev/null
++++ b/gcc/testsuite/c-c++-common/pr84873.c
+@@ -0,0 +1,8 @@
++/* { dg-do compile } */
++/* { dg-additional-options "-frounding-math" } */
++
++int
++i1 (int w3, int n9)
++{
++  return w3 >> ((long int)(1 + 0.1) + -!n9);
++}
+diff --git a/gcc/testsuite/gcc.dg/vect/pr85597.c b/gcc/testsuite/gcc.dg/vect/pr85597.c
+new file mode 100644
+index 000000000..cf615f9c4
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/vect/pr85597.c
+@@ -0,0 +1,26 @@
++/* { dg-do compile } */
++/* { dg-options "-O3" } */
++/* { dg-additional-options "-mfma" { target { x86_64-*-* i?86-*-* } } } */
++
++extern double fma (double, double, double);
++
++static inline void
++bar (int i, double *D, double *S)
++{
++  while (i-- > 0)
++    {
++      D[0] = fma (1, S[0], D[0]);
++      D[1] = fma (1, S[1], D[1]);
++      D[2] = fma (1, S[2], D[2]);
++      D[3] = fma (1, S[3], D[3]);
++      D += 4;
++      S += 4;
++    }
++}
++
++void
++foo (double *d, double *s)
++{
++  bar (10, d, s);
++}
++
+diff --git a/gcc/tree-vect-stmts.c b/gcc/tree-vect-stmts.c
+index aae186ada..eae29b4a7 100644
+--- a/gcc/tree-vect-stmts.c
++++ b/gcc/tree-vect-stmts.c
+@@ -4885,19 +4885,34 @@ vectorizable_operation (gimple stmt, gimple_stmt_iterator *gsi,
+       /* Handle uses.  */
+       if (j == 0)
+ 	{
+-	  if (op_type == binary_op || op_type == ternary_op)
++	  if (op_type == binary_op)
+ 	    vect_get_vec_defs (op0, op1, stmt, &vec_oprnds0, &vec_oprnds1,
+ 			       slp_node, -1);
++	  else if (op_type == ternary_op)
++	    {
++	      if (slp_node)
++		{
++		  auto_vec<tree> ops(3);
++		  ops.quick_push (op0);
++		  ops.quick_push (op1);
++		  ops.quick_push (op2);
++		  auto_vec<vec<tree> > vec_defs(3);
++		  vect_get_slp_defs (ops, slp_node, &vec_defs, -1);
++		  vec_oprnds0 = vec_defs[0];
++		  vec_oprnds1 = vec_defs[1];
++		  vec_oprnds2 = vec_defs[2];
++		}
++	      else
++		{ 
++		  vect_get_vec_defs (op0, op1, stmt, &vec_oprnds0, &vec_oprnds1,
++				     NULL, -1);
++		  vect_get_vec_defs (op2, NULL_TREE, stmt, &vec_oprnds2, NULL,
++				     NULL, -1);
++		}
++	    }
+ 	  else
+ 	    vect_get_vec_defs (op0, NULL_TREE, stmt, &vec_oprnds0, NULL,
+ 			       slp_node, -1);
+-	  if (op_type == ternary_op)
+-	    {
+-	      vec_oprnds2.create (1);
+-	      vec_oprnds2.quick_push (vect_get_vec_def_for_operand (op2,
+-		                                                    stmt,
+-								    NULL));
+-	    }
+ 	}
+       else
+ 	{

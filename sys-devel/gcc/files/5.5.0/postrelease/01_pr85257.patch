@@ -1,0 +1,61 @@
+diff --git a/gcc/fold-const.c b/gcc/fold-const.c
+index 8fa6e489f..d51cdb8f9 100644
+--- a/gcc/fold-const.c
++++ b/gcc/fold-const.c
+@@ -7498,7 +7498,7 @@ native_encode_vector (const_tree expr, unsigned char *ptr, int len, int off)
+ 	return 0;
+       offset += res;
+       if (offset >= len)
+-	return offset;
++	return (off == -1 && i < count - 1) ? 0 : offset;
+       if (off != -1)
+ 	off = 0;
+     }
+diff --git a/gcc/testsuite/gcc.dg/pr85257.c b/gcc/testsuite/gcc.dg/pr85257.c
+new file mode 100644
+index 000000000..75fafd96f
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr85257.c
+@@ -0,0 +1,20 @@
++/* PR tree-optimization/85257 */
++/* { dg-do run { target int128 } } */
++/* { dg-options "-O2 -fno-tree-ccp" } */
++
++typedef __int128 V __attribute__ ((__vector_size__ (16 * sizeof (__int128))));
++
++__int128 __attribute__ ((noinline, noclone))
++foo (void)
++{
++  V v = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16 };
++  return v[5];
++}
++
++int
++main ()
++{
++  if (foo () != 6)
++    __builtin_abort ();
++  return 0;
++}
+diff --git a/gcc/tree-ssa-sccvn.c b/gcc/tree-ssa-sccvn.c
+index 5007a993f..731df1e3e 100644
+--- a/gcc/tree-ssa-sccvn.c
++++ b/gcc/tree-ssa-sccvn.c
+@@ -1800,13 +1800,11 @@ vn_reference_lookup_3 (ao_ref *ref, tree vuse, void *vr_,
+ 	  int len;
+ 
+ 	  len = native_encode_expr (gimple_assign_rhs1 (def_stmt),
+-				    buffer, sizeof (buffer));
+-	  if (len > 0)
++				    buffer, sizeof (buffer),
++				    (offset - offset2) / BITS_PER_UNIT);
++	  if (len > 0 && len * BITS_PER_UNIT >= ref->size)
+ 	    {
+-	      tree val = native_interpret_expr (vr->type,
+-						buffer
+-						+ ((offset - offset2)
+-						   / BITS_PER_UNIT),
++	      tree val = native_interpret_expr (vr->type, buffer,
+ 						ref->size / BITS_PER_UNIT);
+ 	      if (val)
+ 		return vn_reference_lookup_or_insert_for_pieces

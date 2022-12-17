@@ -41,4 +41,18 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/00_fix-building-on-ppc64.patch
 	[[ $(tc-arch) == "sh" ]] && eapply "${FILESDIR}"/${PV}/01_workaround-bootstrap-for-sh4.patch
 	use go && eapply "${FILESDIR}"/${PV}/02_fix-libgo-for-new-glibc.patch
+
+	eapply "${FILESDIR}"/${PV}/postrelease/00_pr94460.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/01_pr85257.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/02_pr104510.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/03_pr105123.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/04_pr89009.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/05_pr84873.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/06_pr44690.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/07_pr85859.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/08_pr101442.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/09_pr96369.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/10_pr86334-88906.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/11_pr94509.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/12_pr80533.patch
 }

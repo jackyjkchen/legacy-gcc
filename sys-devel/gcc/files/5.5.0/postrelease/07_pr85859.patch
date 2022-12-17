@@ -1,0 +1,46 @@
+diff --git a/gcc/testsuite/gcc.dg/pr85859.c b/gcc/testsuite/gcc.dg/pr85859.c
+new file mode 100644
+index 000000000..96eb96711
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr85859.c
+@@ -0,0 +1,19 @@
++/* { dg-do run } */
++/* { dg-options "-ftree-tail-merge -Wno-div-by-zero -O2 -fno-dce -fno-isolate-erroneous-paths-dereference -fno-tree-dce -fno-tree-vrp" } */
++
++int b, c, d, e;
++
++__attribute__ ((noinline, noclone))
++int foo (short f)
++{
++  f %= 0;
++  return f;
++}
++
++int
++main (void)
++{
++  b = (unsigned char) __builtin_parity (d);
++  e ? foo (0) : (long) &c;
++  return 0;
++}
+diff --git a/gcc/tree-ssa-tail-merge.c b/gcc/tree-ssa-tail-merge.c
+index a8e337c5e..cabc02258 100644
+--- a/gcc/tree-ssa-tail-merge.c
++++ b/gcc/tree-ssa-tail-merge.c
+@@ -337,7 +337,15 @@ stmt_local_def (gimple stmt)
+   if (gimple_vdef (stmt) != NULL_TREE
+       || gimple_has_side_effects (stmt)
+       || gimple_could_trap_p_1 (stmt, false, false)
+-      || gimple_vuse (stmt) != NULL_TREE)
++      || gimple_vuse (stmt) != NULL_TREE
++      /* Copied from tree-ssa-ifcombine.c:bb_no_side_effects_p():
++	 const calls don't match any of the above, yet they could
++	 still have some side-effects - they could contain
++	 gimple_could_trap_p statements, like floating point
++	 exceptions or integer division by zero.  See PR70586.
++	 FIXME: perhaps gimple_has_side_effects or gimple_could_trap_p
++	 should handle this.  */
++      || is_gimple_call (stmt))
+     return false;
+ 
+   def_p = SINGLE_SSA_DEF_OPERAND (stmt, SSA_OP_DEF);

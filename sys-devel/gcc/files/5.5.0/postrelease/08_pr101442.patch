@@ -1,0 +1,80 @@
+diff --git a/gcc/cp/decl.c b/gcc/cp/decl.c
+index 3472d29af..0eff5076e 100644
+--- a/gcc/cp/decl.c
++++ b/gcc/cp/decl.c
+@@ -6832,7 +6832,7 @@ cp_finish_decl (tree decl, tree init, bool init_const_expr_p,
+     {
+       unsigned i; tree t;
+       FOR_EACH_VEC_ELT (*cleanups, i, t)
+-	push_cleanup (decl, t, false);
++	push_cleanup (NULL_TREE, t, false);
+       release_tree_vector (cleanups);
+     }
+ 
+diff --git a/gcc/cp/init.c b/gcc/cp/init.c
+index 841afbd8f..01006a9a4 100644
+--- a/gcc/cp/init.c
++++ b/gcc/cp/init.c
+@@ -700,7 +700,7 @@ perform_member_init (tree member, tree init)
+       init = build2 (INIT_EXPR, type, decl, init);
+       finish_expr_stmt (init);
+       FOR_EACH_VEC_ELT (*cleanups, i, t)
+-	push_cleanup (decl, t, false);
++	push_cleanup (NULL_TREE, t, false);
+       release_tree_vector (cleanups);
+     }
+   else if (type_build_ctor_call (type)
+diff --git a/gcc/cp/semantics.c b/gcc/cp/semantics.c
+index eb79696a5..7c8e53a53 100644
+--- a/gcc/cp/semantics.c
++++ b/gcc/cp/semantics.c
+@@ -489,7 +489,8 @@ do_pushlevel (scope_kind sk)
+ 
+ /* Queue a cleanup.  CLEANUP is an expression/statement to be executed
+    when the current scope is exited.  EH_ONLY is true when this is not
+-   meant to apply to normal control flow transfer.  */
++   meant to apply to normal control flow transfer.  DECL is the VAR_DECL
++   being cleaned up, if any, or null for temporaries or subobjects.  */
+ 
+ void
+ push_cleanup (tree decl, tree cleanup, bool eh_only)
+diff --git a/gcc/testsuite/g++.dg/cpp0x/initlist-nrv1.C b/gcc/testsuite/g++.dg/cpp0x/initlist-nrv1.C
+new file mode 100644
+index 000000000..e44dbecfe
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/initlist-nrv1.C
+@@ -0,0 +1,34 @@
++// PR c++/101442
++// { dg-do run { target c++11 } }
++
++bool destroyed = false;
++
++struct A
++{
++  A() {}
++  A(const A &) = delete;
++  A &operator=(const A &) = delete;
++  ~A() {destroyed = true;}
++};
++
++struct B
++{
++  const A &a;
++  struct string {
++    string(const char*) { }
++    ~string() { }
++  } s;
++};
++
++B foo()
++{
++  B ret{ A{}, "" };
++  return ret;
++}
++
++int main()
++{
++  B b = foo();
++  if (!destroyed)
++    __builtin_abort();
++}

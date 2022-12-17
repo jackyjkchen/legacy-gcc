@@ -1,0 +1,139 @@
+diff --git a/gcc/ipa-cp.c b/gcc/ipa-cp.c
+index b09167fc9..8d9ca6fa1 100644
+--- a/gcc/ipa-cp.c
++++ b/gcc/ipa-cp.c
+@@ -733,7 +733,7 @@ build_toporder_info (struct ipa_topo_info *topo)
+   topo->stack = XCNEWVEC (struct cgraph_node *, symtab->cgraph_count);
+ 
+   gcc_checking_assert (topo->stack_top == 0);
+-  topo->nnodes = ipa_reduced_postorder (topo->order, true, true, NULL);
++  topo->nnodes = ipa_reduced_postorder (topo->order, true, NULL);
+ }
+ 
+ /* Free information about strongly connected components and the arrays in
+diff --git a/gcc/ipa-inline.c b/gcc/ipa-inline.c
+index ab94499c9..8bf8cf2d1 100644
+--- a/gcc/ipa-inline.c
++++ b/gcc/ipa-inline.c
+@@ -1743,7 +1743,7 @@ inline_small_functions (void)
+      metrics.  */
+ 
+   max_count = 0;
+-  ipa_reduced_postorder (order, true, true, NULL);
++  ipa_reduced_postorder (order, true, NULL);
+   free (order);
+ 
+   FOR_EACH_DEFINED_FUNCTION (node)
+diff --git a/gcc/ipa-pure-const.c b/gcc/ipa-pure-const.c
+index 75d3ddf91..0a702ceee 100644
+--- a/gcc/ipa-pure-const.c
++++ b/gcc/ipa-pure-const.c
+@@ -1197,7 +1197,7 @@ propagate_pure_const (void)
+   struct ipa_dfs_info * w_info;
+   bool remove_p = false;
+ 
+-  order_pos = ipa_reduced_postorder (order, true, false,
++  order_pos = ipa_reduced_postorder (order, true,
+ 				     ignore_edge_for_pure_const);
+   if (dump_file)
+     {
+@@ -1517,7 +1517,7 @@ propagate_nothrow (void)
+   int i;
+   struct ipa_dfs_info * w_info;
+ 
+-  order_pos = ipa_reduced_postorder (order, true, false,
++  order_pos = ipa_reduced_postorder (order, true,
+ 				     ignore_edge_for_nothrow);
+   if (dump_file)
+     {
+diff --git a/gcc/ipa-reference.c b/gcc/ipa-reference.c
+index b52db42ed..1d8b42948 100644
+--- a/gcc/ipa-reference.c
++++ b/gcc/ipa-reference.c
+@@ -730,7 +730,7 @@ propagate (void)
+      the global information.  All the nodes within a cycle will have
+      the same info so we collapse cycles first.  Then we can do the
+      propagation in one pass from the leaves to the roots.  */
+-  order_pos = ipa_reduced_postorder (order, true, true, ignore_edge_p);
++  order_pos = ipa_reduced_postorder (order, true, ignore_edge_p);
+   if (dump_file)
+     ipa_print_order (dump_file, "reduced", order, order_pos);
+ 
+diff --git a/gcc/ipa-utils.c b/gcc/ipa-utils.c
+index cee0c6c95..1497a44ea 100644
+--- a/gcc/ipa-utils.c
++++ b/gcc/ipa-utils.c
+@@ -62,7 +62,6 @@ struct searchc_env {
+   int order_pos;
+   splay_tree nodes_marked_new;
+   bool reduce;
+-  bool allow_overwritable;
+   int count;
+ };
+ 
+@@ -104,7 +103,7 @@ searchc (struct searchc_env* env, struct cgraph_node *v,
+ 
+       if (w->aux
+ 	  && (avail > AVAIL_INTERPOSABLE
+-	      || (env->allow_overwritable && avail == AVAIL_INTERPOSABLE)))
++	      || avail == AVAIL_INTERPOSABLE))
+ 	{
+ 	  w_info = (struct ipa_dfs_info *) w->aux;
+ 	  if (w_info->new_node)
+@@ -161,7 +160,7 @@ searchc (struct searchc_env* env, struct cgraph_node *v,
+ 
+ int
+ ipa_reduced_postorder (struct cgraph_node **order,
+-		       bool reduce, bool allow_overwritable,
++		       bool reduce,
+ 		       bool (*ignore_edge) (struct cgraph_edge *))
+ {
+   struct cgraph_node *node;
+@@ -174,15 +173,13 @@ ipa_reduced_postorder (struct cgraph_node **order,
+   env.nodes_marked_new = splay_tree_new (splay_tree_compare_ints, 0, 0);
+   env.count = 1;
+   env.reduce = reduce;
+-  env.allow_overwritable = allow_overwritable;
+ 
+   FOR_EACH_DEFINED_FUNCTION (node)
+     {
+       enum availability avail = node->get_availability ();
+ 
+       if (avail > AVAIL_INTERPOSABLE
+-	  || (allow_overwritable
+-	      && (avail == AVAIL_INTERPOSABLE)))
++	  || avail == AVAIL_INTERPOSABLE)
+ 	{
+ 	  /* Reuse the info if it is already there.  */
+ 	  struct ipa_dfs_info *info = (struct ipa_dfs_info *) node->aux;
+diff --git a/gcc/ipa-utils.h b/gcc/ipa-utils.h
+index 58d2de7e3..1ba1983ad 100644
+--- a/gcc/ipa-utils.h
++++ b/gcc/ipa-utils.h
+@@ -36,7 +36,7 @@ struct ipa_dfs_info {
+ 
+ /* In ipa-utils.c  */
+ void ipa_print_order (FILE*, const char *, struct cgraph_node**, int);
+-int ipa_reduced_postorder (struct cgraph_node **, bool, bool,
++int ipa_reduced_postorder (struct cgraph_node **, bool,
+ 			  bool (*ignore_edge) (struct cgraph_edge *));
+ void ipa_free_postorder_info (void);
+ vec<cgraph_node *> ipa_get_nodes_in_cycle (struct cgraph_node *);
+diff --git a/gcc/testsuite/g++.dg/ipa/pr89009.C b/gcc/testsuite/g++.dg/ipa/pr89009.C
+new file mode 100644
+index 000000000..6b4fc65a6
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/ipa/pr89009.C
+@@ -0,0 +1,12 @@
++/* PR ipa/89009 */
++/* { dg-do run } */
++/* { dg-options "-fvisibility=hidden -fpic -O2 -fno-inline" } */
++
++#pragma GCC visibility push(default)
++void foo1() { __builtin_printf ("foo\n"); }
++#pragma GCC visibility pop
++void foo2() { __builtin_printf ("foo\n"); }
++
++int main() { foo2(); return 0; }
++
++/* { dg-output "foo" } */
