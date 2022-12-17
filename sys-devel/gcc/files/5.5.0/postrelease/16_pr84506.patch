@@ -1,0 +1,39 @@
+diff --git a/gcc/fortran/trans-io.c b/gcc/fortran/trans-io.c
+index aa147066f..c1011b33f 100644
+--- a/gcc/fortran/trans-io.c
++++ b/gcc/fortran/trans-io.c
+@@ -623,12 +623,12 @@ set_parameter_value_inquire (stmtblock_t *block, tree var,
+       /* Don't evaluate the UNIT number multiple times.  */
+       se.expr = gfc_evaluate_now (se.expr, &se.pre);
+ 
+-      /* UNIT numbers should be greater than zero.  */
++      /* UNIT numbers should be greater than the min.  */
+       i = gfc_validate_kind (BT_INTEGER, 4, false);
++      val = gfc_conv_mpz_to_tree (gfc_integer_kinds[i].pedantic_min_int, 4);
+       cond1 = build2_loc (input_location, LT_EXPR, boolean_type_node,
+ 			  se.expr,
+-			  fold_convert (TREE_TYPE (se.expr),
+-			  integer_zero_node));
++			  fold_convert (TREE_TYPE (se.expr), val));
+       /* UNIT numbers should be less than the max.  */
+       val = gfc_conv_mpz_to_tree (gfc_integer_kinds[i].huge, 4);
+       cond2 = build2_loc (input_location, GT_EXPR, boolean_type_node,
+diff --git a/gcc/testsuite/gfortran.dg/inquire_19.f90 b/gcc/testsuite/gfortran.dg/inquire_19.f90
+new file mode 100644
+index 000000000..7d01b6b56
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/inquire_19.f90
+@@ -0,0 +1,13 @@
++! { dg-do run }
++! PR84506  INQUIRE(pos=) always sets pos=0 with -fdefault-integer-8
++program TestInquire
++   implicit none
++   integer(8) :: iUnit
++   integer(8) :: iPos
++   open(newunit=iunit, file='output.txt', access='stream', status='replace')
++   write(iUnit) 'TEXT'
++   inquire(iUnit, pos=iPos)
++   close(iUnit, status='delete')
++   !print *, iPos
++   if (iPos.ne.5) stop 1
++end program TestInquire
