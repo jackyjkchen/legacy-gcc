@@ -73,9 +73,9 @@ static void print_number(void) {
         printf(" 0x%02X  %llu%s\n", i, (unsigned long long)(count[i]), msg);
 #endif
 #else
-/* Posix LP64 model, unsigned long == wordsize == size_t */
-/* Windowsy 32bit platform, unsigned long == size_t == 32bit */
-/* WIN/DOS 16bit platform, unsigned long > unsigned int == size_t == 16bit */
+/* Posix LP64 model, unsigned long == wordsize */
+/* Windows 32bit platform, unsigned long == 32bit */
+/* WIN/DOS 16bit platform, unsigned long == 32bit */
         printf(" 0x%02X  %lu%s\n", i, (unsigned long)(count[i]), msg);
 #endif
         if (max_count < count[i]) {

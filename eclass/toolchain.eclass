@@ -268,6 +268,8 @@ if [[ ${PN} != kgcc64 && ${PN} != gcc-* ]] ; then
 	tc_version_is_at_least 4.3 && IUSE+=" fixed-point"
 	tc_version_is_at_least 4.7 && IUSE+=" go"
 
+	tc_version_is_between 4.0 4.9 && IUSE+=" libmudflap"
+
 	# sanitizer support appeared in gcc-4.8, but <gcc-5 does not
 	# support modern glibc.
     # only >=gcc-8 support sanitizer in >=glibc-2.36
@@ -1570,6 +1572,10 @@ toolchain_src_configure() {
 		confgcc+=( --without-{cloog,ppl} )
 	fi
 
+	if tc_version_is_between 4.0 4.9; then
+		confgcc+=( $(use_enable libmudflap) )
+	fi
+
 	if tc_version_is_at_least 4.8; then
 		if in_iuse sanitize ; then
 			# See Note [implicitly enabled flags]
@@ -2218,6 +2224,7 @@ toolchain_src_install() {
 			-name libg2c.la -o \
 			-name libf2c.la -o \
 			-name libgo.la -o \
+			-name 'libmudflap*.la' \
 			-name 'lib*san.la' \
 		')' -type f -delete
 
