@@ -1074,8 +1074,16 @@ toolchain_src_configure() {
 
 	if tc_version_is_at_least 2.7 ; then
 		case $(tc-arch) in
-			amd64|x86|ppc|ppc64|s390) tc_version_is_at_least 4.6 || ENABLE_WERROR="yes" ;;
-			*) ;;
+			amd64|x86|alpha|ppc|ppc64|s390)
+				tc_version_is_at_least 4.6 || ENABLE_WERROR="yes"
+				;;
+			arm)
+				if [[ ${CTARGET} == arm*-*-linux-gnueabi ]] ; then
+					tc_version_is_at_least 4.6 || ENABLE_WERROR="yes"
+				fi
+				;;
+			*)
+				;;
 		esac
 		if [[ ${ENABLE_WERROR} == "yes" ]] && ! is_crosscompile ; then
 			confgcc+=( --enable-werror )

@@ -30,7 +30,7 @@ src_prepare() {
 	toolchain_src_prepare
 	use vanilla && return 0
 
-	is_djgpp || eapply "${FILESDIR}"/${PV}/01_support-armhf.patch
+	[[ ${CTARGET} == arm*-*-*eabihf* ]] && eapply "${FILESDIR}"/${PV}/01_support-armhf.patch
 	[[ $(tc-arch) == "mips" && ${DEFAULT_ABI} == "n64" ]] && eapply "${FILESDIR}"/${PV}/02_mips64-default-n64-abi.patch
 
 	sed -i 's/use_fixproto=yes/:/' gcc/config.gcc #PR33200
