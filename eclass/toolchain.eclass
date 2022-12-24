@@ -1074,8 +1074,11 @@ toolchain_src_configure() {
 
 	if tc_version_is_at_least 2.7 ; then
 		case $(tc-arch) in
-			amd64|x86|alpha|ppc|ppc64|s390)
+			amd64|x86|alpha|hppa|mips|ppc|ppc64|s390)
 				tc_version_is_at_least 4.6 || ENABLE_WERROR="yes"
+				;;
+			m68k)
+				tc_version_is_at_least 4.5 || ENABLE_WERROR="yes"
 				;;
 			arm)
 				if [[ ${CTARGET} == arm*-*-linux-gnueabi ]] ; then
