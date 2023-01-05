@@ -972,6 +972,21 @@ index 484471d..37b5324 100644
  
  # Clean hooks:
  # A lot of the ancillary files are deleted by the main makefile.
+diff --git a/gcc/config/alpha/linux-elf.h b/gcc/config/alpha/linux-elf.h
+index 6430059..0f9ba8a 100644
+--- a/gcc/config/alpha/linux-elf.h
++++ b/gcc/config/alpha/linux-elf.h
+@@ -41,3 +41,10 @@ Boston, MA 02111-1307, USA.  */
+ #define LIB_SPEC \
+ "%{shared:-lc}%{!shared:%{pthread:-lpthread }%{profile:-lc_p}%{!profile:-lc}} "
+ #endif
++
++#define ASM_FILE_END(FILE) \
++  do {									\
++    named_section_flags (".note.GNU-stack",				\
++			 SECTION_DEBUG					\
++			 | (trampolines_created ? SECTION_CODE : 0));	\
++  } while (0)
 diff --git a/gcc/config/alpha/linux.h b/gcc/config/alpha/linux.h
 index 912d7b2..7e87e66 100644
 --- a/gcc/config/alpha/linux.h
@@ -1037,11 +1052,50 @@ index 511b015..76e431b 100644
  
  # Don't build enquire
  ENQUIRE=
+diff --git a/gcc/config/i386/i386.c b/gcc/config/i386/i386.c
+index a34831e..9702cf5 100644
+--- a/gcc/config/i386/i386.c
++++ b/gcc/config/i386/i386.c
+@@ -3865,7 +3865,7 @@ ix86_asm_file_end (file)
+   rtx xops[2];
+ 
+   if (! TARGET_DEEP_BRANCH_PREDICTION || pic_label_name[0] == 0)
+-    return;
++    goto end;
+ 
+   /* ??? Binutils 2.10 and earlier has a linkonce elimination bug related
+      to updating relocations to a section being discarded such that this
+@@ -3905,6 +3905,11 @@ ix86_asm_file_end (file)
+   xops[1] = gen_rtx_MEM (SImode, stack_pointer_rtx);
+   output_asm_insn ("mov{l}\t{%1, %0|%0, %1}", xops);
+   output_asm_insn ("ret", xops);
++
++end:
++#ifdef SUBTARGET_FILE_END
++  SUBTARGET_FILE_END (file);
++#endif
+ }
+ 
+ void
 diff --git a/gcc/config/i386/linux.h b/gcc/config/i386/linux.h
-index b07bd03..bcd3a6c 100644
+index b07bd03..9a1db0d 100644
 --- a/gcc/config/i386/linux.h
 +++ b/gcc/config/i386/linux.h
-@@ -243,9 +243,9 @@ Boston, MA 02111-1307, USA.  */
+@@ -217,6 +217,13 @@ Boston, MA 02111-1307, USA.  */
+ 	   : "=d"(BASE))
+ #endif
+ 
++#define SUBTARGET_FILE_END(FILE) \
++  do {									\
++    named_section_flags (".note.GNU-stack",				\
++			 SECTION_DEBUG					\
++			 | (trampolines_created ? SECTION_CODE : 0));	\
++  } while (0)
++
+ /* Do code reading to identify a signal frame, and set the frame
+    state data appropriately.  See unwind-dw2.c for the structs.  */
+ 
+@@ -243,9 +250,9 @@ Boston, MA 02111-1307, USA.  */
        {									\
  	struct rt_sigframe {						\
  	  int sig;							\
@@ -1054,10 +1108,24 @@ index b07bd03..bcd3a6c 100644
  	} *rt_ = (CONTEXT)->cfa;					\
  	sc_ = (struct sigcontext *) &rt_->uc.uc_mcontext;		\
 diff --git a/gcc/config/i386/linux64.h b/gcc/config/i386/linux64.h
-index 6158431..88954e9 100644
+index 6158431..6070750 100644
 --- a/gcc/config/i386/linux64.h
 +++ b/gcc/config/i386/linux64.h
-@@ -154,9 +154,9 @@ Boston, MA 02111-1307, USA.  */
+@@ -68,6 +68,13 @@ Boston, MA 02111-1307, USA.  */
+ 
+ #define MULTILIB_DEFAULTS { "m64" }
+ 
++#define SUBTARGET_FILE_END(FILE) \
++  do {									\
++    named_section_flags (".note.GNU-stack",				\
++			 SECTION_DEBUG					\
++			 | (trampolines_created ? SECTION_CODE : 0));	\
++  } while (0)
++
+ /* Do code reading to identify a signal frame, and set the frame
+    state data appropriately.  See unwind-dw2.c for the structs.  
+    Don't use this at all if inhibit_libc is used.  */
+@@ -154,9 +161,9 @@ Boston, MA 02111-1307, USA.  */
        {									\
  	struct rt_sigframe {						\
  	  int sig;							\
@@ -1099,6 +1167,21 @@ index 07882cd..9dbf9df 100644
  	struct sigcontext *sc;						\
        } *frame_ = (struct sigframe *)(CONTEXT)->psp;			\
        struct sigcontext *sc_ = frame_->sc;				\
+diff --git a/gcc/config/m68k/linux.h b/gcc/config/m68k/linux.h
+index 10f6a4a..494ee57 100644
+--- a/gcc/config/m68k/linux.h
++++ b/gcc/config/m68k/linux.h
+@@ -391,3 +391,10 @@ do {									\
+       fprintf (FILE, "\n");						\
+     }									\
+ } while (0)
++
++#define ASM_FILE_END(FILE) \
++  do {									\
++    named_section_flags (".note.GNU-stack",				\
++			 SECTION_DEBUG					\
++			 | (trampolines_created ? SECTION_CODE : 0));	\
++  } while (0)
 diff --git a/gcc/config/mips/t-iris6 b/gcc/config/mips/t-iris6
 index 4a8d6be..f7a788c 100644
 --- a/gcc/config/mips/t-iris6
@@ -1151,8 +1234,26 @@ index 52c3fd9..1c92449 100644
 +        rm -f $$(DESTDIR)$$(slibdir)/$(SHLIB_NAME); \
 +        $(LN_S) $(SHLIB_SONAME) $$(DESTDIR)$$(slibdir)/$(SHLIB_NAME)
  
+diff --git a/gcc/config/rs6000/linux.h b/gcc/config/rs6000/linux.h
+index 99c0453..d79608b 100644
+--- a/gcc/config/rs6000/linux.h
++++ b/gcc/config/rs6000/linux.h
+@@ -74,6 +74,13 @@ Boston, MA 02111-1307, USA.  */
+ #undef DRAFT_V4_STRUCT_RET
+ #define DRAFT_V4_STRUCT_RET 1
+ 
++#define ASM_FILE_END(FILE) \
++  do {									\
++    named_section_flags (".note.GNU-stack",				\
++			 SECTION_DEBUG					\
++			 | (trampolines_created ? SECTION_CODE : 0));	\
++  } while (0)
++
+ /* Do code reading to identify a signal frame, and set the frame
+    state data appropriately.  See unwind-dw2.c for the structs.  */
+ 
 diff --git a/gcc/config/rs6000/linux64.h b/gcc/config/rs6000/linux64.h
-index f84e1e3..79f7455 100644
+index f84e1e3..37d73fa 100644
 --- a/gcc/config/rs6000/linux64.h
 +++ b/gcc/config/rs6000/linux64.h
 @@ -141,11 +141,11 @@ Boston, MA 02111-1307, USA.  */
@@ -1188,6 +1289,19 @@ index f84e1e3..79f7455 100644
  /* FP save and restore routines.  */
  #undef  SAVE_FP_PREFIX
  #define SAVE_FP_PREFIX "._savef"
+@@ -327,3 +339,12 @@ do									\
+     sym_lineno += 1;							\
+   }									\
+ while (0)
++
++#define ASM_FILE_END(FILE) \
++  do {									\
++    if (! TARGET_64BIT)							\
++      named_section_flags (".note.GNU-stack",				\
++			   SECTION_DEBUG				\
++			   | (trampolines_created ? SECTION_CODE : 0));	\
++  } while (0)
++
 diff --git a/gcc/config/rs6000/rs6000.md b/gcc/config/rs6000/rs6000.md
 index 5188ce5..38ca8ec 100644
 --- a/gcc/config/rs6000/rs6000.md
@@ -1260,7 +1374,7 @@ index 7be8ebc..9bbfe00 100644
  SHLIB_MKMAP = $(srcdir)/mkmap-flat.awk
  SHLIB_MAPFILES = $(srcdir)/libgcc-std.ver
 diff --git a/gcc/config/s390/linux.h b/gcc/config/s390/linux.h
-index a0336bf..358afae 100644
+index a0336bf..d46dbdd 100644
 --- a/gcc/config/s390/linux.h
 +++ b/gcc/config/s390/linux.h
 @@ -66,9 +66,11 @@ Boston, MA 02111-1307, USA.  */
@@ -1275,6 +1389,19 @@ index a0336bf..358afae 100644
  #endif
  
  
+@@ -120,6 +122,12 @@ Boston, MA 02111-1307, USA.  */
+ #define LINK_SPEC "%{m64:%(link_arch64)} %{!m64:%(link_arch31)}"
+ #endif
+ 
++#define ASM_FILE_END(FILE) \
++  do {									\
++    named_section_flags (".note.GNU-stack",				\
++			 SECTION_DEBUG					\
++			 | (trampolines_created ? SECTION_CODE : 0));	\
++  } while (0)
+ 
+ /* This macro defines names of additional specifications to put in the specs
+    that can be used in various specifications like CC1_SPEC.  Its definition
 diff --git a/gcc/config/s390/t-linux b/gcc/config/s390/t-linux
 index bc8d519..619b7f9 100644
 --- a/gcc/config/s390/t-linux
@@ -1305,6 +1432,42 @@ index d5a9278..db839c6 100644
  # Override t-slibgcc-elf-ver to export some libgcc symbols with
  # the symbol versions that glibc used.
  SHLIB_MAPFILES = $(srcdir)/libgcc-std.ver $(srcdir)/config/s390/libgcc-glibc.ver
+diff --git a/gcc/config/sparc/linux.h b/gcc/config/sparc/linux.h
+index b93b46c..2a0bbae 100644
+--- a/gcc/config/sparc/linux.h
++++ b/gcc/config/sparc/linux.h
+@@ -256,6 +256,13 @@ do {									\
+ #undef CTORS_SECTION_ASM_OP
+ #undef DTORS_SECTION_ASM_OP
+ 
++#define ASM_FILE_END(FILE) \
++  do {									\
++    named_section_flags (".note.GNU-stack",				\
++			 SECTION_DEBUG					\
++			 | (trampolines_created ? SECTION_CODE : 0));	\
++  } while (0)
++
+ /* Do code reading to identify a signal frame, and set the frame
+    state data appropriately.  See unwind-dw2.c for the structs.  */
+ 
+diff --git a/gcc/config/sparc/linux64.h b/gcc/config/sparc/linux64.h
+index 33c3f54..e1a1286 100644
+--- a/gcc/config/sparc/linux64.h
++++ b/gcc/config/sparc/linux64.h
+@@ -376,6 +376,13 @@ do {									\
+ #undef CTORS_SECTION_ASM_OP
+ #undef DTORS_SECTION_ASM_OP
+ 
++#define ASM_FILE_END(FILE) \
++  do {									\
++    named_section_flags (".note.GNU-stack",				\
++			 SECTION_DEBUG					\
++			 | (trampolines_created ? SECTION_CODE : 0));	\
++  } while (0)
++
+ /* Do code reading to identify a signal frame, and set the frame
+    state data appropriately.  See unwind-dw2.c for the structs.  */
+ 
 diff --git a/gcc/config/sparc/t-linux64 b/gcc/config/sparc/t-linux64
 index a648626..3e3fa4c 100644
 --- a/gcc/config/sparc/t-linux64
@@ -1591,6 +1754,42 @@ index d2daf34..0bb5f20 100644
  #
  # Clean hooks:
  # A lot of the ancillary files are deleted by the main makefile.
+diff --git a/gcc/function.c b/gcc/function.c
+index 9ddf676..fe40aa0 100644
+--- a/gcc/function.c
++++ b/gcc/function.c
+@@ -123,6 +123,9 @@ int current_function_uses_only_leaf_regs;
+    post-instantiation libcalls.  */
+ int virtuals_instantiated;
+ 
++/* Nonzero if at least one trampoline has been created.  */
++int trampolines_created;
++
+ /* Assign unique numbers to labels generated for profiling.  */
+ static int profile_label_no;
+ 
+@@ -6869,6 +6872,7 @@ expand_function_end (filename, line, end_bindings)
+       emit_block_move (blktramp, initial_trampoline,
+ 		       GEN_INT (TRAMPOLINE_SIZE));
+ #endif
++      trampolines_created = 1;
+       INITIALIZE_TRAMPOLINE (tramp, XEXP (DECL_RTL (function), 0), context);
+       seq = get_insns ();
+       end_sequence ();
+diff --git a/gcc/function.h b/gcc/function.h
+index cddfce5..32f2514 100644
+--- a/gcc/function.h
++++ b/gcc/function.h
+@@ -486,6 +486,9 @@ extern struct function *cfun;
+ /* Nonzero if we've already converted virtual regs to hard regs.  */
+ extern int virtuals_instantiated;
+ 
++/* Nonzero if at least one trampoline has been created.  */
++extern int trampolines_created;
++
+ /* For backward compatibility... eventually these should all go away.  */
+ #define current_function_name (cfun->name)
+ #define current_function_pops_args (cfun->pops_args)
 diff --git a/gcc/gcc.c b/gcc/gcc.c
 index b594be6..054875b 100644
 --- a/gcc/gcc.c
@@ -2731,7 +2930,7 @@ index 0aa0bb6..61fb954 100644
 +	-$(INSTALL_DATA) $(srcdir)/java/rmiregistry.1 $(DESTDIR)$(man1dir)/rmiregistry$(man1ext)
 +	-chmod a-x $(DESTDIR)$(man1dir)/rmiregistry$(man1ext)
 diff --git a/gcc/mklibgcc.in b/gcc/mklibgcc.in
-index c5db6f0..cde9443 100644
+index c5db6f0..309f2cc 100644
 --- a/gcc/mklibgcc.in
 +++ b/gcc/mklibgcc.in
 @@ -32,7 +32,7 @@
@@ -2743,7 +2942,25 @@ index c5db6f0..cde9443 100644
  
  # Make needs VPATH to be literal.
  echo 'srcdir = @srcdir@'
-@@ -317,22 +317,18 @@ for ml in $MULTILIBS; do
+@@ -282,11 +282,15 @@ for ml in $MULTILIBS; do
+   if [ "@libgcc_visibility@" = yes -a "$SHLIB_LINK" ]; then
+     libgcc_a_objs=
+     echo ""
++    echo "libgcc/${dir}/stacknote.s: stmp-dirs"
++    echo '	@( echo | $(GCC_FOR_TARGET) $(LIBGCC2_CFLAGS) '${flags}' -S -o - -xc - | grep .note.GNU-stack || : ) > $@.tmp'
++    echo '	@mv -f $@.tmp $@'
++    echo ""
+     for o in $libgcc_objs $libgcc_st_objs; do
+       # .oS objects will have all non-local symbol definitions .hidden
+       oS=`echo ${o} | sed s~${objext}'$~.oS~g'`
+-      echo "${oS}: stmp-dirs ${o}"
+-      echo '	@$(NM_FOR_TARGET) '${SHLIB_NM_FLAGS} ${o}' | $(AWK) '\''NF == 3 { print "\t.hidden", $$3 }'\'' | $(GCC_FOR_TARGET) $(LIBGCC2_CFLAGS) '${flags}' -r -nostdinc -nostdlib -o $@ '${o}' -xassembler -'
++      echo "${oS}: stmp-dirs libgcc/${dir}/stacknote.s ${o}"
++      echo '	@( $(NM_FOR_TARGET) '${SHLIB_NM_FLAGS} ${o}' | $(AWK) '\''NF == 3 { print "\t.hidden", $$3 }'\''; cat libgcc/${dir}/stacknote.s ) | $(GCC_FOR_TARGET) $(LIBGCC2_CFLAGS) '${flags}' -r -nostdinc -nostdlib -o $@ '${o}' -xassembler -'
+       libgcc_a_objs="${libgcc_a_objs} ${oS}"
+     done
+   fi
+@@ -317,22 +321,18 @@ for ml in $MULTILIBS; do
        fi
        shlib_so_name="$shlib_base_name"
        shlib_dir=
@@ -2776,7 +2993,15 @@ index c5db6f0..cde9443 100644
  	fi
        fi
        echo ""
-@@ -438,11 +434,12 @@ echo ""
+@@ -375,6 +375,7 @@ echo '	  if [ -d $(stage)/$$dir ]; then true; else mkdir $(stage)/$$dir; fi; \'
+ echo '	done'
+ echo '	-for dir in '"${dirs}"'; do \'
+ echo '	  mv $$dir/*'"${objext}"' $(stage)/$$dir; \'
++echo '	  test ! -f $$dir/stacknote.s || mv $$dir/stacknote.s $(stage)/$$dir; \'
+ echo '	done'
+ 
+ echo ""
+@@ -438,11 +439,12 @@ echo ""
  echo "install: $all"
  for ml in $MULTILIBS; do
    dir=`echo ${ml} | sed -e 's/;.*$//' -e 's/=/$(EQ)/g'`
@@ -2791,7 +3016,7 @@ index c5db6f0..cde9443 100644
    fi
    echo '	$(INSTALL_DATA)' ${dir}/libgcc.a ${ldir}/
    echo '	$(RANLIB_FOR_TARGET)' ${ldir}/libgcc.a
-@@ -460,39 +457,22 @@ for ml in $MULTILIBS; do
+@@ -460,39 +462,22 @@ for ml in $MULTILIBS; do
        shlib_so_name="$shlib_base_name"
        shlib_dir=
        shlib_slibdir_qual=
@@ -2844,7 +3069,7 @@ index c5db6f0..cde9443 100644
  	fi
        fi
        echo "	$SHLIB_INSTALL" \
-@@ -515,10 +495,10 @@ for f in $EXTRA_MULTILIB_PARTS; do
+@@ -515,10 +500,10 @@ for f in $EXTRA_MULTILIB_PARTS; do
      dir=`echo ${ml} | sed -e 's/;.*$//' -e 's/=/$(EQ)/g'`
      if [ $dir != . ]; then
        out=${dir}/$f
