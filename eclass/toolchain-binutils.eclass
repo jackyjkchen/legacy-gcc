@@ -200,6 +200,13 @@ toolchain-binutils_pkgversion() {
 }
 
 toolchain-binutils_src_configure() {
+	# See https://www.gnu.org/software/make/manual/html_node/Parallel-Output.html
+	# Avoid really confusing logs from subconfigure spam, makes logs far
+	# more legible.
+	if tc_version_is_at_least 2.38 ; then
+		MAKEOPTS="--output-sync=line ${MAKEOPTS}"
+	fi
+
 	# Setup some paths
 	LIBPATH=/usr/$(get_libdir)/binutils/${CTARGET}/${BVER}
 	INCPATH=${LIBPATH}/include
@@ -319,6 +326,36 @@ toolchain-binutils_src_configure() {
 			# Change SONAME to avoid conflict across
 			# {native,cross}/binutils, binutils-libs. #666100
 			--with-extra-soversion-suffix=gentoo-${CATEGORY}-${PN}-$(usex multitarget mt st)
+		)
+	fi
+
+	if tc_version_is_at_least 2.34 ; then
+		# avoid automagic dependency on (currently prefix) systems
+		# systems with debuginfod library, bug #754753
+		myconf+=( 
+			--without-debuginfod
+		)
+	fi
+
+	if tc_version_is_at_least 2.35 ; then
+		# Available from 2.35 on
+		myconf+=( 
+			--enable-textrel-check=warning
+		)
+	fi
+
+	if tc_version_is_at_least 2.37 ; then
+		# Works better than vapier's patch... #808787
+		myconf+=( 
+			--enable-new-dtags
+		)
+	fi
+
+	if tc_version_is_at_least 2.38 ; then
+		# (--disable-silent-rules should get passed automatically w/ econf which we use
+		# in >= 2.39, so can drop it then.)
+		myconf+=( 
+			--disable-silent-rules
 		)
 	fi
 

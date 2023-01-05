@@ -178,7 +178,7 @@ legacy-gcc/linux-headers
 
 legacy-gcc/glibc-headers
 
-binutils-wrapper利用x86-64版本binutils的multiarch能力，大部分直接软链接到系统版本即可使用，as和ld则通过指定参数支持32位。
+binutils-wrapper版本2.38，并利用binutils的multiarch能力使用参数指定字长。
 
 linux-headers版本2.6.32.71，方便传统组gcc能调用kernel 2.6+版本的现代系统调用（如epoll）。
 

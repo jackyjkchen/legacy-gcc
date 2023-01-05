@@ -17,6 +17,7 @@ src_prepare() {
 	toolchain-binutils_src_prepare
 
 	eapply "${FILESDIR}"/${PV}/00_PR23919.patch
+	eapply "${FILESDIR}"/${PV}/01_suppress-warning-with-new-glibc.patch
 }
 
 src_configure() {
