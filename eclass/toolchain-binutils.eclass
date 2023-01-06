@@ -98,7 +98,7 @@ else
 fi
 IUSE="+cxx doc multitarget +nls static-libs test vanilla"
 if tc_version_is_at_least 2.21 ; then
-	IUSE+=" +gold"
+	IUSE+=" gold"
 fi
 
 #
