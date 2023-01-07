@@ -1,1 +1,0 @@
-../../sys-devel/gcc/gcc-4.6.4-r5.ebuild

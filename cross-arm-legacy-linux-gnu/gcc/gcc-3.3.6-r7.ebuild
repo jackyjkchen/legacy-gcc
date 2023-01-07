@@ -1,1 +1,0 @@
-../../sys-devel/gcc/gcc-3.3.6-r7.ebuild
