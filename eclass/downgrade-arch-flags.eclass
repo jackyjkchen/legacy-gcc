@@ -104,6 +104,9 @@ downgrade_arch_flags() {
 
 	# "added" "arch" "replacement"
 	local archlist=(
+		11  sapphirerapids icelake-server
+		11  rocketlake cannonlake
+		11  alderlake skylake
 		10  znver3 znver2
 		10  tigerlake icelake-server
 		10  cooperlake cascadelake
@@ -183,38 +186,38 @@ downgrade_arch_flags() {
 			[[ ${myarch} == ${arch} ]] && replace-cpu-flags ${myarch} ${rep}
 			[[ ${mytune} == ${arch} ]] && replace-cpu-flags ${mytune} ${rep}
 			case ${arch} in
-			znver*)
-				filter-flags -mno-sse4a
-				;;
-			bdver*)
-				filter-flags -mno-sse4a -mno-tbm -mno-fma4 -mno-lwp -mno-xop
-				;;
-			btver*)
-				filter-flags -mno-sse4a
-				;;
-			amdfam10|barcelona)
-				filter-flags -mno-sse4a -mno-3dnow
-				;;
-			k8-sse3|opteron-sse3|athlon64-sse3|k8|opteron|athlon64|athlon-fx|athlon-mp|athlon-xp|athlon-4|athlon|athlon-tbird|k6-3|k6-2)
-				filter-flags -mno-3dnow
-				;;
+				znver*)
+					filter-flags -mno-sse4a
+					;;
+				bdver*)
+					filter-flags -mno-sse4a -mno-tbm -mno-fma4 -mno-lwp -mno-xop
+					;;
+				btver*)
+					filter-flags -mno-sse4a
+					;;
+				amdfam10|barcelona)
+					filter-flags -mno-sse4a -mno-3dnow
+					;;
+				k8*|opteron*|athlon*|k6-*)
+					filter-flags -mno-3dnow
+					;;
 			esac
 			case ${rep} in
-			znver*)
-				append-flags -mno-sse4a
-				;;
-			bdver*)
-				append-flags -mno-sse4a -mno-tbm -mno-fma4 -mno-lwp -mno-xop
-				;;
-			btver*)
-				append-flags -mno-sse4a
-				;;
-			amdfam10|barcelona)
-				append-flags -mno-sse4a -mno-3dnow
-				;;
-			k8-sse3|opteron-sse3|athlon64-sse3|k8|opteron|athlon64|athlon-fx|athlon-mp|athlon-xp|athlon-4|k6-3|k6-2)
-				append-flags -mno-3dnow
-				;;
+				znver*)
+					append-flags -mno-sse4a
+					;;
+				bdver*)
+					append-flags -mno-sse4a -mno-tbm -mno-fma4 -mno-lwp -mno-xop
+					;;
+				btver*)
+					append-flags -mno-sse4a
+					;;
+				amdfam10|barcelona)
+					append-flags -mno-sse4a -mno-3dnow
+					;;
+				k8*|opteron*|athlon*|k6-*)
+					append-flags -mno-3dnow
+					;;
 			esac
 			continue
 		else
