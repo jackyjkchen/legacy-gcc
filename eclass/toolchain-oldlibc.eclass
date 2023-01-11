@@ -695,12 +695,13 @@ toolchain-oldlibc_src_install() {
 		fi
 	done
 
-	${CTARGET}-strip -d ${D}${LIBPATH}/{*.a,*.o,32/*.a,32/*.o,n32/*.o,n32/*.a}
-	${CTARGET}-strip -s ${D}${LIBPATH}/{*.so*,32/*.so*,n32/*.so*,*.dll,32/*.dll}
-	${CHOST}-strip -s -N __gentoo_check_ldflags__ -R .comment -R .GCC.command.line -R .note.gnu.gold-version ${D}${BINPATH}/*
-	${CHOST}-strip -s -N __gentoo_check_ldflags__ -R .comment -R .GCC.command.line -R .note.gnu.gold-version ${D}${HOSTLIBPATH}/*
-	${CHOST}-strip -s -N __gentoo_check_ldflags__ -R .comment -R .GCC.command.line -R .note.gnu.gold-version ${D}${PREFIX}/libexec/gcc/${CTARGET}/${GCC_CONFIG_VER}/{*,plugin/*}
-	${CHOST}-strip -s -N __gentoo_check_ldflags__ -R .comment -R .GCC.command.line -R .note.gnu.gold-version ${D}${LIBPATH}/plugin/*.so*
+	${CTARGET}-strip -d -N __gentoo_check_ldflags__ -R .comment -R .note ${D}${LIBPATH}/{*.a,*.o,32/*.a,32/*.o,n32/*.o,n32/*.a}
+	${CTARGET}-strip -s -N __gentoo_check_ldflags__ -R .comment -R .note ${D}${LIBPATH}/{*.so*,32/*.so*,n32/*.so*,*.dll,32/*.dll}
+	${CHOST}-strip -s -N __gentoo_check_ldflags__ -R .comment -R .note ${D}${LIBPATH}/{cc1*,collect2,cpp*,f771,tradcpp0}
+	${CHOST}-strip -s -N __gentoo_check_ldflags__ -R .comment -R .note ${D}${BINPATH}/*
+	${CHOST}-strip -s -N __gentoo_check_ldflags__ -R .comment -R .note ${D}${HOSTLIBPATH}/*
+	${CHOST}-strip -s -N __gentoo_check_ldflags__ -R .comment -R .note ${D}${PREFIX}/libexec/gcc/${CTARGET}/${GCC_CONFIG_VER}/{*,plugin/*}
+	${CHOST}-strip -s -N __gentoo_check_ldflags__ -R .comment -R .note ${D}${LIBPATH}/plugin/*.so*
 
 	cd "${S}" || die
 	rm -rf "${ED}"/usr/share/{man,info}
