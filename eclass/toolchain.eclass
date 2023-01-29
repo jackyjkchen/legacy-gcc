@@ -1395,6 +1395,17 @@ toolchain_src_configure() {
 					armv7*) confgcc+=( --with-fpu=vfpv3-d16 ) ;;
 				esac
 			fi
+
+			# If multilib is used, make the compiler build multilibs
+			# for A or R and M architecture profiles. Do this only
+			# when no specific arch/mode/float is specified, e.g.
+			# for target arm-none-eabi, since doing this is
+			# incompatible with --with-arch/cpu/float/fpu.
+			if is_multilib && [[ ${arm_arch} == arm ]] && \
+			   tc_version_is_at_least 7.1
+			then
+				confgcc+=( --with-multilib-list=aprofile,rmprofile  )
+			fi
 			;;
 		mips)
 			# Add --with-abi flags to set default ABI
@@ -2750,11 +2761,11 @@ toolchain_death_notice() {
 		pushd "${WORKDIR}"/build >/dev/null
 		(echo '' | $(tc-getCC ${CTARGET}) ${CFLAGS} -v -E - 2>&1) > gccinfo.log
 		[[ -e "${T}"/build.log ]] && cp "${T}"/build.log .
-		tar jcf "${WORKDIR}"/gcc-build-logs.tar.bz2 \
+		tar -acf "${WORKDIR}"/gcc-build-logs.tar.xz \
 			gccinfo.log build.log $(find -name config.log)
 		rm gccinfo.log build.log
 		eerror
-		eerror "Please include ${WORKDIR}/gcc-build-logs.tar.bz2 in your bug report."
+		eerror "Please include ${WORKDIR}/gcc-build-logs.tar.xz in your bug report."
 		eerror
 		popd >/dev/null
 	fi

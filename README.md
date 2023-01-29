@@ -4,7 +4,7 @@ legacy-gcc是一个gentoo的自定义overlay repo，启用该repo，可以在最
 
 [支持gcc版本](https://github.com/jackyjkchen/legacy-gcc/tree/master/sys-devel/gcc)。
 
-最新的两个gcc版本由gentoo官方repo支持，本repo不收录。
+尚未EOL的gcc版本由gentoo官方repo支持，本repo不收录。
 
 # 项目目标
 
