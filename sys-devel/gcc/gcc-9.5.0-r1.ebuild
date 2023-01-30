@@ -30,5 +30,6 @@ src_prepare() {
 	toolchain_src_prepare
 	use vanilla && return 0
 
+	eapply "${FILESDIR}"/${PV}/00_workaround-for-gcc12-host.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/00_pr90320.patch
 }
