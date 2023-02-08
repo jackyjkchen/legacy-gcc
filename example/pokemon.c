@@ -6,14 +6,14 @@ static const char* attr_type[] = {
 
 #define ATTR_NUM (sizeof(attr_type) / sizeof(const char*))
 
-#define ZERO    0.0f
-#define ONE     1.0f
-#define TWO     2.0f
-#define FOUR    4.0f
-#define HALF    0.5f
-#define QUARTER 0.25f
+#define ZERO    0
+#define ONE     1
+#define TWO     2
+#define FOUR    4
+#define HALF    3
+#define QUARTER 9
 
-static const float attr_table[] = {
+static const unsigned char attr_table[] = {
 /*       普    格    飞    毒    地    岩    虫    鬼    钢    火    水    草    电    超    冰    龙    恶    仙 */
 /*普*/  ONE,  ONE,  ONE,  ONE,  ONE, HALF,  ONE, ZERO, HALF,  ONE,  ONE,  ONE,  ONE,  ONE,  ONE,  ONE,  ONE,  ONE,
 /*格*/  TWO,  ONE, HALF, HALF,  ONE,  TWO, HALF, ZERO,  TWO,  ONE,  ONE,  ONE,  ONE, HALF,  TWO,  ONE,  TWO, HALF,
@@ -35,12 +35,12 @@ static const float attr_table[] = {
 /*仙*/  ONE,  TWO,  ONE, HALF,  ONE,  ONE,  ONE,  ONE, HALF, HALF,  ONE,  ONE,  ONE,  ONE,  ONE,  TWO,  TWO,  ONE, 
 };
 
-static const char* value_string(float v) {
-    if( v == FOUR) {
+static const char* value_string(unsigned char v) {
+    if(v == FOUR) {
         return "4x";
     } else if (v == TWO) {
         return "2x";
-    } else if (v == ONE) {
+    } else if (v == ONE || v == TWO * HALF) {
         return "1x";
     } else if (v == HALF) {
         return "1/2x";
@@ -73,7 +73,7 @@ static void print_single_attr(unsigned int x) {
 
 static void print_double_attr(unsigned int x, unsigned int y) {
 	unsigned int i = 0;
-	float r[ATTR_NUM] = {0};
+	unsigned char r[ATTR_NUM] = {0};
     if (x == y) {
         return;
     }
