@@ -54,7 +54,7 @@ static const char* value_string(unsigned char v) {
 }
 
 static void print_table_header() {
-	unsigned int i = 0;
+    unsigned int i = 0;
     printf("| 守\\攻 |");
     for (i=0; i<ATTR_NUM; ++i) {
         printf(" %5s |", attr_type[i]);
@@ -63,28 +63,28 @@ static void print_table_header() {
 }
 
 static void print_single_attr(unsigned int x) {
-	unsigned int i = 0;
-	printf("| %s    |", attr_type[x]);
+    unsigned int i = 0;
+    printf("| %s    |", attr_type[x]);
     for (i=0; i<ATTR_NUM; ++i) {
         printf(" %4s |", value_string(attr_table[ATTR_NUM * i + x]));
     }
-	printf("\n");
+    printf("\n");
 }
 
 static void print_double_attr(unsigned int x, unsigned int y) {
-	unsigned int i = 0;
-	unsigned char r[ATTR_NUM] = {0};
+    unsigned int i = 0;
+    unsigned char r[ATTR_NUM] = {0};
     if (x == y) {
         return;
     }
-	printf("| %s+%s |", attr_type[x], attr_type[y]);
-	for(i=0; i<ATTR_NUM; ++i) {
-		r[i] = attr_table[ATTR_NUM * i + x] * attr_table[ATTR_NUM * i + y];
-	}
-	for(i=0; i<ATTR_NUM; ++i) {
-		printf(" %4s |", value_string(r[i]));
-	}
-	printf("\n");
+    printf("| %s+%s |", attr_type[x], attr_type[y]);
+    for(i=0; i<ATTR_NUM; ++i) {
+        r[i] = attr_table[ATTR_NUM * i + x] * attr_table[ATTR_NUM * i + y];
+    }
+    for(i=0; i<ATTR_NUM; ++i) {
+        printf(" %4s |", value_string(r[i]));
+    }
+    printf("\n");
 }
 
 static void print_attr_table() {
