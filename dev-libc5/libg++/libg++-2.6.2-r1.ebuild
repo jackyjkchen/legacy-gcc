@@ -26,6 +26,8 @@ src_prepare() {
 	default
 	gnuconfig_update
 	eapply "${FILESDIR}"/${PV}/00_fix-for-gentoo.patch || die
+	eapply "${FILESDIR}"/${PV}/02_fix-for-crash-00187.patch || die
+	eapply "${FILESDIR}"/${PV}/10_fix-for-libc5.patch  || die
 }
 
 src_configure() {
