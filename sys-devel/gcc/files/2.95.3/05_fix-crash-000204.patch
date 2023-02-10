@@ -1,0 +1,102 @@
+diff --git a/gcc/expmed.c b/gcc/expmed.c
+index 35755c0..b1df996 100644
+--- a/gcc/expmed.c
++++ b/gcc/expmed.c
+@@ -263,21 +263,6 @@ store_bit_field (str_rtx, bitsize, bitnum, fieldmode, value, align, total_size)
+       op0 = SUBREG_REG (op0);
+     }
+ 
+-  /* Make sure we are playing with integral modes.  Pun with subregs
+-     if we aren't.  */
+-  {
+-    enum machine_mode imode = int_mode_for_mode (GET_MODE (op0));
+-    if (imode != GET_MODE (op0))
+-      {
+-	if (GET_CODE (op0) == MEM)
+-	  op0 = change_address (op0, imode, NULL_RTX);
+-	else if (imode != BLKmode)
+-	  op0 = gen_lowpart (imode, op0);
+-	else
+-	  abort ();
+-      }
+-  }
+-
+   /* If OP0 is a register, BITPOS must count within a word.
+      But as we have it, it counts within whatever size OP0 now has.
+      On a bigendian machine, these are not the same, so convert.  */
+@@ -326,6 +311,23 @@ store_bit_field (str_rtx, bitsize, bitnum, fieldmode, value, align, total_size)
+       return value;
+     }
+ 
++  /* Make sure we are playing with integral modes.  Pun with subregs
++     if we aren't.  This must come after the entire register case above,
++     since that case is valid for any mode.  The following cases are only
++     valid for integral modes.  */
++  {
++    enum machine_mode imode = int_mode_for_mode (GET_MODE (op0));
++    if (imode != GET_MODE (op0))
++      {
++	if (GET_CODE (op0) == MEM)
++	  op0 = change_address (op0, imode, NULL_RTX);
++	else if (imode != BLKmode)
++	  op0 = gen_lowpart (imode, op0);
++	else
++	  abort ();
++      }
++  }
++
+   /* Storing an lsb-aligned field in a register
+      can be done with a movestrict instruction.  */
+ 
+@@ -1013,6 +1015,15 @@ extract_bit_field (str_rtx, bitsize, bitnum, unsignedp,
+       op0 = SUBREG_REG (op0);
+     }
+ 
++  if (GET_CODE (op0) == REG
++      && mode == GET_MODE (op0)
++      && bitnum == 0
++      && bitsize == GET_MODE_BITSIZE (GET_MODE (op0)))
++    {
++      /* We're trying to extract a full register from itself.  */
++      return op0;
++    }
++
+   /* Make sure we are playing with integral modes.  Pun with subregs
+      if we aren't.  */
+   {
+diff --git a/gcc/expr.c b/gcc/expr.c
+index ef16c76..77c2390 100644
+--- a/gcc/expr.c
++++ b/gcc/expr.c
+@@ -1964,15 +1964,6 @@ emit_group_load (dst, orig_src, ssize, align)
+ 
+   tmps = (rtx *) alloca (sizeof(rtx) * XVECLEN (dst, 0));
+ 
+-  /* If we won't be loading directly from memory, protect the real source
+-     from strange tricks we might play.  */
+-  src = orig_src;
+-  if (GET_CODE (src) != MEM)
+-    {
+-      src = gen_reg_rtx (GET_MODE (orig_src));
+-      emit_move_insn (src, orig_src);
+-    }
+-
+   /* Process the pieces.  */
+   for (i = start; i < XVECLEN (dst, 0); i++)
+     {
+@@ -1990,6 +1981,15 @@ emit_group_load (dst, orig_src, ssize, align)
+ 	    abort();
+ 	}
+ 
++	  /* If we won't be loading directly from memory, protect the real source
++		 from strange tricks we might play.  */
++	  src = orig_src;
++	  if (GET_CODE (src) != MEM)
++		{
++		  src = gen_reg_rtx (GET_MODE (orig_src));
++		  emit_move_insn (src, orig_src);
++		}
++
+       /* Optimize the access just a bit.  */
+       if (GET_CODE (src) == MEM
+ 	  && align*BITS_PER_UNIT >= GET_MODE_ALIGNMENT (mode)

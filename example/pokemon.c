@@ -73,7 +73,7 @@ static void print_single_attr(unsigned int x) {
 
 static void print_double_attr(unsigned int x, unsigned int y) {
     unsigned int i = 0;
-    unsigned char r[ATTR_NUM] = {0};
+    unsigned char r[ATTR_NUM];
     if (x == y) {
         return;
     }
