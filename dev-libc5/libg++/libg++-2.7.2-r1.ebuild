@@ -26,6 +26,7 @@ src_prepare() {
 	default
 	gnuconfig_update
 	eapply "${FILESDIR}"/${PV}/00_fix-for-gentoo.patch || die
+	eapply "${FILESDIR}"/${PV}/10_fix-for-new-libc5.patch  || die
 }
 
 src_configure() {
