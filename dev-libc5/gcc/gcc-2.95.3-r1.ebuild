@@ -11,30 +11,17 @@ RDEPEND=""
 DEPEND="${RDEPEND}
 	${CATEGORY}/binutils
 	${CATEGORY}/libc"
-BDEPEND="sys-devel/gcc:2.95.3"
+BDEPEND="${CATEGORY}/gcc:3.4.6"
 
-if [[ -f /usr/bin/${CTARGET}-gcc-2.95.3 ]] ; then
-	CC="${CTARGET}-gcc-2.95.3"
-	CXX="${CTARGET}-g++-2.95.3"
-else
-	STAGE1='yes'
-	CC="gcc-2.95.3"
-	CXX="g++-2.95.3"
-fi
+CC="${CTARGET}-gcc-3.4.6"
+CXX="${CTARGET}-g++-3.4.6"
 
 src_prepare() {
 	eapply "${FILESDIR}"/${PV}/00_gcc-${PV}.patch
 	toolchain-oldlibc_src_prepare
 
 	eapply "${FILESDIR}"/${PV}/01_workaround-for-legacy-glibc-in-non-system-dir.patch
+	eapply "${FILESDIR}"/${PV}/05_fix-crash-000204.patch
 	eapply "${FILESDIR}"/${PV}/10_fix-for-libc5.patch
-	eapply "${FILESDIR}"/${PV}/11_fix-for-libc4.patch
-	rm -rf libstdc++
 }
 
-src_install() {
-	toolchain-oldlibc_src_install
-	if [[ $STAGE1 != 'yes' ]] ; then
-		cp -ax "${WORKDIR}"/build/${CTARGET}/libio/libio*.a "${ED}"/usr/lib/gcc-lib/${CHOST}/${PV}/ || die
-	fi
-}
