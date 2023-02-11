@@ -28,7 +28,8 @@ src_prepare() {
 	default
 	gnuconfig_update
 	eapply "${FILESDIR}"/${PV}/00_fix-for-gentoo.patch || die
-	eapply "${FILESDIR}"/${PV}/01_workaround-for-libc4.patch || die
+	eapply "${FILESDIR}"/${PV}/10_fix-for-libc5.patch || die
+	eapply "${FILESDIR}"/${PV}/11_workaround-for-libc4.patch || die
 }
 
 src_configure() {
@@ -66,7 +67,7 @@ src_install() {
 	mv -v "${ED}"/usr/lib/g++-include "${ED}"/usr/lib/gcc-lib/${CHOST}/2.6.3/include/g++ || die
 	sed -i ${S}/libstdc++/new -e 's/cstddef/stddef.h/g' || die
 	cp -ax ${S}/libstdc++/{new,new.h} "${ED}"/usr/lib/gcc-lib/${CHOST}/2.6.3/include/g++ || die
-	cp -ax libio/libio*.a "${ED}"/usr/lib/gcc-lib/${CHOST}/2.6.3/ || die
+	cp -ax libio/libiostream.a "${ED}"/usr/lib/gcc-lib/${CHOST}/2.6.3/ || die
 	rm -rfv "${ED}"/usr/lib/lib* "${ED}"/usr/lib/doc "${ED}"/usr/bin "${ED}"/usr/include "${ED}"/usr/man "${ED}"/usr/${CHOST}
 	popd > /dev/null
 }
