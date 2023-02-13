@@ -13,6 +13,8 @@ SLOT="0"
 KEYWORDS="amd64 x86"
 RESTRICT="strip"
 
+IUSE="+stdint"
+
 DEPEND="${CATEGORY}/linux-headers"
 RDEPEND="${DEPEND}"
 BDEPEND=""
@@ -53,5 +55,8 @@ src_install() {
 	mkdir -p "${ED}"/usr/${CHOST}/ || die
 	cp -ax . "${ED}"/usr/${CHOST}/ || die
 	ln -sv libc.a "${ED}"/usr/${CHOST}/lib/libg.a || die
+	if use stdint; then
+		cp -ax "${FILESDIR}"/stdint.h "${ED}"/usr/${CHOST}/include/ || die
+	fi
 	popd > /dev/null
 }
