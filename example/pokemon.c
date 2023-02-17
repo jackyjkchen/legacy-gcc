@@ -57,7 +57,7 @@ static void print_table_header() {
     unsigned int i = 0;
     printf("| 守\\攻 |");
     for (i=0; i<ATTR_NUM; ++i) {
-        printf(" %5s |", attr_type[i]);
+        printf("   %s |", attr_type[i]);
     }
     printf("\n");
 }

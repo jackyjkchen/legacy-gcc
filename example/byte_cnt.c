@@ -1,9 +1,14 @@
 #ifdef _WIN32
 #define _CRT_SECURE_NO_WARNINGS
 #endif
+#if defined(__MINGW64__) || defined(__MINGW32__)
+#undef __USE_MINGW_ANSI_STDIO
+#define __USE_MINGW_ANSI_STDIO 0
+#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 
 #ifdef _WIN64
 static unsigned __int64 max_count = 0;
@@ -21,6 +26,7 @@ static unsigned long max_count = 0;
 static unsigned long count[256] = { 0 };
 #endif
 static unsigned char overflow[256] = { 0 };
+static unsigned char print_all = 0;
 
 static void read_file(const char *filename) {
     unsigned char buf[BUFSIZ];
@@ -44,7 +50,6 @@ static void read_file(const char *filename) {
 
             count[pos]++;
             if (count[pos] == 0) {
-                fprintf(stderr, "0x%02X count overflow!\n", pos);
                 overflow[pos] = 1;
             }
         }
@@ -60,23 +65,26 @@ static void print_number(void) {
         const char *msg = "";
 
         if (overflow[i] != 0) {
-            msg = " overflow!";
+            msg = "overflow!";
+        } else if (count[i] == 0 && !print_all) {
+            continue;
         }
+
 #if _WIN64
 /* Windows LLP64 model, long == 32bit, only long long == 64bit */
-        printf(" 0x%02X  %llu%s\r\n", i, (unsigned __int64)(count[i]), msg);
+        printf(" 0x%02X  %llu %s\r\n", i, (unsigned __int64)(count[i]), msg);
 #elif COUNT64
 /* Support 64bit count in 32bit platform */
 #if defined(_MSC_VER) || defined(__BORLANDC__) || defined(__WATCOMC__)
-        printf(" 0x%02X  %llu%s\r\n", i, (unsigned __int64)(count[i]), msg);
+        printf(" 0x%02X  %llu %s\r\n", i, (unsigned __int64)(count[i]), msg);
 #elif
-        printf(" 0x%02X  %llu%s\n", i, (unsigned long long)(count[i]), msg);
+        printf(" 0x%02X  %llu %s\n", i, (unsigned long long)(count[i]), msg);
 #endif
 #else
 /* Posix LP64 model, unsigned long == wordsize */
 /* Windows 32bit platform, unsigned long == 32bit */
 /* WIN/DOS 16bit platform, unsigned long == 32bit */
-        printf(" 0x%02X  %lu%s\n", i, (unsigned long)(count[i]), msg);
+        printf(" 0x%02X  %lu %s\n", i, (unsigned long)(count[i]), msg);
 #endif
         if (max_count < count[i]) {
             max_count = count[i];
@@ -90,7 +98,15 @@ static void print_histogram(void) {
     puts("Histogram:");
     for (i = 0; i < 256; ++i) {
         char syms[80];
-        int len = (int)(73 * ((double)count[i] / (double)max_count));
+        unsigned int len = 0;
+        if (count[i] == 0 && !print_all) {
+            continue;
+        }
+        if (max_count > 73) {
+            len = (int)ceil(73 * ((double)count[i] / (double)max_count));
+        } else {
+            len = (int)count[i];
+        }
 
         memset(syms, '+', len);
         syms[len] = 0x00;
@@ -99,15 +115,38 @@ static void print_histogram(void) {
 }
 
 int main(int argc, char **argv) {
-    if (argc != 2) {
-        fprintf(stderr, "Usage: ./byte_cnt <file>\n");
+    const char *fn = NULL;
+    unsigned char *arg_attr = NULL;
+    int i = 0;
+    if (argc < 2 || argc > 3) {
+        fprintf(stderr, "Usage: ./byte_cnt [-a] <file>\n");
+        fprintf(stderr, "\n");
+        fprintf(stderr, "  -a    print all bytes\n");
         return -1;
     }
 
-    read_file(argv[1]);
+    arg_attr = (unsigned char*)malloc(argc);
+    if (!arg_attr) {
+        perror("malloc failed");
+        return -1;
+    }
+    memset(arg_attr, 0x00, argc);
+
+    for (i = 1; i < argc; ++i) {
+        if (strcmp(argv[i], "-a") == 0) {
+            print_all = 1;
+            arg_attr[i] = 1;
+        }
+        if (!arg_attr[i]) {
+            fn = argv[i];
+        }
+    }
+
+    read_file(fn);
     print_number();
     puts("");
     print_histogram();
 
+    free(arg_attr);
     return 0;
 }
