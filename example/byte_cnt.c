@@ -114,14 +114,18 @@ static void print_histogram(void) {
     }
 }
 
+static void help() {
+    fprintf(stderr, "Usage: ./byte_cnt [-a] <file> ... \n");
+    fprintf(stderr, "\n");
+    fprintf(stderr, "  -a    print all bytes\n");
+}
+
 int main(int argc, char **argv) {
     const char *fn = NULL;
     unsigned char *arg_attr = NULL;
     int i = 0;
-    if (argc < 2 || argc > 3) {
-        fprintf(stderr, "Usage: ./byte_cnt [-a] <file>\n");
-        fprintf(stderr, "\n");
-        fprintf(stderr, "  -a    print all bytes\n");
+    if (argc < 2) {
+        help();
         return -1;
     }
 
@@ -139,10 +143,15 @@ int main(int argc, char **argv) {
         }
         if (!arg_attr[i]) {
             fn = argv[i];
+            read_file(fn);
         }
     }
 
-    read_file(fn);
+    if (!fn) {
+        help();
+        return -1;
+    }
+
     print_number();
     puts("");
     print_histogram();

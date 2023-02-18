@@ -82,7 +82,7 @@ src_prepare() {
 	[[ $(tc-arch) == "m68k" ]] && eapply "${FILESDIR}"/${PV}/02_m68k-debian.patch
 	[[ ${TOOL_PREFIX} == "sparc64-legacy" ]] && eapply "${FILESDIR}"/${PV}/03_workaround-for-sparc64.patch
 	[[ $(tc-arch) == "avr" ]] && eapply "${FILESDIR}"/${PV}/04_support-avr.patch
-	eapply "${FILESDIR}"/${PV}/05_fix-crash-000204.patch
+	eapply "${FILESDIR}"/${PV}/05_fix-crash-00204.patch
 	touch -r gcc/README gcc/configure.in || die
 }
 

@@ -21,7 +21,7 @@ src_prepare() {
 	toolchain-oldlibc_src_prepare
 
 	eapply "${FILESDIR}"/${PV}/01_workaround-for-legacy-glibc-in-non-system-dir.patch
-	eapply "${FILESDIR}"/${PV}/05_fix-crash-000204.patch
+	eapply "${FILESDIR}"/${PV}/05_fix-crash-00204.patch
 	eapply "${FILESDIR}"/${PV}/10_fix-for-libc5.patch
 }
 

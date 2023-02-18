@@ -735,90 +735,8 @@ index 0000000..7e46c68
 +
 +/* Get perform_* macros to build libgcc.a.  */
 +#include "i386/perform.h"
-diff --git a/config/i386/linux-oldld.h b/config/i386/linux-oldld.h
-new file mode 100644
-index 0000000..c3066ba
---- /dev/null
-+++ b/config/i386/linux-oldld.h
-@@ -0,0 +1,76 @@
-+/* Definitions for Intel 386 running Linux with pre-BFD a.out linkers
-+   Copyright (C) 1995 Free Software Foundation, Inc.
-+   Contributed by Michael Meissner (meissner@cygnus.com)
-+
-+This file is part of GNU CC.
-+
-+GNU CC is free software; you can redistribute it and/or modify
-+it under the terms of the GNU General Public License as published by
-+the Free Software Foundation; either version 2, or (at your option)
-+any later version.
-+
-+GNU CC is distributed in the hope that it will be useful,
-+but WITHOUT ANY WARRANTY; without even the implied warranty of
-+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-+GNU General Public License for more details.
-+
-+You should have received a copy of the GNU General Public License
-+along with GNU CC; see the file COPYING.  If not, write to
-+the Free Software Foundation, 59 Temple Place - Suite 330,
-+Boston, MA 02111-1307, USA.  */
-+
-+/* This is tested by i386/gas.h.  */
-+#define YES_UNDERSCORES
-+
-+#include <i386/gstabs.h>
-+#include <linux-aout.h>	/* some common stuff */
-+
-+/* Specify predefined symbols in preprocessor.  */
-+
-+#undef CPP_PREDEFINES
-+#define CPP_PREDEFINES "-Dunix -Di386 -Dlinux -Asystem(unix) -Asystem(posix) -Acpu(i386) -Amachine(i386)"
-+
-+#undef CPP_SPEC
-+#if TARGET_CPU_DEFAULT == 2
-+#define CPP_SPEC "%{fPIC:-D__PIC__ -D__pic__} %{fpic:-D__PIC__ -D__pic__} %{!m386:-D__i486__} %{posix:-D_POSIX_SOURCE}"
-+#else
-+#define CPP_SPEC "%{fPIC:-D__PIC__ -D__pic__} %{fpic:-D__PIC__ -D__pic__} %{m486:-D__i486__} %{posix:-D_POSIX_SOURCE}"
-+#endif
-+
-+#undef SIZE_TYPE
-+#define SIZE_TYPE "unsigned int"
-+
-+#undef PTRDIFF_TYPE
-+#define PTRDIFF_TYPE "int"
-+
-+#undef WCHAR_TYPE
-+#define WCHAR_TYPE "long int"
-+
-+#undef WCHAR_TYPE_SIZE
-+#define WCHAR_TYPE_SIZE BITS_PER_WORD
-+
-+/* Don't default to pcc-struct-return, because gcc is the only compiler,
-+   and we want to retain compatibility with older gcc versions.  */
-+#define DEFAULT_PCC_STRUCT_RETURN 0
-+
-+#undef LIB_SPEC
-+
-+#if 1
-+/* We no longer link with libc_p.a or libg.a by default. If you
-+ * want to profile or debug the Linux C library, please add
-+ * -lc_p or -ggdb to LDFLAGS at the link time, respectively.
-+ */
-+#define LIB_SPEC \
-+"%{mieee-fp:-lieee} %{p:-lgmon} %{pg:-lgmon} %{!ggdb:-lc} %{ggdb:-lg}"
-+#else    
-+#define LIB_SPEC \
-+"%{mieee-fp:-lieee} %{p:-lgmon -lc_p} %{pg:-lgmon -lc_p} \
-+ %{!p:%{!pg:%{!g*:-lc} %{g*:-lg -static}}}" 
-+#endif
-+
-+
-+#undef LINK_SPEC
-+#define LINK_SPEC ""
-+
-+/* Get perform_* macros to build libgcc.a.  */
-+#include <i386/perform.h>
 diff --git a/config/i386/linux.h b/config/i386/linux.h
-index 5018bfc..92207d1 100644
+index 5018bfc..e20f283 100644
 --- a/config/i386/linux.h
 +++ b/config/i386/linux.h
 @@ -1,38 +1,139 @@
@@ -996,7 +914,7 @@ index 5018bfc..92207d1 100644
  
  #undef SIZE_TYPE
  #define SIZE_TYPE "unsigned int"
-@@ -46,73 +147,90 @@
+@@ -46,73 +147,87 @@
  #undef WCHAR_TYPE_SIZE
  #define WCHAR_TYPE_SIZE BITS_PER_WORD
  
@@ -1033,9 +951,6 @@ index 5018bfc..92207d1 100644
 +#else /* not USE_GNULIBC_1 */
 +#define CPP_SPEC "%{fPIC:-D__PIC__ -D__pic__} %{fpic:-D__PIC__ -D__pic__} %{posix:-D_POSIX_SOURCE} %{pthread:-D_REENTRANT}"
 +#endif /* not USE_GNULIBC_1 */
-+
-+#undef LIBGCC_SPEC
-+#define LIBGCC_SPEC "-lgcc"
 +
 +#undef	LIB_SPEC
 +#ifdef USE_GNULIBC_1
@@ -1257,10 +1172,10 @@ index 0000000..29fb8e9
 +#define HANDLE_SYSV_PRAGMA
 diff --git a/config/linux.h b/config/linux.h
 new file mode 100644
-index 0000000..c82cfe2
+index 0000000..3249db4
 --- /dev/null
 +++ b/config/linux.h
-@@ -0,0 +1,88 @@
+@@ -0,0 +1,83 @@
 +/* Definitions for Linux with ELF format
 +   Copyright (C) 1995 Free Software Foundation, Inc.
 +   Contributed by Eric Youngdale.
@@ -1323,11 +1238,6 @@ index 0000000..c82cfe2
 +	output_file_directive (FILE, main_input_filename);		\
 +	fprintf (FILE, "\t.version\t\"01.01\"\n");			\
 +  } while (0)
-+
-+#undef	LIBGCC_SPEC
-+#define LIBGCC_SPEC \
-+  "%{!shared:-lgcc}"
-+
 +
 +/* Provide a STARTFILE_SPEC appropriate for Linux.  Here we add
 +   the Linux magical crtbegin.o file (see crtstuff.c) which
@@ -1432,10 +1342,10 @@ index 0000000..980d08f
 +#define REAL_INFINITY
 diff --git a/config/m68k/linux.h b/config/m68k/linux.h
 new file mode 100644
-index 0000000..d5ad0ad
+index 0000000..31a55f0
 --- /dev/null
 +++ b/config/m68k/linux.h
-@@ -0,0 +1,354 @@
+@@ -0,0 +1,351 @@
 +/* Definitions for Motorola 68k running Linux with ELF format.
 +   Copyright (C) 1995 Free Software Foundation, Inc.
 +
@@ -1562,9 +1472,6 @@ index 0000000..d5ad0ad
 +  "%{fPIC:-D__PIC__ -D__pic__} %{fpic:-D__PIC__ -D__pic__} %{m68881:-D__HAVE_68881__} %{posix:-D_POSIX_SOURCE} %{pthread:-D_REENTRANT}"
 +#endif
 +#endif
-+
-+#undef LIBGCC_SPEC
-+#define LIBGCC_SPEC "-lgcc"
 +
 +#undef	LIB_SPEC
 +#ifdef USE_GNULIBC_1
@@ -1836,7 +1743,7 @@ index 0000000..3b10506
 +#include <m68k/xm-m68k.h>
 +#include <xm-linux.h>
 diff --git a/config/svr4.h b/config/svr4.h
-index 64fa031..b88a2df 100644
+index 64fa031..c90b57f 100644
 --- a/config/svr4.h
 +++ b/config/svr4.h
 @@ -1,8 +1,7 @@
@@ -1862,7 +1769,7 @@ index 64fa031..b88a2df 100644
  
     To use this file, make up a file with a name like:
  
-@@ -123,17 +123,25 @@ the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
+@@ -123,17 +123,19 @@ the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
  #define MD_STARTFILE_PREFIX "/usr/ccs/lib/"
  
  /* Provide a LIB_SPEC appropriate for svr4.  Here we tack on the default
@@ -1873,12 +1780,6 @@ index 64fa031..b88a2df 100644
 +
 +#undef	LIB_SPEC
 +#define LIB_SPEC "%{!shared:%{!symbolic:-lc}}"
-+
-+/* Provide a LIBGCC_SPEC appropriate for svr4.  We also want to exclude
-+   libgcc when -symbolic.  */
-+
-+#undef  LIBGCC_SPEC
-+#define LIBGCC_SPEC "%{!shared:%{!symbolic:-lgcc}}"
 +
 +/* Provide an ENDFILE_SPEC appropriate for svr4.  Here we tack on our own
 +   magical crtend.o file (see crtstuff.c) which provides part of the
@@ -1896,7 +1797,7 @@ index 64fa031..b88a2df 100644
  
  /* Provide a LINK_SPEC appropriate for svr4.  Here we provide support
     for the special GCC options -static, -shared, and -symbolic which
-@@ -162,8 +170,8 @@ the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
+@@ -162,8 +164,8 @@ the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
  #define LINK_SPEC "%{h*} %{V} %{v:%{!V:-V}} \
  		   %{b} %{Wl,*:%*} \
  		   %{static:-dn -Bstatic} \
@@ -1907,7 +1808,7 @@ index 64fa031..b88a2df 100644
  		   %{G:-G} \
  		   %{YP,*} \
  		   %{!YP,*:%{p:-Y P,/usr/ccs/lib/libp:/usr/lib/libp:/usr/ccs/lib:/usr/lib} \
-@@ -185,12 +193,13 @@ the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
+@@ -185,12 +187,13 @@ the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
  #undef	STARTFILE_SPEC
  #define STARTFILE_SPEC "%{!shared: \
  			 %{!symbolic: \
@@ -1927,7 +1828,7 @@ index 64fa031..b88a2df 100644
  
  /* Attach a special .ident directive to the end of the file to identify
     the version of GCC which compiled this code.  The format of the
-@@ -245,6 +254,75 @@ do {				 				\
+@@ -245,6 +248,75 @@ do {				 				\
  
  #undef DBX_REGISTER_NUMBER
  
@@ -2003,7 +1904,7 @@ index 64fa031..b88a2df 100644
  /* Define the actual types of some ANSI-mandated types.  (These
     definitions should work for most SVR4 systems).  */
  
-@@ -409,16 +487,33 @@ do {									\
+@@ -409,16 +481,33 @@ do {									\
  #define USE_CONST_SECTION	1
  
  #define CONST_SECTION_ASM_OP	".section\t.rodata"
@@ -2044,7 +1945,7 @@ index 64fa031..b88a2df 100644
  
  /* A default list of other sections which we might be "in" at any given
     time.  For targets that use additional sections (e.g. .tdesc) you
-@@ -440,7 +535,7 @@ do {									\
+@@ -440,7 +529,7 @@ do {									\
  
  #define READONLY_DATA_SECTION() const_section ()
  
@@ -2053,7 +1954,7 @@ index 64fa031..b88a2df 100644
  
  #define CONST_SECTION_FUNCTION						\
  void									\
-@@ -514,7 +609,10 @@ dtors_section ()							\
+@@ -514,7 +603,10 @@ dtors_section ()							\
    else if (TREE_CODE (DECL) == VAR_DECL)				\
      {									\
        if ((flag_pic && RELOC)						\
@@ -2065,21 +1966,15 @@ index 64fa031..b88a2df 100644
  	data_section ();						\
        else								\
  	const_section ();						\
-@@ -540,7 +638,12 @@ dtors_section ()							\
+@@ -540,7 +632,6 @@ dtors_section ()							\
  
  #define TYPE_ASM_OP	".type"
  #define SIZE_ASM_OP	".size"
 -#define WEAK_ASM_OP	".weak"
-+
-+/* This is how we tell the assembler that a symbol is weak.  */
-+
-+#define ASM_WEAKEN_LABEL(FILE,NAME) \
-+  do { fputs ("\t.weak\t", FILE); assemble_name (FILE, NAME); \
-+       fputc ('\n', FILE); } while (0)
  
  /* The following macro defines the format used to output the second
     operand of the .type assembler directive.  Different svr4 assemblers
-@@ -578,24 +681,6 @@ dtors_section ()							\
+@@ -578,24 +669,6 @@ dtors_section ()							\
      ASM_OUTPUT_LABEL(FILE, NAME);					\
    } while (0)
  
@@ -2104,7 +1999,7 @@ index 64fa031..b88a2df 100644
  /* This is how to declare the size of a function.  */
  
  #define ASM_DECLARE_FUNCTION_SIZE(FILE, FNAME, DECL)			\
-@@ -628,10 +713,11 @@ dtors_section ()							\
+@@ -628,10 +701,11 @@ dtors_section ()							\
     in the table.  Note that we can use standard UN*X escape
     sequences for many control characters, but we don't use
     \a to represent BEL because some svr4 assemblers (e.g. on
@@ -2118,7 +2013,7 @@ index 64fa031..b88a2df 100644
  \0\0\"\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\
  \0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\\\0\0\0\
  \0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\1\
-@@ -752,3 +838,6 @@ dtors_section ()							\
+@@ -752,3 +826,6 @@ dtors_section ()							\
          fprintf ((FILE), "\"\n");					\
      }									\
    while (0)
@@ -2213,7 +2108,7 @@ index 0000000..a842299
 +#undef index
 +#undef rindex
 diff --git a/configure b/configure
-index 0791b18..cd62c6e 100755
+index 0791b18..0372732 100755
 --- a/configure
 +++ b/configure
 @@ -277,6 +277,7 @@ for machine in $canon_build $canon_host $canon_target; do
@@ -2224,24 +2119,16 @@ index 0791b18..cd62c6e 100755
  	# Set this to force installation and use of collect2.
  	use_collect2=
  	# Set this to override the default target model.
-@@ -453,13 +454,47 @@ for machine in $canon_build $canon_host $canon_target; do
+@@ -453,13 +454,38 @@ for machine in $canon_build $canon_host $canon_target; do
  		tm_file=i386/sun.h
  		use_collect2=yes
  		;;
 -	i[34]86-*-linux*)               # Intel 80386's running Linux
 -		cpu_type=i386
-+	i[3456]86-*-linux*oldld*)	# Intel 80386's running GNU/Linux
-+		cpu_type=i386		# with a.out format using pre BFD linkers
-+		xm_file=i386/xm-linux.h
-+		xmake_file=x-linux
-+		tm_file=i386/linux-oldld.h
-+		fixincludes=Makefile.in # The headers are ok already.
-+		broken_install=yes
-+		gnu_ld=yes
-+		;;
 +	i[3456]86-*-linux*aout*)		# Intel 80386's running GNU/Linux
 +		cpu_type=i386		# with a.out format
-+		xm_file=i386/xm-linux.h
+ 		xm_file=i386/xm-linux.h
+-		xmake_file=i386/x-linux
 +		xmake_file=x-linux
 +		tm_file=i386/linux-aout.h
 +		fixincludes=Makefile.in # The headers are ok already.
@@ -2253,22 +2140,21 @@ index 0791b18..cd62c6e 100755
 +		xm_file=i386/xm-linux.h
 +		xmake_file=x-linux
 +		tmake_file=t-linux-gnulibc1
-+		tm_file=i386/linux.h
+ 		tm_file=i386/linux.h
+-		fixincludes=Makefile.in #On Linux, the headers are ok already.
 +		fixincludes=Makefile.in # The headers are ok already.
-+		broken_install=yes
+ 		broken_install=yes
 +		gnu_ld=yes
 +		extra_parts="crtbegin.o crtbeginS.o crtend.o crtendS.o"
 +		;;
 +	i[3456]86-*-linux*)		# Intel 80386's running GNU/Linux
 +		cpu_type=i386		# with ELF format
- 		xm_file=i386/xm-linux.h
--		xmake_file=i386/x-linux
++		xm_file=i386/xm-linux.h
 +		xmake_file=x-linux
 +		tmake_file=t-linux
- 		tm_file=i386/linux.h
--		fixincludes=Makefile.in #On Linux, the headers are ok already.
++		tm_file=i386/linux.h
 +		fixincludes=Makefile.in # The headers are ok already.
- 		broken_install=yes
++		broken_install=yes
 +		gnu_ld=yes
 +		# GNU libc version 2 does not supply these;
 +		# we want them from GCC.
@@ -2276,7 +2162,7 @@ index 0791b18..cd62c6e 100755
  		;;
  	i486-ncr-sysv4*)		# NCR 3000 - i486 running system V.4
  		cpu_type=i386
-@@ -742,6 +777,37 @@ for machine in $canon_build $canon_host $canon_target; do
+@@ -742,6 +768,37 @@ for machine in $canon_build $canon_host $canon_target; do
  		tmake_file=t-svr3
  		header_files=math-68881.h
  		;;
@@ -2314,7 +2200,7 @@ index 0791b18..cd62c6e 100755
  	m68000-sun-sunos3*)
  		cpu_type=m68k
  		tm_file=m68k/sun2.h
-@@ -1511,6 +1577,17 @@ else
+@@ -1511,6 +1568,17 @@ else
  	mv Makefile.xx Makefile.tem
  fi
  

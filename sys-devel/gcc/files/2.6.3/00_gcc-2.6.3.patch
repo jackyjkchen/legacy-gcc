@@ -474,88 +474,6 @@ index 0000000..7e46c68
 +
 +/* Get perform_* macros to build libgcc.a.  */
 +#include "i386/perform.h"
-diff --git a/config/i386/linux-oldld.h b/config/i386/linux-oldld.h
-new file mode 100644
-index 0000000..c3066ba
---- /dev/null
-+++ b/config/i386/linux-oldld.h
-@@ -0,0 +1,76 @@
-+/* Definitions for Intel 386 running Linux with pre-BFD a.out linkers
-+   Copyright (C) 1995 Free Software Foundation, Inc.
-+   Contributed by Michael Meissner (meissner@cygnus.com)
-+
-+This file is part of GNU CC.
-+
-+GNU CC is free software; you can redistribute it and/or modify
-+it under the terms of the GNU General Public License as published by
-+the Free Software Foundation; either version 2, or (at your option)
-+any later version.
-+
-+GNU CC is distributed in the hope that it will be useful,
-+but WITHOUT ANY WARRANTY; without even the implied warranty of
-+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-+GNU General Public License for more details.
-+
-+You should have received a copy of the GNU General Public License
-+along with GNU CC; see the file COPYING.  If not, write to
-+the Free Software Foundation, 59 Temple Place - Suite 330,
-+Boston, MA 02111-1307, USA.  */
-+
-+/* This is tested by i386/gas.h.  */
-+#define YES_UNDERSCORES
-+
-+#include <i386/gstabs.h>
-+#include <linux-aout.h>	/* some common stuff */
-+
-+/* Specify predefined symbols in preprocessor.  */
-+
-+#undef CPP_PREDEFINES
-+#define CPP_PREDEFINES "-Dunix -Di386 -Dlinux -Asystem(unix) -Asystem(posix) -Acpu(i386) -Amachine(i386)"
-+
-+#undef CPP_SPEC
-+#if TARGET_CPU_DEFAULT == 2
-+#define CPP_SPEC "%{fPIC:-D__PIC__ -D__pic__} %{fpic:-D__PIC__ -D__pic__} %{!m386:-D__i486__} %{posix:-D_POSIX_SOURCE}"
-+#else
-+#define CPP_SPEC "%{fPIC:-D__PIC__ -D__pic__} %{fpic:-D__PIC__ -D__pic__} %{m486:-D__i486__} %{posix:-D_POSIX_SOURCE}"
-+#endif
-+
-+#undef SIZE_TYPE
-+#define SIZE_TYPE "unsigned int"
-+
-+#undef PTRDIFF_TYPE
-+#define PTRDIFF_TYPE "int"
-+
-+#undef WCHAR_TYPE
-+#define WCHAR_TYPE "long int"
-+
-+#undef WCHAR_TYPE_SIZE
-+#define WCHAR_TYPE_SIZE BITS_PER_WORD
-+
-+/* Don't default to pcc-struct-return, because gcc is the only compiler,
-+   and we want to retain compatibility with older gcc versions.  */
-+#define DEFAULT_PCC_STRUCT_RETURN 0
-+
-+#undef LIB_SPEC
-+
-+#if 1
-+/* We no longer link with libc_p.a or libg.a by default. If you
-+ * want to profile or debug the Linux C library, please add
-+ * -lc_p or -ggdb to LDFLAGS at the link time, respectively.
-+ */
-+#define LIB_SPEC \
-+"%{mieee-fp:-lieee} %{p:-lgmon} %{pg:-lgmon} %{!ggdb:-lc} %{ggdb:-lg}"
-+#else    
-+#define LIB_SPEC \
-+"%{mieee-fp:-lieee} %{p:-lgmon -lc_p} %{pg:-lgmon -lc_p} \
-+ %{!p:%{!pg:%{!g*:-lc} %{g*:-lg -static}}}" 
-+#endif
-+
-+
-+#undef LINK_SPEC
-+#define LINK_SPEC ""
-+
-+/* Get perform_* macros to build libgcc.a.  */
-+#include <i386/perform.h>
 diff --git a/config/i386/linux.h b/config/i386/linux.h
 index a28fbef..6970d03 100644
 --- a/config/i386/linux.h
@@ -1641,7 +1559,7 @@ index 0000000..3b10506
 +#include <m68k/xm-m68k.h>
 +#include <xm-linux.h>
 diff --git a/config/svr4.h b/config/svr4.h
-index 663ff4b..96ce9a3 100644
+index 663ff4b..5c48d2a 100644
 --- a/config/svr4.h
 +++ b/config/svr4.h
 @@ -1,7 +1,7 @@
@@ -1816,21 +1734,15 @@ index 663ff4b..96ce9a3 100644
  /* A C statement (sans semicolon) to output an element in the table of
     global constructors.  */
  #define ASM_OUTPUT_CONSTRUCTOR(FILE,NAME)				\
-@@ -608,7 +638,12 @@ dtors_section ()							\
+@@ -608,7 +638,6 @@ dtors_section ()							\
  
  #define TYPE_ASM_OP	".type"
  #define SIZE_ASM_OP	".size"
 -#define WEAK_ASM_OP	".weak"
-+
-+/* This is how we tell the assembler that a symbol is weak.  */
-+
-+#define ASM_WEAKEN_LABEL(FILE,NAME) \
-+  do { fputs ("\t.weak\t", FILE); assemble_name (FILE, NAME); \
-+       fputc ('\n', FILE); } while (0)
  
  /* The following macro defines the format used to output the second
     operand of the .type assembler directive.  Different svr4 assemblers
-@@ -844,3 +879,6 @@ do {									 \
+@@ -844,3 +873,6 @@ do {									 \
          fprintf ((FILE), "\"\n");					\
      }									\
    while (0)
@@ -1925,7 +1837,7 @@ index 0000000..a842299
 +#undef index
 +#undef rindex
 diff --git a/configure b/configure
-index 1f0106d..326abb6 100755
+index 1f0106d..7b90923 100755
 --- a/configure
 +++ b/configure
 @@ -756,17 +756,6 @@ for machine in $canon_build $canon_host $canon_target; do
@@ -1946,14 +1858,14 @@ index 1f0106d..326abb6 100755
  	i[345]86-*-isc*)		# 80386 running ISC system
  		cpu_type=i386
  		xm_file=i386/xm-isc.h
-@@ -790,18 +779,58 @@ for machine in $canon_build $canon_host $canon_target; do
+@@ -790,18 +779,49 @@ for machine in $canon_build $canon_host $canon_target; do
  		install_headers_dir=install-headers-cpio
  		broken_install=yes
  		;;
 -	i[345]86-*-linux*)		# Intel 80386's running Linux
 -		cpu_type=i386
-+	i[3456]86-*-linux*oldld*)	# Intel 80386's running GNU/Linux
-+		cpu_type=i386		# with a.out format using pre BFD linkers
++	i[3456]86-*-linux*aout*)		# Intel 80386's running GNU/Linux
++		cpu_type=i386		# with a.out format
  		xm_file=i386/xm-linux.h
 -		xmake_file=i386/x-linux
 -                if [ x$elf = xyes ]
@@ -1963,15 +1875,6 @@ index 1f0106d..326abb6 100755
 -			tm_file=i386/linux.h
 -		fi
 -		fixincludes=Makefile.in #On Linux, the headers are ok already.
-+		xmake_file=x-linux
-+		tm_file=i386/linux-oldld.h
-+		fixincludes=Makefile.in # The headers are ok already.
-+		broken_install=yes
-+		gnu_ld=yes
-+		;;
-+	i[3456]86-*-linux*aout*)		# Intel 80386's running GNU/Linux
-+		cpu_type=i386		# with a.out format
-+		xm_file=i386/xm-linux.h
 +		xmake_file=x-linux
 +		tm_file=i386/linux-aout.h
 +		fixincludes=Makefile.in # The headers are ok already.
@@ -1985,7 +1888,7 @@ index 1f0106d..326abb6 100755
 +		tmake_file=t-linux-gnulibc1
 +		tm_file=i386/linux.h
 +		fixincludes=Makefile.in # The headers are ok already.
- 		broken_install=yes
++		broken_install=yes
 +		gnu_ld=yes
 +		extra_parts="crtbegin.o crtbeginS.o crtend.o crtendS.o"
 +		;;
@@ -1996,7 +1899,7 @@ index 1f0106d..326abb6 100755
 +		tmake_file=t-linux
 +		tm_file=i386/linux.h
 +		fixincludes=Makefile.in # The headers are ok already.
-+		broken_install=yes
+ 		broken_install=yes
 +		gnu_ld=yes
 +		# GNU libc version 2 does not supply these;
 +		# we want them from GCC.
@@ -2015,7 +1918,7 @@ index 1f0106d..326abb6 100755
  		;;
  	i[345]86-*-lynxos*)
  		cpu_type=i386
-@@ -1254,6 +1283,37 @@ for machine in $canon_build $canon_host $canon_target; do
+@@ -1254,6 +1274,37 @@ for machine in $canon_build $canon_host $canon_target; do
  		tmake_file=t-svr4
  		header_files=math-68881.h
  		;;
