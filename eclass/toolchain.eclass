@@ -795,6 +795,7 @@ do_gcc_DJGPP_patches() {
 		tc_version_is_at_least 7 || rm -rf gcc/testsuite
 		tc_version_is_at_least 8 || rm -rf libffi
 		tc_version_is_between 6 8 || rm -rf gcc/gengtype-lex.c
+		tc_version_is_between 4.3 4.9 || cp -avx "${FILESDIR}"/nmalloc gcc/i386/
 		if [ -d "${FILESDIR}/${GCC_RELEASE_VER}/djgpp" ]; then
 			einfo "Applying djgpp port patches ..."
 			eapply "${FILESDIR}"/${GCC_RELEASE_VER}/djgpp/*.patch
