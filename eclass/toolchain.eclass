@@ -229,7 +229,7 @@ if [[ ${PN} != kgcc64 && ${PN} != gcc-* ]] ; then
 	[[ -n ${SPECS_VER} ]] && IUSE+=" nossp"
 	case $(tc-arch) in
 		alpha)
-			tc_version_is_at_least 2.9 && IUSE+=" +cxx"
+			tc_version_is_at_least 2.8 && IUSE+=" +cxx"
 			tc_version_is_at_least 2.9 && IUSE+=" objc"
 			;;
 		ppc64)

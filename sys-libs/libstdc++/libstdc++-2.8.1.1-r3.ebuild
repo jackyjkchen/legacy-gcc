@@ -11,13 +11,13 @@ inherit downgrade-arch-flags gnuconfig
 
 LICENSE=""
 SLOT="$(ver_cut 1-3 ${PV})"
-KEYWORDS="amd64 m68k ppc sparc x86"
+KEYWORDS="amd64 alpha m68k ppc sparc x86"
 
 case ${ARCH} in
 amd64|x86)
 	TOOL_PREFIX="i686-legacy"
 	;;
-m68k)
+alpha|m68k)
 	TOOL_PREFIX="${ARCH}-legacy"
 	;;
 ppc)
@@ -53,9 +53,19 @@ src_configure() {
 		--host=${CHOST}
 		--target=${CHOST}
 		--prefix=/usr
-		--enable-shared
 		--with-gxx-include-dir=/usr/lib/gcc-lib/${CHOST}/2.8.1/include/g++-v2
 	)
+
+	# workaround alpha binutils coredump
+	if [[ ${ARCH} == "alpha" ]] ; then
+		econfargs+=(
+			--disable-shared
+        )
+	else
+		econfargs+=(
+			--enable-shared
+        )
+	fi
 
 	mkdir -p "${WORKDIR}"/build
 	pushd "${WORKDIR}"/build > /dev/null
