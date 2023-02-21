@@ -64,6 +64,7 @@ src_prepare() {
 	gnuconfig_update
 	eapply "${FILESDIR}"/${PV}/00_glibc-${PV}.patch
 	eapply "${FILESDIR}"/${PV}/01_glibc-${PV}-workaround-for-old-gcc.patch
+	touch -r aclocal.m4 sysdeps/unix/sysv/linux/configure* configure* || die
 	pushd "${WORKDIR}"/glibc-ports-2.5 > /dev/null
 	eapply "${FILESDIR}"/${PV}/02_glibc-ports-workaround-for-old-gcc.patch
 	[[ ${ARCH} == "m68k" ]] && eapply "${FILESDIR}"/${PV}/03_glibc-ports-m68k-nptl-headers.patch
@@ -112,7 +113,7 @@ src_compile() {
 
 src_install() {
 	pushd "${WORKDIR}"/build >/dev/null
-	emake install-headers || die
+	emake -j1 install-headers || die
 	touch  ${ED}/usr/${CHOST}/include/gnu/stubs.h || die
 	cp -v bits/stdio_lim.h ${ED}/usr/${CHOST}/include/bits || die
 	rm -rv ${ED}/usr/${CHOST}/include/scsi || die

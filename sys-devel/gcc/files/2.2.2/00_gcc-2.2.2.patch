@@ -2907,6 +2907,91 @@ index 7acc807..e556755 100755
  # Conditionalize the makefile for this target machine.
  if [ -f ${srcdir}/config/${tmake_file} ]
  then
+diff --git a/cp-typeck.c b/cp-typeck.c
+index edf62d0..cf42a59 100644
+--- a/cp-typeck.c
++++ b/cp-typeck.c
+@@ -4347,7 +4347,6 @@ build_c_cast (type, expr)
+ 
+   if (type == error_mark_node || expr == error_mark_node)
+     return error_mark_node;
+-  type = TYPE_MAIN_VARIANT (type);
+ 
+   /* build_c_cast puts on a NOP_EXPR to make the result not an lvalue.
+      Strip such NOP_EXPRs, since VALUE is being used in non-lvalue context.  */
+@@ -4362,17 +4361,49 @@ build_c_cast (type, expr)
+ 
+   if (TREE_CODE (type) == ARRAY_TYPE)
+     {
+-      error ("cast specifies array type");
+-      return error_mark_node;
++      /* Allow casting from T1* to T2[] because Cfront allows it.
++	 NIHCL uses it. It is not valid ANSI C however, and hence, not
++	 valid ANSI C++.  */
++      if (TREE_CODE (TREE_TYPE (expr)) == POINTER_TYPE)
++	{
++	  if (pedantic)
++	    pedwarn ("ANSI C++ forbids casting to an array type");
++	  type = build_pointer_type (TREE_TYPE (type));
++	}
++      else
++	{
++	  error ("ANSI C++ forbids casting to an array type");
++	  return error_mark_node;
++	}
+     }
+ 
+-  if (type == TREE_TYPE (value))
++  /* When converting into a reference type, just convert into a pointer
++     to the new type and deference it.  While this is not exactly what ARM 5.4
++     calls for, it is pretty close for now.  (int &)ri  --->  *(int*)&ri  */
++  if (TREE_CODE (type) == REFERENCE_TYPE)
+     {
+-      if (pedantic)
++      value = build_unary_op (ADDR_EXPR, value, 0);
++      if (value != error_mark_node)
++	value = convert (build_pointer_type (TREE_TYPE (type)), value);
++      if (value != error_mark_node)
++	value = build_indirect_ref (value, "reference conversion");
++      return value;
++    }
++
++  if (TREE_TYPE (value)
++      && TYPE_MAIN_VARIANT (type) == TYPE_MAIN_VARIANT (TREE_TYPE (value)))
++    {
++      /* For C++, we must copy the constness of TYPE into VALUE.  */
++      if (TREE_READONLY (value) != TYPE_READONLY (type))
++	{
++	  value = copy_node (value);
++	  TREE_READONLY (value) = TYPE_READONLY (type);
++	}
++      else if (pedantic)
+ 	{
+ 	  if (TREE_CODE (type) == RECORD_TYPE
+ 	      || TREE_CODE (type) == UNION_TYPE)
+-	    pedwarn ("ANSI C forbids casting nonscalar to the same type");
++	    pedwarn ("ANSI C++ forbids casting nonscalar to the same type");
+ 	}
+       return value;
+     }
+@@ -4396,17 +4427,6 @@ build_c_cast (type, expr)
+       if (value == error_mark_node)
+ 	return error_mark_node;
+     }
+-  else if (TREE_CODE (type) == REFERENCE_TYPE
+-	   && TREE_CODE (TREE_TYPE (value)) == REFERENCE_TYPE)
+-    {
+-      /* Reference-to-reference conversion is special.  */
+-      value = build_unary_op (ADDR_EXPR, value, 0);
+-      if (value != error_mark_node)
+-	value = convert_force (build_pointer_type (TREE_TYPE (type)), value);
+-      if (value == error_mark_node)
+-	return error_mark_node;
+-      return build1 (NOP_EXPR, type, value);
+-    }
+   else
+     {
+       tree otype;
 diff --git a/crtstuff.c b/crtstuff.c
 index 0b8fc36..0a30340 100644
 --- a/crtstuff.c
