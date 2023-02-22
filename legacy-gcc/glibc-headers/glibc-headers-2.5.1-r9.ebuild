@@ -113,7 +113,7 @@ src_compile() {
 
 src_install() {
 	pushd "${WORKDIR}"/build >/dev/null
-	emake -j1 install-headers || die
+	make install-headers || die
 	touch  ${ED}/usr/${CHOST}/include/gnu/stubs.h || die
 	cp -v bits/stdio_lim.h ${ED}/usr/${CHOST}/include/bits || die
 	rm -rv ${ED}/usr/${CHOST}/include/scsi || die
