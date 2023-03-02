@@ -1427,7 +1427,7 @@ toolchain_src_configure() {
 			;;
 		hppa)
 			# Enable sjlj exceptions for backward compatibility on hppa
-			[[ ${GCCMAJOR} == "3" ]] && confgcc+=( --enable-sjlj-exceptions )
+			tc_version_is_at_least 3.4 || confgcc+=( --enable-sjlj-exceptions )
 			;;
 		ppc)
 			# Set up defaults based on current CFLAGS
