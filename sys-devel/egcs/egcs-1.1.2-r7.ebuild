@@ -49,8 +49,11 @@ BDEPEND="sys-devel/gcc:2.95.3"
 
 src_prepare() {
 	eapply "${FILESDIR}"/${PV}/00_egcs-${PV}.patch
-	eapply "${FILESDIR}"/${PV}/01_workaround-for-new-glibc.patch
 	toolchain_src_prepare
+
+	eapply "${FILESDIR}"/${PV}/01_workaround-for-new-glibc.patch
+	eapply "${FILESDIR}"/${PV}/02_sjlj-exception-default.patch
+
 	if ! _tc_use_if_iuse cxx; then
 		rm -r libstdc++ libio gcc/cp || die
 	fi

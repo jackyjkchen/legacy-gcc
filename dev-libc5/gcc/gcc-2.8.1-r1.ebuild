@@ -17,10 +17,11 @@ CC="${CTARGET}-gcc-2.95.3"
 CXX="${CTARGET}-g++-2.95.3"
 
 src_prepare() {
-	eapply "${FILESDIR}"/${PV}/00_egcs-${PV}.patch
+	eapply "${FILESDIR}"/${PV}/00_gcc-${PV}.patch
 	toolchain-oldlibc_src_prepare
 
-	eapply "${FILESDIR}"/${PV}/01_workaround-for-new-glibc.patch
+	eapply "${FILESDIR}"/${PV}/01_gcc-${PV}-workaround-for-new-glibc.patch
+	eapply "${FILESDIR}"/${PV}/02_sjlj-exception-default.patch
 	eapply "${FILESDIR}"/${PV}/10_fix-for-libc5.patch
 }
 

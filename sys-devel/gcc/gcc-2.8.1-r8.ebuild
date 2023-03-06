@@ -49,8 +49,10 @@ BDEPEND="sys-devel/gcc:2.95.3"
 
 src_prepare() {
 	eapply "${FILESDIR}"/${PV}/00_gcc-${PV}.patch
-	eapply "${FILESDIR}"/${PV}/01_gcc-${PV}-workaround-for-new-glibc.patch
 	toolchain_src_prepare
+
+	eapply "${FILESDIR}"/${PV}/01_gcc-${PV}-workaround-for-new-glibc.patch
+	eapply "${FILESDIR}"/${PV}/02_sjlj-exception-default.patch
 }
 
 src_install() {
