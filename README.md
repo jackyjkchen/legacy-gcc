@@ -52,7 +52,7 @@ mingw-w64支持multilib，64位使用SEH异常机制（4.8以上版本），32�
 
 mingw仅支持32位，使用SJLJ异常机制，与mingw官方二进制发布一致。
 
-cygwin64/cygwin/cygwin-legacy不支持multilib，异常机制与cygwin官方二进制发布一致（cygwin64使用SEH，cygwin/cygwin-legacy使用DWARF-2）。cygwin-legacy兼容Win9x。
+cygwin64/cygwin/cygwin-legacy不支持multilib，异常机制与cygwin官方二进制发布一致（cygwin64使用SEH，cygwin/cygwin-legacy使用DWARF-2）。cygwin64/cygwin兼容nt6.1（cygwin-3.4.6），nt6.0（cygwin-3.3.6）或nt5.1（cygiwn-2.5.2，XP限SP3）。cygwin-legacy兼容win2k（cygwin-1.7.18）或Win9x（cygwin-1.5.25）。
 
 提供额外的libc5/libc4静态工具链，可与标准glibc(libc6)工具链共存，以本地工具链形式bootstrap——
 * libc5: gcc-1.42 - gcc-3.4.6

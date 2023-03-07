@@ -11,23 +11,11 @@ if [[ ${CTARGET} == ${CHOST} ]] ; then
 	fi
 fi
 
-case ${CTARGET} in
-	x86_64-pc-cygwin)
-		cygwin_arch=x86_64
-		;;
-	i686-pc-cygwin)
-		cygwin_arch=x86
-		;;
-	*)
-		;;
-esac
-
 DESCRIPTION=""
 HOMEPAGE=""
-SRC_URI="https://mirrors.ustc.edu.cn/cygwin/x86_64/release/w32api-headers/w32api-headers-10.0.0-1.tar.xz -> w32api-headers-10.0.0-1-x86_64.tar.xz
-		https://mirrors.ustc.edu.cn/cygwin/x86_64/release/w32api-runtime/w32api-runtime-10.0.0-1.tar.xz -> w32api-runtime-10.0.0-1-x86_64.tar.xz
-		https://mirrors.ustc.edu.cn/cygwin/x86_64/release/cygwin/cygwin-${PV}-1.tar.xz -> cygwin-${PV}-1-x86_64.tar.xz
-		https://mirrors.ustc.edu.cn/cygwin/x86_64/release/cygwin/cygwin-devel/cygwin-devel-${PV}-1.tar.xz -> cygwin-devel-${PV}-1-x86_64.tar.xz"
+SRC_URI="https://github.com/jackyjkchen/binaries/releases/download/cygwin-legacy/w32api-headers-3.0b_svn5747-1.tar.bz2
+		https://github.com/jackyjkchen/binaries/releases/download/cygwin-legacy/w32api-runtime-3.0b_svn5747-1.tar.bz2
+		https://github.com/jackyjkchen/binaries/releases/download/cygwin-legacy/cygwin-${PV}-1.tar.bz2"
 
 LICENSE=""
 SLOT="0"
@@ -48,16 +36,14 @@ pkg_setup() {
 
 src_unpack() {
 	mkdir -p "${S}" || die
-	tar -pxf "${DISTDIR}"/w32api-headers-10.0.0-1-${cygwin_arch}.tar.xz -C "${S}" || die
-	tar -pxf "${DISTDIR}"/w32api-runtime-10.0.0-1-${cygwin_arch}.tar.xz -C "${S}" || die
-	tar -pxf "${DISTDIR}"/cygwin-${PV}-1-${cygwin_arch}.tar.xz -C "${S}" || die
-	tar -pxf "${DISTDIR}"/cygwin-devel-${PV}-1-${cygwin_arch}.tar.xz -C "${S}" || die
+	tar -pxf "${DISTDIR}"/w32api-headers-3.0b_svn5747-1.tar.bz2 -C "${S}" || die
+	tar -pxf "${DISTDIR}"/w32api-runtime-3.0b_svn5747-1.tar.bz2 -C "${S}" || die
+	tar -pxf "${DISTDIR}"/cygwin-${PV}-1.tar.bz2 -C "${S}" || die
 }
 
 src_prepare() {
 	pushd "${S}" > /dev/null
 	default
-	eapply "${FILESDIR}"/00_fix-gcc-47.patch
 	popd > /dev/null
 }
 

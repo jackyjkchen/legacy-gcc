@@ -24,10 +24,10 @@ esac
 
 DESCRIPTION=""
 HOMEPAGE=""
-SRC_URI="https://github.com/jackyjkchen/binaries/releases/download/cygwin-x86/w32api-headers-10.0.0-1-x86.tar.xz -> w32api-headers-10.0.0-1-x86.tar.xz
-		https://github.com/jackyjkchen/binaries/releases/download/cygwin-x86/w32api-runtime-10.0.0-1-x86.tar.xz -> w32api-runtime-10.0.0-1-x86.tar.xz
-		https://github.com/jackyjkchen/binaries/releases/download/cygwin-x86/cygwin-${PV}-1-x86.tar.xz -> cygwin-${PV}-1-x86.tar.xz
-		https://github.com/jackyjkchen/binaries/releases/download/cygwin-x86/cygwin-devel-${PV}-1-x86.tar.xz -> cygwin-devel-${PV}-1-x86.tar.xz"
+SRC_URI="https://github.com/jackyjkchen/binaries/releases/download/cygwin-legacy/w32api-headers-10.0.0-1-x86_64.tar.xz -> w32api-headers-10.0.0-1-x86_64.tar.xz
+		https://github.com/jackyjkchen/binaries/releases/download/cygwin-legacy/w32api-runtime-10.0.0-1-x86_64.tar.xz -> w32api-runtime-10.0.0-1-x86_64.tar.xz
+		https://github.com/jackyjkchen/binaries/releases/download/cygwin-legacy/cygwin-${PV}-1-x86_64.tar.xz -> cygwin-${PV}-1-x86_64.tar.xz
+		https://github.com/jackyjkchen/binaries/releases/download/cygwin-legacy/cygwin-devel-${PV}-1-x86_64.tar.xz -> cygwin-devel-${PV}-1-x86_64.tar.xz"
 
 LICENSE=""
 SLOT="0"
@@ -57,7 +57,7 @@ src_unpack() {
 src_prepare() {
 	pushd "${S}" > /dev/null
 	default
-	eapply "${FILESDIR}"/${PV}/00_fix-gcc-47.patch
+	eapply "${FILESDIR}"/00_fix-gcc-47.patch
 	popd > /dev/null
 }
 
