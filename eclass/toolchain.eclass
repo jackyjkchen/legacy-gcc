@@ -2255,7 +2255,7 @@ toolchain_src_install() {
 			-name 'lib*san.la' \
 		')' -type f -delete
 
-	rm -rfv "${D}${BINPATH}"/{c++filt,gccbug,protoize,unprotoize}
+	rm -rfv "${D}${BINPATH}"/{*c++filt,*gccbug,*protoize,*unprotoize}
 
 	# Use gid of 0 because some stupid ports don't have
 	# the group 'root' set to gid 0.  Send to /dev/null
