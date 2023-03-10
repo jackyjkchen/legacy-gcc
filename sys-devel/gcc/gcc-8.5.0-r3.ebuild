@@ -23,8 +23,13 @@ else
 fi
 
 src_prepare() {
+	if has_version '>=sys-libs/glibc-2.32-r1'; then
+		rm -v "${WORKDIR}/patch/27_all_disable-riscv32-ABIs.patch" || die
+	fi
 	toolchain_src_prepare
 	use vanilla && return 0
+
+	eapply "${FILESDIR}"/${PV}/00_riscv-fix-multilib.patch
 
 	eapply "${FILESDIR}"/${PV}/postrelease/00_pr101384.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/01_pr104510.patch

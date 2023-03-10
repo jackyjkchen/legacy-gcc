@@ -1,0 +1,140 @@
+diff --git a/gcc/config/riscv/t-rtems b/gcc/config/riscv/t-rtems
+index 41f5927fc..19b120308 100644
+--- a/gcc/config/riscv/t-rtems
++++ b/gcc/config/riscv/t-rtems
+@@ -1,8 +1,8 @@
+ MULTILIB_OPTIONS	=
+ MULTILIB_DIRNAMES	=
+ 
+-MULTILIB_OPTIONS	+= march=rv32i/march=rv32im/march=rv32imafd/march=rv32iac/march=rv32imac/march=rv32imafc/march=rv64imafd/march=rv64imac/march=rv64imafdc
+-MULTILIB_DIRNAMES	+= rv32i       rv32im       rv32imafd       rv32iac       rv32imac       rv32imafc       rv64imafd       rv64imac       rv64imafdc
++MULTILIB_OPTIONS	+= march=rv32i/march=rv32iac/march=rv32im/march=rv32ima/march=rv32imac/march=rv32imaf/march=rv32imafc/march=rv32imafd/march=rv32imafdc/march=rv64ima/march=rv64imac/march=rv64imafd/march=rv64imafdc
++MULTILIB_DIRNAMES	+= rv32i       rv32iac       rv32im       rv32ima       rv32imac       rv32imaf       rv32imafc       rv32imafd       rv32imafdc       rv64ima       rv64imac       rv64imafd       rv64imafdc
+ 
+ MULTILIB_OPTIONS	+= mabi=ilp32/mabi=ilp32f/mabi=ilp32d/mabi=lp64/mabi=lp64d
+ MULTILIB_DIRNAMES	+= ilp32      ilp32f      ilp32d      lp64      lp64d
+@@ -12,14 +12,15 @@ MULTILIB_DIRNAMES	+= medany
+ 
+ MULTILIB_REQUIRED	=
+ MULTILIB_REQUIRED	+= march=rv32i/mabi=ilp32
+-MULTILIB_REQUIRED	+= march=rv32im/mabi=ilp32
+-MULTILIB_REQUIRED	+= march=rv32imafd/mabi=ilp32d
+ MULTILIB_REQUIRED	+= march=rv32iac/mabi=ilp32
++MULTILIB_REQUIRED	+= march=rv32im/mabi=ilp32
++MULTILIB_REQUIRED	+= march=rv32ima/mabi=ilp32
+ MULTILIB_REQUIRED	+= march=rv32imac/mabi=ilp32
++MULTILIB_REQUIRED	+= march=rv32imaf/mabi=ilp32f
+ MULTILIB_REQUIRED	+= march=rv32imafc/mabi=ilp32f
+-MULTILIB_REQUIRED	+= march=rv64imafd/mabi=lp64d
+-MULTILIB_REQUIRED	+= march=rv64imafd/mabi=lp64d/mcmodel=medany
+-MULTILIB_REQUIRED	+= march=rv64imac/mabi=lp64
++MULTILIB_REQUIRED	+= march=rv32imafd/mabi=ilp32d
++MULTILIB_REQUIRED	+= march=rv32imafdc/mabi=ilp32d
++MULTILIB_REQUIRED	+= march=rv64ima/mabi=lp64/mcmodel=medany
+ MULTILIB_REQUIRED	+= march=rv64imac/mabi=lp64/mcmodel=medany
+-MULTILIB_REQUIRED	+= march=rv64imafdc/mabi=lp64d
++MULTILIB_REQUIRED	+= march=rv64imafd/mabi=lp64d/mcmodel=medany
+ MULTILIB_REQUIRED	+= march=rv64imafdc/mabi=lp64d/mcmodel=medany
+diff --git a/libgcc/config/riscv/div.S b/libgcc/config/riscv/div.S
+index 922a43380..e892a818b 100644
+--- a/libgcc/config/riscv/div.S
++++ b/libgcc/config/riscv/div.S
+@@ -1,6 +1,6 @@
+ /* Integer division routines for RISC-V.
+ 
+-   Copyright (C) 2016-2018 Free Software Foundation, Inc.
++   Copyright (C) 2016-2020 Free Software Foundation, Inc.
+ 
+ This file is part of GCC.
+ 
+@@ -40,7 +40,7 @@ FUNC_BEGIN (__udivsi3)
+   sll    a0, a0, 32
+   sll    a1, a1, 32
+   move   t0, ra
+-  jal    __udivdi3
++  jal    HIDDEN_JUMPTARGET(__udivdi3)
+   sext.w a0, a0
+   jr     t0
+ FUNC_END (__udivsi3)
+@@ -52,7 +52,7 @@ FUNC_BEGIN (__umodsi3)
+   srl    a0, a0, 32
+   srl    a1, a1, 32
+   move   t0, ra
+-  jal    __udivdi3
++  jal    HIDDEN_JUMPTARGET(__udivdi3)
+   sext.w a0, a1
+   jr     t0
+ FUNC_END (__umodsi3)
+@@ -95,11 +95,12 @@ FUNC_BEGIN (__udivdi3)
+ .L5:
+   ret
+ FUNC_END (__udivdi3)
++HIDDEN_DEF (__udivdi3)
+ 
+ FUNC_BEGIN (__umoddi3)
+   /* Call __udivdi3(a0, a1), then return the remainder, which is in a1.  */
+   move  t0, ra
+-  jal   __udivdi3
++  jal   HIDDEN_JUMPTARGET(__udivdi3)
+   move  a0, a1
+   jr    t0
+ FUNC_END (__umoddi3)
+@@ -107,14 +108,16 @@ FUNC_END (__umoddi3)
+   /* Handle negative arguments to __divdi3.  */
+ .L10:
+   neg   a0, a0
+-  bgez  a1, .L12      /* Compute __udivdi3(-a0, a1), then negate the result.  */
++  /* Zero is handled as a negative so that the result will not be inverted.  */
++  bgtz  a1, .L12     /* Compute __udivdi3(-a0, a1), then negate the result.  */
++
+   neg   a1, a1
+-  j     __udivdi3     /* Compute __udivdi3(-a0, -a1).  */
+-.L11:                 /* Compute __udivdi3(a0, -a1), then negate the result.  */
++  j     HIDDEN_JUMPTARGET(__udivdi3)     /* Compute __udivdi3(-a0, -a1).  */
++.L11:                /* Compute __udivdi3(a0, -a1), then negate the result.  */
+   neg   a1, a1
+ .L12:
+   move  t0, ra
+-  jal   __udivdi3
++  jal   HIDDEN_JUMPTARGET(__udivdi3)
+   neg   a0, a0
+   jr    t0
+ FUNC_END (__divdi3)
+@@ -124,7 +127,7 @@ FUNC_BEGIN (__moddi3)
+   bltz   a1, .L31
+   bltz   a0, .L32
+ .L30:
+-  jal    __udivdi3    /* The dividend is not negative.  */
++  jal    HIDDEN_JUMPTARGET(__udivdi3)    /* The dividend is not negative.  */
+   move   a0, a1
+   jr     t0
+ .L31:
+@@ -132,7 +135,7 @@ FUNC_BEGIN (__moddi3)
+   bgez   a0, .L30
+ .L32:
+   neg    a0, a0
+-  jal    __udivdi3    /* The dividend is hella negative.  */
++  jal    HIDDEN_JUMPTARGET(__udivdi3)    /* The dividend is hella negative.  */
+   neg    a0, a1
+   jr     t0
+ FUNC_END (__moddi3)
+diff --git a/libgcc/config/riscv/riscv-asm.h b/libgcc/config/riscv/riscv-asm.h
+index 50ee1404c..f728a6924 100644
+--- a/libgcc/config/riscv/riscv-asm.h
++++ b/libgcc/config/riscv/riscv-asm.h
+@@ -1,4 +1,4 @@
+-/* Copyright (C) 2017-2018 Free Software Foundation, Inc.
++/* Copyright (C) 2017-2020 Free Software Foundation, Inc.
+ 
+ This file is free software; you can redistribute it and/or modify it
+ under the terms of the GNU General Public License as published by the
+@@ -33,3 +33,9 @@ X:
+ #define FUNC_ALIAS(X,Y)		\
+ 	.globl X;		\
+ 	X = Y
++
++#define CONCAT1(a, b)		CONCAT2(a, b)
++#define CONCAT2(a, b)		a ## b
++#define HIDDEN_JUMPTARGET(X)	CONCAT1(__hidden_, X)
++#define HIDDEN_DEF(X)		FUNC_ALIAS(HIDDEN_JUMPTARGET(X), X);     \
++				.hidden HIDDEN_JUMPTARGET(X)

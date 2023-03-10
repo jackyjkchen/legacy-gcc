@@ -27,9 +27,15 @@ src_prepare() {
 		rm -v "${WORKDIR}/patch/${p}" || die
 	done
 
+	if has_version '>=sys-libs/glibc-2.32-r1'; then
+		rm -v "${WORKDIR}/patch/25_all_disable-riscv32-ABIs.patch" || die
+	fi
+
 	toolchain_src_prepare
 	use vanilla && return 0
 
 	eapply "${FILESDIR}"/${PV}/00_workaround-for-gcc12-host.patch
+	eapply "${FILESDIR}"/${PV}/01_riscv-fix-multilib.patch
+
 	eapply "${FILESDIR}"/${PV}/postrelease/00_pr90320.patch
 }

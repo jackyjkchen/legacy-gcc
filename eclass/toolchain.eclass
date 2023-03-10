@@ -2285,10 +2285,16 @@ toolchain_src_install() {
 			-name libg2c.la -o \
 			-name libf2c.la -o \
 			-name libgo.la -o \
+			-name libcaf_single.la -o \
 			-name 'libmudflap*.la' \
 			-name 'lib*san.la' \
 		')' -type f -delete
 
+	case $(tc-arch) in
+		riscv)
+			tc_version_is_at_least 11 || (is_multilib && rm -rfv "${D}${LIBPATH}"/{*.a,*.o})
+			;;
+	esac
 	rm -rfv "${D}${BINPATH}"/{*c++filt,*gccbug,*protoize,*unprotoize}
 
 	# Use gid of 0 because some stupid ports don't have
