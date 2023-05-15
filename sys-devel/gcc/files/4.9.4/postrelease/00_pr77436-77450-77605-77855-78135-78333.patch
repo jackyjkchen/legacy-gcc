@@ -1,0 +1,346 @@
+diff --git a/gcc/gimplify.c b/gcc/gimplify.c
+index 84d318bf1..eaec44a84 100644
+--- a/gcc/gimplify.c
++++ b/gcc/gimplify.c
+@@ -8924,6 +8924,10 @@ gimplify_function_tree (tree fndecl)
+   /* ??? Add some way to ignore exceptions for this TFE.  */
+   if (flag_instrument_function_entry_exit
+       && !DECL_NO_INSTRUMENT_FUNCTION_ENTRY_EXIT (fndecl)
++      /* Do not instrument extern inline functions.  */
++      && !(DECL_DECLARED_INLINE_P (fndecl)
++	   && DECL_EXTERNAL (fndecl)
++	   && DECL_DISREGARD_INLINE_LIMITS (fndecl))
+       && !flag_instrument_functions_exclude_p (fndecl))
+     {
+       tree x;
+diff --git a/gcc/loop-invariant.c b/gcc/loop-invariant.c
+index 100a2c1b7..4f84733d2 100644
+--- a/gcc/loop-invariant.c
++++ b/gcc/loop-invariant.c
+@@ -592,13 +592,17 @@ find_exits (struct loop *loop, basic_block *body,
+ 
+ 	  FOR_EACH_EDGE (e, ei, body[i]->succs)
+ 	    {
+-	      if (flow_bb_inside_loop_p (loop, e->dest))
+-		continue;
+-
+-	      bitmap_set_bit (may_exit, i);
+-	      bitmap_set_bit (has_exit, i);
+-	      outermost_exit = find_common_loop (outermost_exit,
+-						 e->dest->loop_father);
++	      if (! flow_bb_inside_loop_p (loop, e->dest))
++		{
++		  bitmap_set_bit (may_exit, i);
++		  bitmap_set_bit (has_exit, i);
++		  outermost_exit = find_common_loop (outermost_exit,
++						     e->dest->loop_father);
++		}
++	      /* If we enter a subloop that might never terminate treat
++	         it like a possible exit.  */
++	      if (flow_loop_nested_p (loop, e->dest->loop_father))
++		bitmap_set_bit (may_exit, i);
+ 	    }
+ 	  continue;
+ 	}
+@@ -844,7 +848,7 @@ check_dependencies (rtx insn, bitmap depends_on)
+    unless the program ends due to a function call.  */
+ 
+ static void
+-find_invariant_insn (rtx insn, bool always_reached, bool always_executed)
++find_invariant_insn (rtx insn, bool, bool always_executed)
+ {
+   df_ref ref;
+   struct def *def;
+@@ -877,8 +881,8 @@ find_invariant_insn (rtx insn, bool always_reached, bool always_executed)
+   if (can_throw_internal (insn))
+     return;
+ 
+-  /* We cannot make trapping insn executed, unless it was executed before.  */
+-  if (may_trap_or_fault_p (PATTERN (insn)) && !always_reached)
++  /* We cannot make trapping insn executed.  */
++  if (may_trap_or_fault_p (PATTERN (insn)))
+     return;
+ 
+   depends_on = BITMAP_ALLOC (NULL);
+diff --git a/gcc/testsuite/gcc.dg/pr77450.c b/gcc/testsuite/gcc.dg/pr77450.c
+new file mode 100644
+index 000000000..7c19e86ca
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr77450.c
+@@ -0,0 +1,10 @@
++/* { dg-do compile } */
++/* { dg-options "-std=gnu90" } */
++
++typedef int V __attribute__((vector_size(4)));
++
++void
++foo(void)
++{
++  (V){ 0 }[0] = 0;
++}
+diff --git a/gcc/testsuite/gcc.dg/pr78185.c b/gcc/testsuite/gcc.dg/pr78185.c
+new file mode 100644
+index 000000000..405f7489d
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr78185.c
+@@ -0,0 +1,28 @@
++/* { dg-do run { target *-*-linux* *-*-gnu* } } */
++/* { dg-options "-O" } */
++
++#include <unistd.h>
++#include <signal.h>
++#include <stdlib.h>
++
++static char var1 = 0L;
++static char *var2 = &var1;
++
++void do_exit (int i)
++{
++  exit (0);
++}
++
++int main(void)
++{
++  struct sigaction s;
++  sigemptyset (&s.sa_mask);
++  s.sa_handler = do_exit;
++  s.sa_flags = 0;
++  sigaction (SIGALRM, &s, NULL);
++  alarm (1);
++  /* The following loop is infinite, the division by zero should not
++     be hoisted out of it.  */
++  for (; (var1 == 0 ? 0 : (100 / var1)) == *var2; );
++  return 0;
++}
+diff --git a/gcc/testsuite/gcc.dg/pr78333.c b/gcc/testsuite/gcc.dg/pr78333.c
+new file mode 100644
+index 000000000..ca037e55f
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr78333.c
+@@ -0,0 +1,22 @@
++/* { dg-do link } */
++/* { dg-options "-finstrument-functions" } */
++
++/* Add empty implementations of __cyg_profile_func_enter() and
++   __cyg_profile_func_exit() to avoid problems on non-glibc
++   systems.  */
++void __attribute__((no_instrument_function))
++__cyg_profile_func_enter(void *this_fn, void *call_site)
++{
++}
++
++void __attribute__((no_instrument_function))
++__cyg_profile_func_exit(void *this_fn, void *call_site)
++{
++}
++
++extern inline __attribute__((gnu_inline, always_inline)) int foo () { }
++int main()
++{
++  foo ();
++  return 0;
++}
+diff --git a/gcc/testsuite/gcc.dg/torture/pr77436.c b/gcc/testsuite/gcc.dg/torture/pr77436.c
+new file mode 100644
+index 000000000..e379ce69f
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/torture/pr77436.c
+@@ -0,0 +1,12 @@
++/* { dg-do run } */
++/* { dg-options "-std=gnu99" } */
++
++int main()
++{
++  unsigned short sum = 0;
++  for (short x = -(__SHRT_MAX__ -1); x <= (__SHRT_MAX__ -1); x++)
++    sum += x;
++  if (sum != 0)
++    __builtin_abort ();
++  return 0;
++}
+diff --git a/gcc/testsuite/gcc.dg/torture/pr77605.c b/gcc/testsuite/gcc.dg/torture/pr77605.c
+new file mode 100644
+index 000000000..3f1a26bc8
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/torture/pr77605.c
+@@ -0,0 +1,15 @@
++/* { dg-do run } */
++
++int a, b, c[2][8];
++
++int main ()
++{
++  for (a = 0; a < 8; a++)
++    for (b = 0; b < 2; b++)
++      c[b][a] = c[b][b + 6] ^ 1;
++
++  if (c[0][7] != 0) 
++    __builtin_abort ();
++
++  return 0; 
++}
+diff --git a/gcc/testsuite/gcc.dg/torture/pr77855.c b/gcc/testsuite/gcc.dg/torture/pr77855.c
+new file mode 100644
+index 000000000..bec5af320
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/torture/pr77855.c
+@@ -0,0 +1,48 @@
++/* { dg-do run } */
++
++int a, b = 1, c, e, f, g, k, m, n, o;
++char d, h, i, j, l; 
++char res[2];
++
++void __attribute__ ((noinline,noclone)) fn2 ()
++{
++  d = 2;
++}
++
++void fn3 ()
++{
++  for (;;)
++    {
++      for (; b; b--)
++	{
++	  fn2 ();  
++	  if (e)
++	    j = 1;
++	  if (f)
++	    L1:
++		k = j | (a & l);
++	  for (;;)
++	    {
++	      __builtin_snprintf (res, 2, "%d\n", d);
++	      if (d)
++		break;
++	      for (; o; o--)
++		for (; n;)
++		  for (; m; m++)
++		    ;
++	      goto L1;
++	    }
++	}
++      g = h;
++      c = i;
++      break;
++    }
++}
++
++int main ()
++{
++  fn3 ();
++  if (res[0] != '2')
++    __builtin_abort ();
++  return 0; 
++}
+diff --git a/gcc/tree-data-ref.c b/gcc/tree-data-ref.c
+index 4a517d75d..e034757b8 100644
+--- a/gcc/tree-data-ref.c
++++ b/gcc/tree-data-ref.c
+@@ -2678,13 +2678,13 @@ analyze_subscript_affine_affine (tree chrec_a,
+ 
+ 	      if (niter > 0)
+ 		{
+-		  HOST_WIDE_INT tau2 = MIN (FLOOR_DIV (niter - i0, i1),
+-					    FLOOR_DIV (niter - j0, j1));
++		  HOST_WIDE_INT tau2 = MIN (FLOOR_DIV (niter_a - i0, i1),
++					    FLOOR_DIV (niter_b - j0, j1));
+ 		  HOST_WIDE_INT last_conflict = tau2 - (x1 - i0)/i1;
+ 
+ 		  /* If the overlap occurs outside of the bounds of the
+ 		     loop, there is no dependence.  */
+-		  if (x1 >= niter || y1 >= niter)
++		  if (x1 >= niter_a || y1 >= niter_b)
+ 		    {
+ 		      *overlaps_a = conflict_fn_no_dependence ();
+ 		      *overlaps_b = conflict_fn_no_dependence ();
+diff --git a/gcc/tree-ssa-loop-im.c b/gcc/tree-ssa-loop-im.c
+index 1b4019041..26013d022 100644
+--- a/gcc/tree-ssa-loop-im.c
++++ b/gcc/tree-ssa-loop-im.c
+@@ -53,6 +53,7 @@ along with GCC; see the file COPYING3.  If not see
+ #include "tree-ssa-propagate.h"
+ #include "trans-mem.h"
+ #include "gimple-fold.h"
++#include "tree-ssa-loop-niter.h"
+ 
+ /* TODO:  Support for predicated code motion.  I.e.
+ 
+@@ -2335,8 +2336,16 @@ fill_always_executed_in_1 (struct loop *loop, sbitmap contains_call)
+ 	    break;
+ 
+ 	  FOR_EACH_EDGE (e, ei, bb->succs)
+-	    if (!flow_bb_inside_loop_p (loop, e->dest))
+-	      break;
++	    {
++	      /* If there is an exit from this BB.  */
++	      if (!flow_bb_inside_loop_p (loop, e->dest))
++		break;
++	      /* Or we enter a possibly non-finite loop.  */
++	      if (flow_loop_nested_p (bb->loop_father,
++				      e->dest->loop_father)
++		  && ! finite_loop_p (e->dest->loop_father))
++		break;
++	    }
+ 	  if (e)
+ 	    break;
+ 
+diff --git a/gcc/tree-ssa-pre.c b/gcc/tree-ssa-pre.c
+index 1e5535655..c5365451a 100644
+--- a/gcc/tree-ssa-pre.c
++++ b/gcc/tree-ssa-pre.c
+@@ -2059,9 +2059,17 @@ prune_clobbered_mems (bitmap_set_t set, basic_block block)
+ {
+   bitmap_iterator bi;
+   unsigned i;
++  pre_expr to_remove = NULL;
+ 
+   FOR_EACH_EXPR_ID_IN_SET (set, i, bi)
+     {
++      /* Remove queued expr.  */
++      if (to_remove)
++	{
++	  bitmap_remove_from_set (set, to_remove);
++	  to_remove = NULL;
++	}
++
+       pre_expr expr = expression_for_id (i);
+       if (expr->kind == REFERENCE)
+ 	{
+@@ -2075,7 +2083,7 @@ prune_clobbered_mems (bitmap_set_t set, basic_block block)
+ 					   block, gimple_bb (def_stmt)))
+ 		      || (gimple_bb (def_stmt) == block
+ 			  && value_dies_in_block_x (expr, block))))
+-		bitmap_remove_from_set (set, expr);
++		to_remove = expr;
+ 	    }
+ 	}
+       else if (expr->kind == NARY)
+@@ -2087,9 +2095,13 @@ prune_clobbered_mems (bitmap_set_t set, basic_block block)
+ 	     as the available expression might be after the exit point.  */
+ 	  if (BB_MAY_NOTRETURN (block)
+ 	      && vn_nary_may_trap (nary))
+-	    bitmap_remove_from_set (set, expr);
++	    to_remove = expr;
+ 	}
+     }
++
++  /* Remove queued expr.  */
++  if (to_remove)
++    bitmap_remove_from_set (set, to_remove);
+ }
+ 
+ static sbitmap has_abnormal_preds;
+diff --git a/gcc/tree-ssa-structalias.c b/gcc/tree-ssa-structalias.c
+index abc99ba37..ba5d85e2d 100644
+--- a/gcc/tree-ssa-structalias.c
++++ b/gcc/tree-ssa-structalias.c
+@@ -5355,7 +5355,7 @@ push_fields_onto_fieldstack (tree type, vec<fieldoff_s> *fieldstack,
+ 	    if (!pair
+ 		&& offset + foff != 0)
+ 	      {
+-		fieldoff_s e = {0, offset + foff, false, false, false, false};
++		fieldoff_s e = {0, offset + foff, false, false, true, false};
+ 		pair = fieldstack->safe_push (e);
+ 	      }
+ 

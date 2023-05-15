@@ -46,4 +46,11 @@ src_prepare() {
 
 	# Use -r1 for newer pieapplyet that use DRIVER_SELF_SPECS for the hardened specs.
 	[[ ${CHOST} == ${CTARGET} ]] && eapply "${FILESDIR}"/gcc-spec-env-r1.patch
+
+	eapply "${FILESDIR}"/${PV}/postrelease/00_pr77436-77450-77605-77855-78135-78333.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/01_pr81395.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/02_pr64172.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/03_pr68390.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/04_pr69014.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/05_pr78378.patch
 }
