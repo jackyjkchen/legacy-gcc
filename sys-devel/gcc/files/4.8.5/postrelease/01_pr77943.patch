@@ -1,0 +1,47 @@
+diff --git a/gcc/testsuite/g++.dg/tree-ssa/pr77943.C b/gcc/testsuite/g++.dg/tree-ssa/pr77943.C
+new file mode 100644
+index 000000000..ef7954a98
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/tree-ssa/pr77943.C
+@@ -0,0 +1,25 @@
++/* { dg-do run } */
++/* { dg-options "-O2 -std=c++11" } */
++
++void thrower[[gnu::noinline]]() {
++    throw 1;
++}
++
++inline void fatal() noexcept {thrower();}
++inline void notFatal() {thrower();}
++
++void func(bool callFatal) {
++    if (callFatal) {
++        fatal();
++    } else { 
++        notFatal();
++    }
++}
++
++int main(int argc, const char* argv[]) {
++    try {
++        bool callFatal = argc > 1;
++        func(callFatal);
++    } catch (...) {
++    }
++}
+diff --git a/gcc/tree-ssa-tail-merge.c b/gcc/tree-ssa-tail-merge.c
+index 46a14bc5c..383226cba 100644
+--- a/gcc/tree-ssa-tail-merge.c
++++ b/gcc/tree-ssa-tail-merge.c
+@@ -1230,6 +1230,11 @@ find_duplicate (same_succ same_succ, basic_block bb1, basic_block bb2)
+       gimple stmt1 = gsi_stmt (gsi1);
+       gimple stmt2 = gsi_stmt (gsi2);
+ 
++      /* Verify EH landing pads.  */
++      if (lookup_stmt_eh_lp_fn (cfun, stmt1)
++	  != lookup_stmt_eh_lp_fn (cfun, stmt2))
++	return;
++
+       if (!gimple_equal_p (same_succ, stmt1, stmt2))
+ 	return;
+ 

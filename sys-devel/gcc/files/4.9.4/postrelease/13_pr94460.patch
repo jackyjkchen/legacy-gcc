@@ -1,0 +1,121 @@
+diff --git a/gcc/config/i386/sse.md b/gcc/config/i386/sse.md
+index 84b4782dd..d6ad87e11 100644
+--- a/gcc/config/i386/sse.md
++++ b/gcc/config/i386/sse.md
+@@ -10894,22 +10894,6 @@
+ 		(ssse3_plusminus:HI
+ 		  (vec_select:HI (match_dup 1) (parallel [(const_int 6)]))
+ 		  (vec_select:HI (match_dup 1) (parallel [(const_int 7)])))))
+-	    (vec_concat:V4HI
+-	      (vec_concat:V2HI
+-		(ssse3_plusminus:HI
+-		  (vec_select:HI (match_dup 1) (parallel [(const_int 8)]))
+-		  (vec_select:HI (match_dup 1) (parallel [(const_int 9)])))
+-		(ssse3_plusminus:HI
+-		  (vec_select:HI (match_dup 1) (parallel [(const_int 10)]))
+-		  (vec_select:HI (match_dup 1) (parallel [(const_int 11)]))))
+-	      (vec_concat:V2HI
+-		(ssse3_plusminus:HI
+-		  (vec_select:HI (match_dup 1) (parallel [(const_int 12)]))
+-		  (vec_select:HI (match_dup 1) (parallel [(const_int 13)])))
+-		(ssse3_plusminus:HI
+-		  (vec_select:HI (match_dup 1) (parallel [(const_int 14)]))
+-		  (vec_select:HI (match_dup 1) (parallel [(const_int 15)]))))))
+-	  (vec_concat:V8HI
+ 	    (vec_concat:V4HI
+ 	      (vec_concat:V2HI
+ 		(ssse3_plusminus:HI
+@@ -10926,7 +10910,23 @@
+ 		  (vec_select:HI (match_dup 2) (parallel [(const_int 5)])))
+ 		(ssse3_plusminus:HI
+ 		  (vec_select:HI (match_dup 2) (parallel [(const_int 6)]))
+-		  (vec_select:HI (match_dup 2) (parallel [(const_int 7)])))))
++		  (vec_select:HI (match_dup 2) (parallel [(const_int 7)]))))))
++	  (vec_concat:V8HI
++	    (vec_concat:V4HI
++	      (vec_concat:V2HI
++		(ssse3_plusminus:HI
++		  (vec_select:HI (match_dup 1) (parallel [(const_int 8)]))
++		  (vec_select:HI (match_dup 1) (parallel [(const_int 9)])))
++		(ssse3_plusminus:HI
++		  (vec_select:HI (match_dup 1) (parallel [(const_int 10)]))
++		  (vec_select:HI (match_dup 1) (parallel [(const_int 11)]))))
++	      (vec_concat:V2HI
++		(ssse3_plusminus:HI
++		  (vec_select:HI (match_dup 1) (parallel [(const_int 12)]))
++		  (vec_select:HI (match_dup 1) (parallel [(const_int 13)])))
++		(ssse3_plusminus:HI
++		  (vec_select:HI (match_dup 1) (parallel [(const_int 14)]))
++		  (vec_select:HI (match_dup 1) (parallel [(const_int 15)])))))
+ 	    (vec_concat:V4HI
+ 	      (vec_concat:V2HI
+ 		(ssse3_plusminus:HI
+@@ -11040,14 +11040,6 @@
+ 	      (plusminus:SI
+ 		(vec_select:SI (match_dup 1) (parallel [(const_int 2)]))
+ 		(vec_select:SI (match_dup 1) (parallel [(const_int 3)]))))
+-	    (vec_concat:V2SI
+-	      (plusminus:SI
+-		(vec_select:SI (match_dup 1) (parallel [(const_int 4)]))
+-		(vec_select:SI (match_dup 1) (parallel [(const_int 5)])))
+-	      (plusminus:SI
+-		(vec_select:SI (match_dup 1) (parallel [(const_int 6)]))
+-		(vec_select:SI (match_dup 1) (parallel [(const_int 7)])))))
+-	  (vec_concat:V4SI
+ 	    (vec_concat:V2SI
+ 	      (plusminus:SI
+ 		(vec_select:SI
+@@ -11056,7 +11048,15 @@
+ 		(vec_select:SI (match_dup 2) (parallel [(const_int 1)])))
+ 	      (plusminus:SI
+ 		(vec_select:SI (match_dup 2) (parallel [(const_int 2)]))
+-		(vec_select:SI (match_dup 2) (parallel [(const_int 3)]))))
++		(vec_select:SI (match_dup 2) (parallel [(const_int 3)])))))
++	  (vec_concat:V4SI
++	    (vec_concat:V2SI
++	      (plusminus:SI
++		(vec_select:SI (match_dup 1) (parallel [(const_int 4)]))
++		(vec_select:SI (match_dup 1) (parallel [(const_int 5)])))
++	      (plusminus:SI
++		(vec_select:SI (match_dup 1) (parallel [(const_int 6)]))
++		(vec_select:SI (match_dup 1) (parallel [(const_int 7)]))))
+ 	    (vec_concat:V2SI
+ 	      (plusminus:SI
+ 		(vec_select:SI (match_dup 2) (parallel [(const_int 4)]))
+diff --git a/gcc/testsuite/gcc.target/i386/avx2-pr94460.c b/gcc/testsuite/gcc.target/i386/avx2-pr94460.c
+new file mode 100644
+index 000000000..75b7a7bf3
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/i386/avx2-pr94460.c
+@@ -0,0 +1,31 @@
++/* PR target/94460 */
++/* { dg-do run { target { avx2 && int128 } } } */
++/* { dg-options "-O2 -mavx2" } */
++
++#include <x86intrin.h>
++#include "avx2-check.h"
++
++typedef __int128 v2ti __attribute__ ((__vector_size__ (32)));
++
++static inline v2ti
++foo (__v16hi b)
++{
++  return (v2ti) _mm256_hsub_epi16 ((__m256i) b, (__m256i) b);
++}
++
++static inline v2ti
++bar (__v8si b)
++{
++  return (v2ti) _mm256_hsub_epi32 ((__m256i) b, (__m256i) b);
++}
++
++static void
++avx2_test (void)
++{
++  v2ti x = foo ((__v16hi) { 1 });
++  if (x[0] != ((__int128)1 << 64 | 1) || x[1] != 0)
++    abort ();
++  x = bar ((__v8si) { 1 });
++  if (x[0] != ((__int128)1 << 64 | 1) || x[1] != 0)
++    abort ();
++}

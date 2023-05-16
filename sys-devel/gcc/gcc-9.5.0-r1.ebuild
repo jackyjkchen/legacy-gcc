@@ -38,4 +38,5 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/01_riscv-fix-multilib.patch
 
 	eapply "${FILESDIR}"/${PV}/postrelease/00_pr90320.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/01_pr106513.patch
 }

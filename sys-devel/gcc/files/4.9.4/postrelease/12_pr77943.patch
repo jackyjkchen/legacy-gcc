@@ -1,0 +1,55 @@
+diff --git a/gcc/testsuite/g++.dg/tree-ssa/pr77943.C b/gcc/testsuite/g++.dg/tree-ssa/pr77943.C
+new file mode 100644
+index 000000000..ef7954a98
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/tree-ssa/pr77943.C
+@@ -0,0 +1,25 @@
++/* { dg-do run } */
++/* { dg-options "-O2 -std=c++11" } */
++
++void thrower[[gnu::noinline]]() {
++    throw 1;
++}
++
++inline void fatal() noexcept {thrower();}
++inline void notFatal() {thrower();}
++
++void func(bool callFatal) {
++    if (callFatal) {
++        fatal();
++    } else { 
++        notFatal();
++    }
++}
++
++int main(int argc, const char* argv[]) {
++    try {
++        bool callFatal = argc > 1;
++        func(callFatal);
++    } catch (...) {
++    }
++}
+diff --git a/gcc/tree-ssa-tail-merge.c b/gcc/tree-ssa-tail-merge.c
+index 7bcac2f06..bb048d092 100644
+--- a/gcc/tree-ssa-tail-merge.c
++++ b/gcc/tree-ssa-tail-merge.c
+@@ -216,6 +216,7 @@ along with GCC; see the file COPYING3.  If not see
+ #include "cfgloop.h"
+ #include "tree-pass.h"
+ #include "trans-mem.h"
++#include "tree-eh.h"
+ 
+ /* Describes a group of bbs with the same successors.  The successor bbs are
+    cached in succs, and the successor edge flags are cached in succ_flags.
+@@ -1254,6 +1255,11 @@ find_duplicate (same_succ same_succ, basic_block bb1, basic_block bb2)
+ 	  || is_tm_ending (stmt2))
+ 	return;
+ 
++      /* Verify EH landing pads.  */
++      if (lookup_stmt_eh_lp_fn (cfun, stmt1)
++	  != lookup_stmt_eh_lp_fn (cfun, stmt2))
++	return;
++
+       if (!gimple_equal_p (same_succ, stmt1, stmt2))
+ 	return;
+ 
