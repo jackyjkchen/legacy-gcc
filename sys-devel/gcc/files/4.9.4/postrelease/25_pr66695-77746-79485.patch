@@ -1,0 +1,317 @@
+diff --git a/gcc/fortran/decl.c b/gcc/fortran/decl.c
+index ea1b20e84..38d81d6d9 100644
+--- a/gcc/fortran/decl.c
++++ b/gcc/fortran/decl.c
+@@ -5380,7 +5380,7 @@ add_global_entry (const char *name, const char *binding_label, bool sub,
+      name is a global identifier.  */
+   if (!binding_label || gfc_notification_std (GFC_STD_F2008))
+     {
+-      s = gfc_get_gsymbol (name);
++      s = gfc_get_gsymbol (name, false);
+ 
+       if (s->defined || (s->type != GSYM_UNKNOWN && s->type != type))
+ 	{
+@@ -5402,7 +5402,7 @@ add_global_entry (const char *name, const char *binding_label, bool sub,
+       && (!gfc_notification_std (GFC_STD_F2008)
+ 	  || strcmp (name, binding_label) != 0))
+     {
+-      s = gfc_get_gsymbol (binding_label);
++      s = gfc_get_gsymbol (binding_label, true);
+ 
+       if (s->defined || (s->type != GSYM_UNKNOWN && s->type != type))
+ 	{
+diff --git a/gcc/fortran/gfortran.h b/gcc/fortran/gfortran.h
+index 11d3996c9..f4cb7ebdd 100644
+--- a/gcc/fortran/gfortran.h
++++ b/gcc/fortran/gfortran.h
+@@ -1665,6 +1665,7 @@ typedef struct gfc_gsymbol
+   enum gfc_symbol_type type;
+ 
+   int defined, used;
++  bool bind_c;
+   locus where;
+   gfc_namespace *ns;
+ }
+@@ -2842,7 +2843,7 @@ void gfc_enforce_clean_symbol_state (void);
+ void gfc_free_dt_list (void);
+ 
+ 
+-gfc_gsymbol *gfc_get_gsymbol (const char *);
++gfc_gsymbol *gfc_get_gsymbol (const char *, bool bind_c);
+ gfc_gsymbol *gfc_find_gsymbol (gfc_gsymbol *, const char *);
+ 
+ gfc_typebound_proc* gfc_get_typebound_proc (gfc_typebound_proc*);
+diff --git a/gcc/fortran/parse.c b/gcc/fortran/parse.c
+index e55477e07..28bd646e3 100644
+--- a/gcc/fortran/parse.c
++++ b/gcc/fortran/parse.c
+@@ -4754,7 +4754,7 @@ parse_block_data (void)
+     }
+   else
+     {
+-      s = gfc_get_gsymbol (gfc_new_block->name);
++      s = gfc_get_gsymbol (gfc_new_block->name, false);
+       if (s->defined
+ 	  || (s->type != GSYM_UNKNOWN && s->type != GSYM_BLOCK_DATA))
+        gfc_global_used (s, &gfc_new_block->declared_at);
+@@ -4787,7 +4787,7 @@ parse_module (void)
+   gfc_gsymbol *s;
+   bool error;
+ 
+-  s = gfc_get_gsymbol (gfc_new_block->name);
++  s = gfc_get_gsymbol (gfc_new_block->name, false);
+   if (s->defined || (s->type != GSYM_UNKNOWN && s->type != GSYM_MODULE))
+     gfc_global_used (s, &gfc_new_block->declared_at);
+   else
+@@ -4841,7 +4841,7 @@ add_global_procedure (bool sub)
+      name is a global identifier.  */
+   if (!gfc_new_block->binding_label || gfc_notification_std (GFC_STD_F2008))
+     {
+-      s = gfc_get_gsymbol (gfc_new_block->name);
++      s = gfc_get_gsymbol (gfc_new_block->name, false);
+ 
+       if (s->defined
+ 	  || (s->type != GSYM_UNKNOWN
+@@ -4866,7 +4866,7 @@ add_global_procedure (bool sub)
+       && (!gfc_notification_std (GFC_STD_F2008)
+           || strcmp (gfc_new_block->name, gfc_new_block->binding_label) != 0))
+     {
+-      s = gfc_get_gsymbol (gfc_new_block->binding_label);
++      s = gfc_get_gsymbol (gfc_new_block->binding_label, true);
+ 
+       if (s->defined
+ 	  || (s->type != GSYM_UNKNOWN
+@@ -4898,7 +4898,7 @@ add_global_program (void)
+ 
+   if (gfc_new_block == NULL)
+     return;
+-  s = gfc_get_gsymbol (gfc_new_block->name);
++  s = gfc_get_gsymbol (gfc_new_block->name, false);
+ 
+   if (s->defined || (s->type != GSYM_UNKNOWN && s->type != GSYM_PROGRAM))
+     gfc_global_used (s, &gfc_new_block->declared_at);
+diff --git a/gcc/fortran/resolve.c b/gcc/fortran/resolve.c
+index 1707e2500..eda97866b 100644
+--- a/gcc/fortran/resolve.c
++++ b/gcc/fortran/resolve.c
+@@ -1014,7 +1014,7 @@ resolve_common_blocks (gfc_symtree *common_root)
+ 	}
+       if (!gsym)
+ 	{
+-	  gsym = gfc_get_gsymbol (common_root->n.common->name);
++	  gsym = gfc_get_gsymbol (common_root->n.common->name, false);
+ 	  gsym->type = GSYM_COMMON;
+ 	  gsym->where = common_root->n.common->where;
+ 	  gsym->defined = 1;
+@@ -1036,7 +1036,7 @@ resolve_common_blocks (gfc_symtree *common_root)
+ 	}
+       if (!gsym)
+ 	{
+-	  gsym = gfc_get_gsymbol (common_root->n.common->binding_label);
++	  gsym = gfc_get_gsymbol (common_root->n.common->binding_label, true);
+ 	  gsym->type = GSYM_COMMON;
+ 	  gsym->where = common_root->n.common->where;
+ 	  gsym->defined = 1;
+@@ -2340,7 +2340,8 @@ resolve_global_procedure (gfc_symbol *sym, locus *where,
+ 
+   type = sub ? GSYM_SUBROUTINE : GSYM_FUNCTION;
+ 
+-  gsym = gfc_get_gsymbol (sym->binding_label ? sym->binding_label : sym->name);
++  gsym = gfc_get_gsymbol (sym->binding_label ? sym->binding_label : sym->name,
++			  sym->binding_label != NULL);
+ 
+   if ((gsym->type != GSYM_UNKNOWN && gsym->type != type))
+     gfc_global_used (gsym, where);
+@@ -10223,7 +10224,7 @@ gfc_verify_binding_labels (gfc_symbol *sym)
+ 	  && (gsym->type == GSYM_FUNCTION || gsym->type == GSYM_SUBROUTINE)))
+     {
+       if (!gsym)
+-	gsym = gfc_get_gsymbol (sym->binding_label);
++	gsym = gfc_get_gsymbol (sym->binding_label, true);
+       gsym->where = sym->declared_at;
+       gsym->sym_name = sym->name;
+       gsym->binding_label = sym->binding_label;
+diff --git a/gcc/fortran/symbol.c b/gcc/fortran/symbol.c
+index dca3220fd..3c02e2163 100644
+--- a/gcc/fortran/symbol.c
++++ b/gcc/fortran/symbol.c
+@@ -3776,7 +3776,7 @@ gsym_compare (void *_s1, void *_s2)
+ /* Get a global symbol, creating it if it doesn't exist.  */
+ 
+ gfc_gsymbol *
+-gfc_get_gsymbol (const char *name)
++gfc_get_gsymbol (const char *name, bool bind_c)
+ {
+   gfc_gsymbol *s;
+ 
+@@ -3787,6 +3787,7 @@ gfc_get_gsymbol (const char *name)
+   s = XCNEW (gfc_gsymbol);
+   s->type = GSYM_UNKNOWN;
+   s->name = gfc_get_string (name);
++  s->bind_c = bind_c;
+ 
+   gfc_insert_bbt (&gfc_gsym_root, s, gsym_compare);
+ 
+diff --git a/gcc/fortran/trans-decl.c b/gcc/fortran/trans-decl.c
+index 331d4bc44..1baa58bc4 100644
+--- a/gcc/fortran/trans-decl.c
++++ b/gcc/fortran/trans-decl.c
+@@ -708,7 +708,7 @@ gfc_get_module_backend_decl (gfc_symbol *sym)
+ 	{
+ 	  if (!gsym)
+ 	    {
+-	      gsym = gfc_get_gsymbol (sym->module);
++	      gsym = gfc_get_gsymbol (sym->module, false);
+ 	      gsym->type = GSYM_MODULE;
+ 	      gsym->ns = gfc_get_namespace (NULL, 0);
+ 	    }
+@@ -1685,9 +1685,22 @@ gfc_get_extern_function_decl (gfc_symbol * sym)
+     return get_proc_pointer_decl (sym);
+ 
+   /* See if this is an external procedure from the same file.  If so,
+-     return the backend_decl.  */
+-  gsym =  gfc_find_gsymbol (gfc_gsym_root, sym->binding_label
+-					   ? sym->binding_label : sym->name);
++     return the backend_decl.  If we are looking at a BIND(C)
++     procedure and the symbol is not BIND(C), or vice versa, we
++     haven't found the right procedure.  */
++
++  if (sym->binding_label)
++    {
++      gsym = gfc_find_gsymbol (gfc_gsym_root, sym->binding_label);
++      if (gsym && !gsym->bind_c)
++	gsym = NULL;
++    }
++  else
++    {
++      gsym = gfc_find_gsymbol (gfc_gsym_root, sym->name);
++      if (gsym && gsym->bind_c)
++	gsym = NULL;
++    }
+ 
+   if (gsym && !gsym->defined)
+     gsym = NULL;
+diff --git a/gcc/testsuite/gfortran.dg/binding_label_tests_30.f90 b/gcc/testsuite/gfortran.dg/binding_label_tests_30.f90
+new file mode 100644
+index 000000000..168d4b52f
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/binding_label_tests_30.f90
+@@ -0,0 +1,7 @@
++! { dg-do compile }
++! Make sure this error is flagged.
++subroutine foo() ! { dg-error "is already being used as a SUBROUTINE" }
++end subroutine foo
++
++subroutine bar() bind(C,name="foo") ! { dg-error "is already being used as a SUBROUTINE" }
++end subroutine bar
+diff --git a/gcc/testsuite/gfortran.dg/binding_label_tests_31.f90 b/gcc/testsuite/gfortran.dg/binding_label_tests_31.f90
+new file mode 100644
+index 000000000..e914c66a7
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/binding_label_tests_31.f90
+@@ -0,0 +1,19 @@
++! { dg-do compile }
++! PR fortran/66695 - this used to ICE.
++! Original test case by Vladimir Fuka.
++module mod
++  implicit none
++contains
++    integer function F()
++    end function
++end module
++    
++module mod_C
++  use mod
++  implicit none
++contains
++  subroutine s()  bind(C, name="f")
++    integer :: x
++      x = F()
++  end subroutine
++end module
+diff --git a/gcc/testsuite/gfortran.dg/binding_label_tests_32.f90 b/gcc/testsuite/gfortran.dg/binding_label_tests_32.f90
+new file mode 100644
+index 000000000..f18df66a2
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/binding_label_tests_32.f90
+@@ -0,0 +1,35 @@
++! { dg-do run }
++! PR 77746 - this used to crash during execution.
++! Original test case by Vladimir Fuka.
++module first
++  private
++  public execute
++  
++  interface execute
++    module procedure random_name
++  end interface
++  
++contains
++
++  subroutine random_name()
++  end subroutine
++end module
++
++module test
++  use first
++
++  implicit none
++
++contains
++
++  subroutine p_execute(i)  bind(C, name="random_name")
++    integer :: i
++
++    call execute()
++  end subroutine
++  
++end module
++
++  use test
++  call p_execute(1)
++end
+diff --git a/gcc/testsuite/gfortran.dg/binding_label_tests_33.f90 b/gcc/testsuite/gfortran.dg/binding_label_tests_33.f90
+new file mode 100644
+index 000000000..fdb9a887f
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/binding_label_tests_33.f90
+@@ -0,0 +1,39 @@
++! { dg-do run }
++! PR 79485 - used to crash because the wrong routine was called.
++module fmod1
++
++  contains
++
++  subroutine foo(i)
++    implicit none
++
++    integer, intent(inout) :: i
++
++    i=i+1
++
++  end subroutine foo
++
++end module fmod1
++
++module fmod2
++  use iso_c_binding
++  use fmod1, only : foo_first => foo
++
++  contains
++
++  subroutine foo(i) bind(c)
++    implicit none
++
++    integer, intent(inout) :: i
++
++    i=i+2
++    call foo_first(i)
++
++  end subroutine foo
++
++end module fmod2
++
++  use fmod2
++  
++  call foo(i)
++end

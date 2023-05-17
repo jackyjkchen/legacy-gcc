@@ -1,0 +1,55 @@
+diff --git a/gcc/cp/call.c b/gcc/cp/call.c
+index 59dc3633a..c7963131a 100644
+--- a/gcc/cp/call.c
++++ b/gcc/cp/call.c
+@@ -9519,9 +9519,11 @@ extend_ref_init_temps_1 (tree decl, tree init, vec<tree, va_gc> **cleanups)
+     {
+       tree subinit = NULL_TREE;
+       *p = set_up_extended_ref_temp (decl, *p, cleanups, &subinit);
++      recompute_tree_invariant_for_addr_expr (sub);
++      if (init != sub)
++	init = fold_convert (TREE_TYPE (init), sub);
+       if (subinit)
+ 	init = build2 (COMPOUND_EXPR, TREE_TYPE (init), subinit, init);
+-      recompute_tree_invariant_for_addr_expr (sub);
+     }
+   return init;
+ }
+diff --git a/gcc/cp/decl.c b/gcc/cp/decl.c
+index fa4d54e1c..52c722c80 100644
+--- a/gcc/cp/decl.c
++++ b/gcc/cp/decl.c
+@@ -6301,6 +6301,7 @@ cp_finish_decl (tree decl, tree init, bool init_const_expr_p,
+       else if (init
+ 	       && init_const_expr_p
+ 	       && !type_dependent_p
++	       && TREE_CODE (type) != REFERENCE_TYPE
+ 	       && decl_maybe_constant_var_p (decl)
+ 	       && !type_dependent_init_p (init)
+ 	       && !value_dependent_init_p (init))
+diff --git a/gcc/cp/pt.c b/gcc/cp/pt.c
+index e08a27d43..f78e77aba 100644
+--- a/gcc/cp/pt.c
++++ b/gcc/cp/pt.c
+@@ -20666,6 +20666,8 @@ value_dependent_expression_p (tree expression)
+       if (DECL_INITIAL (expression)
+ 	  && decl_constant_var_p (expression)
+ 	  && (TREE_CODE (DECL_INITIAL (expression)) == TREE_LIST
++	      /* cp_finish_decl doesn't fold reference initializers.  */
++	      || TREE_CODE (TREE_TYPE (expression)) == REFERENCE_TYPE
+ 	      || value_dependent_expression_p (DECL_INITIAL (expression))))
+ 	return true;
+       return false;
+diff --git a/gcc/testsuite/g++.dg/cpp0x/constexpr-ice12.C b/gcc/testsuite/g++.dg/cpp0x/constexpr-ice12.C
+index 98f53b14c..c5483376c 100644
+--- a/gcc/testsuite/g++.dg/cpp0x/constexpr-ice12.C
++++ b/gcc/testsuite/g++.dg/cpp0x/constexpr-ice12.C
+@@ -3,7 +3,7 @@
+ 
+ struct A
+ {
+-  static constexpr int&& i = 0;  // { dg-error "initialization" }
++  static constexpr int&& i = 0;
+ };
+ 
+ int j = A::i;

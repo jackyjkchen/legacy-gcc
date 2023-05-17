@@ -1,0 +1,117 @@
+diff --git a/gcc/config/arm/neon.md b/gcc/config/arm/neon.md
+index a05302720..fedccb634 100644
+--- a/gcc/config/arm/neon.md
++++ b/gcc/config/arm/neon.md
+@@ -5658,28 +5658,22 @@
+ })
+ 
+ (define_insn "neon_vabd<mode>_2"
+- [(set (match_operand:VDQ 0 "s_register_operand" "=w")
+-       (abs:VDQ (minus:VDQ (match_operand:VDQ 1 "s_register_operand" "w")
+-                           (match_operand:VDQ 2 "s_register_operand" "w"))))]
+- "TARGET_NEON && (!<Is_float_mode> || flag_unsafe_math_optimizations)"
++ [(set (match_operand:VCVTF 0 "s_register_operand" "=w")
++       (abs:VCVTF (minus:VCVTF (match_operand:VCVTF 1 "s_register_operand" "w")
++			 (match_operand:VCVTF 2 "s_register_operand" "w"))))]
++ "TARGET_NEON && flag_unsafe_math_optimizations"
+  "vabd.<V_s_elem> %<V_reg>0, %<V_reg>1, %<V_reg>2"
+- [(set (attr "type")
+-       (if_then_else (ne (symbol_ref "<Is_float_mode>") (const_int 0))
+-                     (const_string "neon_fp_abd_s<q>")
+-                     (const_string "neon_abd<q>")))]
++ [(set_attr "type" "neon_fp_abd_s<q>")]
+ )
+ 
+ (define_insn "neon_vabd<mode>_3"
+- [(set (match_operand:VDQ 0 "s_register_operand" "=w")
+-       (abs:VDQ (unspec:VDQ [(match_operand:VDQ 1 "s_register_operand" "w")
+-                             (match_operand:VDQ 2 "s_register_operand" "w")]
+-                 UNSPEC_VSUB)))]
+- "TARGET_NEON && (!<Is_float_mode> || flag_unsafe_math_optimizations)"
++ [(set (match_operand:VCVTF 0 "s_register_operand" "=w")
++       (abs:VCVTF (unspec:VCVTF [(match_operand:VCVTF 1 "s_register_operand" "w")
++			    (match_operand:VCVTF 2 "s_register_operand" "w")]
++		UNSPEC_VSUB)))]
++ "TARGET_NEON && flag_unsafe_math_optimizations"
+  "vabd.<V_if_elem> %<V_reg>0, %<V_reg>1, %<V_reg>2"
+- [(set (attr "type")
+-       (if_then_else (ne (symbol_ref "<Is_float_mode>") (const_int 0))
+-                     (const_string "neon_fp_abd_s<q>")
+-                     (const_string "neon_abd<q>")))]
++ [(set_attr "type" "neon_fp_abd_s<q>")]
+ )
+ 
+ ;; Copy from core-to-neon regs, then extend, not vice-versa
+diff --git a/gcc/testsuite/gcc.target/arm/neon-combine-sub-abs-into-vabd.c b/gcc/testsuite/gcc.target/arm/neon-combine-sub-abs-into-vabd.c
+index fe3d78b30..784714f0e 100644
+--- a/gcc/testsuite/gcc.target/arm/neon-combine-sub-abs-into-vabd.c
++++ b/gcc/testsuite/gcc.target/arm/neon-combine-sub-abs-into-vabd.c
+@@ -12,31 +12,3 @@ float32x2_t f_sub_abs_to_vabd_32(float32x2_t val1, float32x2_t val2)
+   return res;
+ }
+ /* { dg-final { scan-assembler "vabd\.f32" } }*/
+-
+-#include <arm_neon.h>
+-int8x8_t sub_abs_to_vabd_8(int8x8_t val1, int8x8_t val2)
+-{
+-  int8x8_t sres = vsub_s8(val1, val2);
+-  int8x8_t res = vabs_s8 (sres);
+-
+-  return res;
+-}
+-/* { dg-final { scan-assembler "vabd\.s8" } }*/
+-
+-int16x4_t sub_abs_to_vabd_16(int16x4_t val1, int16x4_t val2)
+-{
+-  int16x4_t sres = vsub_s16(val1, val2);
+-  int16x4_t res = vabs_s16 (sres);
+-
+-  return res;
+-}
+-/* { dg-final { scan-assembler "vabd\.s16" } }*/
+-
+-int32x2_t sub_abs_to_vabd_32(int32x2_t val1, int32x2_t val2)
+-{
+-  int32x2_t sres = vsub_s32(val1, val2);
+-  int32x2_t res = vabs_s32 (sres);
+-
+-   return res;
+-}
+-/* { dg-final { scan-assembler "vabd\.s32" } }*/
+diff --git a/gcc/testsuite/gcc.target/arm/pr83687.c b/gcc/testsuite/gcc.target/arm/pr83687.c
+new file mode 100644
+index 000000000..427541386
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/arm/pr83687.c
+@@ -0,0 +1,31 @@
++/* { dg-do run } */
++/* { dg-require-effective-target arm_neon_hw } */
++/* { dg-options "-O2" } */
++/* { dg-add-options arm_neon } */
++
++#include <arm_neon.h>
++
++__attribute__ ((noinline)) int8_t
++testFunction1 (int8_t a, int8_t b)
++{
++  volatile int8x16_t sub = vsubq_s8 (vdupq_n_s8 (a), vdupq_n_s8 (b));
++  int8x16_t abs = vabsq_s8 (sub);
++  return vgetq_lane_s8 (abs, 0);
++}
++
++__attribute__ ((noinline)) int8_t
++testFunction2 (int8_t a, int8_t b)
++{
++  int8x16_t sub = vsubq_s8 (vdupq_n_s8 (a), vdupq_n_s8 (b));
++  int8x16_t abs = vabsq_s8 (sub);
++  return vgetq_lane_s8 (abs, 0);
++}
++
++int
++main (void)
++{
++  if (testFunction1 (-100, 100) != testFunction2 (-100, 100))
++    __builtin_abort ();
++
++  return 0;
++}

@@ -1,0 +1,130 @@
+diff --git a/gcc/testsuite/gcc.target/arm/pr48863.c b/gcc/testsuite/gcc.target/arm/pr48863.c
+new file mode 100644
+index 000000000..33bc7a473
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/arm/pr48863.c
+@@ -0,0 +1,35 @@
++/* PR target/48863.  */
++/* { dg-do run } */
++/* { dg-options "-O2" } */
++
++/* Check that Temporary Expression Replacement does not move a
++  libcall-producing expression across a statement initialising a local
++  register variable.  */
++
++static inline int
++dosvc (int fd, unsigned long high, unsigned low)
++{
++  register int r0 asm("r0") = fd;
++  register int r2 asm("r2") = high;
++  register int r3 asm("r3") = low;
++
++  asm volatile("" : "=r"(r0) : "0"(r0), "r"(r2), "r"(r3));
++  return r0;
++}
++
++struct s
++{
++  int fd;
++  long long length;
++} s = { 2, 0 }, *p = &s;
++
++int
++main (void)
++{
++  unsigned low = p->length & 0xffffffff;
++  unsigned high = p->length / 23;
++
++  if (dosvc (p->fd, high, low) != 2)
++    __builtin_abort ();
++  return 0;
++}
+diff --git a/gcc/tree-ssa-ter.c b/gcc/tree-ssa-ter.c
+index 09dc3138a..a4eef5086 100644
+--- a/gcc/tree-ssa-ter.c
++++ b/gcc/tree-ssa-ter.c
+@@ -180,6 +180,8 @@ typedef struct temp_expr_table_d
+   bitmap new_replaceable_dependencies;	/* Holding place for pending dep's.  */
+   int *num_in_part;			/* # of ssa_names in a partition.  */
+   int *call_cnt;			/* Call count at definition.  */
++  int *reg_vars_cnt;			/* Number of register variable
++					   definitions encountered.  */
+ } *temp_expr_table_p;
+ 
+ /* Used to indicate a dependency on VDEFs.  */
+@@ -226,6 +228,7 @@ new_temp_expr_table (var_map map)
+         t->num_in_part[p]++;
+     }
+   t->call_cnt = XCNEWVEC (int, num_ssa_names + 1);
++  t->reg_vars_cnt = XCNEWVEC (int, num_ssa_names + 1);
+ 
+   return t;
+ }
+@@ -258,6 +261,7 @@ free_temp_expr_table (temp_expr_table_p t)
+   free (t->partition_dependencies);
+   free (t->num_in_part);
+   free (t->call_cnt);
++  free (t->reg_vars_cnt);
+ 
+   if (t->replaceable_expressions)
+     ret = t->replaceable_expressions;
+@@ -455,7 +459,7 @@ ter_is_replaceable_p (gimple stmt)
+ /* Create an expression entry for a replaceable expression.  */
+ 
+ static void
+-process_replaceable (temp_expr_table_p tab, gimple stmt, int call_cnt)
++process_replaceable (temp_expr_table_p tab, gimple stmt, int call_cnt, int reg_vars_cnt)
+ {
+   tree var, def, basevar;
+   int version;
+@@ -497,6 +501,7 @@ process_replaceable (temp_expr_table_p tab, gimple stmt, int call_cnt)
+     }
+ 
+   tab->call_cnt[version] = call_cnt;
++  tab->reg_vars_cnt[version] = reg_vars_cnt;
+ }
+ 
+ 
+@@ -593,6 +598,7 @@ find_replaceable_in_bb (temp_expr_table_p tab, basic_block bb)
+   ssa_op_iter iter;
+   bool stmt_replaceable;
+   int cur_call_cnt = 0;
++  int cur_reg_vars_cnt = 0;
+ 
+   for (bsi = gsi_start_bb (bb); !gsi_end_p (bsi); gsi_next (&bsi))
+     {
+@@ -669,11 +675,14 @@ find_replaceable_in_bb (temp_expr_table_p tab, basic_block bb)
+ 	      /* Mark expression as replaceable unless stmt is volatile, or the
+ 		 def variable has the same root variable as something in the
+ 		 substitution list, or the def and use span a call such that
+-		 we'll expand lifetimes across a call.  */
++		 we'll expand lifetimes across a call.  We also don't want to
++		 replace across these expressions that may call libcalls that
++		 clobber the register involved.  See PR 70184.  */
+ 	      if (gimple_has_volatile_ops (stmt) || same_root_var
+ 		  || (tab->call_cnt[ver] != cur_call_cnt
+ 		      && SINGLE_SSA_USE_OPERAND (SSA_NAME_DEF_STMT (use), SSA_OP_USE)
+-			 == NULL_USE_OPERAND_P))
++			 == NULL_USE_OPERAND_P)
++		  || tab->reg_vars_cnt[ver] != cur_reg_vars_cnt)
+ 		finished_with_expr (tab, ver, true);
+ 	      else
+ 		mark_replaceable (tab, use, stmt_replaceable);
+@@ -696,9 +705,16 @@ find_replaceable_in_bb (temp_expr_table_p tab, basic_block bb)
+ 	       && DECL_BUILT_IN (fndecl)))
+ 	cur_call_cnt++;
+ 
++      /* Increment counter if this statement sets a local
++	 register variable.  */
++      if (gimple_assign_single_p (stmt)
++	  && (TREE_CODE (gimple_assign_lhs (stmt)) == VAR_DECL
++	  && DECL_HARD_REGISTER (gimple_assign_lhs (stmt))))
++	cur_reg_vars_cnt++;
++
+       /* Now see if we are creating a new expression or not.  */
+       if (stmt_replaceable)
+-	process_replaceable (tab, stmt, cur_call_cnt);
++	process_replaceable (tab, stmt, cur_call_cnt, cur_reg_vars_cnt);
+ 
+       /* Free any unused dependency lists.  */
+       bitmap_clear (tab->new_replaceable_dependencies);
