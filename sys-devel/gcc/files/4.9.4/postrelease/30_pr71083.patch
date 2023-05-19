@@ -1,0 +1,145 @@
+diff --git a/gcc/testsuite/gcc.c-torture/execute/pr71083.c b/gcc/testsuite/gcc.c-torture/execute/pr71083.c
+new file mode 100644
+index 000000000..057443493
+--- /dev/null
++++ b/gcc/testsuite/gcc.c-torture/execute/pr71083.c
+@@ -0,0 +1,43 @@
++struct lock_chain {
++  unsigned int irq_context: 2,
++    depth: 6,
++    base: 24;
++};
++
++__attribute__((noinline, noclone))
++struct lock_chain * foo (struct lock_chain *chain)
++{
++  int i;
++  for (i = 0; i < 100; i++)
++    {
++      chain[i+1].base = chain[i].base;
++    }
++  return chain;
++}
++
++struct lock_chain1 {
++  char x;
++  unsigned short base;
++} __attribute__((packed));
++
++__attribute__((noinline, noclone))
++struct lock_chain1 * bar (struct lock_chain1 *chain)
++{
++  int i;
++  for (i = 0; i < 100; i++)
++    {
++      chain[i+1].base = chain[i].base;
++    }
++  return chain;
++}
++
++struct lock_chain test [101];
++struct lock_chain1 test1 [101];
++
++int
++main ()
++{
++  foo (test);
++  bar (test1);
++  return 0;
++}
+diff --git a/gcc/testsuite/gnat.dg/loop_optimization23.adb b/gcc/testsuite/gnat.dg/loop_optimization23.adb
+new file mode 100644
+index 000000000..4f3af5044
+--- /dev/null
++++ b/gcc/testsuite/gnat.dg/loop_optimization23.adb
+@@ -0,0 +1,14 @@
++-- { dg-do run }
++-- { dg-options "-O3" }
++-- PR tree-optimization/71083
++with Loop_Optimization23_Pkg;
++use Loop_Optimization23_Pkg;
++procedure Loop_Optimization23 is
++  Test : ArrayOfStructB;
++begin
++  Test (0).b.b := 9999;
++  Foo (Test);
++  if Test (100).b.b /= 9999 then
++    raise Program_Error;
++  end if;
++end;
+diff --git a/gcc/testsuite/gnat.dg/loop_optimization23_pkg.adb b/gcc/testsuite/gnat.dg/loop_optimization23_pkg.adb
+new file mode 100644
+index 000000000..a5fc90d72
+--- /dev/null
++++ b/gcc/testsuite/gnat.dg/loop_optimization23_pkg.adb
+@@ -0,0 +1,11 @@
++-- { dg-do compile }
++-- { dg-options "-O3" }
++-- PR tree-optimization/71083
++package body Loop_Optimization23_Pkg is
++  procedure Foo (X : in out ArrayOfStructB) is
++  begin
++    for K in 0..99 loop
++      X (K+1).b.b := X (K).b.b;
++    end loop;
++  end Foo;
++end Loop_Optimization23_Pkg;
+diff --git a/gcc/testsuite/gnat.dg/loop_optimization23_pkg.ads b/gcc/testsuite/gnat.dg/loop_optimization23_pkg.ads
+new file mode 100644
+index 000000000..016ad82ef
+--- /dev/null
++++ b/gcc/testsuite/gnat.dg/loop_optimization23_pkg.ads
+@@ -0,0 +1,17 @@
++-- PR tree-optimization/71083
++package Loop_Optimization23_Pkg is
++  type Nibble is mod 2**4;
++  type Int24  is mod 2**24;
++  type StructA is record
++    a : Nibble;
++    b : Int24;
++  end record;
++  pragma Pack(StructA);
++  type StructB is record
++    a : Nibble;
++    b : StructA;
++  end record;
++  pragma Pack(StructB);
++  type ArrayOfStructB is array(0..100) of StructB;
++  procedure Foo (X : in out ArrayOfStructB);
++end Loop_Optimization23_Pkg;
+diff --git a/gcc/tree-predcom.c b/gcc/tree-predcom.c
+index 8f2413d44..0e6142823 100644
+--- a/gcc/tree-predcom.c
++++ b/gcc/tree-predcom.c
+@@ -222,6 +222,7 @@ along with GCC; see the file COPYING3.  If not see
+ #include "tree-pass.h"
+ #include "tree-affine.h"
+ #include "tree-inline.h"
++#include "builtins.h"
+ 
+ /* The maximum number of iterations between the considered memory
+    references.  */
+@@ -1394,6 +1395,8 @@ ref_at_iteration (data_reference_p dr, int iter, gimple_seq *stmts)
+   addr = force_gimple_operand_1 (unshare_expr (addr), stmts,
+ 				 is_gimple_mem_ref_addr, NULL_TREE);
+   tree alias_ptr = fold_convert (reference_alias_ptr_type (DR_REF (dr)), coff);
++  tree type = build_aligned_type (TREE_TYPE (DR_REF (dr)),
++				  get_object_alignment (DR_REF (dr)));
+   /* While data-ref analysis punts on bit offsets it still handles
+      bitfield accesses at byte boundaries.  Cope with that.  Note that
+      we cannot simply re-apply the outer COMPONENT_REF because the
+@@ -1405,12 +1408,11 @@ ref_at_iteration (data_reference_p dr, int iter, gimple_seq *stmts)
+     {
+       tree field = TREE_OPERAND (DR_REF (dr), 1);
+       return build3 (BIT_FIELD_REF, TREE_TYPE (DR_REF (dr)),
+-		     build2 (MEM_REF, DECL_BIT_FIELD_TYPE (field),
+-			     addr, alias_ptr),
++		     build2 (MEM_REF, type, addr, alias_ptr),
+ 		     DECL_SIZE (field), bitsize_zero_node);
+     }
+   else
+-    return fold_build2 (MEM_REF, TREE_TYPE (DR_REF (dr)), addr, alias_ptr);
++    return fold_build2 (MEM_REF, type, addr, alias_ptr);
+ }
+ 
+ /* Get the initialization expression for the INDEX-th temporary variable

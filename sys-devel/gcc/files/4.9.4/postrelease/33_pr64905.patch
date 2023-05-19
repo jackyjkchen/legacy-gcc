@@ -1,0 +1,32 @@
+diff --git a/gcc/lra-eliminations.c b/gcc/lra-eliminations.c
+index 278782035..fb347e335 100644
+--- a/gcc/lra-eliminations.c
++++ b/gcc/lra-eliminations.c
+@@ -157,6 +157,8 @@ setup_can_eliminate (struct elim_table *ep, bool value)
+   if (! value
+       && ep->from == FRAME_POINTER_REGNUM && ep->to == STACK_POINTER_REGNUM)
+     frame_pointer_needed = 1;
++  if (!frame_pointer_needed)
++    REGNO_POINTER_ALIGN (HARD_FRAME_POINTER_REGNUM) = 0;
+ }
+ 
+ /* Map: eliminable "from" register -> its current elimination,
+diff --git a/gcc/testsuite/gcc.target/i386/pr64905.c b/gcc/testsuite/gcc.target/i386/pr64905.c
+new file mode 100644
+index 000000000..024a89458
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/i386/pr64905.c
+@@ -0,0 +1,13 @@
++/* { dg-do compile { target { { ! ia32 } && nonpic } } } */
++/* { dg-options "-Os -fomit-frame-pointer -ffixed-rax -ffixed-rbx -ffixed-rcx -ffixed-rdx -ffixed-rdi -ffixed-rsi -ffixed-r8 -ffixed-r9 -ffixed-r10 -ffixed-r11 -ffixed-r12 -ffixed-r13 -ffixed-r14 -ffixed-r15" } */
++/* { dg-final { scan-assembler-not "movl\[ \t\]0\\(%.*\\), %.*" } } */
++
++typedef unsigned short uint16_t;
++uint16_t a_global;
++
++void
++function (uint16_t **a_p)
++{
++  // unaligned access by address in %rbp: mov    0x0(%rbp),%ebp
++  a_global = **a_p;
++}

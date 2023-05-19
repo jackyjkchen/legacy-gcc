@@ -1,0 +1,46 @@
+diff --git a/gcc/gimple-fold.c b/gcc/gimple-fold.c
+index 7f2a0a526..cf235293b 100644
+--- a/gcc/gimple-fold.c
++++ b/gcc/gimple-fold.c
+@@ -1224,12 +1224,18 @@ gimple_fold_builtin_memset (gimple_stmt_iterator *gsi, tree c, tree len)
+ 
+   length = tree_to_uhwi (len);
+   if (GET_MODE_SIZE (SCALAR_INT_TYPE_MODE (etype)) != length
++      || (GET_MODE_PRECISION (SCALAR_INT_TYPE_MODE (etype))
++	  != GET_MODE_BITSIZE (SCALAR_INT_TYPE_MODE (etype)))
+       || get_pointer_alignment (dest) / BITS_PER_UNIT < length)
+     return NULL_TREE;
+ 
+   if (length > HOST_BITS_PER_WIDE_INT / BITS_PER_UNIT)
+     return NULL_TREE;
+ 
++  if (!type_has_mode_precision_p (etype))
++    etype = lang_hooks.types.type_for_mode (SCALAR_INT_TYPE_MODE (etype),
++					    TYPE_UNSIGNED (etype));
++
+   if (integer_zerop (c))
+     cval = 0;
+   else
+diff --git a/gcc/testsuite/gcc.dg/torture/pr94206.c b/gcc/testsuite/gcc.dg/torture/pr94206.c
+new file mode 100644
+index 000000000..9e54bba4e
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/torture/pr94206.c
+@@ -0,0 +1,17 @@
++/* { dg-do run { target lp64 } } */
++
++struct {
++    unsigned long x:33;
++} s;
++typedef __typeof__(s.x + 0) uint33;
++
++int main()
++{
++  uint33 x;
++  __builtin_memset(&x, -1, sizeof x);
++  unsigned long u;
++  __builtin_memcpy(&u, &x, sizeof u);
++  if (u != -1ul)
++    __builtin_abort ();
++  return 0;
++}

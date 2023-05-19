@@ -1,0 +1,91 @@
+diff --git a/gcc/gcse.c b/gcc/gcse.c
+index b9dbe1fc5..53636e4eb 100644
+--- a/gcc/gcse.c
++++ b/gcc/gcse.c
+@@ -3941,7 +3941,7 @@ compute_ld_motion_mems (void)
+   pre_ldst_table
+     = htab_create (13, pre_ldst_expr_hash, pre_ldst_expr_eq, NULL);
+ 
+-  FOR_EACH_BB (bb)
++  FOR_EACH_BB_FN (bb, cfun)
+     {
+       FOR_BB_INSNS (bb, insn)
+ 	{
+@@ -3952,7 +3952,7 @@ compute_ld_motion_mems (void)
+ 		  rtx src = SET_SRC (PATTERN (insn));
+ 		  rtx dest = SET_DEST (PATTERN (insn));
+ 
+-		  /* Check for a simple LOAD...  */
++		  /* Check for a simple load.  */
+ 		  if (MEM_P (src) && simple_mem (src))
+ 		    {
+ 		      ptr = ldst_entry (src);
+@@ -3967,6 +3967,14 @@ compute_ld_motion_mems (void)
+ 		      invalidate_any_buried_refs (src);
+ 		    }
+ 
++		  /* Check for a simple load through a REG_EQUAL note.  */
++		  rtx note = find_reg_equal_equiv_note (insn), src_eq;
++		  if (note
++		      && REG_NOTE_KIND (note) == REG_EQUAL
++		      && (src_eq = XEXP (note, 0))
++		      && !(MEM_P (src_eq) && simple_mem (src_eq)))
++		    invalidate_any_buried_refs (src_eq);
++
+ 		  /* Check for stores. Don't worry about aliased ones, they
+ 		     will block any movement we might do later. We only care
+ 		     about this exact pattern since those are the only
+@@ -3986,7 +3994,17 @@ compute_ld_motion_mems (void)
+ 		    }
+ 		}
+ 	      else
+-		invalidate_any_buried_refs (PATTERN (insn));
++		{
++		  /* Invalidate all MEMs in the pattern and...  */
++		  invalidate_any_buried_refs (PATTERN (insn));
++
++		  /* ...in REG_EQUAL notes for PARALLELs with single SET.  */
++		  rtx note = find_reg_equal_equiv_note (insn), src_eq;
++		  if (note
++		      && REG_NOTE_KIND (note) == REG_EQUAL
++		      && (src_eq = XEXP (note, 0)))
++		    invalidate_any_buried_refs (src_eq);
++		}
+ 	    }
+ 	}
+     }
+diff --git a/gcc/testsuite/gcc.target/i386/pr70007.c b/gcc/testsuite/gcc.target/i386/pr70007.c
+new file mode 100644
+index 000000000..6b457eecb
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/i386/pr70007.c
+@@ -0,0 +1,29 @@
++/* PR rtl-optimization/70007 */
++/* { dg-do run } */
++/* { dg-options "-O -fgcse -mbmi2 -Wno-psabi -Wno-overflow" } */
++/* { dg-require-effective-target bmi2 } */
++
++typedef unsigned short v32u16 __attribute__ ((vector_size (32)));
++typedef unsigned long long v32u64 __attribute__ ((vector_size (32)));
++typedef unsigned __int128 u128;
++typedef unsigned __int128 v32u128 __attribute__ ((vector_size (32)));
++
++u128
++foo (v32u16 v32u16_0, v32u64 v32u64_0, v32u64 v32u64_1)
++{
++  do {
++    v32u16_0[13] |= v32u64_1[3] = (v32u64_1[3] >> 19) | (v32u64_1[3] << 45);
++    v32u64_1 %= ~v32u64_1;
++    v32u64_0 *= (v32u64) v32u16_0;
++  } while (v32u64_0[0]);
++  return v32u64_1[3];
++}
++
++int
++main (void)
++{
++  u128 x = foo((v32u16){~0xba31, 0x47c6}, (v32u64){64}, (v32u64){0, 0x8b217e2514d23242, 0xac569b6dff9f82, 0x9d4cffe03c139c});
++  if (x != 0x3c74da5ca328d09)
++    __builtin_abort();
++  return 0;
++}

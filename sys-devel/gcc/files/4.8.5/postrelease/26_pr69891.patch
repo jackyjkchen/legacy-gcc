@@ -1,0 +1,49 @@
+diff --git a/gcc/dse.c b/gcc/dse.c
+index 3929ced6f..28f7beae9 100644
+--- a/gcc/dse.c
++++ b/gcc/dse.c
+@@ -2648,6 +2648,8 @@ scan_insn (bb_info_t bb_info, rtx insn)
+ 		      active_local_stores = insn_info;
+ 		    }
+ 		}
++	      else
++		clear_rhs_from_active_local_stores ();
+ 	    }
+ 	}
+ 
+diff --git a/gcc/testsuite/gcc.target/i386/pr69891.c b/gcc/testsuite/gcc.target/i386/pr69891.c
+new file mode 100644
+index 000000000..2c5e86372
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/i386/pr69891.c
+@@ -0,0 +1,30 @@
++/* PR rtl-optimization/69891 */
++/* { dg-do run } */
++/* { dg-options "-O -fno-tree-fre -mstringop-strategy=libcall -Wno-psabi" } */
++/* { dg-additional-options "-mno-sse" { target ia32 } } */
++
++typedef unsigned short A;
++typedef unsigned short B __attribute__ ((vector_size (32)));
++typedef unsigned int C;
++typedef unsigned int D __attribute__ ((vector_size (32)));
++typedef unsigned long long E;
++typedef unsigned long long F __attribute__ ((vector_size (32)));
++
++__attribute__((noinline, noclone)) unsigned
++foo(D a, B b, D c, F d)
++{
++  b /= (B) {1, -c[0]} | 1;
++  c[0] |= 7;
++  a %= c | 1;
++  c ^= c;
++  return a[0] + b[15] + c[0] + d[3];
++}
++
++int
++main ()
++{
++  unsigned x = foo ((D) {}, (B) {}, (D) {}, (F) {});
++  if (x != 0)
++    __builtin_abort ();
++  return 0;
++}

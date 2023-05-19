@@ -1,0 +1,50 @@
+diff --git a/gcc/combine.c b/gcc/combine.c
+index 7c84a3d65..c259b80d5 100644
+--- a/gcc/combine.c
++++ b/gcc/combine.c
+@@ -7057,6 +7057,7 @@ make_extraction (enum machine_mode mode, rtx inner, HOST_WIDE_INT pos,
+   if (tmode != BLKmode
+       && ((pos_rtx == 0 && (pos % BITS_PER_WORD) == 0
+ 	   && !MEM_P (inner)
++	   && (pos == 0 || REG_P (inner))
+ 	   && (inner_mode == tmode
+ 	       || !REG_P (inner)
+ 	       || TRULY_NOOP_TRUNCATION_MODES_P (tmode, inner_mode)
+@@ -7133,10 +7134,9 @@ make_extraction (enum machine_mode mode, rtx inner, HOST_WIDE_INT pos,
+ 	}
+       else
+ 	new_rtx = force_to_mode (inner, tmode,
+-			     len >= HOST_BITS_PER_WIDE_INT
+-			     ? ~(unsigned HOST_WIDE_INT) 0
+-			     : ((unsigned HOST_WIDE_INT) 1 << len) - 1,
+-			     0);
++				 len >= HOST_BITS_PER_WIDE_INT
++				 ? ~(unsigned HOST_WIDE_INT) 0
++				 : ((unsigned HOST_WIDE_INT) 1 << len) - 1, 0);
+ 
+       /* If this extraction is going into the destination of a SET,
+ 	 make a STRICT_LOW_PART unless we made a MEM.  */
+diff --git a/gcc/testsuite/gcc.c-torture/execute/pr78378.c b/gcc/testsuite/gcc.c-torture/execute/pr78378.c
+new file mode 100644
+index 000000000..05c1f9c77
+--- /dev/null
++++ b/gcc/testsuite/gcc.c-torture/execute/pr78378.c
+@@ -0,0 +1,18 @@
++/* PR rtl-optimization/78378 */
++
++unsigned long long __attribute__ ((noinline, noclone))
++foo (unsigned long long x)
++{
++  x <<= 41;
++  x /= 232;
++  return 1 + (unsigned short) x;
++}
++
++int
++main ()
++{
++  unsigned long long x = foo (1);
++  if (x != 0x2c24)
++    __builtin_abort();
++  return 0;
++}

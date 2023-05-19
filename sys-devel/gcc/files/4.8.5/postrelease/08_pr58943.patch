@@ -1,0 +1,163 @@
+diff --git a/gcc/c-family/c-omp.c b/gcc/c-family/c-omp.c
+index f05b60a40..4ebf0c673 100644
+--- a/gcc/c-family/c-omp.c
++++ b/gcc/c-family/c-omp.c
+@@ -124,7 +124,7 @@ c_finish_omp_atomic (location_t loc, enum tree_code code,
+ 		     enum tree_code opcode, tree lhs, tree rhs,
+ 		     tree v, tree lhs1, tree rhs1)
+ {
+-  tree x, type, addr;
++  tree x, type, addr, pre = NULL_TREE;
+ 
+   if (lhs == error_mark_node || rhs == error_mark_node
+       || v == error_mark_node || lhs1 == error_mark_node
+@@ -176,10 +176,18 @@ c_finish_omp_atomic (location_t loc, enum tree_code code,
+   /* There are lots of warnings, errors, and conversions that need to happen
+      in the course of interpreting a statement.  Use the normal mechanisms
+      to do this, and then take it apart again.  */
+-  x = build_modify_expr (input_location, lhs, NULL_TREE, opcode,
+-      			 input_location, rhs, NULL_TREE);
++  bool save = in_late_binary_op;
++  in_late_binary_op = true;
++  x = build_modify_expr (loc, lhs, NULL_TREE, opcode, loc, rhs, NULL_TREE);
++  in_late_binary_op = save;
+   if (x == error_mark_node)
+     return error_mark_node;
++  if (TREE_CODE (x) == COMPOUND_EXPR)
++    {
++      pre = TREE_OPERAND (x, 0);
++      gcc_assert (TREE_CODE (pre) == SAVE_EXPR);
++      x = TREE_OPERAND (x, 1);
++    }
+   gcc_assert (TREE_CODE (x) == MODIFY_EXPR);
+   rhs = TREE_OPERAND (x, 1);
+ 
+@@ -246,6 +254,8 @@ c_finish_omp_atomic (location_t loc, enum tree_code code,
+       x = omit_one_operand_loc (loc, type, x, rhs1addr);
+     }
+ 
++  if (pre)
++    x = omit_one_operand_loc (loc, type, x, pre);
+   return x;
+ }
+ 
+@@ -519,6 +529,12 @@ c_finish_omp_for (location_t locus, tree declv, tree initv, tree condv,
+ 		}
+ 	      break;
+ 
++	    case COMPOUND_EXPR:
++	      if (TREE_CODE (TREE_OPERAND (incr, 0)) != SAVE_EXPR
++		  || TREE_CODE (TREE_OPERAND (incr, 1)) != MODIFY_EXPR)
++		break;
++	      incr = TREE_OPERAND (incr, 1);
++	      /* FALLTHRU */
+ 	    case MODIFY_EXPR:
+ 	      if (TREE_OPERAND (incr, 0) != decl)
+ 		break;
+diff --git a/gcc/c/c-typeck.c b/gcc/c/c-typeck.c
+index a608fb6dd..3108936b2 100644
+--- a/gcc/c/c-typeck.c
++++ b/gcc/c/c-typeck.c
+@@ -4829,6 +4829,7 @@ build_modify_expr (location_t location, tree lhs, tree lhs_origtype,
+ {
+   tree result;
+   tree newrhs;
++  tree rhseval = NULL_TREE;
+   tree rhs_semantic_type = NULL_TREE;
+   tree lhstype = TREE_TYPE (lhs);
+   tree olhstype = lhstype;
+@@ -4875,8 +4876,17 @@ build_modify_expr (location_t location, tree lhs, tree lhs_origtype,
+     {
+       lhs = c_fully_fold (lhs, false, NULL);
+       lhs = stabilize_reference (lhs);
+-      newrhs = build_binary_op (location,
+-				modifycode, lhs, rhs, 1);
++	  /* If in LHS op= RHS the RHS has side-effects, ensure they
++	     are preevaluated before the rest of the assignment expression's
++	     side-effects, because RHS could contain e.g. function calls
++	     that modify LHS.  */
++	  if (TREE_SIDE_EFFECTS (rhs))
++	    {
++	      newrhs = in_late_binary_op ? save_expr (rhs) : c_save_expr (rhs);
++	      rhseval = newrhs;
++	    }
++	  newrhs = build_binary_op (location,
++				    modifycode, lhs, newrhs, 1);
+ 
+       /* The original type of the right hand side is no longer
+ 	 meaningful.  */
+@@ -4889,7 +4899,7 @@ build_modify_expr (location_t location, tree lhs, tree lhs_origtype,
+ 	 if so, we need to generate setter calls.  */
+       result = objc_maybe_build_modify_expr (lhs, newrhs);
+       if (result)
+-	return result;
++	goto return_result;
+ 
+       /* Else, do the check that we postponed for Objective-C.  */
+       if (!lvalue_or_else (location, lhs, lv_assign))
+@@ -4967,7 +4977,7 @@ build_modify_expr (location_t location, tree lhs, tree lhs_origtype,
+       if (result)
+ 	{
+ 	  protected_set_expr_location (result, location);
+-	  return result;
++	  goto return_result;
+ 	}
+     }
+ 
+@@ -4983,11 +4993,15 @@ build_modify_expr (location_t location, tree lhs, tree lhs_origtype,
+      as the LHS argument.  */
+ 
+   if (olhstype == TREE_TYPE (result))
+-    return result;
++    goto return_result;
+ 
+   result = convert_for_assignment (location, olhstype, result, rhs_origtype,
+ 				   ic_assign, false, NULL_TREE, NULL_TREE, 0);
+   protected_set_expr_location (result, location);
++
++return_result:
++  if (rhseval)
++    result = build2 (COMPOUND_EXPR, TREE_TYPE (result), rhseval, result);
+   return result;
+ }
+ 
+diff --git a/gcc/testsuite/gcc.c-torture/execute/pr58943.c b/gcc/testsuite/gcc.c-torture/execute/pr58943.c
+new file mode 100644
+index 000000000..75e87ae09
+--- /dev/null
++++ b/gcc/testsuite/gcc.c-torture/execute/pr58943.c
+@@ -0,0 +1,19 @@
++/* PR c/58943 */
++
++unsigned int x[1] = { 2 };
++
++unsigned int
++foo (void)
++{
++  x[0] |= 128;
++  return 1;
++}
++
++int
++main ()
++{
++  x[0] |= foo ();
++  if (x[0] != 131)
++    __builtin_abort ();
++  return 0;
++}
+diff --git a/gcc/testsuite/gcc.dg/tree-ssa/ssa-fre-33.c b/gcc/testsuite/gcc.dg/tree-ssa/ssa-fre-33.c
+index 410818846..ead6a183d 100644
+--- a/gcc/testsuite/gcc.dg/tree-ssa/ssa-fre-33.c
++++ b/gcc/testsuite/gcc.dg/tree-ssa/ssa-fre-33.c
+@@ -11,8 +11,8 @@ struct {
+ float x;
+ int main(int argc)
+ {
+-  vector float res = (vector float){0.0f,0.0f,0.0f,1.0f};
+-  res += (vector float){1.0f,2.0f,3.0f,4.0f};
++  vector float res;
++  res = (vector float){1.0f,2.0f,3.0f,5.0f};
+   s.global_res = res;
+   x = *((float*)&s.global_res + 1);
+   return 0;

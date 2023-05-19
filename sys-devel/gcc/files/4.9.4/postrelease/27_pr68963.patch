@@ -1,0 +1,91 @@
+diff --git a/gcc/testsuite/gcc.dg/torture/pr68963.c b/gcc/testsuite/gcc.dg/torture/pr68963.c
+new file mode 100644
+index 000000000..c83b543fa
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/torture/pr68963.c
+@@ -0,0 +1,41 @@
++/* { dg-do run } */
++
++static const float a[3] = { 1, 2, 3 };
++int b = 3;
++
++__attribute__((noinline, noclone)) void
++bar (int x)
++{
++  if (x != b++)
++    __builtin_abort ();
++}
++
++void
++foo (float *x, int y)
++{
++  int i;
++  for (i = 0; i < 2 * y; ++i)
++    {
++      if (i < y)
++	x[i] = a[i];
++      else
++	{
++	  bar (i);
++	  x[i] = a[i - y];
++	}
++    }
++}
++
++int
++main ()
++{
++  float x[10];
++  unsigned int i;
++  for (i = 0; i < 10; ++i)
++    x[i] = 1337;
++  foo (x, 3);
++  for (i = 0; i < 10; ++i)
++    if (x[i] != (i < 6 ? (i % 3) + 1 : 1337))
++      __builtin_abort ();
++  return 0;
++}
+diff --git a/gcc/tree-ssa-loop-niter.c b/gcc/tree-ssa-loop-niter.c
+index 897b8f518..f1dbd8dd0 100644
+--- a/gcc/tree-ssa-loop-niter.c
++++ b/gcc/tree-ssa-loop-niter.c
+@@ -2473,7 +2473,7 @@ derive_constant_upper_bound_ops (tree type, tree op0,
+ 				 enum tree_code code, tree op1)
+ {
+   tree subtype, maxt;
+-  double_int bnd, max, mmax, cst;
++  double_int bnd, max, cst;
+   gimple stmt;
+ 
+   if (INTEGRAL_TYPE_P (type))
+@@ -2540,7 +2540,7 @@ derive_constant_upper_bound_ops (tree type, tree op0,
+ 	  /* OP0 + CST.  We need to check that
+ 	     BND <= MAX (type) - CST.  */
+ 
+-	  mmax -= cst;
++	  double_int mmax = max - cst;
+ 	  if (bnd.ugt (mmax))
+ 	    return max;
+ 
+@@ -2751,7 +2751,9 @@ record_nonwrapping_iv (struct loop *loop, tree base, tree step, gimple stmt,
+   if (tree_int_cst_sign_bit (step))
+     {
+       extreme = fold_convert (unsigned_type, low);
+-      if (TREE_CODE (base) != INTEGER_CST)
++      if (TREE_CODE (base) != INTEGER_CST
++	       && dominated_by_p (CDI_DOMINATORS,
++				  loop->latch, gimple_bb (stmt)))
+ 	base = fold_convert (unsigned_type, high);
+       delta = fold_build2 (MINUS_EXPR, unsigned_type, base, extreme);
+       step = fold_build1 (NEGATE_EXPR, unsigned_type, step);
+@@ -2759,7 +2761,9 @@ record_nonwrapping_iv (struct loop *loop, tree base, tree step, gimple stmt,
+   else
+     {
+       extreme = fold_convert (unsigned_type, high);
+-      if (TREE_CODE (base) != INTEGER_CST)
++      if (TREE_CODE (base) != INTEGER_CST
++	       && dominated_by_p (CDI_DOMINATORS,
++				  loop->latch, gimple_bb (stmt)))
+ 	base = fold_convert (unsigned_type, low);
+       delta = fold_build2 (MINUS_EXPR, unsigned_type, extreme, base);
+     }

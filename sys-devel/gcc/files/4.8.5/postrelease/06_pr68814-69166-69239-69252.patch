@@ -1,0 +1,159 @@
+diff --git a/gcc/modulo-sched.c b/gcc/modulo-sched.c
+index 1273b2b70..349865a2a 100644
+--- a/gcc/modulo-sched.c
++++ b/gcc/modulo-sched.c
+@@ -987,7 +987,7 @@ optimize_sc (partial_schedule_ptr ps, ddg_ptr g)
+       int row = SMODULO (branch_cycle, ps->ii);
+       int num_splits = 0;
+       sbitmap must_precede, must_follow, tmp_precede, tmp_follow;
+-      int c;
++      int min_cycle, c;
+ 
+       if (dump_file)
+ 	fprintf (dump_file, "\nTrying to schedule node %d "
+@@ -1042,6 +1042,7 @@ optimize_sc (partial_schedule_ptr ps, ddg_ptr g)
+ 	if (next_ps_i->id == g->closing_branch->cuid)
+ 	  break;
+ 
++      min_cycle = PS_MIN_CYCLE (ps) - SMODULO (PS_MIN_CYCLE (ps), ps->ii);
+       remove_node_from_ps (ps, next_ps_i);
+       success =
+ 	try_scheduling_node_in_cycle (ps, g->closing_branch->cuid, c,
+@@ -1081,6 +1082,10 @@ optimize_sc (partial_schedule_ptr ps, ddg_ptr g)
+ 	  ok = true;
+ 	}
+ 
++      /* This might have been added to a new first stage.  */
++      if (PS_MIN_CYCLE (ps) < min_cycle)
++	reset_sched_times (ps, 0);
++
+       free (must_precede);
+       free (must_follow);
+     }
+diff --git a/gcc/rtlanal.c b/gcc/rtlanal.c
+index dcb23cc59..3519223fa 100644
+--- a/gcc/rtlanal.c
++++ b/gcc/rtlanal.c
+@@ -1195,7 +1195,7 @@ set_noop_p (const_rtx set)
+ 
+   if (GET_CODE (dst) == ZERO_EXTRACT)
+     return rtx_equal_p (XEXP (dst, 0), src)
+-	   && ! BYTES_BIG_ENDIAN && XEXP (dst, 2) == const0_rtx
++	   && !BITS_BIG_ENDIAN && XEXP (dst, 2) == const0_rtx
+ 	   && !side_effects_p (src);
+ 
+   if (GET_CODE (dst) == STRICT_LOW_PART)
+diff --git a/gcc/testsuite/g++.dg/ipa/pr69239.C b/gcc/testsuite/g++.dg/ipa/pr69239.C
+new file mode 100644
+index 000000000..913e4b198
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/ipa/pr69239.C
+@@ -0,0 +1,71 @@
++// PR ipa/69239
++// { dg-do run }
++// { dg-options "-O2 --param=early-inlining-insns=196" }
++// { dg-additional-options "-fPIC" { target fpic } }
++
++struct D
++{
++  float f;
++  D () {}
++  virtual float bar (float z);
++};
++
++struct A
++{
++  A ();
++  virtual int foo (int i);
++};
++
++struct B : public D, public A
++{
++  virtual int foo (int i);
++};
++
++float
++D::bar (float)
++{
++  return f / 2;
++}
++
++int
++A::foo (int i)
++{
++  return i + 1;
++}
++
++int
++B::foo (int i)
++{
++  return i + 2;
++}
++
++int __attribute__ ((noinline,noclone))
++baz ()
++{
++  return 1;
++}
++
++static int __attribute__ ((noinline))
++fn (A *obj, int i)
++{
++  return obj->foo (i);
++}
++
++inline __attribute__ ((always_inline))
++A::A ()
++{
++  if (fn (this, baz ()) != 2)
++    __builtin_abort ();
++}
++
++static void
++bah ()
++{
++  B b;
++}
++
++int
++main ()
++{
++  bah ();
++}
+diff --git a/gcc/testsuite/gcc.dg/torture/pr69166.c b/gcc/testsuite/gcc.dg/torture/pr69166.c
+new file mode 100644
+index 000000000..e69de29bb
+diff --git a/gcc/testsuite/gcc.target/powerpc/pr69252.c b/gcc/testsuite/gcc.target/powerpc/pr69252.c
+new file mode 100644
+index 000000000..23334a900
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/powerpc/pr69252.c
+@@ -0,0 +1,28 @@
++/* PR target/69252 - [4.9/5/6 Regression] gcc.dg/vect/vect-iv-9.c FAILs
++   with -Os -fmodulo-sched -fmodulo-sched-allow-regmoves -fsched-pressure  */
++/* { dg-do run } */
++/* { dg-options "-Os -fmodulo-sched -fmodulo-sched-allow-regmoves -fsched-pressure " } */
++#define N 26
++int a[N];
++__attribute__ ((noinline, noclone))
++     int main1 (int X)
++{
++  int s = X;
++  int i;
++  for (i = 0; i < N; i++)
++    s += (i + a[i]);
++  return s;
++}
++
++int
++main (void)
++{
++  int s, i;
++  for (i = 0; i < N; i++)
++    a[i] = 2 * i;
++  s = main1 (3);
++  if (s != 978)
++    __builtin_abort ();
++  return 0;
++}
++
