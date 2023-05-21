@@ -60,41 +60,6 @@ cygwin64/cygwin/cygwin-legacy不支持multilib，异常机制与cygwin官方二�
 
 libc5为ELF格式，libc4为a.out格式，a.out格式依赖内核模块ia32_aout，仅5.0以下内核支持，对于5.0或以上内核，可使用example/ia32_aout自行编译内核模块。
 
-
-# 使用方法
-
-本overlay repo可以使用layman管理：
-
-```
-emerge -a app-portage/layman
-wget https://raw.githubusercontent.com/jackyjkchen/legacy-gcc/master/etc/layman/overlays/legacy-gcc.xml \
-     -O /etc/layman/overlays/legacy-gcc.xml
-echo 'sys-devel/gcc' >> /etc/portage/package.unmask
-layman -L
-layman -a legacy-gcc
-```
-
-现在你可以安装旧版本gcc了，比如于1992年发布，本来不支持linux，也不支持elf文件格式的gcc-2.0，现在可以正常在最新的kernel+glibc运行环境下运行：
-```
-emerge -1a sys-devel/gcc:2.0
-```
-
-亦可采用如下方式安装全套legacy-gcc（所有gcc版本），并启用c c++ objc objc++ fortran语言：
-```
-mkdir /etc/portage/{sets,package.use}
-wget https://raw.githubusercontent.com/jackyjkchen/legacy-gcc/master/etc/portage/sets/legacy-gcc \
-     -O /etc/portage/sets/legacy-gcc
-wget https://raw.githubusercontent.com/jackyjkchen/legacy-gcc/master/etc/portage/package.use/legacy-gcc \
-     -O /etc/portage/package.use/legacy-gcc
-echo @legacy-gcc >> /var/lib/portage/world_sets
-emerge -1a @legacy-gcc
-```
-
-对于已经启用过本overlay repo的用户，可以使用如下命令更新repo：
-```
-layman -S
-```
-
 所有可安装版本的gcc均为bootstrap构建，即3遍构建，自己编译自己，这是验证编译器移植后可用性的重要保证。
 
 USE参数可使用equery u sys-devel/gcc:${slot}查询。
