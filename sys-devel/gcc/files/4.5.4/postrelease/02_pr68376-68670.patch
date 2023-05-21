@@ -1,0 +1,165 @@
+diff --git a/gcc/ifcvt.c b/gcc/ifcvt.c
+index 061e7dfc5..5a34cf40f 100644
+--- a/gcc/ifcvt.c
++++ b/gcc/ifcvt.c
+@@ -1831,12 +1831,26 @@ noce_try_abs (struct noce_if_info *if_info)
+ 
+   /* Work around funny ideas get_condition has wrt canonicalization.
+      Note that these rtx constants are known to be CONST_INT, and
+-     therefore imply integer comparisons.  */
++     therefore imply integer comparisons.
++     The one_cmpl case is more complicated, as we want to handle
++     only x < 0 ? ~x : x or x >= 0 ? x : ~x to one_cmpl_abs (x)
++     and x < 0 ? x : ~x or x >= 0 ? ~x : x to ~one_cmpl_abs (x),
++     but not other cases (x > -1 is equivalent of x >= 0).  */
+   if (c == constm1_rtx && GET_CODE (cond) == GT)
+     ;
+   else if (c == const1_rtx && GET_CODE (cond) == LT)
+-    ;
+-  else if (c != CONST0_RTX (GET_MODE (b)))
++    {
++      if (one_cmpl)
++	return FALSE;
++    }
++  else if (c == CONST0_RTX (GET_MODE (b)))
++    {
++      if (one_cmpl
++	  && GET_CODE (cond) != GE
++	  && GET_CODE (cond) != LT)
++	return FALSE;
++    }
++  else
+     return FALSE;
+ 
+   /* Determine what sort of operation this is.  */
+diff --git a/gcc/testsuite/gcc.c-torture/execute/pr68376-1.c b/gcc/testsuite/gcc.c-torture/execute/pr68376-1.c
+new file mode 100644
+index 000000000..cb5265764
+--- /dev/null
++++ b/gcc/testsuite/gcc.c-torture/execute/pr68376-1.c
+@@ -0,0 +1,24 @@
++/* PR rtl-optimization/68376 */
++
++int a, b, c = 1;
++signed char d;
++
++int
++main ()
++{
++  for (; a < 1; a++)
++    for (; b < 1; b++)
++      {
++	signed char e = ~d;
++	if (d < 1)
++	  e = d;
++	d = e;
++	if (!c)
++	  __builtin_abort ();
++      }
++
++  if (d != 0)
++    __builtin_abort ();
++
++  return 0;
++}
+diff --git a/gcc/testsuite/gcc.c-torture/execute/pr68376-2.c b/gcc/testsuite/gcc.c-torture/execute/pr68376-2.c
+new file mode 100644
+index 000000000..963d441b5
+--- /dev/null
++++ b/gcc/testsuite/gcc.c-torture/execute/pr68376-2.c
+@@ -0,0 +1,73 @@
++/* PR rtl-optimization/68376 */
++
++extern void abort (void);
++
++__attribute__((noinline, noclone)) int
++f1 (int x)
++{
++  return x < 0 ? ~x : x;
++}
++
++__attribute__((noinline, noclone)) int
++f2 (int x)
++{
++  return x < 0 ? x : ~x;
++}
++
++__attribute__((noinline, noclone)) int
++f3 (int x)
++{
++  return x <= 0 ? ~x : x;
++}
++
++__attribute__((noinline, noclone)) int
++f4 (int x)
++{
++  return x <= 0 ? x : ~x;
++}
++
++__attribute__((noinline, noclone)) int
++f5 (int x)
++{
++  return x >= 0 ? ~x : x;
++}
++
++__attribute__((noinline, noclone)) int
++f6 (int x)
++{
++  return x >= 0 ? x : ~x;
++}
++
++__attribute__((noinline, noclone)) int
++f7 (int x)
++{
++  return x > 0 ? ~x : x;
++}
++
++__attribute__((noinline, noclone)) int
++f8 (int x)
++{
++  return x > 0 ? x : ~x;
++}
++
++int
++main ()
++{
++  if (f1 (5) != 5 || f1 (-5) != 4 || f1 (0) != 0)
++    abort ();
++  if (f2 (5) != -6 || f2 (-5) != -5 || f2 (0) != -1)
++    abort ();
++  if (f3 (5) != 5 || f3 (-5) != 4 || f3 (0) != -1)
++    abort ();
++  if (f4 (5) != -6 || f4 (-5) != -5 || f4 (0) != 0)
++    abort ();
++  if (f5 (5) != -6 || f5 (-5) != -5 || f5 (0) != -1)
++    abort ();
++  if (f6 (5) != 5 || f6 (-5) != 4 || f6 (0) != 0)
++    abort ();
++  if (f7 (5) != -6 || f7 (-5) != -5 || f7 (0) != 0)
++    abort ();
++  if (f8 (5) != 5 || f8 (-5) != 4 || f8 (0) != -1)
++    abort ();
++  return 0;
++}
+diff --git a/gcc/testsuite/gcc.dg/pr68670-1.c b/gcc/testsuite/gcc.dg/pr68670-1.c
+new file mode 100644
+index 000000000..92c28a0a4
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr68670-1.c
+@@ -0,0 +1,5 @@
++/* PR rtl-optimization/68670 */
++/* { dg-do run } */
++/* { dg-options "-O2 -ftracer" } */
++
++#include "../gcc.c-torture/execute/pr68376-1.c"
+diff --git a/gcc/testsuite/gcc.dg/pr68670-2.c b/gcc/testsuite/gcc.dg/pr68670-2.c
+new file mode 100644
+index 000000000..903e33e1f
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr68670-2.c
+@@ -0,0 +1,5 @@
++/* PR rtl-optimization/68670 */
++/* { dg-do run } */
++/* { dg-options "-O2 -ftracer" } */
++
++#include "../gcc.c-torture/execute/pr68376-2.c"

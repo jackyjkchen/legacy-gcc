@@ -1,0 +1,140 @@
+diff --git a/gcc/fortran/trans-array.c b/gcc/fortran/trans-array.c
+index 00b1c36e7..a223a17bc 100644
+--- a/gcc/fortran/trans-array.c
++++ b/gcc/fortran/trans-array.c
+@@ -7191,7 +7191,50 @@ gfc_conv_array_parameter (gfc_se * se, gfc_expr * expr, bool g77,
+       else
+ 	{
+ 	  tmp = build_fold_indirect_ref_loc (input_location, desc);
+-	  gfc_conv_descriptor_data_set (&se->pre, tmp, ptr);
++
++	  gfc_ss * ss = gfc_walk_expr (expr);
++	  if (!transposed_dims (ss))
++	    gfc_conv_descriptor_data_set (&se->pre, tmp, ptr);
++	  else
++	    {
++	      tree old_field, new_field;
++
++	      /* The original descriptor has transposed dims so we can't reuse
++		 it directly; we have to create a new one.  */
++	      tree old_desc = tmp;
++	      tree new_desc = gfc_create_var (TREE_TYPE (old_desc), "arg_desc");
++
++	      old_field = gfc_conv_descriptor_dtype (old_desc);
++	      new_field = gfc_conv_descriptor_dtype (new_desc);
++	      gfc_add_modify (&se->pre, new_field, old_field);
++
++	      old_field = gfc_conv_descriptor_offset (old_desc);
++	      new_field = gfc_conv_descriptor_offset (new_desc);
++	      gfc_add_modify (&se->pre, new_field, old_field);
++
++	      for (int i = 0; i < expr->rank; i++)
++		{
++		  old_field = gfc_conv_descriptor_dimension (old_desc,
++			gfc_rank_cst[get_array_ref_dim_for_loop_dim (ss, i)]);
++		  new_field = gfc_conv_descriptor_dimension (new_desc,
++			gfc_rank_cst[i]);
++		  gfc_add_modify (&se->pre, new_field, old_field);
++		}
++
++	      if (gfc_option.coarray == GFC_FCOARRAY_LIB
++		  && GFC_DESCRIPTOR_TYPE_P (TREE_TYPE (old_desc))
++		  && GFC_TYPE_ARRAY_AKIND (TREE_TYPE (old_desc))
++		     == GFC_ARRAY_ALLOCATABLE)
++		{
++		  old_field = gfc_conv_descriptor_token (old_desc);
++		  new_field = gfc_conv_descriptor_token (new_desc);
++		  gfc_add_modify (&se->pre, new_field, old_field);
++		}
++
++	      gfc_conv_descriptor_data_set (&se->pre, new_desc, ptr);
++	      se->expr = gfc_build_addr_expr (NULL_TREE, new_desc);
++	    }
++	  gfc_free_ss (ss);
+ 	}
+ 
+       if (gfc_option.rtcheck & GFC_RTCHECK_ARRAY_TEMPS)
+diff --git a/gcc/testsuite/gfortran.dg/transpose_4.f90 b/gcc/testsuite/gfortran.dg/transpose_4.f90
+new file mode 100644
+index 000000000..c4db1ffeb
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/transpose_4.f90
+@@ -0,0 +1,78 @@
++! { dg-do run }
++!
++! PR fortran/60392
++! In the transposed case call to my_mul_cont, the compiler used to (wrongly)
++! reuse a transposed descriptor for an array that was not transposed as a result
++! of packing.
++!
++! Original test case from Alexander Vogt <a.vogt@fulguritus.com>.
++
++program test
++  implicit none
++
++  integer, dimension(2,2) :: A, R, RT
++  integer, dimension(2,2) :: B1, B2
++
++  ! 
++  ! A = [  2   17 ]
++  !     [ 82  257 ]
++  !
++  ! matmul(a,a) = [  1398   4403 ]
++  !               [ 21238  67443 ]
++  !
++  ! matmul(transpose(a), a) = [  6728  21108 ]
++  !                           [ 21108  66338 ]
++  A(1,1) =   2
++  A(1,2) =  17
++  A(2,1) =  82
++  A(2,2) = 257
++
++  R(1,1) =  1398
++  R(1,2) =  4403
++  R(2,1) = 21238
++  R(2,2) = 67443
++  
++  RT(1,1) =  6728
++  RT(1,2) = 21108
++  RT(2,1) = 21108
++  RT(2,2) = 66338
++
++  ! Normal argument
++  B1 = 0
++  B2 = 0
++  B1 = my_mul(A,A)
++  B2 = my_mul_cont(A,A)
++! print *,'Normal:    ',maxval(abs(B1-B2))
++! print *,B1
++! print *,B2
++  if (any(B1 /= R)) call abort
++  if (any(B2 /= R)) call abort
++
++  ! Transposed argument
++  B1 = 0
++  B2 = 0
++  B1 = my_mul(transpose(A),A)
++  B2 = my_mul_cont(transpose(A),A)
++! print *,'Transposed:',maxval(abs(B1-B2))
++! print *,B1
++! print *,B2
++  if (any(B1 /= RT)) call abort
++  if (any(B2 /= RT)) call abort
++
++contains
++
++  function my_mul(A,C) result (B)
++    use, intrinsic :: ISO_Fortran_env
++    integer, intent(in) :: A(2,2), C(2,2)
++    integer :: B(2,2)
++    B = matmul(A, C)
++  end function
++
++  function my_mul_cont(A,C) result (B)
++    use, intrinsic :: ISO_Fortran_env
++    integer, intent(in), contiguous :: A(:,:), C(:,:)
++    integer :: B(2,2)
++    B = matmul(A, C)
++  end function
++
++end program

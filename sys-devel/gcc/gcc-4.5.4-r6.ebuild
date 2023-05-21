@@ -34,4 +34,14 @@ src_prepare() {
 	[[ $(tc-arch) == "mips" && ${DEFAULT_ABI} == "n64" ]] && eapply "${FILESDIR}"/${PV}/02_mips64-default-n64-abi.patch
 
 	sed -i 's/use_fixproto=yes/:/' gcc/config.gcc #PR33200
+
+	eapply "${FILESDIR}"/${PV}/postrelease/00_pr78185.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/01_pr58726.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/02_pr68376-68670.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/03_pr54919.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/04_pr52413.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/05_pr36282.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/06_pr55771.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/07_pr70222.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/08_pr91131.patch
 }

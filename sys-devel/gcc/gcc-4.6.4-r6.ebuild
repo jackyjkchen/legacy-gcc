@@ -30,4 +30,18 @@ src_prepare() {
 
 	[[ $(tc-arch) == "arm" ]] && eapply "${FILESDIR}"/${PV}/01_support-armhf.patch
 	[[ $(tc-arch) == "mips" && ${DEFAULT_ABI} == "n64" ]] && eapply "${FILESDIR}"/${PV}/02_mips64-default-n64-abi.patch
+
+	eapply "${FILESDIR}"/${PV}/postrelease/00_pr77605-78185-78333.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/01_pr58726.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/02_pr62052-69889.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/04_pr81395.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/05_pr68376-68670.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/06_pr78378.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/07_pr54919.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/08_pr56899.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/09_pr55771.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/10_pr60485.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/11_pr70222.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/12_pr91131.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/13_pr52413.patch
 }

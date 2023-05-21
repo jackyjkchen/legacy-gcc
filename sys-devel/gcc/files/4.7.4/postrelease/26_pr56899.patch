@@ -1,0 +1,70 @@
+diff --git a/gcc/fold-const.c b/gcc/fold-const.c
+index b9fd89bc9..f1c40cf7d 100644
+--- a/gcc/fold-const.c
++++ b/gcc/fold-const.c
+@@ -5880,8 +5880,10 @@ extract_muldiv_1 (tree t, tree c, enum tree_code code, tree wide_type,
+ 
+       /* The last case is if we are a multiply.  In that case, we can
+ 	 apply the distributive law to commute the multiply and addition
+-	 if the multiplication of the constants doesn't overflow.  */
+-      if (code == MULT_EXPR)
++	 if the multiplication of the constants doesn't overflow
++	 and overflow is defined.  With undefined overflow
++	 op0 * c might overflow, while (op0 + orig_op1) * c doesn't.  */
++      if (code == MULT_EXPR && TYPE_OVERFLOW_WRAPS (ctype))
+ 	return fold_build2 (tcode, ctype,
+ 			    fold_build2 (code, ctype,
+ 					 fold_convert (ctype, op0),
+diff --git a/gcc/testsuite/gcc.c-torture/execute/pr56899.c b/gcc/testsuite/gcc.c-torture/execute/pr56899.c
+new file mode 100644
+index 000000000..9adf9af00
+--- /dev/null
++++ b/gcc/testsuite/gcc.c-torture/execute/pr56899.c
+@@ -0,0 +1,47 @@
++/* PR tree-optimization/56899 */
++
++#if __SIZEOF_INT__ == 4 && __CHAR_BIT__ == 8
++__attribute__((noinline, noclone)) void
++f1 (int v)
++{
++  int x = -214748365 * (v - 1);
++  if (x != -1932735285)
++    __builtin_abort ();
++}
++
++__attribute__((noinline, noclone)) void
++f2 (int v)
++{
++  int x = 214748365 * (v + 1);
++  if (x != -1932735285)
++    __builtin_abort ();
++}
++
++__attribute__((noinline, noclone)) void
++f3 (unsigned int v)
++{
++  unsigned int x = -214748365U * (v - 1);
++  if (x != -1932735285U)
++    __builtin_abort ();
++}
++
++__attribute__((noinline, noclone)) void
++f4 (unsigned int v)
++{
++  unsigned int x = 214748365U * (v + 1);
++  if (x != -1932735285U)
++    __builtin_abort ();
++}
++#endif
++
++int
++main ()
++{
++#if __SIZEOF_INT__ == 4 && __CHAR_BIT__ == 8
++  f1 (10);
++  f2 (-10);
++  f3 (10);
++  f4 (-10U);
++#endif
++  return 0;
++}

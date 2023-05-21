@@ -1,0 +1,89 @@
+diff --git a/gcc/loop-unroll.c b/gcc/loop-unroll.c
+index 378b933ba..b88fa082f 100644
+--- a/gcc/loop-unroll.c
++++ b/gcc/loop-unroll.c
+@@ -101,10 +101,6 @@ struct var_to_expand
+                                       the accumulator.  If REUSE_EXPANSION is 0 reuse
+                                       the original accumulator.  Else use
+                                       var_expansions[REUSE_EXPANSION - 1].  */
+-  unsigned accum_pos;              /* The position in which the accumulator is placed in
+-                                      the insn src.  For example in x = x + something
+-                                      accum_pos is 0 while in x = something + x accum_pos
+-                                      is 1.  */
+ };
+ 
+ /* Information about optimization applied in
+@@ -1723,7 +1719,6 @@ analyze_insn_to_expand_var (struct loop *loop, rtx insn)
+   ves->op = GET_CODE (src);
+   ves->expansion_count = 0;
+   ves->reuse_expansion = 0;
+-  ves->accum_pos = accum_pos;
+   return ves;
+ }
+ 
+@@ -2083,9 +2078,7 @@ expand_var_during_unrolling (struct var_to_expand *ve, rtx insn)
+   else
+     new_reg = get_expansion (ve);
+ 
+-  validate_change (insn, &SET_DEST (set), new_reg, 1);
+-  validate_change (insn, &XEXP (SET_SRC (set), ve->accum_pos), new_reg, 1);
+-
++  validate_replace_rtx_group (SET_DEST (set), new_reg, insn);
+   if (apply_change_group ())
+     if (really_new_expansion)
+       {
+@@ -2125,7 +2118,7 @@ static void
+ insert_var_expansion_initialization (struct var_to_expand *ve,
+ 				     basic_block place)
+ {
+-  rtx seq, var, zero_init, insn;
++  rtx seq, var, zero_init;
+   unsigned i;
+   enum machine_mode mode = GET_MODE (ve->reg);
+   bool honor_signed_zero_p = HONOR_SIGNED_ZEROS (mode);
+@@ -2165,11 +2158,7 @@ insert_var_expansion_initialization (struct var_to_expand *ve,
+   seq = get_insns ();
+   end_sequence ();
+ 
+-  insn = BB_HEAD (place);
+-  while (!NOTE_INSN_BASIC_BLOCK_P (insn))
+-    insn = NEXT_INSN (insn);
+-
+-  emit_insn_after (seq, insn);
++  emit_insn_after (seq, BB_END (place));
+ }
+ 
+ /* Combine the variable expansions at the loop exit.  PLACE is the
+diff --git a/gcc/testsuite/gcc.dg/pr54919.c b/gcc/testsuite/gcc.dg/pr54919.c
+new file mode 100644
+index 000000000..9f1affce2
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr54919.c
+@@ -0,0 +1,27 @@
++/* PR tree-optimization/54919 */
++/* Testcase by Zdenek Sojka <zsojka@seznam.cz> */
++
++/* { dg-do run } */
++/* { dg-options "-O3 -ffast-math -funroll-loops -fvariable-expansion-in-unroller" } */
++
++int a[10];
++extern void abort(void) __attribute__((noreturn));
++
++int __attribute__((__noinline__, __noclone__))
++foo (void)
++{
++  double d;
++  int i;
++  for (i = 0, d = 0; i < 64; i++)
++    d--;
++  return (int) d;
++}
++
++int
++main (void)
++{
++  if (foo () != -64)
++    abort ();
++  return 0;
++}
++

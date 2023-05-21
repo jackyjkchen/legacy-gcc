@@ -1,0 +1,102 @@
+diff --git a/gcc/dce.c b/gcc/dce.c
+index a36ac61de..500439340 100644
+--- a/gcc/dce.c
++++ b/gcc/dce.c
+@@ -94,6 +94,7 @@ deletable_insn_p (rtx insn, bool fast, bitmap arg_stores)
+ {
+   rtx body, x;
+   int i;
++  df_ref *def_rec;
+ 
+   if (CALL_P (insn)
+       /* We cannot delete calls inside of the recursive dce because
+@@ -117,6 +118,12 @@ deletable_insn_p (rtx insn, bool fast, bitmap arg_stores)
+   if (!insn_nothrow_p (insn))
+     return false;
+ 
++  /* If INSN sets a global_reg, leave it untouched.  */
++  for (def_rec = DF_INSN_DEFS (insn); *def_rec; def_rec++)
++    if (HARD_REGISTER_NUM_P (DF_REF_REGNO (*def_rec))
++	&& global_regs[DF_REF_REGNO (*def_rec)])
++      return false;
++
+   body = PATTERN (insn);
+   switch (GET_CODE (body))
+     {
+diff --git a/gcc/df-problems.c b/gcc/df-problems.c
+index 4afdd6fd4..1c2dc0ff8 100644
+--- a/gcc/df-problems.c
++++ b/gcc/df-problems.c
+@@ -893,7 +893,7 @@ df_lr_bb_local_compute (unsigned int bb_index)
+ static void
+ df_lr_local_compute (bitmap all_blocks ATTRIBUTE_UNUSED)
+ {
+-  unsigned int bb_index;
++  unsigned int bb_index, i;
+   bitmap_iterator bi;
+ 
+   bitmap_clear (&df->hardware_regs_used);
+@@ -901,6 +901,11 @@ df_lr_local_compute (bitmap all_blocks ATTRIBUTE_UNUSED)
+   /* The all-important stack pointer must always be live.  */
+   bitmap_set_bit (&df->hardware_regs_used, STACK_POINTER_REGNUM);
+ 
++  /* Global regs are always live, too.  */
++  for (i = 0; i < FIRST_PSEUDO_REGISTER; i++)
++    if (global_regs[i])
++      bitmap_set_bit (&df->hardware_regs_used, i);
++
+   /* Before reload, there are a few registers that must be forced
+      live everywhere -- which might not already be the case for
+      blocks within infinite loops.  */
+diff --git a/gcc/df-scan.c b/gcc/df-scan.c
+index 39f444f9f..0afad694a 100644
+--- a/gcc/df-scan.c
++++ b/gcc/df-scan.c
+@@ -3735,8 +3735,12 @@ df_get_entry_block_def_set (bitmap entry_block_defs)
+   bitmap_clear (entry_block_defs);
+ 
+   for (i = 0; i < FIRST_PSEUDO_REGISTER; i++)
+-    if (FUNCTION_ARG_REGNO_P (i))
+-      bitmap_set_bit (entry_block_defs, INCOMING_REGNO (i));
++    {
++      if (global_regs[i])
++	bitmap_set_bit (entry_block_defs, i);
++      if (FUNCTION_ARG_REGNO_P (i))
++	bitmap_set_bit (entry_block_defs, INCOMING_REGNO (i));
++    }
+ 
+   /* The always important stack pointer.  */
+   bitmap_set_bit (entry_block_defs, STACK_POINTER_REGNUM);
+diff --git a/gcc/testsuite/gcc.c-torture/execute/pr51447.c b/gcc/testsuite/gcc.c-torture/execute/pr51447.c
+new file mode 100644
+index 000000000..7b71a2642
+--- /dev/null
++++ b/gcc/testsuite/gcc.c-torture/execute/pr51447.c
+@@ -0,0 +1,27 @@
++/* PR rtl-optimization/51447 */
++
++extern void abort (void);
++
++#ifdef __x86_64__
++register void *ptr asm ("rbx");
++#else
++void *ptr;
++#endif
++
++int
++main (void)
++{
++  __label__ nonlocal_lab;
++  __attribute__((noinline, noclone)) void
++    bar (void *func)
++      {
++	ptr = func;
++	goto nonlocal_lab;
++      }
++  bar (&&nonlocal_lab);
++  return 1;
++nonlocal_lab:
++  if (ptr != &&nonlocal_lab)
++    abort ();
++  return 0;
++}

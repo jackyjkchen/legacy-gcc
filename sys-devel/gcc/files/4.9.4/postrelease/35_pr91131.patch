@@ -1,0 +1,38 @@
+diff --git a/gcc/gimplify.c b/gcc/gimplify.c
+index e81108273..85ca17d76 100644
+--- a/gcc/gimplify.c
++++ b/gcc/gimplify.c
+@@ -3857,7 +3857,7 @@ gimplify_init_constructor (tree *expr_p, gimple_seq *pre_p, gimple_seq *post_p,
+ 	   one field to assign, initialize the target from a temporary.  */
+ 	if (TREE_THIS_VOLATILE (object)
+ 	    && !TREE_ADDRESSABLE (type)
+-	    && num_nonzero_elements > 0
++	    && (num_nonzero_elements > 0 || !cleared)
+ 	    && vec_safe_length (elts) > 1)
+ 	  {
+ 	    tree temp = create_tmp_var (TYPE_MAIN_VARIANT (type), NULL);
+diff --git a/gcc/testsuite/gcc.target/i386/pr91131.c b/gcc/testsuite/gcc.target/i386/pr91131.c
+new file mode 100644
+index 000000000..85008ff8a
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/i386/pr91131.c
+@@ -0,0 +1,19 @@
++/* { dg-do compile } */
++/* { dg-options "-O" } */
++
++struct Reg_T {
++    unsigned int a : 3;
++    unsigned int b : 1;
++    unsigned int c : 4;
++};
++
++volatile struct Reg_T Reg_A;
++
++int
++main ()
++{
++  Reg_A = (struct Reg_T){ .a = 0, .b = 0, .c = 0 };
++  return 0;
++}
++
++/* { dg-final { scan-assembler-times "mov\[^\r\n\]*Reg_A" 1 } } */

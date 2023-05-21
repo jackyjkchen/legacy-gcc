@@ -1,0 +1,169 @@
+diff --git a/gcc/cp/cp-gimplify.c b/gcc/cp/cp-gimplify.c
+index e06c5454c..dae8fb160 100644
+--- a/gcc/cp/cp-gimplify.c
++++ b/gcc/cp/cp-gimplify.c
+@@ -842,10 +842,16 @@ cp_genericize_r (tree *stmt_p, int *walk_subtrees, void *data)
+       && omp_var_to_track (stmt))
+     omp_cxx_notice_variable (wtd->omp_ctx, stmt);
+ 
+-  if (is_invisiref_parm (stmt)
+-      /* Don't dereference parms in a thunk, pass the references through. */
+-      && !(DECL_THUNK_P (current_function_decl)
+-	   && TREE_CODE (stmt) == PARM_DECL))
++  /* Don't dereference parms in a thunk, pass the references through. */
++  if ((TREE_CODE (stmt) == CALL_EXPR && CALL_FROM_THUNK_P (stmt))
++      || (TREE_CODE (stmt) == AGGR_INIT_EXPR && AGGR_INIT_FROM_THUNK_P (stmt)))
++    {
++      *walk_subtrees = 0;
++      return NULL;
++    }
++
++  /* Otherwise, do dereference invisible reference parms.  */
++  if (is_invisiref_parm (stmt))
+     {
+       *stmt_p = convert_from_reference (stmt);
+       *walk_subtrees = 0;
+diff --git a/gcc/cp/cp-tree.h b/gcc/cp/cp-tree.h
+index b4fdda799..4496b4a6c 100644
+--- a/gcc/cp/cp-tree.h
++++ b/gcc/cp/cp-tree.h
+@@ -2939,6 +2939,11 @@ extern void decl_shadowed_for_var_insert (tree, tree);
+ #define AGGR_INIT_ZERO_FIRST(NODE) \
+   TREE_LANG_FLAG_2 (AGGR_INIT_EXPR_CHECK (NODE))
+ 
++/* Nonzero means that the call is the jump from a thunk to the
++   thunked-to function.  */
++#define AGGR_INIT_FROM_THUNK_P(NODE) \
++  (AGGR_INIT_EXPR_CHECK (NODE)->base.protected_flag)
++
+ /* AGGR_INIT_EXPR accessors.  These are equivalent to the CALL_EXPR
+    accessors, except for AGGR_INIT_EXPR_SLOT (which takes the place of
+    CALL_EXPR_STATIC_CHAIN).  */
+diff --git a/gcc/cp/semantics.c b/gcc/cp/semantics.c
+index 851b1bfd3..d63d65bf7 100644
+--- a/gcc/cp/semantics.c
++++ b/gcc/cp/semantics.c
+@@ -3644,6 +3644,7 @@ simplify_aggr_init_expr (tree *tp)
+ 				    aggr_init_expr_nargs (aggr_init_expr),
+ 				    AGGR_INIT_EXPR_ARGP (aggr_init_expr));
+   TREE_NOTHROW (call_expr) = TREE_NOTHROW (aggr_init_expr);
++  CALL_FROM_THUNK_P (call_expr) = AGGR_INIT_FROM_THUNK_P (aggr_init_expr);
+ 
+   if (style == ctor)
+     {
+diff --git a/gcc/cp/tree.c b/gcc/cp/tree.c
+index 4a182e992..8c14c0fbe 100644
+--- a/gcc/cp/tree.c
++++ b/gcc/cp/tree.c
+@@ -426,14 +426,22 @@ build_aggr_init_expr (tree type, tree init,
+     {
+       slot = build_local_temp (type);
+ 
+-      if (TREE_CODE(init) == CALL_EXPR)
+-	rval = build_aggr_init_array (void_type_node, fn, slot,
+-				      call_expr_nargs (init),
+-				      CALL_EXPR_ARGP (init));
++      if (TREE_CODE (init) == CALL_EXPR)
++	{
++	  rval = build_aggr_init_array (void_type_node, fn, slot,
++					call_expr_nargs (init),
++					CALL_EXPR_ARGP (init));
++	  AGGR_INIT_FROM_THUNK_P (rval)
++	    = CALL_FROM_THUNK_P (init);
++	}
+       else
+-	rval = build_aggr_init_array (void_type_node, fn, slot,
+-				      aggr_init_expr_nargs (init),
+-				      AGGR_INIT_EXPR_ARGP (init));
++	{
++	  rval = build_aggr_init_array (void_type_node, fn, slot,
++					aggr_init_expr_nargs (init),
++					AGGR_INIT_EXPR_ARGP (init));
++	  AGGR_INIT_FROM_THUNK_P (rval)
++	    = AGGR_INIT_FROM_THUNK_P (init);
++	}
+       TREE_SIDE_EFFECTS (rval) = 1;
+       AGGR_INIT_VIA_CTOR_P (rval) = is_ctor;
+       TREE_NOTHROW (rval) = TREE_NOTHROW (init);
+diff --git a/gcc/testsuite/g++.dg/cpp0x/lambda/lambda-conv10.C b/gcc/testsuite/g++.dg/cpp0x/lambda/lambda-conv10.C
+new file mode 100644
+index 000000000..8e806c849
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/lambda/lambda-conv10.C
+@@ -0,0 +1,34 @@
++// PR c++/69889
++// { dg-do compile { target c++11 } }
++
++template <typename F> struct Tag {
++  static void fp() { f()(0); }
++  static F f() {}
++};
++
++struct Dispatch {
++  template <typename F> Dispatch(F&&) : f(Tag<F>::fp) {}
++  void (*f)();
++};
++
++struct Empty { Empty(Empty&&); };
++
++struct Value {
++  Value();
++  template <typename U> Value(U);
++  void call(Dispatch);
++  Empty e;
++};
++
++struct EmptyValue {
++  EmptyValue(EmptyValue&&);
++  EmptyValue();
++};
++
++struct User {
++  User() {
++    Value().call([](Value) { return EmptyValue(); });
++  }
++};
++
++User user;
+diff --git a/gcc/testsuite/g++.dg/cpp0x/pr62052.C b/gcc/testsuite/g++.dg/cpp0x/pr62052.C
+new file mode 100644
+index 000000000..7c2a37d3f
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/pr62052.C
+@@ -0,0 +1,36 @@
++// { dg-do run { target c++11 } }
++
++struct X;
++
++X const* objects[10];
++
++int find(X const* x)
++{
++  for (int i=0; i<10; ++i)
++    if (objects[i] == x)
++      return i;
++  __builtin_abort();
++}
++
++struct X
++{
++  X() {
++    objects[ find(nullptr) ] = this;
++  }
++
++  X(X const& x) {
++    find(&x);
++    objects[ find(nullptr) ] = this;
++  }
++
++  ~X() {
++    objects[ find(this) ] = nullptr;
++  }
++};
++
++int main()
++{
++  auto f = [] (X xx) { return xx; };
++  X (*ff) (X) = f;
++  ff ( X{} );
++}

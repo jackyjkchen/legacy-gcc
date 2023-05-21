@@ -1,0 +1,56 @@
+diff --git a/gcc/testsuite/gcc.dg/torture/pr60766.c b/gcc/testsuite/gcc.dg/torture/pr60766.c
+new file mode 100644
+index 000000000..6f16e3b74
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/torture/pr60766.c
+@@ -0,0 +1,15 @@
++/* { dg-do run } */
++
++int m = 9;
++
++int main()
++{
++  int n, x;
++
++  n = m;
++  for (x = 0; x <= n; x++)
++    if (n == x + (x + 1) + (x + 2))
++      return 0;
++
++  __builtin_abort();
++}
+diff --git a/gcc/tree-ssa-loop-ivopts.c b/gcc/tree-ssa-loop-ivopts.c
+index 7556f53d3..29e7a111a 100644
+--- a/gcc/tree-ssa-loop-ivopts.c
++++ b/gcc/tree-ssa-loop-ivopts.c
+@@ -4322,8 +4322,10 @@ cand_value_at (struct loop *loop, struct iv_cand *cand, gimple at, tree niter,
+   tree steptype = type;
+   if (POINTER_TYPE_P (type))
+     steptype = sizetype;
++  steptype = unsigned_type_for (type);
+ 
+-  tree_to_aff_combination (iv->step, steptype, &step);
++  tree_to_aff_combination (iv->step, TREE_TYPE (iv->step), &step);
++  aff_combination_convert (&step, steptype);
+   tree_to_aff_combination (niter, TREE_TYPE (niter), &nit);
+   aff_combination_convert (&nit, steptype);
+   aff_combination_mult (&nit, &step, &delta);
+@@ -4331,6 +4333,8 @@ cand_value_at (struct loop *loop, struct iv_cand *cand, gimple at, tree niter,
+     aff_combination_add (&delta, &step);
+ 
+   tree_to_aff_combination (iv->base, type, val);
++  if (!POINTER_TYPE_P (type))
++    aff_combination_convert (val, steptype);
+   aff_combination_add (val, &delta);
+ }
+ 
+@@ -4709,7 +4713,8 @@ may_eliminate_iv (struct ivopts_data *data,
+ 
+   cand_value_at (loop, cand, use->stmt, desc->niter, &bnd);
+ 
+-  *bound = aff_combination_to_tree (&bnd);
++  *bound = fold_convert (TREE_TYPE (cand->iv->base),
++			 aff_combination_to_tree (&bnd));
+   *comp = iv_elimination_compare (data, use);
+ 
+   /* It is unlikely that computing the number of iterations using division

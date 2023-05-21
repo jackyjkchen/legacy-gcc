@@ -26,7 +26,7 @@ src_prepare() {
 	toolchain_src_prepare
 	use vanilla && return 0
 
-	eapply "${FILESDIR}"/${PV}/00_fix-isl-version.patch
+	eapply "${FILESDIR}"/${PV}/00_compat-new-isl.patch
 
 	eapply "${FILESDIR}"/${PV}/postrelease/00_pr94460.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/01_pr80693-81019-81020.patch
@@ -52,4 +52,7 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/21_pr91136.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/22_pr106513.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/23_pr66695-77746-79485.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/24_pr91126-91131.patch
+
+	eapply "${FILESDIR}"/${PV}/postrelease/99_fix-known-test-fail.patch
 }

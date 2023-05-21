@@ -1,0 +1,67 @@
+diff --git a/gcc/testsuite/gcc.c-torture/execute/pr60454.c b/gcc/testsuite/gcc.c-torture/execute/pr60454.c
+new file mode 100644
+index 000000000..ceec45e69
+--- /dev/null
++++ b/gcc/testsuite/gcc.c-torture/execute/pr60454.c
+@@ -0,0 +1,31 @@
++#ifdef __UINT32_TYPE__
++typedef __UINT32_TYPE__ uint32_t;
++#else
++typedef unsigned uint32_t;
++#endif
++
++#define __fake_const_swab32(x) ((uint32_t)(			      \
++        (((uint32_t)(x) & (uint32_t)0x000000ffUL) << 24) |            \
++        (((uint32_t)(x) & (uint32_t)0x0000ff00UL) <<  8) |            \
++        (((uint32_t)(x) & (uint32_t)0x000000ffUL) <<  8) |            \
++        (((uint32_t)(x) & (uint32_t)0x0000ff00UL)      ) |            \
++        (((uint32_t)(x) & (uint32_t)0xff000000UL) >> 24)))
++
++/* Previous version of bswap optimization would detect byte swap when none
++   happen. This test aims at catching such wrong detection to avoid
++   regressions.  */
++
++__attribute__ ((noinline, noclone)) uint32_t
++fake_swap32 (uint32_t in)
++{
++  return __fake_const_swab32 (in);
++}
++
++int main(void)
++{
++  if (sizeof (uint32_t) * __CHAR_BIT__ != 32)
++    return 0;
++  if (fake_swap32 (0x12345678UL) != 0x78567E12UL)
++    __builtin_abort ();
++  return 0;
++}
+diff --git a/gcc/tree-ssa-math-opts.c b/gcc/tree-ssa-math-opts.c
+index e79db0613..f43461d47 100644
+--- a/gcc/tree-ssa-math-opts.c
++++ b/gcc/tree-ssa-math-opts.c
+@@ -1717,7 +1717,9 @@ find_bswap_1 (gimple stmt, struct symbolic_number *n, int limit)
+ 
+   if (rhs_class == GIMPLE_BINARY_RHS)
+     {
++      int i;
+       struct symbolic_number n1, n2;
++      unsigned HOST_WIDEST_INT mask;
+       tree source_expr2;
+ 
+       if (code != BIT_IOR_EXPR)
+@@ -1743,6 +1745,15 @@ find_bswap_1 (gimple stmt, struct symbolic_number *n, int limit)
+ 	    return NULL_TREE;
+ 
+ 	  n->size = n1.size;
++	  for (i = 0, mask = 0xff; i < n->size; i++, mask <<= BITS_PER_UNIT)
++	    {
++	      unsigned HOST_WIDEST_INT masked1, masked2;
++
++	      masked1 = n1.n & mask;
++	      masked2 = n2.n & mask;
++	      if (masked1 && masked2 && masked1 != masked2)
++		return NULL_TREE;
++	    }
+ 	  n->n = n1.n | n2.n;
+ 
+ 	  if (!verify_symbolic_number_p (n, stmt))

@@ -43,7 +43,7 @@ src_prepare() {
 	#Use -r1 for newer pieapplyet that use DRIVER_SELF_SPECS for the hardened specs.
 	[[ ${CHOST} == ${CTARGET} ]] && eapply "${FILESDIR}"/gcc-spec-env-r1.patch
 
-	eapply "${FILESDIR}"/${PV}/postrelease/00_pr77436-77450-77605-77855-78185-78333.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/00_pr77450-77605-78185-78333.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/01_pr77943.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/02_pr70022-70484-70931-71452.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/03_pr61068.patch
@@ -78,4 +78,11 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/33_pr77933.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/34_pr70235.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/35_pr64905.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/36_pr91131.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/37_pr63347.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/38_pr60392.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/39_pr62052-69889.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/40_pr52413.patch
+
+	eapply "${FILESDIR}"/${PV}/postrelease/99_fix-known-test-fail.patch
 }

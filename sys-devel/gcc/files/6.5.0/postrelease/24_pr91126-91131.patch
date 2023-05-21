@@ -1,0 +1,101 @@
+diff --git a/gcc/gimplify.c b/gcc/gimplify.c
+index 1181e8e06..32e68e658 100644
+--- a/gcc/gimplify.c
++++ b/gcc/gimplify.c
+@@ -4034,7 +4034,7 @@ gimplify_init_constructor (tree *expr_p, gimple_seq *pre_p, gimple_seq *post_p,
+ 	   one field to assign, initialize the target from a temporary.  */
+ 	if (TREE_THIS_VOLATILE (object)
+ 	    && !TREE_ADDRESSABLE (type)
+-	    && num_nonzero_elements > 0
++	    && (num_nonzero_elements > 0 || !cleared)
+ 	    && vec_safe_length (elts) > 1)
+ 	  {
+ 	    tree temp = create_tmp_var (TYPE_MAIN_VARIANT (type));
+diff --git a/gcc/testsuite/gcc.dg/torture/pr91126.c b/gcc/testsuite/gcc.dg/torture/pr91126.c
+new file mode 100644
+index 000000000..8e34815b9
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/torture/pr91126.c
+@@ -0,0 +1,28 @@
++/* { dg-do run } */
++
++struct S
++{
++  __INT32_TYPE__ a : 24;
++  __INT32_TYPE__ b : 8;
++} s;
++
++int
++main()
++{
++  s.a = 0xfefefe;
++  s.b = 0xfe;
++  unsigned char c;
++  c = ((unsigned char *)&s)[0];
++  if (c != 0xfe)
++    __builtin_abort ();
++  c = ((unsigned char *)&s)[1];
++  if (c != 0xfe)
++    __builtin_abort ();
++  c = ((unsigned char *)&s)[2];
++  if (c != 0xfe)
++    __builtin_abort ();
++  c = ((unsigned char *)&s)[3];
++  if (c != 0xfe)
++    __builtin_abort ();
++  return 0;
++}
+diff --git a/gcc/testsuite/gcc.target/i386/pr91131.c b/gcc/testsuite/gcc.target/i386/pr91131.c
+new file mode 100644
+index 000000000..85008ff8a
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/i386/pr91131.c
+@@ -0,0 +1,19 @@
++/* { dg-do compile } */
++/* { dg-options "-O" } */
++
++struct Reg_T {
++    unsigned int a : 3;
++    unsigned int b : 1;
++    unsigned int c : 4;
++};
++
++volatile struct Reg_T Reg_A;
++
++int
++main ()
++{
++  Reg_A = (struct Reg_T){ .a = 0, .b = 0, .c = 0 };
++  return 0;
++}
++
++/* { dg-final { scan-assembler-times "mov\[^\r\n\]*Reg_A" 1 } } */
+diff --git a/gcc/tree-ssa-sccvn.c b/gcc/tree-ssa-sccvn.c
+index 0c648b2d0..3408d63bd 100644
+--- a/gcc/tree-ssa-sccvn.c
++++ b/gcc/tree-ssa-sccvn.c
+@@ -1813,9 +1813,23 @@ vn_reference_lookup_3 (ao_ref *ref, tree vuse, void *vr_,
+ 	  unsigned char buffer[64];
+ 	  int len;
+ 
++	  tree rhs = gimple_assign_rhs1 (def_stmt);
++	  if (TREE_CODE (rhs) == SSA_NAME)
++	    rhs = SSA_VAL (rhs);
++	  unsigned pad = 0;
++	  enum machine_mode mode = TYPE_MODE (TREE_TYPE (rhs));
++	  if (BYTES_BIG_ENDIAN
++	      && (SCALAR_INT_MODE_P (mode)
++		  || ALL_SCALAR_FIXED_POINT_MODE_P (mode)
++		  || SCALAR_FLOAT_MODE_P (mode)))
++	    {
++	      /* On big-endian the padding is at the 'front' so
++		 just skip the initial bytes.  */
++	      pad = GET_MODE_SIZE (mode) - size2 / BITS_PER_UNIT;
++	    }
+ 	  len = native_encode_expr (gimple_assign_rhs1 (def_stmt),
+ 				    buffer, sizeof (buffer),
+-				    (offset - offset2) / BITS_PER_UNIT);
++				    (offset - offset2) / BITS_PER_UNIT + pad);
+ 	  if (len > 0 && len * BITS_PER_UNIT >= ref->size)
+ 	    {
+ 	      tree type = vr->type;

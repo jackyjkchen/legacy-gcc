@@ -1,0 +1,227 @@
+diff --git a/gcc/testsuite/gcc.dg/torture/pr62031.c b/gcc/testsuite/gcc.dg/torture/pr62031.c
+new file mode 100644
+index 000000000..f0dcef44b
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/torture/pr62031.c
+@@ -0,0 +1,52 @@
++/* { dg-do run } */
++
++#include <stdlib.h>
++
++#define NUM_OF_STATES 4
++typedef unsigned int entry_t[2];
++typedef struct entries_item { entry_t metricEntries_[0]; } entries_item_t;
++
++void __attribute__((noinline,noclone))
++test_00(size_t numOfStates, entries_item_t* p_bm,
++	const unsigned int* polyArray,
++	size_t polyArraySize)
++{
++  size_t idx;
++  unsigned int hlp0, hlp1;
++  for (idx = 0; idx < numOfStates; ++idx)
++    {
++      size_t idy;
++
++      hlp0 = (idx << 1) | 0x00;
++      hlp1 = (idx << 1) | 0x01;
++      p_bm->metricEntries_[idx][0] = 0;
++      p_bm->metricEntries_[idx][1] = 0;
++      for (idy = 0; idy < polyArraySize; ++idy)
++	{
++	  p_bm->metricEntries_[idx][0]
++	      |= __builtin_parity(hlp0 & polyArray[idy]) << idy;
++	  p_bm->metricEntries_[idx][1]
++	      |= __builtin_parity(hlp1 & polyArray[idy]) << idy;
++	}
++    }
++}
++
++int main()
++{
++  unsigned int polyArray[] = { 0x07, 0x05 };
++  entries_item_t* pBranchMetrics;
++  pBranchMetrics = malloc(sizeof(entry_t) * NUM_OF_STATES);
++  test_00(NUM_OF_STATES, pBranchMetrics, polyArray,
++	  sizeof(polyArray) / sizeof(polyArray[0]));
++  if (pBranchMetrics->metricEntries_[0][0] != 0
++      || pBranchMetrics->metricEntries_[0][1] != 3
++      || pBranchMetrics->metricEntries_[1][0] != 1
++      || pBranchMetrics->metricEntries_[1][1] != 2
++      || pBranchMetrics->metricEntries_[2][0] != 3
++      || pBranchMetrics->metricEntries_[2][1] != 0
++      || pBranchMetrics->metricEntries_[3][0] != 2
++      || pBranchMetrics->metricEntries_[3][1] != 1)
++    abort ();
++  free(pBranchMetrics);
++  return 0;
++}
+diff --git a/gcc/testsuite/gcc.dg/vect/pr63379.c b/gcc/testsuite/gcc.dg/vect/pr63379.c
+new file mode 100644
+index 000000000..f6e8fc6a4
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/vect/pr63379.c
+@@ -0,0 +1,43 @@
++/* PR tree-optimization/63379  */
++/* { dg-do run } */
++
++#include "tree-vect.h"
++
++extern void abort (void);
++
++typedef struct {
++    int x;
++    int y;
++} Point;
++
++Point pt_array[25];
++
++void __attribute__((noinline,noclone))
++generate_array(void)
++{
++  unsigned int i;
++  for (i = 0; i<25; i++)
++    {
++      pt_array[i].x = i;
++      pt_array[i].y = 1000+i;
++    }
++}
++
++int main()
++{
++  check_vect ();
++  generate_array ();
++  Point min_pt = pt_array[0];
++  Point *ptr, *ptr_end;
++  for (ptr = pt_array+1, ptr_end = pt_array+25; ptr != ptr_end; ++ptr)
++    {
++      min_pt.x = (min_pt.x < ptr->x) ? min_pt.x : ptr->x;
++      min_pt.y = (min_pt.y < ptr->y) ? min_pt.y : ptr->y;
++    }
++
++  if (min_pt.x != 0 || min_pt.y != 1000)
++    abort ();
++  return 0;
++}
++
++/* { dg-final { cleanup-tree-dump "vect" } } */
+diff --git a/gcc/tree-data-ref.c b/gcc/tree-data-ref.c
+index ce251252f..acfb5fcde 100644
+--- a/gcc/tree-data-ref.c
++++ b/gcc/tree-data-ref.c
+@@ -954,7 +954,6 @@ dr_analyze_indices (struct data_reference *dr, loop_p nest, loop_p loop)
+ 	  ref = fold_build2_loc (EXPR_LOCATION (ref),
+ 				 MEM_REF, TREE_TYPE (ref),
+ 				 base, memoff);
+-	  DR_UNCONSTRAINED_BASE (dr) = true;
+ 	  VEC_safe_push (tree, heap, access_fns, access_fn);
+ 	}
+     }
+@@ -1368,14 +1367,20 @@ dr_may_alias_p (const struct data_reference *a, const struct data_reference *b,
+ 	return false;
+     }
+ 
+-  /* If we had an evolution in a MEM_REF BASE_OBJECT we do not know
+-     the size of the base-object.  So we cannot do any offset/overlap
+-     based analysis but have to rely on points-to information only.  */
++  /* If we had an evolution in a pointer-based MEM_REF BASE_OBJECT we
++     do not know the size of the base-object.  So we cannot do any
++     offset/overlap based analysis but have to rely on points-to
++     information only.  */
+   if (TREE_CODE (addr_a) == MEM_REF
+-      && DR_UNCONSTRAINED_BASE (a))
++      && TREE_CODE (TREE_OPERAND (addr_a, 0)) == SSA_NAME)
+     {
+-      if (TREE_CODE (addr_b) == MEM_REF
+-	  && DR_UNCONSTRAINED_BASE (b))
++      /* For true dependences we can apply TBAA.  */
++      if (flag_strict_aliasing
++	  && DR_IS_WRITE (a) && DR_IS_READ (b)
++	  && !alias_sets_conflict_p (get_alias_set (DR_REF (a)),
++				     get_alias_set (DR_REF (b))))
++	return false;
++      if (TREE_CODE (addr_b) == MEM_REF)
+ 	return ptr_derefs_may_alias_p (TREE_OPERAND (addr_a, 0),
+ 				       TREE_OPERAND (addr_b, 0));
+       else
+@@ -1383,9 +1388,21 @@ dr_may_alias_p (const struct data_reference *a, const struct data_reference *b,
+ 				       build_fold_addr_expr (addr_b));
+     }
+   else if (TREE_CODE (addr_b) == MEM_REF
+-	   && DR_UNCONSTRAINED_BASE (b))
+-    return ptr_derefs_may_alias_p (build_fold_addr_expr (addr_a),
+-				   TREE_OPERAND (addr_b, 0));
++	   && TREE_CODE (TREE_OPERAND (addr_b, 0)) == SSA_NAME)
++    {
++      /* For true dependences we can apply TBAA.  */
++      if (flag_strict_aliasing
++	  && DR_IS_WRITE (a) && DR_IS_READ (b)
++	  && !alias_sets_conflict_p (get_alias_set (DR_REF (a)),
++				     get_alias_set (DR_REF (b))))
++	return false;
++      if (TREE_CODE (addr_a) == MEM_REF)
++	return ptr_derefs_may_alias_p (TREE_OPERAND (addr_a, 0),
++				       TREE_OPERAND (addr_b, 0));
++      else
++	return ptr_derefs_may_alias_p (build_fold_addr_expr (addr_a),
++				       TREE_OPERAND (addr_b, 0));
++    }
+ 
+   /* Otherwise DR_BASE_OBJECT is an access that covers the whole object
+      that is being subsetted in the loop nest.  */
+diff --git a/gcc/tree-data-ref.h b/gcc/tree-data-ref.h
+index d983c8cda..dd68b6cf9 100644
+--- a/gcc/tree-data-ref.h
++++ b/gcc/tree-data-ref.h
+@@ -82,10 +82,6 @@ struct indices
+ 
+   /* A list of chrecs.  Access functions of the indices.  */
+   VEC(tree,heap) *access_fns;
+-
+-  /* Whether BASE_OBJECT is an access representing the whole object
+-     or whether the access could not be constrained.  */
+-  bool unconstrained_base;
+ };
+ 
+ struct dr_alias
+@@ -201,7 +197,6 @@ struct data_reference
+ #define DR_STMT(DR)                (DR)->stmt
+ #define DR_REF(DR)                 (DR)->ref
+ #define DR_BASE_OBJECT(DR)         (DR)->indices.base_object
+-#define DR_UNCONSTRAINED_BASE(DR)  (DR)->indices.unconstrained_base
+ #define DR_ACCESS_FNS(DR)	   (DR)->indices.access_fns
+ #define DR_ACCESS_FN(DR, I)        VEC_index (tree, DR_ACCESS_FNS (DR), I)
+ #define DR_NUM_DIMENSIONS(DR)      VEC_length (tree, DR_ACCESS_FNS (DR))
+diff --git a/gcc/tree-vect-slp.c b/gcc/tree-vect-slp.c
+index b74f5ebf9..ac7200f39 100644
+--- a/gcc/tree-vect-slp.c
++++ b/gcc/tree-vect-slp.c
+@@ -2263,13 +2263,21 @@ vect_get_constant_vectors (tree op, slp_tree slp_node,
+             neutral_op = build_int_cst (TREE_TYPE (op), -1);
+             break;
+ 
+-          case MAX_EXPR:
+-          case MIN_EXPR:
+-            def_stmt = SSA_NAME_DEF_STMT (op);
+-            loop = (gimple_bb (stmt))->loop_father;
+-            neutral_op = PHI_ARG_DEF_FROM_EDGE (def_stmt,
+-                                                loop_preheader_edge (loop));
+-            break;
++	  /* For MIN/MAX we don't have an easy neutral operand but
++	     the initial values can be used fine here.  Only for
++	     a reduction chain we have to force a neutral element.  */
++	  case MAX_EXPR:
++	  case MIN_EXPR:
++	    if (!GROUP_FIRST_ELEMENT (stmt_vinfo))
++	      neutral_op = NULL;
++	    else
++	      {
++		def_stmt = SSA_NAME_DEF_STMT (op);
++		loop = (gimple_bb (stmt))->loop_father;
++		neutral_op = PHI_ARG_DEF_FROM_EDGE (def_stmt,
++						    loop_preheader_edge (loop));
++	      }
++	    break;
+ 
+           default:
+             neutral_op = NULL;

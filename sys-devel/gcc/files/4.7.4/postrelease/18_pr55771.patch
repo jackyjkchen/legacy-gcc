@@ -1,0 +1,37 @@
+diff --git a/gcc/convert.c b/gcc/convert.c
+index 1a6159e82..76827a60f 100644
+--- a/gcc/convert.c
++++ b/gcc/convert.c
+@@ -261,11 +261,12 @@ convert_to_real (tree type, tree expr)
+     switch (TREE_CODE (expr))
+       {
+ 	/* Convert (float)-x into -(float)x.  This is safe for
+-	   round-to-nearest rounding mode.  */
++	   round-to-nearest rounding mode when the inner type is float.  */
+ 	case ABS_EXPR:
+ 	case NEGATE_EXPR:
+ 	  if (!flag_rounding_math
+-	      && TYPE_PRECISION (type) < TYPE_PRECISION (TREE_TYPE (expr)))
++	      && FLOAT_TYPE_P (itype)
++	      && TYPE_PRECISION (type) < TYPE_PRECISION (itype))
+ 	    return build1 (TREE_CODE (expr), type,
+ 			   fold (convert_to_real (type,
+ 						  TREE_OPERAND (expr, 0))));
+diff --git a/gcc/testsuite/c-c++-common/pr55771.c b/gcc/testsuite/c-c++-common/pr55771.c
+new file mode 100644
+index 000000000..16f02442c
+--- /dev/null
++++ b/gcc/testsuite/c-c++-common/pr55771.c
+@@ -0,0 +1,12 @@
++/* { dg-do run } */
++
++float global;
++int main()
++{
++  unsigned long z = 1;
++  float x = -z;
++  global = x;
++  if (global < 0)
++    __builtin_abort ();
++  return 0;
++}

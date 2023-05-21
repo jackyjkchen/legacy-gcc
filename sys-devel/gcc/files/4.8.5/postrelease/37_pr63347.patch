@@ -1,0 +1,73 @@
+diff --git a/gcc/haifa-sched.c b/gcc/haifa-sched.c
+index 28934c5d9..c7b4799f0 100644
+--- a/gcc/haifa-sched.c
++++ b/gcc/haifa-sched.c
+@@ -5758,7 +5758,15 @@ prune_ready_list (state_t temp_state, bool first_cycle_insn_p,
+ 	      if (SCHED_GROUP_P (insn) && cost > min_cost_group)
+ 		min_cost_group = cost;
+ 	      ready_remove (&ready, i);
+-	      queue_insn (insn, cost, reason);
++	      /* Normally we'd want to queue INSN for COST cycles.  However,
++		 if SCHED_GROUP_P is set, then we must ensure that nothing
++		 else comes between INSN and its predecessor.  If there is
++		 some other insn ready to fire on the next cycle, then that
++		 invariant would be broken.
++
++		 So when SCHED_GROUP_P is set, just queue this insn for a
++		 single cycle.  */
++	      queue_insn (insn, SCHED_GROUP_P (insn) ? 1 : cost, reason);
+ 	      if (i + 1 < n)
+ 		break;
+ 	    }
+diff --git a/gcc/testsuite/gcc.target/m68k/pr63347.c b/gcc/testsuite/gcc.target/m68k/pr63347.c
+new file mode 100644
+index 000000000..1d23e9a82
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/m68k/pr63347.c
+@@ -0,0 +1,46 @@
++/* { dg-do compile } */
++/* { dg-options "-O2 -mcpu=5208" } */
++
++#include <stdlib.h>
++
++void __attribute__ ((noinline))
++oof()
++{
++  asm volatile ("" ::: "memory");
++}
++int print_info(unsigned int *ip_addr)
++{
++    int invalid = 0;
++
++    if (ip_addr) {
++        unsigned int haddr = *ip_addr;
++        oof("stuff");
++        if (0x0 == haddr) {
++            invalid = 1;
++        }
++        oof("stuff2");
++    } else {
++        invalid = 1;
++    }
++
++    return invalid;
++}
++
++int main(int argc, char *argv[])
++{
++    unsigned int myaddr;
++    int ret;
++
++    myaddr = 0x0;
++    ret = print_info(&myaddr);
++    if (!ret)
++        abort ();
++
++    myaddr = 0x01020304;
++    ret = print_info(&myaddr);
++    if (ret)
++        abort ();
++    exit (0);
++}
++
++

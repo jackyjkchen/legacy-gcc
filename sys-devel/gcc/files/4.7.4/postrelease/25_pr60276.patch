@@ -1,0 +1,146 @@
+diff --git a/gcc/testsuite/gcc.dg/vect/pr60276.c b/gcc/testsuite/gcc.dg/vect/pr60276.c
+new file mode 100644
+index 000000000..d4ad21980
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/vect/pr60276.c
+@@ -0,0 +1,52 @@
++/* { dg-do run } */
++
++extern void abort (void);
++
++static void 
++foo (int *out, const int *lp, unsigned samples)
++{
++  int x, target;
++  for (x = 0, target = 0; x < (int)samples; x += 2, target++)
++    {
++      out[x] = lp[target];
++      out[x - 1] = out[x - 2] + out[x];
++    }
++}
++
++static void 
++foo_novec (int *out, const int *lp, unsigned samples)
++{
++  int x, target;
++  for (x = 0, target = 0; x < (int)samples; x += 2, target++)
++    {
++      out[x] = lp[target];
++      out[x - 1] = out[x - 2] + out[x];
++      __asm__ volatile ("" : : : "memory");
++    }
++}
++
++int main(void)
++{
++  const int lp[25] = {
++      0, 2, 4, 6, 8,
++      10, 12, 14, 16,
++      18, 20, 22, 24,
++      26, 28, 30, 32,
++      34, 36, 38, 40,
++      42, 44, 46, 48,
++  };
++  int out[49] = {0};
++  int out2[49] = {0};
++  int s;
++
++  foo (out + 2, lp + 1, 48);
++  foo_novec (out2 + 2, lp + 1, 48);
++
++  for (s = 0; s < 49; s++)
++    if (out[s] != out2[s])
++      abort ();
++
++  return 0;
++}
++
++/* { dg-final { cleanup-tree-dump "vect" } } */
+diff --git a/gcc/tree-vect-data-refs.c b/gcc/tree-vect-data-refs.c
+index 07253ec01..0f0570196 100644
+--- a/gcc/tree-vect-data-refs.c
++++ b/gcc/tree-vect-data-refs.c
+@@ -709,6 +709,14 @@ vect_analyze_data_ref_dependence (struct data_dependence_relation *ddr,
+ 	     distance is negative.  */
+ 	  if (vect_print_dump_info (REPORT_DR_DETAILS))
+ 	    fprintf (vect_dump, "dependence distance negative.");
++
++	  /* Record a negative dependence distance to later limit the
++	     amount of stmt copying / unrolling we can perform.
++	     Only need to handle read-after-write dependence.  */
++	  if (DR_IS_READ (drb)
++	      && (STMT_VINFO_MIN_NEG_DIST (stmtinfo_b) == 0
++		  || STMT_VINFO_MIN_NEG_DIST (stmtinfo_b) > (unsigned)dist))
++	    STMT_VINFO_MIN_NEG_DIST (stmtinfo_b) = dist;
+ 	  continue;
+ 	}
+ 
+diff --git a/gcc/tree-vect-stmts.c b/gcc/tree-vect-stmts.c
+index f4ea254c4..c1b70a55e 100644
+--- a/gcc/tree-vect-stmts.c
++++ b/gcc/tree-vect-stmts.c
+@@ -4233,6 +4233,20 @@ vectorizable_load (gimple stmt, gimple_stmt_iterator *gsi, gimple *vec_stmt,
+       return false;
+     }
+ 
++  /* Invalidate assumptions made by dependence analysis when vectorization
++     on the unrolled body effectively re-orders stmts.  */
++  if (ncopies > 1
++      && STMT_VINFO_MIN_NEG_DIST (stmt_info) != 0
++      && ((unsigned)LOOP_VINFO_VECT_FACTOR (loop_vinfo)
++	  > STMT_VINFO_MIN_NEG_DIST (stmt_info)))
++    {
++      if (vect_print_dump_info (REPORT_DETAILS))
++	fprintf (vect_dump,
++			 "cannot perform implicit CSE when unrolling "
++			 "with negative dependence distance\n");
++      return false;
++    }
++
+   if (!STMT_VINFO_RELEVANT_P (stmt_info) && !bb_vinfo)
+     return false;
+ 
+@@ -4299,6 +4313,20 @@ vectorizable_load (gimple stmt, gimple_stmt_iterator *gsi, gimple *vec_stmt,
+ 	  else if (!vect_strided_load_supported (vectype, group_size))
+ 	    return false;
+ 	}
++
++      /* Invalidate assumptions made by dependence analysis when vectorization
++	 on the unrolled body effectively re-orders stmts.  */
++      if (!PURE_SLP_STMT (stmt_info)
++	  && STMT_VINFO_MIN_NEG_DIST (stmt_info) != 0
++	  && ((unsigned)LOOP_VINFO_VECT_FACTOR (loop_vinfo)
++	      > STMT_VINFO_MIN_NEG_DIST (stmt_info)))
++	{
++	  if (vect_print_dump_info (REPORT_DETAILS))
++	    fprintf (vect_dump,
++			     "cannot perform implicit CSE when performing "
++			     "group loads with negative dependence distance\n");
++	  return false;
++	}
+     }
+ 
+   if (negative)
+diff --git a/gcc/tree-vectorizer.h b/gcc/tree-vectorizer.h
+index 6c10ec2d3..91e33429e 100644
+--- a/gcc/tree-vectorizer.h
++++ b/gcc/tree-vectorizer.h
+@@ -524,6 +524,10 @@ typedef struct _stmt_vec_info {
+      is 1.  */
+   unsigned int gap;
+ 
++  /* The minimum negative dependence distance this stmt participates in
++     or zero if none.  */
++  unsigned int min_neg_dist;
++
+   /* Not all stmts in the loop need to be vectorized. e.g, the increment
+      of the loop induction variable and computation of array indexes. relevant
+      indicates whether the stmt needs to be vectorized.  */
+@@ -580,6 +584,7 @@ typedef struct _stmt_vec_info {
+ #define STMT_VINFO_GROUP_READ_WRITE_DEPENDENCE(S)  (S)->read_write_dep
+ #define STMT_VINFO_STRIDED_ACCESS(S)      ((S)->first_element != NULL && (S)->data_ref_info)
+ #define STMT_VINFO_LOOP_PHI_EVOLUTION_PART(S) (S)->loop_phi_evolution_part
++#define STMT_VINFO_MIN_NEG_DIST(S)	(S)->min_neg_dist
+ 
+ #define GROUP_FIRST_ELEMENT(S)          (S)->first_element
+ #define GROUP_NEXT_ELEMENT(S)           (S)->next_element
