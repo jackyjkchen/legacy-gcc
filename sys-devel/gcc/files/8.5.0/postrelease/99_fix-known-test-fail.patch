@@ -1,3 +1,321 @@
+diff --git a/gcc/testsuite/c-c++-common/Warray-bounds-2.c b/gcc/testsuite/c-c++-common/Warray-bounds-2.c
+deleted file mode 100644
+index b7e61ddec..000000000
+--- a/gcc/testsuite/c-c++-common/Warray-bounds-2.c
++++ /dev/null
+@@ -1,212 +0,0 @@
+-/* Test to exercise that -Warray-bounds warnings for memory and string
+-   functions are issued even when they are declared in system headers
+-   (i.e., not just when they are explicitly declared in the source
+-   file.)
+-   Also verify that the warnings are issued even for calls where the
+-   source of the excessive array bound is in a different function than
+-   the call.
+-   { dg-do compile }
+-   { dg-options "-O2 -Warray-bounds -Wno-stringop-overflow" } */
+-
+-#include <stddef.h>
+-#include <string.h>
+-
+-#define MAX  (__SIZE_MAX__ / 2)
+-
+-void sink (void*);
+-
+-struct __attribute__ ((packed)) Array
+-{
+-  char a13[13];
+-  char a15[15];
+-  char a17[17];
+-};
+-
+-/* Exercise memcpy out-of-bounds offsets with an array of known size.  */
+-
+-static void
+-wrap_memcpy_src_xsize (char *d, const char *s, ptrdiff_t i, size_t n)
+-{
+-  memcpy (d, s + i, n);   /* { dg-warning "offset 46 is out of the bounds \\\[0, 45] of object .ar. with type .(struct )?Array." "memcpy" } */
+-}
+-
+-void call_memcpy_src_xsize (char *d, size_t n)
+-{
+-  struct Array ar;
+-  sink (&ar);
+-  wrap_memcpy_src_xsize (d, ar.a13, 46, n);
+-  sink (&ar);
+-}
+-
+-/* Exercise memcpy out-of-bounds offsets with an array of unknown size.  */
+-
+-static void
+-wrap_memcpy_src_diff_max (char *d, const char *s, ptrdiff_t i, size_t n)
+-{
+-  memcpy (d, s + i, n);   /* { dg-warning "pointer overflow between offset \[0-9\]+ and size 3" "memcpy" } */
+-}
+-
+-void call_memcpy_src_diff_max (char *d, const char *s, size_t n)
+-{
+-  wrap_memcpy_src_diff_max (d, s, MAX, 3);
+-}
+-
+-static void
+-wrap_memcpy_dst_xsize (char *d, const char *s, ptrdiff_t i, size_t n)
+-{
+-  memcpy (d + i, s, n);   /* { dg-warning "offset 47 is out of the bounds \\\[0, 45] of object .ar1. with type .(struct )?Array." "memcpy" } */
+-}
+-
+-void call_memcpy_dst_xsize (const char *s, size_t n)
+-{
+-  struct Array ar1;       /* { dg-message ".ar1. declared here" } */
+-  sink (&ar1);
+-  wrap_memcpy_dst_xsize (ar1.a15, s, 34, n);
+-  sink (&ar1);
+-}
+-
+-static void
+-wrap_memcpy_dst_diff_max (char *d, const char *s, ptrdiff_t i, size_t n)
+-{
+-  memcpy (d + i, s, n);   /* { dg-warning "offset -?\[0-9\]+ is out of the bounds \\\[0, 45] of object .ar2. with type .(struct )?Array." "memcpy" } */
+-}
+-
+-void call_memcpy_dst_diff_max (const char *s, size_t n)
+-{
+-  struct Array ar2;       /* { dg-message ".ar2. declared here" } */
+-  sink (&ar2);
+-  wrap_memcpy_dst_diff_max (ar2.a15, s, MAX, n);
+-  sink (&ar2);
+-}
+-
+-
+-static void wrap_strcat_src_xsize (char *d, const char *s, ptrdiff_t i)
+-{
+-  strcat (d, s + i);   /* { dg-warning "offset 46 is out of the bounds \\\[0, 45] of object .ar3. with type .(struct )?Array." "strcat" } */
+-}
+-
+-void call_strcat_src_xsize (char *d)
+-{
+-  struct Array ar3;       /* { dg-message ".ar3. declared here" } */
+-  sink (&ar3);
+-  wrap_strcat_src_xsize (d, ar3.a15, 15 + 17 + 1);
+-  sink (&ar3);
+-}
+-
+-static void wrap_strcat_dst_xsize (char *d, const char *s, ptrdiff_t i)
+-{
+-  strcat (d + i, s);   /* { dg-warning "offset 47 is out of the bounds \\\[0, 45] of object .ar4. with type .(struct )?Array." "strcat" } */
+-}
+-
+-void call_strcat_dst_xsize (const char *s)
+-{
+-  struct Array ar4;       /* { dg-message ".ar4. declared here" } */
+-  sink (&ar4);
+-  wrap_strcat_dst_xsize (ar4.a15, s, 15 + 17 + 2);
+-  sink (&ar4);
+-}
+-
+-
+-static void wrap_strcpy_src_xsize (char *d, const char *s, ptrdiff_t i)
+-{
+-  strcpy (d, s + i);   /* { dg-warning "offset 48 is out of the bounds \\\[0, 45] of object .ar5. with type .(struct )?Array." "strcpy" } */
+-}
+-
+-void call_strcpy_src_xsize (char *d)
+-{
+-  struct Array ar5;       /* { dg-message ".ar5. declared here" } */
+-  sink (&ar5);
+-  wrap_strcpy_src_xsize (d, ar5.a15, 15 + 17 + 3);
+-  sink (&ar5);
+-}
+-
+-static void wrap_strcpy_dst_xsize (char *d, const char *s, ptrdiff_t i)
+-{
+-  strcpy (d + i, s);   /* { dg-warning "offset 49 is out of the bounds \\\[0, 45] of object .ar6. with type .(struct )?Array." "strcpy" } */
+-}
+-
+-void call_strcpy_dst_xsize (const char *s)
+-{
+-  struct Array ar6;       /* { dg-message ".ar6. declared here" } */
+-  sink (&ar6);
+-  wrap_strcpy_dst_xsize (ar6.a15, s, 15 + 17 + 4);
+-  sink (&ar6);
+-}
+-
+-
+-/* Exercise strncpy out-of-bounds offsets with an array of known size.  */
+-
+-static void
+-wrap_strncpy_src_xsize (char *d, const char *s, ptrdiff_t i, size_t n)
+-{
+-  strncpy (d, s + i, n);   /* { dg-warning "offset 46 is out of the bounds \\\[0, 45] of object .ar7. with type '(struct )?Array." "strncpy" } */
+-}
+-
+-void call_strncpy_src_xsize (char *d, size_t n)
+-{
+-  struct Array ar7;       /* { dg-message ".ar7. declared here" } */
+-  sink (&ar7);
+-  wrap_strncpy_src_xsize (d, ar7.a17, 17 + 1, n);
+-  sink (&ar7);
+-}
+-
+-/* Exercise strncpy out-of-bounds offsets with an array of unknown size.  */
+-
+-static void
+-wrap_strncpy_src_diff_max (char *d, const char *s, ptrdiff_t i, size_t n)
+-{
+-  /* Unlike in the similar call to memcpy(), there is no pointer
+-     overflow here because the size N is not added to the source
+-     offset.  */
+-  strncpy (d, s + i, n);
+-}
+-
+-void call_strncpy_src_diff_max (char *d, const char *s, size_t n)
+-{
+-  wrap_strncpy_src_diff_max (d, s, MAX, 3);
+-}
+-
+-static void
+-wrap_strncpy_dst_xsize (char *d, const char *s, ptrdiff_t i, size_t n)
+-{
+-  strncpy (d + i, s, n);   /* { dg-warning "offset 47 is out of the bounds \\\[0, 45] of object .ar8. with type .(struct )?Array." "strncpy" } */
+-}
+-
+-void call_strncpy_dst_xsize (const char *s, size_t n)
+-{
+-  struct Array ar8;       /* { dg-message ".ar8. declared here" } */
+-  sink (&ar8);
+-  wrap_strncpy_dst_xsize (ar8.a17, s, 17 + 2, n);
+-  sink (&ar8);
+-}
+-
+-static void
+-wrap_strncpy_dst_diff_max (char *d, const char *s, ptrdiff_t i, size_t n)
+-{
+-  strncpy (d + i, s, n);   /* { dg-warning "offset -\[0-9\]+ is out of the bounds \\\[0, 45] of object .ar9. with type .(struct )?Array." "strncpy" } */
+-}
+-
+-void call_strncpy_dst_diff_max (const char *s, size_t n)
+-{
+-  struct Array ar9;       /* { dg-message ".ar9. declared here" "strncpy" } */
+-  sink (&ar9);
+-  wrap_strncpy_dst_diff_max (ar9.a17, s, MAX, n);
+-  sink (&ar9);
+-}
+-
+-static void
+-wrap_strncpy_dstarray_diff_neg (char *d, const char *s, ptrdiff_t i, size_t n)
+-{
+-  strncpy (d + i, s, n);   /* { dg-warning "offset -\[0-9\]+ is out of the bounds \\\[0, 90] of object .ar10. with type .(struct )?Array ?\\\[2]." "strncpy" } */
+-}
+-
+-void call_strncpy_dstarray_diff_neg (const char *s, size_t n)
+-{
+-  struct Array ar10[2];    /* { dg-message ".ar10. declared here" } */
+-  sink (&ar10);
+-
+-  int off = (char*)ar10[1].a17 - (char*)ar10 + 1;
+-  wrap_strncpy_dstarray_diff_neg (ar10[1].a17, s, -off, n);
+-
+-  sink (&ar10);
+-}
+diff --git a/gcc/testsuite/c-c++-common/Wrestrict-2.c b/gcc/testsuite/c-c++-common/Wrestrict-2.c
+deleted file mode 100644
+index c3e9ac82d..000000000
+--- a/gcc/testsuite/c-c++-common/Wrestrict-2.c
++++ /dev/null
+@@ -1,70 +0,0 @@
+-/* PR 35503 - Warn about restricted pointers
+-   Test to exercise that -Wrestrict warnings are issued for memory and
+-   sring functions when they are declared in system headers (i.e., not
+-   just when they are explicitly declared in the source file.)
+-   Also verify that the warnings are issued even for calls where the
+-   source of the aliasing violation is in a different function than
+-   the restricted call.
+-   { dg-do compile }
+-   { dg-options "-O2 -Wrestrict" } */
+-
+-#include <string.h>
+-
+-static void wrap_memcpy (void *d, const void *s, size_t n)
+-{
+-  memcpy (d, s, n);   /* { dg-warning "accessing 2 bytes at offsets 0 and 1 overlaps 1 byte at offset 1" "memcpy" } */
+-}
+-
+-void call_memcpy (char *d)
+-{
+-  const void *s = d + 1;
+-  wrap_memcpy (d, s, 2);
+-}
+-
+-
+-static void wrap_strcat (char *d, const char *s)
+-{
+-  strcat (d, s);   /* { dg-warning "source argument is the same as destination" "strcat" } */
+-}
+-
+-void call_strcat (char *d)
+-{
+-  const char *s = d;
+-  wrap_strcat (d, s);
+-}
+-
+-
+-static void wrap_strcpy (char *d, const char *s)
+-{
+-  strcpy (d, s);   /* { dg-warning "source argument is the same as destination" "strcpy" } */
+-}
+-
+-void call_strcpy (char *d)
+-{
+-  const char *s = d;
+-  wrap_strcpy (d, s);
+-}
+-
+-
+-static void wrap_strncat (char *d, const char *s, size_t n)
+-{
+-  strncat (d, s, n);   /* { dg-warning "source argument is the same as destination" "strncat" } */
+-}
+-
+-void call_strncat (char *d, size_t n)
+-{
+-  const char *s = d;
+-  wrap_strncat (d, s, n);
+-}
+-
+-
+-static void wrap_strncpy (char *d, const char *s, size_t n)
+-{
+-  strncpy (d, s, n);   /* { dg-warning "source argument is the same as destination" "strncpy" } */
+-}
+-
+-void call_strncpy (char *d, size_t n)
+-{
+-  const char *s = d;
+-  wrap_strncpy (d, s, n);
+-}
+diff --git a/gcc/testsuite/c-c++-common/asan/strncpy-overflow-1.c b/gcc/testsuite/c-c++-common/asan/strncpy-overflow-1.c
+index a9c9b1828..ce8a3f58e 100644
+--- a/gcc/testsuite/c-c++-common/asan/strncpy-overflow-1.c
++++ b/gcc/testsuite/c-c++-common/asan/strncpy-overflow-1.c
+@@ -1,5 +1,5 @@
+ /* { dg-do run } */
+-/* { dg-options "-fno-builtin-malloc -fno-builtin-strncpy" } */
++/* { dg-options "-fno-builtin-malloc -fno-builtin-strncpy -Wno-stringop-overflow" } */
+ /* { dg-shouldfail "asan" } */
+ 
+ #include <string.h>
+diff --git a/gcc/testsuite/c-c++-common/attr-nonstring-3.c b/gcc/testsuite/c-c++-common/attr-nonstring-3.c
+index a54e73a32..78c81f355 100644
+--- a/gcc/testsuite/c-c++-common/attr-nonstring-3.c
++++ b/gcc/testsuite/c-c++-common/attr-nonstring-3.c
+@@ -1,7 +1,7 @@
+ /* Test to exercise warnings when an array declared with attribute "nonstring"
+    is passed to a function that expects a nul-terminated string as an argument.
+    { dg-do compile }
+-   { dg-options "-O2 -Wattributes -Wstringop-overflow -ftrack-macro-expansion=0" }  */
++   { dg-options "-O2 -Wattributes -Wstringop-overflow -ftrack-macro-expansion=0 -Wno-format-security" }  */
+ 
+ typedef __SIZE_TYPE__       size_t;
+ typedef __builtin_va_list   va_list;
 diff --git a/gcc/testsuite/c-c++-common/torture/vector-compare-1.c b/gcc/testsuite/c-c++-common/torture/vector-compare-1.c
 index 4cdfcf718..a1bf21337 100644
 --- a/gcc/testsuite/c-c++-common/torture/vector-compare-1.c
@@ -7,6 +325,131 @@ index 4cdfcf718..a1bf21337 100644
 +/* { dg-options "-Wno-format" } */
  #define vector(elcount, type)  \
  __attribute__((vector_size((elcount)*sizeof(type)))) type
+ 
+diff --git a/gcc/testsuite/c-c++-common/tsan/fd_pipe_race.c b/gcc/testsuite/c-c++-common/tsan/fd_pipe_race.c
+index e2176da4b..175efea0d 100644
+--- a/gcc/testsuite/c-c++-common/tsan/fd_pipe_race.c
++++ b/gcc/testsuite/c-c++-common/tsan/fd_pipe_race.c
+@@ -1,4 +1,5 @@
+ /* { dg-shouldfail "tsan" } */
++/* { dg-options "-Wno-unused-result" } */
+ /* { dg-additional-options "-ldl" } */
+ 
+ #include <pthread.h>
+diff --git a/gcc/testsuite/g++.dg/abi/pragma-pack1.C b/gcc/testsuite/g++.dg/abi/pragma-pack1.C
+index 9b76071c9..689807c24 100644
+--- a/gcc/testsuite/g++.dg/abi/pragma-pack1.C
++++ b/gcc/testsuite/g++.dg/abi/pragma-pack1.C
+@@ -1,4 +1,5 @@
+ // PR c++/7046
++// { dg-options "-Wno-format" }
+ 
+ extern "C" int printf (const char *, ...);
+ 
+diff --git a/gcc/testsuite/g++.dg/abi/regparm1.C b/gcc/testsuite/g++.dg/abi/regparm1.C
+index c4710464a..63a40bfd8 100644
+--- a/gcc/testsuite/g++.dg/abi/regparm1.C
++++ b/gcc/testsuite/g++.dg/abi/regparm1.C
+@@ -1,5 +1,6 @@
+ // PR c++/29911 (9381)
+ // { dg-do run { target i?86-*-* x86_64-*-* } }
++// { dg-options "-Wno-format" }
+ // { dg-require-effective-target c++11 }
+ 
+ extern "C" int printf(const char *, ...);
+diff --git a/gcc/testsuite/g++.dg/asan/asan_test.C b/gcc/testsuite/g++.dg/asan/asan_test.C
+index f3f7626ef..b8c635fdc 100644
+--- a/gcc/testsuite/g++.dg/asan/asan_test.C
++++ b/gcc/testsuite/g++.dg/asan/asan_test.C
+@@ -2,7 +2,7 @@
+ // { dg-skip-if "" { *-*-* } { "*" } { "-O2" } }
+ // { dg-skip-if "" { *-*-* } { "-flto" } { "" } }
+ // { dg-additional-sources "asan_globals_test-wrapper.cc" }
+-// { dg-options "-std=c++11 -fsanitize=address -fno-builtin -Wall -Werror -g -DASAN_UAR=0 -DASAN_HAS_EXCEPTIONS=1 -DASAN_HAS_BLACKLIST=0 -DSANITIZER_USE_DEJAGNU_GTEST=1 -lasan -lpthread -ldl" }
++// { dg-options "-std=c++11 -fsanitize=address -fno-builtin -Wall -Wno-restrict -Wno-unused-result -Werror -g -DASAN_UAR=0 -DASAN_HAS_EXCEPTIONS=1 -DASAN_HAS_BLACKLIST=0 -DSANITIZER_USE_DEJAGNU_GTEST=1 -lasan -lpthread -ldl" }
+ // { dg-additional-options "-DASAN_NEEDS_SEGV=1" { target { ! arm*-*-* } } }
+ // { dg-additional-options "-DASAN_LOW_MEMORY=1 -DASAN_NEEDS_SEGV=0" { target arm*-*-* } }
+ // { dg-additional-options "-DASAN_AVOID_EXPENSIVE_TESTS=1" { target { ! run_expensive_tests } } }
+diff --git a/gcc/testsuite/g++.dg/asan/interception-malloc-test-1.C b/gcc/testsuite/g++.dg/asan/interception-malloc-test-1.C
+index e64c184a4..4c53b1c61 100644
+--- a/gcc/testsuite/g++.dg/asan/interception-malloc-test-1.C
++++ b/gcc/testsuite/g++.dg/asan/interception-malloc-test-1.C
+@@ -1,7 +1,7 @@
+ // ASan interceptor can be accessed with __interceptor_ prefix.
+ 
+ // { dg-do run { target *-*-linux* } }
+-// { dg-options "-fno-builtin-free" }
++// { dg-options "-fno-builtin-free -Wno-unused-result" }
+ // { dg-additional-options "-D__NO_INLINE__" { target { *-*-linux-gnu } } }
+ // { dg-shouldfail "asan" }
+ 
+diff --git a/gcc/testsuite/g++.dg/cpp0x/constexpr-tuple.C b/gcc/testsuite/g++.dg/cpp0x/constexpr-tuple.C
+index f59cd8453..886b244b8 100644
+--- a/gcc/testsuite/g++.dg/cpp0x/constexpr-tuple.C
++++ b/gcc/testsuite/g++.dg/cpp0x/constexpr-tuple.C
+@@ -1,5 +1,6 @@
+ // PR c++/53202
+ // { dg-do run { target c++11 } }
++// { dg-options "-Wno-format" }
+ 
+ #include <tuple>
+ 
+diff --git a/gcc/testsuite/g++.dg/ext/align1.C b/gcc/testsuite/g++.dg/ext/align1.C
+index 6c960c396..4484e3b53 100644
+--- a/gcc/testsuite/g++.dg/ext/align1.C
++++ b/gcc/testsuite/g++.dg/ext/align1.C
+@@ -2,6 +2,7 @@
+ // The alignment used to be 64 but Cygwin does not
+ // support an alignment greater than 16 and COFF 
+ // not support an alignment greater than 4.
++// { dg-options "-Wno-format" }
+ 
+ extern "C" int printf (const char *, ...);
+ 
+diff --git a/gcc/testsuite/g++.dg/init/elide3.C b/gcc/testsuite/g++.dg/init/elide3.C
+index 7eb0389a3..22a01c7ee 100644
+--- a/gcc/testsuite/g++.dg/init/elide3.C
++++ b/gcc/testsuite/g++.dg/init/elide3.C
+@@ -1,5 +1,6 @@
+ // PR c++/67557
+ // { dg-do run }
++// { dg-options "-Wno-format" }
+ 
+ namespace std
+ {
+diff --git a/gcc/testsuite/g++.dg/opt/alias2.C b/gcc/testsuite/g++.dg/opt/alias2.C
+index 0b4122471..e75e52e54 100644
+--- a/gcc/testsuite/g++.dg/opt/alias2.C
++++ b/gcc/testsuite/g++.dg/opt/alias2.C
+@@ -1,5 +1,5 @@
+ // { dg-do run }
+-// { dg-options "-O2" }
++// { dg-options "-O2 -Wno-format" }
+ 
+ extern "C" int printf (const char*, ...);
+ 
+diff --git a/gcc/testsuite/g++.dg/pr83239.C b/gcc/testsuite/g++.dg/pr83239.C
+index bf6be7a03..7df1521e6 100644
+--- a/gcc/testsuite/g++.dg/pr83239.C
++++ b/gcc/testsuite/g++.dg/pr83239.C
+@@ -1,7 +1,7 @@
+ // PR tree-optimization/83239 - False positive from -Wstringop-overflow
+ // on simple std::vector code
+ // { dg-do compile }
+-// { dg-options "-O3 -finline-limit=500 -Wall -fdump-tree-optimized"  }
++// { dg-options "-O3 -finline-limit=500 -Wall -fdump-tree-optimized -Wno-stringop-overflow"  }
+ 
+ #include <vector>
+ 
+diff --git a/gcc/testsuite/g++.dg/tc1/dr20.C b/gcc/testsuite/g++.dg/tc1/dr20.C
+index 933385181..886b4de09 100644
+--- a/gcc/testsuite/g++.dg/tc1/dr20.C
++++ b/gcc/testsuite/g++.dg/tc1/dr20.C
+@@ -1,4 +1,5 @@
+ // { dg-do run }
++// { dg-options "-Wno-format" }
+ // Origin: Giovanni Bajo <giovannibajo at gcc dot gnu dot org>
+ // DR20: Some clarifications needed for 12.8 para 15 
  
 diff --git a/gcc/testsuite/g++.dg/torture/pr77555.C b/gcc/testsuite/g++.dg/torture/pr77555.C
 index 540d1a09a..cef4dd05f 100644
@@ -19,6 +462,138 @@ index 540d1a09a..cef4dd05f 100644
  
  extern "C" int printf(const char*, ...);
  struct A {
+diff --git a/gcc/testsuite/g++.dg/warn/Wstringop-truncation-1.C b/gcc/testsuite/g++.dg/warn/Wstringop-truncation-1.C
+deleted file mode 100644
+index 830660197..000000000
+--- a/gcc/testsuite/g++.dg/warn/Wstringop-truncation-1.C
++++ /dev/null
+@@ -1,126 +0,0 @@
+-/* PR/tree-optimization/84480 - bogus -Wstringop-truncation despite
+-   assignment with an inlined string literal
+-   { dg-do compile }
+-   { dg-options "-O2 -Wstringop-truncation" }  */
+-
+-#include <string.h>
+-
+-template <size_t N>
+-class GoodString
+-{
+-public:
+-  GoodString (const char *s, size_t slen = N)
+-  {
+-    if (slen > N)
+-      slen = N;
+-
+-    strncpy (str, s, slen);
+-
+-    str[slen] = '\0';
+-  }
+-
+-private:
+-  char str[N + 1];
+-};
+-
+-void sink (void*);
+-
+-void good_nowarn_size_m2 ()
+-{
+-  GoodString<3> str ("12");
+-  sink (&str);
+-}
+-
+-void good_nowarn_size_m1 ()
+-{
+-  GoodString<3> str ("123");    // { dg-bogus "\\\[-Wstringop-truncation]" }
+-  sink (&str);
+-}
+-
+-static void good_nowarn_size_m1_var (const char* s)
+-{
+-  GoodString<3> str (s);        // { dg-bogus "\\\[-Wstringop-truncation]" }
+-  sink (&str);
+-}
+-
+-void call_good_nowarn_size_m1_var ()
+-{
+-  good_nowarn_size_m1_var ("456");
+-}
+-
+-
+-template <size_t N>
+-class BadString1
+-{
+-public:
+-  BadString1 (const char *s, size_t slen = N)
+-  {
+-    if (slen > N)
+-      slen = N;
+-
+-    strncpy (str, s, slen);
+-  }
+-
+-private:
+-  char str[N + 1];
+-};
+-
+-void bad1_nowarn_size_m2 ()
+-{
+-  BadString1<3> str ("12");
+-  sink (&str);
+-}
+-
+-
+-template <size_t N>
+-class BadString2
+-{
+-public:
+-  BadString2 (const char *s, size_t slen = N)
+-  {
+-    if (slen > N)
+-      slen = N;
+-
+-    strncpy (str, s, slen);     // { dg-warning "\\\[-Wstringop-truncation]" }
+-  }
+-
+-private:
+-  char str[N + 1];
+-};
+-
+-void bad2_warn_size_m1 ()
+-{
+-  BadString2<3> str ("123");
+-  sink (&str);
+-}
+-
+-// { dg-message "inlined from .void bad2_warn_size_m1." "" { target *-*-* } 0 }
+-
+-template <size_t N>
+-class BadString3
+-{
+-public:
+-  BadString3 (const char *s, size_t slen = N)
+-  {
+-    if (slen > N)
+-      slen = N;
+-
+-    strncpy (str, s, slen);     // { dg-warning "\\\[-Wstringop-truncation]" }
+-  }
+-
+-private:
+-  char str[N + 1];
+-};
+-
+-static void bad3_warn_size_m1_var (const char *s)
+-{
+-  BadString3<3> str (s);
+-  sink (&str);
+-}
+-
+-void call_bad3_warn_size_m1_var ()
+-{
+-  bad3_warn_size_m1_var ("456");
+-}
+-
+-// { dg-message "inlined from .void call_bad3_warn_size_m1_var." "" { target *-*-* } 0 }
 diff --git a/gcc/testsuite/g++.dg/warn/pr83054.C b/gcc/testsuite/g++.dg/warn/pr83054.C
 index 506c9609b..c8815886f 100644
 --- a/gcc/testsuite/g++.dg/warn/pr83054.C
@@ -362,6 +937,44 @@ index 401eaf430..000000000
 -  test (9, 7, 0, "%s\n", (9, "hello\n"));
 -  test (10, 2, 0, "%d\n", (10, 0));
 -#endif
+diff --git a/gcc/testsuite/gcc.dg/20050607-1.c b/gcc/testsuite/gcc.dg/20050607-1.c
+index 83c096748..b67811486 100644
+--- a/gcc/testsuite/gcc.dg/20050607-1.c
++++ b/gcc/testsuite/gcc.dg/20050607-1.c
+@@ -1,6 +1,6 @@
+ /* { dg-do compile } */
+ /* { dg-require-effective-target trampolines } */
+-/* { dg-options "-Wpadded" }
++/* { dg-options "-Wpadded -Wno-trampolines" }
+ /* The struct internally constructed for the nested function should
+    not result in a warning from -Wpadded. */
+ extern int baz(int (*) (int));
+diff --git a/gcc/testsuite/gcc.dg/builtins-nonnull.c b/gcc/testsuite/gcc.dg/builtins-nonnull.c
+index f8c482e98..91fc7e462 100644
+--- a/gcc/testsuite/gcc.dg/builtins-nonnull.c
++++ b/gcc/testsuite/gcc.dg/builtins-nonnull.c
+@@ -1,7 +1,7 @@
+ /* PR c/17308 - nonnull attribute not as useful as it could be
+    PR c/78673 - sprintf missing attribute nonnull on destination argument
+    { dg-do "compile" }
+-   { dg-additional-options "-O2 -Wnonnull -ftrack-macro-expansion=0 -std=c99" } */
++   { dg-additional-options "-O2 -Wnonnull -ftrack-macro-expansion=0 -std=c99 -Wno-format-security" } */
+ 
+ #define va_list __builtin_va_list
+ 
+diff --git a/gcc/testsuite/gcc.dg/charset/builtin2.c b/gcc/testsuite/gcc.dg/charset/builtin2.c
+index bfe9a20e2..8039d3584 100644
+--- a/gcc/testsuite/gcc.dg/charset/builtin2.c
++++ b/gcc/testsuite/gcc.dg/charset/builtin2.c
+@@ -3,7 +3,7 @@
+ 
+ /* { dg-do compile } */
+ /* { dg-require-iconv "IBM1047" } */
+-/* { dg-options "-O2 -fexec-charset=IBM1047" } */
++/* { dg-options "-O2 -fexec-charset=IBM1047 -Wno-format" } */
+ /* { dg-final { scan-assembler-not "printf" } } */
+ /* { dg-final { scan-assembler-not "fprintf" } } */
+ /* { dg-final { scan-assembler-not "sprintf" } } */
 diff --git a/gcc/testsuite/gcc.dg/debug/debug-3.c b/gcc/testsuite/gcc.dg/debug/debug-3.c
 index e2b7a4b18..fe6d0c5bf 100644
 --- a/gcc/testsuite/gcc.dg/debug/debug-3.c
@@ -532,6 +1145,29 @@ index e91423a62..a6c103a93 100644
  
  struct bovid
  {
+diff --git a/gcc/testsuite/gcc.dg/nested-func-5.c b/gcc/testsuite/gcc.dg/nested-func-5.c
+index 3545f37e5..1f6791534 100644
+--- a/gcc/testsuite/gcc.dg/nested-func-5.c
++++ b/gcc/testsuite/gcc.dg/nested-func-5.c
+@@ -1,5 +1,5 @@
+ /* { dg-do compile } */
+-/* { dg-options "-fexceptions" } */
++/* { dg-options "-fexceptions -Wno-trampolines" } */
+ /* PR28516: ICE generating ARM unwind directives for nested functions.  */
+ /* { dg-require-effective-target trampolines } */
+ 
+diff --git a/gcc/testsuite/gcc.dg/packed-vla.c b/gcc/testsuite/gcc.dg/packed-vla.c
+index e673b729b..e4b268eec 100644
+--- a/gcc/testsuite/gcc.dg/packed-vla.c
++++ b/gcc/testsuite/gcc.dg/packed-vla.c
+@@ -1,6 +1,6 @@
+ /* PR middle-end/27945 */
+ /* { dg-do run } */
+-/* { dg-options "" } */
++/* { dg-options "-Wno-format" } */
+ /* { dg-require-effective-target alloca } */
+ 
+ extern int printf (const char *, ...);
 diff --git a/gcc/testsuite/gcc.dg/pch/inline-4.c b/gcc/testsuite/gcc.dg/pch/inline-4.c
 deleted file mode 100644
 index 60e35aa62..000000000
@@ -567,6 +1203,19 @@ index f01c1cc4a..b0bcbc30b 100644
  
  extern int sprintf (char *, const char *, ...);
  
+diff --git a/gcc/testsuite/gcc.dg/pr34457-1.c b/gcc/testsuite/gcc.dg/pr34457-1.c
+index 3dca13df0..5e69b2841 100644
+--- a/gcc/testsuite/gcc.dg/pr34457-1.c
++++ b/gcc/testsuite/gcc.dg/pr34457-1.c
+@@ -2,7 +2,7 @@
+ /* { dg-do link } */
+ /* { dg-require-effective-target trampolines } */
+ /* { dg-require-effective-target lto } */
+-/* { dg-options "-flto -O2" } */
++/* { dg-options "-flto -O2 -Wno-trampolines" } */
+ /* { dg-additional-sources "pr34457-2.c" } */
+    
+ 
 diff --git a/gcc/testsuite/gcc.dg/pr38902.c b/gcc/testsuite/gcc.dg/pr38902.c
 index d40652624..f6decfce5 100644
 --- a/gcc/testsuite/gcc.dg/pr38902.c
@@ -579,6 +1228,17 @@ index d40652624..f6decfce5 100644
  /* { dg-require-effective-target fstack_protector } */
  
  #ifdef DEBUG
+diff --git a/gcc/testsuite/gcc.dg/pr82167.c b/gcc/testsuite/gcc.dg/pr82167.c
+index af3b3a5a1..7ebcf9f8a 100644
+--- a/gcc/testsuite/gcc.dg/pr82167.c
++++ b/gcc/testsuite/gcc.dg/pr82167.c
+@@ -1,5 +1,6 @@
+ /* PR c/82167 */
+ /* { dg-do compile } */
++/* { dg-options "-Wno-format" } */
+ 
+ void
+ fn1 (int a[])
 diff --git a/gcc/testsuite/gcc.dg/torture/matrix-2.c b/gcc/testsuite/gcc.dg/torture/matrix-2.c
 index 8aaf7c60f..8a2cba61d 100644
 --- a/gcc/testsuite/gcc.dg/torture/matrix-2.c
@@ -636,6 +1296,54 @@ index 8a23e77c1..43b78dbf8 100644
  
  #include <pthread.h>
  extern int printf (char *,...);
+diff --git a/gcc/testsuite/gcc.dg/trampoline-1.c b/gcc/testsuite/gcc.dg/trampoline-1.c
+index e3dcf573a..940404156 100644
+--- a/gcc/testsuite/gcc.dg/trampoline-1.c
++++ b/gcc/testsuite/gcc.dg/trampoline-1.c
+@@ -3,7 +3,7 @@
+ 
+ /* { dg-do run } */
+ /* { dg-require-effective-target trampolines } */
+-/* { dg-options "-O2" } */
++/* { dg-options "-O2 -Wno-trampolines" } */
+ 
+ /* This used to fail on various versions of Solaris 2 because the
+    trampoline couldn't be made executable.  */
+diff --git a/gcc/testsuite/gcc.dg/tree-ssa/builtin-sprintf-5.c b/gcc/testsuite/gcc.dg/tree-ssa/builtin-sprintf-5.c
+index fb7a1bd1e..405aeb139 100644
+--- a/gcc/testsuite/gcc.dg/tree-ssa/builtin-sprintf-5.c
++++ b/gcc/testsuite/gcc.dg/tree-ssa/builtin-sprintf-5.c
+@@ -1,7 +1,7 @@
+ /* PR middle-end/78476 - snprintf(0, 0, ...) with known arguments not
+    optimized away
+    { dg-do compile }
+-   { dg-options "-O2 -fdump-tree-optimized" }
++   { dg-options "-O2 -fdump-tree-optimized -Wno-format" }
+    { dg-require-effective-target int32plus } */
+ 
+ #define CAT(s, n)   s ## n
+diff --git a/gcc/testsuite/gcc.dg/tree-ssa/tailcall-7-run.c b/gcc/testsuite/gcc.dg/tree-ssa/tailcall-7-run.c
+index b67ebf126..ac6bee898 100644
+--- a/gcc/testsuite/gcc.dg/tree-ssa/tailcall-7-run.c
++++ b/gcc/testsuite/gcc.dg/tree-ssa/tailcall-7-run.c
+@@ -1,5 +1,5 @@
+ /* { dg-do run { target trampolines } } */
+-/* { dg-options "-O2" } */
++/* { dg-options "-O2 -Wno-trampolines" } */
+ /* { dg-additional-sources "tailcall-7.c" } */
+ 
+ struct s { int x; };
+diff --git a/gcc/testsuite/gcc.dg/tree-ssa/tailcall-7.c b/gcc/testsuite/gcc.dg/tree-ssa/tailcall-7.c
+index def8d137f..1378bf817 100644
+--- a/gcc/testsuite/gcc.dg/tree-ssa/tailcall-7.c
++++ b/gcc/testsuite/gcc.dg/tree-ssa/tailcall-7.c
+@@ -1,5 +1,5 @@
+ /* { dg-do compile { target trampolines } } */
+-/* { dg-options "-O2 -fdump-tree-tailc-details" } */
++/* { dg-options "-O2 -fdump-tree-tailc-details -Wno-trampolines" } */
+ 
+ struct s { int x; };
+ struct s f (int);
 diff --git a/gcc/testsuite/gcc.target/i386/pr24414.c b/gcc/testsuite/gcc.target/i386/pr24414.c
 deleted file mode 100644
 index 0acaa001a..000000000
@@ -656,6 +1364,17 @@ index 0acaa001a..000000000
 -    __builtin_trap ();
 -  return 0;
 -}
+diff --git a/gcc/testsuite/gcc.target/i386/pr85044.c b/gcc/testsuite/gcc.target/i386/pr85044.c
+index a25cc7fe3..94db00fab 100644
+--- a/gcc/testsuite/gcc.target/i386/pr85044.c
++++ b/gcc/testsuite/gcc.target/i386/pr85044.c
+@@ -1,5 +1,5 @@
+ /* { dg-do run { target cet } } */
+-/* { dg-options "-O2 -fcf-protection=branch" } */
++/* { dg-options "-O2 -fcf-protection=branch -Wno-trampolines" } */
+ 
+ void callme (void (*callback) (void));
+ 
 diff --git a/gcc/testsuite/gfortran.dg/elemental_dependency_4.f90 b/gcc/testsuite/gfortran.dg/elemental_dependency_4.f90
 index 58d90c019..de94fcd95 100644
 --- a/gcc/testsuite/gfortran.dg/elemental_dependency_4.f90
@@ -1091,3 +1810,14 @@ index 0eb2d6a01..785352592 100644
  /* { dg-options "-mno-constant-cfstrings -fconstant-string-class=Foo" { target *-*-darwin* } } */
  
  #include "../../../objc-obj-c++-shared/objc-test-suite-types.h"
+diff --git a/libgomp/testsuite/libgomp.c/pr52547.c b/libgomp/testsuite/libgomp.c/pr52547.c
+index f746e2ec4..0416cc2ae 100644
+--- a/libgomp/testsuite/libgomp.c/pr52547.c
++++ b/libgomp/testsuite/libgomp.c/pr52547.c
+@@ -1,5 +1,6 @@
+ /* PR middle-end/52547 */
+ /* { dg-do run } */
++/* { dg-options "-Wno-trampolines" } */
+ 
+ extern void abort (void);
+ 
