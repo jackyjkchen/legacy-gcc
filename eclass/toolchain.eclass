@@ -1803,6 +1803,12 @@ gcc_do_filter_flags() {
 		esac
 	fi
 
+	if _tc_use_if_iuse test ; then
+		if tc_version_is_between 4.6 4.7 ; then
+			filter-flags -pipe
+		fi
+	fi
+
 	strip-unsupported-flags
 
 	if [[ $(tc-arch) == amd64 || $(tc-arch) == x86 ]] && ! tc_version_is_at_least 2.8 ${bver} ; then
