@@ -822,7 +822,6 @@ do_gcc_DJGPP_patches() {
 			libatomic libcilkrts libgo libgomp libitm libjava libmudflap \
 			libmpx liboffloadmic libsanitizer libvtv zlib lt~obsolete.m4
 		tc_version_is_at_least 4.1 || rm -rf libssp
-		tc_version_is_at_least 7 || rm -rf gcc/testsuite
 		tc_version_is_at_least 8 || rm -rf libffi
 		tc_version_is_between 6 8 || rm -rf gcc/gengtype-lex.c
 		tc_version_is_between 4.3 4.9 || cp -avx "${FILESDIR}"/nmalloc gcc/i386/
@@ -1804,7 +1803,7 @@ gcc_do_filter_flags() {
 	fi
 
 	if _tc_use_if_iuse test ; then
-		if tc_version_is_between 4.6 4.7 ; then
+		if tc_version_is_between 4.6 6 ; then
 			filter-flags -pipe
 		fi
 	fi
