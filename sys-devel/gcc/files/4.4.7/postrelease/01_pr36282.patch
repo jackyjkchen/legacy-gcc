@@ -1,0 +1,109 @@
+diff --git a/gcc/c-pragma.c b/gcc/c-pragma.c
+index f50582ff7..dd404e478 100644
+--- a/gcc/c-pragma.c
++++ b/gcc/c-pragma.c
+@@ -264,6 +264,7 @@ apply_pragma_weak (tree decl, tree value)
+ 
+   if (SUPPORTS_WEAK && DECL_EXTERNAL (decl) && TREE_USED (decl)
+       && !DECL_WEAK (decl) /* Don't complain about a redundant #pragma.  */
++      && DECL_ASSEMBLER_NAME_SET_P (decl)
+       && TREE_SYMBOL_REFERENCED (DECL_ASSEMBLER_NAME (decl)))
+     warning (OPT_Wpragmas, "applying #pragma weak %q+D after first use "
+ 	     "results in unspecified behavior", decl);
+@@ -291,7 +292,13 @@ maybe_apply_pragma_weak (tree decl)
+   if (TREE_CODE (decl) != FUNCTION_DECL && TREE_CODE (decl) != VAR_DECL)
+     return;
+ 
+-  id = DECL_ASSEMBLER_NAME (decl);
++  if (DECL_ASSEMBLER_NAME_SET_P (decl))
++    id = DECL_ASSEMBLER_NAME (decl);
++  else
++    {
++      id = DECL_ASSEMBLER_NAME (decl);
++      SET_DECL_ASSEMBLER_NAME (decl, NULL_TREE);
++    }
+ 
+   for (p = &pending_weaks; (t = *p) ; p = &TREE_CHAIN (t))
+     if (id == TREE_PURPOSE (t))
+@@ -309,6 +316,9 @@ maybe_apply_pending_pragma_weaks (void)
+ {
+   tree *p, t, alias_id, id, decl, *next;
+ 
++  if (!pending_weaks)
++    return;
++
+   for (p = &pending_weaks; (t = *p) ; p = next)
+     {
+       next = &TREE_CHAIN (t);
+diff --git a/gcc/testsuite/c-c++-common/pr36282-1.c b/gcc/testsuite/c-c++-common/pr36282-1.c
+new file mode 100644
+index 000000000..abe11e7ec
+--- /dev/null
++++ b/gcc/testsuite/c-c++-common/pr36282-1.c
+@@ -0,0 +1,12 @@
++/* PR middle-end/36282 */
++/* { dg-do compile } */
++
++#pragma weak bar
++
++extern void *baz (void *dest, const void *src, __SIZE_TYPE__ n);
++extern __typeof (baz) baz __asm("bazfn"); /* { dg-bogus "asm declaration ignored due to conflict with previous rename" } */
++
++void
++foo (void)
++{
++}
+diff --git a/gcc/testsuite/c-c++-common/pr36282-2.c b/gcc/testsuite/c-c++-common/pr36282-2.c
+new file mode 100644
+index 000000000..86d3ad657
+--- /dev/null
++++ b/gcc/testsuite/c-c++-common/pr36282-2.c
+@@ -0,0 +1,10 @@
++/* PR middle-end/36282 */
++/* { dg-do compile } */
++
++extern void *baz (void *dest, const void *src, __SIZE_TYPE__ n);
++extern __typeof (baz) baz __asm("bazfn"); /* { dg-bogus "asm declaration ignored due to conflict with previous rename" } */
++
++void
++foo (void)
++{
++}
+diff --git a/gcc/testsuite/c-c++-common/pr36282-3.c b/gcc/testsuite/c-c++-common/pr36282-3.c
+new file mode 100644
+index 000000000..8982470c0
+--- /dev/null
++++ b/gcc/testsuite/c-c++-common/pr36282-3.c
+@@ -0,0 +1,13 @@
++/* PR middle-end/36282 */
++/* { dg-do compile } */
++
++void bar (void);
++#pragma weak bar
++
++extern void *baz (void *dest, const void *src, __SIZE_TYPE__ n);
++extern __typeof (baz) baz __asm("bazfn"); /* { dg-bogus "asm declaration ignored due to conflict with previous rename" } */
++
++void
++foo (void)
++{
++}
+diff --git a/gcc/testsuite/c-c++-common/pr36282-4.c b/gcc/testsuite/c-c++-common/pr36282-4.c
+new file mode 100644
+index 000000000..f6f40f8e4
+--- /dev/null
++++ b/gcc/testsuite/c-c++-common/pr36282-4.c
+@@ -0,0 +1,13 @@
++/* PR middle-end/36282 */
++/* { dg-do compile } */
++
++#pragma weak bar
++void bar (void);
++
++extern void *baz (void *dest, const void *src, __SIZE_TYPE__ n);
++extern __typeof (baz) baz __asm("bazfn"); /* { dg-bogus "asm declaration ignored due to conflict with previous rename" } */
++
++void
++foo (void)
++{
++}

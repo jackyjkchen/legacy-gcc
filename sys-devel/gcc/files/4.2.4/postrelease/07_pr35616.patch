@@ -1,0 +1,84 @@
+diff --git a/gcc/calls.c b/gcc/calls.c
+index 46a0bd89..98ee2248 100644
+--- a/gcc/calls.c
++++ b/gcc/calls.c
+@@ -2259,7 +2259,7 @@ expand_call (tree exp, rtx target, int ignore)
+       int save_pending_stack_adjust = 0;
+       int save_stack_pointer_delta = 0;
+       rtx insns;
+-      rtx before_call, next_arg_reg;
++      rtx before_call, next_arg_reg, after_args;
+ 
+       if (pass == 0)
+ 	{
+@@ -2682,6 +2682,7 @@ expand_call (tree exp, rtx target, int ignore)
+ 	    use_reg (&call_fusage, struct_value);
+ 	}
+ 
++      after_args = get_last_insn ();
+       funexp = prepare_call_address (funexp, static_chain_value,
+ 				     &call_fusage, reg_parm_seen, pass == 0);
+ 
+@@ -2716,6 +2717,13 @@ expand_call (tree exp, rtx target, int ignore)
+ 		   next_arg_reg, valreg, old_inhibit_defer_pop, call_fusage,
+ 		   flags, & args_so_far);
+ 
++      /* If the call setup or the call itself overlaps with anything
++	 of the argument setup we probably clobbered our call address.
++	 In that case we can't do sibcalls.  */
++      if (pass == 0
++	  && check_sibcall_argument_overlap (after_args, 0, 0))
++	sibcall_failure = 1;
++
+       /* If a non-BLKmode value is returned at the most significant end
+ 	 of a register, shift the register right by the appropriate amount
+ 	 and update VALREG accordingly.  BLKmode values are handled by the
+diff --git a/gcc/testsuite/gcc.dg/pr35616.c b/gcc/testsuite/gcc.dg/pr35616.c
+new file mode 100644
+index 00000000..ad2c9e99
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr35616.c
+@@ -0,0 +1,43 @@
++/* { dg-do run } */
++/* { dg-options "-O2" } */
++typedef void (*listener_fun)(
++        int a,
++        int b,
++        int c);
++
++struct data_t
++{
++  int a;
++
++  listener_fun listener;
++
++  int b;
++  int c;
++  int d;
++};
++
++extern void abort(void);
++void function_calling_listener (struct data_t data);
++
++void function_calling_listener (struct data_t data)
++{
++  data.listener(data.a, data.c, data.d);
++}
++
++void my_listener(int a, int b, int c)
++{
++  if (a != 42 || b != 44 || c != 45)
++    abort ();
++}
++
++int main()
++{
++  struct data_t d;
++  d.a = 42;
++  d.b = 43;
++  d.c = 44;
++  d.d = 45;
++  d.listener = my_listener;
++  function_calling_listener (d);
++  return 0;
++}

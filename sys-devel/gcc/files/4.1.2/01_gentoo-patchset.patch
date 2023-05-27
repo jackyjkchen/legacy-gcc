@@ -150,39 +150,6 @@ index c51291b..88ecc60 100644
      tem = frame_pointer_rtx;
    else 
      {
-@@ -9935,6 +9939,7 @@ fold_builtin_sprintf (tree arglist, int ignored)
-   /* Get the destination string and the format specifier.  */
-   dest = TREE_VALUE (arglist);
-   fmt = TREE_VALUE (TREE_CHAIN (arglist));
-+  arglist = TREE_CHAIN (TREE_CHAIN (arglist));
- 
-   /* Check whether the format is a literal string constant.  */
-   fmt_str = c_getstr (fmt);
-@@ -9955,6 +9960,10 @@ fold_builtin_sprintf (tree arglist, int ignored)
-       if (!fn)
- 	return NULL_TREE;
- 
-+      /* Don't optimize sprintf (buf, "abc", ptr++).  */
-+      if (arglist)
-+	return NULL_TREE;
-+
-       /* Convert sprintf (str, fmt) into strcpy (str, fmt) when
- 	 'format' is known to contain no % formats.  */
-       arglist = build_tree_list (NULL_TREE, fmt);
-@@ -9973,8 +9982,12 @@ fold_builtin_sprintf (tree arglist, int ignored)
-       if (!fn)
- 	return NULL_TREE;
- 
-+      /* Don't crash on sprintf (str1, "%s").  */
-+      if (!arglist)
-+	return NULL_TREE;
-+
-       /* Convert sprintf (str1, "%s", str2) into strcpy (str1, str2).  */
--      orig = TREE_VALUE (TREE_CHAIN (TREE_CHAIN (arglist)));
-+      orig = TREE_VALUE (arglist);
-       arglist = build_tree_list (NULL_TREE, orig);
-       arglist = tree_cons (NULL_TREE, dest, arglist);
-       if (!ignored)
 diff --git a/gcc/c-tree.h b/gcc/c-tree.h
 index 0894317..f867963 100644
 --- a/gcc/c-tree.h
@@ -196,22 +163,6 @@ index 0894317..f867963 100644
  #define ATTRIBUTE_GCC_CDIAG(m, n) __attribute__ ((__format__ (GCC_DIAG_STYLE, m ,n))) ATTRIBUTE_NONNULL(m)
  #else
  #define ATTRIBUTE_GCC_CDIAG(m, n) ATTRIBUTE_NONNULL(m)
-diff --git a/gcc/combine.c b/gcc/combine.c
-index 370b89d..d7ded65 100644
---- a/gcc/combine.c
-+++ b/gcc/combine.c
-@@ -5067,9 +5067,10 @@ simplify_if_then_else (rtx x)
-   /* Look for cases where we have (abs x) or (neg (abs X)).  */
- 
-   if (GET_MODE_CLASS (mode) == MODE_INT
-+      && comparison_p
-+      && XEXP (cond, 1) == const0_rtx
-       && GET_CODE (false_rtx) == NEG
-       && rtx_equal_p (true_rtx, XEXP (false_rtx, 0))
--      && comparison_p
-       && rtx_equal_p (true_rtx, XEXP (cond, 0))
-       && ! side_effects_p (true_rtx))
-     switch (true_code)
 diff --git a/gcc/config.gcc b/gcc/config.gcc
 index b4c8259..d53dd62 100644
 --- a/gcc/config.gcc
@@ -1233,81 +1184,6 @@ index fad1d57..f7f7f85 100644
  
  	  __builtin_memset (&fxsave, 0, sizeof (fxsave));
  
-diff --git a/gcc/config/i386/i386.c b/gcc/config/i386/i386.c
-index 82e5e1b..455283d 100644
---- a/gcc/config/i386/i386.c
-+++ b/gcc/config/i386/i386.c
-@@ -12865,6 +12865,9 @@ assign_386_stack_local (enum machine_mode mode, enum ix86_stack_slot n)
- 
-   gcc_assert (n < MAX_386_STACK_LOCALS);
- 
-+  /* Virtual slot is valid only before vregs are instantiated.  */
-+  gcc_assert ((n == SLOT_VIRTUAL) == !virtuals_instantiated);
-+
-   for (s = ix86_stack_locals; s; s = s->next)
-     if (s->mode == mode && s->n == n)
-       return s->rtl;
-@@ -15496,13 +15499,13 @@ ix86_expand_builtin (tree exp, rtx target, rtx subtarget ATTRIBUTE_UNUSED,
- 
-     case IX86_BUILTIN_LDMXCSR:
-       op0 = expand_expr (TREE_VALUE (arglist), NULL_RTX, VOIDmode, 0);
--      target = assign_386_stack_local (SImode, SLOT_TEMP);
-+      target = assign_386_stack_local (SImode, SLOT_VIRTUAL);
-       emit_move_insn (target, op0);
-       emit_insn (gen_sse_ldmxcsr (target));
-       return 0;
- 
-     case IX86_BUILTIN_STMXCSR:
--      target = assign_386_stack_local (SImode, SLOT_TEMP);
-+      target = assign_386_stack_local (SImode, SLOT_VIRTUAL);
-       emit_insn (gen_sse_stmxcsr (target));
-       return copy_to_mode_reg (SImode, target);
- 
-diff --git a/gcc/config/i386/i386.h b/gcc/config/i386/i386.h
-index 15e3f42..737fae7 100644
---- a/gcc/config/i386/i386.h
-+++ b/gcc/config/i386/i386.h
-@@ -2206,7 +2206,8 @@ enum ix86_entity
- 
- enum ix86_stack_slot 
- {
--  SLOT_TEMP = 0,
-+  SLOT_VIRTUAL = 0,
-+  SLOT_TEMP,
-   SLOT_CW_STORED,
-   SLOT_CW_TRUNC,
-   SLOT_CW_FLOOR,
-diff --git a/gcc/config/i386/i386.md b/gcc/config/i386/i386.md
-index 6350b50..4ba0327 100644
---- a/gcc/config/i386/i386.md
-+++ b/gcc/config/i386/i386.md
-@@ -3684,7 +3684,7 @@
-     ;
-   else
-     {
--      rtx temp = assign_386_stack_local (SFmode, SLOT_TEMP);
-+      rtx temp = assign_386_stack_local (SFmode, SLOT_VIRTUAL);
-       emit_insn (gen_truncdfsf2_with_temp (operands[0], operands[1], temp));
-       DONE;
-     }
-@@ -3836,7 +3836,7 @@
-       DONE;
-     }
-   else
--    operands[2] = assign_386_stack_local (SFmode, SLOT_TEMP);
-+    operands[2] = assign_386_stack_local (SFmode, SLOT_VIRTUAL);
- })
- 
- (define_insn "*truncxfsf2_mixed"
-@@ -3934,7 +3934,7 @@
-       DONE;
-     }
-   else
--    operands[2] = assign_386_stack_local (DFmode, SLOT_TEMP);
-+    operands[2] = assign_386_stack_local (DFmode, SLOT_VIRTUAL);
- })
- 
- (define_insn "*truncxfdf2_mixed"
 diff --git a/gcc/config/i386/linux-unwind.h b/gcc/config/i386/linux-unwind.h
 index 6ca1309..a62ef54 100644
 --- a/gcc/config/i386/linux-unwind.h
@@ -3292,15 +3168,6 @@ index 95893eb..6ac6786 100644
  
  (define_insn ""
    [(set (match_operand 0 "register_operand" "=f")
-@@ -9573,7 +9867,7 @@ add,l %2,%3,%3\;bv,n %%r0(%3)"
-   [(set (match_operand:SI 0 "register_operand" "=r")
- 	(unspec:SI [(const_int 0)] UNSPEC_TP))]
-   ""
--  "{mfctl|mfctl,w} %%cr27,%0"
-+  "mfctl %%cr27,%0"
-   [(set_attr "type" "multi")
-    (set_attr "length" "4")])
- 
 diff --git a/gcc/config/rs6000/ppc-asm.h b/gcc/config/rs6000/ppc-asm.h
 index 74e1483..47547f6 100644
 --- a/gcc/config/rs6000/ppc-asm.h
@@ -4780,22 +4647,6 @@ index 34c9009..10290e6 100644
  #ifdef HAVE_UNISTD_H
  # include <unistd.h>
  #endif
-diff --git a/gcc/testsuite/gcc.target/i386/pr32389.c b/gcc/testsuite/gcc.target/i386/pr32389.c
-new file mode 100644
-index 0000000..3f4cb3e
---- /dev/null
-+++ b/gcc/testsuite/gcc.target/i386/pr32389.c
-@@ -0,0 +1,10 @@
-+/* Testcase by Mike Frysinger <vapier@gentoo.org>  */
-+
-+/* { dg-do compile { target { { i?86-*-* x86_64-*-* } && ilp32 } } } */
-+/* { dg-options "-msse" } */
-+
-+double f1();
-+int f2() {
-+  __builtin_ia32_stmxcsr();
-+  return f1();
-+}
 diff --git a/gcc/toplev.c b/gcc/toplev.c
 index 77e5d29..d5ea855 100644
 --- a/gcc/toplev.c
@@ -5520,124 +5371,6 @@ index caf2f8d..86d9726 100644
  
  # -----------
  # Directories
-diff --git a/libstdc++-v3/acinclude.m4 b/libstdc++-v3/acinclude.m4
-index 597270f..0d1da73 100644
---- a/libstdc++-v3/acinclude.m4
-+++ b/libstdc++-v3/acinclude.m4
-@@ -224,8 +224,8 @@ AC_DEFUN([GLIBCXX_CHECK_LINKER_FEATURES], [
-   # does some of this, but throws away the result.
-   if test x"$with_gnu_ld" = x"yes"; then
-     changequote(,)
--    ldver=`$LD --version 2>/dev/null | head -1 | \
--           sed -e 's/GNU ld version \([0-9.][0-9.]*\).*/\1/'`
-+    ldver=`$LD --version 2>/dev/null | head -n 1 | \
-+           sed -e 's/GNU ld \(version \)\{0,1\}\(([^)]*) \)\{0,1\}\([0-9.][0-9.]*\).*/\3/'`
-     changequote([,])
-     glibcxx_gnu_ld_version=`echo $ldver | \
-            $AWK -F. '{ if (NF<3) [$]3=0; print ([$]1*100+[$]2)*100+[$]3 }'`
-diff --git a/libstdc++-v3/configure b/libstdc++-v3/configure
-index 6f205dd..0c0a5d3 100755
---- a/libstdc++-v3/configure
-+++ b/libstdc++-v3/configure
-@@ -8281,7 +8281,7 @@ ac_compiler_gnu=$ac_cv_c_compiler_gnu
-   if test x"$with_gnu_ld" = x"yes"; then
- 
-     ldver=`$LD --version 2>/dev/null | head -1 | \
--           sed -e 's/GNU ld version \([0-9.][0-9.]*\).*/\1/'`
-+           sed -e 's/GNU ld \(version \)\{0,1\}\(([^)]*) \)\{0,1\}\([0-9.][0-9.]*\).*/\3/'`
- 
-     glibcxx_gnu_ld_version=`echo $ldver | \
-            $AWK -F. '{ if (NF<3) $3=0; print ($1*100+$2)*100+$3 }'`
-@@ -53122,7 +53122,7 @@ ac_compiler_gnu=$ac_cv_c_compiler_gnu
-   if test x"$with_gnu_ld" = x"yes"; then
- 
-     ldver=`$LD --version 2>/dev/null | head -1 | \
--           sed -e 's/GNU ld version \([0-9.][0-9.]*\).*/\1/'`
-+           sed -e 's/GNU ld \(version \)\{0,1\}\(([^)]*) \)\{0,1\}\([0-9.][0-9.]*\).*/\3/'`
- 
-     glibcxx_gnu_ld_version=`echo $ldver | \
-            $AWK -F. '{ if (NF<3) $3=0; print ($1*100+$2)*100+$3 }'`
-@@ -74456,7 +74456,7 @@ done
-   if test x"$with_gnu_ld" = x"yes"; then
- 
-     ldver=`$LD --version 2>/dev/null | head -1 | \
--           sed -e 's/GNU ld version \([0-9.][0-9.]*\).*/\1/'`
-+           sed -e 's/GNU ld \(version \)\{0,1\}\(([^)]*) \)\{0,1\}\([0-9.][0-9.]*\).*/\3/'`
- 
-     glibcxx_gnu_ld_version=`echo $ldver | \
-            $AWK -F. '{ if (NF<3) $3=0; print ($1*100+$2)*100+$3 }'`
-@@ -75953,7 +75953,7 @@ done
-   if test x"$with_gnu_ld" = x"yes"; then
- 
-     ldver=`$LD --version 2>/dev/null | head -1 | \
--           sed -e 's/GNU ld version \([0-9.][0-9.]*\).*/\1/'`
-+           sed -e 's/GNU ld \(version \)\{0,1\}\(([^)]*) \)\{0,1\}\([0-9.][0-9.]*\).*/\3/'`
- 
-     glibcxx_gnu_ld_version=`echo $ldver | \
-            $AWK -F. '{ if (NF<3) $3=0; print ($1*100+$2)*100+$3 }'`
-@@ -77326,7 +77326,7 @@ done
-   if test x"$with_gnu_ld" = x"yes"; then
- 
-     ldver=`$LD --version 2>/dev/null | head -1 | \
--           sed -e 's/GNU ld version \([0-9.][0-9.]*\).*/\1/'`
-+           sed -e 's/GNU ld \(version \)\{0,1\}\(([^)]*) \)\{0,1\}\([0-9.][0-9.]*\).*/\3/'`
- 
-     glibcxx_gnu_ld_version=`echo $ldver | \
-            $AWK -F. '{ if (NF<3) $3=0; print ($1*100+$2)*100+$3 }'`
-@@ -79486,7 +79486,7 @@ done
-   if test x"$with_gnu_ld" = x"yes"; then
- 
-     ldver=`$LD --version 2>/dev/null | head -1 | \
--           sed -e 's/GNU ld version \([0-9.][0-9.]*\).*/\1/'`
-+           sed -e 's/GNU ld \(version \)\{0,1\}\(([^)]*) \)\{0,1\}\([0-9.][0-9.]*\).*/\3/'`
- 
-     glibcxx_gnu_ld_version=`echo $ldver | \
-            $AWK -F. '{ if (NF<3) $3=0; print ($1*100+$2)*100+$3 }'`
-@@ -80305,7 +80305,7 @@ done
-   if test x"$with_gnu_ld" = x"yes"; then
- 
-     ldver=`$LD --version 2>/dev/null | head -1 | \
--           sed -e 's/GNU ld version \([0-9.][0-9.]*\).*/\1/'`
-+           sed -e 's/GNU ld \(version \)\{0,1\}\(([^)]*) \)\{0,1\}\([0-9.][0-9.]*\).*/\3/'`
- 
-     glibcxx_gnu_ld_version=`echo $ldver | \
-            $AWK -F. '{ if (NF<3) $3=0; print ($1*100+$2)*100+$3 }'`
-@@ -81680,7 +81680,7 @@ done
-   if test x"$with_gnu_ld" = x"yes"; then
- 
-     ldver=`$LD --version 2>/dev/null | head -1 | \
--           sed -e 's/GNU ld version \([0-9.][0-9.]*\).*/\1/'`
-+           sed -e 's/GNU ld \(version \)\{0,1\}\(([^)]*) \)\{0,1\}\([0-9.][0-9.]*\).*/\3/'`
- 
-     glibcxx_gnu_ld_version=`echo $ldver | \
-            $AWK -F. '{ if (NF<3) $3=0; print ($1*100+$2)*100+$3 }'`
-@@ -83447,7 +83447,7 @@ echo "${ECHO_T}$glibcxx_cv_WRITEV" >&6
-   if test x"$with_gnu_ld" = x"yes"; then
- 
-     ldver=`$LD --version 2>/dev/null | head -1 | \
--           sed -e 's/GNU ld version \([0-9.][0-9.]*\).*/\1/'`
-+           sed -e 's/GNU ld \(version \)\{0,1\}\(([^)]*) \)\{0,1\}\([0-9.][0-9.]*\).*/\3/'`
- 
-     glibcxx_gnu_ld_version=`echo $ldver | \
-            $AWK -F. '{ if (NF<3) $3=0; print ($1*100+$2)*100+$3 }'`
-@@ -84664,7 +84664,7 @@ _ACEOF
-   if test x"$with_gnu_ld" = x"yes"; then
- 
-     ldver=`$LD --version 2>/dev/null | head -1 | \
--           sed -e 's/GNU ld version \([0-9.][0-9.]*\).*/\1/'`
-+           sed -e 's/GNU ld \(version \)\{0,1\}\(([^)]*) \)\{0,1\}\([0-9.][0-9.]*\).*/\3/'`
- 
-     glibcxx_gnu_ld_version=`echo $ldver | \
-            $AWK -F. '{ if (NF<3) $3=0; print ($1*100+$2)*100+$3 }'`
-@@ -85665,7 +85665,7 @@ done
-   if test x"$with_gnu_ld" = x"yes"; then
- 
-     ldver=`$LD --version 2>/dev/null | head -1 | \
--           sed -e 's/GNU ld version \([0-9.][0-9.]*\).*/\1/'`
-+           sed -e 's/GNU ld \(version \)\{0,1\}\(([^)]*) \)\{0,1\}\([0-9.][0-9.]*\).*/\3/'`
- 
-     glibcxx_gnu_ld_version=`echo $ldver | \
-            $AWK -F. '{ if (NF<3) $3=0; print ($1*100+$2)*100+$3 }'`
 diff --git a/libstdc++-v3/include/c_std/std_cassert.h b/libstdc++-v3/include/c_std/std_cassert.h
 index ae2f498..7b5fea7 100644
 --- a/libstdc++-v3/include/c_std/std_cassert.h

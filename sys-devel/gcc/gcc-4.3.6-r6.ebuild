@@ -33,4 +33,14 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/02_fix-werror.patch
 
 	sed -i 's/use_fixproto=yes/:/' gcc/config.gcc #PR33200
+
+	eapply "${FILESDIR}"/${PV}/postrelease/00_pr36282.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/01_pr50109.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/02_pr91131.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/03_pr55771.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/04_pr35202.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/05_pr38987.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/06_pr49243.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/07_pr46010.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/08_pr47698.patch
 }

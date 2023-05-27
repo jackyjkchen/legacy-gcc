@@ -24,12 +24,14 @@ else
 fi
 
 src_prepare() {
-	! use vanilla && eapply "${FILESDIR}"/${PV}/00_gentoo-patchset.patch
+	! use vanilla && eapply "${FILESDIR}"/${PV}/00_gcc-4.1.3-without-change-version.patch
+	! use vanilla && eapply "${FILESDIR}"/${PV}/01_gentoo-patchset.patch
 	toolchain_src_prepare
 	use vanilla && return 0
 
-	eapply "${FILESDIR}"/${PV}/01_compat-new-mpfr.patch
-	[[ $(tc-arch) == "mips" && ${DEFAULT_ABI} == "n64" ]] && eapply "${FILESDIR}"/${PV}/02_mips64-default-n64-abi.patch
+	eapply "${FILESDIR}"/${PV}/02_compat-new-mpfr.patch
 	[[ $(tc-arch) == "sh" ]] && eapply "${FILESDIR}"/${PV}/03_sh4-fix-build.patch
 	[[ $(tc-arch) == "hppa" ]] && eapply "${FILESDIR}"/${PV}/04_hppa-fix-build.patch
+	[[ $(tc-arch) == "mips" && ${DEFAULT_ABI} == "n64" ]] && eapply "${FILESDIR}"/${PV}/05_mips64-default-n64-abi.patch
+
 }

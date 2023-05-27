@@ -1,0 +1,49 @@
+diff --git a/gcc/testsuite/gfortran.dg/inquire_17.f90 b/gcc/testsuite/gfortran.dg/inquire_17.f90
+new file mode 100644
+index 000000000..8a722f0e7
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/inquire_17.f90
+@@ -0,0 +1,10 @@
++! { dg-do run }
++! PR77707 formatted direct access: nextrec off by one
++program directaccess_formatted
++  integer nextrec
++  open(10, status='scratch', form='formatted', access='direct', recl=10*4)
++  write(10,'(10i4)',rec=9) 1,2,3,4,5,6,7,8,9,10
++  inquire(unit=10,nextrec=nextrec)
++  if (nextrec.ne.10) call abort
++  close(10)
++end
+diff --git a/libgfortran/io/transfer.c b/libgfortran/io/transfer.c
+index 87c67bf6a..4c648fb36 100644
+--- a/libgfortran/io/transfer.c
++++ b/libgfortran/io/transfer.c
+@@ -3480,6 +3480,8 @@ next_record (st_parameter_dt *dtp, int done)
+   else
+     next_record_w (dtp, done);
+ 
++  fbuf_flush (dtp->u.p.current_unit, dtp->u.p.mode);
++
+   if (!is_stream_io (dtp))
+     {
+       /* Since we have changed the position, set it to unspecified so
+@@ -3493,8 +3495,8 @@ next_record (st_parameter_dt *dtp, int done)
+ 	  fp = stell (dtp->u.p.current_unit->s);
+ 	  /* Calculate next record, rounding up partial records.  */
+ 	  dtp->u.p.current_unit->last_record =
+-	    (fp + dtp->u.p.current_unit->recl - 1) /
+-	      dtp->u.p.current_unit->recl;
++	    (fp + dtp->u.p.current_unit->recl) /
++	      dtp->u.p.current_unit->recl - 1;
+ 	}
+       else
+ 	dtp->u.p.current_unit->last_record++;
+@@ -3502,8 +3504,6 @@ next_record (st_parameter_dt *dtp, int done)
+ 
+   if (!done)
+     pre_position (dtp);
+-
+-  fbuf_flush (dtp->u.p.current_unit, dtp->u.p.mode);
+ }
+ 
+ 
