@@ -1,0 +1,101 @@
+diff --git a/gcc/fortran/trans-expr.c b/gcc/fortran/trans-expr.c
+index b2233372..97dccf41 100644
+--- a/gcc/fortran/trans-expr.c
++++ b/gcc/fortran/trans-expr.c
+@@ -255,6 +255,10 @@ gfc_conv_substring (gfc_se * se, gfc_ref * ref, int kind)
+     gfc_conv_string_parameter (se);
+   else
+     {
++      /* Avoid multiple evaluation of substring start.  */
++      if (!CONSTANT_CLASS_P (start.expr) && !DECL_P (start.expr))
++	start.expr = gfc_evaluate_now (start.expr, &se->pre);
++
+       /* Change the start of the string.  */
+       if (TYPE_STRING_FLAG (TREE_TYPE (se->expr)))
+ 	tmp = se->expr;
+@@ -273,6 +277,10 @@ gfc_conv_substring (gfc_se * se, gfc_ref * ref, int kind)
+       gfc_conv_expr_type (&end, ref->u.ss.end, gfc_charlen_type_node);
+       gfc_add_block_to_block (&se->pre, &end.pre);
+     }
++
++  if (!CONSTANT_CLASS_P (end.expr) && !DECL_P (end.expr))
++    end.expr = gfc_evaluate_now (end.expr, &se->pre);
++
+   tmp = fold_build2 (MINUS_EXPR, gfc_charlen_type_node,
+ 		     build_int_cst (gfc_charlen_type_node, 1),
+ 		     start.expr);
+diff --git a/gcc/testsuite/gfortran.dg/substr_4.f b/gcc/testsuite/gfortran.dg/substr_4.f
+new file mode 100644
+index 00000000..fadd5b32
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/substr_4.f
+@@ -0,0 +1,69 @@
++! { dg-do run }
++      subroutine test_lower
++      implicit none
++      character(3), dimension(3) :: zsymel,zsymelr
++      common /xx/ zsymel, zsymelr
++      integer :: znsymelr
++      zsymel = (/ 'X', 'Y', ' ' /)
++      zsymelr= (/ 'X', 'Y', ' ' /)
++      znsymelr=2
++      call check_zsymel(zsymel,zsymelr,znsymelr)
++
++      contains
++
++      subroutine check_zsymel(zsymel,zsymelr,znsymelr)
++        implicit none
++        integer znsymelr, isym
++        character(*) zsymel(*),zsymelr(*)
++        character(len=80) buf
++        zsymel(3)(lenstr(zsymel(3))+1:)='X'
++        write (buf,10) (trim(zsymelr(isym)),isym=1,znsymelr)
++10      format(3(a,:,','))
++        if (trim(buf) /= 'X,Y') call abort
++      end subroutine check_zsymel
++
++      function lenstr(s)
++        character(len=*),intent(in) :: s
++        integer :: lenstr
++        if (len_trim(s) /= 0) call abort
++        lenstr = len_trim(s)
++      end function lenstr
++
++      end subroutine test_lower
++
++      subroutine test_upper
++      implicit none
++      character(3), dimension(3) :: zsymel,zsymelr
++      common /xx/ zsymel, zsymelr
++      integer :: znsymelr
++      zsymel = (/ 'X', 'Y', ' ' /)
++      zsymelr= (/ 'X', 'Y', ' ' /)
++      znsymelr=2
++      call check_zsymel(zsymel,zsymelr,znsymelr)
++
++      contains
++
++      subroutine check_zsymel(zsymel,zsymelr,znsymelr)
++        implicit none
++        integer znsymelr, isym
++        character(*) zsymel(*),zsymelr(*)
++        character(len=80) buf
++        zsymel(3)(:lenstr(zsymel(3))+1)='X'
++        write (buf,20) (trim(zsymelr(isym)),isym=1,znsymelr)
++20      format(3(a,:,','))
++        if (trim(buf) /= 'X,Y') call abort
++      end subroutine check_zsymel
++
++      function lenstr(s)
++        character(len=*),intent(in) :: s
++        integer :: lenstr
++        if (len_trim(s) /= 0) call abort
++        lenstr = len_trim(s)
++      end function lenstr
++
++      end subroutine test_upper
++
++      program test
++        call test_lower
++        call test_upper
++      end program test

@@ -1,0 +1,70 @@
+diff --git a/gcc/gimplify.c b/gcc/gimplify.c
+index ea43aaf6..9b228ed8 100644
+--- a/gcc/gimplify.c
++++ b/gcc/gimplify.c
+@@ -1395,7 +1395,7 @@ gimplify_switch_expr (tree *expr_p, tree *pre_p)
+ 	    {
+ 	      /* Discard empty ranges.  */
+ 	      tree high = CASE_HIGH (elt);
+-	      if (high && INT_CST_LT (high, low))
++	      if (high && tree_int_cst_lt (high, low))
+ 	        remove_element = TRUE;
+ 	    }
+ 	  else
+diff --git a/gcc/stmt.c b/gcc/stmt.c
+index 4e4c5e73..21e21ecf 100644
+--- a/gcc/stmt.c
++++ b/gcc/stmt.c
+@@ -2364,7 +2364,7 @@ expand_case (tree exp)
+ 	  high = CASE_HIGH (elt);
+ 
+ 	  /* Discard empty ranges.  */
+-	  if (high && INT_CST_LT (high, low))
++	  if (high && tree_int_cst_lt (high, low))
+ 	    continue;
+ 
+ 	  case_list = add_case_node (case_list, index_type, low, high,
+@@ -2391,9 +2391,9 @@ expand_case (tree exp)
+ 	    }
+ 	  else
+ 	    {
+-	      if (INT_CST_LT (n->low, minval))
++	      if (tree_int_cst_lt (n->low, minval))
+ 		minval = n->low;
+-	      if (INT_CST_LT (maxval, n->high))
++	      if (tree_int_cst_lt (maxval, n->high))
+ 		maxval = n->high;
+ 	    }
+ 	  /* A range counts double, since it requires two compares.  */
+@@ -2672,7 +2672,8 @@ estimate_case_costs (case_node_ptr node)
+ 
+   for (n = node; n; n = n->right)
+     {
+-      if ((INT_CST_LT (n->low, min_ascii)) || INT_CST_LT (max_ascii, n->high))
++      if (tree_int_cst_lt (n->low, min_ascii)
++	  || tree_int_cst_lt (max_ascii, n->high))
+ 	return 0;
+ 
+       for (i = (HOST_WIDE_INT) TREE_INT_CST_LOW (n->low);
+diff --git a/gcc/testsuite/gcc.c-torture/execute/pr34154.c b/gcc/testsuite/gcc.c-torture/execute/pr34154.c
+new file mode 100644
+index 00000000..cd7bfc6b
+--- /dev/null
++++ b/gcc/testsuite/gcc.c-torture/execute/pr34154.c
+@@ -0,0 +1,16 @@
++int foo( unsigned long long aLL )
++{
++    switch( aLL )
++    {
++        case 1000000000000000000ULL ... 9999999999999999999ULL : return 19 ; 
++        default                                 : return 20 ;
++    };
++};
++extern void abort (void);
++int main()
++{
++    unsigned long long aLL = 1000000000000000000ULL;
++    if (foo (aLL) != 19)
++	abort ();
++    return 0;
++}

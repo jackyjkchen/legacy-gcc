@@ -1,0 +1,48 @@
+diff --git a/gcc/testsuite/gcc.dg/torture/pr28230.c b/gcc/testsuite/gcc.dg/torture/pr28230.c
+new file mode 100644
+index 00000000..5ecc0c71
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/torture/pr28230.c
+@@ -0,0 +1,20 @@
++/* { dg-do run } */
++/* { dg-options "-fwrapv" } */
++
++void foo( unsigned long long bb, unsigned short tn, unsigned e, unsigned* w );
++void foo( unsigned long long bb, unsigned short tn, unsigned e, unsigned* w )
++{
++        unsigned n = tn + bb;
++        do {
++                e = (e > n) ? e : *w;
++                n -= (e > n) ? n : e;
++                if (*w)
++                        *w = 0;
++        } while ( n );
++}
++int main()
++{
++        unsigned w = 0;
++        foo( 0, 0, 0, &w );
++        return 0;
++}
+diff --git a/gcc/tree-vrp.c b/gcc/tree-vrp.c
+index 8d479c1e..142919a6 100644
+--- a/gcc/tree-vrp.c
++++ b/gcc/tree-vrp.c
+@@ -1032,14 +1032,12 @@ vrp_int_const_binop (enum tree_code code, tree val1, tree val2)
+ {
+   tree res;
+ 
+-  if (flag_wrapv)
+-    return int_const_binop (code, val1, val2, 0);
++  res = int_const_binop (code, val1, val2, 0);
+ 
+   /* If we are not using wrapping arithmetic, operate symbolically
+      on -INF and +INF.  */
+-  res = int_const_binop (code, val1, val2, 0);
+-
+-  if (TYPE_UNSIGNED (TREE_TYPE (val1)))
++  if (TYPE_UNSIGNED (TREE_TYPE (val1))
++      || flag_wrapv)
+     {
+       int checkz = compare_values (res, val1);
+       bool overflow = false;

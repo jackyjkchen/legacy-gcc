@@ -1,0 +1,44 @@
+diff --git a/gcc/libgcc2.c b/gcc/libgcc2.c
+index c8f6e51b..67454bda 100644
+--- a/gcc/libgcc2.c
++++ b/gcc/libgcc2.c
+@@ -1727,7 +1727,7 @@ CONCAT3(__div,MODE,3) (MTYPE a, MTYPE b, MTYPE c, MTYPE d)
+      are nonzero/zero, infinite/finite, and finite/infinite.  */
+   if (isnan (x) && isnan (y))
+     {
+-      if (denom == 0.0 && (!isnan (a) || !isnan (b)))
++      if (c == 0.0 && d == 0.0 && (!isnan (a) || !isnan (b)))
+ 	{
+ 	  x = COPYSIGN (INFINITY, c) * a;
+ 	  y = COPYSIGN (INFINITY, c) * b;
+diff --git a/gcc/testsuite/gcc.dg/pr30360.c b/gcc/testsuite/gcc.dg/pr30360.c
+new file mode 100644
+index 00000000..d4dae0d5
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr30360.c
+@@ -0,0 +1,25 @@
++/* PR c/30360 */
++/* { dg-do run { target i?86-*-linux* x86_64-*-linux* ia64-*-linux* s390*-*-linux* } } */
++/* { dg-options "-O2 -std=gnu99" } */
++
++#define I	(__extension__ 1.0iF)
++#define H(x)	asm ("" : "=m" (x) : "m" (x))
++extern void abort (void);
++
++int
++main (void)
++{
++  _Complex double a = 1.0 + 1.0 * I, b = 0.0, c;
++  H (a);
++  H (b);
++  c = a / b;
++  if (!__builtin_isinf (__real__ c) && !__builtin_isinf (__imag__ c))
++    abort ();
++  a = 0.0;
++  H (a);
++  H (b);
++  c = a / b;
++  if (!__builtin_isnan (__real__ c) || !__builtin_isnan (__imag__ c))
++    abort ();
++  return 0;
++}

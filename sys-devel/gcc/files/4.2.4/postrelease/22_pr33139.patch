@@ -1,0 +1,174 @@
+diff --git a/gcc/fortran/trans-array.c b/gcc/fortran/trans-array.c
+index 47290a81..09735ff5 100644
+--- a/gcc/fortran/trans-array.c
++++ b/gcc/fortran/trans-array.c
+@@ -4439,7 +4439,10 @@ gfc_conv_expr_descriptor (gfc_se * se, gfc_expr * expr, gfc_ss * ss)
+       tmp = gfc_conv_descriptor_dtype (parm);
+       gfc_add_modify_expr (&loop.pre, tmp, gfc_get_dtype (parmtype));
+ 
+-      if (se->direct_byref)
++      /* Set offset for assignments to pointer only to zero if it is not
++         the full array.  */
++      if (se->direct_byref
++	  && info->ref && info->ref->u.ar.type != AR_FULL)
+ 	base = gfc_index_zero_node;
+       else if (GFC_ARRAY_TYPE_P (TREE_TYPE (desc)))
+ 	base = gfc_evaluate_now (gfc_conv_array_offset (desc), &loop.pre);
+@@ -4486,10 +4489,11 @@ gfc_conv_expr_descriptor (gfc_se * se, gfc_expr * expr, gfc_ss * ss)
+ 	  from = loop.from[dim];
+ 	  to = loop.to[dim];
+ 
+-	  /* If we have an array section or are assigning to a pointer,
+-	     make sure that the lower bound is 1.  References to the full
++	  /* If we have an array section or are assigning make sure that
++	     the lower bound is 1.  References to the full
+ 	     array should otherwise keep the original bounds.  */
+-	  if ((info->ref->u.ar.type != AR_FULL || se->direct_byref)
++	  if ((!info->ref
++	          || info->ref->u.ar.type != AR_FULL)
+ 	      && !integer_onep (from))
+ 	    {
+ 	      tmp = fold_build2 (MINUS_EXPR, gfc_array_index_type,
+@@ -4509,7 +4513,7 @@ gfc_conv_expr_descriptor (gfc_se * se, gfc_expr * expr, gfc_ss * ss)
+ 	  stride = fold_build2 (MULT_EXPR, gfc_array_index_type,
+ 				stride, info->stride[dim]);
+ 
+-	  if (se->direct_byref)
++	  if (se->direct_byref && info->ref && info->ref->u.ar.type != AR_FULL)
+ 	    {
+ 	      base = fold_build2 (MINUS_EXPR, TREE_TYPE (base),
+ 				  base, stride);
+@@ -4545,7 +4549,7 @@ gfc_conv_expr_descriptor (gfc_se * se, gfc_expr * expr, gfc_ss * ss)
+ 	}
+ 
+       if ((se->direct_byref || GFC_ARRAY_TYPE_P (TREE_TYPE (desc)))
+-	     && !se->data_not_needed)
++	  && !se->data_not_needed)
+ 	{
+ 	  /* Set the offset.  */
+ 	  tmp = gfc_conv_descriptor_offset (parm);
+diff --git a/gcc/testsuite/gfortran.dg/char_result_4.f90 b/gcc/testsuite/gfortran.dg/char_result_4.f90
+index 0224f43c..5e4f58e1 100644
+--- a/gcc/testsuite/gfortran.dg/char_result_4.f90
++++ b/gcc/testsuite/gfortran.dg/char_result_4.f90
+@@ -22,12 +22,12 @@ program main
+ 
+   a = (/ (i + 5, i = 0, 4) /)
+   ap => a
+-  lower = 1
++  lower = lbound(a,dim=1)
+ 
+   call test (f1 (ap), 35)
+   call test (f2 (ap), 115)
+   call test (f3 (ap), 60)
+-  call test (f4 (ap, 5, 2), 21)
++  call test (f4 (ap, 104, 2), 21)
+ contains
+   function f1 (array)
+     integer, dimension (:), pointer :: array
+@@ -37,13 +37,13 @@ contains
+ 
+   function f2 (array)
+     integer, dimension (:), pointer :: array
+-    character (len = array (2) + a (104) + 100) :: f2
++    character (len = array (101) + a (104) + 100) :: f2
+     f2 = ''
+   end function f2
+ 
+   function f3 (array)
+     integer, dimension (:), pointer :: array
+-    character (len = sum (double (array (2:)))) :: f3
++    character (len = sum (double (array (101:)))) :: f3
+     f3 = ''
+   end function f3
+ 
+diff --git a/gcc/testsuite/gfortran.dg/pointer_assign_4.f90 b/gcc/testsuite/gfortran.dg/pointer_assign_4.f90
+new file mode 100644
+index 00000000..faf7c776
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/pointer_assign_4.f90
+@@ -0,0 +1,66 @@
++! { dg-do run }
++!
++! Verify that the bounds are correctly set when assigning pointers.
++!
++! PR fortran/33139
++!
++program prog
++  implicit none
++  real, target :: a(-10:10)
++  real, pointer :: p(:),p2(:)
++  integer :: i
++  do i = -10, 10
++    a(i) = real(i)
++  end do
++  p  => a
++  p2 => p
++  if((lbound(p, dim=1) /= -10) .or. (ubound(p, dim=1) /= 10)) &
++    call abort()
++  if((lbound(p2,dim=1) /= -10) .or. (ubound(p2,dim=1) /= 10)) &
++    call abort()
++  do i = -10, 10
++    if(p(i) /= real(i)) call abort()
++    if(p2(i) /= real(i)) call abort()
++  end do
++  p => a(:)
++  p2 => p
++  if((lbound(p, dim=1) /= 1) .or. (ubound(p, dim=1) /= 21)) &
++    call abort()
++  if((lbound(p2,dim=1) /= 1) .or. (ubound(p2,dim=1) /= 21)) &
++    call abort()
++  p2 => p(:)
++  if((lbound(p2,dim=1) /= 1) .or. (ubound(p2,dim=1) /= 21)) &
++    call abort()
++  call multdim()
++contains
++  subroutine multdim()
++    real, target, allocatable :: b(:,:,:)
++    real, pointer :: ptr(:,:,:)
++    integer :: i, j, k
++    allocate(b(-5:5,10:20,0:3))
++    do i = 0, 3
++      do j = 10, 20
++        do k = -5, 5
++          b(k,j,i) = real(i+10*j+100*k)
++        end do
++      end do
++    end do
++    ptr => b
++    if((lbound(ptr,dim=1) /= -5) .or. (ubound(ptr,dim=1) /=  5) .or. &
++       (lbound(ptr,dim=2) /= 10) .or. (ubound(ptr,dim=2) /= 20) .or. &
++       (lbound(ptr,dim=3) /=  0) .or. (ubound(ptr,dim=3) /=  3))     &
++      call abort()
++    do i = 0, 3
++      do j = 10, 20
++        do k = -5, 5
++          if(ptr(k,j,i) /= real(i+10*j+100*k)) call abort()
++        end do
++      end do
++    end do
++    ptr => b(:,:,:)
++    if((lbound(ptr,dim=1) /= 1) .or. (ubound(ptr,dim=1) /= 11) .or. &
++       (lbound(ptr,dim=2) /= 1) .or. (ubound(ptr,dim=2) /= 11) .or. &
++       (lbound(ptr,dim=3) /= 1) .or. (ubound(ptr,dim=3) /=  4))     &
++      call abort()
++  end subroutine multdim
++end program prog
+diff --git a/gcc/testsuite/gfortran.dg/shape_2.f90 b/gcc/testsuite/gfortran.dg/shape_2.f90
+index a4bde98b..057cb4c8 100644
+--- a/gcc/testsuite/gfortran.dg/shape_2.f90
++++ b/gcc/testsuite/gfortran.dg/shape_2.f90
+@@ -22,9 +22,9 @@ contains
+     if (ubound (b (20:30:3, 40), 1) .ne. 4) call abort
+ 
+     ptr => b
+-    if (lbound (ptr, 1) .ne. 1) call abort
+-    if (ubound (ptr, 1) .ne. 40) call abort
+-    if (lbound (ptr, 2) .ne. 1) call abort
+-    if (ubound (ptr, 2) .ne. 80) call abort
++    if (lbound (ptr, 1) .ne. 11) call abort
++    if (ubound (ptr, 1) .ne. 50) call abort
++    if (lbound (ptr, 2) .ne. -8) call abort
++    if (ubound (ptr, 2) .ne. 71) call abort
+   end subroutine test
+ end program main

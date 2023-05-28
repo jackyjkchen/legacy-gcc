@@ -1,0 +1,180 @@
+diff --git a/gcc/calls.c b/gcc/calls.c
+index 3cfb34446..82cbac637 100644
+--- a/gcc/calls.c
++++ b/gcc/calls.c
+@@ -1970,6 +1970,26 @@ load_register_parameters (struct arg_data *args, int num_actuals,
+ 					   (XEXP (args[i].value, 0), size)))
+ 		*sibcall_failure = 1;
+ 
++	      if (size % UNITS_PER_WORD == 0
++		  || MEM_ALIGN (mem) % BITS_PER_WORD == 0)
++		move_block_to_reg (REGNO (reg), mem, nregs, args[i].mode);
++	      else
++		{
++		  if (nregs > 1)
++		    move_block_to_reg (REGNO (reg), mem, nregs - 1,
++				       args[i].mode);
++		  rtx dest = gen_rtx_REG (word_mode, REGNO (reg) + nregs - 1);
++		  unsigned int bitoff = (nregs - 1) * BITS_PER_WORD;
++		  unsigned int bitsize = size * BITS_PER_UNIT - bitoff;
++		  rtx x = extract_bit_field (mem, bitsize, bitoff, 1,
++					     dest, word_mode, word_mode);
++		  if (BYTES_BIG_ENDIAN)
++		    x = expand_shift (LSHIFT_EXPR, word_mode, x,
++				      BITS_PER_WORD - bitsize, dest, 1);
++		  if (x != dest)
++		    emit_move_insn (dest, x);
++		}
++
+ 	      /* Handle a BLKmode that needs shifting.  */
+ 	      if (nregs == 1 && size < UNITS_PER_WORD
+ #ifdef BLOCK_REG_PADDING
+@@ -1977,22 +1997,18 @@ load_register_parameters (struct arg_data *args, int num_actuals,
+ #else
+ 		  && BYTES_BIG_ENDIAN
+ #endif
+-		 )
++		  )
+ 		{
+-		  rtx tem = operand_subword_force (mem, 0, args[i].mode);
+-		  rtx ri = gen_rtx_REG (word_mode, REGNO (reg));
+-		  rtx x = gen_reg_rtx (word_mode);
++		  rtx dest = gen_rtx_REG (word_mode, REGNO (reg));
+ 		  int shift = (UNITS_PER_WORD - size) * BITS_PER_UNIT;
+-		  enum tree_code dir = BYTES_BIG_ENDIAN ? RSHIFT_EXPR
+-							: LSHIFT_EXPR;
++		  enum tree_code dir = (BYTES_BIG_ENDIAN
++					? RSHIFT_EXPR : LSHIFT_EXPR);
++		  rtx x;
+ 
+-		  emit_move_insn (x, tem);
+-		  x = expand_shift (dir, word_mode, x, shift, ri, 1);
+-		  if (x != ri)
+-		    emit_move_insn (ri, x);
++		  x = expand_shift (dir, word_mode, dest, shift, dest, 1);
++		  if (x != dest)
++		    emit_move_insn (dest, x);
+ 		}
+-	      else
+-		move_block_to_reg (REGNO (reg), mem, nregs, args[i].mode);
+ 	    }
+ 
+ 	  /* When a parameter is a block, and perhaps in other cases, it is
+diff --git a/gcc/testsuite/gcc.dg/pr65408.c b/gcc/testsuite/gcc.dg/pr65408.c
+new file mode 100644
+index 000000000..8eec1d2dc
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr65408.c
+@@ -0,0 +1,112 @@
++/* PR middle-end/36043 target/58744 target/65408 */
++/* { dg-do run { target mmap } } */
++/* { dg-options "-O2" } */
++
++#include <sys/mman.h>
++#ifndef MAP_ANONYMOUS
++#define MAP_ANONYMOUS MAP_ANON
++#endif
++#ifndef MAP_ANON
++#define MAP_ANON 0
++#endif
++#ifndef MAP_FAILED
++#define MAP_FAILED ((void *)-1)
++#endif
++
++typedef struct
++{
++  unsigned char r;
++  unsigned char g;
++  unsigned char b;
++} __attribute__((packed)) pr58744;
++
++typedef struct
++{
++  unsigned short r;
++  unsigned short g;
++  unsigned short b;
++} pr36043;
++
++typedef struct
++{
++  int r;
++  int g;
++  int b;
++} pr65408;
++
++__attribute__ ((noinline, noclone))
++void
++f1a (pr58744 x)
++{
++  if (x.r != 1 || x.g != 2 || x.b != 3)
++    __builtin_abort();
++}
++
++__attribute__ ((noinline, noclone))
++void
++f1 (pr58744 *x)
++{
++  f1a (*x);
++}
++
++__attribute__ ((noinline, noclone))
++void
++f2a (pr36043 x)
++{
++  if (x.r != 1 || x.g != 2 || x.b != 3)
++    __builtin_abort();
++}
++
++__attribute__ ((noinline, noclone))
++void
++f2 (pr36043 *x)
++{
++  f2a (*x);
++}
++
++__attribute__ ((noinline, noclone))
++void
++f3a (pr65408 x)
++{
++  if (x.r != 1 || x.g != 2 || x.b != 3)
++    __builtin_abort();
++}
++
++__attribute__ ((noinline, noclone))
++void
++f3 (pr65408 *x)
++{
++  f3a (*x);
++}
++
++int
++main ()
++{
++  char *p = mmap ((void *) 0, 131072, PROT_READ | PROT_WRITE,
++		  MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
++  if (p == MAP_FAILED)
++    return 0;
++  char *endp = p + 65536;
++  if (munmap (endp, 65536) < 0)
++    return 0;
++
++  pr58744 *s1 = (pr58744 *) endp - 1;
++  s1->r = 1;
++  s1->g = 2;
++  s1->b = 3;
++  f1 (s1);
++
++  pr36043 *s2 = (pr36043 *) endp - 1;
++  s2->r = 1;
++  s2->g = 2;
++  s2->b = 3;
++  f2 (s2);
++
++  pr65408 *s3 = (pr65408 *) endp - 1;
++  s3->r = 1;
++  s3->g = 2;
++  s3->b = 3;
++  f3 (s3);
++
++  return 0;
++}

@@ -1,0 +1,115 @@
+diff --git a/gcc/fortran/trans-expr.c b/gcc/fortran/trans-expr.c
+index db192929..7b6f8685 100644
+--- a/gcc/fortran/trans-expr.c
++++ b/gcc/fortran/trans-expr.c
+@@ -227,6 +227,8 @@ gfc_trans_init_string_length (gfc_charlen * cl, stmtblock_t * pblock)
+ 
+   gfc_init_se (&se, NULL);
+   gfc_conv_expr_type (&se, cl->length, gfc_charlen_type_node);
++  se.expr = fold_build2 (MAX_EXPR, gfc_charlen_type_node, se.expr,
++			 build_int_cst (gfc_charlen_type_node, 0));
+   gfc_add_block_to_block (pblock, &se.pre);
+ 
+   tmp = cl->backend_decl;
+@@ -2252,6 +2254,8 @@ gfc_conv_function_call (gfc_se * se, gfc_symbol * sym,
+         }
+         else
+         {
++	  tree tmp;
++
+ 	  /* Calculate the length of the returned string.  */
+ 	  gfc_init_se (&parmse, NULL);
+ 	  if (need_interface_mapping)
+@@ -2260,7 +2264,11 @@ gfc_conv_function_call (gfc_se * se, gfc_symbol * sym,
+ 	    gfc_conv_expr (&parmse, sym->ts.cl->length);
+ 	  gfc_add_block_to_block (&se->pre, &parmse.pre);
+ 	  gfc_add_block_to_block (&se->post, &parmse.post);
+-	  cl.backend_decl = fold_convert (gfc_charlen_type_node, parmse.expr);
++	  
++	  tmp = fold_convert (gfc_charlen_type_node, parmse.expr);
++	  tmp = fold_build2 (MAX_EXPR, gfc_charlen_type_node, tmp,
++			     build_int_cst (gfc_charlen_type_node, 0));
++	  cl.backend_decl = tmp;
+ 	}
+ 
+       /* Set up a charlen structure for it.  */
+diff --git a/gcc/testsuite/gfortran.dg/string_length_1.f90 b/gcc/testsuite/gfortran.dg/string_length_1.f90
+new file mode 100644
+index 00000000..50883f01
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/string_length_1.f90
+@@ -0,0 +1,74 @@
++! { dg-do run }
++! Testcase for PR 31203
++! We used to create strings with negative length
++subroutine foo(i)
++  integer :: i
++  character(len=i) :: s(2)
++  if (len(s) < 0) call abort
++  if (len(s) /= max(i,0)) call abort
++end
++
++function gee(i)
++  integer, intent(in) :: i
++  character(len=i) :: gee
++
++  gee = ""
++end function gee
++
++subroutine s1(i,j)
++  character(len=i-j) :: a
++  if (len(a) < 0) call abort()
++end subroutine
++
++program test
++  interface
++    function gee(i)
++      integer, intent(in) :: i
++      character(len=i) :: gee
++    end function gee
++  end interface
++
++  call foo(2)
++  call foo(-1)
++  call s1(1,2)
++  call s1(-1,-8)
++  call s1(-8,-1)
++
++  if (len(gee(2)) /= 2) call abort
++  if (len(gee(-5)) /= 0) call abort
++  if (len(gee(intfunc(3))) /= max(intfunc(3),0)) call abort
++  if (len(gee(intfunc(2))) /= max(intfunc(2),0)) call abort
++
++  if (len(bar(2)) /= 2) call abort
++  if (len(bar(-5)) /= 0) call abort
++  if (len(bar(intfunc(3))) /= max(intfunc(3),0)) call abort
++  if (len(bar(intfunc(2))) /= max(intfunc(2),0)) call abort
++
++  if (cow(bar(2)) /= 2) call abort
++  if (cow(bar(-5)) /= 0) call abort
++  if (cow(bar(intfunc(3))) /= max(intfunc(3),0)) call abort
++  if (cow(bar(intfunc(2))) /= max(intfunc(2),0)) call abort
++
++contains
++
++  function bar(i)
++    integer, intent(in) :: i
++    character(len=i) :: bar
++  
++    bar = ""
++  end function bar
++
++  function cow(c)
++    character(len=*), intent(in) :: c
++    integer :: cow
++    cow = len(c)
++  end function cow
++
++  pure function intfunc(i)
++    integer, intent(in) :: i
++    integer :: intfunc
++
++    intfunc = 2*i-5
++  end function intfunc
++
++end program test

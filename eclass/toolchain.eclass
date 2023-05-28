@@ -302,7 +302,7 @@ if [[ ${PN} != kgcc64 && ${PN} != gcc-* ]] ; then
 
 	# sanitizer support appeared in gcc-4.8, but <gcc-5 does not
 	# support modern glibc.
-    # only >=gcc-8 support sanitizer in >=glibc-2.36
+	# only >=gcc-8 support sanitizer in >=glibc-2.36
 	tc_version_is_at_least 8 && IUSE+=" +sanitize"  TC_FEATURES+=( sanitize )
 
 	# Note:
@@ -742,7 +742,7 @@ toolchain_src_prepare() {
 	fi
 
 	if tc_version_is_between 4.9 10 && ! is_djgpp ; then
-		eapply "${FILESDIR}"/gcc-fix-for-glibc-2_36.patch
+		eapply "${FILESDIR}"/san-fix-for-glibc-2_36.patch
 	fi
 }
 

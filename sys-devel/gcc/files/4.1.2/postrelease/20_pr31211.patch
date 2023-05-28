@@ -1,0 +1,135 @@
+diff --git a/gcc/fortran/trans-array.c b/gcc/fortran/trans-array.c
+index 1afb0814..ec1be0da 100644
+--- a/gcc/fortran/trans-array.c
++++ b/gcc/fortran/trans-array.c
+@@ -1374,6 +1374,21 @@ gfc_trans_array_constructor (gfc_loopinfo * loop, gfc_ss * ss)
+ 
+   /* See if the constructor determines the loop bounds.  */
+   dynamic = false;
++
++  if (ss->expr->shape && loop->dimen > 1 && loop->to[0] == NULL_TREE)
++    {
++      /* We have a multidimensional parameter.  */
++      int n;
++      for (n = 0; n < ss->expr->rank; n++)
++      {
++	loop->from[n] = gfc_index_zero_node;
++	loop->to[n] = gfc_conv_mpz_to_tree (ss->expr->shape [n],
++					    gfc_index_integer_kind);
++	loop->to[n] = fold_build2 (MINUS_EXPR, gfc_array_index_type,
++				   loop->to[n], gfc_index_one_node);
++      }
++    }
++
+   if (loop->to[0] == NULL_TREE)
+     {
+       mpz_t size;
+diff --git a/gcc/fortran/trans-expr.c b/gcc/fortran/trans-expr.c
+index 29fc400a..f3b09fd2 100644
+--- a/gcc/fortran/trans-expr.c
++++ b/gcc/fortran/trans-expr.c
+@@ -2880,6 +2880,19 @@ gfc_conv_expr_reference (gfc_se * se, gfc_expr * expr)
+       return;
+     }
+ 
++  if (expr->expr_type == EXPR_FUNCTION
++	&& expr->symtree->n.sym->attr.pointer
++	&& !expr->symtree->n.sym->attr.dimension)
++    {
++      se->want_pointer = 1;
++      gfc_conv_expr (se, expr);
++      var = gfc_create_var (TREE_TYPE (se->expr), NULL);
++      gfc_add_modify_expr (&se->pre, var, se->expr);
++      se->expr = var;
++      return;
++    }
++
++
+   gfc_conv_expr (se, expr);
+ 
+   /* Create a temporary var to hold the value.  */
+diff --git a/gcc/testsuite/gfortran.dg/actual_pointer_function_1.f90 b/gcc/testsuite/gfortran.dg/actual_pointer_function_1.f90
+new file mode 100644
+index 00000000..6311b567
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/actual_pointer_function_1.f90
+@@ -0,0 +1,33 @@
++! { dg-do run }
++! Tests the fix for PR31211, in which the value of the result for
++! cp_get_default_logger was stored as a temporary, rather than the
++! pointer itself.  This caused a segfault when the result was
++! nullified.
++!
++! Contributed by Joost VandeVondele <jv244@cam.ac.uk>
++!
++  TYPE cp_logger_type
++    INTEGER :: a
++  END TYPE cp_logger_type
++
++  if (cp_logger_log(cp_get_default_logger (0))) call abort ()
++  if (.not. cp_logger_log(cp_get_default_logger (42))) call abort ()
++
++CONTAINS
++
++  logical function cp_logger_log(logger)
++    TYPE(cp_logger_type), POINTER ::logger
++    cp_logger_log = associated (logger) .and. (logger%a .eq. 42)
++  END function
++
++  FUNCTION cp_get_default_logger(v) RESULT(res)
++    TYPE(cp_logger_type), POINTER ::res
++    integer :: v
++    if (v .eq. 0) then
++      NULLIFY(RES)
++    else
++      allocate(RES)
++      res%a = v
++    end if
++  END FUNCTION cp_get_default_logger
++END
+diff --git a/gcc/testsuite/gfortran.dg/scalarize_parameter_array_1.f90 b/gcc/testsuite/gfortran.dg/scalarize_parameter_array_1.f90
+new file mode 100644
+index 00000000..86bc92df
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/scalarize_parameter_array_1.f90
+@@ -0,0 +1,40 @@
++! { dg-do run }
++! Tests the fix for pr32682, in which the scalarization loop variables
++! were not being determined when 'c' came first in an expression.
++!
++! Contributed by Janus Weil <jaydub66@gmail.com>
++!
++program matrix
++
++  implicit none
++  real,dimension(2,2),parameter::c=reshape((/1,2,3,4/),(/2,2/))
++  real,dimension(2,2)::m, n
++
++  m=f()+c
++  if (any (m .ne. reshape((/2,3,4,5/),(/2,2/)))) call abort ()
++  m=c+f()
++  if (any (m .ne. reshape((/2,3,4,5/),(/2,2/)))) call abort ()
++  call sub(m+f())
++  if (any (n .ne. reshape((/3,4,5,6/),(/2,2/)))) call abort ()
++  call sub(c+m)
++  if (any (n .ne. reshape((/3,5,7,9/),(/2,2/)))) call abort ()
++  call sub(f()+c)
++  if (any (n .ne. reshape((/2,3,4,5/),(/2,2/)))) call abort ()
++  call sub(c+f())
++  if (any (n .ne. reshape((/2,3,4,5/),(/2,2/)))) call abort ()
++
++contains
++
++  function f()    
++    implicit none
++    real, dimension(2,2)::f
++    f=1
++  end function f
++
++  subroutine sub(a)
++    implicit none
++    real, dimension(2,2)::a
++    n = a
++  end subroutine sub
++
++end program matrix

@@ -1,0 +1,156 @@
+diff --git a/gcc/expr.c b/gcc/expr.c
+index a32caddd..09ae21f8 100644
+--- a/gcc/expr.c
++++ b/gcc/expr.c
+@@ -2001,6 +2001,7 @@ copy_blkmode_from_reg (rtx tgtblk, rtx srcreg, tree type)
+   rtx src = NULL, dst = NULL;
+   unsigned HOST_WIDE_INT bitsize = MIN (TYPE_ALIGN (type), BITS_PER_WORD);
+   unsigned HOST_WIDE_INT bitpos, xbitpos, padding_correction = 0;
++  enum machine_mode copy_mode;
+ 
+   if (tgtblk == 0)
+     {
+@@ -2034,11 +2035,23 @@ copy_blkmode_from_reg (rtx tgtblk, rtx srcreg, tree type)
+     padding_correction
+       = (BITS_PER_WORD - ((bytes % UNITS_PER_WORD) * BITS_PER_UNIT));
+ 
+-  /* Copy the structure BITSIZE bites at a time.
++  /* Copy the structure BITSIZE bits at a time.  If the target lives in
++     memory, take care of not reading/writing past its end by selecting
++     a copy mode suited to BITSIZE.  This should always be possible given
++     how it is computed.
+ 
+      We could probably emit more efficient code for machines which do not use
+      strict alignment, but it doesn't seem worth the effort at the current
+      time.  */
++
++  copy_mode = word_mode;
++  if (MEM_P (tgtblk))
++    {
++      enum machine_mode mem_mode = mode_for_size (bitsize, MODE_INT, 1);
++      if (mem_mode != BLKmode)
++	copy_mode = mem_mode;
++    }
++
+   for (bitpos = 0, xbitpos = padding_correction;
+        bitpos < bytes * BITS_PER_UNIT;
+        bitpos += bitsize, xbitpos += bitsize)
+@@ -2057,11 +2070,11 @@ copy_blkmode_from_reg (rtx tgtblk, rtx srcreg, tree type)
+ 	dst = operand_subword (tgtblk, bitpos / BITS_PER_WORD, 1, BLKmode);
+ 
+       /* Use xbitpos for the source extraction (right justified) and
+-	 xbitpos for the destination store (left justified).  */
+-      store_bit_field (dst, bitsize, bitpos % BITS_PER_WORD, word_mode,
++	 bitpos for the destination store (left justified).  */
++      store_bit_field (dst, bitsize, bitpos % BITS_PER_WORD, copy_mode,
+ 		       extract_bit_field (src, bitsize,
+ 					  xbitpos % BITS_PER_WORD, 1,
+-					  NULL_RTX, word_mode, word_mode));
++					  NULL_RTX, copy_mode, copy_mode));
+     }
+ 
+   return tgtblk;
+diff --git a/gcc/testsuite/gcc.dg/struct-ret-3.c b/gcc/testsuite/gcc.dg/struct-ret-3.c
+new file mode 100644
+index 00000000..4a603cbe
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/struct-ret-3.c
+@@ -0,0 +1,98 @@
++/* PR middle-end/31309 */
++/* Origin: Peeter Joot <peeterj@ca.ibm.com> */
++
++/* { dg-do run { target *-*-linux* } } */
++
++#include <sys/mman.h>
++#include <string.h>
++#include <stdio.h>
++#include <errno.h>
++
++unsigned long ossAlignX(unsigned long i, unsigned long X)
++{
++   return ((i + (X - 1)) & ~(unsigned long) (X - 1));
++}
++
++struct STRUCT_6_BYTES
++{
++   unsigned char slot[sizeof(unsigned short)];
++   unsigned char page[sizeof(unsigned int)];
++};
++
++struct SQLU_DICT_INFO_0
++{
++   void *pBlah;
++   char bSomeFlag1;
++   char bSomeFlag2;
++   struct STRUCT_6_BYTES dRID;
++};
++
++struct SQLU_DATAPART_0
++{
++   struct SQLU_DICT_INFO_0 *pDictRidderInfo;
++};
++
++struct XXX
++{
++   struct SQLU_DATAPART_0 *m_pDatapart;
++};
++
++struct STRUCT_6_BYTES INIT_6_BYTES_ZERO()
++{
++   struct STRUCT_6_BYTES ridOut = {{0,0}, {0,0,0,0}};
++   return ridOut;
++}
++
++void Initialize(struct XXX *this, int iIndex)
++{
++   struct SQLU_DICT_INFO_0 *pDictRidderInfo
++     = this->m_pDatapart[iIndex].pDictRidderInfo;
++   pDictRidderInfo->bSomeFlag1 = 0;
++   pDictRidderInfo->bSomeFlag2 = 0;
++   pDictRidderInfo->dRID = INIT_6_BYTES_ZERO();
++}
++
++int main(void)
++{
++   int rc;
++
++   struct stuff
++   {
++      char c0[4096-sizeof(struct XXX)];
++      struct XXX o;
++      char c1[4096*2-sizeof(struct SQLU_DATAPART_0)];
++      struct SQLU_DATAPART_0 dp;
++      char c2[4096*2-sizeof(struct SQLU_DICT_INFO_0)];
++      struct SQLU_DICT_INFO_0 di;
++      char c3[4096];
++   };
++
++   char buf[sizeof(struct stuff)+4096];
++   struct stuff *u = (struct stuff *)ossAlignX((unsigned long)&buf[0], 4096);
++   memset(u, 1, sizeof(struct stuff));
++   u->c1[0] = '\xAA';
++   u->c2[0] = '\xBB';
++   u->c3[0] = '\xCC';
++
++   rc = mprotect(u->c1, 4096, PROT_NONE);
++   if (rc == -1)
++      printf("mprotect:c1: %d: %d(%s)\n", rc, errno, strerror(errno));
++
++   rc = mprotect(u->c2, 4096, PROT_NONE);
++   if (rc == -1)
++      printf("mprotect:c2: %d: %d(%s)\n", rc, errno, strerror(errno));
++
++   rc = mprotect(u->c3, 4096, PROT_NONE);
++   if (rc == -1)
++      printf("mprotect:c3: %d: %d(%s)\n", rc, errno, strerror(errno));
++
++   u->o.m_pDatapart = &u->dp;
++   u->dp.pDictRidderInfo = &u->di;
++   Initialize(&u->o, 0);
++
++   mprotect(u->c1, 4096, PROT_READ|PROT_WRITE);
++   mprotect(u->c2, 4096, PROT_READ|PROT_WRITE);
++   mprotect(u->c3, 4096, PROT_READ|PROT_WRITE);
++
++   return 0;
++}

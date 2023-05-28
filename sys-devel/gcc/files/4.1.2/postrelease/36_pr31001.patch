@@ -1,0 +1,99 @@
+diff --git a/gcc/config/rs6000/rs6000.c b/gcc/config/rs6000/rs6000.c
+index c775552b..db7f5e1e 100644
+--- a/gcc/config/rs6000/rs6000.c
++++ b/gcc/config/rs6000/rs6000.c
+@@ -18991,14 +18991,14 @@ rs6000_function_value (tree valtype, tree func ATTRIBUTE_UNUSED)
+ 						   GP_ARG_RETURN + 3),
+ 				      GEN_INT (12))));
+     }
+-  if ((INTEGRAL_TYPE_P (valtype)
+-       && TYPE_PRECISION (valtype) < BITS_PER_WORD)
++  mode = TYPE_MODE (valtype);
++  if ((INTEGRAL_TYPE_P (valtype) && GET_MODE_BITSIZE (mode) < BITS_PER_WORD)
+       || POINTER_TYPE_P (valtype))
+     mode = TARGET_32BIT ? SImode : DImode;
+-  else
+-    mode = TYPE_MODE (valtype);
+ 
+-  if (SCALAR_FLOAT_TYPE_P (valtype) && TARGET_HARD_FLOAT && TARGET_FPRS)
++  if (DECIMAL_FLOAT_MODE_P (mode))
++    regno = GP_ARG_RETURN;
++  else if (SCALAR_FLOAT_TYPE_P (valtype) && TARGET_HARD_FLOAT && TARGET_FPRS)
+     regno = FP_ARG_RETURN;
+   else if (TREE_CODE (valtype) == COMPLEX_TYPE
+ 	   && targetm.calls.split_complex_arg)
+diff --git a/gcc/testsuite/gfortran.dg/logical_3.f90 b/gcc/testsuite/gfortran.dg/logical_3.f90
+new file mode 100644
+index 00000000..f4d069e9
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/logical_3.f90
+@@ -0,0 +1,10 @@
++! { dg-do compile }
++! This checks the fix for PR30406.
++!
++! Contributed by Francois-Xavier Coudert <fxcoudert@gcc.gnu.org>
++!===============================================================
++
++function f()
++  logical(8) :: f
++  f = .false._8
++end function f
+diff --git a/gcc/testsuite/gfortran.dg/zero_sized_3.f90 b/gcc/testsuite/gfortran.dg/zero_sized_3.f90
+new file mode 100644
+index 00000000..e4e1c06d
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/zero_sized_3.f90
+@@ -0,0 +1,20 @@
++! { dg-do run }
++! Testcase for PR libfortran/31001
++  implicit none
++
++  integer :: i, j, k
++  integer, allocatable :: mm(:)
++  logical, allocatable :: mask(:)
++
++  do i = 2, -2, -1
++    do k = 0, 1
++      allocate (mm(i), mask(i))
++      mm(:) = k
++      mask(:) = (mm == 0)
++      j = count (mask)
++      print *, pack (mm, mask)
++      if (size (pack (mm, mask)) /= j) call abort
++      deallocate (mm, mask)
++    end do
++  end do
++end
+diff --git a/libgfortran/intrinsics/pack_generic.c b/libgfortran/intrinsics/pack_generic.c
+index bfcd6096..7bda4e74 100644
+--- a/libgfortran/intrinsics/pack_generic.c
++++ b/libgfortran/intrinsics/pack_generic.c
+@@ -93,15 +93,19 @@ pack_internal (gfc_array_char *ret, const gfc_array_char *array,
+ 
+   index_type count[GFC_MAX_DIMENSIONS];
+   index_type extent[GFC_MAX_DIMENSIONS];
++  int zero_sized;
+   index_type n;
+   index_type dim;
+   index_type nelem;
+ 
+   dim = GFC_DESCRIPTOR_RANK (array);
++  zero_sized = 0;
+   for (n = 0; n < dim; n++)
+     {
+       count[n] = 0;
+       extent[n] = array->dim[n].ubound + 1 - array->dim[n].lbound;
++      if (extent[n] <= 0)
++       zero_sized = 1;
+       sstride[n] = array->dim[n].stride * size;
+       mstride[n] = mask->dim[n].stride;
+     }
+@@ -154,6 +158,8 @@ pack_internal (gfc_array_char *ret, const gfc_array_char *array,
+ 	  const GFC_LOGICAL_4 *m = mptr;
+ 
+ 	  total = 0;
++	  if (zero_sized)
++	    m = NULL;
+ 
+ 	  while (m)
+ 	    {

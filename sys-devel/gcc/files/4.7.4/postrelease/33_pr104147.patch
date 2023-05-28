@@ -1,0 +1,50 @@
+diff --git a/gcc/testsuite/c-c++-common/cpp/pr104147.c b/gcc/testsuite/c-c++-common/cpp/pr104147.c
+new file mode 100644
+index 000000000..4ee237ed6
+--- /dev/null
++++ b/gcc/testsuite/c-c++-common/cpp/pr104147.c
+@@ -0,0 +1,27 @@
++/* PR preprocessor/104147 */
++/* { dg-do run } */
++
++#define X(x,y) 	x y
++#define STR_(x) #x
++#define STR(x) 	STR_(x)
++const char *str =
++STR(X(Y,Y))
++#define Y()
++STR(X(Y,Y))
++#undef Y
++STR(X(Y,Y))
++#define Y()
++STR(X(Y,Y))
++STR(X(Y,
++Y))
++STR(X(Y
++,Y))
++;
++
++int
++main ()
++{
++  if (__builtin_strcmp (str, "Y YY YY YY YY YY Y") != 0)
++    __builtin_abort ();
++  return 0;
++}
+diff --git a/libcpp/macro.c b/libcpp/macro.c
+index 54de3e3fc..63f7e2971 100644
+--- a/libcpp/macro.c
++++ b/libcpp/macro.c
+@@ -933,8 +933,11 @@ funlike_invocation_p (cpp_reader *pfile, cpp_hashnode *node,
+       token = cpp_get_token (pfile);
+       if (token->type != CPP_PADDING)
+ 	break;
++      if ((token->flags & PREV_WHITE) != 0) abort();
+       if (padding == NULL
+-	  || (!(padding->flags & PREV_WHITE) && token->val.source == NULL))
++	  || padding->val.source == NULL
++	  || (!(padding->val.source->flags & PREV_WHITE)
++	      && token->val.source == NULL))
+ 	padding = token;
+     }
+ 

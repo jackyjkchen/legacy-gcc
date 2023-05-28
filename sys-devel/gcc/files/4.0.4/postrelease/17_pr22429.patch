@@ -1,0 +1,49 @@
+diff --git a/gcc/fold-const.c b/gcc/fold-const.c
+index d39d43a7..8b22c81d 100644
+--- a/gcc/fold-const.c
++++ b/gcc/fold-const.c
+@@ -3941,7 +3941,8 @@ build_range_check (tree type, tree exp, int in_p, tree low, tree high)
+     }
+ 
+   value = const_binop (MINUS_EXPR, high, low, 0);
+-  if (value != 0 && TREE_OVERFLOW (value) && ! TYPE_UNSIGNED (etype))
++  if (value != 0 && (!flag_wrapv || TREE_OVERFLOW (value))
++      && ! TYPE_UNSIGNED (etype))
+     {
+       tree utype, minv, maxv;
+ 
+@@ -3952,6 +3953,11 @@ build_range_check (tree type, tree exp, int in_p, tree low, tree high)
+ 	case INTEGER_TYPE:
+ 	case ENUMERAL_TYPE:
+ 	case CHAR_TYPE:
++	  /* There is no requirement that LOW be within the range of ETYPE
++	     if the latter is a subtype.  It must, however, be within the base
++	     type of ETYPE.  So be sure we do the subtraction in that type.  */
++	  if (TREE_TYPE (etype))
++	    etype = TREE_TYPE (etype);
+ 	  utype = lang_hooks.types.unsigned_type (etype);
+ 	  maxv = fold_convert (utype, TYPE_MAX_VALUE (etype));
+ 	  maxv = range_binop (PLUS_EXPR, NULL_TREE, maxv, 1,
+diff --git a/gcc/testsuite/gcc.c-torture/execute/pr22429.c b/gcc/testsuite/gcc.c-torture/execute/pr22429.c
+new file mode 100644
+index 00000000..aa55b6e8
+--- /dev/null
++++ b/gcc/testsuite/gcc.c-torture/execute/pr22429.c
+@@ -0,0 +1,17 @@
++extern void abort (void);
++
++#define N	(1 << (sizeof(int) * __CHAR_BIT__ - 2))
++
++int f(int n)
++{
++  if (-N <= n && n <= N-1)
++    return 1;
++  return 0;
++}
++
++int main ()
++{
++  if (f (N))
++    abort ();
++  return 0;
++}

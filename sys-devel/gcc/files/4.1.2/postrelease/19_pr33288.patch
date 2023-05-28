@@ -1,0 +1,84 @@
+diff --git a/gcc/fortran/arith.c b/gcc/fortran/arith.c
+index c99c5249..81259724 100644
+--- a/gcc/fortran/arith.c
++++ b/gcc/fortran/arith.c
+@@ -1316,7 +1316,8 @@ reduce_unary (arith (*eval) (gfc_expr *, gfc_expr **), gfc_expr * op,
+ 
+   for (c = head; c; c = c->next)
+     {
+-      rc = eval (c->expr, &r);
++      rc = reduce_unary (eval, c->expr, &r);
++
+       if (rc != ARITH_OK)
+ 	break;
+ 
+@@ -1357,7 +1358,11 @@ reduce_binary_ac (arith (*eval) (gfc_expr *, gfc_expr *, gfc_expr **),
+ 
+   for (c = head; c; c = c->next)
+     {
+-      rc = eval (c->expr, op2, &r);
++      if (c->expr->expr_type == EXPR_CONSTANT)
++        rc = eval (c->expr, op2, &r);
++      else
++	rc = reduce_binary_ac (eval, c->expr, op2, &r);
++
+       if (rc != ARITH_OK)
+ 	break;
+ 
+@@ -1398,7 +1403,11 @@ reduce_binary_ca (arith (*eval) (gfc_expr *, gfc_expr *, gfc_expr **),
+ 
+   for (c = head; c; c = c->next)
+     {
+-      rc = eval (op1, c->expr, &r);
++      if (c->expr->expr_type == EXPR_CONSTANT)
++	rc = eval (op1, c->expr, &r);
++      else
++	rc = reduce_binary_ca (eval, op1, c->expr, &r);
++
+       if (rc != ARITH_OK)
+ 	break;
+ 
+@@ -1425,6 +1434,11 @@ reduce_binary_ca (arith (*eval) (gfc_expr *, gfc_expr *, gfc_expr **),
+ }
+ 
+ 
++/* We need a forward declaration of reduce_binary.  */
++static arith reduce_binary (arith (*eval) (gfc_expr *, gfc_expr *, gfc_expr **),
++			    gfc_expr *op1, gfc_expr *op2, gfc_expr **result);
++
++
+ static arith
+ reduce_binary_aa (arith (*eval) (gfc_expr *, gfc_expr *, gfc_expr **),
+ 		  gfc_expr * op1, gfc_expr * op2,
+@@ -1453,7 +1467,7 @@ reduce_binary_aa (arith (*eval) (gfc_expr *, gfc_expr *, gfc_expr **),
+ 	      break;
+ 	    }
+ 
+-	  rc = eval (c->expr, d->expr, &r);
++	  rc = reduce_binary (eval, c->expr, d->expr, &r);
+ 	  if (rc != ARITH_OK)
+ 	    break;
+ 
+diff --git a/gcc/testsuite/gfortran.dg/array_constructor_19.f90 b/gcc/testsuite/gfortran.dg/array_constructor_19.f90
+new file mode 100644
+index 00000000..460a34f5
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/array_constructor_19.f90
+@@ -0,0 +1,17 @@
++! Simplification of unary and binary expressions containing
++! array constructors.
++!
++! See PR33288
++!
++! { dg-do run }
++  real, parameter :: x(1) = 42
++  real, parameter :: x1(1) = (/ x /) + 1
++  real, parameter :: x2(1) = 1 + (/ x /)
++  real, parameter :: x3(1) = -(/ x /)
++  real, parameter :: x4(2) = (/ x, 1. /) + (/ 2, (/3/) /)
++
++  if (any (x1 /= (/43./))) call abort
++  if (any (x2 /= (/43./))) call abort
++  if (any (x3 /= (/-42./))) call abort
++  if (any (x4 /= (/44., 4./))) call abort
++end

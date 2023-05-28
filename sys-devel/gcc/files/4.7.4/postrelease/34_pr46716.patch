@@ -1,0 +1,78 @@
+diff --git a/gcc/config/i386/i386.c b/gcc/config/i386/i386.c
+index b39ec9dea..56366e1b4 100644
+--- a/gcc/config/i386/i386.c
++++ b/gcc/config/i386/i386.c
+@@ -6344,21 +6344,27 @@ construct_container (enum machine_mode mode, enum machine_mode orig_mode,
+       default:
+ 	gcc_unreachable ();
+       }
+-  if (n == 2 && regclass[0] == X86_64_SSE_CLASS
+-      && regclass[1] == X86_64_SSEUP_CLASS && mode != BLKmode)
+-    return gen_rtx_REG (mode, SSE_REGNO (sse_regno));
++  if (n == 2
++      && regclass[0] == X86_64_SSE_CLASS
++      && regclass[1] == X86_64_SSEUP_CLASS
++      && mode != BLKmode)
++    return gen_reg_or_parallel (mode, orig_mode,
++				SSE_REGNO (sse_regno));
+   if (n == 4
+       && regclass[0] == X86_64_SSE_CLASS
+       && regclass[1] == X86_64_SSEUP_CLASS
+       && regclass[2] == X86_64_SSEUP_CLASS
+       && regclass[3] == X86_64_SSEUP_CLASS
+       && mode != BLKmode)
+-    return gen_rtx_REG (mode, SSE_REGNO (sse_regno));
+-
++    return gen_reg_or_parallel (mode, orig_mode,
++				SSE_REGNO (sse_regno));
+   if (n == 2
+-      && regclass[0] == X86_64_X87_CLASS && regclass[1] == X86_64_X87UP_CLASS)
++      && regclass[0] == X86_64_X87_CLASS
++      && regclass[1] == X86_64_X87UP_CLASS)
+     return gen_rtx_REG (XFmode, FIRST_STACK_REG);
+-  if (n == 2 && regclass[0] == X86_64_INTEGER_CLASS
++
++  if (n == 2
++      && regclass[0] == X86_64_INTEGER_CLASS
+       && regclass[1] == X86_64_INTEGER_CLASS
+       && (mode == CDImode || mode == TImode)
+       && intreg[0] + 1 == intreg[1])
+diff --git a/gcc/testsuite/gcc.target/i386/pr46716.c b/gcc/testsuite/gcc.target/i386/pr46716.c
+new file mode 100644
+index 000000000..29c5e1e49
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/i386/pr46716.c
+@@ -0,0 +1,33 @@
++/* { dg-do run } */
++/* { dg-options "-O2 -msse -mno-sse2" } */
++/* { dg-require-effective-target sse } */
++
++#include "sse-check.h"
++
++typedef double V __attribute__ ((__vector_size__ (16), __may_alias__));
++typedef union
++{
++  V x;
++  double a[2];
++} u;
++
++#define EMM_FLT8(a) ((double *)&(a))
++
++void __attribute__ ((noinline))
++test (V s1, V s2)
++{
++  if (EMM_FLT8(s1)[0] != EMM_FLT8(s2)[0]
++      || EMM_FLT8(s1)[1] != EMM_FLT8(s2)[1])
++    abort ();
++}
++
++static void
++sse_test (void)
++{
++  u s1;
++
++  s1.a[0] = 1.0;
++  s1.a[1] = 2.0;
++
++  test (s1.x, s1.x);
++}

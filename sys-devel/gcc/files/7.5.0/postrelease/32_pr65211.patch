@@ -1,0 +1,41 @@
+diff --git a/gcc/cp/pt.c b/gcc/cp/pt.c
+index 76893b38d..628cd47a4 100644
+--- a/gcc/cp/pt.c
++++ b/gcc/cp/pt.c
+@@ -13092,6 +13092,13 @@ tsubst_decl (tree t, tree args, tsubst_flags_t complain)
+ 	  {
+ 	    DECL_ORIGINAL_TYPE (r) = NULL_TREE;
+ 	    set_underlying_type (r);
++
++	    /* common_handle_aligned_attribute doesn't apply the alignment
++	       to DECL_ORIGINAL_TYPE.  */
++	    if (TYPE_USER_ALIGN (TREE_TYPE (t)))
++	      TREE_TYPE (r) = build_aligned_type (TREE_TYPE (r),
++						  TYPE_ALIGN (TREE_TYPE (t)));
++
+ 	    if (TYPE_DECL_ALIAS_P (r))
+ 	      /* An alias template specialization can be dependent
+ 		 even if its underlying type is not.  */
+diff --git a/gcc/testsuite/g++.target/i386/vec-tmpl1.C b/gcc/testsuite/g++.target/i386/vec-tmpl1.C
+new file mode 100644
+index 000000000..e0865e351
+--- /dev/null
++++ b/gcc/testsuite/g++.target/i386/vec-tmpl1.C
+@@ -0,0 +1,17 @@
++// PR c++/65211
++// { dg-additional-options "-Wno-psabi" }
++// { dg-final { scan-assembler-not "movdqa" } }
++
++typedef unsigned v4ui __attribute__ ((vector_size(16), aligned (16)));
++
++template<int I>
++static v4ui t1(unsigned *dest_data)
++{
++  typedef unsigned v4ui_1 __attribute__ ((vector_size (16), aligned (4)));
++  return ((const v4ui_1*)dest_data)[0];
++}
++
++v4ui f(unsigned int *array)
++{
++    return t1<1>(array+7);
++}

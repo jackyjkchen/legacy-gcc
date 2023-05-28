@@ -1,0 +1,97 @@
+diff --git a/gcc/cp/decl.c b/gcc/cp/decl.c
+index 61b12863..1fa2f5e5 100644
+--- a/gcc/cp/decl.c
++++ b/gcc/cp/decl.c
+@@ -4992,7 +4992,15 @@ cp_finish_decl (tree decl, tree init, bool init_const_expr_p,
+ 	     initializer.  It is not legal to redeclare a static data
+ 	     member, so this issue does not arise in that case.  */
+ 	  if (var_definition_p && TREE_STATIC (decl))
+-	    expand_static_init (decl, init); 
++            {
++              if (init)
++                {
++                  if (TREE_READONLY (decl))
++                      TREE_READONLY (decl) = 0;
++                  was_readonly = 0;
++                }
++	      expand_static_init (decl, init);
++            }
+ 	} 
+     }
+ 
+diff --git a/gcc/testsuite/g++.dg/opt/static5.C b/gcc/testsuite/g++.dg/opt/static5.C
+new file mode 100644
+index 00000000..1daca6d7
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/opt/static5.C
+@@ -0,0 +1,29 @@
++// PR c++/31809
++// { dg-do run }
++// { dg-options "-O2" }
++
++struct S
++{
++  unsigned v;
++  static inline S f (unsigned a);
++};
++
++inline S
++S::f (unsigned a)
++{
++  static S t = { a };
++  return t;
++}
++
++const static S s = S::f (26);
++
++extern "C" void abort (void);
++
++int
++main ()
++{
++  S t = s;
++  if (t.v != 26)
++    abort ();
++  return 0;
++}
+diff --git a/gcc/testsuite/g++.dg/opt/static6.C b/gcc/testsuite/g++.dg/opt/static6.C
+new file mode 100644
+index 00000000..00e76fb7
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/opt/static6.C
+@@ -0,0 +1,35 @@
++// PR c++/31806
++// { dg-do run }
++// { dg-options "-O2 -fno-inline -fno-threadsafe-statics" }
++
++extern "C" void abort(void);
++
++struct A
++{
++    void *d;
++};
++
++static const A& staticA()
++{
++    static A s_static;
++    return s_static;
++}
++
++void assert_failed()
++{
++    abort();
++}
++
++A testMethod()
++{
++    static const A& s = staticA( );
++    if (&s == 0)
++        assert_failed();
++    return s;
++}
++
++int main()
++{
++    testMethod();
++    return 0;
++}

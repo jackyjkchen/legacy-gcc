@@ -1,0 +1,47 @@
+diff --git a/gcc/cp/init.c b/gcc/cp/init.c
+index 7ce08811..a7f73b86 100644
+--- a/gcc/cp/init.c
++++ b/gcc/cp/init.c
+@@ -200,7 +200,7 @@ build_zero_init (tree type, tree nelts, bool static_storage_p)
+ 	     corresponding to base classes as well.  Thus, iterating
+ 	     over TYPE_FIELDs will result in correct initialization of
+ 	     all of the subobjects.  */
+-	  if (static_storage_p && !zero_init_p (TREE_TYPE (field)))
++	  if (!static_storage_p || !zero_init_p (TREE_TYPE (field)))
+ 	    inits = tree_cons (field, 
+ 			       build_zero_init (TREE_TYPE (field),
+ 						/*nelts=*/NULL_TREE,
+diff --git a/gcc/cp/typeck2.c b/gcc/cp/typeck2.c
+index b78c6f23..af39a925 100644
+--- a/gcc/cp/typeck2.c
++++ b/gcc/cp/typeck2.c
+@@ -1419,7 +1419,9 @@ build_functional_cast (tree exp, tree parms)
+   if (parms == NULL_TREE && !TYPE_NEEDS_CONSTRUCTING (type)
+       && TYPE_HAS_DEFAULT_CONSTRUCTOR (type))
+     {
+-      exp = build_constructor (type, NULL_TREE);
++      exp = build_zero_init (type, 
++			     /*nelts=*/NULL_TREE,
++			     /*static_storage_p=*/false);
+       return get_target_expr (exp);
+     }
+ 
+diff --git a/gcc/testsuite/g++.dg/init/ptrmem4.C b/gcc/testsuite/g++.dg/init/ptrmem4.C
+new file mode 100644
+index 00000000..44ab8cf6
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/init/ptrmem4.C
+@@ -0,0 +1,13 @@
++// PR c++/32245
++// { dg-do run } 
++
++struct foo {
++  int mem1;
++  int foo::* mem2;
++};
++
++int main () {
++  foo x = { 0 } ;
++  if (x.mem2 != foo().mem2)
++    return 1;
++}

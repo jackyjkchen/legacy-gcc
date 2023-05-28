@@ -1,0 +1,98 @@
+diff --git a/gcc/c-typeck.c b/gcc/c-typeck.c
+index 09aa0de8..0ad4b90f 100644
+--- a/gcc/c-typeck.c
++++ b/gcc/c-typeck.c
+@@ -452,6 +452,7 @@ common_pointer_type (tree t1, tree t2)
+   tree pointed_to_1, mv1;
+   tree pointed_to_2, mv2;
+   tree target;
++  unsigned target_quals;
+ 
+   /* Save time if the two types are the same.  */
+ 
+@@ -479,10 +480,15 @@ common_pointer_type (tree t1, tree t2)
+   if (TREE_CODE (mv2) != ARRAY_TYPE)
+     mv2 = TYPE_MAIN_VARIANT (pointed_to_2);
+   target = composite_type (mv1, mv2);
+-  t1 = build_pointer_type (c_build_qualified_type
+-			   (target,
+-			    TYPE_QUALS (pointed_to_1) |
+-			    TYPE_QUALS (pointed_to_2)));
++
++  /* For function types do not merge const qualifiers, but drop them
++     if used inconsistently.  The middle-end uses these to mark const
++     and noreturn functions.  */
++  if (TREE_CODE (pointed_to_1) == FUNCTION_TYPE)
++    target_quals = TYPE_QUALS (pointed_to_1) & TYPE_QUALS (pointed_to_2);
++  else
++    target_quals = TYPE_QUALS (pointed_to_1) | TYPE_QUALS (pointed_to_2);
++  t1 = build_pointer_type (c_build_qualified_type (target, target_quals));
+   return build_type_attribute_variant (t1, attributes);
+ }
+ 
+diff --git a/gcc/testsuite/gcc.c-torture/execute/pr34768-1.c b/gcc/testsuite/gcc.c-torture/execute/pr34768-1.c
+new file mode 100644
+index 00000000..eb16adbf
+--- /dev/null
++++ b/gcc/testsuite/gcc.c-torture/execute/pr34768-1.c
+@@ -0,0 +1,26 @@
++int x;
++
++void __attribute__((noinline)) foo (void)
++{
++  x = -x;
++}
++void __attribute__((const,noinline)) bar (void)
++{
++}
++
++int __attribute__((noinline))
++test (int c)
++{
++  int tmp = x;
++  (c ? foo : bar) ();
++  return tmp + x;
++}
++
++extern void abort (void);
++int main()
++{
++  x = 1;
++  if (test (1) != 0)
++    abort ();
++  return 0;
++}
+diff --git a/gcc/testsuite/gcc.c-torture/execute/pr34768-2.c b/gcc/testsuite/gcc.c-torture/execute/pr34768-2.c
+new file mode 100644
+index 00000000..917bf9e2
+--- /dev/null
++++ b/gcc/testsuite/gcc.c-torture/execute/pr34768-2.c
+@@ -0,0 +1,28 @@
++int x;
++
++int __attribute__((noinline)) foo (void)
++{
++  x = -x;
++  return 0;
++}
++int __attribute__((const,noinline)) bar (void)
++{
++  return 0;
++}
++
++int __attribute__((noinline))
++test (int c)
++{
++  int tmp = x;
++  int res = (c ? foo : bar) ();
++  return tmp + x + res;
++}
++
++extern void abort (void);
++int main()
++{
++  x = 1;
++  if (test (1) != 0)
++    abort ();
++  return 0;
++}

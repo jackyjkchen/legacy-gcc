@@ -1,0 +1,76 @@
+diff --git a/gcc/testsuite/gcc.dg/pr16194.c b/gcc/testsuite/gcc.dg/pr16194.c
+index 44f34a41..eeb779eb 100644
+--- a/gcc/testsuite/gcc.dg/pr16194.c
++++ b/gcc/testsuite/gcc.dg/pr16194.c
+@@ -2,6 +2,7 @@
+ /* { dg-options "-O" } */
+ /* { dg-bogus "internal compiler error" "ICE" { target *-*-* } 0 } */
+ 
++#undef SKIP
+ #define ASMDECL __asm (REG);
+ #define CLOBBER_LIST : REG
+ #define INP_CLOBBER_LIST : CLOBBER_LIST
+@@ -18,17 +19,15 @@
+ # define REG "6"
+ #elif defined (__x86_64__)
+ # define REG "rax"
++#elif defined (__m68k__)
++# define REG "%d0"
+ #else
+-  /* Make this test harmless for any target not recognized above.  */
+-# undef ASMDECL
+-# define ASMDECL
+-# define REG "conflict"
+-# undef CLOBBER_LIST
+-# define CLOBBER_LIST
+-# undef INP_CLOBBER_LIST
+-# define INP_CLOBBER_LIST
++/* Make this test harmless for any target not recognized above.  */
++# define SKIP 1
+ #endif
+ 
++#ifndef SKIP
++
+ struct A
+ {
+   int a;
+@@ -47,7 +46,7 @@ struct C
+ void bug (void)
+ {
+   register char* dst ASMDECL;
+-  __asm__ ("":"=g"(*dst): : REG); /* { dg-error "conflict" } */
++  __asm__ ("":"=g"(*dst): : REG);
+ }
+ 
+ /* The tree optimizers currently prevent us from finding an overlap -
+@@ -65,3 +64,13 @@ foo (void)
+   register struct C *dst ASMDECL;
+   __asm__ ("" : "=g"(dst->c.b[1].a) INP_CLOBBER_LIST);
+ }
++
++#else
++
++int main ()
++{
++  return 0;
++}
++
++#endif
++
+diff --git a/gcc/tree-outof-ssa.c b/gcc/tree-outof-ssa.c
+index 0c2b693b..31d222b3 100644
+--- a/gcc/tree-outof-ssa.c
++++ b/gcc/tree-outof-ssa.c
+@@ -1570,6 +1570,12 @@ check_replaceable (temp_expr_table_p tab, tree stmt)
+   if (flag_float_store && FLOAT_TYPE_P (TREE_TYPE (TREE_OPERAND (stmt, 1))))
+     return false;
+ 
++  /* An assignment with a register variable on the RHS is not
++     replaceable.  */
++  if (TREE_CODE (TREE_OPERAND (stmt, 1)) == VAR_DECL
++     && DECL_HARD_REGISTER (TREE_OPERAND (stmt, 1)))
++   return false;
++
+   /* No function calls can be replaced.  */
+   if ((call_expr = get_call_expr_in (stmt)) != NULL_TREE)
+     return false;

@@ -1,0 +1,57 @@
+diff --git a/gcc/gimplify.c b/gcc/gimplify.c
+index ce1d3b03..e854eec1 100644
+--- a/gcc/gimplify.c
++++ b/gcc/gimplify.c
+@@ -306,6 +306,13 @@ find_single_pointer_decl_1 (tree *tp, int *walk_subtrees ATTRIBUTE_UNUSED,
+ {
+   tree *pdecl = (tree *) data;
+ 
++  /* We are only looking for pointers at the same level as the
++     original tree; we must not look through any indirections.
++     Returning anything other than NULL_TREE will cause the caller to
++     not find a base.  */
++  if (REFERENCE_CLASS_P (*tp))
++    return *tp;
++
+   if (DECL_P (*tp) && POINTER_TYPE_P (TREE_TYPE (*tp)))
+     {
+       if (*pdecl)
+@@ -321,8 +328,9 @@ find_single_pointer_decl_1 (tree *tp, int *walk_subtrees ATTRIBUTE_UNUSED,
+   return NULL_TREE;
+ }
+ 
+-/* Find the single DECL of pointer type in the tree T and return it.
+-   If there are zero or more than one such DECLs, return NULL.  */
++/* Find the single DECL of pointer type in the tree T, used directly
++   rather than via an indirection, and return it.  If there are zero
++   or more than one such DECLs, return NULL.  */
+ 
+ static tree
+ find_single_pointer_decl (tree t)
+diff --git a/gcc/testsuite/gcc.c-torture/execute/20080506-2.c b/gcc/testsuite/gcc.c-torture/execute/20080506-2.c
+new file mode 100644
+index 00000000..d2fac713
+--- /dev/null
++++ b/gcc/testsuite/gcc.c-torture/execute/20080506-2.c
+@@ -0,0 +1,21 @@
++/* PR middle-end/36013 */
++
++extern void abort (void);
++
++void __attribute__((noinline))
++foo (int **__restrict p, int **__restrict q)
++{
++  *p[0] = 1;
++  *q[0] = 2;
++  if (*p[0] != 2)
++    abort ();
++}
++
++int
++main (void)
++{
++  int a;
++  int *p1 = &a, *p2 = &a;
++  foo (&p1, &p2);
++  return 0;
++}
