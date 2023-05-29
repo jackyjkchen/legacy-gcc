@@ -273,9 +273,17 @@ downgrade_arch_flags() {
 
 	strip-unsupported-flags
 
-	if ! tc_version_is_at_least 2.8 ${bver} ; then
-		filter-flags '-mtune=*' '-march=*' '-mcpu=*' '-m*' '-mno-*'
-		tc_version_is_at_least 2.0 ${bver} && append-flags -m486
+	if ! tc_version_is_at_least 2.9 ${bver} ; then
+		strip-flags
+		CFLAGS="-O2 -pipe"
+		CXXFLAGS="-O2 -pipe"
+		FFLAGS="-O2 -pipe"
+		FCFLAGS="-O2 -pipe"
+		if tc_version_is_at_least 2.8 ${bver} ; then
+			append-flags -march=i686
+		elif tc_version_is_at_least 2.0 ${bver} ; then
+			append-flags -m486
+		fi
 		return 0
 	fi
 }

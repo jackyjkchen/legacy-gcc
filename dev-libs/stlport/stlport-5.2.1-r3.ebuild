@@ -47,6 +47,7 @@ src_prepare() {
 src_configure() {
 	pushd "${S}" > /dev/null
 	downgrade_arch_flags 2.95.3
+	strip-flags
 	popd > /dev/null
 }
 
