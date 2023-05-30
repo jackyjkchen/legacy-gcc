@@ -63,7 +63,7 @@ src_configure() {
 
 src_compile() {
 	pushd "${WORKDIR}"/build > /dev/null
-	emake -j1 CC="${CC}" CXX="${CXX}" CFLAGS="${CFLAGS}" CXXFLAGS="${CXXFLAGS}" AR="${CHOST}-ar" RANLIB="${CHOST}-ranlib" NM="${CHOST}-nm" || die "failed to run make"
+	emake CC="${CC}" CXX="${CXX}" CFLAGS="${CFLAGS}" CXXFLAGS="${CXXFLAGS}" AR="${CHOST}-ar" RANLIB="${CHOST}-ranlib" NM="${CHOST}-nm" || die "failed to run make"
 	popd > /dev/null
 }
 
