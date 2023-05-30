@@ -33,6 +33,7 @@ src_prepare() {
 	[[ $(tc-arch) == "sh" ]] && eapply "${FILESDIR}"/${PV}/03_sh4-fix-build.patch
 	[[ $(tc-arch) == "hppa" ]] && eapply "${FILESDIR}"/${PV}/04_hppa-fix-build.patch
 	[[ $(tc-arch) == "mips" && ${DEFAULT_ABI} == "n64" ]] && eapply "${FILESDIR}"/${PV}/05_mips64-default-n64-abi.patch
+	eapply "${FILESDIR}"/${PV}/06_backport-static-libstdc++-option.patch
 
 	eapply "${FILESDIR}"/${PV}/postrelease/00_pr33619.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/01_pr36013.patch

@@ -39,6 +39,7 @@ src_prepare() {
 	[[ $(tc-arch) == "sh" ]] && eapply "${FILESDIR}"/${PV}/02_sh4-workaround-fixproto-core.patch
 	[[ $(tc-arch) == "hppa" ]] && eapply "${FILESDIR}"/${PV}/03_hppa-fix-build.patch
 	eapply "${FILESDIR}"/${PV}/04_fix-werror.patch
+	eapply "${FILESDIR}"/${PV}/05_backport-static-libstdc++-option.patch
 
 	eapply "${FILESDIR}"/${PV}/postrelease/00_pr13685.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/01_pr32245.patch
@@ -59,4 +60,6 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/16_pr31806.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/17_pr22429.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/18_pr55771.patch
+
+	is_crosscompile || eapply "${FILESDIR}"/${PV}/postrelease/99_fix-known-test-fail.patch
 }

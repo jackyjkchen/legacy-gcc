@@ -30,6 +30,7 @@ src_prepare() {
 	use vanilla && return 0
 
 	[[ $(tc-arch) == "mips" && ${DEFAULT_ABI} == "n64" ]] && eapply "${FILESDIR}"/${PV}/02_mips64-default-n64-abi.patch
+	eapply "${FILESDIR}"/${PV}/03_backport-static-libstdc++-option.patch
 
 	eapply "${FILESDIR}"/${PV}/postrelease/00_pr35146.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/01_pr33619.patch
