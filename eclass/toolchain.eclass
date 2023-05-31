@@ -2295,7 +2295,7 @@ toolchain_src_install() {
 			-name libf2c.la -o \
 			-name libgo.la -o \
 			-name libcaf_single.la -o \
-			-name 'libmudflap*.la' \
+			-name 'libmudflap*.la' -o \
 			-name 'lib*san.la' \
 		')' -type f -delete
 

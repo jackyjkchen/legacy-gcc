@@ -30,6 +30,7 @@ src_prepare() {
 	use vanilla && return 0
 
 	eapply "${FILESDIR}"/${PV}/00_riscv-fix-multilib.patch
+	eapply "${FILESDIR}"/${PV}/01_fix-i686-sanitizer-malloc.patch
 
 	eapply "${FILESDIR}"/${PV}/postrelease/00_pr101384.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/01_pr104510.patch

@@ -57,7 +57,7 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/07_pr62052-69889.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/08_pr67037.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/09_pr71086.patch
-	eapply "${FILESDIR}"/${PV}/postrelease/10_pr86334.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/10_pr56743.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/11_pr44690.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/12_pr77943.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/13_pr94460.patch
@@ -85,7 +85,6 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/35_pr77707.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/36_pr104147.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/37_pr36043-58744-65408.patch
-	eapply "${FILESDIR}"/${PV}/postrelease/38_pr56743.patch
 
 	is_crosscompile || eapply "${FILESDIR}"/${PV}/postrelease/99_fix-known-test-fail.patch
 }
