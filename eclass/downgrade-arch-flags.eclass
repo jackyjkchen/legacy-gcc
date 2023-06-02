@@ -28,6 +28,17 @@ downgrade_arch_flags() {
 	local arch bver i isa myarch mytune rep ver
 
 	bver=${1}
+
+	if [[ $(tc-arch) != amd64 && $(tc-arch) != x86 ]] ; then
+		strip-unsupported-flags
+		if ! tc_version_is_at_least 3.1 ${bver} ; then
+			strip-flags
+			CFLAGS="-O2 -pipe"
+			CXXFLAGS="-O2 -pipe"
+			FFLAGS="-O2 -pipe"
+			FCFLAGS="-O2 -pipe"
+		fi
+	fi
 	case $(tc-arch) in
 	alpha)
 		if ! tc_version_is_at_least 2.9 ${bver}; then
@@ -273,7 +284,7 @@ downgrade_arch_flags() {
 
 	strip-unsupported-flags
 
-	if ! tc_version_is_at_least 2.9 ${bver} ; then
+	if ! tc_version_is_at_least 3.1 ${bver} ; then
 		strip-flags
 		CFLAGS="-O2 -pipe"
 		CXXFLAGS="-O2 -pipe"

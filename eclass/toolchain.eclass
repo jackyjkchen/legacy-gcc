@@ -1808,14 +1808,6 @@ gcc_do_filter_flags() {
 		fi
 	fi
 
-	strip-unsupported-flags
-
-	if [[ $(tc-arch) == amd64 || $(tc-arch) == x86 ]] && ! tc_version_is_at_least 2.8 ${bver} ; then
-		filter-flags '-mtune=*' '-march=*' '-mcpu=*' '-m*' '-mno-*'
-		tc_version_is_at_least 2.0 ${bver} && append-flags -m486
-		return 0
-	fi
-
 	# These are set here so we have something sane at configure time
 	if is_crosscompile ; then
 		# Set this to something sane for both native and target
