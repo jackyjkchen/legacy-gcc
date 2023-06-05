@@ -1,0 +1,60 @@
+diff --git a/gcc/testsuite/gfortran.dg/namelist_61.f90 b/gcc/testsuite/gfortran.dg/namelist_61.f90
+new file mode 100644
+index 00000000..c7214dd2
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/namelist_61.f90
+@@ -0,0 +1,35 @@
++! { dg-do run }
++!
++! PR fortran/43228
++!
++integer :: a(3,3)
++character(len=100) :: str
++namelist /nml/a
++
++a = -1
++str = '&nml a(1,:) = 1 2 3 /'
++read(str, nml=nml)
++if (any (a(1,:) /= [1, 2, 3])) call abort ()
++if (any (a([2,3],:) /= -1)) call abort ()
++
++a = -1
++str = '&nml a(1,1) = 1 2 3 4 /'
++read(str, nml=nml)
++if (any (a(:,1) /= [1, 2, 3])) call abort ()
++if (any (a(:,2) /= [4, -1, -1])) call abort ()
++if (any (a(:,3) /= -1)) call abort ()
++
++str = '&nml a(1,:) = 1 2 3 , &
++       &    a(2,:) = 4,5,6 &
++       &    a(3,:) = 7 8 9/'
++read(str, nml=nml)
++if (any (a(1,:) /= [1, 2, 3])) call abort ()
++if (any (a(2,:) /= [4, 5, 6])) call abort ()
++if (any (a(3,:) /= [7, 8, 9])) call abort ()
++
++!print *, a(:,1)
++!print *, a(:,2)
++!print *, a(:,3)
++end
++
++
+diff --git a/libgfortran/io/list_read.c b/libgfortran/io/list_read.c
+index 45f5de0f..0e3b2921 100644
+--- a/libgfortran/io/list_read.c
++++ b/libgfortran/io/list_read.c
+@@ -2041,6 +2041,14 @@ nml_parse_qualifier (st_parameter_dt *dtp, descriptor_dimension *ad,
+ 	    }
+ 	}
+ 
++      if (is_array_section == 1 && dtp->u.p.expanded_read == 1)
++     	{
++	  int i;
++	  dtp->u.p.expanded_read = 0;
++	  for (i = 0; i < dim; i++)
++	    ls[i].end = ls[i].start;
++      	}
++
+       /* Check the values of the triplet indices.  */
+       if ((ls[dim].start > (ssize_t)ad[dim].ubound)
+ 	  || (ls[dim].start < (ssize_t)ad[dim].lbound)

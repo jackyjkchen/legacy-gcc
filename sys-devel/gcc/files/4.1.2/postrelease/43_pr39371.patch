@@ -1,0 +1,163 @@
+diff --git a/gcc/cp/decl.c b/gcc/cp/decl.c
+index 2468444a..d2f9899e 100644
+--- a/gcc/cp/decl.c
++++ b/gcc/cp/decl.c
+@@ -2520,7 +2520,8 @@ finish_case_label (tree low_value, tree high_value)
+   if (cond && TREE_CODE (cond) == TREE_LIST)
+     cond = TREE_VALUE (cond);
+ 
+-  r = c_add_case_label (switch_stack->cases, cond, TREE_TYPE (cond),
++  r = c_add_case_label (switch_stack->cases, cond,
++			SWITCH_STMT_TYPE (switch_stack->switch_stmt),
+ 			low_value, high_value);
+ 
+   check_switch_goto (switch_stack->level);
+diff --git a/gcc/cp/semantics.c b/gcc/cp/semantics.c
+index 5dae20d8..4c0a4468 100644
+--- a/gcc/cp/semantics.c
++++ b/gcc/cp/semantics.c
+@@ -907,8 +907,6 @@ finish_switch_cond (tree cond, tree switch_stmt)
+   tree orig_type = NULL;
+   if (!processing_template_decl)
+     {
+-      tree index;
+-
+       /* Convert the condition to an integer or enumeration type.  */
+       cond = build_expr_type_conversion (WANT_INT | WANT_ENUM, cond, true);
+       if (cond == NULL_TREE)
+@@ -925,18 +923,6 @@ finish_switch_cond (tree cond, tree switch_stmt)
+ 	  cond = perform_integral_promotions (cond);
+ 	  cond = maybe_cleanup_point_expr (cond);
+ 	}
+-
+-      if (cond != error_mark_node)
+-	{
+-	  index = get_unwidened (cond, NULL_TREE);
+-	  /* We can't strip a conversion from a signed type to an unsigned,
+-	     because if we did, int_fits_type_p would do the wrong thing
+-	     when checking case values for being in range,
+-	     and it's too hard to do the right thing.  */
+-	  if (TYPE_UNSIGNED (TREE_TYPE (cond))
+-	      == TYPE_UNSIGNED (TREE_TYPE (index)))
+-	    cond = index;
+-	}
+     }
+   finish_cond (&SWITCH_STMT_COND (switch_stmt), cond);
+   SWITCH_STMT_TYPE (switch_stmt) = orig_type;
+diff --git a/gcc/testsuite/g++.dg/opt/switch2.C b/gcc/testsuite/g++.dg/opt/switch2.C
+index 2590273c..f7374cb7 100644
+--- a/gcc/testsuite/g++.dg/opt/switch2.C
++++ b/gcc/testsuite/g++.dg/opt/switch2.C
+@@ -1,5 +1,5 @@
+ // { dg-do compile }
+-// { dg-options "-O2" }
++// { dg-options "-O2 -w" }
+ 
+ extern int foo (int);
+ 
+diff --git a/gcc/testsuite/g++.dg/opt/switch4.C b/gcc/testsuite/g++.dg/opt/switch4.C
+index 231929fd..1542f310 100644
+--- a/gcc/testsuite/g++.dg/opt/switch4.C
++++ b/gcc/testsuite/g++.dg/opt/switch4.C
+@@ -1,4 +1,5 @@
+ // { dg-do compile }
++// { dg-options "-fshort-enums -w" }
+ 
+ // PR c++/20008
+ 
+diff --git a/gcc/testsuite/g++.dg/other/switch3.C b/gcc/testsuite/g++.dg/other/switch3.C
+new file mode 100644
+index 00000000..4f9b5485
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/other/switch3.C
+@@ -0,0 +1,25 @@
++// PR c++/39371
++// { dg-do compile }
++
++void
++foo (bool b)
++{
++  switch ((unsigned int) b)
++    {
++    case 1:
++    case 2:
++      break;
++    }
++}
++
++void
++bar (unsigned char b)
++{
++  switch ((unsigned int) b)
++    {
++    case 1:
++    case 257:
++    case 513:
++      break;
++    }
++}
+diff --git a/gcc/testsuite/g++.dg/torture/pr40335.C b/gcc/testsuite/g++.dg/torture/pr40335.C
+new file mode 100644
+index 00000000..14ea95d4
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/torture/pr40335.C
+@@ -0,0 +1,16 @@
++/* { dg-do run } */
++
++extern "C" void abort (void);
++int
++main (void)
++{
++  int i = -1; 
++  switch ((signed char) i)
++    {
++      case 255: /* { dg-bogus "exceeds maximum value" "" { xfail *-*-* } } */
++	abort ();
++      default:
++	break;
++    }
++}
++
+diff --git a/gcc/testsuite/g++.dg/warn/Wswitch-1.C b/gcc/testsuite/g++.dg/warn/Wswitch-1.C
+index 9b05cd16..6a209446 100644
+--- a/gcc/testsuite/g++.dg/warn/Wswitch-1.C
++++ b/gcc/testsuite/g++.dg/warn/Wswitch-1.C
+@@ -50,14 +50,14 @@ foo (int i, int j, enum e ei, enum e ej, enum e ek, enum e el,
+     {
+     case e1: return 1;
+     case e2: return 2;
+-    case 3: return 3; /* { dg-warning "case value '3' not in enumerated type 'e'" "excess 3" } */
++    case 3: return 3; /* { dg-warning "exceeds maximum value" } */
+     }
+   switch (ep)
+     {
+     case e1: return 1;
+     case e2: return 2;
+-    case 3: return 3;
++    case 3: return 3; /* { dg-warning "exceeds maximum value" } */
+     default: break;
+-    } /* Since there is a default, no warning about ``case 3'' */
++    }
+   return 0;
+ }
+diff --git a/gcc/testsuite/g++.dg/warn/switch1.C b/gcc/testsuite/g++.dg/warn/switch1.C
+new file mode 100644
+index 00000000..49c17e91
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/warn/switch1.C
+@@ -0,0 +1,15 @@
++// { dg-do compile { target { int32plus } } }
++
++signed char sc;
++
++void
++foo (void)
++{
++  switch (sc)
++    {
++    case 1:
++    case 2 * __SCHAR_MAX__ + 3:		// { dg-warning "case label value exceeds maximum" }
++    case - 2 * __SCHAR_MAX__ - 1:	// { dg-warning "case label value is less than minimum" }
++      break;
++    }
++}

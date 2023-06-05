@@ -1,0 +1,52 @@
+diff --git a/gcc/cp/typeck.c b/gcc/cp/typeck.c
+index b67ab1f05..57ba9e594 100644
+--- a/gcc/cp/typeck.c
++++ b/gcc/cp/typeck.c
+@@ -5775,7 +5775,8 @@ build_static_cast_1 (tree type, tree expr, bool c_cast_p,
+       base = lookup_base (TREE_TYPE (type), TREE_TYPE (intype),
+ 			  c_cast_p ? ba_unique : ba_check,
+ 			  NULL);
+-      return build_base_path (MINUS_EXPR, expr, base, /*nonnull=*/false);
++      expr = build_base_path (MINUS_EXPR, expr, base, /*nonnull=*/false);
++      return cp_fold_convert(type, expr);
+     }
+ 
+   if ((TYPE_PTRMEM_P (type) && TYPE_PTRMEM_P (intype))
+diff --git a/gcc/testsuite/g++.dg/expr/static_cast7.C b/gcc/testsuite/g++.dg/expr/static_cast7.C
+new file mode 100644
+index 000000000..bced805bc
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/expr/static_cast7.C
+@@ -0,0 +1,10 @@
++// Regression test for bug 39415 (and its duplicate 44916).
++struct S {};
++struct T : S {};
++int f(const T*) {}
++void f(T*);
++int main() {
++  S* s(0);
++  int a = f(static_cast<const T*>(s));
++  int b = f(static_cast<const T*>(0));
++}
+diff --git a/libstdc++-v3/src/atomic.cc b/libstdc++-v3/src/atomic.cc
+index 7ec08c5d7..ef3180c11 100644
+--- a/libstdc++-v3/src/atomic.cc
++++ b/libstdc++-v3/src/atomic.cc
+@@ -80,7 +80,7 @@ namespace std
+     atomic_flag_test_and_set_explicit(__atomic_flag_base* __a,
+ 				      memory_order __m) throw()
+     {
+-      atomic_flag* d = static_cast<volatile atomic_flag*>(__a);
++      atomic_flag* d = static_cast<atomic_flag*>(__a);
+       return d->test_and_set(__m);
+     }
+ 
+@@ -88,7 +88,7 @@ namespace std
+     atomic_flag_clear_explicit(__atomic_flag_base* __a, 
+ 			       memory_order __m) throw()
+     {
+-      atomic_flag* d = static_cast<volatile atomic_flag*>(__a);
++      atomic_flag* d = static_cast<atomic_flag*>(__a);
+       return d->clear(__m);
+     }
+ 

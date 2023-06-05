@@ -1,0 +1,45 @@
+diff --git a/gcc/testsuite/gcc.dg/torture/pr79351.c b/gcc/testsuite/gcc.dg/torture/pr79351.c
+new file mode 100644
+index 000000000..fcdd34c5a
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/torture/pr79351.c
+@@ -0,0 +1,27 @@
++/* { dg-do run } */
++/* { dg-options "-O1 -ftree-pre -std=c99" } */
++
++static struct state {
++    int k;
++    int dummy;
++} states[256];
++
++__attribute((noinline))
++static void
++ismatch(int n)
++{
++  for (int j=0; j<n; j++) {
++      states[j] = (struct state){0};
++      for (int i = 0; i <= j; i++) {
++	  states[i].k++;
++      }
++  }
++}
++
++int
++main()
++{
++  ismatch(2);
++  if (states[0].k != 2)
++    __builtin_abort();
++}
+diff --git a/gcc/tree-ssa-sccvn.c b/gcc/tree-ssa-sccvn.c
+index 465087368..4ae5754f7 100644
+--- a/gcc/tree-ssa-sccvn.c
++++ b/gcc/tree-ssa-sccvn.c
+@@ -1472,6 +1472,7 @@ vn_reference_lookup_3 (ao_ref *ref, tree vuse, void *vr_)
+       base2 = get_ref_base_and_extent (gimple_assign_lhs (def_stmt),
+ 				       &offset2, &size2, &maxsize2);
+       if (maxsize2 != -1
++	  && maxsize2 == size2
+ 	  && operand_equal_p (base, base2, 0)
+ 	  && offset2 <= offset
+ 	  && offset2 + size2 >= offset + maxsize)

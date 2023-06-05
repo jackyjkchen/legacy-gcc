@@ -1,0 +1,42 @@
+diff --git a/gcc/real.c b/gcc/real.c
+index 9b165ec0..977e992d 100644
+--- a/gcc/real.c
++++ b/gcc/real.c
+@@ -2212,6 +2212,15 @@ real_maxval (REAL_VALUE_TYPE *r, int sign, enum machine_mode mode)
+   np2 = SIGNIFICAND_BITS - fmt->p * fmt->log2_b;
+   memset (r->sig, -1, SIGSZ * sizeof (unsigned long));
+   clear_significand_below (r, np2);
++
++  if (fmt->pnan < fmt->p)
++/* This is an IBM extended double format made up of two IEEE
++   doubles.  The value of the long double is the sum of the
++   values of the two parts.  The most significant part is
++   required to be the value of the long double rounded to the
++   nearest double.  Rounding means we need a slightly smaller
++   value for LDBL_MAX.  */
++	clear_significand_bit (r, SIGNIFICAND_BITS - fmt->pnan);
+ }
+ 
+ /* Fills R with 2**N.  */
+diff --git a/gcc/testsuite/gcc.c-torture/execute/pr29302-1.c b/gcc/testsuite/gcc.c-torture/execute/pr29302-1.c
+new file mode 100644
+index 00000000..f6f3dd2c
+--- /dev/null
++++ b/gcc/testsuite/gcc.c-torture/execute/pr29302-1.c
+@@ -0,0 +1,16 @@
++extern void abort (void);
++
++int main (void)
++{
++  int n;
++  long double x;
++
++  x = 1/0.0;
++
++  n = (x == 1/0.0);
++
++  if (n == 1)
++    return 0;
++  else
++    abort ();
++}

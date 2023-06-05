@@ -1,0 +1,37 @@
+diff --git a/gcc/loop-invariant.c b/gcc/loop-invariant.c
+index e0623855..8db28f99 100644
+--- a/gcc/loop-invariant.c
++++ b/gcc/loop-invariant.c
+@@ -206,7 +206,7 @@ check_maybe_invariant (rtx x)
+ 
+       /* Just handle the most trivial case where we load from an unchanging
+ 	 location (most importantly, pic tables).  */
+-      if (MEM_READONLY_P (x))
++      if (MEM_READONLY_P (x) && !MEM_VOLATILE_P (x))
+ 	break;
+ 
+       return false;
+diff --git a/gcc/testsuite/gcc.dg/pr35729.c b/gcc/testsuite/gcc.dg/pr35729.c
+new file mode 100644
+index 00000000..a9cf2e10
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr35729.c
+@@ -0,0 +1,18 @@
++/* Target is restricted to x86 type architectures, so that we may
++   assume something about memory addressing modes.  */
++
++/* { dg-do compile { target { { i?86-*-* x86_64-*-* } && nonpic } } } */
++/* { dg-options "-Os -fdump-rtl-loop2_invariant" } */
++
++const volatile int g_361 = 3L;
++volatile int g_2 = 0L;
++void func_1 (void)
++{
++  for (g_2 = 0; g_2 > 10; g_2++)
++    {
++      int l_357 = g_361;
++    }
++}
++
++/* { dg-final { scan-rtl-dump-times "Decided to move invariant" 0 "loop2_invariant" } } */
++/* { dg-final { cleanup-rtl-dump "loop2_invariant" } } */

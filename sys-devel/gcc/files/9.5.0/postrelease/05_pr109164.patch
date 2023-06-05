@@ -1,0 +1,173 @@
+diff --git a/gcc/cp/cp-tree.h b/gcc/cp/cp-tree.h
+index f1106dd91..2e7f136c9 100644
+--- a/gcc/cp/cp-tree.h
++++ b/gcc/cp/cp-tree.h
+@@ -6527,6 +6527,7 @@ extern tree cp_build_parm_decl			(tree, tree, tree);
+ extern tree get_guard				(tree);
+ extern tree get_guard_cond			(tree, bool);
+ extern tree set_guard				(tree);
++extern bool var_needs_tls_wrapper		(tree);
+ extern tree maybe_get_tls_wrapper_call		(tree);
+ extern void mark_needed				(tree);
+ extern bool decl_needed_p			(tree);
+diff --git a/gcc/cp/decl.c b/gcc/cp/decl.c
+index bf732ba65..2c1de534f 100644
+--- a/gcc/cp/decl.c
++++ b/gcc/cp/decl.c
+@@ -7381,6 +7381,18 @@ cp_finish_decl (tree decl, tree init, bool init_const_expr_p,
+ 	  if (TYPE_HAS_NONTRIVIAL_DESTRUCTOR (type))
+ 	    TREE_READONLY (decl) = 0;
+ 	}
++      else if (VAR_P (decl)
++	       && CP_DECL_THREAD_LOCAL_P (decl)
++	       && (!DECL_EXTERNAL (decl) || flag_extern_tls_init)
++	       && (was_readonly || TREE_READONLY (decl))
++	       && var_needs_tls_wrapper (decl))
++	{
++	  /* TLS variables need dynamic initialization by the TLS wrapper
++	     function, we don't want to hoist accesses to it before the
++	     wrapper.  */
++	  was_readonly = 0;
++	  TREE_READONLY (decl) = 0;
++	}
+ 
+       make_rtl_for_nonlocal_decl (decl, init, asmspec);
+ 
+diff --git a/gcc/cp/decl2.c b/gcc/cp/decl2.c
+index b64a4d7ca..1921b7659 100644
+--- a/gcc/cp/decl2.c
++++ b/gcc/cp/decl2.c
+@@ -3342,7 +3342,7 @@ var_defined_without_dynamic_init (tree var)
+ /* Returns true iff VAR is a variable that needs uses to be
+    wrapped for possible dynamic initialization.  */
+ 
+-static bool
++bool
+ var_needs_tls_wrapper (tree var)
+ {
+   return (!error_operand_p (var)
+diff --git a/gcc/testsuite/g++.dg/tls/thread_local13-aux.cc b/gcc/testsuite/g++.dg/tls/thread_local13-aux.cc
+new file mode 100644
+index 000000000..691f308cf
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/tls/thread_local13-aux.cc
+@@ -0,0 +1,35 @@
++// PR c++/109164
++
++struct S { virtual void foo (); int s; };
++extern bool baz ();
++
++void
++S::foo ()
++{
++  if (s != 42)
++    __builtin_abort ();
++}
++
++S s;
++
++S &
++qux ()
++{
++  s.s = 42;
++  return s;
++}
++
++thread_local S &t = qux ();
++
++bool
++bar ()
++{
++  return false;
++}
++
++int
++main ()
++{
++  if (baz ())
++    __builtin_abort ();
++}
+diff --git a/gcc/testsuite/g++.dg/tls/thread_local13.C b/gcc/testsuite/g++.dg/tls/thread_local13.C
+new file mode 100644
+index 000000000..b424b9f8a
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/tls/thread_local13.C
+@@ -0,0 +1,21 @@
++// PR c++/109164
++// { dg-do run { target c++11 } }
++// { dg-options "-O2" }
++// { dg-add-options tls }
++// { dg-require-effective-target tls_runtime }
++// { dg-additional-sources "thread_local13-aux.cc" }
++
++struct S { virtual void foo (); int s; };
++extern thread_local S &t;
++bool bar ();
++
++bool
++baz ()
++{
++  while (1)
++    {
++      t.foo ();
++      if (!bar ())
++        return false;
++    }
++}
+diff --git a/gcc/testsuite/g++.dg/tls/thread_local14-aux.cc b/gcc/testsuite/g++.dg/tls/thread_local14-aux.cc
+new file mode 100644
+index 000000000..e8f2a243f
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/tls/thread_local14-aux.cc
+@@ -0,0 +1,26 @@
++// PR c++/109164
++
++extern bool baz ();
++
++int
++qux ()
++{
++  return 42;
++}
++
++extern thread_local const int t = qux ();
++
++bool
++bar (int x)
++{
++  if (x != 42)
++    __builtin_abort ();
++  return false;
++}
++
++int
++main ()
++{
++  if (baz ())
++    __builtin_abort ();
++}
+diff --git a/gcc/testsuite/g++.dg/tls/thread_local14.C b/gcc/testsuite/g++.dg/tls/thread_local14.C
+new file mode 100644
+index 000000000..a7402d0d6
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/tls/thread_local14.C
+@@ -0,0 +1,19 @@
++// PR c++/109164
++// { dg-do run { target c++11 } }
++// { dg-options "-O2" }
++// { dg-add-options tls }
++// { dg-require-effective-target tls_runtime }
++// { dg-additional-sources "thread_local14-aux.cc" }
++
++extern thread_local const int t;
++bool bar (int);
++
++bool
++baz ()
++{
++  while (1)
++    {
++      if (!bar (t))
++        return false;
++    }
++}

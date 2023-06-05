@@ -1,0 +1,42 @@
+diff --git a/gcc/c-family/c-gimplify.c b/gcc/c-family/c-gimplify.c
+index 3ff0a31cb..3fa107d77 100644
+--- a/gcc/c-family/c-gimplify.c
++++ b/gcc/c-family/c-gimplify.c
+@@ -193,7 +193,7 @@ c_gimplify_expr (tree *expr_p, gimple_seq *pre_p ATTRIBUTE_UNUSED,
+ 	tree type = TREE_TYPE (TREE_OPERAND (*expr_p, 0));
+ 	if (INTEGRAL_TYPE_P (type) && c_promoting_integer_type_p (type))
+ 	  {
+-	    if (TYPE_OVERFLOW_UNDEFINED (type))
++	    if (!TYPE_OVERFLOW_WRAPS (type))
+ 	      type = unsigned_type_for (type);
+ 	    return gimplify_self_mod_expr (expr_p, pre_p, post_p, 1, type);
+ 	  }
+diff --git a/gcc/testsuite/c-c++-common/pr61741.c b/gcc/testsuite/c-c++-common/pr61741.c
+new file mode 100644
+index 000000000..6acf9dbc5
+--- /dev/null
++++ b/gcc/testsuite/c-c++-common/pr61741.c
+@@ -0,0 +1,23 @@
++/* { dg-do run } */
++/* { dg-options "-O2 -fno-strict-overflow" } */
++
++int a = 1, b;
++
++void
++foo (void)
++{
++  signed char c = 0;
++  for (; a; a--)
++    for (; c >= 0; c++);
++  if (!c)
++    b = 1;
++}
++
++int
++main ()
++{
++  foo ();
++  if (b != 0)
++    __builtin_abort ();
++  return 0;
++}

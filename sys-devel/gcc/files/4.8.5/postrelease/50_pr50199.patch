@@ -1,0 +1,40 @@
+diff --git a/gcc/lto/lto-lang.c b/gcc/lto/lto-lang.c
+index 87a756d57..0e5c121f5 100644
+--- a/gcc/lto/lto-lang.c
++++ b/gcc/lto/lto-lang.c
+@@ -769,6 +769,12 @@ lto_post_options (const char **pfilename ATTRIBUTE_UNUSED)
+      support.  */
+   flag_excess_precision_cmdline = EXCESS_PRECISION_FAST;
+ 
++  /* When partitioning, we can tear appart STRING_CSTs uses from the same
++     TU into multiple partitions.  Without constant merging the constants
++     might not be equal at runtime.  See PR50199.  */
++  if (!flag_merge_constants)
++    flag_merge_constants = 1;
++
+   /* Initialize the compiler back end.  */
+   return false;
+ }
+diff --git a/gcc/testsuite/gcc.dg/lto/pr50199_0.c b/gcc/testsuite/gcc.dg/lto/pr50199_0.c
+new file mode 100644
+index 000000000..61d0012be
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/lto/pr50199_0.c
+@@ -0,0 +1,17 @@
++/* PR middle-end/50199 */
++/* { dg-lto-options {{-O2 -flto -fno-merge-constants --param=lto-min-partition=1}} } */
++
++__attribute__ ((noinline)) const char *
++foo (const char *x)
++{
++  return x;
++}
++
++int
++main ()
++{
++  const char *a = "ab";
++  if (a != foo (a))
++    __builtin_abort ();
++  return 0;
++}

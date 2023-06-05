@@ -30,7 +30,7 @@ src_prepare() {
 	use vanilla && return 0
 
 	eapply "${FILESDIR}"/${PV}/00_riscv-fix-multilib.patch
-	eapply "${FILESDIR}"/${PV}/01_fix-ia32-sanitizer-malloc.patch
+	is_djgpp || eapply "${FILESDIR}"/${PV}/01_fix-ia32-sanitizer-malloc.patch
 
 	eapply "${FILESDIR}"/${PV}/postrelease/00_pr101384.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/01_pr104510.patch
@@ -46,6 +46,8 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/11_pr94206.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/12_pr104147.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/13_pr65211.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/14_pr38644.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/15_pr109164.patch
 
 	is_crosscompile || eapply "${FILESDIR}"/${PV}/postrelease/99_fix-known-test-fail.patch
 }

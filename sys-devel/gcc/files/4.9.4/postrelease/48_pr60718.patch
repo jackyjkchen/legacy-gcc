@@ -1,0 +1,161 @@
+diff --git a/gcc/fortran/trans-expr.c b/gcc/fortran/trans-expr.c
+index a2857551c..e47fd2ce3 100644
+--- a/gcc/fortran/trans-expr.c
++++ b/gcc/fortran/trans-expr.c
+@@ -4301,6 +4301,55 @@ gfc_conv_procedure_call (gfc_se * se, gfc_symbol * sym,
+ 				     fsym->attr.optional
+ 				     && e->expr_type == EXPR_VARIABLE);
+ 		    }
++		  else if (e->ts.type == BT_CLASS && fsym
++			   && fsym->ts.type == BT_CLASS
++			   && !CLASS_DATA (fsym)->as
++			   && !CLASS_DATA (e)->as
++			   && (CLASS_DATA (fsym)->attr.class_pointer
++			       != CLASS_DATA (e)->attr.class_pointer
++			       || CLASS_DATA (fsym)->attr.allocatable
++				  != CLASS_DATA (e)->attr.allocatable))
++		    {
++		      type = gfc_typenode_for_spec (&fsym->ts);
++		      var = gfc_create_var (type, fsym->name);
++		      gfc_conv_expr (&parmse, e);
++		      if (fsym->attr.optional
++			  && e->expr_type == EXPR_VARIABLE
++			  && e->symtree->n.sym->attr.optional)
++			{
++			  stmtblock_t block;
++			  tree cond;
++			  tmp = gfc_build_addr_expr (NULL_TREE, parmse.expr);
++			  cond = fold_build2_loc (input_location, NE_EXPR,
++						  boolean_type_node, tmp,
++						  fold_convert (TREE_TYPE (tmp),
++							    null_pointer_node));
++			  gfc_start_block (&block);
++			  gfc_add_modify (&block, var,
++					  fold_build1_loc (input_location,
++							   VIEW_CONVERT_EXPR,
++							   type, parmse.expr));
++			  gfc_add_expr_to_block (&parmse.pre,
++				 fold_build3_loc (input_location,
++					 COND_EXPR, void_type_node,
++					 cond, gfc_finish_block (&block),
++					 build_empty_stmt (input_location)));
++			  parmse.expr = gfc_build_addr_expr (NULL_TREE, var);
++			  parmse.expr = build3_loc (input_location, COND_EXPR,
++					 TREE_TYPE (parmse.expr),
++					 cond, parmse.expr,
++					 fold_convert (TREE_TYPE (parmse.expr),
++						       null_pointer_node));
++			}
++		      else
++			{
++			  gfc_add_modify (&parmse.pre, var,
++					  fold_build1_loc (input_location,
++							   VIEW_CONVERT_EXPR,
++							   type, parmse.expr));
++			  parmse.expr = gfc_build_addr_expr (NULL_TREE, var);
++			}
++		    }
+ 		  else
+ 		    gfc_conv_expr_reference (&parmse, e);
+ 
+diff --git a/gcc/testsuite/gfortran.dg/class_alias.f90 b/gcc/testsuite/gfortran.dg/class_alias.f90
+new file mode 100644
+index 000000000..961514eb7
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/class_alias.f90
+@@ -0,0 +1,95 @@
++! { dg-do run }
++! { dg-options "-fdump-tree-original" }
++!
++! test for aliasing violations when converting class objects with
++! different target and pointer attributes.
++!
++module test_module
++
++  implicit none
++
++  type, public :: test
++    integer :: x
++  end type test
++
++contains
++
++  subroutine do_it6 (par2_t)
++    class (test), target :: par2_t
++    par2_t%x = par2_t%x + 1
++  end subroutine do_it6
++   
++  subroutine do_it5 (par1_p)
++    class (test), pointer, intent(in) :: par1_p
++    ! pointer -> target
++    ! { dg-final { scan-tree-dump "par2_t\[^\n]*VIEW_CONVERT_EXPR\[^\n]*par1_p" "original" } }
++    call do_it6 (par1_p)
++  end subroutine do_it5
++
++  subroutine do_it4 (par_p)
++    class (test), pointer, intent(in) :: par_p
++    ! pointer -> pointer
++    ! { dg-final { scan-tree-dump-not "par1_p\[^\n]*VIEW_CONVERT_EXPR\[^\n]*par_p" "original" } }
++    call do_it5 (par_p)
++  end subroutine do_it4
++
++  subroutine do_it3 (par1_t)
++    class (test), target :: par1_t
++    ! target -> pointer
++    ! { dg-final { scan-tree-dump "par_p\[^\n]*VIEW_CONVERT_EXPR\[^\n]*par1_t" "original" } }
++    call do_it4 (par1_t)
++  end subroutine do_it3
++
++  subroutine do_it2 (par_t)
++    class (test), target :: par_t
++    ! target -> target
++    ! { dg-final { scan-tree-dump-not "par1_t\[^\n]*VIEW_CONVERT_EXPR\[^\n]*par_t" "original" } }
++    call do_it3 (par_t)
++  end subroutine do_it2
++
++  subroutine do_it1 (par1_a)
++    class (test), allocatable :: par1_a
++    ! allocatable -> target
++    ! { dg-final { scan-tree-dump "par_t\[^\n]*VIEW_CONVERT_EXPR\[^\n]*par1_a" "original" } }
++    call do_it2 (par1_a)
++  end subroutine do_it1
++
++  subroutine do_it (par_a)
++    class (test), allocatable :: par_a
++    ! allocatable -> allocatable
++    ! { dg-final { scan-tree-dump-not "par1_a\[^\n]*VIEW_CONVERT_EXPR\[^\n]*par_a" "original" } }
++    call do_it1 (par_a)
++  end subroutine do_it
++
++end module test_module
++
++use test_module
++
++  implicit none
++  class (test), allocatable :: var_a
++  class (test), pointer :: var_p
++
++
++  allocate (var_a)
++  allocate (var_p)
++  var_a%x = 0
++  var_p%x = 0
++  
++  ! allocatable -> allocatable
++  ! { dg-final { scan-tree-dump-not "par_a\[^\n]*VIEW_CONVERT_EXPR\[^\n]*var_a" "original" } }
++  call do_it (var_a)
++  ! allocatable -> target
++  ! { dg-final { scan-tree-dump "par_t\[^\n]*VIEW_CONVERT_EXPR\[^\n]*var_a" "original" } }
++  call do_it2 (var_a)
++  ! pointer -> target
++  ! { dg-final { scan-tree-dump "par_t\[^\n]*VIEW_CONVERT_EXPR\[^\n]*var_p" "original" } }
++  call do_it2 (var_p)
++  ! pointer -> pointer
++  ! { dg-final { scan-tree-dump-not "par_p\[^\n]*VIEW_CONVERT_EXPR\[^\n]*var_p" "original" } }
++  call do_it4 (var_p)
++  if (var_a%x .ne. 2) call abort()
++  if (var_p%x .ne. 2) call abort()
++  deallocate (var_a)
++  deallocate (var_p)
++end
++! { dg-final { cleanup-tree-dump "original" } }

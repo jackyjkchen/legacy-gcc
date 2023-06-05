@@ -1,0 +1,148 @@
+diff --git a/gcc/omp-low.c b/gcc/omp-low.c
+index f3c0fb2a4..929cf4658 100644
+--- a/gcc/omp-low.c
++++ b/gcc/omp-low.c
+@@ -784,7 +784,7 @@ use_pointer_for_field (tree decl, omp_context *shared_ctx)
+ 		  break;
+ 
+ 	      if (c)
+-		return true;
++		goto maybe_mark_addressable_and_ret;
+ 	    }
+ 	}
+ 
+@@ -794,7 +794,9 @@ use_pointer_for_field (tree decl, omp_context *shared_ctx)
+ 	 returns, the task hasn't necessarily terminated.  */
+       if (!TREE_READONLY (decl) && is_task_ctx (shared_ctx))
+ 	{
+-	  tree outer = maybe_lookup_decl_in_outer_ctx (decl, shared_ctx);
++	  tree outer;
++	maybe_mark_addressable_and_ret:
++	  outer = maybe_lookup_decl_in_outer_ctx (decl, shared_ctx);
+ 	  if (is_gimple_reg (outer))
+ 	    {
+ 	      /* Taking address of OUTER in lower_send_shared_vars
+diff --git a/libgomp/testsuite/libgomp.c/pr49897-1.c b/libgomp/testsuite/libgomp.c/pr49897-1.c
+new file mode 100644
+index 000000000..d21a26252
+--- /dev/null
++++ b/libgomp/testsuite/libgomp.c/pr49897-1.c
+@@ -0,0 +1,31 @@
++/* PR middle-end/49897 */
++/* { dg-do run } */
++
++extern void abort (void);
++
++int
++main ()
++{
++  int i, j, x = 0, y, sum = 0;
++#pragma omp parallel reduction(+:sum)
++  {
++  #pragma omp for firstprivate(x) lastprivate(x, y)
++    for (i = 0; i < 10; i++)
++      {
++	x = i;
++	y = 0;
++      #pragma omp parallel reduction(+:sum)
++	{
++	#pragma omp for firstprivate(y) lastprivate(y)
++	  for (j = 0; j < 10; j++)
++	    {
++	      y = j;
++	      sum += y;
++	    }
++	}
++      }
++  }
++  if (x != 9 || y != 9 || sum != 450)
++    abort ();
++  return 0;
++}
+diff --git a/libgomp/testsuite/libgomp.c/pr49897-2.c b/libgomp/testsuite/libgomp.c/pr49897-2.c
+new file mode 100644
+index 000000000..c9ea5eced
+--- /dev/null
++++ b/libgomp/testsuite/libgomp.c/pr49897-2.c
+@@ -0,0 +1,25 @@
++/* PR middle-end/49897 */
++/* { dg-do run } */
++
++extern void abort (void);
++
++int
++main ()
++{
++  int i, j, x = 0, y, sum = 0;
++#pragma omp parallel for reduction(+:sum) firstprivate(x) lastprivate(x, y)
++  for (i = 0; i < 10; i++)
++    {
++      x = i;
++      y = 0;
++    #pragma omp parallel for reduction(+:sum) firstprivate(y) lastprivate(y)
++      for (j = 0; j < 10; j++)
++	{
++	  y = j;
++	  sum += y;
++	}
++    }
++  if (x != 9 || y != 9 || sum != 450)
++    abort ();
++  return 0;
++}
+diff --git a/libgomp/testsuite/libgomp.c/pr49898-1.c b/libgomp/testsuite/libgomp.c/pr49898-1.c
+new file mode 100644
+index 000000000..175426d40
+--- /dev/null
++++ b/libgomp/testsuite/libgomp.c/pr49898-1.c
+@@ -0,0 +1,26 @@
++/* PR middle-end/49898 */
++/* { dg-do run } */
++
++extern void abort (void);
++
++int
++main ()
++{
++  int i, j, sum = 0;
++#pragma omp parallel
++  {
++  #pragma omp for reduction(+:sum)
++    for (i = 0; i < 10; i++)
++      {
++      #pragma omp parallel
++	{
++	#pragma omp for reduction(+:sum)
++	  for (j = 0; j < 10; j++)
++	    sum += j;
++	}
++      }
++  }
++  if (sum != 450)
++    abort ();
++  return 0;
++}
+diff --git a/libgomp/testsuite/libgomp.c/pr49898-2.c b/libgomp/testsuite/libgomp.c/pr49898-2.c
+new file mode 100644
+index 000000000..03ba0f8ff
+--- /dev/null
++++ b/libgomp/testsuite/libgomp.c/pr49898-2.c
+@@ -0,0 +1,18 @@
++/* PR middle-end/49898 */
++/* { dg-do run } */
++
++extern void abort (void);
++
++int
++main ()
++{
++  int i, j, sum = 0;
++#pragma omp parallel for reduction(+:sum)
++  for (i = 0; i < 10; i++)
++    #pragma omp parallel for reduction(+:sum)
++    for (j = 0; j < 10; j++)
++      sum += j;
++  if (sum != 450)
++    abort ();
++  return 0;
++}

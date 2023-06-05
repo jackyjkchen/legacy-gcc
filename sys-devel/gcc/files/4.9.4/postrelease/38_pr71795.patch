@@ -1,0 +1,43 @@
+diff --git a/gcc/fortran/frontend-passes.c b/gcc/fortran/frontend-passes.c
+index 518a80a5c..2d9ab3858 100644
+--- a/gcc/fortran/frontend-passes.c
++++ b/gcc/fortran/frontend-passes.c
+@@ -1092,6 +1092,11 @@ combine_array_constructor (gfc_expr *e)
+   if (forall_level > 0)
+     return false;
+ 
++  /* Inside an iterator, things can get hairy; we are likely to create
++     an invalid temporary variable.  */
++  if (iterator_level > 0)
++    return false;
++
+   op1 = e->value.op.op1;
+   op2 = e->value.op.op2;
+ 
+diff --git a/gcc/testsuite/gfortran.dg/array_constructor_50.f90 b/gcc/testsuite/gfortran.dg/array_constructor_50.f90
+new file mode 100644
+index 000000000..c22c980ed
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/array_constructor_50.f90
+@@ -0,0 +1,21 @@
++! { dg-do run }
++! PR 71795 - wrong result when putting an array constructor
++! instide an iterator.
++     program test
++
++     implicit none
++     integer :: i,n
++     logical, dimension(1) :: ra
++     logical :: rs
++     integer, allocatable :: a(:)
++
++     allocate ( a(1) )
++
++     n = 1
++     a = 2
++
++     ra = (/ (any(a(i).eq.(/1,2,3/)) ,i=1,n) /)
++     if (.not. all(ra)) call abort
++     rs = any ( (/ (any(a(i).eq.(/1,2,3/)) ,i=1,n) /) )
++     if (.not. rs) call abort
++   end program test

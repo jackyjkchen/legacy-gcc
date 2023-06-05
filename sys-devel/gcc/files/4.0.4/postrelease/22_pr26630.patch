@@ -1,0 +1,54 @@
+diff --git a/gcc/convert.c b/gcc/convert.c
+index 128d8f6f..266856ca 100644
+--- a/gcc/convert.c
++++ b/gcc/convert.c
+@@ -588,7 +588,17 @@ convert_to_integer (tree type, tree expr)
+ 				|| ex_form == RSHIFT_EXPR
+ 				|| ex_form == LROTATE_EXPR
+ 				|| ex_form == RROTATE_EXPR))
+-			|| ex_form == LSHIFT_EXPR)
++			|| ex_form == LSHIFT_EXPR
++			/* If we have !flag_wrapv, and either ARG0 or
++			   ARG1 is of a signed type, we have to do
++			   PLUS_EXPR or MINUS_EXPR in an unsigned
++			   type.  Otherwise, we would introduce
++			   signed-overflow undefinedness.  */
++			|| (!flag_wrapv
++			    && (ex_form == PLUS_EXPR
++				|| ex_form == MINUS_EXPR)
++			    && (!TYPE_UNSIGNED (TREE_TYPE (arg0))
++				|| !TYPE_UNSIGNED (TREE_TYPE (arg1)))))
+ 		      typex = lang_hooks.types.unsigned_type (typex);
+ 		    else
+ 		      typex = lang_hooks.types.signed_type (typex);
+diff --git a/gcc/testsuite/gcc.dg/torture/pr26630.c b/gcc/testsuite/gcc.dg/torture/pr26630.c
+new file mode 100644
+index 00000000..08cf5f65
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/torture/pr26630.c
+@@ -0,0 +1,11 @@
++/* { dg-do run } */
++
++extern void abort(void);
++int main()
++{
++  int a1 = 40000;
++  int c1 = ( ((int)(short)(a1-10000)) + 10000)*2;
++  if (c1 != 80000)
++    abort();
++  return 0;
++}
+diff --git a/gcc/testsuite/gcc.dg/vect/vect-7.c b/gcc/testsuite/gcc.dg/vect/vect-7.c
+index c753de8c..10cff365 100644
+--- a/gcc/testsuite/gcc.dg/vect/vect-7.c
++++ b/gcc/testsuite/gcc.dg/vect/vect-7.c
+@@ -45,7 +45,7 @@ int main (void)
+   return main1 ();
+ }
+ 
+-/* Fails for targets that don't vectorize PLUS.  */
+-/* { dg-final { scan-tree-dump-times "vectorized 2 loops" 1 "vect" { xfail alpha*-*-* } } } */
++/* Fails for 32-bit targets that don't vectorize PLUS.  */
++/* { dg-final { scan-tree-dump-times "vectorized 2 loops" 1 "vect" { xfail *-*-* } } } */
+ /* { dg-final { scan-tree-dump-times "Vectorizing an unaligned access" 0 "vect" } } */
+ /* { dg-final { cleanup-tree-dump "vect" } } */

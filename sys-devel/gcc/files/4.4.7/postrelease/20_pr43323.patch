@@ -1,0 +1,242 @@
+diff --git a/gcc/gimple.h b/gcc/gimple.h
+index ef1b2acca..68046862f 100644
+--- a/gcc/gimple.h
++++ b/gcc/gimple.h
+@@ -1020,6 +1020,7 @@ extern void gimple_add_to_addresses_taken (gimple, tree);
+ 
+ /* In tree-ssa.c  */
+ extern bool tree_ssa_useless_type_conversion (tree);
++extern tree tree_ssa_strip_useless_type_conversions (tree);
+ extern bool useless_type_conversion_p (tree, tree);
+ extern bool types_compatible_p (tree, tree);
+ 
+diff --git a/gcc/testsuite/gcc.c-torture/execute/bitfld-5.c b/gcc/testsuite/gcc.c-torture/execute/bitfld-5.c
+new file mode 100644
+index 000000000..ca88d9221
+--- /dev/null
++++ b/gcc/testsuite/gcc.c-torture/execute/bitfld-5.c
+@@ -0,0 +1,35 @@
++/* See http://gcc.gnu.org/ml/gcc/2009-06/msg00072.html.  */
++
++extern void abort (void);
++
++struct s
++{
++  unsigned long long a:2;
++  unsigned long long b:40;
++  unsigned long long c:22;
++};
++
++__attribute__ ((noinline)) void
++g (unsigned long long a, unsigned long long b)
++{
++  asm ("");
++  if (a != b)
++    abort ();
++}
++
++__attribute__ ((noinline)) void
++f (struct s s, unsigned long long b)
++{
++  asm ("");
++  g (((unsigned long long) (s.b-8)) + 8, b);
++}
++
++int
++main ()
++{
++  struct s s = {1, 10, 3};
++  struct s t = {1, 2, 3};
++  f (s, 10);
++  f (t, 0x10000000002);
++  return 0;
++}
+diff --git a/gcc/testsuite/gcc.c-torture/execute/pr43323.c b/gcc/testsuite/gcc.c-torture/execute/pr43323.c
+new file mode 100644
+index 000000000..ed93ea576
+--- /dev/null
++++ b/gcc/testsuite/gcc.c-torture/execute/pr43323.c
+@@ -0,0 +1,14 @@
++/* PR middle-end/43323 */
++
++extern void abort (void);
++
++int main()
++{
++  struct { unsigned bar:1; } foo;
++  foo.bar = 0x1;
++  if ((unsigned char)(foo.bar * 0xfe) != 0xfeu)
++    abort ();
++  if ((unsigned char)(foo.bar * 0xff) != 0xffu)
++    abort ();
++  return 0;
++}
+diff --git a/gcc/tree-ssa.c b/gcc/tree-ssa.c
+index 9d8f99deb..17d368288 100644
+--- a/gcc/tree-ssa.c
++++ b/gcc/tree-ssa.c
+@@ -1271,6 +1271,18 @@ tree_ssa_useless_type_conversion (tree expr)
+   return false;
+ }
+ 
++/* Strip conversions from EXP according to
++   tree_ssa_useless_type_conversion and return the resulting
++   expression.  */
++
++tree
++tree_ssa_strip_useless_type_conversions (tree exp)
++{
++  while (tree_ssa_useless_type_conversion (exp))
++    exp = TREE_OPERAND (exp, 0);
++  return exp;
++}
++
+ 
+ /* Internal helper for walk_use_def_chains.  VAR, FN and DATA are as
+    described in walk_use_def_chains.
+diff --git a/gcc/tree.c b/gcc/tree.c
+index af5f0a104..6bf8c3763 100644
+--- a/gcc/tree.c
++++ b/gcc/tree.c
+@@ -9098,6 +9098,79 @@ tree_nonartificial_location (tree exp)
+     return EXPR_LOCATION (exp);
+ }
+ 
++/* Return true iff conversion in EXP generates no instruction.  Mark
++   it inline so that we fully inline into the stripping functions even
++   though we have two uses of this function.  */
++
++static inline bool
++tree_nop_conversion (const_tree exp)
++{
++  tree outer_type, inner_type;
++
++  if (!CONVERT_EXPR_P (exp)
++      && TREE_CODE (exp) != NON_LVALUE_EXPR)
++    return false;
++  if (TREE_OPERAND (exp, 0) == error_mark_node)
++    return false;
++
++  outer_type = TREE_TYPE (exp);
++  inner_type = TREE_TYPE (TREE_OPERAND (exp, 0));
++
++  /* Use precision rather then machine mode when we can, which gives
++     the correct answer even for submode (bit-field) types.  */
++  if ((INTEGRAL_TYPE_P (outer_type)
++       || POINTER_TYPE_P (outer_type)
++       || TREE_CODE (outer_type) == OFFSET_TYPE)
++      && (INTEGRAL_TYPE_P (inner_type)
++	  || POINTER_TYPE_P (inner_type)
++	  || TREE_CODE (inner_type) == OFFSET_TYPE))
++    return TYPE_PRECISION (outer_type) == TYPE_PRECISION (inner_type);
++
++  /* Otherwise fall back on comparing machine modes (e.g. for
++     aggregate types, floats).  */
++  return TYPE_MODE (outer_type) == TYPE_MODE (inner_type);
++}
++
++/* Return true iff conversion in EXP generates no instruction.  Don't
++   consider conversions changing the signedness.  */
++
++static bool
++tree_sign_nop_conversion (const_tree exp)
++{
++  tree outer_type, inner_type;
++
++  if (!tree_nop_conversion (exp))
++    return false;
++
++  outer_type = TREE_TYPE (exp);
++  inner_type = TREE_TYPE (TREE_OPERAND (exp, 0));
++
++  return (TYPE_UNSIGNED (outer_type) == TYPE_UNSIGNED (inner_type)
++	  && POINTER_TYPE_P (outer_type) == POINTER_TYPE_P (inner_type));
++}
++
++/* Strip conversions from EXP according to tree_nop_conversion and
++   return the resulting expression.  */
++
++tree
++tree_strip_nop_conversions (tree exp)
++{
++  while (tree_nop_conversion (exp))
++    exp = TREE_OPERAND (exp, 0);
++  return exp;
++}
++
++/* Strip conversions from EXP according to tree_sign_nop_conversion
++   and return the resulting expression.  */
++
++tree
++tree_strip_sign_nop_conversions (tree exp)
++{
++  while (tree_sign_nop_conversion (exp))
++    exp = TREE_OPERAND (exp, 0);
++  return exp;
++}
++
+ 
+ /* These are the hash table functions for the hash table of OPTIMIZATION_NODEq
+    nodes.  */
+diff --git a/gcc/tree.h b/gcc/tree.h
+index e7f15e16b..af5bb6f00 100644
+--- a/gcc/tree.h
++++ b/gcc/tree.h
+@@ -974,30 +974,17 @@ extern void omp_clause_range_check_failed (const_tree, const char *, int,
+   case NOP_EXPR:						\
+   case CONVERT_EXPR
+ 
+-/* Given an expression as a tree, strip any NON_LVALUE_EXPRs and NOP_EXPRs
+-   that don't change the machine mode.  */
++/* Given an expression as a tree, strip any conversion that generates
++   no instruction.  Accepts both tree and const_tree arguments since
++   we are not modifying the tree itself.  */
+ 
+-#define STRIP_NOPS(EXP)						\
+-  while ((CONVERT_EXPR_P (EXP)					\
+-	  || TREE_CODE (EXP) == NON_LVALUE_EXPR)		\
+-	 && TREE_OPERAND (EXP, 0) != error_mark_node		\
+-	 && (TYPE_MODE (TREE_TYPE (EXP))			\
+-	     == TYPE_MODE (TREE_TYPE (TREE_OPERAND (EXP, 0))))) \
+-    (EXP) = TREE_OPERAND (EXP, 0)
++#define STRIP_NOPS(EXP) \
++  (EXP) = tree_strip_nop_conversions (CONST_CAST_TREE (EXP))
+ 
+ /* Like STRIP_NOPS, but don't let the signedness change either.  */
+ 
+ #define STRIP_SIGN_NOPS(EXP) \
+-  while ((CONVERT_EXPR_P (EXP)					\
+-	  || TREE_CODE (EXP) == NON_LVALUE_EXPR)		\
+-	 && TREE_OPERAND (EXP, 0) != error_mark_node		\
+-	 && (TYPE_MODE (TREE_TYPE (EXP))			\
+-	     == TYPE_MODE (TREE_TYPE (TREE_OPERAND (EXP, 0))))	\
+-	 && (TYPE_UNSIGNED (TREE_TYPE (EXP))			\
+-	     == TYPE_UNSIGNED (TREE_TYPE (TREE_OPERAND (EXP, 0)))) \
+-	 && (POINTER_TYPE_P (TREE_TYPE (EXP))			\
+-	     == POINTER_TYPE_P (TREE_TYPE (TREE_OPERAND (EXP, 0))))) \
+-    (EXP) = TREE_OPERAND (EXP, 0)
++  (EXP) = tree_strip_sign_nop_conversions (CONST_CAST_TREE (EXP))
+ 
+ /* Like STRIP_NOPS, but don't alter the TREE_TYPE either.  */
+ 
+@@ -1012,9 +999,8 @@ extern void omp_clause_range_check_failed (const_tree, const char *, int,
+ /* Remove unnecessary type conversions according to
+    tree_ssa_useless_type_conversion.  */
+ 
+-#define STRIP_USELESS_TYPE_CONVERSION(EXP)				\
+-      while (tree_ssa_useless_type_conversion (EXP))			\
+-	EXP = TREE_OPERAND (EXP, 0)
++#define STRIP_USELESS_TYPE_CONVERSION(EXP) \
++  (EXP) = tree_ssa_strip_useless_type_conversions (EXP)
+ 
+ /* Nonzero if TYPE represents an integral type.  Note that we do not
+    include COMPLEX types here.  Keep these checks in ascending code
+@@ -4702,6 +4688,8 @@ extern bool stdarg_p (tree);
+ extern bool prototype_p (tree);
+ extern int function_args_count (tree);
+ extern bool auto_var_in_fn_p (const_tree, const_tree);
++extern tree tree_strip_nop_conversions (tree);
++extern tree tree_strip_sign_nop_conversions (tree);
+ 
+ /* In gimplify.c */
+ extern tree unshare_expr (tree);

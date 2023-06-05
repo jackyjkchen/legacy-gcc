@@ -1,0 +1,140 @@
+diff --git a/gcc/testsuite/gcc.dg/torture/pr49651.c b/gcc/testsuite/gcc.dg/torture/pr49651.c
+new file mode 100644
+index 000000000..8a17e23ed
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/torture/pr49651.c
+@@ -0,0 +1,31 @@
++/* { dg-do run } */
++
++extern void abort (void);
++
++struct X {
++    int *p;
++    int *q;
++};
++
++void __attribute__((noinline))
++foo (struct X x) { *x.q = 0; }
++
++volatile int what;
++struct X y;
++
++int main()
++{
++  int i, j;
++  struct X x, *p;
++  x.p = &i;
++  x.q = &j;
++  if (what)
++    p = &y;
++  else
++    p = &x;
++  j = 1;
++  foo (*p);
++  if (j != 0)
++    abort ();
++  return 0;
++}
+diff --git a/gcc/tree-ssa-structalias.c b/gcc/tree-ssa-structalias.c
+index bd8f2aa97..44683698e 100644
+--- a/gcc/tree-ssa-structalias.c
++++ b/gcc/tree-ssa-structalias.c
+@@ -266,6 +266,7 @@ typedef struct variable_info *varinfo_t;
+ 
+ static varinfo_t first_vi_for_offset (varinfo_t, unsigned HOST_WIDE_INT);
+ static varinfo_t lookup_vi_for_tree (tree);
++static inline bool type_can_have_subvars (const_tree);
+ 
+ /* Pool of variable info structures.  */
+ static alloc_pool variable_info_pool;
+@@ -419,6 +420,9 @@ struct constraint_expr
+   unsigned HOST_WIDE_INT offset;
+ };
+ 
++/* Use 0x8000... as special unknown offset.  */
++#define UNKNOWN_OFFSET ((HOST_WIDE_INT)-1 << (HOST_BITS_PER_WIDE_INT-1))
++
+ typedef struct constraint_expr ce_s;
+ DEF_VEC_O(ce_s);
+ DEF_VEC_ALLOC_O(ce_s, heap);
+@@ -3131,9 +3135,50 @@ get_constraint_for_1 (tree t, VEC (ce_s, heap) **results, bool address_p)
+ 	  {
+ 	  case INDIRECT_REF:
+ 	    {
++	      struct constraint_expr cs;
++	      varinfo_t vi, curr;
+ 	      get_constraint_for_1 (TREE_OPERAND (t, 0), results, address_p);
+ 	      do_deref (results);
+-	      return;
++
++	      /* If we are not taking the address then make sure to process
++		 all subvariables we might access.  */
++	      if (address_p)
++		return;
++
++	      cs = *VEC_last (ce_s, *results);
++	      if (cs.type == DEREF
++		  && type_can_have_subvars (TREE_TYPE (t)))
++		{
++		  /* For dereferences this means we have to defer it
++		     to solving time.  */
++		  VEC_last (ce_s, *results)->offset = UNKNOWN_OFFSET;
++		  return;
++		}
++	      if (cs.type != SCALAR)
++		return;
++
++	      vi = get_varinfo (cs.var);
++	      curr = vi->next;
++	      if (!vi->is_full_var
++		  && curr)
++		{
++		  unsigned HOST_WIDE_INT size;
++		  if (host_integerp (TYPE_SIZE (TREE_TYPE (t)), 1))
++		    size = TREE_INT_CST_LOW (TYPE_SIZE (TREE_TYPE (t)));
++		  else
++		    size = -1;
++		  for (; curr; curr = curr->next)
++		    {
++		      if (curr->offset - vi->offset < size)
++			{
++			  cs.var = curr->id;
++			  VEC_safe_push (ce_s, heap, *results, &cs);
++			}
++		      else
++			break;
++		    }
++                }
++              return;
+ 	    }
+ 	  case ARRAY_REF:
+ 	  case ARRAY_RANGE_REF:
+@@ -4074,6 +4119,15 @@ sort_fieldstack (VEC(fieldoff_s,heap) *fieldstack)
+ 	 fieldoff_compare);
+ }
+ 
++/* Return true if T is a type that can have subvars.  */
++
++static inline bool
++type_can_have_subvars (const_tree t)
++{
++  /* Aggregates without overlapping fields can have subvars.  */
++  return TREE_CODE (t) == RECORD_TYPE;
++}
++
+ /* Return true if V is a tree that we can have subvars for.
+    Normally, this is any aggregate type.  Also complex
+    types which are not gimple registers can have subvars.  */
+@@ -4089,11 +4143,7 @@ var_can_have_subvars (const_tree v)
+   if (!DECL_P (v) || MTAG_P (v))
+     return false;
+ 
+-  /* Aggregates without overlapping fields can have subvars.  */
+-  if (TREE_CODE (TREE_TYPE (v)) == RECORD_TYPE)
+-    return true;
+-
+-  return false;
++  return type_can_have_subvars (TREE_TYPE (v));
+ }
+ 
+ /* Given a TYPE, and a vector of field offsets FIELDSTACK, push all

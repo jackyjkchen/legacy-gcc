@@ -1,0 +1,77 @@
+diff --git a/gcc/simplify-rtx.c b/gcc/simplify-rtx.c
+index 037adefa7..b25f5e6ea 100644
+--- a/gcc/simplify-rtx.c
++++ b/gcc/simplify-rtx.c
+@@ -5313,34 +5313,14 @@ simplify_const_relational_operation (enum rtx_code code,
+ 	{
+ 	case LT:
+ 	  /* Optimize abs(x) < 0.0.  */
+-	  if (!HONOR_SNANS (mode)
+-	      && (!INTEGRAL_MODE_P (mode)
+-		  || (!flag_wrapv && !flag_trapv && flag_strict_overflow)))
+-	    {
+-	      if (INTEGRAL_MODE_P (mode)
+-		  && (issue_strict_overflow_warning
+-		      (WARN_STRICT_OVERFLOW_CONDITIONAL)))
+-		warning (OPT_Wstrict_overflow,
+-			 ("assuming signed overflow does not occur when "
+-			  "assuming abs (x) < 0 is false"));
+-	       return const0_rtx;
+-	    }
++	  if (!INTEGRAL_MODE_P (mode) && !HONOR_SNANS (mode))
++	    return const0_rtx;
+ 	  break;
+ 
+ 	case GE:
+ 	  /* Optimize abs(x) >= 0.0.  */
+-	  if (!HONOR_NANS (mode)
+-	      && (!INTEGRAL_MODE_P (mode)
+-		  || (!flag_wrapv && !flag_trapv && flag_strict_overflow)))
+-	    {
+-	      if (INTEGRAL_MODE_P (mode)
+-	          && (issue_strict_overflow_warning
+-	    	  (WARN_STRICT_OVERFLOW_CONDITIONAL)))
+-	        warning (OPT_Wstrict_overflow,
+-			 ("assuming signed overflow does not occur when "
+-			  "assuming abs (x) >= 0 is true"));
+-	      return const_true_rtx;
+-	    }
++	  if (!INTEGRAL_MODE_P (mode) && !HONOR_NANS (mode))
++	    return const_true_rtx;
+ 	  break;
+ 
+ 	case UNGE:
+diff --git a/gcc/testsuite/gcc.dg/torture/pr75964.c b/gcc/testsuite/gcc.dg/torture/pr75964.c
+new file mode 100644
+index 000000000..3b895ba70
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/torture/pr75964.c
+@@ -0,0 +1,28 @@
++/* { dg-do run } */
++
++typedef __UINT8_TYPE__ uint8_t;
++
++uint8_t __attribute__ ((noinline, noclone))
++abs8 (uint8_t x)
++{
++  if (x & 0x80)
++    x = -x;
++
++  if (x & 0x80)
++    x = 0x7f;
++
++  return x;
++}
++
++int
++main (void)
++{
++  if (abs8 (0) != 0
++      || abs8 (1) != 1
++      || abs8 (127) != 127
++      || abs8 (128) != 127
++      || abs8 (129) != 127
++      || abs8 (255) != 1)
++    __builtin_abort ();
++  return 0;
++}

@@ -1,0 +1,142 @@
+diff --git a/gcc/gimplify.c b/gcc/gimplify.c
+index 514f4f8a9..36dbed000 100644
+--- a/gcc/gimplify.c
++++ b/gcc/gimplify.c
+@@ -2287,17 +2287,18 @@ gimplify_self_mod_expr (tree *expr_p, gimple_seq *pre_p, gimple_seq *post_p,
+       arith_code = POINTER_PLUS_EXPR;
+     }
+ 
+-  t1 = build2 (arith_code, TREE_TYPE (*expr_p), lhs, rhs);
+-
+   if (postfix)
+     {
+-      gimplify_assign (lvalue, t1, orig_post_p);
++      tree t2 = get_initialized_tmp_var (lhs, pre_p, NULL);
++      t1 = build2 (arith_code, TREE_TYPE (*expr_p), t2, rhs);
++      gimplify_assign (lvalue, t1, pre_p);
+       gimplify_seq_add_seq (orig_post_p, post);
+-      *expr_p = lhs;
++      *expr_p = t2;
+       return GS_ALL_DONE;
+     }
+   else
+     {
++      t1 = build2 (arith_code, TREE_TYPE (*expr_p), lhs, rhs);
+       *expr_p = build2 (MODIFY_EXPR, TREE_TYPE (lvalue), lvalue, t1);
+       return GS_OK;
+     }
+diff --git a/gcc/testsuite/gcc.c-torture/execute/pr48814-1.c b/gcc/testsuite/gcc.c-torture/execute/pr48814-1.c
+new file mode 100644
+index 000000000..452aaab30
+--- /dev/null
++++ b/gcc/testsuite/gcc.c-torture/execute/pr48814-1.c
+@@ -0,0 +1,18 @@
++extern void abort (void);
++
++int arr[] = {1,2,3,4};
++int count = 0;
++
++int __attribute__((noinline))
++incr (void)
++{
++  return ++count;
++}
++
++int main()
++{
++  arr[count++] = incr ();
++  if (count != 2 || arr[count] != 3)
++    abort ();
++  return 0;
++}
+diff --git a/gcc/testsuite/gcc.c-torture/execute/pr48814-2.c b/gcc/testsuite/gcc.c-torture/execute/pr48814-2.c
+new file mode 100644
+index 000000000..9eea3289a
+--- /dev/null
++++ b/gcc/testsuite/gcc.c-torture/execute/pr48814-2.c
+@@ -0,0 +1,18 @@
++extern void abort (void);
++
++int arr[] = {1,2,3,4};
++int count = 0;
++
++int
++incr (void)
++{
++  return ++count;
++}
++
++int main()
++{
++  arr[count++] = incr ();
++  if (count != 2 || arr[count] != 3)
++    abort ();
++  return 0;
++}
+diff --git a/gcc/testsuite/gcc.dg/tree-ssa/assign-1.c b/gcc/testsuite/gcc.dg/tree-ssa/assign-1.c
+new file mode 100644
+index 000000000..f95f03ff4
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/tree-ssa/assign-1.c
+@@ -0,0 +1,12 @@
++/* { dg-do compile } */
++/* { dg-options "-O2 -fdump-tree-optimized" } */
++
++volatile int count;
++void bar(int);
++void foo()
++{
++ bar(count++);
++}
++
++/* { dg-final { scan-tree-dump-times "count =" 1 "optimized"} } */
++/* { dg-final { cleanup-tree-dump "optimized" } } */
+diff --git a/gcc/testsuite/gcc.dg/tree-ssa/assign-2.c b/gcc/testsuite/gcc.dg/tree-ssa/assign-2.c
+new file mode 100644
+index 000000000..47c38225b
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/tree-ssa/assign-2.c
+@@ -0,0 +1,13 @@
++/* { dg-do compile } */
++/* { dg-options "-O2 -fdump-tree-optimized" } */
++
++volatile int count;
++int arr[4];
++void foo()
++{
++ arr[count++] = 0;
++}
++
++/* { dg-final { scan-tree-dump-times "count =" 1 "optimized"} } */
++/* { dg-final { cleanup-tree-dump "optimized" } } */
++
+diff --git a/gcc/testsuite/gcc.dg/tree-ssa/assign-3.c b/gcc/testsuite/gcc.dg/tree-ssa/assign-3.c
+new file mode 100644
+index 000000000..e5426d781
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/tree-ssa/assign-3.c
+@@ -0,0 +1,24 @@
++/* { dg-do run } */
++/* { dg-options "-O2 -fdump-tree-gimple" } */
++
++extern void abort (void);
++struct S { int i; };
++struct S arr[32];
++volatile int count = 0;
++
++struct S __attribute__((noinline))
++incr ()
++{
++  ++count;
++}
++
++int main()
++{
++  arr[count++] = incr ();
++  if (count != 2)
++    abort ();
++  return 0;
++}
++
++/* { dg-final { scan-tree-dump-times " = count;" 3 "gimple" } } */
++/* { dg-final { cleanup-tree-dump "gimple" } } */

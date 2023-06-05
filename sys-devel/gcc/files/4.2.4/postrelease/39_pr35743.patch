@@ -1,0 +1,330 @@
+diff --git a/gcc/fortran/trans-array.c b/gcc/fortran/trans-array.c
+index 09735ff5..5d8f9b6f 100644
+--- a/gcc/fortran/trans-array.c
++++ b/gcc/fortran/trans-array.c
+@@ -1590,20 +1590,21 @@ gfc_add_loop_ss_code (gfc_loopinfo * loop, gfc_ss * ss, bool subscript)
+ 	  /* Scalar expression.  Evaluate this now.  This includes elemental
+ 	     dimension indices, but not array section bounds.  */
+ 	  gfc_init_se (&se, NULL);
+-          gfc_conv_expr (&se, ss->expr);
+-          gfc_add_block_to_block (&loop->pre, &se.pre);
++	  gfc_conv_expr (&se, ss->expr);
++	  gfc_add_block_to_block (&loop->pre, &se.pre);
+ 
+-          if (ss->expr->ts.type != BT_CHARACTER)
+-            {
+-              /* Move the evaluation of scalar expressions outside the
+-                 scalarization loop.  */
+-              if (subscript)
+-                se.expr = convert(gfc_array_index_type, se.expr);
+-              se.expr = gfc_evaluate_now (se.expr, &loop->pre);
+-              gfc_add_block_to_block (&loop->pre, &se.post);
+-            }
+-          else
+-            gfc_add_block_to_block (&loop->post, &se.post);
++	  if (ss->expr->ts.type != BT_CHARACTER)
++	    {
++	      /* Move the evaluation of scalar expressions outside the
++		 scalarization loop, except for WHERE assignments.  */
++	      if (subscript)
++		se.expr = convert(gfc_array_index_type, se.expr);
++	      if (!ss->where)
++		se.expr = gfc_evaluate_now (se.expr, &loop->pre);
++	      gfc_add_block_to_block (&loop->pre, &se.post);
++	    }
++	  else
++	    gfc_add_block_to_block (&loop->post, &se.post);
+ 
+ 	  ss->data.scalar.expr = se.expr;
+ 	  ss->string_length = se.string_length;
+diff --git a/gcc/fortran/trans-stmt.c b/gcc/fortran/trans-stmt.c
+index b414ad2e..b1386218 100644
+--- a/gcc/fortran/trans-stmt.c
++++ b/gcc/fortran/trans-stmt.c
+@@ -2922,6 +2922,7 @@ gfc_trans_where_assign (gfc_expr *expr1, gfc_expr *expr2,
+    {
+      /* The rhs is scalar.  Add a ss for the expression.  */
+      rss = gfc_get_ss ();
++     rss->where = 1;
+      rss->next = gfc_ss_terminator;
+      rss->type = GFC_SS_SCALAR;
+      rss->expr = expr2;
+@@ -3084,6 +3085,7 @@ gfc_trans_where_2 (gfc_code * code, tree mask, bool invert,
+   gfc_code *cblock;
+   gfc_code *cnext;
+   tree tmp;
++  tree cond;
+   tree count1, count2;
+   bool need_cmask;
+   bool need_pmask;
+@@ -3149,6 +3151,13 @@ gfc_trans_where_2 (gfc_code * code, tree mask, bool invert,
+       size = compute_overall_iter_number (nested_forall_info, inner_size,
+ 					  &inner_size_body, block);
+ 
++      /* Check whether the size is negative.  */
++      cond = fold_build2 (LE_EXPR, boolean_type_node, size,
++			  gfc_index_zero_node);
++      size = fold_build3 (COND_EXPR, gfc_array_index_type, cond,
++			  gfc_index_zero_node, size);
++      size = gfc_evaluate_now (size, block);
++
+       /* Allocate temporary for WHERE mask if needed.  */
+       if (need_cmask)
+ 	cmask = allocate_temp_for_forall_nest_1 (mask_type, size, block,
+@@ -3352,6 +3361,7 @@ gfc_trans_where_3 (gfc_code * cblock, gfc_code * eblock)
+   if (tsss == gfc_ss_terminator)
+     {
+       tsss = gfc_get_ss ();
++      tsss->where = 1;
+       tsss->next = gfc_ss_terminator;
+       tsss->type = GFC_SS_SCALAR;
+       tsss->expr = tsrc;
+@@ -3369,6 +3379,7 @@ gfc_trans_where_3 (gfc_code * cblock, gfc_code * eblock)
+       if (esss == gfc_ss_terminator)
+ 	{
+ 	  esss = gfc_get_ss ();
++	  esss->where = 1;
+ 	  esss->next = gfc_ss_terminator;
+ 	  esss->type = GFC_SS_SCALAR;
+ 	  esss->expr = esrc;
+@@ -3483,19 +3494,28 @@ gfc_trans_where (gfc_code * code)
+ 	     block is dependence free if cond is not dependent on writes
+ 	     to x1 and x2, y1 is not dependent on writes to x2, and y2
+ 	     is not dependent on writes to x1, and both y's are not
+-	     dependent upon their own x's.  */
++	     dependent upon their own x's.  In addition to this, the
++	     final two dependency checks below exclude all but the same
++	     array reference if the where and elswhere destinations
++	     are the same.  In short, this is VERY conservative and this
++	     is needed because the two loops, required by the standard
++	     are coalesced in gfc_trans_where_3.  */
+ 	  if (!gfc_check_dependency(cblock->next->expr,
+ 				    cblock->expr, 0)
+ 	      && !gfc_check_dependency(eblock->next->expr,
+ 				       cblock->expr, 0)
+ 	      && !gfc_check_dependency(cblock->next->expr,
+-				       eblock->next->expr2, 0)
++				       eblock->next->expr2, 1)
++	      && !gfc_check_dependency(eblock->next->expr,
++				       cblock->next->expr2, 1)
++	      && !gfc_check_dependency(cblock->next->expr,
++				       cblock->next->expr2, 1)
+ 	      && !gfc_check_dependency(eblock->next->expr,
+-				       cblock->next->expr2, 0)
++				       eblock->next->expr2, 1)
+ 	      && !gfc_check_dependency(cblock->next->expr,
+-				       cblock->next->expr2, 0)
++				       eblock->next->expr, 0)
+ 	      && !gfc_check_dependency(eblock->next->expr,
+-				       eblock->next->expr2, 0))
++				       cblock->next->expr, 0))
+ 	    return gfc_trans_where_3 (cblock, eblock);
+ 	}
+     }
+diff --git a/gcc/fortran/trans.h b/gcc/fortran/trans.h
+index e56bbb0d..c8920d9b 100644
+--- a/gcc/fortran/trans.h
++++ b/gcc/fortran/trans.h
+@@ -198,8 +198,9 @@ typedef struct gfc_ss
+ 
+   /* This is used by assignments requiring temporaries. The bits specify which
+      loops the terms appear in.  This will be 1 for the RHS expressions,
+-     2 for the LHS expressions, and 3(=1|2) for the temporary.  */
+-  unsigned useflags:2;
++     2 for the LHS expressions, and 3(=1|2) for the temporary.  The bit
++     'where' suppresses precalculation of scalars in WHERE assignments.  */
++  unsigned useflags:2, where:1;
+ }
+ gfc_ss;
+ #define gfc_get_ss() gfc_getmem(sizeof(gfc_ss))
+diff --git a/gcc/testsuite/gfortran.dg/actual_procedure_1.f90 b/gcc/testsuite/gfortran.dg/actual_procedure_1.f90
+new file mode 100644
+index 00000000..5327cb73
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/actual_procedure_1.f90
+@@ -0,0 +1,72 @@
++! { dg-do run }
++! Tests the fix for PR36433 in which a check for the array size
++! or character length of the actual arguments of foo and bar
++! would reject this legal code.
++!
++! Contributed by Paul Thomas <pault@gcc.gnu.org>
++!
++module m
++contains
++  function proc4 (arg, chr)
++    integer, dimension(10) :: proc4
++    integer, intent(in) :: arg
++    character(8), intent(inout) :: chr
++    proc4 = arg
++    chr = "proc4"
++  end function
++  function chr_proc ()
++    character(8) :: chr_proc
++    chr_proc = "chr_proc"
++  end function
++end module
++
++program procPtrTest
++  use m
++  character(8) :: chr
++  interface
++    function proc_ext (arg, chr)
++      integer, dimension(10) :: proc_ext
++      integer, intent(in) :: arg
++      character(8), intent(inout) :: chr
++    end function
++  end interface
++! Check the passing of a module function
++  call foo (proc4, chr)
++  if (trim (chr) .ne. "proc4") call abort
++! Check the passing of an external function
++  call foo (proc_ext, chr)
++! Check the passing of a character function
++  if (trim (chr) .ne. "proc_ext") call abort
++  call bar (chr_proc)
++contains
++  subroutine foo (p, chr)
++    character(8), intent(inout) :: chr
++    integer :: i(10)
++    interface
++      function p (arg, chr)
++        integer, dimension(10) :: p
++        integer, intent(in) :: arg
++        character(8), intent(inout) :: chr
++      end function
++    end interface
++    i = p (99, chr)
++    if (any(i .ne. 99)) call abort
++  end subroutine
++  subroutine bar (p)
++    interface
++      function p ()
++        character(8):: p
++      end function
++    end interface
++    if (p () .ne. "chr_proc") call abort
++  end subroutine
++end program 
++
++function proc_ext (arg, chr)
++  integer, dimension(10) :: proc_ext
++  integer, intent(in) :: arg
++  character(8), intent(inout) :: chr
++  proc_ext = arg
++  chr = "proc_ext"
++end function
++! { dg-final { cleanup-modules "m" } }
+\ No newline at end of file
+diff --git a/gcc/testsuite/gfortran.dg/where_1.f90 b/gcc/testsuite/gfortran.dg/where_1.f90
+new file mode 100644
+index 00000000..0f5b5e77
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/where_1.f90
+@@ -0,0 +1,64 @@
++! { dg-do run }
++! Tests the fix for PR35759 and PR35756 in which the dependencies
++! led to an incorrect use of the "simple where", gfc_trans_where_3.
++!
++! Contributed by Dick Hendrickson <dick.hendrickson@gmail.com>
++!
++  logical :: la(6) = (/(2*(i/2) /= i, i = 1, 6)/), lb(6)
++  CALL PR35759
++  CALL PR35756
++!
++! The first version of the fix caused this to regress as pointed
++! out by Dominique d'Humieres
++!
++  lb = la
++  where(la)
++    la = .false.
++  elsewhere
++    la = .true.
++  end where
++  if (any(la .eqv. lb)) call abort()
++CONTAINS
++  subroutine PR35759
++    integer UDA1L(6)
++    integer ::  UDA1R(6), expected(6) = (/2,0,5,0,3,0/)
++    LOGICAL LDA(5)
++    UDA1L(1:6) = 0
++    uda1r = (/1,2,3,4,5,6/)
++    lda = (/ (i/2*2 .ne. I, i=1,5) /)
++    WHERE (LDA)
++      UDA1L(1:5) = UDA1R(2:6)
++    ELSEWHERE
++      UDA1L(2:6) = UDA1R(6:2:-1)
++    ENDWHERE
++    if (any (expected /= uda1l)) call abort
++  END subroutine
++
++  SUBROUTINE PR35756
++    INTEGER  ILA(10), CLA(10)
++    LOGICAL  LDA(10)
++    ILA = (/ (I, i=1,10) /)
++    LDA = (/ (i/2*2 .ne. I, i=1,10) /)
++    WHERE(LDA)
++      CLA = 10
++    ELSEWHERE
++      CLA = 2
++    ENDWHERE
++    WHERE(LDA)
++      ILA = R_MY_MAX_I(ILA)
++    ELSEWHERE
++      ILA = R_MY_MIN_I(ILA)
++    ENDWHERE
++    IF (any (CLA /= ILA)) call abort
++  end subroutine
++
++  INTEGER FUNCTION R_MY_MAX_I(A)
++    INTEGER  ::  A(:)
++    R_MY_MAX_I = MAXVAL(A)
++  END FUNCTION R_MY_MAX_I
++
++  INTEGER FUNCTION R_MY_MIN_I(A)
++    INTEGER  ::  A(:)
++    R_MY_MIN_I = MINVAL(A)
++  END FUNCTION R_MY_MIN_I
++END
+diff --git a/gcc/testsuite/gfortran.dg/where_2.f90 b/gcc/testsuite/gfortran.dg/where_2.f90
+new file mode 100644
+index 00000000..b6e952b2
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/where_2.f90
+@@ -0,0 +1,36 @@
++! { dg-do run }
++! Tests the fix for PR35743 and PR35745.
++!
++! Contributed by Dick Hendrickson <dick.hendrickson@gmail.com>
++!
++program try_rg0025
++  logical lda(5)
++  lda = (/(i/2*2 .ne. I, i=1,5)/)
++  call PR35743 (lda,  1,  2,  3,  5,  6, -1, -2)
++  CALL PR34745
++end program
++
++! Previously, the negative mask size would not be detected.
++SUBROUTINE PR35743 (LDA,nf1,nf2,nf3,nf5,nf6,mf1,mf2)
++  type unseq
++    real  r
++  end type unseq
++  TYPE(UNSEQ) TDA1L(6)
++  LOGICAL LDA(NF5)
++  TDA1L(1:6)%r = 1.0
++  WHERE (LDA(NF6:NF3))
++    TDA1L(MF1:NF5:MF1) = TDA1L(NF6:NF2)
++  ENDWHERE
++END SUBROUTINE
++
++! Previously, the expression in the WHERE block would be evaluated
++! ouside the loop generated by the where.
++SUBROUTINE PR34745
++  INTEGER IDA(10)
++  REAL RDA(10)
++  RDA    = 1.0
++  nf0 = 0
++  WHERE (RDA < -15.0)
++    IDA = 1/NF0 + 2
++  ENDWHERE
++END SUBROUTINE

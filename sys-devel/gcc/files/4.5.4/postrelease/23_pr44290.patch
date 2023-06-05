@@ -1,0 +1,78 @@
+diff --git a/gcc/attribs.c b/gcc/attribs.c
+index 4d91a0d65..2e066081f 100644
+--- a/gcc/attribs.c
++++ b/gcc/attribs.c
+@@ -278,6 +278,19 @@ decl_attributes (tree *node, tree attributes, int flags)
+ 	TREE_VALUE (cur_attr) = chainon (opts, TREE_VALUE (cur_attr));
+     }
+ 
++  /* A "naked" function attribute implies "noinline" and "noclone" for
++     those targets that support it.  */
++  if (TREE_CODE (*node) == FUNCTION_DECL
++      && lookup_attribute_spec (get_identifier ("naked"))
++      && lookup_attribute ("naked", attributes) != NULL)
++    {
++      if (lookup_attribute ("noinline", attributes) == NULL)
++	attributes = tree_cons (get_identifier ("noinline"), NULL, attributes);
++
++      if (lookup_attribute ("noclone", attributes) == NULL)
++	attributes = tree_cons (get_identifier ("noclone"),  NULL, attributes);
++    }
++
+   targetm.insert_attributes (*node, &attributes);
+ 
+   for (a = attributes; a; a = TREE_CHAIN (a))
+diff --git a/gcc/testsuite/gcc.dg/pr44290-1.c b/gcc/testsuite/gcc.dg/pr44290-1.c
+new file mode 100644
+index 000000000..071a27104
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr44290-1.c
+@@ -0,0 +1,18 @@
++/* { dg-do compile { target arm*-*-* avr-*-* mcore-*-* rx-*-* spu-*-* } } */
++/* { dg-options "-O2 -fdump-tree-optimized" } */
++
++static void __attribute__((naked))
++foo(void *from, void *to)
++{
++  asm volatile("dummy"::"r"(from), "r"(to));
++}
++
++unsigned int fie[2];
++
++void fum(void *to)
++{
++  foo(fie, to);
++}
++
++/* { dg-final { scan-tree-dump "foo \\\(void \\\* from, void \\\* to\\\)" "optimized" } } */
++/* { dg-final { cleanup-tree-dump "optimized" } } */
+diff --git a/gcc/testsuite/gcc.dg/pr44290-2.c b/gcc/testsuite/gcc.dg/pr44290-2.c
+new file mode 100644
+index 000000000..1951a519d
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr44290-2.c
+@@ -0,0 +1,24 @@
++/* { dg-do compile { target arm*-*-* avr-*-* mcore-*-* rx-*-* spu-*-* } } */
++/* { dg-options "-O2 -fdump-tree-optimized" } */
++
++static unsigned long __attribute__((naked))
++foo (unsigned long base)
++{
++  asm volatile ("dummy");
++}
++unsigned long
++bar (void)
++{
++  static int start, set;
++
++  if (!set)
++    {
++      set = 1;
++      start = foo (0);
++    }
++
++  return foo (start);
++}
++
++/* { dg-final { scan-tree-dump "foo \\\(long unsigned int base\\\)" "optimized" } } */
++/* { dg-final { cleanup-tree-dump "optimized" } } */

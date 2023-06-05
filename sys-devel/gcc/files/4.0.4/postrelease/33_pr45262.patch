@@ -1,0 +1,64 @@
+diff --git a/gcc/fold-const.c b/gcc/fold-const.c
+index 8b22c81d..ff9afdbe 100644
+--- a/gcc/fold-const.c
++++ b/gcc/fold-const.c
+@@ -3705,9 +3705,9 @@ make_range (tree exp, int *pin_p, tree *plow, tree *phigh)
+ 	  n_high = range_binop (MINUS_EXPR, exp_type,
+ 				fold_convert (exp_type, integer_zero_node),
+ 				0, low, 0);
+-	  low = n_low, high = n_high;
+-	  exp = arg0;
+-	  continue;
++	  if (n_high != 0 && TREE_OVERFLOW (n_high))
++	    break;
++	  goto normalize;
+ 
+ 	case BIT_NOT_EXPR:
+ 	  /* ~ X -> -X - 1  */
+@@ -3731,6 +3731,7 @@ make_range (tree exp, int *pin_p, tree *plow, tree *phigh)
+ 	      || (n_high != 0 && TREE_OVERFLOW (n_high)))
+ 	    break;
+ 
++	normalize:
+ 	  /* Check for an unsigned range which has wrapped around the maximum
+ 	     value thus making n_high < n_low, and normalize it.  */
+ 	  if (n_low && n_high && tree_int_cst_lt (n_high, n_low))
+diff --git a/gcc/testsuite/gcc.c-torture/execute/pr45262.c b/gcc/testsuite/gcc.c-torture/execute/pr45262.c
+new file mode 100644
+index 00000000..72e186bf
+--- /dev/null
++++ b/gcc/testsuite/gcc.c-torture/execute/pr45262.c
+@@ -0,0 +1,33 @@
++/* PR middle-end/45262 */
++
++extern void abort (void);
++
++int
++foo (unsigned int x)
++{
++  return ((int) x < 0) || ((int) (-x) < 0);
++}
++
++int
++bar (unsigned int x)
++{
++  return x >> 31 || (-x) >> 31;
++}
++
++int
++main (void)
++{
++  if (foo (1) != 1)
++    abort ();
++  if (foo (0) != 0)
++    abort ();
++  if (foo (-1) != 1)
++    abort ();
++  if (bar (1) != 1)
++    abort ();
++  if (bar (0) != 0)
++    abort ();
++  if (bar (-1) != 1)
++    abort ();
++  return 0;
++}

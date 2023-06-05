@@ -1,0 +1,99 @@
+diff --git a/gcc/lto-streamer-in.c b/gcc/lto-streamer-in.c
+index f732785e1..458858531 100644
+--- a/gcc/lto-streamer-in.c
++++ b/gcc/lto-streamer-in.c
+@@ -1754,6 +1754,11 @@ unpack_ts_function_decl_value_fields (struct bitpack_d *bp, tree expr)
+   DECL_DISREGARD_INLINE_LIMITS (expr) = (unsigned) bp_unpack_value (bp, 1);
+   DECL_PURE_P (expr) = (unsigned) bp_unpack_value (bp, 1);
+   DECL_LOOPING_CONST_OR_PURE_P (expr) = (unsigned) bp_unpack_value (bp, 1);
++  if (DECL_STATIC_DESTRUCTOR (expr))
++    {
++       priority_type p = (priority_type) bp_unpack_value (bp, HOST_BITS_PER_SHORT);
++       SET_DECL_FINI_PRIORITY (expr, p);
++    }
+ }
+ 
+ 
+diff --git a/gcc/lto-streamer-out.c b/gcc/lto-streamer-out.c
+index 7e0485563..4da75a7c3 100644
+--- a/gcc/lto-streamer-out.c
++++ b/gcc/lto-streamer-out.c
+@@ -505,6 +505,8 @@ pack_ts_function_decl_value_fields (struct bitpack_d *bp, tree expr)
+   bp_pack_value (bp, DECL_DISREGARD_INLINE_LIMITS (expr), 1);
+   bp_pack_value (bp, DECL_PURE_P (expr), 1);
+   bp_pack_value (bp, DECL_LOOPING_CONST_OR_PURE_P (expr), 1);
++  if (DECL_STATIC_DESTRUCTOR (expr))
++    bp_pack_value (bp, DECL_FINI_PRIORITY (expr), HOST_BITS_PER_SHORT);
+ }
+ 
+ 
+diff --git a/gcc/testsuite/gcc.dg/initpri3.c b/gcc/testsuite/gcc.dg/initpri3.c
+new file mode 100644
+index 000000000..1633da014
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/initpri3.c
+@@ -0,0 +1,64 @@
++/* { dg-do run { target init_priority } } */
++/* { dg-require-effective-target lto } */
++/* { dg-options "-flto -O3" } */
++
++extern void abort ();
++
++int i;
++int j;
++
++void c1() __attribute__((constructor (500)));
++void c2() __attribute__((constructor (700)));
++void c3() __attribute__((constructor (600)));
++
++void c1() {
++  if (i++ != 0)
++    abort ();
++}
++
++void c2() {
++  if (i++ != 2)
++    abort ();
++}
++
++void c3() {
++  if (i++ != 1)
++    abort ();
++}
++
++void d1() __attribute__((destructor (500)));
++void d2() __attribute__((destructor (700)));
++void d3() __attribute__((destructor (600)));
++
++void d1() {
++  if (--i != 0)
++    abort ();
++}
++
++void d2() {
++  if (--i != 2)
++    abort ();
++}
++
++void d3() {
++  if (j != 2)
++    abort ();
++  if (--i != 1)
++    abort ();
++}
++
++void cd4() __attribute__((constructor (800), destructor (800)));
++
++void cd4() {
++  if (i != 3)
++    abort ();
++  ++j;
++}
++
++int main () {
++  if (i != 3)
++    return 1;
++  if (j != 1)
++    abort ();
++  return 0;
++}

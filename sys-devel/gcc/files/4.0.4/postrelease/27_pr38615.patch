@@ -1,0 +1,55 @@
+diff --git a/gcc/doc/invoke.texi b/gcc/doc/invoke.texi
+index 10310f4e..5687401f 100644
+--- a/gcc/doc/invoke.texi
++++ b/gcc/doc/invoke.texi
+@@ -4349,8 +4349,9 @@ Attempt to merge identical constants and identical variables.
+ This option implies @option{-fmerge-constants}.  In addition to
+ @option{-fmerge-constants} this considers e.g.@: even constant initialized
+ arrays or initialized constant variables with integral or floating point
+-types.  Languages like C or C++ require each non-automatic variable to
+-have distinct location, so using this option will result in non-conforming
++types.  Languages like C or C++ require each variable, including multiple
++instances of the same variable in recursive calls, to have distinct locations,
++so using this option will result in non-conforming
+ behavior.
+ 
+ @item -fmodulo-sched
+diff --git a/gcc/gimplify.c b/gcc/gimplify.c
+index 7d217e51..8c0b9b9a 100644
+--- a/gcc/gimplify.c
++++ b/gcc/gimplify.c
+@@ -2635,7 +2635,8 @@ gimplify_init_constructor (tree *expr_p, tree *pre_p,
+ 	if (num_nonconstant_elements == 0
+ 	    && num_nonzero_elements > 1
+ 	    && TREE_READONLY (object)
+-	    && TREE_CODE (object) == VAR_DECL)
++	    && TREE_CODE (object) == VAR_DECL
++	    && (flag_merge_constants >= 2 || !TREE_ADDRESSABLE (object)))
+ 	  {
+ 	    DECL_INITIAL (object) = ctor;
+ 	    TREE_STATIC (object) = 1;
+diff --git a/gcc/testsuite/gcc.dg/pr38615.c b/gcc/testsuite/gcc.dg/pr38615.c
+new file mode 100644
+index 00000000..8a818a11
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr38615.c
+@@ -0,0 +1,19 @@
++/* { dg-do run } */
++
++int t;
++extern void abort (void);
++
++int f(int t, const int *a)
++{
++ const int b[] = { 1, 2, 3};
++ if (!t)
++   return f(1, b);
++ return b == a;
++}
++
++int main(void)
++{
++ if (f(0, 0))
++   abort ();
++ return 0;
++}

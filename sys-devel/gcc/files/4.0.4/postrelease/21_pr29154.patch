@@ -1,0 +1,85 @@
+diff --git a/gcc/gimplify.c b/gcc/gimplify.c
+index b13e96a3..7d217e51 100644
+--- a/gcc/gimplify.c
++++ b/gcc/gimplify.c
+@@ -1595,7 +1595,7 @@ gimplify_self_mod_expr (tree *expr_p, tree *pre_p, tree *post_p,
+ 			bool want_value)
+ {
+   enum tree_code code;
+-  tree lhs, lvalue, rhs, t1;
++  tree lhs, lvalue, rhs, t1, post = NULL, *orig_post_p = post_p;
+   bool postfix;
+   enum tree_code arith_code;
+   enum gimplify_status ret;
+@@ -1612,6 +1612,11 @@ gimplify_self_mod_expr (tree *expr_p, tree *pre_p, tree *post_p,
+   else
+     postfix = false;
+ 
++  /* For postfix, make sure the inner expression's post side effects
++     are executed after side effects from this expression.  */
++  if (postfix)
++    post_p = &post;
++
+   /* Add or subtract?  */
+   if (code == PREINCREMENT_EXPR || code == POSTINCREMENT_EXPR)
+     arith_code = PLUS_EXPR;
+@@ -1642,7 +1647,8 @@ gimplify_self_mod_expr (tree *expr_p, tree *pre_p, tree *post_p,
+ 
+   if (postfix)
+     {
+-      gimplify_and_add (t1, post_p);
++      gimplify_and_add (t1, orig_post_p);
++      append_to_statement_list (post, orig_post_p);
+       *expr_p = lhs;
+       return GS_ALL_DONE;
+     }
+diff --git a/gcc/testsuite/gcc.c-torture/execute/20060929-1.c b/gcc/testsuite/gcc.c-torture/execute/20060929-1.c
+new file mode 100644
+index 00000000..76c447fd
+--- /dev/null
++++ b/gcc/testsuite/gcc.c-torture/execute/20060929-1.c
+@@ -0,0 +1,44 @@
++/* PR c/29154 */
++
++extern void abort (void);
++
++void
++foo (int **p, int *q)
++{
++  *(*p++)++ = *q++;
++}
++
++void
++bar (int **p, int *q)
++{
++  **p = *q++;
++  *(*p++)++;
++}
++
++void
++baz (int **p, int *q)
++{
++  **p = *q++;
++  (*p++)++;
++}
++
++int
++main (void)
++{
++  int i = 42, j = 0;
++  int *p = &i;
++  foo (&p, &j);
++  if (p - 1 != &i || j != 0 || i != 0)
++    abort ();
++  i = 43;
++  p = &i;
++  bar (&p, &j);
++  if (p - 1 != &i || j != 0 || i != 0)
++    abort ();
++  i = 44;
++  p = &i;
++  baz (&p, &j);
++  if (p - 1 != &i || j != 0 || i != 0)
++    abort ();
++  return 0;
++}

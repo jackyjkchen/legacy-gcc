@@ -1,0 +1,50 @@
+diff --git a/gcc/config/avr/avr.c b/gcc/config/avr/avr.c
+index 9b3e7666..eb2a3340 100644
+--- a/gcc/config/avr/avr.c
++++ b/gcc/config/avr/avr.c
+@@ -69,6 +69,7 @@ static void avr_file_start (void);
+ static void avr_file_end (void);
+ static void avr_asm_function_end_prologue (FILE *);
+ static void avr_asm_function_begin_epilogue (FILE *);
++static bool avr_cannot_modify_jumps_p (void);
+ static void avr_insert_attributes (tree, tree *);
+ static void avr_asm_init_sections (void);
+ static unsigned int avr_section_type_flags (tree, const char *, int);
+@@ -328,6 +329,9 @@ int avr_case_values_threshold = 30000;
+ #undef TARGET_STRICT_ARGUMENT_NAMING
+ #define TARGET_STRICT_ARGUMENT_NAMING hook_bool_CUMULATIVE_ARGS_true
+ 
++#undef TARGET_CANNOT_MODIFY_JUMPS_P
++#define TARGET_CANNOT_MODIFY_JUMPS_P avr_cannot_modify_jumps_p
++
+ struct gcc_target targetm = TARGET_INITIALIZER;
+ 
+ void
+@@ -951,6 +955,27 @@ avr_asm_function_begin_epilogue (FILE *file)
+   fprintf (file, "/* epilogue start */\n");
+ }
+ 
++
++/* Implement TARGET_CANNOT_MODITY_JUMPS_P */
++
++static bool
++avr_cannot_modify_jumps_p (void)
++{
++
++  /* Naked Functions must not have any instructions after
++     their epilogue, see PR42240 */
++     
++  if (reload_completed
++      && cfun->machine
++      && cfun->machine->is_naked)
++    {
++      return true;
++    }
++
++  return false;
++}
++
++
+ /* Return nonzero if X (an RTX) is a legitimate memory address on the target
+    machine for a memory operand of mode MODE.  */
+ 
