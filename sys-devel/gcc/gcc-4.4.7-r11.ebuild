@@ -57,8 +57,8 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/17_pr42240.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/18_pr39415.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/19_pr44996.patch
-	eapply "${FILESDIR}"/${PV}/postrelease/20_pr43323.patch
-	eapply "${FILESDIR}"/${PV}/postrelease/21_pr42321.patch
+	[[ ${CTARGET} == arm*-*-*eabihf* ]] || eapply "${FILESDIR}"/${PV}/postrelease/20_pr43323.patch
+	[[ ${CTARGET} == arm*-*-*eabihf* ]] || eapply "${FILESDIR}"/${PV}/postrelease/21_pr42321.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/22_pr39633.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/23_pr45777.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/24_pr36399.patch
