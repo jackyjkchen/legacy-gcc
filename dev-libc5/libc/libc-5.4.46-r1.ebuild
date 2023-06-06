@@ -16,7 +16,7 @@ IUSE="+stdint"
 
 DEPEND="${CATEGORY}/linux-headers"
 RDEPEND="${DEPEND}"
-BDEPEND=""
+BDEPEND="dev-vcs/git"
 
 S=${WORKDIR}/libc-${PV}
 

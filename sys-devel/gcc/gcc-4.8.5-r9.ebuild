@@ -101,6 +101,6 @@ src_prepare() {
 
 	is_crosscompile || eapply "${FILESDIR}"/${PV}/postrelease/99_fix-known-test-fail.patch
 
-	# gcc-4.8.4 on aarch64, pch case random build crash
+	# gcc-4.8.5 on aarch64, pch case random build crash
 	[[ $(tc-arch) == "arm64" ]] && rm -rf gcc/testsuite/gcc.dg/pch gcc/testsuite/g++.dg/pch gcc/testsuite/objc.dg/pch
 }
