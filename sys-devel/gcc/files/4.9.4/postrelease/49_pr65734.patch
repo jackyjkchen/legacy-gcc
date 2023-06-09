@@ -1,0 +1,139 @@
+diff --git a/gcc/cp/class.c b/gcc/cp/class.c
+index 042a43d28..5fd8cbf5a 100644
+--- a/gcc/cp/class.c
++++ b/gcc/cp/class.c
+@@ -1821,14 +1821,23 @@ fixup_attribute_variants (tree t)
+   if (!t)
+     return;
+ 
++  tree attrs = TYPE_ATTRIBUTES (t);
++  unsigned align = TYPE_ALIGN (t);
++  bool user_align = TYPE_USER_ALIGN (t);
++
+   for (variants = TYPE_NEXT_VARIANT (t);
+        variants;
+        variants = TYPE_NEXT_VARIANT (variants))
+     {
+       /* These are the two fields that check_qualified_type looks at and
+ 	 are affected by attributes.  */
+-      TYPE_ATTRIBUTES (variants) = TYPE_ATTRIBUTES (t);
+-      TYPE_ALIGN (variants) = TYPE_ALIGN (t);
++      TYPE_ATTRIBUTES (variants) = attrs;
++      unsigned valign = align;
++      if (TYPE_USER_ALIGN (variants))
++	valign = MAX (valign, TYPE_ALIGN (variants));
++      else
++	TYPE_USER_ALIGN (variants) = user_align;
++      TYPE_ALIGN (variants) = valign;
+     }
+ }
+ 
+diff --git a/gcc/stor-layout.c b/gcc/stor-layout.c
+index 9dc10d454..5428e2e7f 100644
+--- a/gcc/stor-layout.c
++++ b/gcc/stor-layout.c
+@@ -1704,6 +1704,7 @@ finalize_type_size (tree type)
+       tree size = TYPE_SIZE (type);
+       tree size_unit = TYPE_SIZE_UNIT (type);
+       unsigned int align = TYPE_ALIGN (type);
++      unsigned int precision = TYPE_PRECISION (type);
+       unsigned int user_align = TYPE_USER_ALIGN (type);
+       enum machine_mode mode = TYPE_MODE (type);
+ 
+@@ -1714,8 +1715,13 @@ finalize_type_size (tree type)
+ 	{
+ 	  TYPE_SIZE (variant) = size;
+ 	  TYPE_SIZE_UNIT (variant) = size_unit;
+-	  TYPE_ALIGN (variant) = align;
+-	  TYPE_USER_ALIGN (variant) = user_align;
++	  unsigned valign = align;
++	  if (TYPE_USER_ALIGN (variant))
++	    valign = MAX (valign, TYPE_ALIGN (variant));
++	  else
++	    TYPE_USER_ALIGN (variant) = user_align;
++	  TYPE_ALIGN (variant) = valign;
++	  TYPE_PRECISION (variant) = precision;
+ 	  SET_TYPE_MODE (variant, mode);
+ 	}
+     }
+@@ -2034,6 +2040,10 @@ layout_type (tree type)
+   if (type == error_mark_node)
+     return;
+ 
++  /* We don't want finalize_type_size to copy an alignment attribute to
++     variants that don't have it.  */
++  type = TYPE_MAIN_VARIANT (type);
++
+   /* Do nothing if type has been laid out before.  */
+   if (TYPE_SIZE (type))
+     return;
+@@ -2227,13 +2237,17 @@ layout_type (tree type)
+ 	/* Now round the alignment and size,
+ 	   using machine-dependent criteria if any.  */
+ 
++	unsigned align = TYPE_ALIGN (element);
++	if (TYPE_USER_ALIGN (type))
++	  align = MAX (align, TYPE_ALIGN (type));
++	else
++	  TYPE_USER_ALIGN (type) = TYPE_USER_ALIGN (element);
+ #ifdef ROUND_TYPE_ALIGN
+-	TYPE_ALIGN (type)
+-	  = ROUND_TYPE_ALIGN (type, TYPE_ALIGN (element), BITS_PER_UNIT);
++	align = ROUND_TYPE_ALIGN (type, align, BITS_PER_UNIT);
+ #else
+-	TYPE_ALIGN (type) = MAX (TYPE_ALIGN (element), BITS_PER_UNIT);
++	align = MAX (align, BITS_PER_UNIT);
+ #endif
+-	TYPE_USER_ALIGN (type) = TYPE_USER_ALIGN (element);
++	TYPE_ALIGN (type) = align;
+ 	SET_TYPE_MODE (type, BLKmode);
+ 	if (TYPE_SIZE (type) != 0
+ 	    && ! targetm.member_type_forces_blk (type, VOIDmode)
+diff --git a/gcc/testsuite/g++.dg/cpp0x/alignas1.C b/gcc/testsuite/g++.dg/cpp0x/alignas1.C
+new file mode 100644
+index 000000000..d73c875d6
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/alignas1.C
+@@ -0,0 +1,16 @@
++// PR c++/65734
++// { dg-do compile { target c++11 } }
++
++template <class T> struct A
++{
++  T t;
++};
++
++typedef A<int> T[4] alignas (2 * alignof (int));
++A<int> a[4];
++
++typedef A<char> T2[4] alignas (2 * alignof (int));
++
++#define SA(X) static_assert((X),#X)
++SA(alignof (T) == 2 * alignof(int));
++SA(alignof (T2) == 2 * alignof(int));
+diff --git a/gcc/testsuite/g++.dg/cpp0x/alignas2.C b/gcc/testsuite/g++.dg/cpp0x/alignas2.C
+new file mode 100644
+index 000000000..2e7d051c8
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/alignas2.C
+@@ -0,0 +1,20 @@
++// PR c++/65734
++// { dg-do compile { target c++11 } }
++
++template <typename T>
++struct BVector
++{
++  T t;
++};
++BVector<int> m;
++
++template <template <class> class T>
++struct BV2
++{
++  typedef T<float> value_type alignas (16);
++  value_type v;
++};
++BV2<BVector> m2;
++
++#define SA(X) static_assert((X),#X)
++SA(alignof (BV2<BVector>::value_type) == 16);

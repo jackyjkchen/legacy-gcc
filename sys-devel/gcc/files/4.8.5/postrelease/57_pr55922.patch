@@ -1,0 +1,88 @@
+diff --git a/gcc/cp/cp-tree.h b/gcc/cp/cp-tree.h
+index f482a2ad7..7f1029b51 100644
+--- a/gcc/cp/cp-tree.h
++++ b/gcc/cp/cp-tree.h
+@@ -3367,6 +3367,9 @@ more_aggr_init_expr_args_p (const aggr_init_expr_arg_iterator *iter)
+    B b{1,2}, not B b({1,2}) or B b = {1,2}.  */
+ #define CONSTRUCTOR_IS_DIRECT_INIT(NODE) (TREE_LANG_FLAG_0 (CONSTRUCTOR_CHECK (NODE)))
+ 
++#define DIRECT_LIST_INIT_P(NODE) \
++   (BRACE_ENCLOSED_INITIALIZER_P (NODE) && CONSTRUCTOR_IS_DIRECT_INIT (NODE))
++
+ /* True if NODE represents a conversion for direct-initialization in a
+    template.  Set by perform_implicit_conversion_flags.  */
+ #define IMPLICIT_CONV_EXPR_DIRECT_INIT(NODE) \
+diff --git a/gcc/cp/init.c b/gcc/cp/init.c
+index e0ede33a2..f83b0d97f 100644
+--- a/gcc/cp/init.c
++++ b/gcc/cp/init.c
+@@ -1747,6 +1747,19 @@ expand_aggr_init_1 (tree binfo, tree true_exp, tree exp, tree init, int flags,
+       return;
+     }
+ 
++  /* List-initialization from {} becomes value-initialization for non-aggregate
++     classes with default constructors.  Handle this here so protected access
++     works.  */
++  if (init && TREE_CODE (init) == TREE_LIST)
++    {
++      tree elt = TREE_VALUE (init);
++      if (DIRECT_LIST_INIT_P (elt)
++	  && CONSTRUCTOR_ELTS (elt) == 0
++	  && CLASSTYPE_NON_AGGREGATE (type)
++	  && TYPE_HAS_DEFAULT_CONSTRUCTOR (type))
++	init = void_type_node;
++    }
++
+   /* If an explicit -- but empty -- initializer list was present,
+      that's value-initialization.  */
+   if (init == void_type_node)
+diff --git a/gcc/testsuite/g++.dg/cpp0x/initlist-base2.C b/gcc/testsuite/g++.dg/cpp0x/initlist-base2.C
+new file mode 100644
+index 000000000..68ccad908
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/initlist-base2.C
+@@ -0,0 +1,21 @@
++// PR c++/55922
++// { dg-do run { target c++11 } }
++
++bool called = false;
++
++struct Base {
++  Base() { if (called) throw 1; called = true; }
++};
++
++struct B1 : virtual Base {
++  B1() { }
++};
++
++struct C : B1, virtual Base {
++  C() : B1{}
++  { }
++};
++
++int main() {
++  C c;
++}
+diff --git a/gcc/testsuite/g++.dg/cpp0x/initlist-base3.C b/gcc/testsuite/g++.dg/cpp0x/initlist-base3.C
+new file mode 100644
+index 000000000..145b975c1
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/initlist-base3.C
+@@ -0,0 +1,17 @@
++// PR c++/71774
++// { dg-do compile { target c++11 } }
++
++class Meow
++{
++  protected:
++    Meow() =default;
++    virtual void f() {}
++};
++
++class Purr : public Meow
++{
++  public:
++    Purr()
++      : Meow{}
++    {}
++};

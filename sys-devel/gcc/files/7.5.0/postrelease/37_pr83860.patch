@@ -1,0 +1,359 @@
+diff --git a/libstdc++-v3/include/bits/gslice_array.h b/libstdc++-v3/include/bits/gslice_array.h
+index dd4545017..d7f0fd1cb 100644
+--- a/libstdc++-v3/include/bits/gslice_array.h
++++ b/libstdc++-v3/include/bits/gslice_array.h
+@@ -128,8 +128,13 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
+ 
+       gslice_array(_Array<_Tp>, const valarray<size_t>&);
+ 
++#if __cplusplus < 201103L
+       // not implemented
+       gslice_array();
++#else
++    public:
++      gslice_array() = delete;
++#endif
+     };
+ 
+   template<typename _Tp>
+diff --git a/libstdc++-v3/include/bits/mask_array.h b/libstdc++-v3/include/bits/mask_array.h
+index 5c4fcc676..626a4852f 100644
+--- a/libstdc++-v3/include/bits/mask_array.h
++++ b/libstdc++-v3/include/bits/mask_array.h
+@@ -131,8 +131,13 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
+       const _Array<bool> _M_mask;
+       const _Array<_Tp>  _M_array;
+ 
++#if __cplusplus < 201103L
+       // not implemented
+       mask_array();
++#else
++    public:
++      mask_array() = delete;
++#endif
+     };
+ 
+   template<typename _Tp>
+diff --git a/libstdc++-v3/include/bits/slice_array.h b/libstdc++-v3/include/bits/slice_array.h
+index cd668fbc1..78cb16669 100644
+--- a/libstdc++-v3/include/bits/slice_array.h
++++ b/libstdc++-v3/include/bits/slice_array.h
+@@ -192,8 +192,13 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
+       const size_t      _M_stride;
+       const _Array<_Tp> _M_array;
+ 
++#if __cplusplus < 201103L
+       // not implemented
+       slice_array();
++#else
++    public:
++      slice_array() = delete;
++#endif
+     };
+ 
+   template<typename _Tp>
+diff --git a/libstdc++-v3/include/bits/valarray_after.h b/libstdc++-v3/include/bits/valarray_after.h
+index 54ba7fed6..836ac65a3 100644
+--- a/libstdc++-v3/include/bits/valarray_after.h
++++ b/libstdc++-v3/include/bits/valarray_after.h
+@@ -38,6 +38,8 @@ namespace std _GLIBCXX_VISIBILITY(default)
+ {
+ _GLIBCXX_BEGIN_NAMESPACE_VERSION
+ 
++namespace __detail
++{
+   //
+   // gslice_array closure.
+   //
+@@ -59,8 +61,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
+       { return _M_index.size(); }
+ 
+     private:
+-      const _Dom&	      _M_expr;
+-      const valarray<size_t>& _M_index;
++      typename _ValArrayRef<_Dom>::__type	_M_expr;
++      const valarray<size_t>&			_M_index;
+     };
+ 
+   template<typename _Tp>
+@@ -128,8 +130,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
+       { return _M_index.size(); }
+ 
+     private:
+-      const _Dom&	      _M_expr;
+-      const valarray<size_t>& _M_index;
++      typename _ValArrayRef<_Dom>::__type	_M_expr;
++      const valarray<size_t>&			_M_index;
+     };
+ 
+   template<class _Dom>
+@@ -153,6 +155,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
+       _IClos (const valarray<_Tp>& __a, const valarray<size_t>& __i)
+       : _Base (__a, __i) {}
+     };
++} // namespace __detail
+   
+   //
+   // class _Expr
+diff --git a/libstdc++-v3/include/bits/valarray_before.h b/libstdc++-v3/include/bits/valarray_before.h
+index 67603e109..c7625763e 100644
+--- a/libstdc++-v3/include/bits/valarray_before.h
++++ b/libstdc++-v3/include/bits/valarray_before.h
+@@ -406,6 +406,20 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
+       typedef bool result_type;
+     };
+ 
++namespace __detail
++{
++  // Closure types already have reference semantics and are often short-lived,
++  // so store them by value to avoid (some cases of) dangling references to
++  // out-of-scope temporaries.
++  template<typename _Tp>
++    struct _ValArrayRef
++    { typedef const _Tp __type; };
++
++  // Use real references for std::valarray objects.
++  template<typename _Tp>
++    struct _ValArrayRef< valarray<_Tp> >
++    { typedef const valarray<_Tp>& __type; };
++
+   //
+   // Apply function taking a value/const reference closure
+   //
+@@ -425,7 +439,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
+       size_t size() const { return _M_expr.size ();}
+ 
+     private:
+-      const _Dom& _M_expr;
++      typename _ValArrayRef<_Dom>::__type _M_expr;
+       value_type (*_M_func)(_Arg);
+     };
+ 
+@@ -490,7 +504,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
+       size_t size() const { return _M_expr.size(); }
+       
+     private:
+-      const _Arg& _M_expr;
++      typename _ValArrayRef<_Arg>::__type _M_expr;
+     };
+ 
+   template<class _Oper, class _Dom>
+@@ -536,8 +550,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
+       size_t size() const { return _M_expr1.size(); }
+ 
+     private:
+-      const _FirstArg& _M_expr1;
+-      const _SecondArg& _M_expr2;
++      typename _ValArrayRef<_FirstArg>::__type _M_expr1;
++      typename _ValArrayRef<_SecondArg>::__type _M_expr2;
+     };
+ 
+ 
+@@ -557,8 +571,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
+       size_t size() const { return _M_expr1.size(); }
+ 
+     private:
+-      const _Clos& _M_expr1;
+-      const _Vt& _M_expr2;
++      typename _ValArrayRef<_Clos>::__type _M_expr1;
++      _Vt _M_expr2;
+     };
+ 
+   template<class _Oper, class _Clos>
+@@ -577,8 +591,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
+       size_t size() const { return _M_expr2.size(); }
+ 
+     private:
+-      const _Vt& _M_expr1;
+-      const _Clos& _M_expr2;
++      _Vt _M_expr1;
++      typename _ValArrayRef<_Clos>::__type _M_expr2;
+     };
+ 
+   template<class _Oper, class _Dom1, class _Dom2>
+@@ -592,7 +606,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
+     };
+ 
+   template<class _Oper, typename _Tp>
+-    struct _BinClos<_Oper,_ValArray, _ValArray, _Tp, _Tp>
++    struct _BinClos<_Oper, _ValArray, _ValArray, _Tp, _Tp>
+     : _BinBase<_Oper, valarray<_Tp>, valarray<_Tp> >
+     {
+       typedef _BinBase<_Oper, valarray<_Tp>, valarray<_Tp> > _Base;
+@@ -668,10 +682,10 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
+       _BinClos(const _Tp& __t, const valarray<_Tp>& __v) : _Base(__t, __v) {}
+     };
+ 
+-    //
+-    // slice_array closure.
+-    //
+-  template<typename _Dom> 
++  //
++  // slice_array closure.
++  //
++  template<typename _Dom>
+     class _SBase
+     {
+     public:
+@@ -689,7 +703,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
+       { return _M_slice.size (); }
+ 
+     private:
+-      const _Dom& _M_expr;
++      typename _ValArrayRef<_Dom>::__type _M_expr;
+       const slice& _M_slice;
+     };
+ 
+@@ -736,6 +750,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
+       
+       _SClos (_Array<_Tp> __a, const slice& __s) : _Base (__a, __s) {}
+     };
++} // namespace __detail
+ 
+ _GLIBCXX_END_NAMESPACE_VERSION
+ } // namespace
+diff --git a/libstdc++-v3/include/std/valarray b/libstdc++-v3/include/std/valarray
+index 2dc6e42ca..9f9d9f609 100644
+--- a/libstdc++-v3/include/std/valarray
++++ b/libstdc++-v3/include/std/valarray
+@@ -51,6 +51,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
+   template<typename _Tp1, typename _Tp2>
+     class _ValArray;
+ 
++namespace __detail
++{
+   template<class _Oper, template<class, class> class _Meta, class _Dom>
+     struct _UnClos;
+ 
+@@ -74,6 +76,15 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
+ 
+   template<template<class, class> class _Meta, class _Dom>
+     class _RefFunClos;
++} // namespace __detail
++
++  using __detail::_UnClos;
++  using __detail::_BinClos;
++  using __detail::_SClos;
++  using __detail::_GClos;
++  using __detail::_IClos;
++  using __detail::_ValFunClos;
++  using __detail::_RefFunClos;
+ 
+   template<class _Tp> class valarray;   // An array of type _Tp
+   class slice;                          // BLAS-like slice out of an array
+diff --git a/libstdc++-v3/testsuite/26_numerics/valarray/83860.cc b/libstdc++-v3/testsuite/26_numerics/valarray/83860.cc
+new file mode 100644
+index 000000000..6d82ef558
+--- /dev/null
++++ b/libstdc++-v3/testsuite/26_numerics/valarray/83860.cc
+@@ -0,0 +1,110 @@
++// Copyright (C) 2018 Free Software Foundation, Inc.
++//
++// This file is part of the GNU ISO C++ Library.  This library is free
++// software; you can redistribute it and/or modify it under the
++// terms of the GNU General Public License as published by the
++// Free Software Foundation; either version 3, or (at your option)
++// any later version.
++
++// This library is distributed in the hope that it will be useful,
++// but WITHOUT ANY WARRANTY; without even the implied warranty of
++// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++// GNU General Public License for more details.
++
++// You should have received a copy of the GNU General Public License along
++// with this library; see the file COPYING3.  If not see
++// <http://www.gnu.org/licenses/>.
++
++// { dg-do run { target c++11 } }
++
++#include <valarray>
++#include <testsuite_hooks.h>
++
++const std::valarray<int> v{
++  0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15
++};
++
++bool
++all_of(const std::valarray<bool>& vals)
++{
++  for (bool b : vals)
++    if (!b)
++      return false;
++  return true;
++}
++
++void
++test01()
++{
++  // PR libstdc++/83860
++  const std::valarray<int> va(v), vb(v), vc(v);
++  auto sum = va + vb + vc;
++  std::valarray<int> vsum = sum;
++  VERIFY( all_of( vsum == (3 * v) ) );
++}
++
++void
++test02()
++{
++  auto neg = -(-v);
++  std::valarray<int> vneg = neg;
++  VERIFY( all_of( vneg == v ) );
++}
++
++void
++test03()
++{
++  const std::valarray<int> va(v), vb(v);
++  auto diff = va + -vb;
++  std::valarray<int> vdiff = diff;
++  VERIFY( all_of( vdiff == (va - vb) ) );
++}
++
++void
++test04()
++{
++  const std::valarray<int> va(v), vb(v);
++  auto sum = -va + -vb;
++  std::valarray<int> vsum = sum;
++  VERIFY( all_of( vsum == (-2 * v) ) );
++}
++
++void
++test05()
++{
++  const std::valarray<int> va(v), vb(v);
++  auto sum = -(-va + -vb);
++  std::valarray<int> vsum = sum;
++  VERIFY( all_of( vsum == (2 * v) ) );
++}
++
++void
++test06()
++{
++  auto prod = 3 * +v * 2;
++  std::valarray<int> vprod = prod;
++  VERIFY( all_of( vprod == (6 * v) ) );
++}
++
++void
++test07()
++{
++  const std::valarray<int> va(v), vb(v);
++  auto valfun = [](int i) { return i; };
++  auto reffun = [](const int& i) { return i; };
++  auto sum = (va.apply(valfun) + vb.apply(reffun));
++  std::valarray<int> vsum = sum;
++  VERIFY( all_of( vsum == (va + vb) ) );
++}
++
++int
++main()
++{
++  test01();
++  test02();
++  test03();
++  test04();
++  test05();
++  test06();
++  test07();
++}

@@ -1,0 +1,152 @@
+diff --git a/gcc/config/i386/i386.c b/gcc/config/i386/i386.c
+index e3c2560a8..78f593c4f 100644
+--- a/gcc/config/i386/i386.c
++++ b/gcc/config/i386/i386.c
+@@ -41926,24 +41926,11 @@ ix86_cannot_change_mode_class (machine_mode from, machine_mode to,
+ 
+   if (MAYBE_SSE_CLASS_P (regclass) || MAYBE_MMX_CLASS_P (regclass))
+     {
+-      int from_size = GET_MODE_SIZE (from);
+-      int to_size = GET_MODE_SIZE (to);
+-
+       /* Vector registers do not support QI or HImode loads.  If we don't
+ 	 disallow a change to these modes, reload will assume it's ok to
+ 	 drop the subreg from (subreg:SI (reg:HI 100) 0).  This affects
+ 	 the vec_dupv4hi pattern.  */
+-      if (from_size < 4)
+-	return true;
+-
+-      /* Further, we cannot allow word_mode subregs of full vector modes.
+-         Otherwise the middle-end will assume it's ok to store to
+-         (subreg:DI (reg:TI 100) 0) in order to modify only the low 64 bits
+-         of the 128-bit register.  However, after reload the subreg will
+-         be dropped leaving a plain DImode store.  This is indistinguishable
+-         from a "normal" DImode move, and so we're justified to use movsd,
+-         which modifies the entire 128-bit register.  */
+-      if (to_size == UNITS_PER_WORD && from_size > UNITS_PER_WORD)
++      if (GET_MODE_SIZE (from) < 4)
+ 	return true;
+     }
+ 
+diff --git a/gcc/reginfo.c b/gcc/reginfo.c
+index 9015eebbd..5aeca001b 100644
+--- a/gcc/reginfo.c
++++ b/gcc/reginfo.c
+@@ -1284,8 +1284,16 @@ simplifiable_subregs (const subreg_shape &shape)
+ static HARD_REG_SET **valid_mode_changes;
+ static obstack valid_mode_changes_obstack;
+ 
++/* Restrict the choice of register for SUBREG_REG (SUBREG) based
++   on information about SUBREG.
++
++   If PARTIAL_DEF, SUBREG is a partial definition of a multipart inner
++   register and we want to ensure that the other parts of the inner
++   register are correctly preserved.  If !PARTIAL_DEF we need to
++   ensure that SUBREG itself can be formed.  */
++
+ static void
+-record_subregs_of_mode (rtx subreg)
++record_subregs_of_mode (rtx subreg, bool partial_def)
+ {
+   unsigned int regno;
+ 
+@@ -1296,15 +1304,41 @@ record_subregs_of_mode (rtx subreg)
+   if (regno < FIRST_PSEUDO_REGISTER)
+     return;
+ 
++  subreg_shape shape (shape_of_subreg (subreg));
++  if (partial_def)
++    {
++      /* The number of independently-accessible SHAPE.outer_mode values
++	 in SHAPE.inner_mode is GET_MODE_SIZE (SHAPE.inner_mode) / SIZE.
++	 We need to check that the assignment will preserve all the other
++	 SIZE-byte chunks in the inner register besides the one that
++	 includes SUBREG.
++
++	 In practice it is enough to check whether an equivalent
++	 SHAPE.inner_mode value in an adjacent SIZE-byte chunk can be formed.
++	 If the underlying registers are small enough, both subregs will
++	 be valid.  If the underlying registers are too large, one of the
++	 subregs will be invalid.
++
++	 This relies on the fact that we've already been passed
++	 SUBREG with PARTIAL_DEF set to false.  */
++      unsigned int size = MAX (REGMODE_NATURAL_SIZE (shape.inner_mode),
++			       GET_MODE_SIZE (shape.outer_mode));
++      gcc_checking_assert (size < GET_MODE_SIZE (shape.inner_mode));
++      if (shape.offset >= size)
++	shape.offset -= size;
++      else
++	shape.offset += size;
++    }
++
+   if (valid_mode_changes[regno])
+     AND_HARD_REG_SET (*valid_mode_changes[regno],
+-		      simplifiable_subregs (shape_of_subreg (subreg)));
++		      simplifiable_subregs (shape));
+   else
+     {
+       valid_mode_changes[regno]
+ 	= XOBNEW (&valid_mode_changes_obstack, HARD_REG_SET);
+       COPY_HARD_REG_SET (*valid_mode_changes[regno],
+-			 simplifiable_subregs (shape_of_subreg (subreg)));
++			 simplifiable_subregs (shape));
+     }
+ }
+ 
+@@ -1317,7 +1351,7 @@ find_subregs_of_mode (rtx x)
+   int i;
+ 
+   if (code == SUBREG)
+-    record_subregs_of_mode (x);
++    record_subregs_of_mode (x, false);
+ 
+   /* Time for some deep diving.  */
+   for (i = GET_RTX_LENGTH (code) - 1; i >= 0; i--)
+@@ -1345,7 +1379,14 @@ init_subregs_of_mode (void)
+   FOR_EACH_BB_FN (bb, cfun)
+     FOR_BB_INSNS (bb, insn)
+       if (NONDEBUG_INSN_P (insn))
+-        find_subregs_of_mode (PATTERN (insn));
++	{
++	  find_subregs_of_mode (PATTERN (insn));
++	  df_ref def;
++	  FOR_EACH_INSN_DEF (def, insn)
++	    if (DF_REF_FLAGS_IS_SET (def, DF_REF_PARTIAL)
++		&& df_read_modify_subreg_p (DF_REF_REG (def)))
++	      record_subregs_of_mode (DF_REF_REG (def), true);
++	}
+ }
+ 
+ const HARD_REG_SET *
+diff --git a/gcc/testsuite/gcc.target/i386/pr69577.c b/gcc/testsuite/gcc.target/i386/pr69577.c
+new file mode 100644
+index 000000000..d680539e3
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/i386/pr69577.c
+@@ -0,0 +1,25 @@
++/* { dg-do run } */
++/* { dg-require-effective-target avx } */
++/* { dg-require-effective-target int128 } */
++/* { dg-options "-O -fno-forward-propagate -fno-split-wide-types -mavx" } */
++
++typedef unsigned int u32;
++typedef unsigned __int128 u128;
++typedef unsigned __int128 v32u128 __attribute__ ((vector_size (32)));
++
++u128 __attribute__ ((noinline, noclone))
++foo (u32 u32_0, v32u128 v32u128_0)
++{
++  v32u128_0[0] >>= u32_0;
++  v32u128_0 += (v32u128) {u32_0, 0};
++  return u32_0 + v32u128_0[0] + v32u128_0[1];
++}
++
++int
++main()
++{
++  u128 x = foo (1, (v32u128) {1, 4});
++  if (x != 6)
++    __builtin_abort ();
++  return 0;
++}

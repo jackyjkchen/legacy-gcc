@@ -1,0 +1,100 @@
+diff --git a/gcc/doc/tm.texi b/gcc/doc/tm.texi
+index 3ad66463e..661f7b157 100644
+--- a/gcc/doc/tm.texi
++++ b/gcc/doc/tm.texi
+@@ -9787,6 +9787,8 @@ for @var{entity}.  For any fixed @var{entity}, @code{mode_priority_to_mode}
+ Generate one or more insns to set @var{entity} to @var{mode}.
+ @var{hard_reg_live} is the set of hard registers live at the point where
+ the insn(s) are to be inserted.
++Sets of a lower numbered entity will be emitted before sets of a higher
++numbered entity to a mode of the same or lower priority.
+ @end defmac
+ 
+ @node Target Attributes
+diff --git a/gcc/doc/tm.texi.in b/gcc/doc/tm.texi.in
+index 0c8335d88..e479b5166 100644
+--- a/gcc/doc/tm.texi.in
++++ b/gcc/doc/tm.texi.in
+@@ -7456,6 +7456,8 @@ for @var{entity}.  For any fixed @var{entity}, @code{mode_priority_to_mode}
+ Generate one or more insns to set @var{entity} to @var{mode}.
+ @var{hard_reg_live} is the set of hard registers live at the point where
+ the insn(s) are to be inserted.
++Sets of a lower numbered entity will be emitted before sets of a higher
++numbered entity to a mode of the same or lower priority.
+ @end defmac
+ 
+ @node Target Attributes
+diff --git a/gcc/mode-switching.c b/gcc/mode-switching.c
+index 316653973..2848da34c 100644
+--- a/gcc/mode-switching.c
++++ b/gcc/mode-switching.c
+@@ -96,12 +96,18 @@ static void make_preds_opaque (basic_block, int);
+ 
+ 
+ /* This function will allocate a new BBINFO structure, initialized
+-   with the MODE, INSN, and basic block BB parameters.  */
++   with the MODE, INSN, and basic block BB parameters.
++   INSN may not be a NOTE_INSN_BASIC_BLOCK, unless it is an empty
++   basic block; that allows us later to insert instructions in a FIFO-like
++   manner.  */
+ 
+ static struct seginfo *
+ new_seginfo (int mode, rtx insn, int bb, HARD_REG_SET regs_live)
+ {
+   struct seginfo *ptr;
++
++  gcc_assert (!NOTE_INSN_BASIC_BLOCK_P (insn)
++	      || insn == BB_END (NOTE_BASIC_BLOCK (insn)));
+   ptr = XNEW (struct seginfo);
+   ptr->mode = mode;
+   ptr->insn_ptr = insn;
+@@ -534,7 +540,13 @@ optimize_mode_switching (void)
+ 		break;
+ 	    if (e)
+ 	      {
+-		ptr = new_seginfo (no_mode, BB_HEAD (bb), bb->index, live_now);
++		rtx ins_pos = BB_HEAD (bb);
++		if (LABEL_P (ins_pos))
++		  ins_pos = NEXT_INSN (ins_pos);
++		gcc_assert (NOTE_INSN_BASIC_BLOCK_P (ins_pos));
++		if (ins_pos != BB_END (bb))
++		  ins_pos = NEXT_INSN (ins_pos);
++		ptr = new_seginfo (no_mode, ins_pos, bb->index, live_now);
+ 		add_seginfo (info + bb->index, ptr);
+ 		bitmap_clear_bit (transp[bb->index], j);
+ 	      }
+@@ -733,7 +745,15 @@ optimize_mode_switching (void)
+ 		    {
+ 		      emitted = true;
+ 		      if (NOTE_INSN_BASIC_BLOCK_P (ptr->insn_ptr))
+-			emit_insn_after (mode_set, ptr->insn_ptr);
++			/* We need to emit the insns in a FIFO-like manner,
++			   i.e. the first to be emitted at our insertion
++			   point ends up first in the instruction steam.
++			   Because we made sure that NOTE_INSN_BASIC_BLOCK is
++			   only used for initially empty basic blocks, we
++			   can archive this by appending at the end of
++			   the block.  */
++			emit_insn_after
++			  (mode_set, BB_END (NOTE_BASIC_BLOCK (ptr->insn_ptr)));
+ 		      else
+ 			emit_insn_before (mode_set, ptr->insn_ptr);
+ 		    }
+diff --git a/gcc/testsuite/gcc.target/epiphany/mode-switch.c b/gcc/testsuite/gcc.target/epiphany/mode-switch.c
+new file mode 100644
+index 000000000..d7f80a962
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/epiphany/mode-switch.c
+@@ -0,0 +1,12 @@
++/* { dg-do compile } */
++/* { dg-options "-O2" } */
++/* { dg-final { scan-assembler "#-917506" } } */
++/* PR 60651 */
++
++int a;
++int c;
++
++void __attribute__((interrupt))
++misc_handler (void) {
++   a*= c;
++}

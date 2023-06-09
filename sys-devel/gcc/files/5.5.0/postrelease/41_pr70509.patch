@@ -1,0 +1,69 @@
+diff --git a/gcc/simplify-rtx.c b/gcc/simplify-rtx.c
+index 2388fd0e0..07286edc6 100644
+--- a/gcc/simplify-rtx.c
++++ b/gcc/simplify-rtx.c
+@@ -3612,7 +3612,7 @@ simplify_binary_operation_1 (enum rtx_code code, machine_mode mode,
+ 	      for (int i = 0; i < XVECLEN (trueop1, 0); i++)
+ 		{
+ 		  rtx j = XVECEXP (trueop1, 0, i);
+-		  if (sel & (1 << UINTVAL (j)))
++		  if (sel & (HOST_WIDE_INT_1U << UINTVAL (j)))
+ 		    all_operand1 = false;
+ 		  else
+ 		    all_operand0 = false;
+diff --git a/gcc/testsuite/gcc.target/i386/avx512bw-pr70509.c b/gcc/testsuite/gcc.target/i386/avx512bw-pr70509.c
+new file mode 100644
+index 000000000..d7bd659f7
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/i386/avx512bw-pr70509.c
+@@ -0,0 +1,26 @@
++/* PR tree-optimization/70509 */
++/* { dg-do run } */
++/* { dg-options "-O1 -mavx512bw" } */
++/* { dg-require-effective-target avx512bw } */
++
++#define AVX512BW
++#include "avx512f-helper.h"
++
++typedef char V __attribute__ ((vector_size (64)));
++
++int __attribute__ ((noinline, noclone))
++foo (V u, V v)
++{
++  u /= v[0x20];
++  return u[0];
++}
++
++void
++TEST (void)
++{
++  int x = foo ((V) { 9 }, (V) { 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
++				2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
++				3 });
++  if (x != 3)
++    abort ();
++}
+diff --git a/gcc/tree-ssa-forwprop.c b/gcc/tree-ssa-forwprop.c
+index a1ba1e09d..84664ba5b 100644
+--- a/gcc/tree-ssa-forwprop.c
++++ b/gcc/tree-ssa-forwprop.c
+@@ -1813,7 +1813,7 @@ simplify_bitfield_ref (gimple_stmt_iterator *gsi)
+ 
+   if (code == VEC_PERM_EXPR)
+     {
+-      tree p, m, index, tem;
++      tree p, m, tem;
+       unsigned nelts;
+       m = gimple_assign_rhs3 (def_stmt);
+       if (TREE_CODE (m) != VECTOR_CST)
+@@ -1830,9 +1830,8 @@ simplify_bitfield_ref (gimple_stmt_iterator *gsi)
+ 	  p = gimple_assign_rhs2 (def_stmt);
+ 	  idx -= nelts;
+ 	}
+-      index = build_int_cst (TREE_TYPE (TREE_TYPE (m)), idx * size);
+       tem = build3 (BIT_FIELD_REF, TREE_TYPE (op),
+-		    unshare_expr (p), op1, index);
++		    unshare_expr (p), op1, bitsize_int (idx * size));
+       gimple_assign_set_rhs1 (stmt, tem);
+       fold_stmt (gsi);
+       update_stmt (gsi_stmt (*gsi));

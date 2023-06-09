@@ -1,0 +1,47 @@
+diff --git a/gcc/fortran/trans-decl.c b/gcc/fortran/trans-decl.c
+index 200140b26..3a01ae45e 100644
+--- a/gcc/fortran/trans-decl.c
++++ b/gcc/fortran/trans-decl.c
+@@ -4287,7 +4287,10 @@ gfc_trans_deferred_vars (gfc_symbol * proc_sym, gfc_wrapped_block * block)
+ 		    && sym->ts.u.cl->passed_length)
+ 		tmp = gfc_null_and_pass_deferred_len (sym, &init, &loc);
+ 	      else
+-		gfc_restore_backend_locus (&loc);
++		{
++		  gfc_restore_backend_locus (&loc);
++		  tmp = NULL_TREE;
++		}
+ 
+ 	      /* Deallocate when leaving the scope. Nullifying is not
+ 		 needed.  */
+diff --git a/gcc/testsuite/gfortran.dg/pr81735.f90 b/gcc/testsuite/gfortran.dg/pr81735.f90
+new file mode 100644
+index 000000000..6aae203aa
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/pr81735.f90
+@@ -0,0 +1,25 @@
++! { dg-do compile }
++! { dg-options "-fdump-tree-original" }
++!
++! Contributed by Danila  <flashmozzg@gmail.com>
++!
++program fooprog
++    implicit none
++    type FooType
++        integer, allocatable :: x
++    end type FooType
++
++    type(FooType), pointer :: bar
++
++    bar => foo()
++
++contains
++    function foo() result(res)
++        type(FooType), pointer :: res
++
++        character(:), allocatable :: rt
++        rt = ""
++        res => null()
++    end function foo
++end program fooprog
++! { dg-final { scan-tree-dump-times "__builtin_free" 1 "original" } }

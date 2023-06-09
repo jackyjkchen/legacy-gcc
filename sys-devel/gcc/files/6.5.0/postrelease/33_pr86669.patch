@@ -1,0 +1,103 @@
+diff --git a/gcc/cp/call.c b/gcc/cp/call.c
+index 9cff6c826..d2af7097c 100644
+--- a/gcc/cp/call.c
++++ b/gcc/cp/call.c
+@@ -9834,8 +9834,11 @@ make_temporary_var_for_ref_to_temp (tree decl, tree type)
+       var = pushdecl_top_level (var);
+     }
+   else
+-    /* Create a new cleanup level if necessary.  */
+-    maybe_push_cleanup_level (type);
++    {
++      /* Create a new cleanup level if necessary.  */
++      maybe_push_cleanup_level (type);
++      var = pushdecl (var);
++    }
+ 
+   return var;
+ }
+diff --git a/gcc/testsuite/g++.dg/cpp0x/initlist105.C b/gcc/testsuite/g++.dg/cpp0x/initlist105.C
+new file mode 100644
+index 000000000..3720a2da8
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/initlist105.C
+@@ -0,0 +1,28 @@
++// PR c++/86669
++// { dg-do run { target c++11 } }
++
++#include <initializer_list>
++
++struct S { S (); };
++struct T : public S {};
++int cnt;
++void foo (int) { cnt++; }
++
++S::S ()
++{
++  int e = 1, f = 2, g = 3, h = 4;
++
++  for (auto k : { e, f, g, h })
++    foo (k);
++}
++
++int
++main ()
++{
++  S s;
++  if (cnt != 4)
++    __builtin_abort ();
++  T t;
++  if (cnt != 8)
++    __builtin_abort ();
++}
+diff --git a/gcc/testsuite/g++.dg/cpp0x/initlist106.C b/gcc/testsuite/g++.dg/cpp0x/initlist106.C
+new file mode 100644
+index 000000000..df0afac80
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/initlist106.C
+@@ -0,0 +1,29 @@
++// PR c++/86669
++// { dg-do run { target c++11 } }
++
++#include <initializer_list>
++
++struct A { };
++struct S : virtual public A { S (); };
++struct T : public S, virtual public A {};
++int cnt;
++void foo (int) { cnt++; }
++
++S::S ()
++{
++  int e = 1, f = 2, g = 3, h = 4;
++
++  for (auto k : { e, f, g, h })
++    foo (k);
++}
++
++int
++main ()
++{
++  S s;
++  if (cnt != 4)
++    __builtin_abort ();
++  T t;
++  if (cnt != 8)
++    __builtin_abort ();
++}
+diff --git a/gcc/testsuite/g++.dg/other/pr86669.C b/gcc/testsuite/g++.dg/other/pr86669.C
+new file mode 100644
+index 000000000..d986bb196
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/other/pr86669.C
+@@ -0,0 +1,10 @@
++// PR c++/86669
++// { dg-do compile }
++
++struct S { S (); };
++struct T : public S {};
++
++S::S ()
++{
++  int *p = { (int *) &p };
++}
