@@ -1393,8 +1393,7 @@ toolchain_src_configure() {
 	case $(tc-arch) in
 		alpha)
 			if ! tc_version_is_at_least 3.1 ; then
-				CFLAGS="${CFLAGS} -gstabs+"
-				CXXFLAGS="${CXXFLAGS} -gstabs+"
+				append-flags -gstabs+
 			fi
 			;;
 		arm)
@@ -1492,8 +1491,7 @@ toolchain_src_configure() {
 			;;
 		sparc)
 			if ! tc_version_is_at_least 3.1 && [[ ${ABI} == "sparc64" ]]; then
-				CFLAGS="${CFLAGS} -gstabs+"
-				CXXFLAGS="${CXXFLAGS} -gstabs+"
+				append-flags -gstabs+
 			fi
 			;;
 	esac

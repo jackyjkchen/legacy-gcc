@@ -20,8 +20,6 @@ if [[ ${CATEGORY} != cross-* ]] ; then
 		CFLAGS_x86=""
 		;;
 	alpha)
-		CFLAGS="${CFLAGS} -Wl,-no-relax"
-		CXXFLAGS="${CFLAGS} -Wl,-no-relax"
 		TOOL_PREFIX="$(tc-arch)-legacy"
 		;;
 	m68k)
