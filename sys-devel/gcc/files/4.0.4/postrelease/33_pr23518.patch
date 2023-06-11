@@ -1,0 +1,43 @@
+diff --git a/gcc/fold-const.c b/gcc/fold-const.c
+index ff9afdbe..55b2abd9 100644
+--- a/gcc/fold-const.c
++++ b/gcc/fold-const.c
+@@ -3719,6 +3719,11 @@ make_range (tree exp, int *pin_p, tree *plow, tree *phigh)
+ 	  if (TREE_CODE (arg1) != INTEGER_CST)
+ 	    break;
+ 
++	  /* If flag_wrapv and ARG0_TYPE is signed, then we cannot
++	     move a constant to the other side.  */
++	  if (flag_wrapv && !TYPE_UNSIGNED (arg0_type))
++	    break;
++
+ 	  /* If EXP is signed, any overflow in the computation is undefined,
+ 	     so we don't worry about it so long as our computations on
+ 	     the bounds don't overflow.  For unsigned, overflow is defined
+diff --git a/gcc/testsuite/gcc.dg/pr23518.c b/gcc/testsuite/gcc.dg/pr23518.c
+new file mode 100644
+index 00000000..3c6bd275
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr23518.c
+@@ -0,0 +1,21 @@
++/* PR tree-optimization/23518.
++   make_range used to transform a + 1 < 0 into a < -1 even when a is
++   signed and -fwrapv is given.  Make sure that no longer happens.  */
++
++/* { dg-do run } */
++/* { dg-options "-O2 -fwrapv" } */
++
++#include <limits.h>
++
++extern void abort (void);
++extern void exit (int);
++
++int
++main (void)
++{
++  int a = INT_MAX;
++  if ((a < 0) || (a + 1 < 0))
++    exit (0);
++
++  abort ();
++}

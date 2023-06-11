@@ -1,0 +1,103 @@
+diff --git a/gcc/config/i386/i386.md b/gcc/config/i386/i386.md
+index 3522658b..6c78c071 100644
+--- a/gcc/config/i386/i386.md
++++ b/gcc/config/i386/i386.md
+@@ -2393,10 +2393,23 @@
+ 	return "pxor\t%0, %0";
+     case 1:
+     case 2:
+-      if (get_attr_mode (insn) == MODE_V4SF)
+-	return "movaps\t{%1, %0|%0, %1}";
++      /* TDmode values are passed as TImode on the stack.  Moving them
++	 to stack may result in unaligned memory access.  */
++      if (misaligned_operand (operands[0], TImode)
++	  || misaligned_operand (operands[1], TImode))
++	{ 
++	  if (get_attr_mode (insn) == MODE_V4SF)
++	    return "movups\t{%1, %0|%0, %1}";
++	 else
++	   return "movdqu\t{%1, %0|%0, %1}";
++	}
+       else
+-	return "movdqa\t{%1, %0|%0, %1}";
++	{ 
++	  if (get_attr_mode (insn) == MODE_V4SF)
++	    return "movaps\t{%1, %0|%0, %1}";
++	 else
++	   return "movdqa\t{%1, %0|%0, %1}";
++	}
+     default:
+       gcc_unreachable ();
+     }
+@@ -2430,10 +2443,23 @@
+ 	return "pxor\t%0, %0";
+     case 3:
+     case 4:
+-      if (get_attr_mode (insn) == MODE_V4SF)
+-	return "movaps\t{%1, %0|%0, %1}";
++      /* TDmode values are passed as TImode on the stack.  Moving them
++	 to stack may result in unaligned memory access.  */
++      if (misaligned_operand (operands[0], TImode)
++	  || misaligned_operand (operands[1], TImode))
++	{ 
++	  if (get_attr_mode (insn) == MODE_V4SF)
++	    return "movups\t{%1, %0|%0, %1}";
++	 else
++	   return "movdqu\t{%1, %0|%0, %1}";
++	}
+       else
+-	return "movdqa\t{%1, %0|%0, %1}";
++	{ 
++	  if (get_attr_mode (insn) == MODE_V4SF)
++	    return "movaps\t{%1, %0|%0, %1}";
++	 else
++	   return "movdqa\t{%1, %0|%0, %1}";
++	}
+     default:
+       gcc_unreachable ();
+     }
+diff --git a/gcc/config/i386/predicates.md b/gcc/config/i386/predicates.md
+index 0d2b54a7..9a017805 100644
+--- a/gcc/config/i386/predicates.md
++++ b/gcc/config/i386/predicates.md
+@@ -1059,3 +1059,8 @@
+ 
+ (define_predicate "absneg_operator"
+   (match_code "abs,neg"))
++
++;; Return 1 if OP is misaligned memory operand
++(define_predicate "misaligned_operand"
++  (and (match_code "mem")
++       (match_test "MEM_ALIGN (op) < GET_MODE_ALIGNMENT (mode)")))
+diff --git a/gcc/testsuite/gcc.target/i386/pr32000-1.c b/gcc/testsuite/gcc.target/i386/pr32000-1.c
+new file mode 100644
+index 00000000..483d24a7
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/i386/pr32000-1.c
+@@ -0,0 +1,26 @@
++/* { dg-do run } */
++/* { dg-require-effective-target dfp } */
++/* { dg-options "-O -msse2 -std=gnu99" } */
++
++#include "sse2-check.h"
++
++typedef struct { _Decimal128 f __attribute__((packed)); } packed;
++
++_Decimal128 __attribute__((noinline))
++foo (_Decimal128 a1, _Decimal128 a2, _Decimal128 a3, _Decimal128 a4,
++     _Decimal128 a5, _Decimal128 a6, _Decimal128 a7, _Decimal128 a8,
++     int b1, int b2, int b3, int b4, int b5, int b6, int b7, packed y)
++{
++  return y.f;
++}
++
++void
++sse2_test (void)
++{
++  packed x;
++  _Decimal128 y = -1;
++  x.f = y;
++  y = foo (0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, -1, x);
++  if (__builtin_memcmp (&y, &x.f, sizeof (y)))
++    abort ();
++}

@@ -1,0 +1,81 @@
+diff --git a/libstdc++-v3/libsupc++/exception_ptr.h b/libstdc++-v3/libsupc++/exception_ptr.h
+index bd355ed88..5d64a7726 100644
+--- a/libstdc++-v3/libsupc++/exception_ptr.h
++++ b/libstdc++-v3/libsupc++/exception_ptr.h
+@@ -39,6 +39,10 @@
+ #include <typeinfo>
+ #include <new>
+ 
++#if __cplusplus >= 201103L
++# include <bits/move.h>
++#endif
++
+ extern "C++" {
+ 
+ namespace std 
+@@ -178,14 +182,16 @@ namespace std
+     exception_ptr 
+     make_exception_ptr(_Ex __ex) _GLIBCXX_USE_NOEXCEPT
+     {
+-#if __cpp_exceptions && __cpp_rtti && !_GLIBCXX_HAVE_CDTOR_CALLABI
++#if __cpp_exceptions && __cpp_rtti && !_GLIBCXX_HAVE_CDTOR_CALLABI \
++      && __cplusplus >= 201103L
++      using _Ex2 = typename remove_reference<_Ex>::type;
+       void* __e = __cxxabiv1::__cxa_allocate_exception(sizeof(_Ex));
+       (void) __cxxabiv1::__cxa_init_primary_exception(
+-	  __e, const_cast<std::type_info*>(&typeid(__ex)),
+-	  __exception_ptr::__dest_thunk<_Ex>);
++	  __e, const_cast<std::type_info*>(&typeid(_Ex)),
++	  __exception_ptr::__dest_thunk<_Ex2>);
+       try
+ 	{
+-          ::new (__e) _Ex(__ex);
++	  ::new (__e) _Ex2(std::forward<_Ex>(__ex));
+           return exception_ptr(__e);
+ 	}
+       catch(...)
+diff --git a/libstdc++-v3/testsuite/18_support/exception_ptr/103630.cc b/libstdc++-v3/testsuite/18_support/exception_ptr/103630.cc
+new file mode 100644
+index 000000000..58fb2abe4
+--- /dev/null
++++ b/libstdc++-v3/testsuite/18_support/exception_ptr/103630.cc
+@@ -0,0 +1,39 @@
++// { dg-do run }
++
++#include <exception>
++#if __cplusplus < 201103L
++// std::make_exception_ptr is defined for C++98 as a GNU extension
++# include <bits/exception_ptr.h>
++#endif
++
++#include <testsuite_hooks.h>
++
++struct B
++{
++  virtual bool derived() const { return false; }
++};
++
++struct D : B
++{
++  virtual bool derived() const { return true; }
++};
++
++int main()
++{
++  D d;
++  std::exception_ptr p = std::make_exception_ptr<B&>(d); // PR libstdc++/103630
++#if __cpp_exceptions
++  try
++  {
++    std::rethrow_exception(p);
++  }
++  catch (const D& d)
++  {
++    VERIFY(d.derived()); // PR libstdc++/103630
++  }
++  catch (const B& b)
++  {
++    VERIFY(!b.derived());
++  }
++#endif
++}

@@ -1,0 +1,131 @@
+diff --git a/gcc/testsuite/gcc.c-torture/execute/builtins/pr93262-chk-lib.c b/gcc/testsuite/gcc.c-torture/execute/builtins/pr93262-chk-lib.c
+new file mode 100644
+index 000000000..9daf13e82
+--- /dev/null
++++ b/gcc/testsuite/gcc.c-torture/execute/builtins/pr93262-chk-lib.c
+@@ -0,0 +1 @@
++#include "lib/chk.c"
+diff --git a/gcc/testsuite/gcc.c-torture/execute/builtins/pr93262-chk.c b/gcc/testsuite/gcc.c-torture/execute/builtins/pr93262-chk.c
+new file mode 100644
+index 000000000..66d86b44b
+--- /dev/null
++++ b/gcc/testsuite/gcc.c-torture/execute/builtins/pr93262-chk.c
+@@ -0,0 +1,55 @@
++/* PR tree-optimization/93262 */
++
++extern void abort (void);
++typedef __SIZE_TYPE__ size_t;
++extern void *memcpy (void *, const void *, size_t);
++extern void *memset (void *, int, size_t);
++
++#include "chk.h"
++
++char b[32] = "def";
++char a[32] = "abc";
++char c[32] = "ghi";
++int l1;
++
++__attribute__((noipa, noinline, noclone, optimize ("tree-dse"))) void
++foo (char *b)
++{
++  memcpy (a, b, 48);
++  memset (a, ' ', 16);
++}
++
++__attribute__((noipa, noinline, noclone, optimize ("tree-dse"))) void
++bar (void)
++{
++  memset (a, ' ', 48);
++  memset (a, '0', 16);
++}
++
++void
++main_test (void)
++{
++#ifndef __OPTIMIZE__
++  /* Object size checking is only intended for -O[s123].  */
++  return;
++#endif
++  __asm ("" : "=r" (l1) : "0" (l1));
++  chk_calls = 0;
++  chk_fail_allowed = 1;
++  /* Runtime checks.  */
++  if (__builtin_setjmp (chk_fail_buf) == 0)
++    {
++      foo ("0123456789abcdeffedcba9876543210ghijklmnopqrstuv");
++      if (!l1)
++	abort ();
++    }
++  if (__builtin_setjmp (chk_fail_buf) == 0)
++    {
++      bar ();
++      if (!l1)
++	abort ();
++    }
++  if (chk_calls != 2)
++    abort ();
++  return 0;
++}
+diff --git a/gcc/testsuite/gcc.c-torture/execute/builtins/pr93262-chk.x b/gcc/testsuite/gcc.c-torture/execute/builtins/pr93262-chk.x
+new file mode 100644
+index 000000000..6f4746d43
+--- /dev/null
++++ b/gcc/testsuite/gcc.c-torture/execute/builtins/pr93262-chk.x
+@@ -0,0 +1,7 @@
++load_lib target-supports.exp
++
++if { ! [check_effective_target_nonlocal_goto] } {
++    return 1
++}
++
++return 0
+diff --git a/gcc/tree-ssa-dse.c b/gcc/tree-ssa-dse.c
+index 5d5611c04..c1d3eabeb 100644
+--- a/gcc/tree-ssa-dse.c
++++ b/gcc/tree-ssa-dse.c
+@@ -416,6 +416,22 @@ maybe_trim_memstar_call (ao_ref *ref, sbitmap live, gimple *stmt)
+ 	/* Head trimming requires adjusting all the arguments.  */
+         if (head_trim)
+           {
++	  /* For __*_chk need to adjust also the last argument.  */
++	  if (gimple_call_num_args (stmt) == 4)
++	    {
++	      tree size = gimple_call_arg (stmt, 3);
++	      if (!tree_fits_uhwi_p (size))
++		break;
++	      if (!integer_all_onesp (size))
++		{
++		  unsigned HOST_WIDE_INT sz = tree_to_uhwi (size);
++		  if (sz < (unsigned) head_trim)
++		    break;
++		  tree arg = wide_int_to_tree (TREE_TYPE (size),
++					       sz - head_trim);
++		  gimple_call_set_arg (stmt, 3, arg);
++		}
++	    }
+ 	    tree *dst = gimple_call_arg_ptr (stmt, 0);
+ 	    increment_start_addr (stmt, dst, head_trim);
+ 	    tree *src = gimple_call_arg_ptr (stmt, 1);
+@@ -437,6 +453,22 @@ maybe_trim_memstar_call (ao_ref *ref, sbitmap live, gimple *stmt)
+ 	/* Head trimming requires adjusting all the arguments.  */
+         if (head_trim)
+           {
++	  /* For __*_chk need to adjust also the last argument.  */
++	  if (gimple_call_num_args (stmt) == 4)
++	    {
++	      tree size = gimple_call_arg (stmt, 3);
++	      if (!tree_fits_uhwi_p (size))
++		break;
++	      if (!integer_all_onesp (size))
++		{
++		  unsigned HOST_WIDE_INT sz = tree_to_uhwi (size);
++		  if (sz < (unsigned) head_trim)
++		    break;
++		  tree arg = wide_int_to_tree (TREE_TYPE (size),
++					       sz - head_trim);
++		  gimple_call_set_arg (stmt, 3, arg);
++		}
++	    }
+ 	    tree *dst = gimple_call_arg_ptr (stmt, 0);
+ 	    increment_start_addr (stmt, dst, head_trim);
+ 	    decrement_count (stmt, head_trim);

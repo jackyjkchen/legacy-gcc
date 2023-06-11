@@ -1,0 +1,83 @@
+diff --git a/gcc/testsuite/gcc.dg/vect/pr81740-1.c b/gcc/testsuite/gcc.dg/vect/pr81740-1.c
+new file mode 100644
+index 000000000..d2226fcdb
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/vect/pr81740-1.c
+@@ -0,0 +1,22 @@
++/* { dg-do run } */
++/* { dg-require-effective-target vect_int } */
++
++#include "tree-vect.h"
++
++int a[8][10] = { [2][5] = 4 }, c;
++
++int
++main ()
++{
++  short b;
++  int i, d;
++  check_vect ();
++  for (b = 4; b >= 0; b--)
++    for (c = 0; c <= 6; c++)
++      a[c + 1][b + 2] = a[c][b + 1];
++  for (i = 0; i < 8; i++)
++    for (d = 0; d < 10; d++)
++      if (a[i][d] != (i == 3 && d == 6) * 4)
++	__builtin_abort ();
++  return 0;
++}
+diff --git a/gcc/testsuite/gcc.dg/vect/pr81740-2.c b/gcc/testsuite/gcc.dg/vect/pr81740-2.c
+new file mode 100644
+index 000000000..76637ad0f
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/vect/pr81740-2.c
+@@ -0,0 +1,24 @@
++/* { dg-do run } */
++/* { dg-require-effective-target vect_int } */
++
++#include "tree-vect.h"
++
++int a[8][10] = { [2][5] = 4 }, c;
++
++int
++main ()
++{
++  short b;
++  int i, d;
++  check_vect ();
++  for (b = 4; b >= 0; b--)
++    for (c = 6; c >= 0; c--)
++      a[c + 1][b + 2] = a[c][b + 1];
++  for (i = 0; i < 8; i++)
++    for (d = 0; d < 10; d++)
++      if (a[i][d] != (i == 3 && d == 6) * 4)
++	__builtin_abort ();
++  return 0;
++}
++
++/* { dg-final { scan-tree-dump "OUTER LOOP VECTORIZED" "vect" } } */
+diff --git a/gcc/tree-vect-data-refs.c b/gcc/tree-vect-data-refs.c
+index cbd53b5e0..d9db9f5a6 100644
+--- a/gcc/tree-vect-data-refs.c
++++ b/gcc/tree-vect-data-refs.c
+@@ -396,8 +396,19 @@ vect_analyze_data_ref_dependence (struct data_dependence_relation *ddr,
+ 	     reversed (to make distance vector positive), and the actual
+ 	     distance is negative.  */
+ 	  if (dump_enabled_p ())
+-	    dump_printf_loc (MSG_MISSED_OPTIMIZATION, vect_location,
++	    dump_printf_loc (MSG_NOTE, vect_location,
+ 	                     "dependence distance negative.\n");
++	  /* When doing outer loop vectorization, we need to check if there is
++	     a backward dependence at the inner loop level if the dependence
++	     at the outer loop is reversed.  See PR81740.  */
++	  if (nested_in_vect_loop_p (loop, DR_STMT (dra))
++	      || nested_in_vect_loop_p (loop, DR_STMT (drb)))
++	    {
++	      unsigned inner_depth = index_in_loop_nest (loop->inner->num,
++							 DDR_LOOP_NEST (ddr));
++	      if (dist_v[inner_depth] < 0)
++		return true;
++	    }
+ 	  /* Record a negative dependence distance to later limit the
+ 	     amount of stmt copying / unrolling we can perform.
+ 	     Only need to handle read-after-write dependence.  */

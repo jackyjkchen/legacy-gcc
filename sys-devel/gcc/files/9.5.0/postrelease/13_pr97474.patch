@@ -1,0 +1,51 @@
+diff --git a/gcc/cp/call.c b/gcc/cp/call.c
+index 812c5ad48..9f0479c33 100644
+--- a/gcc/cp/call.c
++++ b/gcc/cp/call.c
+@@ -7801,11 +7801,7 @@ type_passed_as (tree type)
+ {
+   /* Pass classes with copy ctors by invisible reference.  */
+   if (TREE_ADDRESSABLE (type))
+-    {
+-      type = build_reference_type (type);
+-      /* There are no other pointers to this temporary.  */
+-      type = cp_build_qualified_type (type, TYPE_QUAL_RESTRICT);
+-    }
++    type = build_reference_type (type);
+   else if (targetm.calls.promote_prototypes (NULL_TREE)
+ 	   && INTEGRAL_TYPE_P (type)
+ 	   && COMPLETE_TYPE_P (type)
+diff --git a/gcc/testsuite/g++.dg/torture/pr97474.C b/gcc/testsuite/g++.dg/torture/pr97474.C
+new file mode 100644
+index 000000000..6ce117e43
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/torture/pr97474.C
+@@ -0,0 +1,28 @@
++// PR c++/97474
++// { dg-do run }
++
++extern "C" int printf (const char *, ...);
++extern "C" void abort ();
++
++struct A {
++    int a;
++    int& b;
++
++    A(int x) : a(x), b(a) {}
++    A(const A& other) : a(other.a), b(a) {}
++    A() : a(0), b(a) {}
++};
++
++int foo(A a) {
++    a.a *= a.b;
++    return a.b;
++}
++
++
++int main() {
++    A a(3);
++
++    int r = foo (a);
++    if (r != 9)
++      abort ();
++}

@@ -1,0 +1,42 @@
+diff --git a/gcc/postreload.c b/gcc/postreload.c
+index d60875a25..2f718fda2 100644
+--- a/gcc/postreload.c
++++ b/gcc/postreload.c
+@@ -1079,6 +1079,10 @@ reload_combine_recognize_pattern (rtx_insn *insn)
+       struct reg_use *use = reg_state[regno].reg_use + i;
+       if (GET_MODE (*use->usep) != mode)
+ 	return false;
++      /* Don't try to adjust (use (REGX)).  */
++      if (GET_CODE (PATTERN (use->insn)) == USE
++	  && &XEXP (PATTERN (use->insn), 0) == use->usep)
++	return false;
+     }
+ 
+   /* Look for (set (REGX) (CONST_INT))
+diff --git a/gcc/testsuite/gcc.c-torture/execute/pr93402.c b/gcc/testsuite/gcc.c-torture/execute/pr93402.c
+new file mode 100644
+index 000000000..6487797d0
+--- /dev/null
++++ b/gcc/testsuite/gcc.c-torture/execute/pr93402.c
+@@ -0,0 +1,21 @@
++/* PR rtl-optimization/93402 */
++
++struct S { unsigned int a; unsigned long long b; };
++
++__attribute__((noipa)) struct S
++foo (unsigned long long x)
++{
++  struct S ret;
++  ret.a = 0;
++  ret.b = x * 11111111111ULL + 111111111111ULL;
++  return ret;
++}
++
++int
++main ()
++{
++  struct S a = foo (1);
++  if (a.a != 0 || a.b != 122222222222ULL)
++    __builtin_abort ();
++  return 0;
++}

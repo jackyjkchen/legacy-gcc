@@ -1,0 +1,54 @@
+diff --git a/gcc/cp/pt.c b/gcc/cp/pt.c
+index cf6c80b79..8121568ac 100644
+--- a/gcc/cp/pt.c
++++ b/gcc/cp/pt.c
+@@ -15175,7 +15175,8 @@ tsubst_baselink (tree baselink, tree object_type,
+ 
+   tree binfo_type = BINFO_TYPE (BASELINK_BINFO (baselink));
+   binfo_type = tsubst (binfo_type, args, complain, in_decl);
+-  bool dependent_p = binfo_type != BINFO_TYPE (BASELINK_BINFO (baselink));
++  bool dependent_p = (binfo_type != BINFO_TYPE (BASELINK_BINFO (baselink))
++		      || optype != BASELINK_OPTYPE (baselink));
+ 
+   if (dependent_p)
+     {
+diff --git a/gcc/testsuite/g++.dg/template/conv19.C b/gcc/testsuite/g++.dg/template/conv19.C
+new file mode 100644
+index 000000000..7a3da939c
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/template/conv19.C
+@@ -0,0 +1,34 @@
++// PR c++/101698
++// { dg-do compile { target c++11 } }
++
++class Base {
++ public:
++  template <class T>
++  operator const T&() const = delete;
++
++  virtual operator const int&() const {
++    static int res;
++    return res;
++  }
++};
++
++template <class T>
++class Derive : public Base {
++ public:
++  operator const T&() const override {
++    using Y = int;
++    //static_assert(__is_same_as(T,Y), "");
++
++    static int res;
++
++    res = Base::operator const Y&(); // OK
++    res = Base::operator const T&(); // { dg-bogus "deleted" }
++    return res;
++  }
++};
++
++int main() {
++  Derive<int> a;
++  const int& b = a;
++  (void)b;
++}

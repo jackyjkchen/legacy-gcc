@@ -1,0 +1,37 @@
+diff --git a/gcc/fortran/frontend-passes.c b/gcc/fortran/frontend-passes.c
+index e317c89ba..95bcdefa8 100644
+--- a/gcc/fortran/frontend-passes.c
++++ b/gcc/fortran/frontend-passes.c
+@@ -1250,8 +1250,8 @@ traverse_io_block (gfc_code *code, bool *has_reached, gfc_code *prev)
+ 		std::swap (start->value.op.op1, start->value.op.op2);
+ 	      gcc_fallthrough ();
+ 	    case INTRINSIC_MINUS:
+-	      if ((start->value.op.op1->expr_type!= EXPR_VARIABLE
+-		   && start->value.op.op2->expr_type != EXPR_CONSTANT)
++	      if (start->value.op.op1->expr_type!= EXPR_VARIABLE
++		  || start->value.op.op2->expr_type != EXPR_CONSTANT
+ 		  || start->value.op.op1->ref)
+ 		return false;
+ 	      if (!stack_top || !stack_top->iter
+diff --git a/gcc/testsuite/gfortran.dg/implied_do_io_7.f90 b/gcc/testsuite/gfortran.dg/implied_do_io_7.f90
+new file mode 100644
+index 000000000..63927aafe
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/implied_do_io_7.f90
+@@ -0,0 +1,16 @@
++! { dg-do run }
++! PR 100227 - this was falsely optimized, leading to nonsense  results.
++! Original test case by "Mathieu".
++
++program p
++  implicit none
++  integer, parameter :: nbmode = 3
++  integer :: k
++  real    :: mass(nbmode*2)
++  character (len=80) :: line
++  do k = 1, nbmode*2
++     mass(k) = k
++  end do
++  write (unit=line,fmt='(*(F6.2))') (mass(k+k), k=1,nbmode)
++  if (line /= '  2.00  4.00  6.00') stop 1
++end program

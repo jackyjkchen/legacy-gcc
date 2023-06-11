@@ -1,0 +1,281 @@
+diff --git a/gcc/testsuite/gcc.dg/torture/pr88936-1.c b/gcc/testsuite/gcc.dg/torture/pr88936-1.c
+new file mode 100644
+index 000000000..20d6aa543
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/torture/pr88936-1.c
+@@ -0,0 +1,27 @@
++/* { dg-do run } */
++/* { dg-additional-options "-fipa-pta" } */
++
++static long bug (long depth, long * v)
++{
++  if (depth == 0)
++    {
++      *v = 0;
++      return 1;
++    }
++
++  long r = 1;
++  long val = bug(depth - 1, &r);
++  return 2 * r + val;
++}
++
++static long ff (long depth)
++{
++  return bug(depth, (long*)0);
++}
++
++int main()
++{
++  if (ff(1) != 1)
++    __builtin_abort ();
++  return 0;
++}
+diff --git a/gcc/testsuite/gcc.dg/torture/pr88936-2.c b/gcc/testsuite/gcc.dg/torture/pr88936-2.c
+new file mode 100644
+index 000000000..7802e90fb
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/torture/pr88936-2.c
+@@ -0,0 +1,22 @@
++/* { dg-do run } */
++/* { dg-additional-options "-fipa-pta" } */
++
++static int *p;
++void bar(int cnt)
++{
++  int i = 0;
++  if (cnt == 0)
++    {
++      p = &i;
++      bar (1);
++      if (i != 1)
++	__builtin_abort ();
++    }
++  else if (cnt == 1)
++    *p = 1;
++}
++int main()
++{
++  bar (0);
++  return 0;
++}
+diff --git a/gcc/testsuite/gcc.dg/torture/pr88936-3.c b/gcc/testsuite/gcc.dg/torture/pr88936-3.c
+new file mode 100644
+index 000000000..737b03e8a
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/torture/pr88936-3.c
+@@ -0,0 +1,21 @@
++/* { dg-do run } */
++/* { dg-additional-options "-fipa-pta" } */
++
++static int *p;
++void bar(int cnt)
++{
++  if (cnt == 0)
++    {
++      p = &cnt;
++      bar (1);
++      if (cnt != 1)
++	__builtin_abort ();
++    }
++  else if (cnt == 1)
++    *p = 1;
++}
++int main()
++{
++  bar (0);
++  return 0;
++}
+diff --git a/gcc/tree-ssa-ccp.c b/gcc/tree-ssa-ccp.c
+index 9082cf14b..b6ee70b82 100644
+--- a/gcc/tree-ssa-ccp.c
++++ b/gcc/tree-ssa-ccp.c
+@@ -2135,23 +2135,26 @@ fold_builtin_alloca_with_align (gimple *stmt)
+   if (size > threshold)
+     return NULL_TREE;
+ 
++  /* We have to be able to move points-to info.  We used to assert
++     that we can but IPA PTA might end up with two UIDs here
++     as it might need to handle more than one instance being
++     live at the same time.  Instead of trying to detect this case
++     (using the first UID would be OK) just give up for now.  */
++  struct ptr_info_def *pi = SSA_NAME_PTR_INFO (lhs);
++  unsigned uid = 0;
++  if (pi != NULL
++      && !pi->pt.anything
++      && !pt_solution_singleton_or_null_p (&pi->pt, &uid))
++    return NULL_TREE;
++
+   /* Declare array.  */
+   elem_type = build_nonstandard_integer_type (BITS_PER_UNIT, 1);
+   n_elem = size * 8 / BITS_PER_UNIT;
+   array_type = build_array_type_nelts (elem_type, n_elem);
+   var = create_tmp_var (array_type);
+   SET_DECL_ALIGN (var, TREE_INT_CST_LOW (gimple_call_arg (stmt, 1)));
+-  {
+-    struct ptr_info_def *pi = SSA_NAME_PTR_INFO (lhs);
+-    if (pi != NULL && !pi->pt.anything)
+-      {
+-	bool singleton_p;
+-	unsigned uid;
+-	singleton_p = pt_solution_singleton_or_null_p (&pi->pt, &uid);
+-	gcc_assert (singleton_p);
+-	SET_DECL_PT_UID (var, uid);
+-      }
+-  }
++  if (uid != 0)
++    SET_DECL_PT_UID (var, uid);
+ 
+   /* Fold alloca to the address of the array.  */
+   return fold_convert (TREE_TYPE (lhs), build_fold_addr_expr (var));
+diff --git a/gcc/tree-ssa-structalias.c b/gcc/tree-ssa-structalias.c
+index 148afd4fc..df16be6da 100644
+--- a/gcc/tree-ssa-structalias.c
++++ b/gcc/tree-ssa-structalias.c
+@@ -294,6 +294,11 @@ struct variable_info
+   /* Full size of the base variable, in bits.  */
+   unsigned HOST_WIDE_INT fullsize;
+ 
++  /* In IPA mode the shadow UID in case the variable needs to be duplicated in
++     the final points-to solution because it reaches its containing
++     function recursively.  Zero if none is needed.  */
++  unsigned int shadow_var_uid;
++
+   /* Name of this variable */
+   const char *name;
+ 
+@@ -391,6 +396,7 @@ new_var_info (tree t, const char *name, bool add_id)
+   ret->solution = BITMAP_ALLOC (&pta_obstack);
+   ret->oldsolution = NULL;
+   ret->next = 0;
++  ret->shadow_var_uid = 0;
+   ret->head = ret->id;
+ 
+   stats.total_vars++;
+@@ -6362,6 +6368,16 @@ set_uids_in_ptset (bitmap into, bitmap from, struct pt_solution *pt,
+ 	      && (TREE_STATIC (vi->decl) || DECL_EXTERNAL (vi->decl))
+ 	      && ! decl_binds_to_current_def_p (vi->decl))
+ 	    pt->vars_contains_interposable = true;
++
++	  /* If this is a local variable we can have overlapping lifetime
++	     of different function invocations through recursion duplicate
++	     it with its shadow variable.  */
++	  if (in_ipa_mode
++	      && vi->shadow_var_uid != 0)
++	    {
++	      bitmap_set_bit (into, vi->shadow_var_uid);
++	      pt->vars_contains_nonlocal = true;
++	    }
+ 	}
+ 
+       else if (TREE_CODE (vi->decl) == FUNCTION_DECL
+@@ -7949,6 +7965,62 @@ ipa_pta_execute (void)
+   /* From the constraints compute the points-to sets.  */
+   solve_constraints ();
+ 
++  /* Now post-process solutions to handle locals from different
++     runtime instantiations coming in through recursive invocations.  */
++  unsigned shadow_var_cnt = 0;
++  for (unsigned i = 1; i < varmap.length (); ++i)
++    {
++      varinfo_t fi = get_varinfo (i);
++      if (fi->is_fn_info
++	  && fi->decl)
++	/* Automatic variables pointed to by their containing functions
++	   parameters need this treatment.  */
++	for (varinfo_t ai = first_vi_for_offset (fi, fi_parm_base);
++	     ai; ai = vi_next (ai))
++	  {
++	    varinfo_t vi = get_varinfo (find (ai->id));
++	    bitmap_iterator bi;
++	    unsigned j;
++	    EXECUTE_IF_SET_IN_BITMAP (vi->solution, 0, j, bi)
++	      {
++		varinfo_t pt = get_varinfo (j);
++		if (pt->shadow_var_uid == 0
++		    && pt->decl
++		    && auto_var_in_fn_p (pt->decl, fi->decl))
++		  {
++		    pt->shadow_var_uid = allocate_decl_uid ();
++		    shadow_var_cnt++;
++		  }
++	      }
++	  }
++      /* As well as global variables which are another way of passing
++         arguments to recursive invocations.  */
++      else if (fi->is_global_var)
++	{
++	  for (varinfo_t ai = fi; ai; ai = vi_next (ai))
++	    {
++	      varinfo_t vi = get_varinfo (find (ai->id));
++	      bitmap_iterator bi;
++	      unsigned j;
++	      EXECUTE_IF_SET_IN_BITMAP (vi->solution, 0, j, bi)
++		{
++		  varinfo_t pt = get_varinfo (j);
++		  if (pt->shadow_var_uid == 0
++		      && pt->decl
++		      && auto_var_p (pt->decl))
++		    {
++		      pt->shadow_var_uid = allocate_decl_uid ();
++		      shadow_var_cnt++;
++		    }
++		}
++	    }
++	}
++    }
++  if (shadow_var_cnt && dump_file && (dump_flags & TDF_DETAILS))
++    fprintf (dump_file, "Allocated %u shadow variables for locals "
++	     "maybe leaking into recursive invocations of their containing "
++	     "functions\n", shadow_var_cnt);
++
+   /* Compute the global points-to sets for ESCAPED.
+      ???  Note that the computed escape set is not correct
+      for the whole unit as we fail to consider graph edges to
+diff --git a/gcc/tree.c b/gcc/tree.c
+index c523a78b5..8dd2c1591 100644
+--- a/gcc/tree.c
++++ b/gcc/tree.c
+@@ -9307,17 +9307,25 @@ get_type_static_bounds (const_tree type, mpz_t min, mpz_t max)
+     }
+ }
+ 
++/* Return true if VAR is an automatic variable.  */
++
++bool
++auto_var_p (const_tree var)
++{
++  return ((((VAR_P (var) && ! DECL_EXTERNAL (var))
++	    || TREE_CODE (var) == PARM_DECL)
++	   && ! TREE_STATIC (var))
++	  || TREE_CODE (var) == RESULT_DECL);
++}
++
+ /* Return true if VAR is an automatic variable defined in function FN.  */
+ 
+ bool
+ auto_var_in_fn_p (const_tree var, const_tree fn)
+ {
+   return (DECL_P (var) && DECL_CONTEXT (var) == fn
+-	  && ((((VAR_P (var) && ! DECL_EXTERNAL (var))
+-		|| TREE_CODE (var) == PARM_DECL)
+-	       && ! TREE_STATIC (var))
+-	      || TREE_CODE (var) == LABEL_DECL
+-	      || TREE_CODE (var) == RESULT_DECL));
++	  && (auto_var_p (var)
++	      || TREE_CODE (var) == LABEL_DECL));
+ }
+ 
+ /* Subprogram of following function.  Called by walk_tree.
+diff --git a/gcc/tree.h b/gcc/tree.h
+index a49ccf6d0..7301e9226 100644
+--- a/gcc/tree.h
++++ b/gcc/tree.h
+@@ -4724,6 +4724,7 @@ extern bool stdarg_p (const_tree);
+ extern bool prototype_p (const_tree);
+ extern bool is_typedef_decl (const_tree x);
+ extern bool typedef_variant_p (const_tree);
++extern bool auto_var_p (const_tree);
+ extern bool auto_var_in_fn_p (const_tree, const_tree);
+ extern tree build_low_bits_mask (tree, unsigned);
+ extern bool tree_nop_conversion_p (const_tree, const_tree);

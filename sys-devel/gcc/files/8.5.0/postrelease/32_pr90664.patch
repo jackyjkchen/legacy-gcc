@@ -1,0 +1,44 @@
+diff --git a/gcc/cp/cvt.c b/gcc/cp/cvt.c
+index d0059a327..e08608cfd 100644
+--- a/gcc/cp/cvt.c
++++ b/gcc/cp/cvt.c
+@@ -1925,6 +1925,11 @@ can_convert_qual (tree type, tree expr)
+   tree expr_type = TREE_TYPE (expr);
+   gcc_assert (!same_type_p (type, expr_type));
+ 
++  /* A function pointer conversion also counts as a Qualification Adjustment
++     under [over.ics.scs].  */
++  if (fnptr_conv_p (type, expr_type))
++    return true;
++
+   if (TYPE_PTR_P (type) && TYPE_PTR_P (expr_type))
+     return comp_ptr_ttypes (TREE_TYPE (type), TREE_TYPE (expr_type));
+   else if (TYPE_PTRMEM_P (type) && TYPE_PTRMEM_P (expr_type))
+diff --git a/gcc/testsuite/g++.dg/cpp1z/noexcept-type24.C b/gcc/testsuite/g++.dg/cpp1z/noexcept-type24.C
+new file mode 100644
+index 000000000..df16ea786
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp1z/noexcept-type24.C
+@@ -0,0 +1,22 @@
++// PR c++/90664
++// { dg-do compile { target c++11 } }
++
++template <typename TT, typename MFP, MFP> struct OpM;
++
++template <typename TR, typename TT, TR (TT::*f)()>
++struct OpM<TT, TR (TT::*)(), f>
++{};
++
++class Class {
++public:
++  int address() noexcept { return 0; }
++  void address(int) noexcept {}
++};
++
++struct Sk {
++  template <class C, typename R> Sk(R (C::*p)()) {
++    typedef OpM<C, R (C::*)() /* noexcept */, &Class::address> OP;
++  }
++};
++
++Sk sk(static_cast<int (Class::*)()>(&Class::address));

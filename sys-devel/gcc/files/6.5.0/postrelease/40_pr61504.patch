@@ -1,0 +1,37 @@
+diff --git a/gcc/cp/call.c b/gcc/cp/call.c
+index d2af7097c..6c5983d77 100644
+--- a/gcc/cp/call.c
++++ b/gcc/cp/call.c
+@@ -7627,7 +7627,14 @@ build_over_call (struct z_candidate *cand, int flags, tsubst_flags_t complain)
+ 
+       /* Pull out the real argument, disregarding const-correctness.  */
+       targ = arg;
+-      while (CONVERT_EXPR_P (targ)
++      /* Strip the reference binding for the constructor parameter.  */
++      if (CONVERT_EXPR_P (targ)
++	  && TREE_CODE (TREE_TYPE (targ)) == REFERENCE_TYPE)
++	targ = TREE_OPERAND (targ, 0);
++      /* But don't strip any other reference bindings; binding a temporary to a
++	 reference prevents copy elision.  */
++      while ((CONVERT_EXPR_P (targ)
++	      && TREE_CODE (TREE_TYPE (targ)) != REFERENCE_TYPE)
+ 	     || TREE_CODE (targ) == NON_LVALUE_EXPR)
+ 	targ = TREE_OPERAND (targ, 0);
+       if (TREE_CODE (targ) == ADDR_EXPR)
+diff --git a/gcc/testsuite/g++.dg/init/elide6.C b/gcc/testsuite/g++.dg/init/elide6.C
+new file mode 100644
+index 000000000..d40bd9d63
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/init/elide6.C
+@@ -0,0 +1,11 @@
++// PR c++/79533
++
++struct S {
++  S();
++  S(const S&);
++};
++S f();
++S s(static_cast<S const &>(f()));
++
++// The static_cast prevents copy elision.
++// { dg-final { scan-assembler "_ZN1SC1ERKS_" } }

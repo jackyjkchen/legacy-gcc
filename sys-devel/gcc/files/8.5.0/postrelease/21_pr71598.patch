@@ -1,0 +1,190 @@
+diff --git a/gcc/c/c-objc-common.c b/gcc/c/c-objc-common.c
+index a841bc14d..e6b00ee81 100644
+--- a/gcc/c/c-objc-common.c
++++ b/gcc/c/c-objc-common.c
+@@ -242,3 +242,22 @@ c_vla_unspec_p (tree x, tree fn ATTRIBUTE_UNUSED)
+ {
+   return c_vla_type_p (x);
+ }
++
++/* Special routine to get the alias set of T for C.  */
++
++alias_set_type
++c_get_alias_set (tree t)
++{
++  /* Allow aliasing between enumeral types and the underlying
++     integer type.  This is required since those are compatible types.  */
++  if (TREE_CODE (t) == ENUMERAL_TYPE)
++    {
++      tree t1 = c_common_type_for_size (tree_to_uhwi (TYPE_SIZE (t)),
++					/* short-cut commoning to signed
++					   type.  */
++					false);
++      return get_alias_set (t1);
++    }
++
++  return c_common_get_alias_set (t);
++}
+diff --git a/gcc/c/c-objc-common.h b/gcc/c/c-objc-common.h
+index 78e768c23..1a2ce38b7 100644
+--- a/gcc/c/c-objc-common.h
++++ b/gcc/c/c-objc-common.h
+@@ -43,7 +43,7 @@ along with GCC; see the file COPYING3.  If not see
+ #undef LANG_HOOKS_POST_OPTIONS
+ #define LANG_HOOKS_POST_OPTIONS c_common_post_options
+ #undef LANG_HOOKS_GET_ALIAS_SET
+-#define LANG_HOOKS_GET_ALIAS_SET c_common_get_alias_set
++#define LANG_HOOKS_GET_ALIAS_SET c_get_alias_set
+ #undef LANG_HOOKS_PARSE_FILE
+ #define LANG_HOOKS_PARSE_FILE c_common_parse_file
+ #undef LANG_HOOKS_FINISH_INCOMPLETE_DECL
+diff --git a/gcc/c/c-tree.h b/gcc/c/c-tree.h
+index fb99cc7ac..0c264145d 100644
+--- a/gcc/c/c-tree.h
++++ b/gcc/c/c-tree.h
+@@ -618,6 +618,7 @@ extern bool c_missing_noreturn_ok_p (tree);
+ extern bool c_warn_unused_global_decl (const_tree);
+ extern void c_initialize_diagnostics (diagnostic_context *);
+ extern bool c_vla_unspec_p (tree x, tree fn);
++extern alias_set_type c_get_alias_set (tree);
+ 
+ /* in c-typeck.c */
+ extern int in_alignof;
+diff --git a/gcc/gimple.c b/gcc/gimple.c
+index 18fc2f86a..0c49eccef 100644
+--- a/gcc/gimple.c
++++ b/gcc/gimple.c
+@@ -44,6 +44,7 @@ along with GCC; see the file COPYING3.  If not see
+ #include "stringpool.h"
+ #include "attribs.h"
+ #include "asan.h"
++#include "langhooks.h"
+ 
+ 
+ /* All the tuples have their operand vector (if present) at the very bottom
+@@ -2519,6 +2520,16 @@ gimple_get_alias_set (tree t)
+ 	return get_alias_set (t1);
+     }
+ 
++  /* Allow aliasing between enumeral types and the underlying
++     integer type.  This is required for C since those are
++     compatible types.  */
++  else if (TREE_CODE (t) == ENUMERAL_TYPE)
++    {
++      tree t1 = lang_hooks.types.type_for_size (tree_to_uhwi (TYPE_SIZE (t)),
++						false /* short-cut above */);
++      return get_alias_set (t1);
++    }
++
+   return -1;
+ }
+ 
+diff --git a/gcc/testsuite/gcc.dg/torture/pr71598-1.c b/gcc/testsuite/gcc.dg/torture/pr71598-1.c
+new file mode 100644
+index 000000000..4dd405278
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/torture/pr71598-1.c
+@@ -0,0 +1,22 @@
++/* { dg-do run } */
++/* { dg-prune-output "use of enum values across objects may fail" } */
++/* { dg-additional-options "-fno-short-enums" } */
++
++enum e1 { c1 };
++
++__attribute__((noinline,noclone))
++int f(enum e1 *p, unsigned *q)
++{
++  *p = c1;
++  *q = 2;
++  return *p;
++}
++
++int main()
++{
++  unsigned x;
++
++  if (f(&x, &x) != 2)
++    __builtin_abort();
++  return 0;
++}
+diff --git a/gcc/testsuite/gcc.dg/torture/pr71598-2.c b/gcc/testsuite/gcc.dg/torture/pr71598-2.c
+new file mode 100644
+index 000000000..44b23f566
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/torture/pr71598-2.c
+@@ -0,0 +1,48 @@
++/* { dg-do run } */
++/* { dg-prune-output "use of enum values across objects may fail" } */
++/* { dg-additional-options "-fshort-enums" } */
++
++enum e1 { c1 = -__INT_MAX__ };
++
++__attribute__((noinline,noclone))
++int f(enum e1 *p, signed int *q)
++{
++  *p = c1;
++  *q = 2;
++  return *p;
++}
++
++enum e2 { c2 = __SHRT_MAX__ + 1};
++
++__attribute__((noinline,noclone))
++int g(enum e2 *p, unsigned short *q)
++{
++  *p = c2;
++  *q = 2;
++  return *p;
++}
++
++enum e3 { c3 = __SCHAR_MAX__ };
++
++__attribute__((noinline,noclone))
++int h(enum e3 *p, unsigned char *q)
++{
++  *p = c3;
++  *q = 2;
++  return *p;
++}
++
++int main()
++{
++  signed x;
++  unsigned short y;
++  unsigned char z;
++
++  if (f(&x, &x) != 2)
++    __builtin_abort();
++  if (g(&y, &y) != 2)
++    __builtin_abort();
++  if (h(&z, &z) != 2)
++    __builtin_abort();
++  return 0;
++}
+diff --git a/gcc/testsuite/gcc.dg/torture/pr71598-3.c b/gcc/testsuite/gcc.dg/torture/pr71598-3.c
+new file mode 100644
+index 000000000..0b4b84213
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/torture/pr71598-3.c
+@@ -0,0 +1,21 @@
++/* { dg-do run } */
++
++enum e1 { A, B };
++enum e2 { C, D };
++
++__attribute__((noinline,noclone))
++enum e1 f(unsigned int *p)
++{
++  *(enum e1 *)p = A;
++  *(enum e2 *)p = D;
++  return *(enum e1 *)p;
++}
++
++int main()
++{
++  unsigned int storage;
++
++  if (f(&storage) != B)
++    __builtin_abort();
++  return 0;
++}

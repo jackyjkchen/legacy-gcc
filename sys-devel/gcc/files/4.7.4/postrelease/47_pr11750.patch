@@ -1,0 +1,72 @@
+diff --git a/gcc/cp/call.c b/gcc/cp/call.c
+index d655983bb..ff0fff56a 100644
+--- a/gcc/cp/call.c
++++ b/gcc/cp/call.c
+@@ -7337,9 +7337,15 @@ build_new_method_call_1 (tree instance, tree fns, VEC(tree,gc) **args,
+ 	    }
+ 	  else
+ 	    {
+-	      /* Optimize away vtable lookup if we know that this function
+-		 can't be overridden.  */
++	      /* Optimize away vtable lookup if we know that this
++		 function can't be overridden.  We need to check if
++		 the context and the instance type are the same,
++		 actually FN might be defined in a different class
++		 type because of a using-declaration. In this case, we
++		 do not want to perform a non-virtual call.  */
+ 	      if (DECL_VINDEX (fn) && ! (flags & LOOKUP_NONVIRTUAL)
++		  && same_type_ignoring_top_level_qualifiers_p
++		  (DECL_CONTEXT (fn), TREE_TYPE (instance))
+ 		  && resolves_to_fixed_type_p (instance, 0))
+ 		flags |= LOOKUP_NONVIRTUAL;
+               if (explicit_targs)
+diff --git a/gcc/testsuite/g++.dg/inherit/virtual9.C b/gcc/testsuite/g++.dg/inherit/virtual9.C
+new file mode 100644
+index 000000000..03342646f
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/inherit/virtual9.C
+@@ -0,0 +1,44 @@
++// { dg-do run }
++// PR c++/11750
++
++struct A
++{
++  virtual void f() const { __builtin_abort(); }
++  virtual void g() {}
++};
++
++struct B : virtual A
++{
++  virtual void f() const {}
++  virtual void g() { __builtin_abort(); }
++};
++
++struct C : B, virtual A
++{
++  using A::f;
++  using A::g;
++};
++
++int main()
++{
++  C c;
++  c.f(); // call B::f
++
++  C c2;
++  c2.C::g(); // call A::g
++
++  C* c3 = &c;
++  c3->f(); // call B::f
++
++  C& c4 = c;
++  c4.f(); // call B::f
++
++  C const* c5 = &c;
++  c5->f(); // call B::f
++
++  C** c6 = &c3;
++  (*c6)->f(); // call B::f
++
++  C const& c7 = c;
++  c7.f(); // call B::f
++}

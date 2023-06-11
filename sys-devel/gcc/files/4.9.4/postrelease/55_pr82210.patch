@@ -1,0 +1,68 @@
+diff --git a/gcc/stor-layout.c b/gcc/stor-layout.c
+index ed9dc1374..c5b5b4b14 100644
+--- a/gcc/stor-layout.c
++++ b/gcc/stor-layout.c
+@@ -1457,6 +1457,31 @@ place_field (record_layout_info rli, tree field)
+ 	= size_binop (PLUS_EXPR, rli->offset, DECL_SIZE_UNIT (field));
+       rli->bitpos = bitsize_zero_node;
+       rli->offset_align = MIN (rli->offset_align, desired_align);
++
++      if (!multiple_of_p (bitsizetype, DECL_SIZE (field),
++			  bitsize_int (rli->offset_align)))
++	{
++	  tree type = strip_array_types (TREE_TYPE (field));
++	  /* The above adjusts offset_align just based on the start of the
++	     field.  The field might not have a size that is a multiple of
++	     that offset_align though.  If the field is an array of fixed
++	     sized elements, assume there can be any multiple of those
++	     sizes.  If it is a variable length aggregate or array of
++	     variable length aggregates, assume worst that the end is
++	     just BITS_PER_UNIT aligned.  */
++	  if (TREE_CODE (TYPE_SIZE (type)) == INTEGER_CST)
++	    {
++	      if (TREE_INT_CST_LOW (TYPE_SIZE (type)))
++		{
++		  unsigned HOST_WIDE_INT sz
++		    = TREE_INT_CST_LOW (TYPE_SIZE (type));
++		  sz = sz & -sz;
++		  rli->offset_align = MIN (rli->offset_align, sz);
++		}
++	    }
++	  else
++	    rli->offset_align = MIN (rli->offset_align, BITS_PER_UNIT);
++	}
+     }
+   else if (targetm.ms_bitfield_layout_p (rli->t))
+     {
+diff --git a/gcc/testsuite/gcc.c-torture/execute/pr82210.c b/gcc/testsuite/gcc.c-torture/execute/pr82210.c
+new file mode 100644
+index 000000000..48fb71557
+--- /dev/null
++++ b/gcc/testsuite/gcc.c-torture/execute/pr82210.c
+@@ -0,0 +1,26 @@
++/* PR c/82210 */
++
++void
++foo (int size)
++{
++  int i;
++  struct S {
++    __attribute__((aligned (16))) struct T { short c; } a[size];
++    int b[size];
++  } s;
++
++  for (i = 0; i < size; i++)
++    s.a[i].c = 0x1234;
++  for (i = 0; i < size; i++)
++    s.b[i] = 0;
++  for (i = 0; i < size; i++)
++    if (s.a[i].c != 0x1234 || s.b[i] != 0)
++      __builtin_abort ();
++}
++
++int
++main ()
++{
++  foo (15);
++  return 0;
++}

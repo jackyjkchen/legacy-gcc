@@ -1,0 +1,79 @@
+diff --git a/gcc/testsuite/g++.dg/torture/pr90313.cc b/gcc/testsuite/g++.dg/torture/pr90313.cc
+new file mode 100644
+index 000000000..d9f183a29
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/torture/pr90313.cc
+@@ -0,0 +1,33 @@
++// { dg-do run }
++
++#include <stddef.h>
++
++namespace std {
++  template<typename T, size_t N> struct array {
++    T elems[N];
++    const T &operator[](size_t i) const { return elems[i]; }
++  };
++}
++
++using Coordinates = std::array<double, 3>;
++
++Coordinates map(const Coordinates &c, size_t level)
++{
++  Coordinates result{ c[1], c[2], c[0] };
++
++  if (level != 0)
++    result = map (result, level - 1);
++
++  return result;
++}
++
++int main()
++{
++  Coordinates vecOfCoordinates = { 1.0, 2.0, 3.0 };
++
++  auto result = map(vecOfCoordinates, 1);
++  if (result[0] != 3 || result[1] != 1 || result[2] != 2)
++    __builtin_abort ();
++
++  return 0;
++}
+diff --git a/gcc/tree-tailcall.c b/gcc/tree-tailcall.c
+index ed443fa08..54d2db228 100644
+--- a/gcc/tree-tailcall.c
++++ b/gcc/tree-tailcall.c
+@@ -464,6 +464,35 @@ find_tail_calls (basic_block bb, struct tailcall **ret)
+       && !auto_var_in_fn_p (ass_var, cfun->decl))
+     return;
+ 
++  /* If the function returns a value, then at present, the tail call
++     must return the same type of value.  There is conceptually a copy
++     between the object returned by the tail call candidate and the
++     object returned by CFUN itself.
++
++     This means that if we have:
++
++	 lhs = f (&<retval>);    // f reads from <retval>
++				 // (lhs is usually also <retval>)
++
++     there is a copy between the temporary object returned by f and lhs,
++     meaning that any use of <retval> in f occurs before the assignment
++     to lhs begins.  Thus the <retval> that is live on entry to the call
++     to f is really an independent local variable V that happens to be
++     stored in the RESULT_DECL rather than a local VAR_DECL.
++
++     Turning this into a tail call would remove the copy and make the
++     lifetimes of the return value and V overlap.  The same applies to
++     tail recursion, since if f can read from <retval>, we have to assume
++     that CFUN might already have written to <retval> before the call.
++
++     The problem doesn't apply when <retval> is passed by value, but that
++     isn't a case we handle anyway.  */
++  tree result_decl = DECL_RESULT (cfun->decl);
++  if (result_decl
++      && may_be_aliased (result_decl)
++      && ref_maybe_used_by_stmt_p (call, result_decl))
++    return;
++
+   /* We found the call, check whether it is suitable.  */
+   tail_recursion = false;
+   func = gimple_call_fndecl (call);

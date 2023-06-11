@@ -1,0 +1,70 @@
+diff --git a/libstdc++-v3/include/bits/random.tcc b/libstdc++-v3/include/bits/random.tcc
+index b7f9961b8..d2c4b9428 100644
+--- a/libstdc++-v3/include/bits/random.tcc
++++ b/libstdc++-v3/include/bits/random.tcc
+@@ -1938,7 +1938,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
+       bool __saved_avail;
+       if (__is >> __mean >> __stddev >> __saved_avail)
+ 	{
+-	  if (__saved_avail && (__is >> __x._M_saved))
++	  if (!__saved_avail || (__is >> __x._M_saved))
+ 	    {
+ 	      __x._M_saved_available = __saved_avail;
+ 	      __x.param(typename normal_distribution<_RealType>::
+diff --git a/libstdc++-v3/testsuite/26_numerics/random/normal_distribution/operators/serialize.cc b/libstdc++-v3/testsuite/26_numerics/random/normal_distribution/operators/serialize.cc
+index fb541266d..01e6cf4b2 100644
+--- a/libstdc++-v3/testsuite/26_numerics/random/normal_distribution/operators/serialize.cc
++++ b/libstdc++-v3/testsuite/26_numerics/random/normal_distribution/operators/serialize.cc
+@@ -25,6 +25,7 @@
+ 
+ #include <random>
+ #include <sstream>
++#include <testsuite_hooks.h>
+ 
+ void
+ test01()
+@@ -37,10 +38,43 @@ test01()
+   str << u;
+ 
+   str >> v;
++  VERIFY( u == v );
++}
++
++void
++test_pr105502()
++{
++  // PR libstdc++/105502 std::normal_distribution deserialization issue
++  std::stringstream str;
++  std::normal_distribution<> d{1, 2}, d2;
++  std::minstd_rand0 g;
++  str << d;
++  VERIFY( str );
++  str >> d2;
++  VERIFY( str );
++  VERIFY( d == d2 );
++
++  (void) d(g); // sets d._M_saved_available = true
++  str.str("");
++  str.clear();
++  str << d;
++  VERIFY( str );
++  str >> d2;
++  VERIFY( str );
++  VERIFY( d == d2 );
++
++  (void) d(g); // sets d._M_saved_available = false
++  str.str("");
++  str.clear();
++  str << d;
++  VERIFY( str );
++  str >> d2;
++  VERIFY( str );
++  VERIFY( d == d2 );
+ }
+ 
+ int main()
+ {
+   test01();
+-  return 0;
++  test_pr105502();
+ }

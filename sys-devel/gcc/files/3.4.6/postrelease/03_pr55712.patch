@@ -1,0 +1,33 @@
+diff --git a/gcc/convert.c b/gcc/convert.c
+index 9096541f..20fdb46a 100644
+--- a/gcc/convert.c
++++ b/gcc/convert.c
+@@ -206,7 +206,9 @@ convert_to_real (tree type, tree expr)
+ 	/* Convert (float)-x into -(float)x.  This is always safe.  */
+ 	case ABS_EXPR:
+ 	case NEGATE_EXPR:
+-	  if (TYPE_PRECISION (type) < TYPE_PRECISION (TREE_TYPE (expr)))
++ 	  if (!flag_rounding_math
++	      && FLOAT_TYPE_P (itype)
++	      && TYPE_PRECISION (type) < TYPE_PRECISION (itype))
+ 	    return build1 (TREE_CODE (expr), type,
+ 			   fold (convert_to_real (type,
+ 						  TREE_OPERAND (expr, 0))));
+diff --git a/gcc/testsuite/c-c++-common/pr55771.c b/gcc/testsuite/c-c++-common/pr55771.c
+new file mode 100644
+index 00000000..16f02442
+--- /dev/null
++++ b/gcc/testsuite/c-c++-common/pr55771.c
+@@ -0,0 +1,12 @@
++/* { dg-do run } */
++
++float global;
++int main()
++{
++  unsigned long z = 1;
++  float x = -z;
++  global = x;
++  if (global < 0)
++    __builtin_abort ();
++  return 0;
++}

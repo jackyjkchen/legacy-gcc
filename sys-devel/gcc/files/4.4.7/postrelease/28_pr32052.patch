@@ -1,0 +1,183 @@
+diff --git a/gcc/objc/objc-act.c b/gcc/objc/objc-act.c
+index fb4335da7..0a9731641 100644
+--- a/gcc/objc/objc-act.c
++++ b/gcc/objc/objc-act.c
+@@ -8033,15 +8033,21 @@ encode_aggregate_within (tree type, int curtype, int format, int left,
+ 
+   /* Encode the struct/union tag name, or '?' if a tag was
+      not provided.  Typedef aliases do not qualify.  */
+-  if (name && TREE_CODE (name) == IDENTIFIER_NODE
+ #ifdef OBJCPLUS
++  /* For compatibility with the NeXT runtime, ObjC++ encodes template
++     args as a composite struct tag name. */
++  if (name && TREE_CODE (name) == IDENTIFIER_NODE
+       /* Did this struct have a tag?  */
+-      && !TYPE_WAS_ANONYMOUS (type)
+-#endif
+-      )
++      && !TYPE_WAS_ANONYMOUS (type))
++    obstack_grow (&util_obstack,
++		  decl_as_string (type, TFF_DECL_SPECIFIERS | TFF_UNQUALIFIED_NAME),
++		  strlen (decl_as_string (type, TFF_DECL_SPECIFIERS | TFF_UNQUALIFIED_NAME)));
++#else
++  if (name && TREE_CODE (name) == IDENTIFIER_NODE)
+     obstack_grow (&util_obstack,
+ 		  IDENTIFIER_POINTER (name),
+ 		  strlen (IDENTIFIER_POINTER (name)));
++#endif
+   else
+     obstack_1grow (&util_obstack, '?');
+ 
+diff --git a/gcc/testsuite/obj-c++.dg/encode-2.mm b/gcc/testsuite/obj-c++.dg/encode-2.mm
+index 2f1e2f007..cfa9bc783 100644
+--- a/gcc/testsuite/obj-c++.dg/encode-2.mm
++++ b/gcc/testsuite/obj-c++.dg/encode-2.mm
+@@ -6,9 +6,21 @@ struct Vec {
+  int z;
+ };
+ 
++typedef struct {
++  Vec<double> dvec;
++  Vec<float> fvec;
++  float fscalar;
++  double dscalar;
++  Vec<char> chVec;
++  int iscalar;
++} anonymous;
++
+ Vec<double> dd;
++
+ const char *enc = @encode(Vec<float>);
+ const char *enc2 = @encode(Vec<double>);
++const char *enc3 = @encode(anonymous);
+ 
+-/* { dg-final { scan-assembler "{Vec<float>=ffi}" { xfail "*-*-*" } } } PR32052 */
+-/* { dg-final { scan-assembler "{Vec<double>=ddi}" { xfail "*-*-*" } } } PR32052 */
++/* { dg-final { scan-assembler "{Vec<float>=ffi}" } }  */
++/* { dg-final { scan-assembler "{Vec<double>=ddi}" } }  */
++/* { dg-final { scan-assembler "{?={Vec<double>=ddi}{Vec<float>=ffi}fd{Vec<char>=cci}i}" } }  */
+diff --git a/gcc/testsuite/obj-c++.dg/encode-3.mm b/gcc/testsuite/obj-c++.dg/encode-3.mm
+index c1217904b..c1ce00b37 100644
+--- a/gcc/testsuite/obj-c++.dg/encode-3.mm
++++ b/gcc/testsuite/obj-c++.dg/encode-3.mm
+@@ -1,18 +1,30 @@
+-/* { dg-do run { xfail { "*-*-*" } } } PR32052 */
++/* { dg-do run } */
+ 
+-#include <stdlib.h>
+-#include <string.h>
++extern "C" {
++extern void abort (void);
++extern int strcmp (const char *, const char *);
++}
+ 
+ template <class T>
+ struct Vec {
+- T x, y;
+- long z;
+- long long zz;
++  T x, y;
++  long z;
++  long long zz;
+ };
+ 
+-Vec<double> dd;
++typedef struct {
++  float fscalar;
++  double dv[10];
++  int iscalar;
++  long z;
++  long long zz;
++  Vec<const char> cv;
++} anonymous;
++
++//Vec<double> dd;
+ const char *enc = @encode(Vec<float>);
+ const char *enc2 = @encode(Vec<double>);
++const char *enc3 = @encode(anonymous);
+ 
+ #ifdef __LP64__
+ #define L "q"
+@@ -32,5 +44,8 @@ int main(void) {
+   if (strcmp (enc2, "{Vec<double>=dd" L "q}"))
+     abort();
+ 
++  if (strcmp (enc3, "{?=f[10d]i" L "q{Vec<const char>=rcrc" L "q}}"))
++    abort();
++
+   return 0;
+ }
+diff --git a/gcc/testsuite/objc.dg/encode-10.m b/gcc/testsuite/objc.dg/encode-10.m
+new file mode 100644
+index 000000000..bdfdb82b8
+--- /dev/null
++++ b/gcc/testsuite/objc.dg/encode-10.m
+@@ -0,0 +1,19 @@
++/* { dg-do compile } */
++
++typedef struct Vec {
++ double x, y;
++ int z;
++} xyz_t ;
++
++typedef struct {
++  float fscalar;
++  double dscalar;
++  xyz_t dv;
++  int iscalar;
++} anonymous;
++
++const char *enc = @encode(xyz_t);
++const char *enc2 = @encode(anonymous);
++
++/* { dg-final { scan-assembler "{Vec=ddi}" } }  */
++/* { dg-final { scan-assembler "{?=fd{Vec=ddi}i}" } }  */
+diff --git a/gcc/testsuite/objc.dg/encode-11.m b/gcc/testsuite/objc.dg/encode-11.m
+new file mode 100644
+index 000000000..0b59a3aa6
+--- /dev/null
++++ b/gcc/testsuite/objc.dg/encode-11.m
+@@ -0,0 +1,43 @@
++/* { dg-do run } */
++
++extern void abort (void);
++extern int strcmp (const char *, const char *);
++
++typedef struct Vec {
++ double xv[10], yv[5];
++ float fscal;
++ int z;
++} xyz_t ;
++
++typedef struct {
++  float fscalar;
++  double dscalar;
++  xyz_t dv;
++  int iscalar;
++  long ln;
++  long long lln;
++} anonymous;
++
++const char *enc = @encode(xyz_t);
++const char *enc2 = @encode(anonymous);
++
++#ifdef __LP64__
++#define L "q"
++#else
++#define L "l"
++#endif
++
++int main(void) {
++  const char *encode = @encode(long);
++
++  if (strcmp (encode, L))
++    abort ();
++    
++  if (strcmp (enc, "{Vec=[10d][5d]fi}"))
++     abort ();
++
++  if (strcmp (enc2, "{?=fd{Vec=[10d][5d]fi}i" L "q}"))
++    abort ();
++
++  return 0;
++}

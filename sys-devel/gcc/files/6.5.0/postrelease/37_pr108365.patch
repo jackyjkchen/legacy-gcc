@@ -1,0 +1,60 @@
+diff --git a/gcc/cp/typeck.c b/gcc/cp/typeck.c
+index 5fa61b230..177d2ad1e 100644
+--- a/gcc/cp/typeck.c
++++ b/gcc/cp/typeck.c
+@@ -4288,7 +4288,12 @@ cp_build_binary_op (location_t location,
+ 	       point, so we have to dig out the original type to find out if
+ 	       it was unsigned.  */
+ 	    shorten = ((TREE_CODE (op0) == NOP_EXPR
+-			&& TYPE_UNSIGNED (TREE_TYPE (TREE_OPERAND (op0, 0))))
++			  && INTEGRAL_TYPE_P (TREE_TYPE (TREE_OPERAND (op0,
++								       0)))
++			  && TYPE_UNSIGNED (TREE_TYPE (TREE_OPERAND (op0, 0)))
++			  && (TYPE_PRECISION (TREE_TYPE (TREE_OPERAND (op0,
++								       0)))
++			      < TYPE_PRECISION (type0)))
+ 		       || (TREE_CODE (op1) == INTEGER_CST
+ 			   && ! integer_all_onesp (op1)));
+ 
+@@ -4325,7 +4330,10 @@ cp_build_binary_op (location_t location,
+ 	     quotient can't be represented in the computation mode.  We shorten
+ 	     only if unsigned or if dividing by something we know != -1.  */
+ 	  shorten = ((TREE_CODE (op0) == NOP_EXPR
+-		      && TYPE_UNSIGNED (TREE_TYPE (TREE_OPERAND (op0, 0))))
++		      && INTEGRAL_TYPE_P (TREE_TYPE (TREE_OPERAND (op0, 0)))
++		      && TYPE_UNSIGNED (TREE_TYPE (TREE_OPERAND (op0, 0)))
++		      && (TYPE_PRECISION (TREE_TYPE (TREE_OPERAND (op0, 0)))
++			  < TYPE_PRECISION (type0)))
+ 		     || (TREE_CODE (op1) == INTEGER_CST
+ 			 && ! integer_all_onesp (op1)));
+ 	  common = 1;
+diff --git a/gcc/testsuite/g++.dg/opt/pr108365.C b/gcc/testsuite/g++.dg/opt/pr108365.C
+new file mode 100644
+index 000000000..47eefa2b2
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/opt/pr108365.C
+@@ -0,0 +1,13 @@
++// PR c++/108365
++// { dg-do run }
++
++char b = 1;
++
++int
++main ()
++{
++#if __CHAR_BIT__ == 8 && __SIZEOF_SHORT__ == 2 && __SIZEOF_INT__ == 4 && __SIZEOF_LONG_LONG__ == 8
++  while ((short) ((long long) (unsigned long long) (-__INT_MAX__ - 1) / (long long) (b ? -1 : 0)))
++    ;
++#endif
++}
+diff --git a/gcc/testsuite/g++.dg/warn/pr108365.C b/gcc/testsuite/g++.dg/warn/pr108365.C
+new file mode 100644
+index 000000000..6d40957c9
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/warn/pr108365.C
+@@ -0,0 +1,5 @@
++// PR c++/108365
++// { dg-do compile { target { { { ilp32 || lp64 } || llp64 } && c++11 } } }
++
++constexpr char b = 1;
++long t = (short) ((long long) (unsigned long long) (-__INT_MAX__ - 1) / (long long) (b ? -1 : 0)); // { dg-bogus "integer overflow in expression of type" }

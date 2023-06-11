@@ -1,0 +1,127 @@
+diff --git a/gcc/fortran/class.c b/gcc/fortran/class.c
+index fdc10627a..fe64a1992 100644
+--- a/gcc/fortran/class.c
++++ b/gcc/fortran/class.c
+@@ -899,7 +899,7 @@ finalize_component (gfc_expr *expr, gfc_symbol *derived, gfc_component *comp,
+   if (!comp_is_finalizable (comp))
+     return;
+ 
+-  if (comp->finalized)
++  if (expr->finalized)
+     return;
+ 
+   e = gfc_copy_expr (expr);
+@@ -990,6 +990,7 @@ finalize_component (gfc_expr *expr, gfc_symbol *derived, gfc_component *comp,
+ 	}
+       else
+ 	(*code) = cond;
++
+     }
+   else if (comp->ts.type == BT_DERIVED
+ 	    && comp->ts.u.derived->f2k_derived
+@@ -1029,7 +1030,7 @@ finalize_component (gfc_expr *expr, gfc_symbol *derived, gfc_component *comp,
+ 			    sub_ns);
+       gfc_free_expr (e);
+     }
+-  comp->finalized = true;
++  expr->finalized = 1;
+ }
+ 
+ 
+diff --git a/gcc/fortran/gfortran.h b/gcc/fortran/gfortran.h
+index f7f1fa58d..634a976d3 100644
+--- a/gcc/fortran/gfortran.h
++++ b/gcc/fortran/gfortran.h
+@@ -1058,7 +1058,6 @@ typedef struct gfc_component
+   struct gfc_typebound_proc *tb;
+   /* When allocatable/pointer and in a coarray the associated token.  */
+   tree caf_token;
+-  bool finalized;
+ }
+ gfc_component;
+ 
+@@ -2114,6 +2113,10 @@ typedef struct gfc_expr
+   /* Set this if no warning should be given somewhere in a lower level.  */
+ 
+   unsigned int do_not_warn : 1;
++
++  /* Set this if the expression has already been finalized.  */
++  unsigned int finalized : 1;
++
+   /* If an expression comes from a Hollerith constant or compile-time
+      evaluation of a transfer statement, it may have a prescribed target-
+      memory representation, and these cannot always be backformed from
+diff --git a/gcc/testsuite/gfortran.dg/finalize_28.f90 b/gcc/testsuite/gfortran.dg/finalize_28.f90
+index 597413b2d..f0c966525 100644
+--- a/gcc/testsuite/gfortran.dg/finalize_28.f90
++++ b/gcc/testsuite/gfortran.dg/finalize_28.f90
+@@ -21,4 +21,4 @@ contains
+     integer, intent(out) :: edges(:,:)
+   end subroutine coo_dump_edges
+ end module coo_graphs
+-! { dg-final { scan-tree-dump-times "__builtin_free" 5 "original" } }
++! { dg-final { scan-tree-dump-times "__builtin_free" 6 "original" } }
+diff --git a/gcc/testsuite/gfortran.dg/finalize_34.f90 b/gcc/testsuite/gfortran.dg/finalize_34.f90
+index e2f02a5c5..fef7dac6d 100644
+--- a/gcc/testsuite/gfortran.dg/finalize_34.f90
++++ b/gcc/testsuite/gfortran.dg/finalize_34.f90
+@@ -22,4 +22,4 @@ program main
+   use testmodule
+   type(evtlist_type), dimension(10) :: a
+ end program main
+-! { dg-final  { scan-tree-dump-times "__builtin_free" 8 "original" } }
++! { dg-final  { scan-tree-dump-times "__builtin_free" 12 "original" } }
+diff --git a/gcc/testsuite/gfortran.dg/finalize_35.f90 b/gcc/testsuite/gfortran.dg/finalize_35.f90
+new file mode 100644
+index 000000000..66435c43e
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/finalize_35.f90
+@@ -0,0 +1,48 @@
++! { dg-do compile }
++! { dg-additional-options "-fdump-tree-original" }
++! PR 94361 - this left open some memory leaks.  Original test case by
++! Antony Lewis.
++
++module debug
++  private
++
++  Type TypeWithFinal
++   contains
++     FINAL :: finalizer  !No leak if this line is commented
++  end type TypeWithFinal
++
++  Type Tester
++     real, dimension(:), allocatable :: Dat
++     Type(TypeWithFinal) :: X
++  end Type Tester
++
++  Type :: TestType2
++     Type(Tester) :: T
++  end type TestType2
++  public Leaker
++contains
++
++  subroutine Leaker
++    type(TestType2) :: Test
++
++    allocate(Test%T%Dat(1000))
++  end subroutine Leaker
++
++  subroutine finalizer(this)
++    Type(TypeWithFinal) :: this
++  end subroutine finalizer
++
++end module debug
++
++
++program run
++  use debug
++  implicit none
++  integer i
++
++  do i=1, 1000
++     call Leaker()
++  end do
++
++end program run
++! { dg-final  { scan-tree-dump-times "__builtin_free\\ \\(ptr2" 2 "original" } }

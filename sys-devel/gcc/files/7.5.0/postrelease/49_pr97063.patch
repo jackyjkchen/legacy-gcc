@@ -1,0 +1,2881 @@
+diff --git a/gcc/testsuite/gfortran.dg/matmul_20.f90 b/gcc/testsuite/gfortran.dg/matmul_20.f90
+new file mode 100644
+index 000000000..7a211a497
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/matmul_20.f90
+@@ -0,0 +1,47 @@
++! { dg-do run }
++! PR97063 - Wrong result for vector (step size is negative) * matrix
++
++program p
++  implicit none
++  integer, parameter :: m = 3, k = 2*m, l = k-1, n = 4
++  integer :: i, j,  m1, m2, ms
++  integer :: ai(k), bi(k,n), ci(n), ci_ref(n), c1, c2
++  real    :: ar(k), br(k,n), cr(n), cr_ref(n)
++
++  ai(:)   = [(i,i=0,k-1)]
++  bi(:,:) = reshape ([(((5*i+j),i=0,k-1),j=0,n-1)],[k,n])
++
++  ! Parameters of subscript triplet
++  m1 = 1; m2 = l; ms =  2
++
++  ! Reference values for cross-checks: integer variant
++  c1 = dot_product (ai(m1:m2: ms), bi(m1:m2: ms,1))
++  c2 = dot_product (ai(m1:m2: ms), bi(m1:m2: ms,2))
++  ci_ref = matmul  (ai(m1:m2: ms), bi(m1:m2: ms,:))
++  ci     = matmul  (ai(m2:m1:-ms), bi(m2:m1:-ms,:))
++
++  if (ci_ref(1) /= c1 .or. ci_ref(2) /= c2) stop 1
++  if (any (ci   /= ci_ref)) stop 2
++
++  ! Real variant
++  ar = real (ai)
++  br = real (bi)
++  cr_ref = matmul  (ar(m1:m2: ms), br(m1:m2: ms,:))
++  cr     = matmul  (ar(m2:m1:-ms), br(m2:m1:-ms,:))
++
++  if (any (cr_ref /= real (ci_ref))) stop 3
++  if (any (cr     /=       cr_ref )) stop 4
++
++  ! Mixed variants
++  cr_ref = matmul  (ar(m1:m2: ms), bi(m1:m2: ms,:))
++  cr     = matmul  (ar(m2:m1:-ms), bi(m2:m1:-ms,:))
++
++  if (any (cr_ref /= real (ci_ref))) stop 5
++  if (any (cr     /=       cr_ref )) stop 6
++
++  cr_ref = matmul  (ai(m1:m2: ms), br(m1:m2: ms,:))
++  cr     = matmul  (ai(m2:m1:-ms), br(m2:m1:-ms,:))
++
++  if (any (cr_ref /= real (ci_ref))) stop 7
++  if (any (cr     /=       cr_ref )) stop 8
++end program
+diff --git a/libgfortran/generated/matmul_c10.c b/libgfortran/generated/matmul_c10.c
+index d8b26c513..582489589 100644
+--- a/libgfortran/generated/matmul_c10.c
++++ b/libgfortran/generated/matmul_c10.c
+@@ -565,20 +565,6 @@ matmul_c10_avx (gfc_array_c10 * const restrict retarray,
+ 	    }
+ 	}
+     }
+-  else if (axstride < aystride)
+-    {
+-      for (y = 0; y < ycount; y++)
+-	for (x = 0; x < xcount; x++)
+-	  dest[x*rxstride + y*rystride] = (GFC_COMPLEX_10)0;
+-
+-      for (y = 0; y < ycount; y++)
+-	for (n = 0; n < count; n++)
+-	  for (x = 0; x < xcount; x++)
+-	    /* dest[x,y] += a[x,n] * b[n,y] */
+-	    dest[x*rxstride + y*rystride] +=
+-					abase[x*axstride + n*aystride] *
+-					bbase[n*bxstride + y*bystride];
+-    }
+   else if (GFC_DESCRIPTOR_RANK (a) == 1)
+     {
+       const GFC_COMPLEX_10 *restrict bbase_y;
+@@ -593,6 +579,20 @@ matmul_c10_avx (gfc_array_c10 * const restrict retarray,
+ 	  dest[y*rxstride] = s;
+ 	}
+     }
++  else if (axstride < aystride)
++    {
++      for (y = 0; y < ycount; y++)
++	for (x = 0; x < xcount; x++)
++	  dest[x*rxstride + y*rystride] = (GFC_COMPLEX_10)0;
++
++      for (y = 0; y < ycount; y++)
++	for (n = 0; n < count; n++)
++	  for (x = 0; x < xcount; x++)
++	    /* dest[x,y] += a[x,n] * b[n,y] */
++	    dest[x*rxstride + y*rystride] +=
++					abase[x*axstride + n*aystride] *
++					bbase[n*bxstride + y*bystride];
++    }
+   else
+     {
+       const GFC_COMPLEX_10 *restrict abase_x;
+@@ -1108,20 +1108,6 @@ matmul_c10_avx2 (gfc_array_c10 * const restrict retarray,
+ 	    }
+ 	}
+     }
+-  else if (axstride < aystride)
+-    {
+-      for (y = 0; y < ycount; y++)
+-	for (x = 0; x < xcount; x++)
+-	  dest[x*rxstride + y*rystride] = (GFC_COMPLEX_10)0;
+-
+-      for (y = 0; y < ycount; y++)
+-	for (n = 0; n < count; n++)
+-	  for (x = 0; x < xcount; x++)
+-	    /* dest[x,y] += a[x,n] * b[n,y] */
+-	    dest[x*rxstride + y*rystride] +=
+-					abase[x*axstride + n*aystride] *
+-					bbase[n*bxstride + y*bystride];
+-    }
+   else if (GFC_DESCRIPTOR_RANK (a) == 1)
+     {
+       const GFC_COMPLEX_10 *restrict bbase_y;
+@@ -1136,6 +1122,20 @@ matmul_c10_avx2 (gfc_array_c10 * const restrict retarray,
+ 	  dest[y*rxstride] = s;
+ 	}
+     }
++  else if (axstride < aystride)
++    {
++      for (y = 0; y < ycount; y++)
++	for (x = 0; x < xcount; x++)
++	  dest[x*rxstride + y*rystride] = (GFC_COMPLEX_10)0;
++
++      for (y = 0; y < ycount; y++)
++	for (n = 0; n < count; n++)
++	  for (x = 0; x < xcount; x++)
++	    /* dest[x,y] += a[x,n] * b[n,y] */
++	    dest[x*rxstride + y*rystride] +=
++					abase[x*axstride + n*aystride] *
++					bbase[n*bxstride + y*bystride];
++    }
+   else
+     {
+       const GFC_COMPLEX_10 *restrict abase_x;
+@@ -1651,20 +1651,6 @@ matmul_c10_avx512f (gfc_array_c10 * const restrict retarray,
+ 	    }
+ 	}
+     }
+-  else if (axstride < aystride)
+-    {
+-      for (y = 0; y < ycount; y++)
+-	for (x = 0; x < xcount; x++)
+-	  dest[x*rxstride + y*rystride] = (GFC_COMPLEX_10)0;
+-
+-      for (y = 0; y < ycount; y++)
+-	for (n = 0; n < count; n++)
+-	  for (x = 0; x < xcount; x++)
+-	    /* dest[x,y] += a[x,n] * b[n,y] */
+-	    dest[x*rxstride + y*rystride] +=
+-					abase[x*axstride + n*aystride] *
+-					bbase[n*bxstride + y*bystride];
+-    }
+   else if (GFC_DESCRIPTOR_RANK (a) == 1)
+     {
+       const GFC_COMPLEX_10 *restrict bbase_y;
+@@ -1679,6 +1665,20 @@ matmul_c10_avx512f (gfc_array_c10 * const restrict retarray,
+ 	  dest[y*rxstride] = s;
+ 	}
+     }
++  else if (axstride < aystride)
++    {
++      for (y = 0; y < ycount; y++)
++	for (x = 0; x < xcount; x++)
++	  dest[x*rxstride + y*rystride] = (GFC_COMPLEX_10)0;
++
++      for (y = 0; y < ycount; y++)
++	for (n = 0; n < count; n++)
++	  for (x = 0; x < xcount; x++)
++	    /* dest[x,y] += a[x,n] * b[n,y] */
++	    dest[x*rxstride + y*rystride] +=
++					abase[x*axstride + n*aystride] *
++					bbase[n*bxstride + y*bystride];
++    }
+   else
+     {
+       const GFC_COMPLEX_10 *restrict abase_x;
+@@ -2190,20 +2190,6 @@ matmul_c10_vanilla (gfc_array_c10 * const restrict retarray,
+ 	    }
+ 	}
+     }
+-  else if (axstride < aystride)
+-    {
+-      for (y = 0; y < ycount; y++)
+-	for (x = 0; x < xcount; x++)
+-	  dest[x*rxstride + y*rystride] = (GFC_COMPLEX_10)0;
+-
+-      for (y = 0; y < ycount; y++)
+-	for (n = 0; n < count; n++)
+-	  for (x = 0; x < xcount; x++)
+-	    /* dest[x,y] += a[x,n] * b[n,y] */
+-	    dest[x*rxstride + y*rystride] +=
+-					abase[x*axstride + n*aystride] *
+-					bbase[n*bxstride + y*bystride];
+-    }
+   else if (GFC_DESCRIPTOR_RANK (a) == 1)
+     {
+       const GFC_COMPLEX_10 *restrict bbase_y;
+@@ -2218,6 +2204,20 @@ matmul_c10_vanilla (gfc_array_c10 * const restrict retarray,
+ 	  dest[y*rxstride] = s;
+ 	}
+     }
++  else if (axstride < aystride)
++    {
++      for (y = 0; y < ycount; y++)
++	for (x = 0; x < xcount; x++)
++	  dest[x*rxstride + y*rystride] = (GFC_COMPLEX_10)0;
++
++      for (y = 0; y < ycount; y++)
++	for (n = 0; n < count; n++)
++	  for (x = 0; x < xcount; x++)
++	    /* dest[x,y] += a[x,n] * b[n,y] */
++	    dest[x*rxstride + y*rystride] +=
++					abase[x*axstride + n*aystride] *
++					bbase[n*bxstride + y*bystride];
++    }
+   else
+     {
+       const GFC_COMPLEX_10 *restrict abase_x;
+@@ -2787,20 +2787,6 @@ matmul_c10 (gfc_array_c10 * const restrict retarray,
+ 	    }
+ 	}
+     }
+-  else if (axstride < aystride)
+-    {
+-      for (y = 0; y < ycount; y++)
+-	for (x = 0; x < xcount; x++)
+-	  dest[x*rxstride + y*rystride] = (GFC_COMPLEX_10)0;
+-
+-      for (y = 0; y < ycount; y++)
+-	for (n = 0; n < count; n++)
+-	  for (x = 0; x < xcount; x++)
+-	    /* dest[x,y] += a[x,n] * b[n,y] */
+-	    dest[x*rxstride + y*rystride] +=
+-					abase[x*axstride + n*aystride] *
+-					bbase[n*bxstride + y*bystride];
+-    }
+   else if (GFC_DESCRIPTOR_RANK (a) == 1)
+     {
+       const GFC_COMPLEX_10 *restrict bbase_y;
+@@ -2815,6 +2801,20 @@ matmul_c10 (gfc_array_c10 * const restrict retarray,
+ 	  dest[y*rxstride] = s;
+ 	}
+     }
++  else if (axstride < aystride)
++    {
++      for (y = 0; y < ycount; y++)
++	for (x = 0; x < xcount; x++)
++	  dest[x*rxstride + y*rystride] = (GFC_COMPLEX_10)0;
++
++      for (y = 0; y < ycount; y++)
++	for (n = 0; n < count; n++)
++	  for (x = 0; x < xcount; x++)
++	    /* dest[x,y] += a[x,n] * b[n,y] */
++	    dest[x*rxstride + y*rystride] +=
++					abase[x*axstride + n*aystride] *
++					bbase[n*bxstride + y*bystride];
++    }
+   else
+     {
+       const GFC_COMPLEX_10 *restrict abase_x;
+diff --git a/libgfortran/generated/matmul_c16.c b/libgfortran/generated/matmul_c16.c
+index bc37fcd71..b235a0583 100644
+--- a/libgfortran/generated/matmul_c16.c
++++ b/libgfortran/generated/matmul_c16.c
+@@ -565,20 +565,6 @@ matmul_c16_avx (gfc_array_c16 * const restrict retarray,
+ 	    }
+ 	}
+     }
+-  else if (axstride < aystride)
+-    {
+-      for (y = 0; y < ycount; y++)
+-	for (x = 0; x < xcount; x++)
+-	  dest[x*rxstride + y*rystride] = (GFC_COMPLEX_16)0;
+-
+-      for (y = 0; y < ycount; y++)
+-	for (n = 0; n < count; n++)
+-	  for (x = 0; x < xcount; x++)
+-	    /* dest[x,y] += a[x,n] * b[n,y] */
+-	    dest[x*rxstride + y*rystride] +=
+-					abase[x*axstride + n*aystride] *
+-					bbase[n*bxstride + y*bystride];
+-    }
+   else if (GFC_DESCRIPTOR_RANK (a) == 1)
+     {
+       const GFC_COMPLEX_16 *restrict bbase_y;
+@@ -593,6 +579,20 @@ matmul_c16_avx (gfc_array_c16 * const restrict retarray,
+ 	  dest[y*rxstride] = s;
+ 	}
+     }
++  else if (axstride < aystride)
++    {
++      for (y = 0; y < ycount; y++)
++	for (x = 0; x < xcount; x++)
++	  dest[x*rxstride + y*rystride] = (GFC_COMPLEX_16)0;
++
++      for (y = 0; y < ycount; y++)
++	for (n = 0; n < count; n++)
++	  for (x = 0; x < xcount; x++)
++	    /* dest[x,y] += a[x,n] * b[n,y] */
++	    dest[x*rxstride + y*rystride] +=
++					abase[x*axstride + n*aystride] *
++					bbase[n*bxstride + y*bystride];
++    }
+   else
+     {
+       const GFC_COMPLEX_16 *restrict abase_x;
+@@ -1108,20 +1108,6 @@ matmul_c16_avx2 (gfc_array_c16 * const restrict retarray,
+ 	    }
+ 	}
+     }
+-  else if (axstride < aystride)
+-    {
+-      for (y = 0; y < ycount; y++)
+-	for (x = 0; x < xcount; x++)
+-	  dest[x*rxstride + y*rystride] = (GFC_COMPLEX_16)0;
+-
+-      for (y = 0; y < ycount; y++)
+-	for (n = 0; n < count; n++)
+-	  for (x = 0; x < xcount; x++)
+-	    /* dest[x,y] += a[x,n] * b[n,y] */
+-	    dest[x*rxstride + y*rystride] +=
+-					abase[x*axstride + n*aystride] *
+-					bbase[n*bxstride + y*bystride];
+-    }
+   else if (GFC_DESCRIPTOR_RANK (a) == 1)
+     {
+       const GFC_COMPLEX_16 *restrict bbase_y;
+@@ -1136,6 +1122,20 @@ matmul_c16_avx2 (gfc_array_c16 * const restrict retarray,
+ 	  dest[y*rxstride] = s;
+ 	}
+     }
++  else if (axstride < aystride)
++    {
++      for (y = 0; y < ycount; y++)
++	for (x = 0; x < xcount; x++)
++	  dest[x*rxstride + y*rystride] = (GFC_COMPLEX_16)0;
++
++      for (y = 0; y < ycount; y++)
++	for (n = 0; n < count; n++)
++	  for (x = 0; x < xcount; x++)
++	    /* dest[x,y] += a[x,n] * b[n,y] */
++	    dest[x*rxstride + y*rystride] +=
++					abase[x*axstride + n*aystride] *
++					bbase[n*bxstride + y*bystride];
++    }
+   else
+     {
+       const GFC_COMPLEX_16 *restrict abase_x;
+@@ -1651,20 +1651,6 @@ matmul_c16_avx512f (gfc_array_c16 * const restrict retarray,
+ 	    }
+ 	}
+     }
+-  else if (axstride < aystride)
+-    {
+-      for (y = 0; y < ycount; y++)
+-	for (x = 0; x < xcount; x++)
+-	  dest[x*rxstride + y*rystride] = (GFC_COMPLEX_16)0;
+-
+-      for (y = 0; y < ycount; y++)
+-	for (n = 0; n < count; n++)
+-	  for (x = 0; x < xcount; x++)
+-	    /* dest[x,y] += a[x,n] * b[n,y] */
+-	    dest[x*rxstride + y*rystride] +=
+-					abase[x*axstride + n*aystride] *
+-					bbase[n*bxstride + y*bystride];
+-    }
+   else if (GFC_DESCRIPTOR_RANK (a) == 1)
+     {
+       const GFC_COMPLEX_16 *restrict bbase_y;
+@@ -1679,6 +1665,20 @@ matmul_c16_avx512f (gfc_array_c16 * const restrict retarray,
+ 	  dest[y*rxstride] = s;
+ 	}
+     }
++  else if (axstride < aystride)
++    {
++      for (y = 0; y < ycount; y++)
++	for (x = 0; x < xcount; x++)
++	  dest[x*rxstride + y*rystride] = (GFC_COMPLEX_16)0;
++
++      for (y = 0; y < ycount; y++)
++	for (n = 0; n < count; n++)
++	  for (x = 0; x < xcount; x++)
++	    /* dest[x,y] += a[x,n] * b[n,y] */
++	    dest[x*rxstride + y*rystride] +=
++					abase[x*axstride + n*aystride] *
++					bbase[n*bxstride + y*bystride];
++    }
+   else
+     {
+       const GFC_COMPLEX_16 *restrict abase_x;
+@@ -2190,20 +2190,6 @@ matmul_c16_vanilla (gfc_array_c16 * const restrict retarray,
+ 	    }
+ 	}
+     }
+-  else if (axstride < aystride)
+-    {
+-      for (y = 0; y < ycount; y++)
+-	for (x = 0; x < xcount; x++)
+-	  dest[x*rxstride + y*rystride] = (GFC_COMPLEX_16)0;
+-
+-      for (y = 0; y < ycount; y++)
+-	for (n = 0; n < count; n++)
+-	  for (x = 0; x < xcount; x++)
+-	    /* dest[x,y] += a[x,n] * b[n,y] */
+-	    dest[x*rxstride + y*rystride] +=
+-					abase[x*axstride + n*aystride] *
+-					bbase[n*bxstride + y*bystride];
+-    }
+   else if (GFC_DESCRIPTOR_RANK (a) == 1)
+     {
+       const GFC_COMPLEX_16 *restrict bbase_y;
+@@ -2218,6 +2204,20 @@ matmul_c16_vanilla (gfc_array_c16 * const restrict retarray,
+ 	  dest[y*rxstride] = s;
+ 	}
+     }
++  else if (axstride < aystride)
++    {
++      for (y = 0; y < ycount; y++)
++	for (x = 0; x < xcount; x++)
++	  dest[x*rxstride + y*rystride] = (GFC_COMPLEX_16)0;
++
++      for (y = 0; y < ycount; y++)
++	for (n = 0; n < count; n++)
++	  for (x = 0; x < xcount; x++)
++	    /* dest[x,y] += a[x,n] * b[n,y] */
++	    dest[x*rxstride + y*rystride] +=
++					abase[x*axstride + n*aystride] *
++					bbase[n*bxstride + y*bystride];
++    }
+   else
+     {
+       const GFC_COMPLEX_16 *restrict abase_x;
+@@ -2787,20 +2787,6 @@ matmul_c16 (gfc_array_c16 * const restrict retarray,
+ 	    }
+ 	}
+     }
+-  else if (axstride < aystride)
+-    {
+-      for (y = 0; y < ycount; y++)
+-	for (x = 0; x < xcount; x++)
+-	  dest[x*rxstride + y*rystride] = (GFC_COMPLEX_16)0;
+-
+-      for (y = 0; y < ycount; y++)
+-	for (n = 0; n < count; n++)
+-	  for (x = 0; x < xcount; x++)
+-	    /* dest[x,y] += a[x,n] * b[n,y] */
+-	    dest[x*rxstride + y*rystride] +=
+-					abase[x*axstride + n*aystride] *
+-					bbase[n*bxstride + y*bystride];
+-    }
+   else if (GFC_DESCRIPTOR_RANK (a) == 1)
+     {
+       const GFC_COMPLEX_16 *restrict bbase_y;
+@@ -2815,6 +2801,20 @@ matmul_c16 (gfc_array_c16 * const restrict retarray,
+ 	  dest[y*rxstride] = s;
+ 	}
+     }
++  else if (axstride < aystride)
++    {
++      for (y = 0; y < ycount; y++)
++	for (x = 0; x < xcount; x++)
++	  dest[x*rxstride + y*rystride] = (GFC_COMPLEX_16)0;
++
++      for (y = 0; y < ycount; y++)
++	for (n = 0; n < count; n++)
++	  for (x = 0; x < xcount; x++)
++	    /* dest[x,y] += a[x,n] * b[n,y] */
++	    dest[x*rxstride + y*rystride] +=
++					abase[x*axstride + n*aystride] *
++					bbase[n*bxstride + y*bystride];
++    }
+   else
+     {
+       const GFC_COMPLEX_16 *restrict abase_x;
+diff --git a/libgfortran/generated/matmul_c4.c b/libgfortran/generated/matmul_c4.c
+index 683df98ed..450dac927 100644
+--- a/libgfortran/generated/matmul_c4.c
++++ b/libgfortran/generated/matmul_c4.c
+@@ -565,20 +565,6 @@ matmul_c4_avx (gfc_array_c4 * const restrict retarray,
+ 	    }
+ 	}
+     }
+-  else if (axstride < aystride)
+-    {
+-      for (y = 0; y < ycount; y++)
+-	for (x = 0; x < xcount; x++)
+-	  dest[x*rxstride + y*rystride] = (GFC_COMPLEX_4)0;
+-
+-      for (y = 0; y < ycount; y++)
+-	for (n = 0; n < count; n++)
+-	  for (x = 0; x < xcount; x++)
+-	    /* dest[x,y] += a[x,n] * b[n,y] */
+-	    dest[x*rxstride + y*rystride] +=
+-					abase[x*axstride + n*aystride] *
+-					bbase[n*bxstride + y*bystride];
+-    }
+   else if (GFC_DESCRIPTOR_RANK (a) == 1)
+     {
+       const GFC_COMPLEX_4 *restrict bbase_y;
+@@ -593,6 +579,20 @@ matmul_c4_avx (gfc_array_c4 * const restrict retarray,
+ 	  dest[y*rxstride] = s;
+ 	}
+     }
++  else if (axstride < aystride)
++    {
++      for (y = 0; y < ycount; y++)
++	for (x = 0; x < xcount; x++)
++	  dest[x*rxstride + y*rystride] = (GFC_COMPLEX_4)0;
++
++      for (y = 0; y < ycount; y++)
++	for (n = 0; n < count; n++)
++	  for (x = 0; x < xcount; x++)
++	    /* dest[x,y] += a[x,n] * b[n,y] */
++	    dest[x*rxstride + y*rystride] +=
++					abase[x*axstride + n*aystride] *
++					bbase[n*bxstride + y*bystride];
++    }
+   else
+     {
+       const GFC_COMPLEX_4 *restrict abase_x;
+@@ -1108,20 +1108,6 @@ matmul_c4_avx2 (gfc_array_c4 * const restrict retarray,
+ 	    }
+ 	}
+     }
+-  else if (axstride < aystride)
+-    {
+-      for (y = 0; y < ycount; y++)
+-	for (x = 0; x < xcount; x++)
+-	  dest[x*rxstride + y*rystride] = (GFC_COMPLEX_4)0;
+-
+-      for (y = 0; y < ycount; y++)
+-	for (n = 0; n < count; n++)
+-	  for (x = 0; x < xcount; x++)
+-	    /* dest[x,y] += a[x,n] * b[n,y] */
+-	    dest[x*rxstride + y*rystride] +=
+-					abase[x*axstride + n*aystride] *
+-					bbase[n*bxstride + y*bystride];
+-    }
+   else if (GFC_DESCRIPTOR_RANK (a) == 1)
+     {
+       const GFC_COMPLEX_4 *restrict bbase_y;
+@@ -1136,6 +1122,20 @@ matmul_c4_avx2 (gfc_array_c4 * const restrict retarray,
+ 	  dest[y*rxstride] = s;
+ 	}
+     }
++  else if (axstride < aystride)
++    {
++      for (y = 0; y < ycount; y++)
++	for (x = 0; x < xcount; x++)
++	  dest[x*rxstride + y*rystride] = (GFC_COMPLEX_4)0;
++
++      for (y = 0; y < ycount; y++)
++	for (n = 0; n < count; n++)
++	  for (x = 0; x < xcount; x++)
++	    /* dest[x,y] += a[x,n] * b[n,y] */
++	    dest[x*rxstride + y*rystride] +=
++					abase[x*axstride + n*aystride] *
++					bbase[n*bxstride + y*bystride];
++    }
+   else
+     {
+       const GFC_COMPLEX_4 *restrict abase_x;
+@@ -1651,20 +1651,6 @@ matmul_c4_avx512f (gfc_array_c4 * const restrict retarray,
+ 	    }
+ 	}
+     }
+-  else if (axstride < aystride)
+-    {
+-      for (y = 0; y < ycount; y++)
+-	for (x = 0; x < xcount; x++)
+-	  dest[x*rxstride + y*rystride] = (GFC_COMPLEX_4)0;
+-
+-      for (y = 0; y < ycount; y++)
+-	for (n = 0; n < count; n++)
+-	  for (x = 0; x < xcount; x++)
+-	    /* dest[x,y] += a[x,n] * b[n,y] */
+-	    dest[x*rxstride + y*rystride] +=
+-					abase[x*axstride + n*aystride] *
+-					bbase[n*bxstride + y*bystride];
+-    }
+   else if (GFC_DESCRIPTOR_RANK (a) == 1)
+     {
+       const GFC_COMPLEX_4 *restrict bbase_y;
+@@ -1679,6 +1665,20 @@ matmul_c4_avx512f (gfc_array_c4 * const restrict retarray,
+ 	  dest[y*rxstride] = s;
+ 	}
+     }
++  else if (axstride < aystride)
++    {
++      for (y = 0; y < ycount; y++)
++	for (x = 0; x < xcount; x++)
++	  dest[x*rxstride + y*rystride] = (GFC_COMPLEX_4)0;
++
++      for (y = 0; y < ycount; y++)
++	for (n = 0; n < count; n++)
++	  for (x = 0; x < xcount; x++)
++	    /* dest[x,y] += a[x,n] * b[n,y] */
++	    dest[x*rxstride + y*rystride] +=
++					abase[x*axstride + n*aystride] *
++					bbase[n*bxstride + y*bystride];
++    }
+   else
+     {
+       const GFC_COMPLEX_4 *restrict abase_x;
+@@ -2190,20 +2190,6 @@ matmul_c4_vanilla (gfc_array_c4 * const restrict retarray,
+ 	    }
+ 	}
+     }
+-  else if (axstride < aystride)
+-    {
+-      for (y = 0; y < ycount; y++)
+-	for (x = 0; x < xcount; x++)
+-	  dest[x*rxstride + y*rystride] = (GFC_COMPLEX_4)0;
+-
+-      for (y = 0; y < ycount; y++)
+-	for (n = 0; n < count; n++)
+-	  for (x = 0; x < xcount; x++)
+-	    /* dest[x,y] += a[x,n] * b[n,y] */
+-	    dest[x*rxstride + y*rystride] +=
+-					abase[x*axstride + n*aystride] *
+-					bbase[n*bxstride + y*bystride];
+-    }
+   else if (GFC_DESCRIPTOR_RANK (a) == 1)
+     {
+       const GFC_COMPLEX_4 *restrict bbase_y;
+@@ -2218,6 +2204,20 @@ matmul_c4_vanilla (gfc_array_c4 * const restrict retarray,
+ 	  dest[y*rxstride] = s;
+ 	}
+     }
++  else if (axstride < aystride)
++    {
++      for (y = 0; y < ycount; y++)
++	for (x = 0; x < xcount; x++)
++	  dest[x*rxstride + y*rystride] = (GFC_COMPLEX_4)0;
++
++      for (y = 0; y < ycount; y++)
++	for (n = 0; n < count; n++)
++	  for (x = 0; x < xcount; x++)
++	    /* dest[x,y] += a[x,n] * b[n,y] */
++	    dest[x*rxstride + y*rystride] +=
++					abase[x*axstride + n*aystride] *
++					bbase[n*bxstride + y*bystride];
++    }
+   else
+     {
+       const GFC_COMPLEX_4 *restrict abase_x;
+@@ -2787,20 +2787,6 @@ matmul_c4 (gfc_array_c4 * const restrict retarray,
+ 	    }
+ 	}
+     }
+-  else if (axstride < aystride)
+-    {
+-      for (y = 0; y < ycount; y++)
+-	for (x = 0; x < xcount; x++)
+-	  dest[x*rxstride + y*rystride] = (GFC_COMPLEX_4)0;
+-
+-      for (y = 0; y < ycount; y++)
+-	for (n = 0; n < count; n++)
+-	  for (x = 0; x < xcount; x++)
+-	    /* dest[x,y] += a[x,n] * b[n,y] */
+-	    dest[x*rxstride + y*rystride] +=
+-					abase[x*axstride + n*aystride] *
+-					bbase[n*bxstride + y*bystride];
+-    }
+   else if (GFC_DESCRIPTOR_RANK (a) == 1)
+     {
+       const GFC_COMPLEX_4 *restrict bbase_y;
+@@ -2815,6 +2801,20 @@ matmul_c4 (gfc_array_c4 * const restrict retarray,
+ 	  dest[y*rxstride] = s;
+ 	}
+     }
++  else if (axstride < aystride)
++    {
++      for (y = 0; y < ycount; y++)
++	for (x = 0; x < xcount; x++)
++	  dest[x*rxstride + y*rystride] = (GFC_COMPLEX_4)0;
++
++      for (y = 0; y < ycount; y++)
++	for (n = 0; n < count; n++)
++	  for (x = 0; x < xcount; x++)
++	    /* dest[x,y] += a[x,n] * b[n,y] */
++	    dest[x*rxstride + y*rystride] +=
++					abase[x*axstride + n*aystride] *
++					bbase[n*bxstride + y*bystride];
++    }
+   else
+     {
+       const GFC_COMPLEX_4 *restrict abase_x;
+diff --git a/libgfortran/generated/matmul_c8.c b/libgfortran/generated/matmul_c8.c
+index 9cf762394..f6e190e06 100644
+--- a/libgfortran/generated/matmul_c8.c
++++ b/libgfortran/generated/matmul_c8.c
+@@ -565,20 +565,6 @@ matmul_c8_avx (gfc_array_c8 * const restrict retarray,
+ 	    }
+ 	}
+     }
+-  else if (axstride < aystride)
+-    {
+-      for (y = 0; y < ycount; y++)
+-	for (x = 0; x < xcount; x++)
+-	  dest[x*rxstride + y*rystride] = (GFC_COMPLEX_8)0;
+-
+-      for (y = 0; y < ycount; y++)
+-	for (n = 0; n < count; n++)
+-	  for (x = 0; x < xcount; x++)
+-	    /* dest[x,y] += a[x,n] * b[n,y] */
+-	    dest[x*rxstride + y*rystride] +=
+-					abase[x*axstride + n*aystride] *
+-					bbase[n*bxstride + y*bystride];
+-    }
+   else if (GFC_DESCRIPTOR_RANK (a) == 1)
+     {
+       const GFC_COMPLEX_8 *restrict bbase_y;
+@@ -593,6 +579,20 @@ matmul_c8_avx (gfc_array_c8 * const restrict retarray,
+ 	  dest[y*rxstride] = s;
+ 	}
+     }
++  else if (axstride < aystride)
++    {
++      for (y = 0; y < ycount; y++)
++	for (x = 0; x < xcount; x++)
++	  dest[x*rxstride + y*rystride] = (GFC_COMPLEX_8)0;
++
++      for (y = 0; y < ycount; y++)
++	for (n = 0; n < count; n++)
++	  for (x = 0; x < xcount; x++)
++	    /* dest[x,y] += a[x,n] * b[n,y] */
++	    dest[x*rxstride + y*rystride] +=
++					abase[x*axstride + n*aystride] *
++					bbase[n*bxstride + y*bystride];
++    }
+   else
+     {
+       const GFC_COMPLEX_8 *restrict abase_x;
+@@ -1108,20 +1108,6 @@ matmul_c8_avx2 (gfc_array_c8 * const restrict retarray,
+ 	    }
+ 	}
+     }
+-  else if (axstride < aystride)
+-    {
+-      for (y = 0; y < ycount; y++)
+-	for (x = 0; x < xcount; x++)
+-	  dest[x*rxstride + y*rystride] = (GFC_COMPLEX_8)0;
+-
+-      for (y = 0; y < ycount; y++)
+-	for (n = 0; n < count; n++)
+-	  for (x = 0; x < xcount; x++)
+-	    /* dest[x,y] += a[x,n] * b[n,y] */
+-	    dest[x*rxstride + y*rystride] +=
+-					abase[x*axstride + n*aystride] *
+-					bbase[n*bxstride + y*bystride];
+-    }
+   else if (GFC_DESCRIPTOR_RANK (a) == 1)
+     {
+       const GFC_COMPLEX_8 *restrict bbase_y;
+@@ -1136,6 +1122,20 @@ matmul_c8_avx2 (gfc_array_c8 * const restrict retarray,
+ 	  dest[y*rxstride] = s;
+ 	}
+     }
++  else if (axstride < aystride)
++    {
++      for (y = 0; y < ycount; y++)
++	for (x = 0; x < xcount; x++)
++	  dest[x*rxstride + y*rystride] = (GFC_COMPLEX_8)0;
++
++      for (y = 0; y < ycount; y++)
++	for (n = 0; n < count; n++)
++	  for (x = 0; x < xcount; x++)
++	    /* dest[x,y] += a[x,n] * b[n,y] */
++	    dest[x*rxstride + y*rystride] +=
++					abase[x*axstride + n*aystride] *
++					bbase[n*bxstride + y*bystride];
++    }
+   else
+     {
+       const GFC_COMPLEX_8 *restrict abase_x;
+@@ -1651,20 +1651,6 @@ matmul_c8_avx512f (gfc_array_c8 * const restrict retarray,
+ 	    }
+ 	}
+     }
+-  else if (axstride < aystride)
+-    {
+-      for (y = 0; y < ycount; y++)
+-	for (x = 0; x < xcount; x++)
+-	  dest[x*rxstride + y*rystride] = (GFC_COMPLEX_8)0;
+-
+-      for (y = 0; y < ycount; y++)
+-	for (n = 0; n < count; n++)
+-	  for (x = 0; x < xcount; x++)
+-	    /* dest[x,y] += a[x,n] * b[n,y] */
+-	    dest[x*rxstride + y*rystride] +=
+-					abase[x*axstride + n*aystride] *
+-					bbase[n*bxstride + y*bystride];
+-    }
+   else if (GFC_DESCRIPTOR_RANK (a) == 1)
+     {
+       const GFC_COMPLEX_8 *restrict bbase_y;
+@@ -1679,6 +1665,20 @@ matmul_c8_avx512f (gfc_array_c8 * const restrict retarray,
+ 	  dest[y*rxstride] = s;
+ 	}
+     }
++  else if (axstride < aystride)
++    {
++      for (y = 0; y < ycount; y++)
++	for (x = 0; x < xcount; x++)
++	  dest[x*rxstride + y*rystride] = (GFC_COMPLEX_8)0;
++
++      for (y = 0; y < ycount; y++)
++	for (n = 0; n < count; n++)
++	  for (x = 0; x < xcount; x++)
++	    /* dest[x,y] += a[x,n] * b[n,y] */
++	    dest[x*rxstride + y*rystride] +=
++					abase[x*axstride + n*aystride] *
++					bbase[n*bxstride + y*bystride];
++    }
+   else
+     {
+       const GFC_COMPLEX_8 *restrict abase_x;
+@@ -2190,20 +2190,6 @@ matmul_c8_vanilla (gfc_array_c8 * const restrict retarray,
+ 	    }
+ 	}
+     }
+-  else if (axstride < aystride)
+-    {
+-      for (y = 0; y < ycount; y++)
+-	for (x = 0; x < xcount; x++)
+-	  dest[x*rxstride + y*rystride] = (GFC_COMPLEX_8)0;
+-
+-      for (y = 0; y < ycount; y++)
+-	for (n = 0; n < count; n++)
+-	  for (x = 0; x < xcount; x++)
+-	    /* dest[x,y] += a[x,n] * b[n,y] */
+-	    dest[x*rxstride + y*rystride] +=
+-					abase[x*axstride + n*aystride] *
+-					bbase[n*bxstride + y*bystride];
+-    }
+   else if (GFC_DESCRIPTOR_RANK (a) == 1)
+     {
+       const GFC_COMPLEX_8 *restrict bbase_y;
+@@ -2218,6 +2204,20 @@ matmul_c8_vanilla (gfc_array_c8 * const restrict retarray,
+ 	  dest[y*rxstride] = s;
+ 	}
+     }
++  else if (axstride < aystride)
++    {
++      for (y = 0; y < ycount; y++)
++	for (x = 0; x < xcount; x++)
++	  dest[x*rxstride + y*rystride] = (GFC_COMPLEX_8)0;
++
++      for (y = 0; y < ycount; y++)
++	for (n = 0; n < count; n++)
++	  for (x = 0; x < xcount; x++)
++	    /* dest[x,y] += a[x,n] * b[n,y] */
++	    dest[x*rxstride + y*rystride] +=
++					abase[x*axstride + n*aystride] *
++					bbase[n*bxstride + y*bystride];
++    }
+   else
+     {
+       const GFC_COMPLEX_8 *restrict abase_x;
+@@ -2787,20 +2787,6 @@ matmul_c8 (gfc_array_c8 * const restrict retarray,
+ 	    }
+ 	}
+     }
+-  else if (axstride < aystride)
+-    {
+-      for (y = 0; y < ycount; y++)
+-	for (x = 0; x < xcount; x++)
+-	  dest[x*rxstride + y*rystride] = (GFC_COMPLEX_8)0;
+-
+-      for (y = 0; y < ycount; y++)
+-	for (n = 0; n < count; n++)
+-	  for (x = 0; x < xcount; x++)
+-	    /* dest[x,y] += a[x,n] * b[n,y] */
+-	    dest[x*rxstride + y*rystride] +=
+-					abase[x*axstride + n*aystride] *
+-					bbase[n*bxstride + y*bystride];
+-    }
+   else if (GFC_DESCRIPTOR_RANK (a) == 1)
+     {
+       const GFC_COMPLEX_8 *restrict bbase_y;
+@@ -2815,6 +2801,20 @@ matmul_c8 (gfc_array_c8 * const restrict retarray,
+ 	  dest[y*rxstride] = s;
+ 	}
+     }
++  else if (axstride < aystride)
++    {
++      for (y = 0; y < ycount; y++)
++	for (x = 0; x < xcount; x++)
++	  dest[x*rxstride + y*rystride] = (GFC_COMPLEX_8)0;
++
++      for (y = 0; y < ycount; y++)
++	for (n = 0; n < count; n++)
++	  for (x = 0; x < xcount; x++)
++	    /* dest[x,y] += a[x,n] * b[n,y] */
++	    dest[x*rxstride + y*rystride] +=
++					abase[x*axstride + n*aystride] *
++					bbase[n*bxstride + y*bystride];
++    }
+   else
+     {
+       const GFC_COMPLEX_8 *restrict abase_x;
+diff --git a/libgfortran/generated/matmul_i1.c b/libgfortran/generated/matmul_i1.c
+index e2fd404d6..0396c3461 100644
+--- a/libgfortran/generated/matmul_i1.c
++++ b/libgfortran/generated/matmul_i1.c
+@@ -565,20 +565,6 @@ matmul_i1_avx (gfc_array_i1 * const restrict retarray,
+ 	    }
+ 	}
+     }
+-  else if (axstride < aystride)
+-    {
+-      for (y = 0; y < ycount; y++)
+-	for (x = 0; x < xcount; x++)
+-	  dest[x*rxstride + y*rystride] = (GFC_INTEGER_1)0;
+-
+-      for (y = 0; y < ycount; y++)
+-	for (n = 0; n < count; n++)
+-	  for (x = 0; x < xcount; x++)
+-	    /* dest[x,y] += a[x,n] * b[n,y] */
+-	    dest[x*rxstride + y*rystride] +=
+-					abase[x*axstride + n*aystride] *
+-					bbase[n*bxstride + y*bystride];
+-    }
+   else if (GFC_DESCRIPTOR_RANK (a) == 1)
+     {
+       const GFC_INTEGER_1 *restrict bbase_y;
+@@ -593,6 +579,20 @@ matmul_i1_avx (gfc_array_i1 * const restrict retarray,
+ 	  dest[y*rxstride] = s;
+ 	}
+     }
++  else if (axstride < aystride)
++    {
++      for (y = 0; y < ycount; y++)
++	for (x = 0; x < xcount; x++)
++	  dest[x*rxstride + y*rystride] = (GFC_INTEGER_1)0;
++
++      for (y = 0; y < ycount; y++)
++	for (n = 0; n < count; n++)
++	  for (x = 0; x < xcount; x++)
++	    /* dest[x,y] += a[x,n] * b[n,y] */
++	    dest[x*rxstride + y*rystride] +=
++					abase[x*axstride + n*aystride] *
++					bbase[n*bxstride + y*bystride];
++    }
+   else
+     {
+       const GFC_INTEGER_1 *restrict abase_x;
+@@ -1108,20 +1108,6 @@ matmul_i1_avx2 (gfc_array_i1 * const restrict retarray,
+ 	    }
+ 	}
+     }
+-  else if (axstride < aystride)
+-    {
+-      for (y = 0; y < ycount; y++)
+-	for (x = 0; x < xcount; x++)
+-	  dest[x*rxstride + y*rystride] = (GFC_INTEGER_1)0;
+-
+-      for (y = 0; y < ycount; y++)
+-	for (n = 0; n < count; n++)
+-	  for (x = 0; x < xcount; x++)
+-	    /* dest[x,y] += a[x,n] * b[n,y] */
+-	    dest[x*rxstride + y*rystride] +=
+-					abase[x*axstride + n*aystride] *
+-					bbase[n*bxstride + y*bystride];
+-    }
+   else if (GFC_DESCRIPTOR_RANK (a) == 1)
+     {
+       const GFC_INTEGER_1 *restrict bbase_y;
+@@ -1136,6 +1122,20 @@ matmul_i1_avx2 (gfc_array_i1 * const restrict retarray,
+ 	  dest[y*rxstride] = s;
+ 	}
+     }
++  else if (axstride < aystride)
++    {
++      for (y = 0; y < ycount; y++)
++	for (x = 0; x < xcount; x++)
++	  dest[x*rxstride + y*rystride] = (GFC_INTEGER_1)0;
++
++      for (y = 0; y < ycount; y++)
++	for (n = 0; n < count; n++)
++	  for (x = 0; x < xcount; x++)
++	    /* dest[x,y] += a[x,n] * b[n,y] */
++	    dest[x*rxstride + y*rystride] +=
++					abase[x*axstride + n*aystride] *
++					bbase[n*bxstride + y*bystride];
++    }
+   else
+     {
+       const GFC_INTEGER_1 *restrict abase_x;
+@@ -1651,20 +1651,6 @@ matmul_i1_avx512f (gfc_array_i1 * const restrict retarray,
+ 	    }
+ 	}
+     }
+-  else if (axstride < aystride)
+-    {
+-      for (y = 0; y < ycount; y++)
+-	for (x = 0; x < xcount; x++)
+-	  dest[x*rxstride + y*rystride] = (GFC_INTEGER_1)0;
+-
+-      for (y = 0; y < ycount; y++)
+-	for (n = 0; n < count; n++)
+-	  for (x = 0; x < xcount; x++)
+-	    /* dest[x,y] += a[x,n] * b[n,y] */
+-	    dest[x*rxstride + y*rystride] +=
+-					abase[x*axstride + n*aystride] *
+-					bbase[n*bxstride + y*bystride];
+-    }
+   else if (GFC_DESCRIPTOR_RANK (a) == 1)
+     {
+       const GFC_INTEGER_1 *restrict bbase_y;
+@@ -1679,6 +1665,20 @@ matmul_i1_avx512f (gfc_array_i1 * const restrict retarray,
+ 	  dest[y*rxstride] = s;
+ 	}
+     }
++  else if (axstride < aystride)
++    {
++      for (y = 0; y < ycount; y++)
++	for (x = 0; x < xcount; x++)
++	  dest[x*rxstride + y*rystride] = (GFC_INTEGER_1)0;
++
++      for (y = 0; y < ycount; y++)
++	for (n = 0; n < count; n++)
++	  for (x = 0; x < xcount; x++)
++	    /* dest[x,y] += a[x,n] * b[n,y] */
++	    dest[x*rxstride + y*rystride] +=
++					abase[x*axstride + n*aystride] *
++					bbase[n*bxstride + y*bystride];
++    }
+   else
+     {
+       const GFC_INTEGER_1 *restrict abase_x;
+@@ -2190,20 +2190,6 @@ matmul_i1_vanilla (gfc_array_i1 * const restrict retarray,
+ 	    }
+ 	}
+     }
+-  else if (axstride < aystride)
+-    {
+-      for (y = 0; y < ycount; y++)
+-	for (x = 0; x < xcount; x++)
+-	  dest[x*rxstride + y*rystride] = (GFC_INTEGER_1)0;
+-
+-      for (y = 0; y < ycount; y++)
+-	for (n = 0; n < count; n++)
+-	  for (x = 0; x < xcount; x++)
+-	    /* dest[x,y] += a[x,n] * b[n,y] */
+-	    dest[x*rxstride + y*rystride] +=
+-					abase[x*axstride + n*aystride] *
+-					bbase[n*bxstride + y*bystride];
+-    }
+   else if (GFC_DESCRIPTOR_RANK (a) == 1)
+     {
+       const GFC_INTEGER_1 *restrict bbase_y;
+@@ -2218,6 +2204,20 @@ matmul_i1_vanilla (gfc_array_i1 * const restrict retarray,
+ 	  dest[y*rxstride] = s;
+ 	}
+     }
++  else if (axstride < aystride)
++    {
++      for (y = 0; y < ycount; y++)
++	for (x = 0; x < xcount; x++)
++	  dest[x*rxstride + y*rystride] = (GFC_INTEGER_1)0;
++
++      for (y = 0; y < ycount; y++)
++	for (n = 0; n < count; n++)
++	  for (x = 0; x < xcount; x++)
++	    /* dest[x,y] += a[x,n] * b[n,y] */
++	    dest[x*rxstride + y*rystride] +=
++					abase[x*axstride + n*aystride] *
++					bbase[n*bxstride + y*bystride];
++    }
+   else
+     {
+       const GFC_INTEGER_1 *restrict abase_x;
+@@ -2787,20 +2787,6 @@ matmul_i1 (gfc_array_i1 * const restrict retarray,
+ 	    }
+ 	}
+     }
+-  else if (axstride < aystride)
+-    {
+-      for (y = 0; y < ycount; y++)
+-	for (x = 0; x < xcount; x++)
+-	  dest[x*rxstride + y*rystride] = (GFC_INTEGER_1)0;
+-
+-      for (y = 0; y < ycount; y++)
+-	for (n = 0; n < count; n++)
+-	  for (x = 0; x < xcount; x++)
+-	    /* dest[x,y] += a[x,n] * b[n,y] */
+-	    dest[x*rxstride + y*rystride] +=
+-					abase[x*axstride + n*aystride] *
+-					bbase[n*bxstride + y*bystride];
+-    }
+   else if (GFC_DESCRIPTOR_RANK (a) == 1)
+     {
+       const GFC_INTEGER_1 *restrict bbase_y;
+@@ -2815,6 +2801,20 @@ matmul_i1 (gfc_array_i1 * const restrict retarray,
+ 	  dest[y*rxstride] = s;
+ 	}
+     }
++  else if (axstride < aystride)
++    {
++      for (y = 0; y < ycount; y++)
++	for (x = 0; x < xcount; x++)
++	  dest[x*rxstride + y*rystride] = (GFC_INTEGER_1)0;
++
++      for (y = 0; y < ycount; y++)
++	for (n = 0; n < count; n++)
++	  for (x = 0; x < xcount; x++)
++	    /* dest[x,y] += a[x,n] * b[n,y] */
++	    dest[x*rxstride + y*rystride] +=
++					abase[x*axstride + n*aystride] *
++					bbase[n*bxstride + y*bystride];
++    }
+   else
+     {
+       const GFC_INTEGER_1 *restrict abase_x;
+diff --git a/libgfortran/generated/matmul_i16.c b/libgfortran/generated/matmul_i16.c
+index 1601e1044..2936a7a8c 100644
+--- a/libgfortran/generated/matmul_i16.c
++++ b/libgfortran/generated/matmul_i16.c
+@@ -565,20 +565,6 @@ matmul_i16_avx (gfc_array_i16 * const restrict retarray,
+ 	    }
+ 	}
+     }
+-  else if (axstride < aystride)
+-    {
+-      for (y = 0; y < ycount; y++)
+-	for (x = 0; x < xcount; x++)
+-	  dest[x*rxstride + y*rystride] = (GFC_INTEGER_16)0;
+-
+-      for (y = 0; y < ycount; y++)
+-	for (n = 0; n < count; n++)
+-	  for (x = 0; x < xcount; x++)
+-	    /* dest[x,y] += a[x,n] * b[n,y] */
+-	    dest[x*rxstride + y*rystride] +=
+-					abase[x*axstride + n*aystride] *
+-					bbase[n*bxstride + y*bystride];
+-    }
+   else if (GFC_DESCRIPTOR_RANK (a) == 1)
+     {
+       const GFC_INTEGER_16 *restrict bbase_y;
+@@ -593,6 +579,20 @@ matmul_i16_avx (gfc_array_i16 * const restrict retarray,
+ 	  dest[y*rxstride] = s;
+ 	}
+     }
++  else if (axstride < aystride)
++    {
++      for (y = 0; y < ycount; y++)
++	for (x = 0; x < xcount; x++)
++	  dest[x*rxstride + y*rystride] = (GFC_INTEGER_16)0;
++
++      for (y = 0; y < ycount; y++)
++	for (n = 0; n < count; n++)
++	  for (x = 0; x < xcount; x++)
++	    /* dest[x,y] += a[x,n] * b[n,y] */
++	    dest[x*rxstride + y*rystride] +=
++					abase[x*axstride + n*aystride] *
++					bbase[n*bxstride + y*bystride];
++    }
+   else
+     {
+       const GFC_INTEGER_16 *restrict abase_x;
+@@ -1108,20 +1108,6 @@ matmul_i16_avx2 (gfc_array_i16 * const restrict retarray,
+ 	    }
+ 	}
+     }
+-  else if (axstride < aystride)
+-    {
+-      for (y = 0; y < ycount; y++)
+-	for (x = 0; x < xcount; x++)
+-	  dest[x*rxstride + y*rystride] = (GFC_INTEGER_16)0;
+-
+-      for (y = 0; y < ycount; y++)
+-	for (n = 0; n < count; n++)
+-	  for (x = 0; x < xcount; x++)
+-	    /* dest[x,y] += a[x,n] * b[n,y] */
+-	    dest[x*rxstride + y*rystride] +=
+-					abase[x*axstride + n*aystride] *
+-					bbase[n*bxstride + y*bystride];
+-    }
+   else if (GFC_DESCRIPTOR_RANK (a) == 1)
+     {
+       const GFC_INTEGER_16 *restrict bbase_y;
+@@ -1136,6 +1122,20 @@ matmul_i16_avx2 (gfc_array_i16 * const restrict retarray,
+ 	  dest[y*rxstride] = s;
+ 	}
+     }
++  else if (axstride < aystride)
++    {
++      for (y = 0; y < ycount; y++)
++	for (x = 0; x < xcount; x++)
++	  dest[x*rxstride + y*rystride] = (GFC_INTEGER_16)0;
++
++      for (y = 0; y < ycount; y++)
++	for (n = 0; n < count; n++)
++	  for (x = 0; x < xcount; x++)
++	    /* dest[x,y] += a[x,n] * b[n,y] */
++	    dest[x*rxstride + y*rystride] +=
++					abase[x*axstride + n*aystride] *
++					bbase[n*bxstride + y*bystride];
++    }
+   else
+     {
+       const GFC_INTEGER_16 *restrict abase_x;
+@@ -1651,20 +1651,6 @@ matmul_i16_avx512f (gfc_array_i16 * const restrict retarray,
+ 	    }
+ 	}
+     }
+-  else if (axstride < aystride)
+-    {
+-      for (y = 0; y < ycount; y++)
+-	for (x = 0; x < xcount; x++)
+-	  dest[x*rxstride + y*rystride] = (GFC_INTEGER_16)0;
+-
+-      for (y = 0; y < ycount; y++)
+-	for (n = 0; n < count; n++)
+-	  for (x = 0; x < xcount; x++)
+-	    /* dest[x,y] += a[x,n] * b[n,y] */
+-	    dest[x*rxstride + y*rystride] +=
+-					abase[x*axstride + n*aystride] *
+-					bbase[n*bxstride + y*bystride];
+-    }
+   else if (GFC_DESCRIPTOR_RANK (a) == 1)
+     {
+       const GFC_INTEGER_16 *restrict bbase_y;
+@@ -1679,6 +1665,20 @@ matmul_i16_avx512f (gfc_array_i16 * const restrict retarray,
+ 	  dest[y*rxstride] = s;
+ 	}
+     }
++  else if (axstride < aystride)
++    {
++      for (y = 0; y < ycount; y++)
++	for (x = 0; x < xcount; x++)
++	  dest[x*rxstride + y*rystride] = (GFC_INTEGER_16)0;
++
++      for (y = 0; y < ycount; y++)
++	for (n = 0; n < count; n++)
++	  for (x = 0; x < xcount; x++)
++	    /* dest[x,y] += a[x,n] * b[n,y] */
++	    dest[x*rxstride + y*rystride] +=
++					abase[x*axstride + n*aystride] *
++					bbase[n*bxstride + y*bystride];
++    }
+   else
+     {
+       const GFC_INTEGER_16 *restrict abase_x;
+@@ -2190,20 +2190,6 @@ matmul_i16_vanilla (gfc_array_i16 * const restrict retarray,
+ 	    }
+ 	}
+     }
+-  else if (axstride < aystride)
+-    {
+-      for (y = 0; y < ycount; y++)
+-	for (x = 0; x < xcount; x++)
+-	  dest[x*rxstride + y*rystride] = (GFC_INTEGER_16)0;
+-
+-      for (y = 0; y < ycount; y++)
+-	for (n = 0; n < count; n++)
+-	  for (x = 0; x < xcount; x++)
+-	    /* dest[x,y] += a[x,n] * b[n,y] */
+-	    dest[x*rxstride + y*rystride] +=
+-					abase[x*axstride + n*aystride] *
+-					bbase[n*bxstride + y*bystride];
+-    }
+   else if (GFC_DESCRIPTOR_RANK (a) == 1)
+     {
+       const GFC_INTEGER_16 *restrict bbase_y;
+@@ -2218,6 +2204,20 @@ matmul_i16_vanilla (gfc_array_i16 * const restrict retarray,
+ 	  dest[y*rxstride] = s;
+ 	}
+     }
++  else if (axstride < aystride)
++    {
++      for (y = 0; y < ycount; y++)
++	for (x = 0; x < xcount; x++)
++	  dest[x*rxstride + y*rystride] = (GFC_INTEGER_16)0;
++
++      for (y = 0; y < ycount; y++)
++	for (n = 0; n < count; n++)
++	  for (x = 0; x < xcount; x++)
++	    /* dest[x,y] += a[x,n] * b[n,y] */
++	    dest[x*rxstride + y*rystride] +=
++					abase[x*axstride + n*aystride] *
++					bbase[n*bxstride + y*bystride];
++    }
+   else
+     {
+       const GFC_INTEGER_16 *restrict abase_x;
+@@ -2787,20 +2787,6 @@ matmul_i16 (gfc_array_i16 * const restrict retarray,
+ 	    }
+ 	}
+     }
+-  else if (axstride < aystride)
+-    {
+-      for (y = 0; y < ycount; y++)
+-	for (x = 0; x < xcount; x++)
+-	  dest[x*rxstride + y*rystride] = (GFC_INTEGER_16)0;
+-
+-      for (y = 0; y < ycount; y++)
+-	for (n = 0; n < count; n++)
+-	  for (x = 0; x < xcount; x++)
+-	    /* dest[x,y] += a[x,n] * b[n,y] */
+-	    dest[x*rxstride + y*rystride] +=
+-					abase[x*axstride + n*aystride] *
+-					bbase[n*bxstride + y*bystride];
+-    }
+   else if (GFC_DESCRIPTOR_RANK (a) == 1)
+     {
+       const GFC_INTEGER_16 *restrict bbase_y;
+@@ -2815,6 +2801,20 @@ matmul_i16 (gfc_array_i16 * const restrict retarray,
+ 	  dest[y*rxstride] = s;
+ 	}
+     }
++  else if (axstride < aystride)
++    {
++      for (y = 0; y < ycount; y++)
++	for (x = 0; x < xcount; x++)
++	  dest[x*rxstride + y*rystride] = (GFC_INTEGER_16)0;
++
++      for (y = 0; y < ycount; y++)
++	for (n = 0; n < count; n++)
++	  for (x = 0; x < xcount; x++)
++	    /* dest[x,y] += a[x,n] * b[n,y] */
++	    dest[x*rxstride + y*rystride] +=
++					abase[x*axstride + n*aystride] *
++					bbase[n*bxstride + y*bystride];
++    }
+   else
+     {
+       const GFC_INTEGER_16 *restrict abase_x;
+diff --git a/libgfortran/generated/matmul_i2.c b/libgfortran/generated/matmul_i2.c
+index c9b67af0a..1f87a80d8 100644
+--- a/libgfortran/generated/matmul_i2.c
++++ b/libgfortran/generated/matmul_i2.c
+@@ -565,20 +565,6 @@ matmul_i2_avx (gfc_array_i2 * const restrict retarray,
+ 	    }
+ 	}
+     }
+-  else if (axstride < aystride)
+-    {
+-      for (y = 0; y < ycount; y++)
+-	for (x = 0; x < xcount; x++)
+-	  dest[x*rxstride + y*rystride] = (GFC_INTEGER_2)0;
+-
+-      for (y = 0; y < ycount; y++)
+-	for (n = 0; n < count; n++)
+-	  for (x = 0; x < xcount; x++)
+-	    /* dest[x,y] += a[x,n] * b[n,y] */
+-	    dest[x*rxstride + y*rystride] +=
+-					abase[x*axstride + n*aystride] *
+-					bbase[n*bxstride + y*bystride];
+-    }
+   else if (GFC_DESCRIPTOR_RANK (a) == 1)
+     {
+       const GFC_INTEGER_2 *restrict bbase_y;
+@@ -593,6 +579,20 @@ matmul_i2_avx (gfc_array_i2 * const restrict retarray,
+ 	  dest[y*rxstride] = s;
+ 	}
+     }
++  else if (axstride < aystride)
++    {
++      for (y = 0; y < ycount; y++)
++	for (x = 0; x < xcount; x++)
++	  dest[x*rxstride + y*rystride] = (GFC_INTEGER_2)0;
++
++      for (y = 0; y < ycount; y++)
++	for (n = 0; n < count; n++)
++	  for (x = 0; x < xcount; x++)
++	    /* dest[x,y] += a[x,n] * b[n,y] */
++	    dest[x*rxstride + y*rystride] +=
++					abase[x*axstride + n*aystride] *
++					bbase[n*bxstride + y*bystride];
++    }
+   else
+     {
+       const GFC_INTEGER_2 *restrict abase_x;
+@@ -1108,20 +1108,6 @@ matmul_i2_avx2 (gfc_array_i2 * const restrict retarray,
+ 	    }
+ 	}
+     }
+-  else if (axstride < aystride)
+-    {
+-      for (y = 0; y < ycount; y++)
+-	for (x = 0; x < xcount; x++)
+-	  dest[x*rxstride + y*rystride] = (GFC_INTEGER_2)0;
+-
+-      for (y = 0; y < ycount; y++)
+-	for (n = 0; n < count; n++)
+-	  for (x = 0; x < xcount; x++)
+-	    /* dest[x,y] += a[x,n] * b[n,y] */
+-	    dest[x*rxstride + y*rystride] +=
+-					abase[x*axstride + n*aystride] *
+-					bbase[n*bxstride + y*bystride];
+-    }
+   else if (GFC_DESCRIPTOR_RANK (a) == 1)
+     {
+       const GFC_INTEGER_2 *restrict bbase_y;
+@@ -1136,6 +1122,20 @@ matmul_i2_avx2 (gfc_array_i2 * const restrict retarray,
+ 	  dest[y*rxstride] = s;
+ 	}
+     }
++  else if (axstride < aystride)
++    {
++      for (y = 0; y < ycount; y++)
++	for (x = 0; x < xcount; x++)
++	  dest[x*rxstride + y*rystride] = (GFC_INTEGER_2)0;
++
++      for (y = 0; y < ycount; y++)
++	for (n = 0; n < count; n++)
++	  for (x = 0; x < xcount; x++)
++	    /* dest[x,y] += a[x,n] * b[n,y] */
++	    dest[x*rxstride + y*rystride] +=
++					abase[x*axstride + n*aystride] *
++					bbase[n*bxstride + y*bystride];
++    }
+   else
+     {
+       const GFC_INTEGER_2 *restrict abase_x;
+@@ -1651,20 +1651,6 @@ matmul_i2_avx512f (gfc_array_i2 * const restrict retarray,
+ 	    }
+ 	}
+     }
+-  else if (axstride < aystride)
+-    {
+-      for (y = 0; y < ycount; y++)
+-	for (x = 0; x < xcount; x++)
+-	  dest[x*rxstride + y*rystride] = (GFC_INTEGER_2)0;
+-
+-      for (y = 0; y < ycount; y++)
+-	for (n = 0; n < count; n++)
+-	  for (x = 0; x < xcount; x++)
+-	    /* dest[x,y] += a[x,n] * b[n,y] */
+-	    dest[x*rxstride + y*rystride] +=
+-					abase[x*axstride + n*aystride] *
+-					bbase[n*bxstride + y*bystride];
+-    }
+   else if (GFC_DESCRIPTOR_RANK (a) == 1)
+     {
+       const GFC_INTEGER_2 *restrict bbase_y;
+@@ -1679,6 +1665,20 @@ matmul_i2_avx512f (gfc_array_i2 * const restrict retarray,
+ 	  dest[y*rxstride] = s;
+ 	}
+     }
++  else if (axstride < aystride)
++    {
++      for (y = 0; y < ycount; y++)
++	for (x = 0; x < xcount; x++)
++	  dest[x*rxstride + y*rystride] = (GFC_INTEGER_2)0;
++
++      for (y = 0; y < ycount; y++)
++	for (n = 0; n < count; n++)
++	  for (x = 0; x < xcount; x++)
++	    /* dest[x,y] += a[x,n] * b[n,y] */
++	    dest[x*rxstride + y*rystride] +=
++					abase[x*axstride + n*aystride] *
++					bbase[n*bxstride + y*bystride];
++    }
+   else
+     {
+       const GFC_INTEGER_2 *restrict abase_x;
+@@ -2190,20 +2190,6 @@ matmul_i2_vanilla (gfc_array_i2 * const restrict retarray,
+ 	    }
+ 	}
+     }
+-  else if (axstride < aystride)
+-    {
+-      for (y = 0; y < ycount; y++)
+-	for (x = 0; x < xcount; x++)
+-	  dest[x*rxstride + y*rystride] = (GFC_INTEGER_2)0;
+-
+-      for (y = 0; y < ycount; y++)
+-	for (n = 0; n < count; n++)
+-	  for (x = 0; x < xcount; x++)
+-	    /* dest[x,y] += a[x,n] * b[n,y] */
+-	    dest[x*rxstride + y*rystride] +=
+-					abase[x*axstride + n*aystride] *
+-					bbase[n*bxstride + y*bystride];
+-    }
+   else if (GFC_DESCRIPTOR_RANK (a) == 1)
+     {
+       const GFC_INTEGER_2 *restrict bbase_y;
+@@ -2218,6 +2204,20 @@ matmul_i2_vanilla (gfc_array_i2 * const restrict retarray,
+ 	  dest[y*rxstride] = s;
+ 	}
+     }
++  else if (axstride < aystride)
++    {
++      for (y = 0; y < ycount; y++)
++	for (x = 0; x < xcount; x++)
++	  dest[x*rxstride + y*rystride] = (GFC_INTEGER_2)0;
++
++      for (y = 0; y < ycount; y++)
++	for (n = 0; n < count; n++)
++	  for (x = 0; x < xcount; x++)
++	    /* dest[x,y] += a[x,n] * b[n,y] */
++	    dest[x*rxstride + y*rystride] +=
++					abase[x*axstride + n*aystride] *
++					bbase[n*bxstride + y*bystride];
++    }
+   else
+     {
+       const GFC_INTEGER_2 *restrict abase_x;
+@@ -2787,20 +2787,6 @@ matmul_i2 (gfc_array_i2 * const restrict retarray,
+ 	    }
+ 	}
+     }
+-  else if (axstride < aystride)
+-    {
+-      for (y = 0; y < ycount; y++)
+-	for (x = 0; x < xcount; x++)
+-	  dest[x*rxstride + y*rystride] = (GFC_INTEGER_2)0;
+-
+-      for (y = 0; y < ycount; y++)
+-	for (n = 0; n < count; n++)
+-	  for (x = 0; x < xcount; x++)
+-	    /* dest[x,y] += a[x,n] * b[n,y] */
+-	    dest[x*rxstride + y*rystride] +=
+-					abase[x*axstride + n*aystride] *
+-					bbase[n*bxstride + y*bystride];
+-    }
+   else if (GFC_DESCRIPTOR_RANK (a) == 1)
+     {
+       const GFC_INTEGER_2 *restrict bbase_y;
+@@ -2815,6 +2801,20 @@ matmul_i2 (gfc_array_i2 * const restrict retarray,
+ 	  dest[y*rxstride] = s;
+ 	}
+     }
++  else if (axstride < aystride)
++    {
++      for (y = 0; y < ycount; y++)
++	for (x = 0; x < xcount; x++)
++	  dest[x*rxstride + y*rystride] = (GFC_INTEGER_2)0;
++
++      for (y = 0; y < ycount; y++)
++	for (n = 0; n < count; n++)
++	  for (x = 0; x < xcount; x++)
++	    /* dest[x,y] += a[x,n] * b[n,y] */
++	    dest[x*rxstride + y*rystride] +=
++					abase[x*axstride + n*aystride] *
++					bbase[n*bxstride + y*bystride];
++    }
+   else
+     {
+       const GFC_INTEGER_2 *restrict abase_x;
+diff --git a/libgfortran/generated/matmul_i4.c b/libgfortran/generated/matmul_i4.c
+index 47b061cc1..556f34750 100644
+--- a/libgfortran/generated/matmul_i4.c
++++ b/libgfortran/generated/matmul_i4.c
+@@ -565,20 +565,6 @@ matmul_i4_avx (gfc_array_i4 * const restrict retarray,
+ 	    }
+ 	}
+     }
+-  else if (axstride < aystride)
+-    {
+-      for (y = 0; y < ycount; y++)
+-	for (x = 0; x < xcount; x++)
+-	  dest[x*rxstride + y*rystride] = (GFC_INTEGER_4)0;
+-
+-      for (y = 0; y < ycount; y++)
+-	for (n = 0; n < count; n++)
+-	  for (x = 0; x < xcount; x++)
+-	    /* dest[x,y] += a[x,n] * b[n,y] */
+-	    dest[x*rxstride + y*rystride] +=
+-					abase[x*axstride + n*aystride] *
+-					bbase[n*bxstride + y*bystride];
+-    }
+   else if (GFC_DESCRIPTOR_RANK (a) == 1)
+     {
+       const GFC_INTEGER_4 *restrict bbase_y;
+@@ -593,6 +579,20 @@ matmul_i4_avx (gfc_array_i4 * const restrict retarray,
+ 	  dest[y*rxstride] = s;
+ 	}
+     }
++  else if (axstride < aystride)
++    {
++      for (y = 0; y < ycount; y++)
++	for (x = 0; x < xcount; x++)
++	  dest[x*rxstride + y*rystride] = (GFC_INTEGER_4)0;
++
++      for (y = 0; y < ycount; y++)
++	for (n = 0; n < count; n++)
++	  for (x = 0; x < xcount; x++)
++	    /* dest[x,y] += a[x,n] * b[n,y] */
++	    dest[x*rxstride + y*rystride] +=
++					abase[x*axstride + n*aystride] *
++					bbase[n*bxstride + y*bystride];
++    }
+   else
+     {
+       const GFC_INTEGER_4 *restrict abase_x;
+@@ -1108,20 +1108,6 @@ matmul_i4_avx2 (gfc_array_i4 * const restrict retarray,
+ 	    }
+ 	}
+     }
+-  else if (axstride < aystride)
+-    {
+-      for (y = 0; y < ycount; y++)
+-	for (x = 0; x < xcount; x++)
+-	  dest[x*rxstride + y*rystride] = (GFC_INTEGER_4)0;
+-
+-      for (y = 0; y < ycount; y++)
+-	for (n = 0; n < count; n++)
+-	  for (x = 0; x < xcount; x++)
+-	    /* dest[x,y] += a[x,n] * b[n,y] */
+-	    dest[x*rxstride + y*rystride] +=
+-					abase[x*axstride + n*aystride] *
+-					bbase[n*bxstride + y*bystride];
+-    }
+   else if (GFC_DESCRIPTOR_RANK (a) == 1)
+     {
+       const GFC_INTEGER_4 *restrict bbase_y;
+@@ -1136,6 +1122,20 @@ matmul_i4_avx2 (gfc_array_i4 * const restrict retarray,
+ 	  dest[y*rxstride] = s;
+ 	}
+     }
++  else if (axstride < aystride)
++    {
++      for (y = 0; y < ycount; y++)
++	for (x = 0; x < xcount; x++)
++	  dest[x*rxstride + y*rystride] = (GFC_INTEGER_4)0;
++
++      for (y = 0; y < ycount; y++)
++	for (n = 0; n < count; n++)
++	  for (x = 0; x < xcount; x++)
++	    /* dest[x,y] += a[x,n] * b[n,y] */
++	    dest[x*rxstride + y*rystride] +=
++					abase[x*axstride + n*aystride] *
++					bbase[n*bxstride + y*bystride];
++    }
+   else
+     {
+       const GFC_INTEGER_4 *restrict abase_x;
+@@ -1651,20 +1651,6 @@ matmul_i4_avx512f (gfc_array_i4 * const restrict retarray,
+ 	    }
+ 	}
+     }
+-  else if (axstride < aystride)
+-    {
+-      for (y = 0; y < ycount; y++)
+-	for (x = 0; x < xcount; x++)
+-	  dest[x*rxstride + y*rystride] = (GFC_INTEGER_4)0;
+-
+-      for (y = 0; y < ycount; y++)
+-	for (n = 0; n < count; n++)
+-	  for (x = 0; x < xcount; x++)
+-	    /* dest[x,y] += a[x,n] * b[n,y] */
+-	    dest[x*rxstride + y*rystride] +=
+-					abase[x*axstride + n*aystride] *
+-					bbase[n*bxstride + y*bystride];
+-    }
+   else if (GFC_DESCRIPTOR_RANK (a) == 1)
+     {
+       const GFC_INTEGER_4 *restrict bbase_y;
+@@ -1679,6 +1665,20 @@ matmul_i4_avx512f (gfc_array_i4 * const restrict retarray,
+ 	  dest[y*rxstride] = s;
+ 	}
+     }
++  else if (axstride < aystride)
++    {
++      for (y = 0; y < ycount; y++)
++	for (x = 0; x < xcount; x++)
++	  dest[x*rxstride + y*rystride] = (GFC_INTEGER_4)0;
++
++      for (y = 0; y < ycount; y++)
++	for (n = 0; n < count; n++)
++	  for (x = 0; x < xcount; x++)
++	    /* dest[x,y] += a[x,n] * b[n,y] */
++	    dest[x*rxstride + y*rystride] +=
++					abase[x*axstride + n*aystride] *
++					bbase[n*bxstride + y*bystride];
++    }
+   else
+     {
+       const GFC_INTEGER_4 *restrict abase_x;
+@@ -2190,20 +2190,6 @@ matmul_i4_vanilla (gfc_array_i4 * const restrict retarray,
+ 	    }
+ 	}
+     }
+-  else if (axstride < aystride)
+-    {
+-      for (y = 0; y < ycount; y++)
+-	for (x = 0; x < xcount; x++)
+-	  dest[x*rxstride + y*rystride] = (GFC_INTEGER_4)0;
+-
+-      for (y = 0; y < ycount; y++)
+-	for (n = 0; n < count; n++)
+-	  for (x = 0; x < xcount; x++)
+-	    /* dest[x,y] += a[x,n] * b[n,y] */
+-	    dest[x*rxstride + y*rystride] +=
+-					abase[x*axstride + n*aystride] *
+-					bbase[n*bxstride + y*bystride];
+-    }
+   else if (GFC_DESCRIPTOR_RANK (a) == 1)
+     {
+       const GFC_INTEGER_4 *restrict bbase_y;
+@@ -2218,6 +2204,20 @@ matmul_i4_vanilla (gfc_array_i4 * const restrict retarray,
+ 	  dest[y*rxstride] = s;
+ 	}
+     }
++  else if (axstride < aystride)
++    {
++      for (y = 0; y < ycount; y++)
++	for (x = 0; x < xcount; x++)
++	  dest[x*rxstride + y*rystride] = (GFC_INTEGER_4)0;
++
++      for (y = 0; y < ycount; y++)
++	for (n = 0; n < count; n++)
++	  for (x = 0; x < xcount; x++)
++	    /* dest[x,y] += a[x,n] * b[n,y] */
++	    dest[x*rxstride + y*rystride] +=
++					abase[x*axstride + n*aystride] *
++					bbase[n*bxstride + y*bystride];
++    }
+   else
+     {
+       const GFC_INTEGER_4 *restrict abase_x;
+@@ -2787,20 +2787,6 @@ matmul_i4 (gfc_array_i4 * const restrict retarray,
+ 	    }
+ 	}
+     }
+-  else if (axstride < aystride)
+-    {
+-      for (y = 0; y < ycount; y++)
+-	for (x = 0; x < xcount; x++)
+-	  dest[x*rxstride + y*rystride] = (GFC_INTEGER_4)0;
+-
+-      for (y = 0; y < ycount; y++)
+-	for (n = 0; n < count; n++)
+-	  for (x = 0; x < xcount; x++)
+-	    /* dest[x,y] += a[x,n] * b[n,y] */
+-	    dest[x*rxstride + y*rystride] +=
+-					abase[x*axstride + n*aystride] *
+-					bbase[n*bxstride + y*bystride];
+-    }
+   else if (GFC_DESCRIPTOR_RANK (a) == 1)
+     {
+       const GFC_INTEGER_4 *restrict bbase_y;
+@@ -2815,6 +2801,20 @@ matmul_i4 (gfc_array_i4 * const restrict retarray,
+ 	  dest[y*rxstride] = s;
+ 	}
+     }
++  else if (axstride < aystride)
++    {
++      for (y = 0; y < ycount; y++)
++	for (x = 0; x < xcount; x++)
++	  dest[x*rxstride + y*rystride] = (GFC_INTEGER_4)0;
++
++      for (y = 0; y < ycount; y++)
++	for (n = 0; n < count; n++)
++	  for (x = 0; x < xcount; x++)
++	    /* dest[x,y] += a[x,n] * b[n,y] */
++	    dest[x*rxstride + y*rystride] +=
++					abase[x*axstride + n*aystride] *
++					bbase[n*bxstride + y*bystride];
++    }
+   else
+     {
+       const GFC_INTEGER_4 *restrict abase_x;
+diff --git a/libgfortran/generated/matmul_i8.c b/libgfortran/generated/matmul_i8.c
+index 716ef13f5..423de9fbc 100644
+--- a/libgfortran/generated/matmul_i8.c
++++ b/libgfortran/generated/matmul_i8.c
+@@ -565,20 +565,6 @@ matmul_i8_avx (gfc_array_i8 * const restrict retarray,
+ 	    }
+ 	}
+     }
+-  else if (axstride < aystride)
+-    {
+-      for (y = 0; y < ycount; y++)
+-	for (x = 0; x < xcount; x++)
+-	  dest[x*rxstride + y*rystride] = (GFC_INTEGER_8)0;
+-
+-      for (y = 0; y < ycount; y++)
+-	for (n = 0; n < count; n++)
+-	  for (x = 0; x < xcount; x++)
+-	    /* dest[x,y] += a[x,n] * b[n,y] */
+-	    dest[x*rxstride + y*rystride] +=
+-					abase[x*axstride + n*aystride] *
+-					bbase[n*bxstride + y*bystride];
+-    }
+   else if (GFC_DESCRIPTOR_RANK (a) == 1)
+     {
+       const GFC_INTEGER_8 *restrict bbase_y;
+@@ -593,6 +579,20 @@ matmul_i8_avx (gfc_array_i8 * const restrict retarray,
+ 	  dest[y*rxstride] = s;
+ 	}
+     }
++  else if (axstride < aystride)
++    {
++      for (y = 0; y < ycount; y++)
++	for (x = 0; x < xcount; x++)
++	  dest[x*rxstride + y*rystride] = (GFC_INTEGER_8)0;
++
++      for (y = 0; y < ycount; y++)
++	for (n = 0; n < count; n++)
++	  for (x = 0; x < xcount; x++)
++	    /* dest[x,y] += a[x,n] * b[n,y] */
++	    dest[x*rxstride + y*rystride] +=
++					abase[x*axstride + n*aystride] *
++					bbase[n*bxstride + y*bystride];
++    }
+   else
+     {
+       const GFC_INTEGER_8 *restrict abase_x;
+@@ -1108,20 +1108,6 @@ matmul_i8_avx2 (gfc_array_i8 * const restrict retarray,
+ 	    }
+ 	}
+     }
+-  else if (axstride < aystride)
+-    {
+-      for (y = 0; y < ycount; y++)
+-	for (x = 0; x < xcount; x++)
+-	  dest[x*rxstride + y*rystride] = (GFC_INTEGER_8)0;
+-
+-      for (y = 0; y < ycount; y++)
+-	for (n = 0; n < count; n++)
+-	  for (x = 0; x < xcount; x++)
+-	    /* dest[x,y] += a[x,n] * b[n,y] */
+-	    dest[x*rxstride + y*rystride] +=
+-					abase[x*axstride + n*aystride] *
+-					bbase[n*bxstride + y*bystride];
+-    }
+   else if (GFC_DESCRIPTOR_RANK (a) == 1)
+     {
+       const GFC_INTEGER_8 *restrict bbase_y;
+@@ -1136,6 +1122,20 @@ matmul_i8_avx2 (gfc_array_i8 * const restrict retarray,
+ 	  dest[y*rxstride] = s;
+ 	}
+     }
++  else if (axstride < aystride)
++    {
++      for (y = 0; y < ycount; y++)
++	for (x = 0; x < xcount; x++)
++	  dest[x*rxstride + y*rystride] = (GFC_INTEGER_8)0;
++
++      for (y = 0; y < ycount; y++)
++	for (n = 0; n < count; n++)
++	  for (x = 0; x < xcount; x++)
++	    /* dest[x,y] += a[x,n] * b[n,y] */
++	    dest[x*rxstride + y*rystride] +=
++					abase[x*axstride + n*aystride] *
++					bbase[n*bxstride + y*bystride];
++    }
+   else
+     {
+       const GFC_INTEGER_8 *restrict abase_x;
+@@ -1651,20 +1651,6 @@ matmul_i8_avx512f (gfc_array_i8 * const restrict retarray,
+ 	    }
+ 	}
+     }
+-  else if (axstride < aystride)
+-    {
+-      for (y = 0; y < ycount; y++)
+-	for (x = 0; x < xcount; x++)
+-	  dest[x*rxstride + y*rystride] = (GFC_INTEGER_8)0;
+-
+-      for (y = 0; y < ycount; y++)
+-	for (n = 0; n < count; n++)
+-	  for (x = 0; x < xcount; x++)
+-	    /* dest[x,y] += a[x,n] * b[n,y] */
+-	    dest[x*rxstride + y*rystride] +=
+-					abase[x*axstride + n*aystride] *
+-					bbase[n*bxstride + y*bystride];
+-    }
+   else if (GFC_DESCRIPTOR_RANK (a) == 1)
+     {
+       const GFC_INTEGER_8 *restrict bbase_y;
+@@ -1679,6 +1665,20 @@ matmul_i8_avx512f (gfc_array_i8 * const restrict retarray,
+ 	  dest[y*rxstride] = s;
+ 	}
+     }
++  else if (axstride < aystride)
++    {
++      for (y = 0; y < ycount; y++)
++	for (x = 0; x < xcount; x++)
++	  dest[x*rxstride + y*rystride] = (GFC_INTEGER_8)0;
++
++      for (y = 0; y < ycount; y++)
++	for (n = 0; n < count; n++)
++	  for (x = 0; x < xcount; x++)
++	    /* dest[x,y] += a[x,n] * b[n,y] */
++	    dest[x*rxstride + y*rystride] +=
++					abase[x*axstride + n*aystride] *
++					bbase[n*bxstride + y*bystride];
++    }
+   else
+     {
+       const GFC_INTEGER_8 *restrict abase_x;
+@@ -2190,20 +2190,6 @@ matmul_i8_vanilla (gfc_array_i8 * const restrict retarray,
+ 	    }
+ 	}
+     }
+-  else if (axstride < aystride)
+-    {
+-      for (y = 0; y < ycount; y++)
+-	for (x = 0; x < xcount; x++)
+-	  dest[x*rxstride + y*rystride] = (GFC_INTEGER_8)0;
+-
+-      for (y = 0; y < ycount; y++)
+-	for (n = 0; n < count; n++)
+-	  for (x = 0; x < xcount; x++)
+-	    /* dest[x,y] += a[x,n] * b[n,y] */
+-	    dest[x*rxstride + y*rystride] +=
+-					abase[x*axstride + n*aystride] *
+-					bbase[n*bxstride + y*bystride];
+-    }
+   else if (GFC_DESCRIPTOR_RANK (a) == 1)
+     {
+       const GFC_INTEGER_8 *restrict bbase_y;
+@@ -2218,6 +2204,20 @@ matmul_i8_vanilla (gfc_array_i8 * const restrict retarray,
+ 	  dest[y*rxstride] = s;
+ 	}
+     }
++  else if (axstride < aystride)
++    {
++      for (y = 0; y < ycount; y++)
++	for (x = 0; x < xcount; x++)
++	  dest[x*rxstride + y*rystride] = (GFC_INTEGER_8)0;
++
++      for (y = 0; y < ycount; y++)
++	for (n = 0; n < count; n++)
++	  for (x = 0; x < xcount; x++)
++	    /* dest[x,y] += a[x,n] * b[n,y] */
++	    dest[x*rxstride + y*rystride] +=
++					abase[x*axstride + n*aystride] *
++					bbase[n*bxstride + y*bystride];
++    }
+   else
+     {
+       const GFC_INTEGER_8 *restrict abase_x;
+@@ -2787,20 +2787,6 @@ matmul_i8 (gfc_array_i8 * const restrict retarray,
+ 	    }
+ 	}
+     }
+-  else if (axstride < aystride)
+-    {
+-      for (y = 0; y < ycount; y++)
+-	for (x = 0; x < xcount; x++)
+-	  dest[x*rxstride + y*rystride] = (GFC_INTEGER_8)0;
+-
+-      for (y = 0; y < ycount; y++)
+-	for (n = 0; n < count; n++)
+-	  for (x = 0; x < xcount; x++)
+-	    /* dest[x,y] += a[x,n] * b[n,y] */
+-	    dest[x*rxstride + y*rystride] +=
+-					abase[x*axstride + n*aystride] *
+-					bbase[n*bxstride + y*bystride];
+-    }
+   else if (GFC_DESCRIPTOR_RANK (a) == 1)
+     {
+       const GFC_INTEGER_8 *restrict bbase_y;
+@@ -2815,6 +2801,20 @@ matmul_i8 (gfc_array_i8 * const restrict retarray,
+ 	  dest[y*rxstride] = s;
+ 	}
+     }
++  else if (axstride < aystride)
++    {
++      for (y = 0; y < ycount; y++)
++	for (x = 0; x < xcount; x++)
++	  dest[x*rxstride + y*rystride] = (GFC_INTEGER_8)0;
++
++      for (y = 0; y < ycount; y++)
++	for (n = 0; n < count; n++)
++	  for (x = 0; x < xcount; x++)
++	    /* dest[x,y] += a[x,n] * b[n,y] */
++	    dest[x*rxstride + y*rystride] +=
++					abase[x*axstride + n*aystride] *
++					bbase[n*bxstride + y*bystride];
++    }
+   else
+     {
+       const GFC_INTEGER_8 *restrict abase_x;
+diff --git a/libgfortran/generated/matmul_r10.c b/libgfortran/generated/matmul_r10.c
+index e0246b0f4..07ec155a5 100644
+--- a/libgfortran/generated/matmul_r10.c
++++ b/libgfortran/generated/matmul_r10.c
+@@ -565,20 +565,6 @@ matmul_r10_avx (gfc_array_r10 * const restrict retarray,
+ 	    }
+ 	}
+     }
+-  else if (axstride < aystride)
+-    {
+-      for (y = 0; y < ycount; y++)
+-	for (x = 0; x < xcount; x++)
+-	  dest[x*rxstride + y*rystride] = (GFC_REAL_10)0;
+-
+-      for (y = 0; y < ycount; y++)
+-	for (n = 0; n < count; n++)
+-	  for (x = 0; x < xcount; x++)
+-	    /* dest[x,y] += a[x,n] * b[n,y] */
+-	    dest[x*rxstride + y*rystride] +=
+-					abase[x*axstride + n*aystride] *
+-					bbase[n*bxstride + y*bystride];
+-    }
+   else if (GFC_DESCRIPTOR_RANK (a) == 1)
+     {
+       const GFC_REAL_10 *restrict bbase_y;
+@@ -593,6 +579,20 @@ matmul_r10_avx (gfc_array_r10 * const restrict retarray,
+ 	  dest[y*rxstride] = s;
+ 	}
+     }
++  else if (axstride < aystride)
++    {
++      for (y = 0; y < ycount; y++)
++	for (x = 0; x < xcount; x++)
++	  dest[x*rxstride + y*rystride] = (GFC_REAL_10)0;
++
++      for (y = 0; y < ycount; y++)
++	for (n = 0; n < count; n++)
++	  for (x = 0; x < xcount; x++)
++	    /* dest[x,y] += a[x,n] * b[n,y] */
++	    dest[x*rxstride + y*rystride] +=
++					abase[x*axstride + n*aystride] *
++					bbase[n*bxstride + y*bystride];
++    }
+   else
+     {
+       const GFC_REAL_10 *restrict abase_x;
+@@ -1108,20 +1108,6 @@ matmul_r10_avx2 (gfc_array_r10 * const restrict retarray,
+ 	    }
+ 	}
+     }
+-  else if (axstride < aystride)
+-    {
+-      for (y = 0; y < ycount; y++)
+-	for (x = 0; x < xcount; x++)
+-	  dest[x*rxstride + y*rystride] = (GFC_REAL_10)0;
+-
+-      for (y = 0; y < ycount; y++)
+-	for (n = 0; n < count; n++)
+-	  for (x = 0; x < xcount; x++)
+-	    /* dest[x,y] += a[x,n] * b[n,y] */
+-	    dest[x*rxstride + y*rystride] +=
+-					abase[x*axstride + n*aystride] *
+-					bbase[n*bxstride + y*bystride];
+-    }
+   else if (GFC_DESCRIPTOR_RANK (a) == 1)
+     {
+       const GFC_REAL_10 *restrict bbase_y;
+@@ -1136,6 +1122,20 @@ matmul_r10_avx2 (gfc_array_r10 * const restrict retarray,
+ 	  dest[y*rxstride] = s;
+ 	}
+     }
++  else if (axstride < aystride)
++    {
++      for (y = 0; y < ycount; y++)
++	for (x = 0; x < xcount; x++)
++	  dest[x*rxstride + y*rystride] = (GFC_REAL_10)0;
++
++      for (y = 0; y < ycount; y++)
++	for (n = 0; n < count; n++)
++	  for (x = 0; x < xcount; x++)
++	    /* dest[x,y] += a[x,n] * b[n,y] */
++	    dest[x*rxstride + y*rystride] +=
++					abase[x*axstride + n*aystride] *
++					bbase[n*bxstride + y*bystride];
++    }
+   else
+     {
+       const GFC_REAL_10 *restrict abase_x;
+@@ -1651,20 +1651,6 @@ matmul_r10_avx512f (gfc_array_r10 * const restrict retarray,
+ 	    }
+ 	}
+     }
+-  else if (axstride < aystride)
+-    {
+-      for (y = 0; y < ycount; y++)
+-	for (x = 0; x < xcount; x++)
+-	  dest[x*rxstride + y*rystride] = (GFC_REAL_10)0;
+-
+-      for (y = 0; y < ycount; y++)
+-	for (n = 0; n < count; n++)
+-	  for (x = 0; x < xcount; x++)
+-	    /* dest[x,y] += a[x,n] * b[n,y] */
+-	    dest[x*rxstride + y*rystride] +=
+-					abase[x*axstride + n*aystride] *
+-					bbase[n*bxstride + y*bystride];
+-    }
+   else if (GFC_DESCRIPTOR_RANK (a) == 1)
+     {
+       const GFC_REAL_10 *restrict bbase_y;
+@@ -1679,6 +1665,20 @@ matmul_r10_avx512f (gfc_array_r10 * const restrict retarray,
+ 	  dest[y*rxstride] = s;
+ 	}
+     }
++  else if (axstride < aystride)
++    {
++      for (y = 0; y < ycount; y++)
++	for (x = 0; x < xcount; x++)
++	  dest[x*rxstride + y*rystride] = (GFC_REAL_10)0;
++
++      for (y = 0; y < ycount; y++)
++	for (n = 0; n < count; n++)
++	  for (x = 0; x < xcount; x++)
++	    /* dest[x,y] += a[x,n] * b[n,y] */
++	    dest[x*rxstride + y*rystride] +=
++					abase[x*axstride + n*aystride] *
++					bbase[n*bxstride + y*bystride];
++    }
+   else
+     {
+       const GFC_REAL_10 *restrict abase_x;
+@@ -2190,20 +2190,6 @@ matmul_r10_vanilla (gfc_array_r10 * const restrict retarray,
+ 	    }
+ 	}
+     }
+-  else if (axstride < aystride)
+-    {
+-      for (y = 0; y < ycount; y++)
+-	for (x = 0; x < xcount; x++)
+-	  dest[x*rxstride + y*rystride] = (GFC_REAL_10)0;
+-
+-      for (y = 0; y < ycount; y++)
+-	for (n = 0; n < count; n++)
+-	  for (x = 0; x < xcount; x++)
+-	    /* dest[x,y] += a[x,n] * b[n,y] */
+-	    dest[x*rxstride + y*rystride] +=
+-					abase[x*axstride + n*aystride] *
+-					bbase[n*bxstride + y*bystride];
+-    }
+   else if (GFC_DESCRIPTOR_RANK (a) == 1)
+     {
+       const GFC_REAL_10 *restrict bbase_y;
+@@ -2218,6 +2204,20 @@ matmul_r10_vanilla (gfc_array_r10 * const restrict retarray,
+ 	  dest[y*rxstride] = s;
+ 	}
+     }
++  else if (axstride < aystride)
++    {
++      for (y = 0; y < ycount; y++)
++	for (x = 0; x < xcount; x++)
++	  dest[x*rxstride + y*rystride] = (GFC_REAL_10)0;
++
++      for (y = 0; y < ycount; y++)
++	for (n = 0; n < count; n++)
++	  for (x = 0; x < xcount; x++)
++	    /* dest[x,y] += a[x,n] * b[n,y] */
++	    dest[x*rxstride + y*rystride] +=
++					abase[x*axstride + n*aystride] *
++					bbase[n*bxstride + y*bystride];
++    }
+   else
+     {
+       const GFC_REAL_10 *restrict abase_x;
+@@ -2787,20 +2787,6 @@ matmul_r10 (gfc_array_r10 * const restrict retarray,
+ 	    }
+ 	}
+     }
+-  else if (axstride < aystride)
+-    {
+-      for (y = 0; y < ycount; y++)
+-	for (x = 0; x < xcount; x++)
+-	  dest[x*rxstride + y*rystride] = (GFC_REAL_10)0;
+-
+-      for (y = 0; y < ycount; y++)
+-	for (n = 0; n < count; n++)
+-	  for (x = 0; x < xcount; x++)
+-	    /* dest[x,y] += a[x,n] * b[n,y] */
+-	    dest[x*rxstride + y*rystride] +=
+-					abase[x*axstride + n*aystride] *
+-					bbase[n*bxstride + y*bystride];
+-    }
+   else if (GFC_DESCRIPTOR_RANK (a) == 1)
+     {
+       const GFC_REAL_10 *restrict bbase_y;
+@@ -2815,6 +2801,20 @@ matmul_r10 (gfc_array_r10 * const restrict retarray,
+ 	  dest[y*rxstride] = s;
+ 	}
+     }
++  else if (axstride < aystride)
++    {
++      for (y = 0; y < ycount; y++)
++	for (x = 0; x < xcount; x++)
++	  dest[x*rxstride + y*rystride] = (GFC_REAL_10)0;
++
++      for (y = 0; y < ycount; y++)
++	for (n = 0; n < count; n++)
++	  for (x = 0; x < xcount; x++)
++	    /* dest[x,y] += a[x,n] * b[n,y] */
++	    dest[x*rxstride + y*rystride] +=
++					abase[x*axstride + n*aystride] *
++					bbase[n*bxstride + y*bystride];
++    }
+   else
+     {
+       const GFC_REAL_10 *restrict abase_x;
+diff --git a/libgfortran/generated/matmul_r16.c b/libgfortran/generated/matmul_r16.c
+index 7d34e2b58..f68f4db40 100644
+--- a/libgfortran/generated/matmul_r16.c
++++ b/libgfortran/generated/matmul_r16.c
+@@ -565,20 +565,6 @@ matmul_r16_avx (gfc_array_r16 * const restrict retarray,
+ 	    }
+ 	}
+     }
+-  else if (axstride < aystride)
+-    {
+-      for (y = 0; y < ycount; y++)
+-	for (x = 0; x < xcount; x++)
+-	  dest[x*rxstride + y*rystride] = (GFC_REAL_16)0;
+-
+-      for (y = 0; y < ycount; y++)
+-	for (n = 0; n < count; n++)
+-	  for (x = 0; x < xcount; x++)
+-	    /* dest[x,y] += a[x,n] * b[n,y] */
+-	    dest[x*rxstride + y*rystride] +=
+-					abase[x*axstride + n*aystride] *
+-					bbase[n*bxstride + y*bystride];
+-    }
+   else if (GFC_DESCRIPTOR_RANK (a) == 1)
+     {
+       const GFC_REAL_16 *restrict bbase_y;
+@@ -593,6 +579,20 @@ matmul_r16_avx (gfc_array_r16 * const restrict retarray,
+ 	  dest[y*rxstride] = s;
+ 	}
+     }
++  else if (axstride < aystride)
++    {
++      for (y = 0; y < ycount; y++)
++	for (x = 0; x < xcount; x++)
++	  dest[x*rxstride + y*rystride] = (GFC_REAL_16)0;
++
++      for (y = 0; y < ycount; y++)
++	for (n = 0; n < count; n++)
++	  for (x = 0; x < xcount; x++)
++	    /* dest[x,y] += a[x,n] * b[n,y] */
++	    dest[x*rxstride + y*rystride] +=
++					abase[x*axstride + n*aystride] *
++					bbase[n*bxstride + y*bystride];
++    }
+   else
+     {
+       const GFC_REAL_16 *restrict abase_x;
+@@ -1108,20 +1108,6 @@ matmul_r16_avx2 (gfc_array_r16 * const restrict retarray,
+ 	    }
+ 	}
+     }
+-  else if (axstride < aystride)
+-    {
+-      for (y = 0; y < ycount; y++)
+-	for (x = 0; x < xcount; x++)
+-	  dest[x*rxstride + y*rystride] = (GFC_REAL_16)0;
+-
+-      for (y = 0; y < ycount; y++)
+-	for (n = 0; n < count; n++)
+-	  for (x = 0; x < xcount; x++)
+-	    /* dest[x,y] += a[x,n] * b[n,y] */
+-	    dest[x*rxstride + y*rystride] +=
+-					abase[x*axstride + n*aystride] *
+-					bbase[n*bxstride + y*bystride];
+-    }
+   else if (GFC_DESCRIPTOR_RANK (a) == 1)
+     {
+       const GFC_REAL_16 *restrict bbase_y;
+@@ -1136,6 +1122,20 @@ matmul_r16_avx2 (gfc_array_r16 * const restrict retarray,
+ 	  dest[y*rxstride] = s;
+ 	}
+     }
++  else if (axstride < aystride)
++    {
++      for (y = 0; y < ycount; y++)
++	for (x = 0; x < xcount; x++)
++	  dest[x*rxstride + y*rystride] = (GFC_REAL_16)0;
++
++      for (y = 0; y < ycount; y++)
++	for (n = 0; n < count; n++)
++	  for (x = 0; x < xcount; x++)
++	    /* dest[x,y] += a[x,n] * b[n,y] */
++	    dest[x*rxstride + y*rystride] +=
++					abase[x*axstride + n*aystride] *
++					bbase[n*bxstride + y*bystride];
++    }
+   else
+     {
+       const GFC_REAL_16 *restrict abase_x;
+@@ -1651,20 +1651,6 @@ matmul_r16_avx512f (gfc_array_r16 * const restrict retarray,
+ 	    }
+ 	}
+     }
+-  else if (axstride < aystride)
+-    {
+-      for (y = 0; y < ycount; y++)
+-	for (x = 0; x < xcount; x++)
+-	  dest[x*rxstride + y*rystride] = (GFC_REAL_16)0;
+-
+-      for (y = 0; y < ycount; y++)
+-	for (n = 0; n < count; n++)
+-	  for (x = 0; x < xcount; x++)
+-	    /* dest[x,y] += a[x,n] * b[n,y] */
+-	    dest[x*rxstride + y*rystride] +=
+-					abase[x*axstride + n*aystride] *
+-					bbase[n*bxstride + y*bystride];
+-    }
+   else if (GFC_DESCRIPTOR_RANK (a) == 1)
+     {
+       const GFC_REAL_16 *restrict bbase_y;
+@@ -1679,6 +1665,20 @@ matmul_r16_avx512f (gfc_array_r16 * const restrict retarray,
+ 	  dest[y*rxstride] = s;
+ 	}
+     }
++  else if (axstride < aystride)
++    {
++      for (y = 0; y < ycount; y++)
++	for (x = 0; x < xcount; x++)
++	  dest[x*rxstride + y*rystride] = (GFC_REAL_16)0;
++
++      for (y = 0; y < ycount; y++)
++	for (n = 0; n < count; n++)
++	  for (x = 0; x < xcount; x++)
++	    /* dest[x,y] += a[x,n] * b[n,y] */
++	    dest[x*rxstride + y*rystride] +=
++					abase[x*axstride + n*aystride] *
++					bbase[n*bxstride + y*bystride];
++    }
+   else
+     {
+       const GFC_REAL_16 *restrict abase_x;
+@@ -2190,20 +2190,6 @@ matmul_r16_vanilla (gfc_array_r16 * const restrict retarray,
+ 	    }
+ 	}
+     }
+-  else if (axstride < aystride)
+-    {
+-      for (y = 0; y < ycount; y++)
+-	for (x = 0; x < xcount; x++)
+-	  dest[x*rxstride + y*rystride] = (GFC_REAL_16)0;
+-
+-      for (y = 0; y < ycount; y++)
+-	for (n = 0; n < count; n++)
+-	  for (x = 0; x < xcount; x++)
+-	    /* dest[x,y] += a[x,n] * b[n,y] */
+-	    dest[x*rxstride + y*rystride] +=
+-					abase[x*axstride + n*aystride] *
+-					bbase[n*bxstride + y*bystride];
+-    }
+   else if (GFC_DESCRIPTOR_RANK (a) == 1)
+     {
+       const GFC_REAL_16 *restrict bbase_y;
+@@ -2218,6 +2204,20 @@ matmul_r16_vanilla (gfc_array_r16 * const restrict retarray,
+ 	  dest[y*rxstride] = s;
+ 	}
+     }
++  else if (axstride < aystride)
++    {
++      for (y = 0; y < ycount; y++)
++	for (x = 0; x < xcount; x++)
++	  dest[x*rxstride + y*rystride] = (GFC_REAL_16)0;
++
++      for (y = 0; y < ycount; y++)
++	for (n = 0; n < count; n++)
++	  for (x = 0; x < xcount; x++)
++	    /* dest[x,y] += a[x,n] * b[n,y] */
++	    dest[x*rxstride + y*rystride] +=
++					abase[x*axstride + n*aystride] *
++					bbase[n*bxstride + y*bystride];
++    }
+   else
+     {
+       const GFC_REAL_16 *restrict abase_x;
+@@ -2787,20 +2787,6 @@ matmul_r16 (gfc_array_r16 * const restrict retarray,
+ 	    }
+ 	}
+     }
+-  else if (axstride < aystride)
+-    {
+-      for (y = 0; y < ycount; y++)
+-	for (x = 0; x < xcount; x++)
+-	  dest[x*rxstride + y*rystride] = (GFC_REAL_16)0;
+-
+-      for (y = 0; y < ycount; y++)
+-	for (n = 0; n < count; n++)
+-	  for (x = 0; x < xcount; x++)
+-	    /* dest[x,y] += a[x,n] * b[n,y] */
+-	    dest[x*rxstride + y*rystride] +=
+-					abase[x*axstride + n*aystride] *
+-					bbase[n*bxstride + y*bystride];
+-    }
+   else if (GFC_DESCRIPTOR_RANK (a) == 1)
+     {
+       const GFC_REAL_16 *restrict bbase_y;
+@@ -2815,6 +2801,20 @@ matmul_r16 (gfc_array_r16 * const restrict retarray,
+ 	  dest[y*rxstride] = s;
+ 	}
+     }
++  else if (axstride < aystride)
++    {
++      for (y = 0; y < ycount; y++)
++	for (x = 0; x < xcount; x++)
++	  dest[x*rxstride + y*rystride] = (GFC_REAL_16)0;
++
++      for (y = 0; y < ycount; y++)
++	for (n = 0; n < count; n++)
++	  for (x = 0; x < xcount; x++)
++	    /* dest[x,y] += a[x,n] * b[n,y] */
++	    dest[x*rxstride + y*rystride] +=
++					abase[x*axstride + n*aystride] *
++					bbase[n*bxstride + y*bystride];
++    }
+   else
+     {
+       const GFC_REAL_16 *restrict abase_x;
+diff --git a/libgfortran/generated/matmul_r4.c b/libgfortran/generated/matmul_r4.c
+index f6f86a651..29a305d22 100644
+--- a/libgfortran/generated/matmul_r4.c
++++ b/libgfortran/generated/matmul_r4.c
+@@ -565,20 +565,6 @@ matmul_r4_avx (gfc_array_r4 * const restrict retarray,
+ 	    }
+ 	}
+     }
+-  else if (axstride < aystride)
+-    {
+-      for (y = 0; y < ycount; y++)
+-	for (x = 0; x < xcount; x++)
+-	  dest[x*rxstride + y*rystride] = (GFC_REAL_4)0;
+-
+-      for (y = 0; y < ycount; y++)
+-	for (n = 0; n < count; n++)
+-	  for (x = 0; x < xcount; x++)
+-	    /* dest[x,y] += a[x,n] * b[n,y] */
+-	    dest[x*rxstride + y*rystride] +=
+-					abase[x*axstride + n*aystride] *
+-					bbase[n*bxstride + y*bystride];
+-    }
+   else if (GFC_DESCRIPTOR_RANK (a) == 1)
+     {
+       const GFC_REAL_4 *restrict bbase_y;
+@@ -593,6 +579,20 @@ matmul_r4_avx (gfc_array_r4 * const restrict retarray,
+ 	  dest[y*rxstride] = s;
+ 	}
+     }
++  else if (axstride < aystride)
++    {
++      for (y = 0; y < ycount; y++)
++	for (x = 0; x < xcount; x++)
++	  dest[x*rxstride + y*rystride] = (GFC_REAL_4)0;
++
++      for (y = 0; y < ycount; y++)
++	for (n = 0; n < count; n++)
++	  for (x = 0; x < xcount; x++)
++	    /* dest[x,y] += a[x,n] * b[n,y] */
++	    dest[x*rxstride + y*rystride] +=
++					abase[x*axstride + n*aystride] *
++					bbase[n*bxstride + y*bystride];
++    }
+   else
+     {
+       const GFC_REAL_4 *restrict abase_x;
+@@ -1108,20 +1108,6 @@ matmul_r4_avx2 (gfc_array_r4 * const restrict retarray,
+ 	    }
+ 	}
+     }
+-  else if (axstride < aystride)
+-    {
+-      for (y = 0; y < ycount; y++)
+-	for (x = 0; x < xcount; x++)
+-	  dest[x*rxstride + y*rystride] = (GFC_REAL_4)0;
+-
+-      for (y = 0; y < ycount; y++)
+-	for (n = 0; n < count; n++)
+-	  for (x = 0; x < xcount; x++)
+-	    /* dest[x,y] += a[x,n] * b[n,y] */
+-	    dest[x*rxstride + y*rystride] +=
+-					abase[x*axstride + n*aystride] *
+-					bbase[n*bxstride + y*bystride];
+-    }
+   else if (GFC_DESCRIPTOR_RANK (a) == 1)
+     {
+       const GFC_REAL_4 *restrict bbase_y;
+@@ -1136,6 +1122,20 @@ matmul_r4_avx2 (gfc_array_r4 * const restrict retarray,
+ 	  dest[y*rxstride] = s;
+ 	}
+     }
++  else if (axstride < aystride)
++    {
++      for (y = 0; y < ycount; y++)
++	for (x = 0; x < xcount; x++)
++	  dest[x*rxstride + y*rystride] = (GFC_REAL_4)0;
++
++      for (y = 0; y < ycount; y++)
++	for (n = 0; n < count; n++)
++	  for (x = 0; x < xcount; x++)
++	    /* dest[x,y] += a[x,n] * b[n,y] */
++	    dest[x*rxstride + y*rystride] +=
++					abase[x*axstride + n*aystride] *
++					bbase[n*bxstride + y*bystride];
++    }
+   else
+     {
+       const GFC_REAL_4 *restrict abase_x;
+@@ -1651,20 +1651,6 @@ matmul_r4_avx512f (gfc_array_r4 * const restrict retarray,
+ 	    }
+ 	}
+     }
+-  else if (axstride < aystride)
+-    {
+-      for (y = 0; y < ycount; y++)
+-	for (x = 0; x < xcount; x++)
+-	  dest[x*rxstride + y*rystride] = (GFC_REAL_4)0;
+-
+-      for (y = 0; y < ycount; y++)
+-	for (n = 0; n < count; n++)
+-	  for (x = 0; x < xcount; x++)
+-	    /* dest[x,y] += a[x,n] * b[n,y] */
+-	    dest[x*rxstride + y*rystride] +=
+-					abase[x*axstride + n*aystride] *
+-					bbase[n*bxstride + y*bystride];
+-    }
+   else if (GFC_DESCRIPTOR_RANK (a) == 1)
+     {
+       const GFC_REAL_4 *restrict bbase_y;
+@@ -1679,6 +1665,20 @@ matmul_r4_avx512f (gfc_array_r4 * const restrict retarray,
+ 	  dest[y*rxstride] = s;
+ 	}
+     }
++  else if (axstride < aystride)
++    {
++      for (y = 0; y < ycount; y++)
++	for (x = 0; x < xcount; x++)
++	  dest[x*rxstride + y*rystride] = (GFC_REAL_4)0;
++
++      for (y = 0; y < ycount; y++)
++	for (n = 0; n < count; n++)
++	  for (x = 0; x < xcount; x++)
++	    /* dest[x,y] += a[x,n] * b[n,y] */
++	    dest[x*rxstride + y*rystride] +=
++					abase[x*axstride + n*aystride] *
++					bbase[n*bxstride + y*bystride];
++    }
+   else
+     {
+       const GFC_REAL_4 *restrict abase_x;
+@@ -2190,20 +2190,6 @@ matmul_r4_vanilla (gfc_array_r4 * const restrict retarray,
+ 	    }
+ 	}
+     }
+-  else if (axstride < aystride)
+-    {
+-      for (y = 0; y < ycount; y++)
+-	for (x = 0; x < xcount; x++)
+-	  dest[x*rxstride + y*rystride] = (GFC_REAL_4)0;
+-
+-      for (y = 0; y < ycount; y++)
+-	for (n = 0; n < count; n++)
+-	  for (x = 0; x < xcount; x++)
+-	    /* dest[x,y] += a[x,n] * b[n,y] */
+-	    dest[x*rxstride + y*rystride] +=
+-					abase[x*axstride + n*aystride] *
+-					bbase[n*bxstride + y*bystride];
+-    }
+   else if (GFC_DESCRIPTOR_RANK (a) == 1)
+     {
+       const GFC_REAL_4 *restrict bbase_y;
+@@ -2218,6 +2204,20 @@ matmul_r4_vanilla (gfc_array_r4 * const restrict retarray,
+ 	  dest[y*rxstride] = s;
+ 	}
+     }
++  else if (axstride < aystride)
++    {
++      for (y = 0; y < ycount; y++)
++	for (x = 0; x < xcount; x++)
++	  dest[x*rxstride + y*rystride] = (GFC_REAL_4)0;
++
++      for (y = 0; y < ycount; y++)
++	for (n = 0; n < count; n++)
++	  for (x = 0; x < xcount; x++)
++	    /* dest[x,y] += a[x,n] * b[n,y] */
++	    dest[x*rxstride + y*rystride] +=
++					abase[x*axstride + n*aystride] *
++					bbase[n*bxstride + y*bystride];
++    }
+   else
+     {
+       const GFC_REAL_4 *restrict abase_x;
+@@ -2787,20 +2787,6 @@ matmul_r4 (gfc_array_r4 * const restrict retarray,
+ 	    }
+ 	}
+     }
+-  else if (axstride < aystride)
+-    {
+-      for (y = 0; y < ycount; y++)
+-	for (x = 0; x < xcount; x++)
+-	  dest[x*rxstride + y*rystride] = (GFC_REAL_4)0;
+-
+-      for (y = 0; y < ycount; y++)
+-	for (n = 0; n < count; n++)
+-	  for (x = 0; x < xcount; x++)
+-	    /* dest[x,y] += a[x,n] * b[n,y] */
+-	    dest[x*rxstride + y*rystride] +=
+-					abase[x*axstride + n*aystride] *
+-					bbase[n*bxstride + y*bystride];
+-    }
+   else if (GFC_DESCRIPTOR_RANK (a) == 1)
+     {
+       const GFC_REAL_4 *restrict bbase_y;
+@@ -2815,6 +2801,20 @@ matmul_r4 (gfc_array_r4 * const restrict retarray,
+ 	  dest[y*rxstride] = s;
+ 	}
+     }
++  else if (axstride < aystride)
++    {
++      for (y = 0; y < ycount; y++)
++	for (x = 0; x < xcount; x++)
++	  dest[x*rxstride + y*rystride] = (GFC_REAL_4)0;
++
++      for (y = 0; y < ycount; y++)
++	for (n = 0; n < count; n++)
++	  for (x = 0; x < xcount; x++)
++	    /* dest[x,y] += a[x,n] * b[n,y] */
++	    dest[x*rxstride + y*rystride] +=
++					abase[x*axstride + n*aystride] *
++					bbase[n*bxstride + y*bystride];
++    }
+   else
+     {
+       const GFC_REAL_4 *restrict abase_x;
+diff --git a/libgfortran/generated/matmul_r8.c b/libgfortran/generated/matmul_r8.c
+index 9210d9171..c193f8587 100644
+--- a/libgfortran/generated/matmul_r8.c
++++ b/libgfortran/generated/matmul_r8.c
+@@ -565,20 +565,6 @@ matmul_r8_avx (gfc_array_r8 * const restrict retarray,
+ 	    }
+ 	}
+     }
+-  else if (axstride < aystride)
+-    {
+-      for (y = 0; y < ycount; y++)
+-	for (x = 0; x < xcount; x++)
+-	  dest[x*rxstride + y*rystride] = (GFC_REAL_8)0;
+-
+-      for (y = 0; y < ycount; y++)
+-	for (n = 0; n < count; n++)
+-	  for (x = 0; x < xcount; x++)
+-	    /* dest[x,y] += a[x,n] * b[n,y] */
+-	    dest[x*rxstride + y*rystride] +=
+-					abase[x*axstride + n*aystride] *
+-					bbase[n*bxstride + y*bystride];
+-    }
+   else if (GFC_DESCRIPTOR_RANK (a) == 1)
+     {
+       const GFC_REAL_8 *restrict bbase_y;
+@@ -593,6 +579,20 @@ matmul_r8_avx (gfc_array_r8 * const restrict retarray,
+ 	  dest[y*rxstride] = s;
+ 	}
+     }
++  else if (axstride < aystride)
++    {
++      for (y = 0; y < ycount; y++)
++	for (x = 0; x < xcount; x++)
++	  dest[x*rxstride + y*rystride] = (GFC_REAL_8)0;
++
++      for (y = 0; y < ycount; y++)
++	for (n = 0; n < count; n++)
++	  for (x = 0; x < xcount; x++)
++	    /* dest[x,y] += a[x,n] * b[n,y] */
++	    dest[x*rxstride + y*rystride] +=
++					abase[x*axstride + n*aystride] *
++					bbase[n*bxstride + y*bystride];
++    }
+   else
+     {
+       const GFC_REAL_8 *restrict abase_x;
+@@ -1108,20 +1108,6 @@ matmul_r8_avx2 (gfc_array_r8 * const restrict retarray,
+ 	    }
+ 	}
+     }
+-  else if (axstride < aystride)
+-    {
+-      for (y = 0; y < ycount; y++)
+-	for (x = 0; x < xcount; x++)
+-	  dest[x*rxstride + y*rystride] = (GFC_REAL_8)0;
+-
+-      for (y = 0; y < ycount; y++)
+-	for (n = 0; n < count; n++)
+-	  for (x = 0; x < xcount; x++)
+-	    /* dest[x,y] += a[x,n] * b[n,y] */
+-	    dest[x*rxstride + y*rystride] +=
+-					abase[x*axstride + n*aystride] *
+-					bbase[n*bxstride + y*bystride];
+-    }
+   else if (GFC_DESCRIPTOR_RANK (a) == 1)
+     {
+       const GFC_REAL_8 *restrict bbase_y;
+@@ -1136,6 +1122,20 @@ matmul_r8_avx2 (gfc_array_r8 * const restrict retarray,
+ 	  dest[y*rxstride] = s;
+ 	}
+     }
++  else if (axstride < aystride)
++    {
++      for (y = 0; y < ycount; y++)
++	for (x = 0; x < xcount; x++)
++	  dest[x*rxstride + y*rystride] = (GFC_REAL_8)0;
++
++      for (y = 0; y < ycount; y++)
++	for (n = 0; n < count; n++)
++	  for (x = 0; x < xcount; x++)
++	    /* dest[x,y] += a[x,n] * b[n,y] */
++	    dest[x*rxstride + y*rystride] +=
++					abase[x*axstride + n*aystride] *
++					bbase[n*bxstride + y*bystride];
++    }
+   else
+     {
+       const GFC_REAL_8 *restrict abase_x;
+@@ -1651,20 +1651,6 @@ matmul_r8_avx512f (gfc_array_r8 * const restrict retarray,
+ 	    }
+ 	}
+     }
+-  else if (axstride < aystride)
+-    {
+-      for (y = 0; y < ycount; y++)
+-	for (x = 0; x < xcount; x++)
+-	  dest[x*rxstride + y*rystride] = (GFC_REAL_8)0;
+-
+-      for (y = 0; y < ycount; y++)
+-	for (n = 0; n < count; n++)
+-	  for (x = 0; x < xcount; x++)
+-	    /* dest[x,y] += a[x,n] * b[n,y] */
+-	    dest[x*rxstride + y*rystride] +=
+-					abase[x*axstride + n*aystride] *
+-					bbase[n*bxstride + y*bystride];
+-    }
+   else if (GFC_DESCRIPTOR_RANK (a) == 1)
+     {
+       const GFC_REAL_8 *restrict bbase_y;
+@@ -1679,6 +1665,20 @@ matmul_r8_avx512f (gfc_array_r8 * const restrict retarray,
+ 	  dest[y*rxstride] = s;
+ 	}
+     }
++  else if (axstride < aystride)
++    {
++      for (y = 0; y < ycount; y++)
++	for (x = 0; x < xcount; x++)
++	  dest[x*rxstride + y*rystride] = (GFC_REAL_8)0;
++
++      for (y = 0; y < ycount; y++)
++	for (n = 0; n < count; n++)
++	  for (x = 0; x < xcount; x++)
++	    /* dest[x,y] += a[x,n] * b[n,y] */
++	    dest[x*rxstride + y*rystride] +=
++					abase[x*axstride + n*aystride] *
++					bbase[n*bxstride + y*bystride];
++    }
+   else
+     {
+       const GFC_REAL_8 *restrict abase_x;
+@@ -2190,20 +2190,6 @@ matmul_r8_vanilla (gfc_array_r8 * const restrict retarray,
+ 	    }
+ 	}
+     }
+-  else if (axstride < aystride)
+-    {
+-      for (y = 0; y < ycount; y++)
+-	for (x = 0; x < xcount; x++)
+-	  dest[x*rxstride + y*rystride] = (GFC_REAL_8)0;
+-
+-      for (y = 0; y < ycount; y++)
+-	for (n = 0; n < count; n++)
+-	  for (x = 0; x < xcount; x++)
+-	    /* dest[x,y] += a[x,n] * b[n,y] */
+-	    dest[x*rxstride + y*rystride] +=
+-					abase[x*axstride + n*aystride] *
+-					bbase[n*bxstride + y*bystride];
+-    }
+   else if (GFC_DESCRIPTOR_RANK (a) == 1)
+     {
+       const GFC_REAL_8 *restrict bbase_y;
+@@ -2218,6 +2204,20 @@ matmul_r8_vanilla (gfc_array_r8 * const restrict retarray,
+ 	  dest[y*rxstride] = s;
+ 	}
+     }
++  else if (axstride < aystride)
++    {
++      for (y = 0; y < ycount; y++)
++	for (x = 0; x < xcount; x++)
++	  dest[x*rxstride + y*rystride] = (GFC_REAL_8)0;
++
++      for (y = 0; y < ycount; y++)
++	for (n = 0; n < count; n++)
++	  for (x = 0; x < xcount; x++)
++	    /* dest[x,y] += a[x,n] * b[n,y] */
++	    dest[x*rxstride + y*rystride] +=
++					abase[x*axstride + n*aystride] *
++					bbase[n*bxstride + y*bystride];
++    }
+   else
+     {
+       const GFC_REAL_8 *restrict abase_x;
+@@ -2787,20 +2787,6 @@ matmul_r8 (gfc_array_r8 * const restrict retarray,
+ 	    }
+ 	}
+     }
+-  else if (axstride < aystride)
+-    {
+-      for (y = 0; y < ycount; y++)
+-	for (x = 0; x < xcount; x++)
+-	  dest[x*rxstride + y*rystride] = (GFC_REAL_8)0;
+-
+-      for (y = 0; y < ycount; y++)
+-	for (n = 0; n < count; n++)
+-	  for (x = 0; x < xcount; x++)
+-	    /* dest[x,y] += a[x,n] * b[n,y] */
+-	    dest[x*rxstride + y*rystride] +=
+-					abase[x*axstride + n*aystride] *
+-					bbase[n*bxstride + y*bystride];
+-    }
+   else if (GFC_DESCRIPTOR_RANK (a) == 1)
+     {
+       const GFC_REAL_8 *restrict bbase_y;
+@@ -2815,6 +2801,20 @@ matmul_r8 (gfc_array_r8 * const restrict retarray,
+ 	  dest[y*rxstride] = s;
+ 	}
+     }
++  else if (axstride < aystride)
++    {
++      for (y = 0; y < ycount; y++)
++	for (x = 0; x < xcount; x++)
++	  dest[x*rxstride + y*rystride] = (GFC_REAL_8)0;
++
++      for (y = 0; y < ycount; y++)
++	for (n = 0; n < count; n++)
++	  for (x = 0; x < xcount; x++)
++	    /* dest[x,y] += a[x,n] * b[n,y] */
++	    dest[x*rxstride + y*rystride] +=
++					abase[x*axstride + n*aystride] *
++					bbase[n*bxstride + y*bystride];
++    }
+   else
+     {
+       const GFC_REAL_8 *restrict abase_x;
+diff --git a/libgfortran/m4/matmul_internal.m4 b/libgfortran/m4/matmul_internal.m4
+index f7b82483c..91fdade97 100644
+--- a/libgfortran/m4/matmul_internal.m4
++++ b/libgfortran/m4/matmul_internal.m4
+@@ -481,20 +481,6 @@ sinclude(`matmul_asm_'rtype_code`.m4')dnl
+ 	    }
+ 	}
+     }
+-  else if (axstride < aystride)
+-    {
+-      for (y = 0; y < ycount; y++)
+-	for (x = 0; x < xcount; x++)
+-	  dest[x*rxstride + y*rystride] = ('rtype_name`)0;
+-
+-      for (y = 0; y < ycount; y++)
+-	for (n = 0; n < count; n++)
+-	  for (x = 0; x < xcount; x++)
+-	    /* dest[x,y] += a[x,n] * b[n,y] */
+-	    dest[x*rxstride + y*rystride] +=
+-					abase[x*axstride + n*aystride] *
+-					bbase[n*bxstride + y*bystride];
+-    }
+   else if (GFC_DESCRIPTOR_RANK (a) == 1)
+     {
+       const 'rtype_name` *restrict bbase_y;
+@@ -509,6 +495,20 @@ sinclude(`matmul_asm_'rtype_code`.m4')dnl
+ 	  dest[y*rxstride] = s;
+ 	}
+     }
++  else if (axstride < aystride)
++    {
++      for (y = 0; y < ycount; y++)
++	for (x = 0; x < xcount; x++)
++	  dest[x*rxstride + y*rystride] = ('rtype_name`)0;
++
++      for (y = 0; y < ycount; y++)
++	for (n = 0; n < count; n++)
++	  for (x = 0; x < xcount; x++)
++	    /* dest[x,y] += a[x,n] * b[n,y] */
++	    dest[x*rxstride + y*rystride] +=
++					abase[x*axstride + n*aystride] *
++					bbase[n*bxstride + y*bystride];
++    }
+   else
+     {
+       const 'rtype_name` *restrict abase_x;

@@ -1,0 +1,144 @@
+diff --git a/gcc/config/rs6000/rs6000.c b/gcc/config/rs6000/rs6000.c
+index d94ccfe8a..e86aa0a4c 100644
+--- a/gcc/config/rs6000/rs6000.c
++++ b/gcc/config/rs6000/rs6000.c
+@@ -6069,7 +6069,8 @@ darwin_rs6000_special_round_type_align (tree type, unsigned int computed,
+       type = TREE_TYPE (type);
+   } while (AGGREGATE_TYPE_P (type));
+ 
+-  if (! AGGREGATE_TYPE_P (type) && type != error_mark_node)
++  if (type != error_mark_node && ! AGGREGATE_TYPE_P (type)
++      && ! TYPE_PACKED (type) && maximum_field_alignment == 0)
+     align = MAX (align, TYPE_ALIGN (type));
+ 
+   return align;
+diff --git a/gcc/testsuite/gcc.target/powerpc/darwin-abi-13-0.c b/gcc/testsuite/gcc.target/powerpc/darwin-abi-13-0.c
+new file mode 100644
+index 000000000..d8d3c63a0
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/powerpc/darwin-abi-13-0.c
+@@ -0,0 +1,23 @@
++/* { dg-do compile { target powerpc*-*-darwin* } } */
++/* { dg-require-effective-target ilp32 } */
++/* { dg-options "-Wno-long-long" } */
++
++#include "darwin-structs-0.h"
++
++int tcd[sizeof(cd) != 12 ? -1 : 1];
++int acd[__alignof__(cd) != 4 ? -1 : 1];
++
++int sdc[sizeof(dc) != 16 ? -1 : 1];
++int adc[__alignof__(dc) != 8 ? -1 : 1];
++
++int scL[sizeof(cL) != 12 ? -1 : 1];
++int acL[__alignof__(cL) != 4 ? -1 : 1];
++
++int sLc[sizeof(Lc) != 16 ? -1 : 1];
++int aLc[__alignof__(Lc) != 8 ? -1 : 1];
++
++int scD[sizeof(cD) != 32 ? -1 : 1];
++int acD[__alignof__(cD) != 16 ? -1 : 1];
++
++int sDc[sizeof(Dc) != 32 ? -1 : 1];
++int aDc[__alignof__(Dc) != 16 ? -1 : 1];
+diff --git a/gcc/testsuite/gcc.target/powerpc/darwin-abi-13-1.c b/gcc/testsuite/gcc.target/powerpc/darwin-abi-13-1.c
+new file mode 100644
+index 000000000..4d888d383
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/powerpc/darwin-abi-13-1.c
+@@ -0,0 +1,27 @@
++/* { dg-do compile { target powerpc*-*-darwin* } } */
++/* { dg-require-effective-target ilp32 } */
++/* { dg-options "-Wno-long-long" } */
++
++#pragma pack(push, 1)
++
++#include "darwin-structs-0.h"
++
++int tcd[sizeof(cd) != 9 ? -1 : 1];
++int acd[__alignof__(cd) != 1 ? -1 : 1];
++
++int sdc[sizeof(dc) != 9 ? -1 : 1];
++int adc[__alignof__(dc) != 1 ? -1 : 1];
++
++int scL[sizeof(cL) != 9 ? -1 : 1];
++int acL[__alignof__(cL) != 1 ? -1 : 1];
++
++int sLc[sizeof(Lc) != 9 ? -1 : 1];
++int aLc[__alignof__(Lc) != 1 ? -1 : 1];
++
++int scD[sizeof(cD) != 17 ? -1 : 1];
++int acD[__alignof__(cD) != 1 ? -1 : 1];
++
++int sDc[sizeof(Dc) != 17 ? -1 : 1];
++int aDc[__alignof__(Dc) != 1 ? -1 : 1];
++
++#pragma pack(pop)
+diff --git a/gcc/testsuite/gcc.target/powerpc/darwin-abi-13-2.c b/gcc/testsuite/gcc.target/powerpc/darwin-abi-13-2.c
+new file mode 100644
+index 000000000..3bd52c0a8
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/powerpc/darwin-abi-13-2.c
+@@ -0,0 +1,27 @@
++/* { dg-do compile { target powerpc*-*-darwin* } } */
++/* { dg-require-effective-target ilp32 } */
++/* { dg-options "-Wno-long-long" } */
++
++#pragma pack(push, 2)
++
++#include "darwin-structs-0.h"
++
++int tcd[sizeof(cd) != 10 ? -1 : 1];
++int acd[__alignof__(cd) != 2 ? -1 : 1];
++
++int sdc[sizeof(dc) != 10 ? -1 : 1];
++int adc[__alignof__(dc) != 2 ? -1 : 1];
++
++int scL[sizeof(cL) != 10 ? -1 : 1];
++int acL[__alignof__(cL) != 2 ? -1 : 1];
++
++int sLc[sizeof(Lc) != 10 ? -1 : 1];
++int aLc[__alignof__(Lc) != 2 ? -1 : 1];
++
++int scD[sizeof(cD) != 18 ? -1 : 1];
++int acD[__alignof__(cD) != 2 ? -1 : 1];
++
++int sDc[sizeof(Dc) != 18 ? -1 : 1];
++int aDc[__alignof__(Dc) != 2 ? -1 : 1];
++
++#pragma pack(pop)
+diff --git a/gcc/testsuite/gcc.target/powerpc/darwin-structs-0.h b/gcc/testsuite/gcc.target/powerpc/darwin-structs-0.h
+new file mode 100644
+index 000000000..1db44f7a8
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/powerpc/darwin-structs-0.h
+@@ -0,0 +1,29 @@
++typedef struct _cd {
++ char c;
++ double d;
++} cd;
++
++typedef struct _dc {
++ double d;
++ char c;
++} dc;
++
++typedef struct _cL {
++ char c;
++ long long L;
++} cL;
++
++typedef struct _Lc {
++ long long L;
++ char c;
++} Lc;
++
++typedef struct _cD {
++ char c;
++ long double D;
++} cD;
++
++typedef struct _Dc {
++ long double D;
++ char c;
++} Dc;

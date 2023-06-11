@@ -1,0 +1,41 @@
+diff --git a/gcc/c-semantics.c b/gcc/c-semantics.c
+index 7731ac935..99e288d95 100644
+--- a/gcc/c-semantics.c
++++ b/gcc/c-semantics.c
+@@ -72,6 +72,8 @@ pop_stmt_list (tree t)
+     {
+       chain = TREE_CHAIN (u);
+       TREE_CHAIN (u) = NULL_TREE;
++      if (chain)
++	STATEMENT_LIST_HAS_LABEL (chain) |= STATEMENT_LIST_HAS_LABEL (u);
+       if (t == u)
+ 	break;
+       u = chain;
+diff --git a/gcc/testsuite/gcc.c-torture/execute/vla-dealloc-1.c b/gcc/testsuite/gcc.c-torture/execute/vla-dealloc-1.c
+new file mode 100644
+index 000000000..f2291ad66
+--- /dev/null
++++ b/gcc/testsuite/gcc.c-torture/execute/vla-dealloc-1.c
+@@ -0,0 +1,22 @@
++/* VLAs should be deallocated on a jump to before their definition,
++   including a jump to a label in an inner scope.  PR 19771.  */
++
++void *volatile p;
++
++int
++main (void)
++{
++  int n = 0;
++  if (0)
++    {
++    lab:;
++    }
++  int x[n % 1000 + 1];
++  x[0] = 1;
++  x[n % 1000] = 2;
++  p = x;
++  n++;
++  if (n < 1000000)
++    goto lab;
++  return 0;
++}

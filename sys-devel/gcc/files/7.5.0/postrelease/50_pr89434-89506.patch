@@ -1,0 +1,238 @@
+diff --git a/gcc/config/arm/arm.md b/gcc/config/arm/arm.md
+index 057b25deb..b16438e0a 100644
+--- a/gcc/config/arm/arm.md
++++ b/gcc/config/arm/arm.md
+@@ -854,20 +854,31 @@
+    (set_attr "type" "alus_sreg")]
+ )
+ 
+-;; This is the canonicalization of addsi3_compare0_for_combiner when the
++;; This is the canonicalization of subsi3_compare when the
+ ;; addend is a constant.
+ (define_insn "cmpsi2_addneg"
+   [(set (reg:CC CC_REGNUM)
+ 	(compare:CC
+ 	 (match_operand:SI 1 "s_register_operand" "r,r")
+-	 (match_operand:SI 2 "arm_addimm_operand" "L,I")))
++	 (match_operand:SI 2 "arm_addimm_operand" "I,L")))
+    (set (match_operand:SI 0 "s_register_operand" "=r,r")
+ 	(plus:SI (match_dup 1)
+-		 (match_operand:SI 3 "arm_addimm_operand" "I,L")))]
+-  "TARGET_32BIT && INTVAL (operands[2]) == -INTVAL (operands[3])"
+-  "@
+-   adds%?\\t%0, %1, %3
+-   subs%?\\t%0, %1, #%n3"
++		 (match_operand:SI 3 "arm_addimm_operand" "L,I")))]
++  "TARGET_32BIT
++   && (INTVAL (operands[2])
++       == trunc_int_for_mode (-INTVAL (operands[3]), SImode))"
++{
++  /* For 0 and INT_MIN it is essential that we use subs, as adds will result
++     in different condition codes (like cmn rather than like cmp), so that
++     alternative comes first.  Both alternatives can match for any 0x??000000
++     where except for 0 and INT_MIN it doesn't matter what we choose, and also
++     for -1 and 1 with TARGET_THUMB2, in that case prefer instruction with #1
++     as it is shorter.  */
++  if (which_alternative == 0 && operands[3] != const1_rtx)
++    return "subs%?\\t%0, %1, #%n3";
++  else
++    return "adds%?\\t%0, %1, %3";
++}
+   [(set_attr "conds" "set")
+    (set_attr "type" "alus_sreg")]
+ )
+@@ -1144,10 +1155,20 @@
+ (define_insn "*subsi3_carryin_const"
+   [(set (match_operand:SI 0 "s_register_operand" "=r")
+         (minus:SI (plus:SI (match_operand:SI 1 "s_register_operand" "r")
+-                           (match_operand:SI 2 "arm_not_immediate_operand" "K"))
++                           (match_operand:SI 2 "arm_neg_immediate_operand" "L"))
++                  (ltu:SI (reg:CC_C CC_REGNUM) (const_int 0))))]
++  "TARGET_32BIT"
++  "sbc\\t%0, %1, #%n2"
++  [(set_attr "conds" "use")
++   (set_attr "type" "adc_imm")]
++)
++
++(define_insn "*subsi3_carryin_const0"
++  [(set (match_operand:SI 0 "s_register_operand" "=r")
++        (minus:SI (match_operand:SI 1 "s_register_operand" "r")
+                   (ltu:SI (reg:CC_C CC_REGNUM) (const_int 0))))]
+   "TARGET_32BIT"
+-  "sbc\\t%0, %1, #%B2"
++  "sbc\\t%0, %1, #0"
+   [(set_attr "conds" "use")
+    (set_attr "type" "adc_imm")]
+ )
+@@ -1169,13 +1190,28 @@
+ (define_insn "*subsi3_carryin_compare_const"
+   [(set (reg:CC CC_REGNUM)
+         (compare:CC (match_operand:SI 1 "reg_or_int_operand" "r")
+-                    (match_operand:SI 2 "arm_not_operand" "K")))
++                    (match_operand:SI 2 "const_int_I_operand" "I")))
+    (set (match_operand:SI 0 "s_register_operand" "=r")
+         (minus:SI (plus:SI (match_dup 1)
+-                           (match_dup 2))
++                           (match_operand:SI 3 "arm_neg_immediate_operand" "L"))
++                  (ltu:SI (reg:CC_C CC_REGNUM) (const_int 0))))]
++  "TARGET_32BIT
++   && (INTVAL (operands[2])
++       == trunc_int_for_mode (-INTVAL (operands[3]), SImode))"
++  "sbcs\\t%0, %1, #%n3"
++  [(set_attr "conds" "set")
++   (set_attr "type" "adcs_imm")]
++)
++
++(define_insn "*subsi3_carryin_compare_const0"
++  [(set (reg:CC CC_REGNUM)
++        (compare:CC (match_operand:SI 1 "reg_or_int_operand" "r")
++		    (const_int 0)))
++   (set (match_operand:SI 0 "s_register_operand" "=r")
++        (minus:SI (match_dup 1)
+                   (ltu:SI (reg:CC_C CC_REGNUM) (const_int 0))))]
+   "TARGET_32BIT"
+-  "sbcs\\t%0, %1, #%B2"
++  "sbcs\\t%0, %1, #0"
+   [(set_attr "conds" "set")
+    (set_attr "type" "adcs_imm")]
+ )
+@@ -1300,14 +1336,13 @@
+   [(parallel [(set (reg:CC CC_REGNUM)
+ 		   (compare:CC (match_dup 1) (match_dup 2)))
+ 	      (set (match_dup 0) (minus:SI (match_dup 1) (match_dup 2)))])
+-   (set (match_dup 3) (minus:SI (plus:SI (match_dup 4) (match_dup 5))
++   (set (match_dup 3) (minus:SI (match_dup 4)
+                                 (ltu:SI (reg:CC_C CC_REGNUM) (const_int 0))))]
+   {
+     operands[3] = gen_highpart (SImode, operands[0]);
+     operands[0] = gen_lowpart (SImode, operands[0]);
+     operands[4] = gen_highpart (SImode, operands[1]);
+     operands[1] = gen_lowpart (SImode, operands[1]);
+-    operands[5] = GEN_INT (~0);
+    }
+   [(set_attr "conds" "clob")
+    (set_attr "length" "8")
+@@ -7360,16 +7395,19 @@
+                    (compare:CC (match_dup 3) (match_dup 4)))
+               (set (match_dup 2)
+                    (minus:SI (match_dup 5)
+-                            (ltu:SI (reg:CC_C CC_REGNUM) (const_int 0))))])]
++			     (ltu:SI (reg:CC_C CC_REGNUM) (const_int 0))))])]
+   {
+     operands[3] = gen_highpart (SImode, operands[0]);
+     operands[0] = gen_lowpart (SImode, operands[0]);
+     if (CONST_INT_P (operands[1]))
+       {
+-        operands[4] = GEN_INT (~INTVAL (gen_highpart_mode (SImode,
+-                                                           DImode,
+-                                                           operands[1])));
+-        operands[5] = gen_rtx_PLUS (SImode, operands[3], operands[4]);
++	operands[4] = gen_highpart_mode (SImode, DImode, operands[1]);
++	if (operands[4] == const0_rtx)
++	  operands[5] = operands[3];
++	else
++	  operands[5] = gen_rtx_PLUS (SImode, operands[3],
++				      gen_int_mode (-UINTVAL (operands[4]),
++						    SImode));
+       }
+     else
+       {
+@@ -9035,7 +9073,7 @@
+    (cond_exec (ne:CC (reg:CC CC_REGNUM) (const_int 0))
+ 	      (set (match_dup 0) (const_int 1)))]
+ {
+-  operands[3] = GEN_INT (-INTVAL (operands[2]));
++  operands[3] = gen_int_mode (-INTVAL (operands[2]), SImode);
+ })
+ 
+ (define_split
+@@ -9807,7 +9845,8 @@
+         /* Emit subs\\t%0, %1, %2\;mvnne\\t%0, #0 */
+         if (CONST_INT_P (operands[2]))
+           emit_insn (gen_cmpsi2_addneg (operands[0], operands[1], operands[2],
+-                                        GEN_INT (- INTVAL (operands[2]))));
++                                        gen_int_mode (-INTVAL (operands[2]),
++						      SImode)));
+         else
+           emit_insn (gen_subsi3_compare (operands[0], operands[1], operands[2]));
+ 
+diff --git a/gcc/config/arm/thumb2.md b/gcc/config/arm/thumb2.md
+index 35f8e9bbf..95e37c53b 100644
+--- a/gcc/config/arm/thumb2.md
++++ b/gcc/config/arm/thumb2.md
+@@ -908,7 +908,8 @@
+         /* Emit subs\\t%0, %1, %2\;it\\tne\;mvnne\\t%0, #0 */
+         if (CONST_INT_P (operands[2]))
+           emit_insn (gen_cmpsi2_addneg (operands[0], operands[1], operands[2],
+-                                        GEN_INT (- INTVAL (operands[2]))));
++                                        gen_int_mode (-INTVAL (operands[2]),
++						      SImode)));
+         else
+           emit_insn (gen_subsi3_compare (operands[0], operands[1], operands[2]));
+ 
+diff --git a/gcc/testsuite/gcc.c-torture/execute/pr89434.c b/gcc/testsuite/gcc.c-torture/execute/pr89434.c
+new file mode 100644
+index 000000000..5c26266e5
+--- /dev/null
++++ b/gcc/testsuite/gcc.c-torture/execute/pr89434.c
+@@ -0,0 +1,29 @@
++/* PR target/89434 */
++
++#if __SIZEOF_INT__ == 4 && __SIZEOF_LONG_LONG__ == 8 && __CHAR_BIT__ == 8
++long g = 0;
++
++static inline unsigned long long
++foo (unsigned long long u)
++{
++  unsigned x;
++  __builtin_mul_overflow (-1, g, &x);
++  u |= (unsigned) u < (unsigned short) x;
++  return x - u;
++}
++
++int
++main ()
++{
++  unsigned long long x = foo (0x222222222ULL);
++  if (x != 0xfffffffddddddddeULL)
++    __builtin_abort ();
++  return 0;
++}
++#else
++int
++main ()
++{
++  return 0;
++}
++#endif
+diff --git a/gcc/testsuite/gcc.dg/pr89434.c b/gcc/testsuite/gcc.dg/pr89434.c
+new file mode 100644
+index 000000000..477adb50c
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr89434.c
+@@ -0,0 +1,5 @@
++/* PR target/89434 */
++/* { dg-do run } */
++/* { dg-options "-Og" } */
++
++#include "../gcc.c-torture/execute/pr89434.c"
+diff --git a/gcc/testsuite/gcc.dg/pr89506.c b/gcc/testsuite/gcc.dg/pr89506.c
+new file mode 100644
+index 000000000..2ec4f3211
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr89506.c
+@@ -0,0 +1,14 @@
++/* PR target/89506 */
++/* { dg-do compile } */
++/* { dg-options "-Og -g -w" } */
++
++long long a;
++int c;
++
++int
++foo (long long d, short e)
++{
++  __builtin_sub_overflow (0xffffffff, c, &a);
++  e >>= ~2147483647 != (int) a;
++  return d + e;
++}

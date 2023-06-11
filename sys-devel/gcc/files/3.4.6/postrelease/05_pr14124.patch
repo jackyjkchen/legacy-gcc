@@ -1,0 +1,105 @@
+diff --git a/gcc/cp/decl.c b/gcc/cp/decl.c
+index 20f1fc6f..c482098e 100644
+--- a/gcc/cp/decl.c
++++ b/gcc/cp/decl.c
+@@ -9812,6 +9812,7 @@ finish_enum (tree enumtype)
+   tree maxnode;
+   tree t;
+   bool unsignedp;
++  bool use_short_enum;
+   int lowprec;
+   int highprec; 
+   int precision;
+@@ -9904,8 +9905,14 @@ finish_enum (tree enumtype)
+ 
+      We use "int" or an "unsigned int" as the underlying type, even if
+      a smaller integral type would work, unless the user has
+-     explicitly requested that we use the smallest possible type.  */
+-  for (itk = (flag_short_enums ? itk_char : itk_int); 
++     explicitly requested that we use the smallest possible type.  The
++     user can request that for all enumerations with a command line
++     flag, or for just one enumeration with an attribute. */
++
++    use_short_enum = flag_short_enums
++      || lookup_attribute ("packed", TYPE_ATTRIBUTES (enumtype));
++
++    for (itk = (use_short_enum ? itk_char : itk_int);
+        itk != itk_none; 
+        itk++)
+     {
+diff --git a/gcc/cp/parser.c b/gcc/cp/parser.c
+index 0eb4bf7a..4c926027 100644
+--- a/gcc/cp/parser.c
++++ b/gcc/cp/parser.c
+@@ -9343,6 +9343,9 @@ cp_parser_elaborated_type_specifier (cp_parser* parser,
+    enum-specifier:
+      enum identifier [opt] { enumerator-list [opt] }
+ 
++   GNU Extensions:
++     enum identifier [opt] { enumerator-list [opt] } attributes
++
+    Returns an ENUM_TYPE representing the enumeration.  */
+ 
+ static tree
+@@ -9384,6 +9387,16 @@ cp_parser_enum_specifier (cp_parser* parser)
+   /* Look for the `}'.  */
+   cp_parser_require (parser, CPP_CLOSE_BRACE, "`}'");
+ 
++  /* Look for trailing attributes to apply to this enumeration, and
++     apply them if appropriate. */
++  if (cp_parser_allow_gnu_extensions_p (parser))
++    {
++      tree trailing_attr = cp_parser_attributes_opt (parser);
++      cplus_decl_attributes (&type,
++                           trailing_attr,
++                           (int) ATTR_FLAG_TYPE_IN_PLACE);
++    }
++
+   /* Finish up the enumeration.  */
+   finish_enum (type);
+ 
+diff --git a/gcc/testsuite/g++.dg/ext/packed7.C b/gcc/testsuite/g++.dg/ext/packed7.C
+new file mode 100644
+index 00000000..e2f74e02
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/ext/packed7.C
+@@ -0,0 +1,15 @@
++// PR c++/14124
++// A packed enum uses the minimal underlying type.
++
++// Copyright (C) 2004 Free Software Foundation, Inc.
++// Contributed by Matt Austern  <austern@apple.com>
++
++// { dg-do run }
++
++enum XXX { xyzzy = 3 } __attribute__((packed));
++
++int main()
++{
++  int enumsize = sizeof(xyzzy);
++  return (enumsize == 1) ? 0 : 1;
++}
+diff --git a/gcc/testsuite/g++.old-deja/g++.other/enum5.C b/gcc/testsuite/g++.old-deja/g++.other/enum5.C
+index f254dca1..ad40d4e1 100644
+--- a/gcc/testsuite/g++.old-deja/g++.other/enum5.C
++++ b/gcc/testsuite/g++.old-deja/g++.other/enum5.C
+@@ -1,14 +1,14 @@
+-// { dg-do compile }
+-// Copyright (C) 2001, 2003 Free Software Foundation, Inc.
++// { dg-do run }
++// Copyright (C) 2001, 2003, 2004 Free Software Foundation, Inc.
+ // Contributed by Ben Elliston <bje@redhat.com>
+ 
+ // PR 80: Packed enums use minimum required storage.
+ 
+ extern "C" void abort();
+ 
+-enum numbers { one, two, three } __attribute__ ((packed)) nums; // { dg-bogus "" "" { xfail *-*-* } } 
+-enum colours { red = 1000, green, blue } __attribute__ ((packed)) cols; // { dg-bogus "" "" { xfail *-*-* } } 
+-enum conditions { fine, rain, cloudy } __attribute__ ((packed)) forecast; // { dg-bogus "" "" { xfail *-*-* } } 
++enum numbers { one, two, three } __attribute__ ((packed)) nums;
++enum colours { red = 1000, green, blue } __attribute__ ((packed)) cols;
++enum conditions { fine, rain, cloudy } __attribute__ ((packed)) forecast;
+ 
+ int
+ main()

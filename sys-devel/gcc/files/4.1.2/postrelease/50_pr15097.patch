@@ -1,0 +1,128 @@
+diff --git a/gcc/cp/cp-tree.h b/gcc/cp/cp-tree.h
+index a8782840..fbb06dbd 100644
+--- a/gcc/cp/cp-tree.h
++++ b/gcc/cp/cp-tree.h
+@@ -4145,6 +4145,7 @@ extern void init_rtti_processing		(void);
+ extern tree build_typeid			(tree);
+ extern tree get_tinfo_decl			(tree);
+ extern tree get_typeid				(tree);
++extern tree build_headof			(tree);
+ extern tree build_dynamic_cast			(tree, tree);
+ extern void emit_support_tinfos			(void);
+ extern bool emit_tinfo_decl			(tree);
+diff --git a/gcc/cp/init.c b/gcc/cp/init.c
+index 1924978b..49eb8179 100644
+--- a/gcc/cp/init.c
++++ b/gcc/cp/init.c
+@@ -2880,6 +2880,7 @@ build_delete (tree type, tree addr, special_function_kind auto_delete,
+     }
+   else
+     {
++      tree head = NULL_TREE;
+       tree do_delete = NULL_TREE;
+       tree ifexp;
+ 
+@@ -2893,8 +2894,9 @@ build_delete (tree type, tree addr, special_function_kind auto_delete,
+ 	{
+ 	  /* We will use ADDR multiple times so we must save it.  */
+ 	  addr = save_expr (addr);
++	  head = get_target_expr (build_headof (addr));
+ 	  /* Delete the object.  */
+-	  do_delete = build_builtin_delete_call (addr);
++	  do_delete = build_builtin_delete_call (head);
+ 	  /* Otherwise, treat this like a complete object destructor
+ 	     call.  */
+ 	  auto_delete = sfk_complete_destructor;
+@@ -2930,6 +2932,10 @@ build_delete (tree type, tree addr, special_function_kind auto_delete,
+       if (do_delete)
+ 	expr = build2 (COMPOUND_EXPR, void_type_node, expr, do_delete);
+ 
++      /* We need to calculate this before the dtor changes the vptr.  */
++      if (head)
++	expr = build2 (COMPOUND_EXPR, void_type_node, head, expr);
++
+       if (flags & LOOKUP_DESTRUCTOR)
+ 	/* Explicit destructor call; don't check for null pointer.  */
+ 	ifexp = integer_one_node;
+diff --git a/gcc/cp/rtti.c b/gcc/cp/rtti.c
+index 0956c00c..079a1545 100644
+--- a/gcc/cp/rtti.c
++++ b/gcc/cp/rtti.c
+@@ -101,7 +101,6 @@ VEC(tree,gc) *unemitted_tinfo_decls;
+    and are generated as needed. */
+ static GTY (()) VEC(tinfo_s,gc) *tinfo_descs;
+ 
+-static tree build_headof (tree);
+ static tree ifnonnull (tree, tree);
+ static tree tinfo_name (tree);
+ static tree build_dynamic_cast_1 (tree, tree);
+@@ -155,7 +154,7 @@ init_rtti_processing (void)
+    virtual functions (TYPE_POLYMORPHIC_P), else just return the
+    expression.  */
+ 
+-static tree
++tree
+ build_headof (tree exp)
+ {
+   tree type = TREE_TYPE (exp);
+diff --git a/gcc/testsuite/g++.dg/init/delete2.C b/gcc/testsuite/g++.dg/init/delete2.C
+new file mode 100644
+index 00000000..8a486bea
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/init/delete2.C
+@@ -0,0 +1,55 @@
++// PR c++/15097
++// { dg-do run }
++
++typedef __SIZE_TYPE__ size_t;
++
++extern "C" void * malloc (size_t);
++extern "C" void free (void *);
++extern "C" void abort(void);
++
++void *saved;
++
++void * operator new (size_t size)
++{
++  void *p = malloc (size);
++  saved = p;
++  return p;
++}
++
++void operator delete (void *p)
++{
++  if (p != saved)
++    abort ();
++  free (p);
++}
++
++struct B1
++{
++    virtual ~B1 () throw() {}
++    B1 (){}
++    int x;
++};
++struct B2
++{
++    virtual ~B2 () throw() {}
++    B2 (){}
++    int x;
++};
++struct D : B1, B2
++{
++    D (){}
++    ~D () throw() {}
++    int y;
++};
++void f1 (D*);
++void f2 (B2*);
++void f3 (B1*);
++int main (void)
++{
++    f1 (::new D);
++    f2 (::new D);     
++    f3 (::new D);
++}
++void f1 ( D* p) { ::delete p; }
++void f2 (B2* p) { ::delete p; }  
++void f3 (B1* p) { ::delete p; }

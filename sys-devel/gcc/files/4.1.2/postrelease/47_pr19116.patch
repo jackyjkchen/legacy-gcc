@@ -1,0 +1,44 @@
+diff --git a/gcc/config/i386/i386.c b/gcc/config/i386/i386.c
+index af43c476..e3079b36 100644
+--- a/gcc/config/i386/i386.c
++++ b/gcc/config/i386/i386.c
+@@ -1554,7 +1554,7 @@ override_options (void)
+ 
+   /* If we're doing fast math, we don't care about comparison order
+      wrt NaNs.  This lets us use a shorter comparison sequence.  */
+-  if (flag_unsafe_math_optimizations)
++  if (flag_finite_math_only)
+     target_flags &= ~MASK_IEEE_FP;
+ 
+   /* If the architecture always has an FPU, turn off NO_FANCY_MATH_387,
+diff --git a/gcc/config/i386/i386.md b/gcc/config/i386/i386.md
+index 4ba03270..ebc9c48e 100644
+--- a/gcc/config/i386/i386.md
++++ b/gcc/config/i386/i386.md
+@@ -15283,8 +15283,7 @@
+ (define_insn "sqrtxf2"
+   [(set (match_operand:XF 0 "register_operand" "=f")
+ 	(sqrt:XF (match_operand:XF 1 "register_operand" "0")))]
+-  "TARGET_USE_FANCY_MATH_387 
+-   && (TARGET_IEEE_FP || flag_unsafe_math_optimizations) "
++  "TARGET_USE_FANCY_MATH_387"
+   "fsqrt"
+   [(set_attr "type" "fpspc")
+    (set_attr "mode" "XF")
+diff --git a/gcc/simplify-rtx.c b/gcc/simplify-rtx.c
+index b3123041..f2967913 100644
+--- a/gcc/simplify-rtx.c
++++ b/gcc/simplify-rtx.c
+@@ -3090,10 +3090,10 @@ simplify_const_relational_operation (enum rtx_code code,
+     return simplify_const_relational_operation (signed_condition (code),
+ 						mode, tem, const0_rtx);
+ 
+-  if (flag_unsafe_math_optimizations && code == ORDERED)
++  if (! HONOR_NANS (mode) && code == ORDERED)
+     return const_true_rtx;
+ 
+-  if (flag_unsafe_math_optimizations && code == UNORDERED)
++  if (! HONOR_NANS (mode) && code == UNORDERED)
+     return const0_rtx;
+ 
+   /* For modes without NaNs, if the two operands are equal, we know the

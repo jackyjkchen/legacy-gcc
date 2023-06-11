@@ -1,0 +1,91 @@
+diff --git a/gcc/combine.c b/gcc/combine.c
+index b7c245767..9477e419e 100644
+--- a/gcc/combine.c
++++ b/gcc/combine.c
+@@ -7955,18 +7955,9 @@ make_compound_operation (rtx x, enum rtx_code in_code)
+ 				     XEXP (inner_x0, 1),
+ 				     i, 1, 0, in_code == COMPARE);
+ 
+-	  if (new_rtx)
+-	    {
+-	      /* If we narrowed the mode when dropping the subreg, then
+-		 we must zero-extend to keep the semantics of the AND.  */
+-	      if (GET_MODE_SIZE (inner_mode) >= GET_MODE_SIZE (mode))
+-		;
+-	      else if (SCALAR_INT_MODE_P (inner_mode))
+-		new_rtx = simplify_gen_unary (ZERO_EXTEND, mode,
+-					      new_rtx, inner_mode);
+-	      else
+-		new_rtx = NULL;
+-	    }
++	  /* If we narrowed the mode when dropping the subreg, then we lose.  */
++	  if (GET_MODE_SIZE (inner_mode) < GET_MODE_SIZE (mode))
++	    new_rtx = NULL;
+ 
+ 	  /* If that didn't give anything, see if the AND simplifies on
+ 	     its own.  */
+diff --git a/gcc/simplify-rtx.c b/gcc/simplify-rtx.c
+index 5acc7eae2..a6507550b 100644
+--- a/gcc/simplify-rtx.c
++++ b/gcc/simplify-rtx.c
+@@ -825,6 +825,15 @@ simplify_truncation (machine_mode mode, rtx op,
+     return simplify_gen_unary (TRUNCATE, mode, XEXP (op, 0),
+ 			       GET_MODE (XEXP (op, 0)));
+ 
++  /* (truncate:A (ior X C)) is (const_int -1) if C is equal to that already,
++     in mode A.  */
++  if (GET_CODE (op) == IOR
++      && SCALAR_INT_MODE_P (mode)
++      && SCALAR_INT_MODE_P (op_mode)
++      && CONST_INT_P (XEXP (op, 1))
++      && trunc_int_for_mode (INTVAL (XEXP (op, 1)), mode) == -1)
++    return constm1_rtx;
++
+   return NULL_RTX;
+ }
+ 
+diff --git a/gcc/testsuite/gcc.c-torture/execute/pr81423.c b/gcc/testsuite/gcc.c-torture/execute/pr81423.c
+new file mode 100644
+index 000000000..be7413be3
+--- /dev/null
++++ b/gcc/testsuite/gcc.c-torture/execute/pr81423.c
+@@ -0,0 +1,39 @@
++/* PR rtl-optimization/81423 */
++
++extern void abort (void);
++
++unsigned long long int ll = 0;
++unsigned long long int ull1 = 1ULL;
++unsigned long long int ull2 = 12008284144813806346ULL;
++unsigned long long int ull3;
++
++unsigned long long int __attribute__ ((noinline))
++foo (void)
++{
++  ll = -5597998501375493990LL;
++
++  ll = (unsigned int) (5677365550390624949LL - ll) - (ull1 > 0);
++  unsigned long long int ull3;
++  ull3 = (unsigned int)
++    (2067854353LL <<
++     (((ll + -2129105131LL) ^ 10280750144413668236ULL) -
++      10280750143997242009ULL)) >> ((2873442921854271231ULL | ull2)
++				    - 12098357307243495419ULL);
++
++  return ull3;
++}
++
++int
++main (void)
++{
++  /* We need a long long of exactly 64 bits and int of exactly 32 bits
++     for this test.  */
++  if (__SIZEOF_LONG_LONG__ * __CHAR_BIT__ != 64
++      || __SIZEOF_INT__ * __CHAR_BIT__ != 32)
++    return 0;
++
++  ull3 = foo ();
++  if (ull3 != 3998784)
++    abort ();
++  return 0;
++}

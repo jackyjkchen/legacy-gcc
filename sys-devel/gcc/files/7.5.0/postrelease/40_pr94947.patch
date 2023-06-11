@@ -1,0 +1,88 @@
+diff --git a/gcc/testsuite/gcc.dg/torture/pr94947-1.c b/gcc/testsuite/gcc.dg/torture/pr94947-1.c
+new file mode 100644
+index 000000000..ab8b488c6
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/torture/pr94947-1.c
+@@ -0,0 +1,23 @@
++/* { dg-do run } */
++/* { dg-additional-sources "pr94947-2.c" } */
++/* { dg-additional-options "-fipa-pta -flto-partition=1to1" } */
++
++extern void abort ();
++extern void baz ();
++extern void (*baz_call)();
++static int *p;
++
++static void foo ()
++{
++  if (*p != 1)
++    abort ();
++}
++
++int main()
++{
++  int x = 1;
++  p = &x;
++  baz_call = foo;
++  baz ();
++  return 0;
++}
+diff --git a/gcc/testsuite/gcc.dg/torture/pr94947-2.c b/gcc/testsuite/gcc.dg/torture/pr94947-2.c
+new file mode 100644
+index 000000000..670dd61c1
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/torture/pr94947-2.c
+@@ -0,0 +1,7 @@
++/* { dg-do compile } */
++
++void (*baz_call)();
++void baz ()
++{
++  baz_call ();
++}
+diff --git a/gcc/tree-ssa-structalias.c b/gcc/tree-ssa-structalias.c
+index 148afd4fc..f57e32229 100644
+--- a/gcc/tree-ssa-structalias.c
++++ b/gcc/tree-ssa-structalias.c
+@@ -7775,7 +7775,8 @@ refered_from_nonlocal_fn (struct cgraph_node *node, void *data)
+ {
+   bool *nonlocal_p = (bool *)data;
+   *nonlocal_p |= (node->used_from_other_partition
+-		  || node->externally_visible
++		  || DECL_EXTERNAL (node->decl)
++		  || TREE_PUBLIC (node->decl)
+ 		  || node->force_output);
+   return false;
+ }
+@@ -7786,7 +7787,8 @@ refered_from_nonlocal_var (struct varpool_node *node, void *data)
+ {
+   bool *nonlocal_p = (bool *)data;
+   *nonlocal_p |= (node->used_from_other_partition
+-		  || node->externally_visible
++		  || DECL_EXTERNAL (node->decl)
++		  || TREE_PUBLIC (node->decl)
+ 		  || node->force_output);
+   return false;
+ }
+@@ -7835,7 +7837,8 @@ ipa_pta_execute (void)
+ 	 For local functions we see all callers and thus do not need initial
+ 	 constraints for parameters.  */
+       bool nonlocal_p = (node->used_from_other_partition
+-			 || node->externally_visible
++			 || DECL_EXTERNAL (node->decl)
++			 || TREE_PUBLIC (node->decl)
+ 			 || node->force_output);
+       node->call_for_symbol_thunks_and_aliases (refered_from_nonlocal_fn,
+ 						&nonlocal_p, true);
+@@ -7873,8 +7876,9 @@ ipa_pta_execute (void)
+ 
+       /* For the purpose of IPA PTA unit-local globals are not
+          escape points.  */
+-      bool nonlocal_p = (var->used_from_other_partition
+-			 || var->externally_visible
++      bool nonlocal_p = (DECL_EXTERNAL (var->decl)
++			 || TREE_PUBLIC (var->decl)
++			 || var->used_from_other_partition
+ 			 || var->force_output);
+       var->call_for_symbol_and_aliases (refered_from_nonlocal_var,
+ 					&nonlocal_p, true);

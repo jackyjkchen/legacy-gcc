@@ -1,0 +1,107 @@
+diff --git a/gcc/cp/cp-gimplify.c b/gcc/cp/cp-gimplify.c
+index e071569b7..80e7c321c 100644
+--- a/gcc/cp/cp-gimplify.c
++++ b/gcc/cp/cp-gimplify.c
+@@ -2395,6 +2395,15 @@ cp_fold (tree x)
+       x = fold (x);
+       break;
+ 
++    case SAVE_EXPR:
++      /* A SAVE_EXPR might contain e.g. (0 * i) + (0 * j), which, after
++	 folding, evaluates to an invariant.  In that case no need to wrap
++	 this folded tree with a SAVE_EXPR.  */
++      r = cp_fold (TREE_OPERAND (x, 0));
++      if (tree_invariant_p (r))
++	x = r;
++      break;
++
+     default:
+       return org_x;
+     }
+diff --git a/gcc/testsuite/c-c++-common/ubsan/pr80536.c b/gcc/testsuite/c-c++-common/ubsan/pr80536.c
+new file mode 100644
+index 000000000..23913ad3b
+--- /dev/null
++++ b/gcc/testsuite/c-c++-common/ubsan/pr80536.c
+@@ -0,0 +1,9 @@
++/* PR sanitizer/80536 */
++/* { dg-do compile } */
++/* { dg-options "-fsanitize=undefined" } */
++
++int
++foo (int i)
++{
++  return ((i * (unsigned long long) (-0 + 1UL)) * 2) % 1;
++}
+diff --git a/gcc/testsuite/g++.dg/ubsan/pr80386.C b/gcc/testsuite/g++.dg/ubsan/pr80386.C
+new file mode 100644
+index 000000000..60122da3c
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/ubsan/pr80386.C
+@@ -0,0 +1,13 @@
++// PR sanitizer/80386
++// { dg-do run }
++// { dg-options "-fsanitize=undefined -fno-sanitize-recover" }
++
++static unsigned long long int i = 13996271126042720493ULL;
++
++int
++main ()
++{
++  int r = (((2921 + 0) - short(i)) + 0x7fffffff) >> 0;
++  asm volatile ("" : "+g" (r));
++  return 0;
++}
+diff --git a/gcc/tree.c b/gcc/tree.c
+index e25cbb700..d3be67892 100644
+--- a/gcc/tree.c
++++ b/gcc/tree.c
+@@ -3338,7 +3338,6 @@ tree_invariant_p (tree t)
+ tree
+ save_expr (tree expr)
+ {
+-  tree t = fold (expr);
+   tree inner;
+ 
+   /* If the tree evaluates to a constant, then we don't want to hide that
+@@ -3346,33 +3345,32 @@ save_expr (tree expr)
+      However, a read-only object that has side effects cannot be bypassed.
+      Since it is no problem to reevaluate literals, we just return the
+      literal node.  */
+-  inner = skip_simple_arithmetic (t);
++  inner = skip_simple_arithmetic (expr);
+   if (TREE_CODE (inner) == ERROR_MARK)
+     return inner;
+ 
+   if (tree_invariant_p_1 (inner))
+-    return t;
++    return expr;
+ 
+   /* If INNER contains a PLACEHOLDER_EXPR, we must evaluate it each time, since
+      it means that the size or offset of some field of an object depends on
+      the value within another field.
+ 
+-     Note that it must not be the case that T contains both a PLACEHOLDER_EXPR
++     Note that it must not be the case that EXPR contains both a PLACEHOLDER_EXPR
+      and some variable since it would then need to be both evaluated once and
+      evaluated more than once.  Front-ends must assure this case cannot
+      happen by surrounding any such subexpressions in their own SAVE_EXPR
+      and forcing evaluation at the proper time.  */
+   if (contains_placeholder_p (inner))
+-    return t;
++    return expr;
+ 
+-  t = build1 (SAVE_EXPR, TREE_TYPE (expr), t);
+-  SET_EXPR_LOCATION (t, EXPR_LOCATION (expr));
++  expr = build1_loc (EXPR_LOCATION (expr), SAVE_EXPR, TREE_TYPE (expr), expr);
+ 
+   /* This expression might be placed ahead of a jump to ensure that the
+      value was computed on both sides of the jump.  So make sure it isn't
+      eliminated as dead.  */
+-  TREE_SIDE_EFFECTS (t) = 1;
+-  return t;
++  TREE_SIDE_EFFECTS (expr) = 1;
++  return expr;
+ }
+ 
+ /* Look inside EXPR into any simple arithmetic operations.  Return the
