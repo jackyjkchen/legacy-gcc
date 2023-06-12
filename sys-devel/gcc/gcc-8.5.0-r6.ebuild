@@ -50,7 +50,7 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/15_pr109164.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/16_pr83860.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/17_pr108365.patch
-	eapply "${FILESDIR}"/${PV}/postrelease/18_pr94383.patch
+	[[ $(tc-arch) == "arm64" ]] && eapply "${FILESDIR}"/${PV}/postrelease/18_pr94383.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/19_pr93262.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/20_pr110044.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/21_pr71598.patch

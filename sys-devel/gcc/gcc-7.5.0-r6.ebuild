@@ -29,7 +29,7 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/00_riscv-fix-multilib.patch
 
 	eapply "${FILESDIR}"/${PV}/postrelease/00_pr94460.patch
-	eapply "${FILESDIR}"/${PV}/postrelease/01_pr94383.patch
+	[[ $(tc-arch) == "arm64" ]] && eapply "${FILESDIR}"/${PV}/postrelease/01_pr94383.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/02_pr80693-81019-81020.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/03_pr81331.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/04_pr94130.patch

@@ -44,13 +44,12 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/04_pr38644.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/05_pr109164.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/06_pr108365.patch
-	eapply "${FILESDIR}"/${PV}/postrelease/07_pr94383.patch
+	[[ $(tc-arch) == "arm64" ]] && eapply "${FILESDIR}"/${PV}/postrelease/07_pr94383.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/08_pr93262.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/09_pr110044.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/10_pr91927.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/11_pr106032.patch
-	eapply "${FILESDIR}"/${PV}/postrelease/12_pr105549.patch
-	eapply "${FILESDIR}"/${PV}/postrelease/13_pr97474.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/12_pr97474.patch
 
 	is_crosscompile || eapply "${FILESDIR}"/${PV}/postrelease/99_fix-known-test-fail.patch
 }
