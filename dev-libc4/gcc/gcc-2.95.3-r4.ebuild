@@ -23,12 +23,13 @@ else
 fi
 
 src_prepare() {
-	eapply "${FILESDIR}"/${PV}/00_gcc-${PV}.patch
+	eapply "${FILESDIR}"/${PV}/00_gcc-2.95.4-without-change-version.patch
+	eapply "${FILESDIR}"/${PV}/01_gcc-${PV}.patch
 	toolchain-oldlibc_src_prepare
 
-	eapply "${FILESDIR}"/${PV}/01_workaround-for-legacy-glibc-in-non-system-dir.patch
-	eapply "${FILESDIR}"/${PV}/04_fix-crash-00204.patch
-	eapply "${FILESDIR}"/${PV}/05_sjlj-exception-default.patch
+	eapply "${FILESDIR}"/${PV}/02_workaround-for-legacy-glibc-in-non-system-dir.patch
+	eapply "${FILESDIR}"/${PV}/05_fix-crash-00204.patch
+	eapply "${FILESDIR}"/${PV}/06_sjlj-exception-default.patch
 	eapply "${FILESDIR}"/${PV}/10_fix-for-libc5.patch
 	eapply "${FILESDIR}"/${PV}/11_fix-for-libc4.patch
 	rm -rf libstdc++

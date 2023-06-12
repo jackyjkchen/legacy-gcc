@@ -73,14 +73,15 @@ else
 fi
 
 src_prepare() {
-	eapply "${FILESDIR}"/${PV}/00_gcc-${PV}.patch
+	eapply "${FILESDIR}"/${PV}/00_gcc-2.95.4-without-change-version.patch
+	eapply "${FILESDIR}"/${PV}/01_gcc-${PV}.patch
 	toolchain_src_prepare
 
-	[[ ${TOOL_PREFIX} != "" ]] && eapply "${FILESDIR}"/${PV}/01_workaround-for-legacy-glibc-in-non-system-dir.patch
-	[[ $(tc-arch) == "m68k" ]] && eapply "${FILESDIR}"/${PV}/02_m68k-debian.patch
-	[[ ${TOOL_PREFIX} == "sparc64-legacy" ]] && eapply "${FILESDIR}"/${PV}/03_workaround-for-sparc64.patch
-	eapply "${FILESDIR}"/${PV}/04_fix-crash-00204.patch
-	eapply "${FILESDIR}"/${PV}/05_sjlj-exception-default.patch
+	[[ ${TOOL_PREFIX} != "" ]] && eapply "${FILESDIR}"/${PV}/02_workaround-for-legacy-glibc-in-non-system-dir.patch
+	[[ $(tc-arch) == "m68k" ]] && eapply "${FILESDIR}"/${PV}/03_m68k-debian.patch
+	[[ ${TOOL_PREFIX} == "sparc64-legacy" ]] && eapply "${FILESDIR}"/${PV}/04_workaround-for-sparc64.patch
+	eapply "${FILESDIR}"/${PV}/05_fix-crash-00204.patch
+	eapply "${FILESDIR}"/${PV}/06_sjlj-exception-default.patch
 	touch -r gcc/README gcc/configure.in || die
 }
 
