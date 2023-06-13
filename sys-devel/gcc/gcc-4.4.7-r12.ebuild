@@ -34,7 +34,7 @@ src_prepare() {
 	[[ $(tc-arch) == "mips" && ${DEFAULT_ABI} == "n64" ]] && eapply "${FILESDIR}"/${PV}/02_mips64-default-n64-abi.patch
 	eapply "${FILESDIR}"/${PV}/03_fix-werror.patch
 	eapply "${FILESDIR}"/${PV}/04_backport-static-libstdc++-option.patch
-	use test && eapply "${FILESDIR}"/${PV}/05_workaround-abi-warning-in-test.patch
+	use test && [[ ${CTARGET} == arm*-*-*eabi ]] && eapply "${FILESDIR}"/${PV}/05_workaround-abi-warning-in-test.patch
 
 	sed -i 's/use_fixproto=yes/:/' gcc/config.gcc #PR33200
 
