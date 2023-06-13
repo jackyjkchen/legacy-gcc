@@ -86,6 +86,11 @@ src_prepare() {
 	[[ ${TOOL_PREFIX} != "" ]] && eapply "${FILESDIR}"/${PV}/01_workaround-for-legacy-glibc-in-non-system-dir.patch
 	[[ $(tc-arch) == "mips" ]] && eapply "${FILESDIR}"/${PV}/02_support-mips64.patch
 	[[ $(tc-arch) == "hppa" ]] && eapply "${FILESDIR}"/${PV}/03_hppa-fix-build.patch
+
+	eapply "${FILESDIR}"/${PV}/postrelease/00_pr13685.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/01_pr24580.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/02_pr25572.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/03_pr45262.patch
 }
 
 src_install() {

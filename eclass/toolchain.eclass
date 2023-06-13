@@ -2068,7 +2068,11 @@ toolchain_src_test() {
 	# 'asan' wants to be preloaded first, so does 'sandbox'.
 	# To make asan tests work disable sandbox for all of test suite.
 	# 'backtrace' tests also does not like 'libsandbox.so' presence.
-	SANDBOX_ON=0 LD_PRELOAD= emake -k check
+	if tc_version_is_at_least 3.4 ; then
+		SANDBOX_ON=0 LD_PRELOAD= emake -k check
+	else
+		SANDBOX_ON=0 LD_PRELOAD= emake -k check -j2
+	fi
 
 	einfo "Testing complete! Review the following output to check for success or failure."
 	einfo "Please ignore any 'mail' lines in the summary output below (no mail is sent)."

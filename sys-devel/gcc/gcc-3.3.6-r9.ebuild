@@ -96,6 +96,11 @@ src_prepare() {
 	[[ $(tc-arch) == "hppa" ]] && eapply "${FILESDIR}"/${PV}/06_hppa-fix-build.patch
 
 	eapply "${FILESDIR}"/${PV}/postrelease/00_pr13685.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/01_pr45262.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/02_pr24580.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/03_pr24969.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/04_pr25572.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/05_pr26729.patch
 }
 
 src_install() {
