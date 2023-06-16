@@ -23,6 +23,7 @@ Linux glibc本地工具链——
 * armel：>=gcc-4.1.2
 * armhf：>=gcc-4.4.7
 * hppa1.1：>=gcc-3.1.1
+* loongarch: >=gcc-12
 * m68k：>=gcc-2.2.2
 * mips：>=gcc-2.95.3
 * mipsel：>=gcc-2.95.3
