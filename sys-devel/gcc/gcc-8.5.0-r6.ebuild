@@ -7,7 +7,7 @@ PATCH_VER="2"
 
 inherit toolchain
 
-KEYWORDS="alpha amd64 arm arm64 hppa ia64 m68k mips ppc ppc64 riscv s390 sparc x86"
+KEYWORDS="alpha amd64 arm arm64 hppa ia64 loong m68k mips ppc ppc64 riscv s390 sparc x86"
 
 RDEPEND=""
 BDEPEND="${CATEGORY}/binutils"
@@ -26,6 +26,7 @@ src_prepare() {
 	if has_version '>=sys-libs/glibc-2.32-r1'; then
 		rm -v "${WORKDIR}/patch/27_all_disable-riscv32-ABIs.patch" || die
 	fi
+	rm -v "${WORKDIR}/patch/26_all_sparc-fpu-subregs-91269.patch" || die
 	toolchain_src_prepare
 	use vanilla && return 0
 

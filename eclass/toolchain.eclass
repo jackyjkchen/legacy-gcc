@@ -637,6 +637,7 @@ toolchain_src_prepare() {
 
 	do_gcc_gentoo_patches
 	do_gcc_PIE_patches
+	do_gcc_ARCH_patches
 	do_gcc_MINGW64_patches
 	do_gcc_MINGW_patches
 	do_gcc_CYGWIN_patches
@@ -782,6 +783,13 @@ do_gcc_PIE_patches() {
 	eapply "${WORKDIR}"/piepatch/*.patch
 
 	BRANDING_GCC_PKGVERSION="${BRANDING_GCC_PKGVERSION}, pie-${PIE_VER}"
+}
+
+do_gcc_ARCH_patches() {
+	if [ -d "${FILESDIR}/${GCC_RELEASE_VER}/$(tc-arch)" ]; then
+		einfo "Applying arch port patches ..."
+		eapply "${FILESDIR}"/${GCC_RELEASE_VER}/$(tc-arch)/*.patch
+	fi
 }
 
 do_gcc_MINGW64_patches() {
