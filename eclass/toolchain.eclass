@@ -17,7 +17,7 @@ case ${EAPI} in
 	*) die "${ECLASS}: EAPI ${EAPI:-0} not supported" ;;
 esac
 
-if [[ ! ${_TOOLCHAIN_ECLASS} ]]; then
+if [[ -z ${_TOOLCHAIN_ECLASS} ]]; then
 _TOOLCHAIN_ECLASS=1
 
 DESCRIPTION="The GNU Compiler Collection"
@@ -727,8 +727,21 @@ toolchain_src_prepare() {
 		sed -i 's|A-Za-z0-9|[:alnum:]|g' "${S}"/gcc/*.awk || die #215828
 	fi
 
+	if ! use prefix-guest && [[ -n ${EPREFIX} ]] && tc_version_is_at_least 10 ; then
+		einfo "Prefixifying dynamic linkers..."
+		for f in gcc/config/*/*linux*.h ; do
+			ebegin "  Updating ${f}"
+			if [[ ${f} == gcc/config/rs6000/linux*.h ]]; then
+				sed -i -r "s,(DYNAMIC_LINKER_PREFIX\s+)\"\",\1\"${EPREFIX}\",g" "${f}" || die
+			else
+				sed -i -r "/_DYNAMIC_LINKER/s,([\":])(/lib),\1${EPREFIX}\2,g" "${f}" || die
+			fi
+			eend $?
+		done
+	fi
+
 	# Prevent new texinfo from breaking old versions (see #198182, bug #464008)
-	if tc_version_is_at_least 4.1; then
+	if tc_version_is_between 4.1 10; then
 		einfo "Remove texinfo (bug #198182, bug #464008)"
 		eapply "${FILESDIR}"/gcc-configure-texinfo.patch
 	fi
@@ -1320,6 +1333,21 @@ toolchain_src_configure() {
 				confgcc+=( --enable-threads=posix )
 				;;
 		esac
+
+		if ! use prefix-guest && tc_version_is_at_least 10 ; then
+			# GNU ld scripts, such as those in glibc, reference unprefixed paths
+			# as the sysroot given here is automatically prepended. For
+			# prefix-guest, we use the host's libc instead.
+			if [[ -n ${EPREFIX} ]] ; then
+				confgcc+=( --with-sysroot="${EPREFIX}" )
+			fi
+
+			# We need to build against the right headers and libraries. Again,
+			# for prefix-guest, this is the host's.
+			if [[ -n ${ESYSROOT} ]] ; then
+				confgcc+=( --with-build-sysroot="${ESYSROOT}" )
+			fi
+		fi
 	fi
 
 	# __cxa_atexit is "essential for fully standards-compliant handling of
@@ -2081,11 +2109,36 @@ toolchain_src_test() {
 	else
 		SANDBOX_ON=0 LD_PRELOAD= emake -k check -j2
 	fi
+	local success_tests=$?
+
+	if [[ ! -d "${BROOT}"/var/cache/gcc/${SLOT} ]] && ! [[ ${success_tests} -eq 0 ]] ; then
+		# We have no reference data saved from a previous run to know if
+		# the failures are tolerable or not, so we bail out.
+		eerror "Reference test data does NOT exist at ${BROOT}/var/cache/gcc/${SLOT}"
+		eerror "Tests failed and nothing to compare with, so this is a fatal error."
+		eerror "(Set GCC_TESTS_IGNORE_NO_BASELINE=1 to make this non-fatal for initial run.)"
+
+		if [[ -z ${GCC_TESTS_IGNORE_NO_BASELINE} ]] ; then
+			die "Tests failed (failures occurred with no reference data)"
+		fi
+	fi
 
 	einfo "Testing complete! Review the following output to check for success or failure."
 	einfo "Please ignore any 'mail' lines in the summary output below (no mail is sent)."
 	einfo "Summary:"
 	"${S}"/contrib/test_summary
+
+	# If previous results exist on the system, compare with it
+	# TODO: Distribute some baseline results in e.g. gcc-patches.git?
+	if [[ -d "${BROOT}"/var/cache/gcc/${SLOT} ]] ; then
+		einfo "Comparing with previous cached results at ${BROOT}/var/cache/gcc/${SLOT}"
+
+		# Exit with the following values:
+		# 0 if there is nothing of interest
+		# 1 if there are errors when comparing single test case files
+		# N for the number of errors found when comparing directories
+		"${S}"/contrib/compare_tests "${BROOT}"/var/cache/gcc/${SLOT}/ . || die "Comparison for tests results failed, error code: $?"
+	fi
 }
 
 #---->> src_install <<----
@@ -2336,6 +2389,19 @@ toolchain_src_install() {
 	if tc_version_is_at_least 4.3 ; then
 		pax-mark -r "${D}${PREFIX}/libexec/gcc/${CTARGET}/${GCC_CONFIG_VER}/cc1"
 		pax-mark -r "${D}${PREFIX}/libexec/gcc/${CTARGET}/${GCC_CONFIG_VER}/cc1plus"
+	fi
+
+	if use test ; then
+		# TODO: In future, install orphaned to allow comparison across
+		# more versions even after unmerged? Also would be useful for
+		# historical records and tracking down regressions a while
+		# after they first appeared, but were only just reported.
+		einfo "Copying test results to ${EPREFIX}/var/cache/gcc/${SLOT} for future comparison"
+		(
+			dodir /var/cache/gcc/${SLOT}
+			cd "${WORKDIR}"/build || die
+			find . -name \*.sum -exec cp --parents -v {} "${ED}"/var/cache/gcc/${SLOT} \;
+		)
 	fi
 }
 

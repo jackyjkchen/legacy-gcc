@@ -71,7 +71,7 @@ static void print_number(void) {
         }
 
 #if _WIN64
-/* Windows LLP64 model, long == 32bit, only long long == 64bit */
+/* Windows LLP64 model, long = 32bit, only long long = 64bit */
         printf(" 0x%02X  %llu %s\r\n", i, (unsigned __int64)(count[i]), msg);
 #elif COUNT64
 /* Support 64bit count in 32bit platform */
@@ -81,9 +81,9 @@ static void print_number(void) {
         printf(" 0x%02X  %llu %s\n", i, (unsigned long long)(count[i]), msg);
 #endif
 #else
-/* Posix LP64 model, unsigned long == wordsize */
-/* Windows 32bit platform, unsigned long == 32bit */
-/* WIN/DOS 16bit platform, unsigned long == 32bit */
+/* Posix LP64 model, unsigned long = wordsize */
+/* Windows 32bit platform, unsigned long = 32bit */
+/* WIN/DOS 16bit platform, unsigned long = 32bit */
         printf(" 0x%02X  %lu %s\n", i, (unsigned long)(count[i]), msg);
 #endif
         if (max_count < count[i]) {
