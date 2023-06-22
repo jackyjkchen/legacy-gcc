@@ -60,9 +60,18 @@ inherit toolchain
 KEYWORDS="alpha amd64 m68k mips ppc s390 sparc x86"
 
 RDEPEND=""
-DEPEND="${RDEPEND}
-	${LEGACY_DEPEND}"
-BDEPEND="sys-devel/gcc:3.4.6"
+DEPEND="${CATEGORY}/binutils"
+
+if is_crosscompile ; then
+	BDEPEND="sys-devel/gcc:3.0.4"
+	CC="gcc-3.0.4"
+	CXX="g++-3.0.4"
+else
+	DEPEND="${DEPEND} ${LEGACY_DEPEND}"
+	BDEPEND="sys-devel/gcc:3.4.6"
+	CC=${CC-"gcc-3.4.6"}
+	CXX=${CXX-"g++-3.4.6"}
+fi
 
 src_prepare() {
 	eapply "${FILESDIR}"/${PV}/00_gcc-${PV}.patch

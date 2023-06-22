@@ -19,12 +19,9 @@ inherit toolchain
 KEYWORDS="alpha amd64 arm arm64 hppa ia64 m68k mips ppc ppc64 s390 sh sparc x86"
 
 RDEPEND=""
-DEPEND="${RDEPEND}
-	elibc_glibc? ( >=sys-libs/glibc-2.8 )
-	>=${CATEGORY}/binutils-2.20"
+DEPEND="${CATEGORY}/binutils"
 
 if [[ ${CATEGORY} != cross-* ]] ; then
-	PDEPEND="${PDEPEND} elibc_glibc? ( >=sys-libs/glibc-2.8 )"
 	BDEPEND="sys-devel/gcc:9.5.0"
 	CC="gcc-9.5.0"
 	CXX="g++-9.5.0"

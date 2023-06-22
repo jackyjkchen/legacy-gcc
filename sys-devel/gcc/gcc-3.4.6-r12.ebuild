@@ -61,14 +61,8 @@ inherit toolchain
 
 KEYWORDS="alpha amd64 hppa ia64 m68k mips ppc ppc64 s390 sh sparc x86"
 
-# we need a proper glibc version for the Scrt1.o provided to the pie-ssp specs
-# NOTE: we SHOULD be using at least binutils 2.15.90.0.1 everywhere for proper
-# .eh_frame ld optimisation and symbol visibility support, but it hasnt been
-# well tested in gentoo on any arch other than amd64!!
 RDEPEND=""
-DEPEND="${RDEPEND}
-	>=${CATEGORY}/binutils-2.14.90.0.8-r1
-	amd64? ( >=${CATEGORY}/binutils-2.15.90.0.1.1-r1 )"
+DEPEND="${CATEGORY}/binutils"
 
 if is_crosscompile ; then
 	BDEPEND="sys-devel/gcc:3.4.6"

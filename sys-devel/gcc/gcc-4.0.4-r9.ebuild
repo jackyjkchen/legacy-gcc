@@ -8,8 +8,7 @@ inherit toolchain
 KEYWORDS="alpha amd64 hppa ia64 m68k mips ppc ppc64 s390 sh sparc x86"
 
 RDEPEND=""
-DEPEND="${RDEPEND}
-	>=${CATEGORY}/binutils-2.15.94"
+DEPEND="${CATEGORY}/binutils"
 
 if is_crosscompile ; then
 	BDEPEND="sys-devel/gcc:4.0.4"

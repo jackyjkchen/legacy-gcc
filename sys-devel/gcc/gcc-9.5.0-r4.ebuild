@@ -20,13 +20,6 @@ if [[ ${CATEGORY} == cross-* ]] ; then
 fi
 
 src_prepare() {
-	local p upstreamed_patches=(
-		# add them here
-	)
-	for p in "${upstreamed_patches[@]}"; do
-		rm -v "${WORKDIR}/patch/${p}" || die
-	done
-
 	if has_version '>=sys-libs/glibc-2.32-r1'; then
 		rm -v "${WORKDIR}/patch/25_all_disable-riscv32-ABIs.patch" || die
 	fi

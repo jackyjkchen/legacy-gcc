@@ -60,7 +60,9 @@ inherit toolchain
 
 KEYWORDS="alpha amd64 m68k mips ppc sparc x86"
 
-RDEPEND="${CATEGORY}/binutils"
+RDEPEND=""
+DEPEND="${CATEGORY}/binutils"
+
 if is_crosscompile ; then
 	BDEPEND="sys-devel/gcc:2.95.3"
 	CC="gcc-2.95.3"
