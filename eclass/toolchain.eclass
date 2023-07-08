@@ -519,42 +519,18 @@ get_gcc_src_uri() {
 
 	# Set where to download gcc itself depending on whether we're using a
 	# live git tree, snapshot, or release tarball.
-	if tc_is_live ; then
-		: # Nothing to do w/git snapshots.
-	elif [[ -n ${GCC_TARBALL_SRC_URI} ]] ; then
-		# Pull gcc tarball from another location. Frequently used by gnat-gpl.
-		GCC_SRC_URI="${GCC_TARBALL_SRC_URI}"
-	elif [[ -n ${SNAPSHOT} ]] ; then
-		GCC_SRC_URI="https://gcc.gnu.org/pub/gcc/snapshots/${SNAPSHOT}/gcc-${SNAPSHOT}.tar.xz"
-	else
-		if tc_version_is_at_least 5 ; then
-			GCC_SRC_URI="http://mirrors.ustc.edu.cn/gnu/gcc/gcc-${GCC_PV}/gcc-${GCC_RELEASE_VER}.tar.xz"
-		elif tc_version_is_between 3.2 5 ; then
-			GCC_SRC_URI="http://mirrors.ustc.edu.cn/gnu/gcc/gcc-${GCC_PV}/gcc-${GCC_RELEASE_VER}.tar.bz2"
-		elif tc_version_is_between 3.0 3.2 ; then
-			GCC_SRC_URI="http://mirrors.ustc.edu.cn/gnu/gcc/gcc-${GCC_PV}/gcc-${GCC_RELEASE_VER}.tar.gz"
-		elif [[ ${PN} == "egcs" ]] ; then
-			GCC_SRC_URI="http://gcc.gnu.org/pub/gcc/old-releases/egcs/${P}.tar.bz2"
-		elif tc_version_is_between 2.0 3.0 ; then
-			GCC_SRC_URI="http://gcc.gnu.org/pub/gcc/old-releases/gcc-2/gcc-${GCC_PV}.tar.bz2"
-		elif tc_version_is_between 1.0 2.0 ; then
-			GCC_SRC_URI="http://gcc.gnu.org/pub/gcc/old-releases/gcc-1/gcc-${GCC_PV}.tar.bz2"
-		fi
-	fi
-
-	if tc_version_is_at_least 10 ; then
-		[[ -n ${PATCH_VER} ]] && \
-			GCC_SRC_URI+=" $(gentoo_urls gcc-${PATCH_GCC_VER}-patches-${PATCH_VER}.tar.${TOOLCHAIN_PATCH_SUFFIX})"
-		[[ -n ${MUSL_VER} ]] && \
-			GCC_SRC_URI+=" $(gentoo_urls gcc-${MUSL_GCC_VER}-musl-patches-${MUSL_VER}.tar.${TOOLCHAIN_PATCH_SUFFIX})"
-
-		[[ -n ${PIE_VER} ]] && \
-			PIE_CORE=${PIE_CORE:-gcc-${PIE_GCC_VER}-piepatches-v${PIE_VER}.tar.${TOOLCHAIN_PATCH_SUFFIX}} && \
-			GCC_SRC_URI+=" $(gentoo_urls ${PIE_CORE})"
-
-		# gcc minispec for the hardened gcc 4 compiler
-		[[ -n ${SPECS_VER} ]] && \
-			GCC_SRC_URI+=" $(gentoo_urls gcc-${SPECS_GCC_VER}-specs-${SPECS_VER}.tar.${TOOLCHAIN_PATCH_SUFFIX})"
+	if tc_version_is_at_least 5 ; then
+		GCC_SRC_URI="http://mirrors.ustc.edu.cn/gnu/gcc/gcc-${GCC_PV}/gcc-${GCC_RELEASE_VER}.tar.xz"
+	elif tc_version_is_between 3.2 5 ; then
+		GCC_SRC_URI="http://mirrors.ustc.edu.cn/gnu/gcc/gcc-${GCC_PV}/gcc-${GCC_RELEASE_VER}.tar.bz2"
+	elif tc_version_is_between 3.0 3.2 ; then
+		GCC_SRC_URI="http://mirrors.ustc.edu.cn/gnu/gcc/gcc-${GCC_PV}/gcc-${GCC_RELEASE_VER}.tar.gz"
+	elif [[ ${PN} == "egcs" ]] ; then
+		GCC_SRC_URI="http://gcc.gnu.org/pub/gcc/old-releases/egcs/${P}.tar.bz2"
+	elif tc_version_is_between 2.0 3.0 ; then
+		GCC_SRC_URI="http://gcc.gnu.org/pub/gcc/old-releases/gcc-2/gcc-${GCC_PV}.tar.bz2"
+	elif tc_version_is_between 1.0 2.0 ; then
+		GCC_SRC_URI="http://gcc.gnu.org/pub/gcc/old-releases/gcc-1/gcc-${GCC_PV}.tar.bz2"
 	fi
 
 	echo "${GCC_SRC_URI}"
@@ -568,18 +544,23 @@ unpack_gcc_patchset() {
 	export SPECS_GCC_VER=${SPECS_GCC_VER:-${GCC_RELEASE_VER}}
 
 	if [[ -n ${PATCH_VER} ]] ; then
-		local PATCH_FILE=gcc-${PATCH_GCC_VER}-patches-${PATCH_VER}.tar.bz2
+		local PATCH_FILE=gcc-${PATCH_GCC_VER}-patches-${PATCH_VER}.tar.${TOOLCHAIN_PATCH_SUFFIX}
 		tar -pxf ${FILESDIR}/patchset/${PATCH_FILE} -C ${WORKDIR}/ || die
 	fi
 
+	if [[ -n ${MUSL_VER} ]] ; then
+		local MUSL_FILE=gcc-${PATCH_GCC_VER}-musl-patches-${MUSL_VER}.tar.${TOOLCHAIN_PATCH_SUFFIX}
+		tar -pxf ${FILESDIR}/patchset/${MUSL_FILE} -C ${WORKDIR}/ || die
+	fi
+
 	if [[ -n ${PIE_VER} ]] ; then
-		local PIE_CORE=${PIE_CORE:-gcc-${PIE_GCC_VER}-piepatches-v${PIE_VER}.tar.bz2}
+		local PIE_CORE=${PIE_CORE:-gcc-${PIE_GCC_VER}-piepatches-v${PIE_VER}.tar.${TOOLCHAIN_PATCH_SUFFIX}}
 		tar -pxf ${FILESDIR}/patchset/${PIE_CORE} -C ${WORKDIR}/ || die
 	fi
 
 	# gcc minispec for the hardened gcc 4 compiler
 	if [[ -n ${SPECS_VER} ]] ; then
-		local SPECS_FILE=gcc-${SPECS_GCC_VER}-specs-${SPECS_VER}.tar.bz2
+		local SPECS_FILE=gcc-${SPECS_GCC_VER}-specs-${SPECS_VER}.tar.${TOOLCHAIN_PATCH_SUFFIX}
 		tar -pxf ${FILESDIR}/patchset/${SPECS_FILE} -C ${WORKDIR}/ || die
 	fi
 
@@ -625,7 +606,7 @@ toolchain_src_unpack() {
 	fi
 
 	default_src_unpack
-	tc_version_is_at_least 10 || unpack_gcc_patchset
+	tc_version_is_at_least 11 || unpack_gcc_patchset
 	#tc_version_is_at_least 4.7 || git_init_src
 }
 
