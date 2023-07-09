@@ -16,9 +16,9 @@ RDEPEND=""
 BDEPEND="${CATEGORY}/binutils"
 
 if [[ ${CATEGORY} == cross-* ]] ; then
-	BDEPEND="${BDEPEND} sys-devel/gcc:10.5.0"
-	CC="gcc-10.5.0"
-	CXX="g++-10.5.0"
+	BDEPEND="${BDEPEND} sys-devel/gcc:10"
+	CC="gcc-10"
+	CXX="g++-10"
 fi
 
 src_prepare() {
