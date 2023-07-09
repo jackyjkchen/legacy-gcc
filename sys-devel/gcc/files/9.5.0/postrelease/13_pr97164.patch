@@ -1,0 +1,105 @@
+diff --git a/gcc/stor-layout.c b/gcc/stor-layout.c
+index fb7ff272c..0dda458ca 100644
+--- a/gcc/stor-layout.c
++++ b/gcc/stor-layout.c
+@@ -2559,10 +2559,19 @@ layout_type (tree type)
+ 	    /* If TYPE_SIZE_UNIT overflowed, then it is certainly larger than
+ 	       TYPE_ALIGN_UNIT.  */
+ 	    && !TREE_OVERFLOW (TYPE_SIZE_UNIT (element))
+-	    && !integer_zerop (TYPE_SIZE_UNIT (element))
+-	    && compare_tree_int (TYPE_SIZE_UNIT (element),
+-			  	 TYPE_ALIGN_UNIT (element)) < 0)
+-	  error ("alignment of array elements is greater than element size");
++	    && !integer_zerop (TYPE_SIZE_UNIT (element)))
++	  {
++	    if (compare_tree_int (TYPE_SIZE_UNIT (element),
++				  TYPE_ALIGN_UNIT (element)) < 0)
++	      error ("alignment of array elements is greater than "
++		     "element size");
++	    else if (TYPE_ALIGN_UNIT (element) > 1
++		     && (wi::zext (wi::to_wide (TYPE_SIZE_UNIT (element)),
++				  ffs_hwi (TYPE_ALIGN_UNIT (element)) - 1)
++			 != 0))
++	      error ("size of array element is not a multiple of its "
++		     "alignment");
++	  }
+ 	break;
+       }
+ 
+diff --git a/gcc/testsuite/c-c++-common/pr97164.c b/gcc/testsuite/c-c++-common/pr97164.c
+new file mode 100644
+index 000000000..8ffb92894
+--- /dev/null
++++ b/gcc/testsuite/c-c++-common/pr97164.c
+@@ -0,0 +1,15 @@
++/* PR tree-optimization/97164 */
++/* { dg-do compile } */
++
++typedef struct { int *a; char b[64]; } A __attribute__((aligned (64)));
++struct B { A d[4]; } b;	/* { dg-error "size of array element is not a multiple of its alignment" } */
++void foo (void);
++
++int *
++bar (void)
++{
++  struct B *h = &b;
++  if (h->d[1].a)
++    foo ();
++  return h->d[1].a;
++}
+diff --git a/gcc/testsuite/gcc.c-torture/execute/pr36093.c b/gcc/testsuite/gcc.dg/pr36093.c
+similarity index 79%
+rename from gcc/testsuite/gcc.c-torture/execute/pr36093.c
+rename to gcc/testsuite/gcc.dg/pr36093.c
+index dac5720fa..84746416f 100644
+--- a/gcc/testsuite/gcc.c-torture/execute/pr36093.c
++++ b/gcc/testsuite/gcc.dg/pr36093.c
+@@ -1,3 +1,4 @@
++/* { dg-do compile } */
+ /* { dg-skip-if "small alignment" { pdp11-*-* } } */
+ 
+ extern void abort (void);
+@@ -7,7 +8,7 @@ typedef struct Bar {
+ } Bar __attribute__((__aligned__(128)));
+ 
+ typedef struct Foo {
+-      Bar bar[4];
++      Bar bar[4];	/* { dg-error "size of array element is not a multiple of its alignment" } */
+ } Foo;
+ 
+ Foo foo[4];
+diff --git a/gcc/testsuite/gcc.c-torture/execute/pr43783.c b/gcc/testsuite/gcc.dg/pr43783.c
+similarity index 71%
+rename from gcc/testsuite/gcc.c-torture/execute/pr43783.c
+rename to gcc/testsuite/gcc.dg/pr43783.c
+index 1eff2b980..196735b1b 100644
+--- a/gcc/testsuite/gcc.c-torture/execute/pr43783.c
++++ b/gcc/testsuite/gcc.dg/pr43783.c
+@@ -1,3 +1,5 @@
++/* { dg-do compile } */
++/* { dg-options "" } */
+ /* { dg-skip-if "small alignment" { pdp11-*-* } } */
+ 
+ typedef __attribute__((aligned(16)))
+@@ -5,7 +7,7 @@ struct {
+   unsigned long long w[3];
+ } UINT192;
+ 
+-UINT192 bid_Kx192[32];
++UINT192 bid_Kx192[32];	/* { dg-error "size of array element is not a multiple of its alignment" } */
+ 
+ extern void abort (void);
+ 
+diff --git a/libgcc/config/libbid/bid_functions.h b/libgcc/config/libbid/bid_functions.h
+index 3a9c83a00..a00bfe069 100644
+--- a/libgcc/config/libbid/bid_functions.h
++++ b/libgcc/config/libbid/bid_functions.h
+@@ -81,7 +81,7 @@ ALIGN (16)
+ #define SQRT80 sqrtw
+ #endif
+ 
+-     typedef ALIGN (16)
++     typedef ALIGN (8)
+      struct {
+        UINT64 w[3];
+      } UINT192;

@@ -1,0 +1,508 @@
+diff --git a/gcc/testsuite/gcc.dg/Warray-bounds-56.c b/gcc/testsuite/gcc.dg/Warray-bounds-56.c
+index 399c9b263..04c26a659 100644
+--- a/gcc/testsuite/gcc.dg/Warray-bounds-56.c
++++ b/gcc/testsuite/gcc.dg/Warray-bounds-56.c
+@@ -42,8 +42,8 @@ struct Flex f3 = { 3, { 1, 2, 3 } };
+ 
+ NOIPA void test_strcpy_flexarray (void)
+ {
+-  T (S (0), fx);                // { dg-bogus "\\\[-Warray-bounds" "pr92815" { xfail *-*-*} }
+-  T (S (9), fx);                // { dg-bogus "\\\[-Warray-bounds" "pr92815" { xfail *-*-*} }
++  T (S (0), fx);                // { dg-bogus "\\\[-Warray-bounds" "pr92815" }
++  T (S (9), fx);                // { dg-bogus "\\\[-Warray-bounds" "pr92815" }
+ 
+   T (S (0), f1);
+   T (S (1), f1);                // { dg-warning "\\\[-Warray-bounds" }
+diff --git a/gcc/testsuite/gcc.dg/builtin-object-size-20.c b/gcc/testsuite/gcc.dg/builtin-object-size-20.c
+new file mode 100644
+index 000000000..bed973c2c
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/builtin-object-size-20.c
+@@ -0,0 +1,315 @@
++/* PR middle-end/92815 - spurious -Wstringop-overflow writing into
++   a flexible array of an extern struct
++   { dg-do compile }
++   { dg-options "-O -Wall -fdump-tree-optimized" } */
++
++#define ASSERT(expr) ((expr) ? (void)0 : fail (__LINE__))
++#define bos0(expr) __builtin_object_size (expr, 1)
++#define bos1(expr) __builtin_object_size (expr, 1)
++#define bos2(expr) __builtin_object_size (expr, 2)
++#define bos3(expr) __builtin_object_size (expr, 3)
++
++typedef __INT16_TYPE__ int16_t;
++typedef __INT32_TYPE__ int32_t;
++typedef __INT64_TYPE__ int64_t;
++typedef __SIZE_TYPE__  size_t;
++
++
++extern void fail (int);
++
++
++/* Verify sizes of a struct with a flexible array member and no padding.  */
++
++struct ACX { char n, a[]; };
++
++struct ACX ac0 = { };
++struct ACX ac1 = { 1, { 1 } };
++struct ACX ac2 = { 2, { 1, 2 } };
++struct ACX ac3 = { 3, { 1, 2, 3 } };
++
++extern struct ACX eacx;
++
++void facx (void)
++{
++  ASSERT (bos0 (&ac0) == sizeof ac0);
++  ASSERT (bos0 (&ac1) == 2);
++  ASSERT (bos0 (&ac2) == 3);
++  ASSERT (bos0 (&ac3) == 4);
++  ASSERT (bos0 (&eacx) == (size_t)-1);
++
++  ASSERT (bos1 (&ac0) == sizeof ac0);
++  ASSERT (bos1 (&ac1) == 2);
++  ASSERT (bos1 (&ac2) == 3);
++  ASSERT (bos1 (&ac3) == 4);
++  ASSERT (bos1 (&eacx) == (size_t)-1);
++
++  ASSERT (bos2 (&ac0) == sizeof ac0);
++  ASSERT (bos2 (&ac1) == 2);
++  ASSERT (bos2 (&ac2) == 3);
++  ASSERT (bos2 (&ac3) == 4);
++  ASSERT (bos2 (&eacx) == sizeof eacx);
++
++  ASSERT (bos3 (&ac0) == sizeof ac0);
++  ASSERT (bos3 (&ac1) == 2);
++  ASSERT (bos3 (&ac2) == 3);
++  ASSERT (bos3 (&ac3) == 4);
++  ASSERT (bos3 (&eacx) == sizeof eacx);
++}
++
++
++
++/* Verify sizes of a struct with a flexible array member and 1 byte
++   of tail padding.  */
++
++struct AI16CX { int16_t i; char n, a[]; };
++
++struct AI16CX ai16c0 = { 0 };
++struct AI16CX ai16c1 = { 0, 1, { 1 } };
++struct AI16CX ai16c2 = { 0, 2, { 1, 2 } };
++struct AI16CX ai16c3 = { 0, 3, { 1, 2, 3 } };
++struct AI16CX ai16c4 = { 0, 4, { 1, 2, 3, 4 } };
++struct AI16CX ai16c5 = { 0, 5, { 1, 2, 3, 4, 5 } };
++struct AI16CX ai16c6 = { 0, 6, { 1, 2, 3, 4, 5, 6 } };
++struct AI16CX ai16c7 = { 0, 7, { 1, 2, 3, 4, 5, 6, 7 } };
++struct AI16CX ai16c8 = { 0, 8, { 1, 2, 3, 4, 5, 6, 7, 8 } };
++
++extern struct AI16CX eai16cx;
++
++void fai16cx (void)
++{
++  ASSERT (bos0 (&ai16c0) == sizeof ai16c0);
++  ASSERT (bos0 (&ai16c1) == sizeof ai16c1);
++  ASSERT (bos0 (&ai16c2) == sizeof ai16c2 + 1);
++  ASSERT (bos0 (&ai16c3) == sizeof ai16c3 + 2);
++
++  ASSERT (bos0 (&ai16c4) == sizeof ai16c4 + 3);
++  ASSERT (bos0 (&ai16c5) == sizeof ai16c5 + 4);
++  ASSERT (bos0 (&ai16c6) == sizeof ai16c6 + 5);
++  ASSERT (bos0 (&ai16c7) == sizeof ai16c6 + 6);
++  ASSERT (bos0 (&ai16c8) == sizeof ai16c6 + 7);
++
++  ASSERT (bos0 (&eai16cx) == (size_t)-1);
++
++
++  ASSERT (bos1 (&ai16c0) == sizeof ai16c0);
++  ASSERT (bos1 (&ai16c1) == sizeof ai16c1);
++  ASSERT (bos1 (&ai16c2) == sizeof ai16c2 + 1);
++  ASSERT (bos1 (&ai16c3) == sizeof ai16c3 + 2);
++
++  ASSERT (bos1 (&ai16c4) == sizeof ai16c4 + 3);
++  ASSERT (bos1 (&ai16c5) == sizeof ai16c5 + 4);
++  ASSERT (bos1 (&ai16c6) == sizeof ai16c6 + 5);
++  ASSERT (bos1 (&ai16c7) == sizeof ai16c6 + 6);
++  ASSERT (bos1 (&ai16c8) == sizeof ai16c6 + 7);
++
++  ASSERT (bos1 (&eai16cx) == (size_t)-1);
++
++
++  ASSERT (bos2 (&ai16c0) == sizeof ai16c0);
++  ASSERT (bos2 (&ai16c1) == sizeof ai16c1);
++  ASSERT (bos2 (&ai16c2) == sizeof ai16c2 + 1);
++  ASSERT (bos2 (&ai16c3) == sizeof ai16c3 + 2);
++
++  ASSERT (bos2 (&ai16c4) == sizeof ai16c4 + 3);
++  ASSERT (bos2 (&ai16c5) == sizeof ai16c5 + 4);
++  ASSERT (bos2 (&ai16c6) == sizeof ai16c6 + 5);
++  ASSERT (bos2 (&ai16c7) == sizeof ai16c6 + 6);
++  ASSERT (bos2 (&ai16c8) == sizeof ai16c6 + 7);
++
++  ASSERT (bos2 (&eai16cx) == sizeof eai16cx);
++
++
++  ASSERT (bos3 (&ai16c0) == sizeof ai16c0);
++  ASSERT (bos3 (&ai16c1) == sizeof ai16c1);
++  ASSERT (bos3 (&ai16c2) == sizeof ai16c2 + 1);
++  ASSERT (bos3 (&ai16c3) == sizeof ai16c3 + 2);
++
++  ASSERT (bos3 (&ai16c4) == sizeof ai16c4 + 3);
++  ASSERT (bos3 (&ai16c5) == sizeof ai16c5 + 4);
++  ASSERT (bos3 (&ai16c6) == sizeof ai16c6 + 5);
++  ASSERT (bos3 (&ai16c7) == sizeof ai16c6 + 6);
++  ASSERT (bos3 (&ai16c8) == sizeof ai16c6 + 7);
++
++  ASSERT (bos3 (&eai16cx) == sizeof eai16cx);
++}
++
++
++/* Verify sizes of a struct with a flexible array member and 3 bytes
++   of tail padding.  */
++
++struct AI32CX { int32_t i; char n, a[]; };
++
++struct AI32CX ai32c0 = { 0 };
++struct AI32CX ai32c1 = { 0, 1, { 1 } };
++struct AI32CX ai32c2 = { 0, 2, { 1, 2 } };
++struct AI32CX ai32c3 = { 0, 3, { 1, 2, 3 } };
++struct AI32CX ai32c4 = { 0, 4, { 1, 2, 3, 4 } };
++struct AI32CX ai32c5 = { 0, 5, { 1, 2, 3, 4, 5 } };
++struct AI32CX ai32c6 = { 0, 6, { 1, 2, 3, 4, 5, 6 } };
++struct AI32CX ai32c7 = { 0, 7, { 1, 2, 3, 4, 5, 6, 7 } };
++struct AI32CX ai32c8 = { 0, 8, { 1, 2, 3, 4, 5, 6, 7, 8 } };
++
++extern struct AI32CX eai32cx;
++
++void fai32cx (void)
++{
++  ASSERT (bos0 (&ai32c0) == sizeof ai32c0);
++  ASSERT (bos0 (&ai32c1) == sizeof ai32c1);
++  ASSERT (bos0 (&ai32c2) == sizeof ai32c2);
++  ASSERT (bos0 (&ai32c3) == sizeof ai32c3);
++
++  ASSERT (bos0 (&ai32c4) == sizeof ai32c4 + 1);
++  ASSERT (bos0 (&ai32c5) == sizeof ai32c5 + 2);
++  ASSERT (bos0 (&ai32c6) == sizeof ai32c6 + 3);
++  ASSERT (bos0 (&ai32c7) == sizeof ai32c6 + 4);
++  ASSERT (bos0 (&ai32c8) == sizeof ai32c6 + 5);
++
++  ASSERT (bos0 (&eai32cx) == (size_t)-1);
++
++
++  ASSERT (bos1 (&ai32c0) == sizeof ai32c0);
++  ASSERT (bos1 (&ai32c1) == sizeof ai32c1);
++  ASSERT (bos1 (&ai32c2) == sizeof ai32c2);
++  ASSERT (bos1 (&ai32c3) == sizeof ai32c3);
++
++  ASSERT (bos1 (&ai32c4) == sizeof ai32c4 + 1);
++  ASSERT (bos1 (&ai32c5) == sizeof ai32c5 + 2);
++  ASSERT (bos1 (&ai32c6) == sizeof ai32c6 + 3);
++  ASSERT (bos1 (&ai32c7) == sizeof ai32c6 + 4);
++  ASSERT (bos1 (&ai32c8) == sizeof ai32c6 + 5);
++
++  ASSERT (bos1 (&eai32cx) == (size_t)-1);
++
++
++  ASSERT (bos2 (&ai32c0) == sizeof ai32c0);
++  ASSERT (bos2 (&ai32c1) == sizeof ai32c1);
++  ASSERT (bos2 (&ai32c2) == sizeof ai32c2);
++  ASSERT (bos2 (&ai32c3) == sizeof ai32c3);
++
++  ASSERT (bos2 (&ai32c4) == sizeof ai32c4 + 1);
++  ASSERT (bos2 (&ai32c5) == sizeof ai32c5 + 2);
++  ASSERT (bos2 (&ai32c6) == sizeof ai32c6 + 3);
++  ASSERT (bos2 (&ai32c7) == sizeof ai32c6 + 4);
++  ASSERT (bos2 (&ai32c8) == sizeof ai32c6 + 5);
++
++  ASSERT (bos2 (&eai32cx) == sizeof eai32cx);
++
++
++  ASSERT (bos3 (&ai32c0) == sizeof ai32c0);
++  ASSERT (bos3 (&ai32c1) == sizeof ai32c1);
++  ASSERT (bos3 (&ai32c2) == sizeof ai32c2);
++  ASSERT (bos3 (&ai32c3) == sizeof ai32c3);
++
++  ASSERT (bos3 (&ai32c4) == sizeof ai32c4 + 1);
++  ASSERT (bos3 (&ai32c5) == sizeof ai32c5 + 2);
++  ASSERT (bos3 (&ai32c6) == sizeof ai32c6 + 3);
++  ASSERT (bos3 (&ai32c7) == sizeof ai32c6 + 4);
++  ASSERT (bos3 (&ai32c8) == sizeof ai32c6 + 5);
++
++  ASSERT (bos3 (&eai32cx) == sizeof eai32cx);
++}
++
++
++/* Verify sizes of a struct with a flexible array member and 7 bytes
++   of tail padding.  */
++
++struct AI64CX { int64_t i __attribute__ ((aligned (8))); char n, a[]; };
++
++struct AI64CX ai64c0 = { 0 };
++struct AI64CX ai64c1 = { 0, 1, { 1 } };
++struct AI64CX ai64c2 = { 0, 2, { 1, 2 } };
++struct AI64CX ai64c3 = { 0, 3, { 1, 2, 3 } };
++struct AI64CX ai64c4 = { 0, 4, { 1, 2, 3, 4 } };
++struct AI64CX ai64c5 = { 0, 5, { 1, 2, 3, 4, 5 } };
++struct AI64CX ai64c6 = { 0, 6, { 1, 2, 3, 4, 5, 6 } };
++struct AI64CX ai64c7 = { 0, 7, { 1, 2, 3, 4, 5, 6, 7 } };
++struct AI64CX ai64c8 = { 0, 8, { 1, 2, 3, 4, 5, 6, 7, 8 } };
++struct AI64CX ai64c9 = { 0, 8, { 1, 2, 3, 4, 5, 6, 7, 8, 9 } };
++
++extern struct AI64CX eai64cx;
++
++void fai64cx (void)
++{
++  ASSERT (bos0 (&ai64c0) == sizeof ai64c0);
++  ASSERT (bos0 (&ai64c1) == sizeof ai64c1);
++  ASSERT (bos0 (&ai64c2) == sizeof ai64c2);
++  ASSERT (bos0 (&ai64c3) == sizeof ai64c3);
++  ASSERT (bos0 (&ai64c4) == sizeof ai64c4);
++  ASSERT (bos0 (&ai64c5) == sizeof ai64c5);
++  ASSERT (bos0 (&ai64c6) == sizeof ai64c6);
++  ASSERT (bos0 (&ai64c7) == sizeof ai64c7);
++
++  ASSERT (bos0 (&ai64c8) == sizeof ai64c8 + 1);
++  ASSERT (bos0 (&ai64c9) == sizeof ai64c9 + 2);
++
++  ASSERT (bos0 (&eai64cx) == (size_t)-1);
++
++
++  ASSERT (bos1 (&ai64c0) == sizeof ai64c0);
++  ASSERT (bos1 (&ai64c1) == sizeof ai64c1);
++  ASSERT (bos1 (&ai64c2) == sizeof ai64c2);
++  ASSERT (bos1 (&ai64c3) == sizeof ai64c3);
++  ASSERT (bos1 (&ai64c4) == sizeof ai64c4);
++  ASSERT (bos1 (&ai64c5) == sizeof ai64c5);
++  ASSERT (bos1 (&ai64c6) == sizeof ai64c6);
++  ASSERT (bos1 (&ai64c7) == sizeof ai64c7);
++
++  ASSERT (bos1 (&ai64c8) == sizeof ai64c8 + 1);
++  ASSERT (bos1 (&ai64c9) == sizeof ai64c9 + 2);
++
++  ASSERT (bos1 (&eai64cx) == (size_t)-1);
++
++
++  ASSERT (bos2 (&ai64c0) == sizeof ai64c0);
++  ASSERT (bos2 (&ai64c1) == sizeof ai64c1);
++  ASSERT (bos2 (&ai64c2) == sizeof ai64c2);
++  ASSERT (bos2 (&ai64c3) == sizeof ai64c3);
++  ASSERT (bos2 (&ai64c4) == sizeof ai64c4);
++  ASSERT (bos2 (&ai64c5) == sizeof ai64c5);
++  ASSERT (bos2 (&ai64c6) == sizeof ai64c6);
++  ASSERT (bos2 (&ai64c7) == sizeof ai64c7);
++
++  ASSERT (bos2 (&ai64c8) == sizeof ai64c8 + 1);
++  ASSERT (bos2 (&ai64c9) == sizeof ai64c9 + 2);
++
++  ASSERT (bos2 (&eai64cx) == sizeof eai64cx);
++
++  ASSERT (bos3 (&ai64c0) == sizeof ai64c0);
++  ASSERT (bos3 (&ai64c1) == sizeof ai64c1);
++  ASSERT (bos3 (&ai64c2) == sizeof ai64c2);
++  ASSERT (bos3 (&ai64c3) == sizeof ai64c3);
++  ASSERT (bos3 (&ai64c4) == sizeof ai64c4);
++  ASSERT (bos3 (&ai64c5) == sizeof ai64c5);
++  ASSERT (bos3 (&ai64c6) == sizeof ai64c6);
++  ASSERT (bos3 (&ai64c7) == sizeof ai64c7);
++
++  ASSERT (bos3 (&ai64c8) == sizeof ai64c8 + 1);
++  ASSERT (bos3 (&ai64c9) == sizeof ai64c9 + 2);
++
++  ASSERT (bos3 (&eai64cx) == sizeof eai64cx);
++}
++
++
++/* Also verify sizes of a struct with a zero length array member.  */
++
++struct A0C0 { char n, a[0]; };
++
++struct A0C0 a0c0 = { };
++extern struct A0C0 ea0c0;
++
++void fa0c0 (void)
++{
++  ASSERT (bos0 (&a0c0) == sizeof a0c0);
++  ASSERT (bos0 (&ea0c0) == sizeof ea0c0);
++
++  ASSERT (bos1 (&a0c0) == sizeof a0c0);
++  ASSERT (bos1 (&a0c0) == sizeof ea0c0);
++
++  ASSERT (bos2 (&a0c0) == sizeof a0c0);
++  ASSERT (bos2 (&a0c0) == sizeof ea0c0);
++
++  ASSERT (bos3 (&a0c0) == sizeof a0c0);
++  ASSERT (bos3 (&a0c0) == sizeof ea0c0);
++}
++
++/* { dg-final { scan-tree-dump-not "fail" "optimized" } } */
+diff --git a/gcc/testsuite/gcc.dg/builtin-object-size-21.c b/gcc/testsuite/gcc.dg/builtin-object-size-21.c
+new file mode 100644
+index 000000000..1c42374ba
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/builtin-object-size-21.c
+@@ -0,0 +1,51 @@
++/* PR middle-end/92815 - spurious -Wstringop-overflow writing into
++   a flexible array of an extern struct
++   { dg-do compile }
++   { dg-options "-Wall -fdump-tree-optimized" } */
++
++#define PTRDIFF_MAX __PTRDIFF_MAX__
++
++typedef __SIZE_TYPE__ size_t;
++
++#define bos0(expr) __builtin_object_size (expr, 0)
++#define bos1(expr) __builtin_object_size (expr, 1)
++#define bos2(expr) __builtin_object_size (expr, 2)
++#define bos3(expr) __builtin_object_size (expr, 3)
++
++void fail (const char*, ...);
++
++#define A(x, n01, n23)							\
++  ((bos0 (&x) == n01 ? (void)0 : fail (#x, __LINE__, bos0 (&x), n01)),	\
++   (bos1 (&x) == n01 ? (void)0 : fail (#x, __LINE__, bos1 (&x), n01)),	\
++   (bos2 (&x) == n23 ? (void)0 : fail (#x, __LINE__, bos2 (&x), n23)),	\
++   (bos3 (&x) == n23 ? (void)0 : fail (#x, __LINE__, bos3 (&x), n23)))
++
++struct Ax_m3 { char a[PTRDIFF_MAX - 3], ax[]; };
++
++struct Ax_m3 xm3_0 = { { 0 } };
++struct Ax_m3 xm3_1 = { { 0 }, { 1 } };
++struct Ax_m3 xm3_2 = { { 0 }, { 1, 2 } };
++struct Ax_m3 xm3_3 = { { 0 }, { 1, 2, 3 } };
++struct Ax_m3 xm3_4 = { { 0 }, { 1, 2, 3, 3 } };   // { dg-error "too large" }
++
++void test_axm3 (void)
++{
++  A (xm3_0, sizeof xm3_0, sizeof xm3_0);
++  A (xm3_1, sizeof xm3_1 + 1, sizeof xm3_1 + 1);
++  A (xm3_2, sizeof xm3_2 + 2, sizeof xm3_2 + 2);
++  A (xm3_3, (size_t)-1, 0);   // expect failure
++  A (xm3_4, (size_t)-1, 0);   // expect failure
++}
++
++
++struct Ax_mx { char a[PTRDIFF_MAX], ax[]; };
++struct Ax_mx xmx_0 = { { 0 } };
++struct Ax_mx xmx_1 = { { 0 }, { 1 } };            // { dg-error "too large" }
++extern struct Ax_mx xmx_x;
++
++void test_axmx (void)
++{
++  A (xmx_0, (size_t)-1, 0);   // expect failure
++  A (xmx_1, (size_t)-1, 0);   // expect failure
++  A (xmx_x, (size_t)-1, 0);   // expect failure
++}
+diff --git a/gcc/tree-object-size.c b/gcc/tree-object-size.c
+index 255ea63ca..8855065f5 100644
+--- a/gcc/tree-object-size.c
++++ b/gcc/tree-object-size.c
+@@ -166,6 +166,42 @@ compute_object_offset (const_tree expr, const_tree var)
+   return size_binop (code, base, off);
+ }
+ 
++/* Returns the size of the object designated by DECL considering its
++   initializer if it either has one or if it would not affect its size,
++   otherwise the size of the object without the initializer when MIN
++   is true, else null.  An object's initializer affects the object's
++   size if it's a struct type with a flexible array member.  */
++
++static tree
++decl_init_size (tree decl, bool min)
++{
++  tree size = DECL_SIZE_UNIT (decl);
++  tree type = TREE_TYPE (decl);
++  if (TREE_CODE (type) != RECORD_TYPE)
++    return size;
++
++  tree last = last_field (type);
++  if (!last)
++    return size;
++
++  tree last_type = TREE_TYPE (last);
++  if (TREE_CODE (last_type) != ARRAY_TYPE
++      || TYPE_SIZE (last_type))
++    return size;
++
++  /* Use TYPE_SIZE_UNIT; DECL_SIZE_UNIT sometimes reflects the size
++     of the initializer and sometimes doesn't.  */
++  size = TYPE_SIZE_UNIT (type);
++  tree ref = build3 (COMPONENT_REF, type, decl, last, NULL_TREE);
++  tree compsize = component_ref_size (ref);
++  if (!compsize)
++    return min ? size : NULL_TREE;
++
++  /* The size includes tail padding and initializer elements.  */
++  tree pos = byte_position (last);
++  size = fold_build2 (PLUS_EXPR, TREE_TYPE (size), pos, compsize);
++  return size;
++}
+ 
+ /* Compute __builtin_object_size for PTR, which is a ADDR_EXPR.
+    OBJECT_SIZE_TYPE is the second argument from __builtin_object_size.
+@@ -194,8 +230,10 @@ addr_object_size (struct object_size_info *osi, const_tree ptr,
+   while (handled_component_p (pt_var))
+     pt_var = TREE_OPERAND (pt_var, 0);
+ 
+-  if (pt_var
+-      && TREE_CODE (pt_var) == MEM_REF)
++  if (!pt_var)
++    return false;
++
++  if (TREE_CODE (pt_var) == MEM_REF)
+     {
+       unsigned HOST_WIDE_INT sz;
+ 
+@@ -236,24 +274,26 @@ addr_object_size (struct object_size_info *osi, const_tree ptr,
+       if (sz != unknown[object_size_type] && sz < offset_limit)
+ 	pt_var_size = size_int (sz);
+     }
+-  else if (pt_var
+-	   && DECL_P (pt_var)
+-	   && tree_fits_uhwi_p (DECL_SIZE_UNIT (pt_var))
+-	   && tree_to_uhwi (DECL_SIZE_UNIT (pt_var)) < offset_limit)
++  else if (DECL_P (pt_var))
+     {
+       *pdecl = pt_var;
+-      pt_var_size = DECL_SIZE_UNIT (pt_var);
++      pt_var_size = decl_init_size (pt_var, object_size_type & 2);
++      if (!pt_var_size)
++	return false;
+     }
+-  else if (pt_var
+-	   && TREE_CODE (pt_var) == STRING_CST
+-	   && TYPE_SIZE_UNIT (TREE_TYPE (pt_var))
+-	   && tree_fits_uhwi_p (TYPE_SIZE_UNIT (TREE_TYPE (pt_var)))
+-	   && tree_to_uhwi (TYPE_SIZE_UNIT (TREE_TYPE (pt_var)))
+-	      < offset_limit)
++  else if (TREE_CODE (pt_var) == STRING_CST)
+     pt_var_size = TYPE_SIZE_UNIT (TREE_TYPE (pt_var));
+   else
+     return false;
+ 
++  if (pt_var_size)
++    {
++      /* Validate the size determined above.  */
++      if (!tree_fits_uhwi_p (pt_var_size)
++	  || tree_to_uhwi (pt_var_size) >= offset_limit)
++	return false;
++    }
++
+   if (pt_var != TREE_OPERAND (ptr, 0))
+     {
+       tree var;
+diff --git a/gcc/tree.h b/gcc/tree.h
+index 80bb8ed15..f3be3caf7 100644
+--- a/gcc/tree.h
++++ b/gcc/tree.h
+@@ -4700,9 +4700,10 @@ extern tree nreverse (tree);
+ 
+ extern int list_length (const_tree);
+ 
+-/* Returns the first FIELD_DECL in a type.  */
++/* Returns the first/last FIELD_DECL in a RECORD_TYPE.  */
+ 
+-extern tree first_field (const_tree);
++extern tree first_field (const_tree) ATTRIBUTE_NONNULL (1);
++extern tree last_field (const_tree) ATTRIBUTE_NONNULL (1);
+ 
+ /* Given an initializer INIT, return TRUE if INIT is zero or some
+    aggregate of zeros.  Otherwise return FALSE.  If NONZERO is not

@@ -1,0 +1,434 @@
+diff --git a/gcc/fortran/trans-array.c b/gcc/fortran/trans-array.c
+index 65f66b8cd..15873cde3 100644
+--- a/gcc/fortran/trans-array.c
++++ b/gcc/fortran/trans-array.c
+@@ -7387,7 +7387,6 @@ gfc_conv_expr_descriptor (gfc_se *se, gfc_expr *expr)
+   tree desc;
+   stmtblock_t block;
+   tree start;
+-  tree offset;
+   int full;
+   bool subref_array_target = false;
+   bool deferred_array_component = false;
+@@ -7458,6 +7457,10 @@ gfc_conv_expr_descriptor (gfc_se *se, gfc_expr *expr)
+ 	full = 1;
+       else if (se->direct_byref)
+ 	full = 0;
++      else if (info->ref->u.ar.dimen == 0 && !info->ref->next)
++	full = 1;
++      else if (info->ref->u.ar.type == AR_SECTION && se->want_pointer)
++	full = 0;
+       else
+ 	full = gfc_full_array_ref_p (info->ref, NULL);
+ 
+@@ -7694,10 +7697,9 @@ gfc_conv_expr_descriptor (gfc_se *se, gfc_expr *expr)
+       tree from;
+       tree to;
+       tree base;
+-      bool onebased = false, rank_remap;
++      tree offset;
+ 
+       ndim = info->ref ? info->ref->u.ar.dimen : ss->dimen;
+-      rank_remap = ss->dimen < ndim;
+ 
+       if (se->want_coarray)
+ 	{
+@@ -7747,10 +7749,10 @@ gfc_conv_expr_descriptor (gfc_se *se, gfc_expr *expr)
+ 	    expr->ts.u.cl->backend_decl = tmp;
+ 	}
+ 
+-      /* If we have an array section or are assigning make sure that
+-	 the lower bound is 1.  References to the full
+-	 array should otherwise keep the original bounds.  */
+-      if ((!info->ref || info->ref->u.ar.type != AR_FULL) && !se->want_pointer)
++      /* If we have an array section, are assigning  or passing an array
++	 section argument make sure that the lower bound is 1.  References
++	 to the full array should otherwise keep the original bounds.  */
++      if (!info->ref || info->ref->u.ar.type != AR_FULL)
+ 	for (dim = 0; dim < loop.dimen; dim++)
+ 	  if (!integer_onep (loop.from[dim]))
+ 	    {
+@@ -7814,8 +7816,6 @@ gfc_conv_expr_descriptor (gfc_se *se, gfc_expr *expr)
+       if (tmp != NULL_TREE)
+ 	gfc_conv_descriptor_span_set (&loop.pre, parm, tmp);
+ 
+-      offset = gfc_index_zero_node;
+-
+       /* The following can be somewhat confusing.  We have two
+          descriptors, a new one and the original array.
+          {parm, parmtype, dim} refer to the new one.
+@@ -7829,22 +7829,17 @@ gfc_conv_expr_descriptor (gfc_se *se, gfc_expr *expr)
+       tmp = gfc_conv_descriptor_dtype (parm);
+       gfc_add_modify (&loop.pre, tmp, gfc_get_dtype (parmtype));
+ 
+-      /* Set offset for assignments to pointer only to zero if it is not
+-         the full array.  */
+-      if ((se->direct_byref || se->use_offset)
+-	  && ((info->ref && info->ref->u.ar.type != AR_FULL)
+-	      || (expr->expr_type == EXPR_ARRAY && se->use_offset)))
+-	base = gfc_index_zero_node;
+-      else if (GFC_ARRAY_TYPE_P (TREE_TYPE (desc)))
+-	base = gfc_evaluate_now (gfc_conv_array_offset (desc), &loop.pre);
+-      else
+-	base = NULL_TREE;
++      /* The 1st element in the section.  */
++      base = gfc_index_zero_node;
++
++      /* The offset from the 1st element in the section.  */
++      offset = gfc_index_zero_node;
+ 
+       for (n = 0; n < ndim; n++)
+ 	{
+ 	  stride = gfc_conv_array_stride (desc, n);
+ 
+-	  /* Work out the offset.  */
++	  /* Work out the 1st element in the section.  */
+ 	  if (info->ref
+ 	      && info->ref->u.ar.dimen_type[n] == DIMEN_ELEMENT)
+ 	    {
+@@ -7864,13 +7859,14 @@ gfc_conv_expr_descriptor (gfc_se *se, gfc_expr *expr)
+ 				 start, tmp);
+ 	  tmp = fold_build2_loc (input_location, MULT_EXPR, TREE_TYPE (tmp),
+ 				 tmp, stride);
+-	  offset = fold_build2_loc (input_location, PLUS_EXPR, TREE_TYPE (tmp),
+-				    offset, tmp);
++	  base = fold_build2_loc (input_location, PLUS_EXPR, TREE_TYPE (tmp),
++				    base, tmp);
+ 
+ 	  if (info->ref
+ 	      && info->ref->u.ar.dimen_type[n] == DIMEN_ELEMENT)
+ 	    {
+-	      /* For elemental dimensions, we only need the offset.  */
++	      /* For elemental dimensions, we only need the 1st
++		 element in the section.  */
+ 	      continue;
+ 	    }
+ 
+@@ -7890,7 +7886,6 @@ gfc_conv_expr_descriptor (gfc_se *se, gfc_expr *expr)
+ 	  from = loop.from[dim];
+ 	  to = loop.to[dim];
+ 
+-	  onebased = integer_onep (from);
+ 	  gfc_conv_descriptor_lbound_set (&loop.pre, parm,
+ 					  gfc_rank_cst[dim], from);
+ 
+@@ -7904,35 +7899,10 @@ gfc_conv_expr_descriptor (gfc_se *se, gfc_expr *expr)
+ 				    gfc_array_index_type,
+ 				    stride, info->stride[n]);
+ 
+-	  if ((se->direct_byref || se->use_offset)
+-	      && ((info->ref && info->ref->u.ar.type != AR_FULL)
+-		  || (expr->expr_type == EXPR_ARRAY && se->use_offset)))
+-	    {
+-	      base = fold_build2_loc (input_location, MINUS_EXPR,
+-				      TREE_TYPE (base), base, stride);
+-	    }
+-	  else if (GFC_ARRAY_TYPE_P (TREE_TYPE (desc)) || se->use_offset)
+-	    {
+-	      bool toonebased;
+-	      tmp = gfc_conv_array_lbound (desc, n);
+-	      toonebased = integer_onep (tmp);
+-	      // lb(arr) - from (- start + 1)
+-	      tmp = fold_build2_loc (input_location, MINUS_EXPR,
+-				     TREE_TYPE (base), tmp, from);
+-	      if (onebased && toonebased)
+-		{
+-		  tmp = fold_build2_loc (input_location, MINUS_EXPR,
+-					 TREE_TYPE (base), tmp, start);
+-		  tmp = fold_build2_loc (input_location, PLUS_EXPR,
+-					 TREE_TYPE (base), tmp,
+-					 gfc_index_one_node);
+-		}
+-	      tmp = fold_build2_loc (input_location, MULT_EXPR,
+-				     TREE_TYPE (base), tmp,
+-				     gfc_conv_array_stride (desc, n));
+-	      base = fold_build2_loc (input_location, PLUS_EXPR,
+-				     TREE_TYPE (base), tmp, base);
+-	    }
++	  tmp = fold_build2_loc (input_location, MULT_EXPR,
++				 TREE_TYPE (offset), stride, from);
++	  offset = fold_build2_loc (input_location, MINUS_EXPR,
++				   TREE_TYPE (offset), offset, tmp);
+ 
+ 	  /* Store the new stride.  */
+ 	  gfc_conv_descriptor_stride_set (&loop.pre, parm,
+@@ -7955,58 +7925,11 @@ gfc_conv_expr_descriptor (gfc_se *se, gfc_expr *expr)
+ 				      gfc_index_zero_node);
+       else
+ 	/* Point the data pointer at the 1st element in the section.  */
+-	gfc_get_dataptr_offset (&loop.pre, parm, desc, offset,
++	gfc_get_dataptr_offset (&loop.pre, parm, desc, base,
+ 				subref_array_target, expr);
+ 
+-      /* Force the offset to be -1, when the lower bound of the highest
+-	 dimension is one and the symbol is present and is not a
+-	 pointer/allocatable or associated.  */
+-      if (((se->direct_byref || GFC_ARRAY_TYPE_P (TREE_TYPE (desc)))
+-	   && !se->data_not_needed)
+-	  || (se->use_offset && base != NULL_TREE))
+-	{
+-	  /* Set the offset depending on base.  */
+-	  tmp = rank_remap && !se->direct_byref ?
+-		fold_build2_loc (input_location, PLUS_EXPR,
+-				 gfc_array_index_type, base,
+-				 offset)
+-	      : base;
+-	  gfc_conv_descriptor_offset_set (&loop.pre, parm, tmp);
+-	}
+-      else if (GFC_DESCRIPTOR_TYPE_P (TREE_TYPE (desc))
+-	       && !se->data_not_needed
+-	       && (!rank_remap || se->use_offset))
+-	{
+-	  gfc_conv_descriptor_offset_set (&loop.pre, parm,
+-					 gfc_conv_descriptor_offset_get (desc));
+-	}
+-      else if (GFC_DESCRIPTOR_TYPE_P (TREE_TYPE (desc))
+-	       && !se->data_not_needed
+-	       && gfc_expr_attr (expr).select_rank_temporary)
+-	{
+-	  gfc_conv_descriptor_offset_set (&loop.pre, parm, gfc_index_zero_node);
+-	}
+-      else if (onebased && (!rank_remap || se->use_offset)
+-	  && expr->symtree
+-	  && !(expr->symtree->n.sym && expr->symtree->n.sym->ts.type == BT_CLASS
+-	       && !CLASS_DATA (expr->symtree->n.sym)->attr.class_pointer)
+-	  && !expr->symtree->n.sym->attr.allocatable
+-	  && !expr->symtree->n.sym->attr.pointer
+-	  && !expr->symtree->n.sym->attr.host_assoc
+-	  && !expr->symtree->n.sym->attr.use_assoc)
+-	{
+-	  /* Set the offset to -1.  */
+-	  mpz_t minus_one;
+-	  mpz_init_set_si (minus_one, -1);
+-	  tmp = gfc_conv_mpz_to_tree (minus_one, gfc_index_integer_kind);
+-	  gfc_conv_descriptor_offset_set (&loop.pre, parm, tmp);
+-	}
+-      else
+-	{
+-	  /* Only the callee knows what the correct offset it, so just set
+-	     it to zero here.  */
+-	  gfc_conv_descriptor_offset_set (&loop.pre, parm, gfc_index_zero_node);
+-	}
++      gfc_conv_descriptor_offset_set (&loop.pre, parm, offset);
++
+       desc = parm;
+     }
+ 
+diff --git a/gcc/testsuite/gfortran.dg/PR85868A.f90 b/gcc/testsuite/gfortran.dg/PR85868A.f90
+new file mode 100644
+index 000000000..621b87430
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/PR85868A.f90
+@@ -0,0 +1,47 @@
++! { dg-do run }
++!
++! PR fortran/85868
++!
++! Contributed by Harald Anlauf <anlauf@gmx.de>
++! 
++
++program test
++  
++  implicit none
++  
++  integer, parameter :: e(*) = [1, 1, -1, -1, 0, 0, 1]
++  
++  integer, pointer :: t(:), u(:)
++  integer          :: i
++  
++  allocate (t(-1:5))
++  do i = -1, 5
++    t(i) = i
++  end do
++  call p (t, e(1))     ! Pointer with lower bound = -1 from allocation
++  u     => t           ! Pointer assignment sets same lower bound
++  call p (u, e(2))
++  !
++  u     => t(:)        ! Pointer assignment with implicit lower bound (1)
++  call p (u, e(3))
++  call p (t(:), e(4))  ! Full array, behaves the same
++  !
++  call p (t(0:), e(5)) ! Array section
++  u     => t(0:)       ! Pointer assignment with implicit lower bound (1)
++  call p (u, e(6))
++  u(0:) => t(0:)       ! Pointer assignment with given lower bound (0)
++  call p (u, e(7))
++  stop
++  
++contains
++  
++  subroutine p (a, v)
++    integer, pointer, intent(in) :: a(:)
++    integer,          intent(in) :: v
++    
++    if(a(1)/=v) stop 1001
++    return
++  end subroutine p
++  
++end program test
++
+diff --git a/gcc/testsuite/gfortran.dg/PR85868B.f90 b/gcc/testsuite/gfortran.dg/PR85868B.f90
+new file mode 100644
+index 000000000..288f29fd7
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/PR85868B.f90
+@@ -0,0 +1,144 @@
++program main_p
++
++  implicit none
++
++  integer, parameter :: n = 10
++  integer, parameter :: m = 5
++
++  integer, parameter :: b = 3
++  integer, parameter :: t = n+b-1
++  
++  integer, parameter :: l = 4
++  integer, parameter :: u = 7
++  integer, parameter :: s = 3
++  integer, parameter :: e = (u-l)/s+1
++  
++  call test_f()
++  call test_s()
++  call test_p()
++  call test_a()
++  stop
++
++contains
++
++  subroutine test_f()
++    integer, target :: x(n,n)
++    integer, target :: y(b:t)
++    integer         :: i
++    
++    x = reshape([(i, i=1,n*n)], [n,n])
++    y = x(:,m)
++    call sub_s(x(:,m), y, 1, n, n)
++    call sub_s(y, x(:,m), b, t, n)
++    return
++  end subroutine test_f
++  
++  subroutine test_s()
++    integer, target :: x(n,n)
++    integer, target :: v(e)
++    integer         :: i
++    
++    x = reshape([(i, i=1,n*n)], [n,n])
++    v = x(l:u:s,m)
++    call sub_s(v, v, 1, e, e)
++    call sub_s(x(l:u:s,m), v, 1, e, e)
++    call sub_s(v, x(l:u:s,m), 1, e, e)
++    return
++  end subroutine test_s
++  
++  subroutine test_p()
++    integer,  target :: x(n,n)
++    integer, pointer :: p(:)
++    integer          :: v(e)
++    integer          :: i
++    
++    x = reshape([(i, i=1,n*n)], [n,n])
++    v = x(l:u:s,m)
++    p => x(:,m)
++    call sub_s(p(l:u:s), v, 1, e, e)
++    p => x(l:u:s,m)
++    call sub_s(p, v, 1, e, e)
++    p(l:) => x(l:u:s,m)
++    call sub_s(p, v, l, e+l-1, e)
++    p(l:l+e-1) => x(l:u:s,m)
++    call sub_s(p, v, l, e+l-1, e)
++    allocate(p(n))
++    p(:) = x(:,m)
++    call sub_s(p(l:u:s), v, 1, e, e)
++    deallocate(p)
++    allocate(p(e))
++    p(:) = x(l:u:s,m)
++    call sub_s(p, v, 1, e, e)
++    deallocate(p)
++    allocate(p(l:l+e-1))
++    p(:) = x(l:u:s,m)
++    call sub_s(p, v, l, e+l-1, e)
++    deallocate(p)
++    allocate(p(l:l+e-1))
++    p(l:) = x(l:u:s,m)
++    call sub_s(p, v, l, e+l-1, e)
++    deallocate(p)
++    allocate(p(l:l+e-1))
++    p(l:l+e-1) = x(l:u:s,m)
++    call sub_s(p, v, l, e+l-1, e)
++    deallocate(p)
++    return
++  end subroutine test_p
++  
++  subroutine test_a()
++    integer                      :: x(n,n)
++    integer, allocatable, target :: a(:)
++    integer                      :: v(e)
++    integer                      :: i
++    
++    x = reshape([(i, i=1,n*n)], [n,n])
++    v = x(l:u:s,m)
++    a = x(:,m)
++    call sub_s(a(l:u:s), v, 1, e, e)
++    deallocate(a)
++    allocate(a(n))
++    a(:) = x(:,m)
++    call sub_s(a(l:u:s), v, 1, e, e)
++    deallocate(a)
++    a = x(l:u:s,m)
++    call sub_s(a, v, 1, e, e)
++    deallocate(a)
++    allocate(a(e))
++    a(:) = x(l:u:s,m)
++    call sub_s(a, v, 1, e, e)
++    deallocate(a)
++    allocate(a(l:l+e-1))
++    a(:) = x(l:u:s,m)
++    call sub_s(a, v, l, e+l-1, e)
++    deallocate(a)
++    allocate(a(l:l+e-1))
++    a(l:) = x(l:u:s,m)
++    call sub_s(a, v, l, e+l-1, e)
++    deallocate(a)
++    allocate(a(l:l+e-1))
++    a(l:l+e-1) = x(l:u:s,m)
++    call sub_s(a, v, l, e+l-1, e)
++    deallocate(a)
++    return
++  end subroutine test_a
++
++  subroutine  sub_s(a, b, l, u, e)
++    integer, pointer, intent(in) :: a(:)
++    integer,          intent(in) :: b(:)
++    integer,          intent(in) :: l
++    integer,          intent(in) :: u
++    integer,          intent(in) :: e
++
++    integer :: i
++
++    if(lbound(a,dim=1)/=l) stop 1001
++    if(ubound(a,dim=1)/=u) stop 1002
++    if(any(shape(a)/=[e])) stop 1003
++    if(size(a, dim=1)/=e)  stop 1004
++    if(size(a)/=size(b))   stop 1005
++    do i = l, u
++      if(a(i)/=b(i-l+1)) stop 1006
++    end do
++  end subroutine sub_s
++
++end program main_p
+diff --git a/gcc/testsuite/gfortran.dg/coarray_lib_comm_1.f90 b/gcc/testsuite/gfortran.dg/coarray_lib_comm_1.f90
+index 171a27bd4..a8954e7af 100644
+--- a/gcc/testsuite/gfortran.dg/coarray_lib_comm_1.f90
++++ b/gcc/testsuite/gfortran.dg/coarray_lib_comm_1.f90
+@@ -38,8 +38,7 @@ B(1:5) = B(3:7)
+ if (any (A-B /= 0)) STOP 4
+ end
+ 
+-! { dg-final { scan-tree-dump-times "_gfortran_caf_get \\\(caf_token.0, \\\(integer\\\(kind=\[48\]\\\)\\\) parm.\[0-9\]+.data - \\\(integer\\\(kind=\[48\]\\\)\\\) a, 1, &parm.\[0-9\]+, 0B, &parm.\[0-9\]+, 4, 4, 1, 0B\\\);" 2 "original" } }
+-! { dg-final { scan-tree-dump-times "_gfortran_caf_get \\\(caf_token.0, \\\(integer\\\(kind=\[48\]\\\)\\\) parm.\[0-9\]+.data - \\\(integer\\\(kind=\[48\]\\\)\\\) a, 1, &parm.\[0-9\]+, 0B, &p, 4, 4, 1, 0B\\\);" 1 "original" } }
+-! { dg-final { scan-tree-dump-times "_gfortran_caf_get \\\(caf_token.1, \\\(integer\\\(kind=\[48\]\\\)\\\) parm.\[0-9\]+.data - \\\(integer\\\(kind=\[48\]\\\)\\\) b, 1, &parm.\[0-9\]+, 0B, &p, 4, 4, 0, 0B\\\);" 1 "original" } }
++! { dg-final { scan-tree-dump-times "_gfortran_caf_get \\\(caf_token.0, \\\(integer\\\(kind=\[48\]\\\)\\\) parm.\[0-9\]+.data - \\\(integer\\\(kind=\[48\]\\\)\\\) a, 1, &parm.\[0-9\]+, 0B, &parm.\[0-9\]+, 4, 4, 1, 0B\\\);" 3 "original" } }
++! { dg-final { scan-tree-dump-times "_gfortran_caf_get \\\(caf_token.1, \\\(integer\\\(kind=\[48\]\\\)\\\) parm.\[0-9\]+.data - \\\(integer\\\(kind=\[48\]\\\)\\\) b, 1, &parm.\[0-9\]+, 0B, &parm.\[0-9\]+, 4, 4, 0, 0B\\\);" 1 "original" } }
+ ! { dg-final { scan-tree-dump-times "_gfortran_caf_sendget \\\(caf_token.0, \\\(integer\\\(kind=\[48\]\\\)\\\) parm.\[0-9\]+.data - \\\(integer\\\(kind=\[48\]\\\)\\\) a, 1, &parm.\[0-9\]+, 0B, caf_token.0, \\\(integer\\\(kind=\[48\]\\\)\\\) parm.\[0-9\]+.data - \\\(integer\\\(kind=\[48\]\\\)\\\) a, 1, &parm.\[0-9\]+, 0B, 4, 4, 1, 0B\\\);" 1 "original" } }
+ 

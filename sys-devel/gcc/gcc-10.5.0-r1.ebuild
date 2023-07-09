@@ -31,4 +31,14 @@ src_prepare() {
 
 	eapply "${FILESDIR}"/${PV}/00_workaround-for-gcc12-host.patch
 	eapply "${FILESDIR}"/${PV}/01_riscv-fix-multilib.patch
+
+	eapply "${FILESDIR}"/${PV}/postrelease/00_pr97164.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/01_pr92815.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/02_pr78287.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/03_pr104931.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/04_pr106027.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/05_pr69695.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/06_pr89583.patch
+
+	is_crosscompile || eapply "${FILESDIR}"/${PV}/postrelease/99_fix-known-test-fail.patch
 }

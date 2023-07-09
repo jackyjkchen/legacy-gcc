@@ -1,0 +1,45 @@
+diff --git a/gcc/fold-const.c b/gcc/fold-const.c
+index 07a20d5ff..b27f90f90 100644
+--- a/gcc/fold-const.c
++++ b/gcc/fold-const.c
+@@ -6948,7 +6948,7 @@ tree_swap_operands_p (const_tree arg0, const_tree arg1)
+ static tree
+ fold_to_nonsharp_ineq_using_bound (location_t loc, tree ineq, tree bound)
+ {
+-  tree a, typea, type = TREE_TYPE (ineq), a1, diff, y;
++  tree a, typea, type = TREE_TYPE (bound), a1, diff, y;
+ 
+   if (TREE_CODE (bound) == LT_EXPR)
+     a = TREE_OPERAND (bound, 0);
+@@ -10584,11 +10584,15 @@ fold_binary_loc (location_t loc, enum tree_code code, tree type,
+ 	{
+ 	  tem = fold_to_nonsharp_ineq_using_bound (loc, arg0, arg1);
+ 	  if (tem && !operand_equal_p (tem, arg0, 0))
+-	    return fold_build2_loc (loc, code, type, tem, arg1);
++	    return fold_convert (type,
++				 fold_build2_loc (loc, code, TREE_TYPE (arg1),
++						  tem, arg1));
+ 
+ 	  tem = fold_to_nonsharp_ineq_using_bound (loc, arg1, arg0);
+ 	  if (tem && !operand_equal_p (tem, arg1, 0))
+-	    return fold_build2_loc (loc, code, type, arg0, tem);
++	    return fold_convert (type,
++				 fold_build2_loc (loc, code, TREE_TYPE (arg0),
++						  arg0, tem));
+ 	}
+ 
+       if ((tem = fold_truth_andor (loc, code, type, arg0, arg1, op0, op1))
+diff --git a/gcc/testsuite/gcc.dg/pr106027.c b/gcc/testsuite/gcc.dg/pr106027.c
+new file mode 100644
+index 000000000..735205fb2
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr106027.c
+@@ -0,0 +1,8 @@
++/* { dg-do compile } */
++/* { dg-options "-O" } */
++
++int
++foo (unsigned int x, int y)
++{
++  return x <= (((y != y) < 0) ? y < 1 : 0);
++}
