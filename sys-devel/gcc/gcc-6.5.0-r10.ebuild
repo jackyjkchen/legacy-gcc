@@ -80,5 +80,5 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/49_pr110044.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/50_pr81423.patch
 
-	is_crosscompile || eapply "${FILESDIR}"/${PV}/postrelease/99_fix-known-test-fail.patch
+	is_crosscompile || eapply "${FILESDIR}"/${PV}/postrelease/90_fix-known-test-fail.patch
 }
