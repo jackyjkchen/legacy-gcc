@@ -42,7 +42,7 @@ Linux glibc本地工具链——
 
 Windows/MSDOS交叉工具链——
 * mingw-w64：>=gcc-4.5.4
-* mingw：gcc-3.3.6 - gcc-8.5.0（建议gcc-4.7及以上版本使用mingw-w64）
+* mingw-legacy：gcc-3.3.6 - gcc-8.5.0（建议gcc-4.7及以上版本使用mingw-w64）
 * cygwin64：>=gcc-4.8.5
 * cygwin：>=gcc-4.5.4
 * cygwin-legacy：gcc-3.4.6，gcc-4.3.6 - gcc-4.7.4（建议gcc-4.5及以上版本使用cygwin）
@@ -51,7 +51,7 @@ Windows/MSDOS交叉工具链——
 
 mingw-w64支持multilib，64位使用SEH异常机制（4.8以上版本），32位使用SJLJ异常机制（包括4.8以下的64位版本），保障与Windows系统DLL的最佳兼容性。
 
-mingw仅支持32位，使用SJLJ异常机制，与mingw官方二进制发布一致。
+mingw-legacy仅支持32位，使用SJLJ异常机制，与mingw官方二进制发布一致。
 
 cygwin64/cygwin/cygwin-legacy不支持multilib，异常机制与cygwin官方二进制发布一致（cygwin64使用SEH，cygwin/cygwin-legacy使用DWARF-2）。cygwin64/cygwin兼容NT6.1（cygwin-3.4.6，限cygwin64），NT6.0（cygwin-3.3.6）或NT5.1（cygiwn-2.5.2，XP限SP3）。cygwin-legacy兼容Win2k（cygwin-1.7.18）或Win9x（cygwin-1.5.25，限<=gcc-4.4.7）。
 
@@ -108,7 +108,7 @@ gcc的历史很久远，对可执行文件格式和CPU架构的支持发生过�
 以gcc-3.1.1为分界线，将gcc分为“现代”和“传统”两组，选择gcc-3.1.1作为分界原因如下：
 
 * gcc-3.1开始对C99支持基本完善，大部分GNU扩展的支持也基本成型，通常不容易出现不兼容新版本glibc的情况。
-* gcc-3.1首次支持x86-64，对于工具链来说是个天然的分界点，在x86-64系统上，3.1以下版本必须调整工具链（i686-legacy-linux-gnu）。
+* gcc-3.1首次支持x86-64，对于工具链来说是个天然的分界点，在x86-64系统上，3.1以下版本必须调整工具链（i686-legacy-linux-gnu）。出于跨平台实践和C++标准库考虑，legacy-gcc项目中gcc-3.x都使用了legacy工具链。
 * 虽然实际经过实验，目前最新版本的glibc（2.32+）可以支持低至gcc-2.5的gcc bootstrap。但gcc-2.8.1/2.95.3的libstdc++无法在最新glibc下构建。gcc-3.0虽然在新glibc上大体没有问题，但出于前两点考虑，仍将分界点定为gcc-3.1。
 
 所有版本的gcc打过补丁后均运行在系统自带的libc.so.6上，glibc从2.x版本开始即保证ABI向下兼容，只要libc.so.6的版本号不变，本项目构建方案就不会break。因为对于编译器敏感的glibc header和linux header部分，传统组gcc采用与系统独立的版本。
