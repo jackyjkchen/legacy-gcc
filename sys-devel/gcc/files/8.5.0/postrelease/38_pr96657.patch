@@ -1,0 +1,160 @@
+diff --git a/libstdc++-v3/libsupc++/Makefile.am b/libstdc++-v3/libsupc++/Makefile.am
+index a582f6521..5f51f2fa8 100644
+--- a/libstdc++-v3/libsupc++/Makefile.am
++++ b/libstdc++-v3/libsupc++/Makefile.am
+@@ -48,6 +48,7 @@ sources = \
+ 	array_type_info.cc \
+ 	atexit_arm.cc \
+ 	atexit_thread.cc \
++	atomicity.cc \
+ 	bad_alloc.cc \
+ 	bad_array_length.cc \
+ 	bad_array_new.cc \
+@@ -127,6 +128,9 @@ cp-demangle.lo: cp-demangle.c
+ cp-demangle.o: cp-demangle.c
+ 	$(C_COMPILE) -DIN_GLIBCPP_V3 -Wno-error -c $<
+ 
++atomicity_file = ${glibcxx_srcdir}/$(ATOMICITY_SRCDIR)/atomicity.h
++atomicity.cc: ${atomicity_file}
++	$(LN_S) ${atomicity_file} ./atomicity.cc || true
+ 
+ # Use special rules for the C++17 sources so that the proper flags are passed.
+ new_opa.lo: new_opa.cc
+diff --git a/libstdc++-v3/libsupc++/Makefile.in b/libstdc++-v3/libsupc++/Makefile.in
+index 244f6bfbf..24dcd2e8b 100644
+--- a/libstdc++-v3/libsupc++/Makefile.in
++++ b/libstdc++-v3/libsupc++/Makefile.in
+@@ -116,13 +116,13 @@ am__installdirs = "$(DESTDIR)$(toolexeclibdir)" "$(DESTDIR)$(bitsdir)" \
+ LTLIBRARIES = $(noinst_LTLIBRARIES) $(toolexeclib_LTLIBRARIES)
+ libsupc___la_LIBADD =
+ am__objects_1 = array_type_info.lo atexit_arm.lo atexit_thread.lo \
+-	bad_alloc.lo bad_array_length.lo bad_array_new.lo bad_cast.lo \
+-	bad_typeid.lo class_type_info.lo del_op.lo del_ops.lo \
+-	del_opnt.lo del_opv.lo del_opvs.lo del_opvnt.lo dyncast.lo \
+-	eh_alloc.lo eh_arm.lo eh_aux_runtime.lo eh_call.lo eh_catch.lo \
+-	eh_exception.lo eh_globals.lo eh_personality.lo eh_ptr.lo \
+-	eh_term_handler.lo eh_terminate.lo eh_tm.lo eh_throw.lo \
+-	eh_type.lo eh_unex_handler.lo enum_type_info.lo \
++	atomicity.lo bad_alloc.lo bad_array_length.lo bad_array_new.lo \
++	bad_cast.lo bad_typeid.lo class_type_info.lo del_op.lo \
++	del_ops.lo del_opnt.lo del_opv.lo del_opvs.lo del_opvnt.lo \
++	dyncast.lo eh_alloc.lo eh_arm.lo eh_aux_runtime.lo eh_call.lo \
++	eh_catch.lo eh_exception.lo eh_globals.lo eh_personality.lo \
++	eh_ptr.lo eh_term_handler.lo eh_terminate.lo eh_tm.lo \
++	eh_throw.lo eh_type.lo eh_unex_handler.lo enum_type_info.lo \
+ 	function_type_info.lo fundamental_type_info.lo guard.lo \
+ 	guard_error.lo hash_bytes.lo nested_exception.lo \
+ 	new_handler.lo new_op.lo new_opnt.lo new_opv.lo new_opvnt.lo \
+@@ -412,6 +412,7 @@ sources = \
+ 	array_type_info.cc \
+ 	atexit_arm.cc \
+ 	atexit_thread.cc \
++	atomicity.cc \
+ 	bad_alloc.cc \
+ 	bad_array_length.cc \
+ 	bad_array_new.cc \
+@@ -478,6 +479,7 @@ sources = \
+ 
+ libsupc___la_SOURCES = $(sources) $(c_sources) $(vtv_sources)
+ libsupc__convenience_la_SOURCES = $(sources) $(c_sources) $(vtv_sources)
++atomicity_file = ${glibcxx_srcdir}/$(ATOMICITY_SRCDIR)/atomicity.h
+ 
+ # AM_CXXFLAGS needs to be in each subdirectory so that it can be
+ # modified in a per-library or per-sub-library way.  Need to manually
+@@ -861,6 +863,8 @@ cp-demangle.lo: cp-demangle.c
+ 	$(LTCOMPILE) -DIN_GLIBCPP_V3 -Wno-error -c $<
+ cp-demangle.o: cp-demangle.c
+ 	$(C_COMPILE) -DIN_GLIBCPP_V3 -Wno-error -c $<
++atomicity.cc: ${atomicity_file}
++	$(LN_S) ${atomicity_file} ./atomicity.cc || true
+ 
+ # Use special rules for the C++17 sources so that the proper flags are passed.
+ new_opa.lo: new_opa.cc
+diff --git a/libstdc++-v3/src/c++98/Makefile.am b/libstdc++-v3/src/c++98/Makefile.am
+index f1b54a059..5824159bc 100644
+--- a/libstdc++-v3/src/c++98/Makefile.am
++++ b/libstdc++-v3/src/c++98/Makefile.am
+@@ -39,7 +39,6 @@ endif
+ # particular host.
+ host_sources = \
+ 	$(cow_string_host_sources) \
+-	atomicity.cc \
+ 	codecvt_members.cc \
+ 	collate_members.cc \
+ 	messages_members.cc \
+@@ -65,10 +64,6 @@ numeric_members.cc: ${glibcxx_srcdir}/$(CNUMERIC_CC)
+ time_members.cc: ${glibcxx_srcdir}/$(CTIME_CC)
+ 	$(LN_S) ${glibcxx_srcdir}/$(CTIME_CC) . || true
+ 
+-atomicity_file = ${glibcxx_srcdir}/$(ATOMICITY_SRCDIR)/atomicity.h
+-atomicity.cc: ${atomicity_file}
+-	$(LN_S) ${atomicity_file} ./atomicity.cc || true
+-
+ if ENABLE_DUAL_ABI
+ collate_members_cow.cc: ${glibcxx_srcdir}/$(CCOLLATE_CC)
+ 	$(LN_S) ${glibcxx_srcdir}/$(CCOLLATE_CC) ./$@ || true
+diff --git a/libstdc++-v3/src/c++98/Makefile.in b/libstdc++-v3/src/c++98/Makefile.in
+index 874587143..7e90df2fa 100644
+--- a/libstdc++-v3/src/c++98/Makefile.in
++++ b/libstdc++-v3/src/c++98/Makefile.in
+@@ -90,9 +90,9 @@ libc__98convenience_la_LIBADD =
+ @ENABLE_DUAL_ABI_TRUE@	messages_members_cow.lo \
+ @ENABLE_DUAL_ABI_TRUE@	monetary_members_cow.lo \
+ @ENABLE_DUAL_ABI_TRUE@	numeric_members_cow.lo
+-am__objects_3 = $(am__objects_2) atomicity.lo codecvt_members.lo \
+-	collate_members.lo messages_members.lo monetary_members.lo \
+-	numeric_members.lo time_members.lo
++am__objects_3 = $(am__objects_2) codecvt_members.lo collate_members.lo \
++	messages_members.lo monetary_members.lo numeric_members.lo \
++	time_members.lo
+ @ENABLE_EXTERN_TEMPLATE_TRUE@am__objects_4 = allocator-inst.lo \
+ @ENABLE_EXTERN_TEMPLATE_TRUE@	concept-inst.lo ext-inst.lo \
+ @ENABLE_EXTERN_TEMPLATE_TRUE@	misc-inst.lo
+@@ -365,7 +365,6 @@ headers =
+ # particular host.
+ host_sources = \
+ 	$(cow_string_host_sources) \
+-	atomicity.cc \
+ 	codecvt_members.cc \
+ 	collate_members.cc \
+ 	messages_members.cc \
+@@ -373,7 +372,6 @@ host_sources = \
+ 	numeric_members.cc \
+ 	time_members.cc
+ 
+-atomicity_file = ${glibcxx_srcdir}/$(ATOMICITY_SRCDIR)/atomicity.h
+ 
+ # Source files linked in via configuration/make substitution for a
+ # particular host, but with ad hoc naming rules.
+@@ -758,8 +756,6 @@ numeric_members.cc: ${glibcxx_srcdir}/$(CNUMERIC_CC)
+ 
+ time_members.cc: ${glibcxx_srcdir}/$(CTIME_CC)
+ 	$(LN_S) ${glibcxx_srcdir}/$(CTIME_CC) . || true
+-atomicity.cc: ${atomicity_file}
+-	$(LN_S) ${atomicity_file} ./atomicity.cc || true
+ 
+ @ENABLE_DUAL_ABI_TRUE@collate_members_cow.cc: ${glibcxx_srcdir}/$(CCOLLATE_CC)
+ @ENABLE_DUAL_ABI_TRUE@	$(LN_S) ${glibcxx_srcdir}/$(CCOLLATE_CC) ./$@ || true
+diff --git a/libstdc++-v3/testsuite/18_support/exception_ptr/96657.cc b/libstdc++-v3/testsuite/18_support/exception_ptr/96657.cc
+new file mode 100644
+index 000000000..615726683
+--- /dev/null
++++ b/libstdc++-v3/testsuite/18_support/exception_ptr/96657.cc
+@@ -0,0 +1,17 @@
++// { dg-options "-nodefaultlibs -lsupc++ -lgcc_s -lc" { target sparc*-*-linux-gnu } }
++// { dg-do link { target c++11 } }
++
++#include <exception>
++
++void
++test01()
++{
++  // PR libstdc++/96657 undefined references in libsupc++
++  std::make_exception_ptr(1);
++}
++
++int
++main()
++{
++  test01();
++}

@@ -1,0 +1,174 @@
+diff --git a/gcc/doc/extend.texi b/gcc/doc/extend.texi
+index 2b29dfbf..d11cdcb3 100644
+--- a/gcc/doc/extend.texi
++++ b/gcc/doc/extend.texi
+@@ -367,6 +367,12 @@ This is more friendly to code living in shared libraries, as it reduces
+ the number of dynamic relocations that are needed, and by consequence,
+ allows the data to be read-only.
+ 
++The @code{&&foo} expressions for the same label might have different values
++if the containing function is inlined or cloned.  If a program relies on
++them being always the same, @code{__attribute__((__noinline__))} should
++be used to prevent inlining.  If @code{&&foo} is used
++in a static variable initializer, inlining is forbidden.
++
+ @node Nested Functions
+ @section Nested Functions
+ @cindex nested functions
+diff --git a/gcc/testsuite/gcc.c-torture/execute/20071220-1.c b/gcc/testsuite/gcc.c-torture/execute/20071220-1.c
+new file mode 100644
+index 00000000..00c2fa57
+--- /dev/null
++++ b/gcc/testsuite/gcc.c-torture/execute/20071220-1.c
+@@ -0,0 +1,40 @@
++/* PR tree-optimization/29484 */
++
++extern void abort (void);
++
++void *__attribute__((noinline))
++baz (void **lab)
++{
++  asm volatile ("" : "+r" (lab));
++  return *lab;
++}
++
++static inline
++int bar (void)
++{
++  static void *b[] = { &&addr };
++  void *p = baz (b);
++  goto *p;
++addr:
++  return 17;
++}
++
++int __attribute__((noinline))
++f1 (void)
++{
++  return bar ();
++}
++
++int __attribute__((noinline))
++f2 (void)
++{
++  return bar ();
++}
++
++int
++main (void)
++{
++  if (f1 () != 17 || f1 () != 17 || f2 () != 17 || f2 () != 17)
++    abort ();
++  return 0;
++}
+diff --git a/gcc/testsuite/gcc.c-torture/execute/20071220-2.c b/gcc/testsuite/gcc.c-torture/execute/20071220-2.c
+new file mode 100644
+index 00000000..93fa9de0
+--- /dev/null
++++ b/gcc/testsuite/gcc.c-torture/execute/20071220-2.c
+@@ -0,0 +1,39 @@
++/* PR tree-optimization/29484 */
++
++extern void abort (void);
++
++void *__attribute__((noinline))
++baz (void **lab)
++{
++  asm volatile ("" : "+r" (lab));
++  return *lab;
++}
++
++static inline
++int bar (void)
++{
++  static void *b[] = { &&addr };
++  baz (b);
++addr:
++  return 17;
++}
++
++int __attribute__((noinline))
++f1 (void)
++{
++  return bar ();
++}
++
++int __attribute__((noinline))
++f2 (void)
++{
++  return bar ();
++}
++
++int
++main (void)
++{
++  if (f1 () != 17 || f1 () != 17 || f2 () != 17 || f2 () != 17)
++    abort ();
++  return 0;
++}
+diff --git a/gcc/tree-inline.c b/gcc/tree-inline.c
+index 4eb9162b..d32968cf 100644
+--- a/gcc/tree-inline.c
++++ b/gcc/tree-inline.c
+@@ -1455,6 +1455,27 @@ inline_forbidden_p_1 (tree *nodep, int *walk_subtrees ATTRIBUTE_UNUSED,
+   return NULL_TREE;
+ }
+ 
++static tree
++inline_forbidden_p_2 (tree *nodep, int *walk_subtrees,
++		      void *fnp)
++{
++  tree node = *nodep;
++  tree fn = (tree) fnp;
++
++  if (TREE_CODE (node) == LABEL_DECL && DECL_CONTEXT (node) == fn)
++    {
++      inline_forbidden_reason
++	= G_("function %q+F can never be inlined "
++	     "because it saves address of local label in a static variable");
++      return node;
++    }
++
++  if (TYPE_P (node))
++    *walk_subtrees = 0;
++
++  return NULL_TREE;
++}
++
+ /* Return subexpression representing possible alloca call, if any.  */
+ static tree
+ inline_forbidden_p (tree fndecl)
+@@ -1463,16 +1484,31 @@ inline_forbidden_p (tree fndecl)
+   block_stmt_iterator bsi;
+   basic_block bb;
+   tree ret = NULL_TREE;
++  struct function *fun = DECL_STRUCT_FUNCTION (fndecl);
++  tree step;
+ 
+-  FOR_EACH_BB_FN (bb, DECL_STRUCT_FUNCTION (fndecl))
++  FOR_EACH_BB_FN (bb, fun)
+     for (bsi = bsi_start (bb); !bsi_end_p (bsi); bsi_next (&bsi))
+       {
+ 	ret = walk_tree_without_duplicates (bsi_stmt_ptr (bsi),
+-				    inline_forbidden_p_1, fndecl);
++					    inline_forbidden_p_1, fndecl);
+ 	if (ret)
+ 	  goto egress;
+       }
+ 
++  for (step = fun->unexpanded_var_list; step; step = TREE_CHAIN (step))
++    {
++      tree decl = TREE_VALUE (step);
++      if (TREE_CODE (decl) == VAR_DECL
++	  && TREE_STATIC (decl)
++	  && !DECL_EXTERNAL (decl)
++	  && DECL_INITIAL (decl))
++	ret = walk_tree_without_duplicates (&DECL_INITIAL (decl),
++					    inline_forbidden_p_2, fndecl);
++	if (ret)
++	  goto egress;
++    }
++
+ egress:
+   input_location = saved_loc;
+   return ret;

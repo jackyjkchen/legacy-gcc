@@ -1,0 +1,46 @@
+diff --git a/gcc/config/i386/x86-64.h b/gcc/config/i386/x86-64.h
+index 88db428f5..0c5b8af5a 100644
+--- a/gcc/config/i386/x86-64.h
++++ b/gcc/config/i386/x86-64.h
+@@ -59,6 +59,17 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+ #define ASM_OUTPUT_ALIGNED_DECL_COMMON(FILE, DECL, NAME, SIZE, ALIGN)		\
+   x86_elf_aligned_decl_common (FILE, DECL, NAME, SIZE, ALIGN);
+ 
++#undef  ASM_OUTPUT_ALIGNED_DECL_LOCAL
++#define ASM_OUTPUT_ALIGNED_DECL_LOCAL(FILE, DECL, NAME, SIZE, ALIGN)  \
++  do								      \
++    {								      \
++      fprintf ((FILE), "%s", LOCAL_ASM_OP);			      \
++      assemble_name ((FILE), (NAME));				      \
++      fprintf ((FILE), "\n");					      \
++      ASM_OUTPUT_ALIGNED_DECL_COMMON (FILE, DECL, NAME, SIZE, ALIGN); \
++    }								      \
++  while (0)
++
+ /* This is used to align code labels according to Intel recommendations.  */
+ 
+ #define SUBALIGN_LOG 3
+diff --git a/libgomp/testsuite/libgomp.c/pr95620.c b/libgomp/testsuite/libgomp.c/pr95620.c
+new file mode 100644
+index 000000000..b310b5655
+--- /dev/null
++++ b/libgomp/testsuite/libgomp.c/pr95620.c
+@@ -0,0 +1,18 @@
++// { dg-do link { target { { i?86-*-* x86_64-*-* } && lp64 } } }
++/* { dg-require-effective-target lto } */
++/* { dg-additional-options "-flto -mcmodel=medium" } */
++
++double a[353783808];
++int b, c, d;
++
++int
++main()
++{
++  for (; b;)
++#pragma omp parallel
++    a[c] = 1;
++  for (;; b++)
++    if (a[c])
++      d++;
++  return 0;
++}
