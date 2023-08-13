@@ -49,8 +49,14 @@ downgrade_arch_flags() {
 			append-flags '-mcpu=ev6'
 		fi
 		;;
+	m68k)
+		if ! tc_version_is_at_least 4.3 ${bver} ; then
+			filter-flags '-march=*' '-mtune=*' '-mcpu=*'
+			append-flags '-m68020'
+		fi
+		;;
 	mips)
-   		if ! tc_version_is_at_least 4.4 ${bver} ; then
+		if ! tc_version_is_at_least 4.4 ${bver} ; then
 			filter-flags '-march=*' '-mtune=*' '-mips*'
 			if ! tc_version_is_at_least 3.1 ${bver} ; then
 				append-flags '-mips2'

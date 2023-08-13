@@ -519,7 +519,9 @@ get_gcc_src_uri() {
 
 	# Set where to download gcc itself depending on whether we're using a
 	# live git tree, snapshot, or release tarball.
-	if tc_version_is_at_least 5 ; then
+	if [[ -n ${SNAPSHOT} ]] ; then
+		GCC_SRC_URI="mirror://gcc/snapshots/${SNAPSHOT}/gcc-${SNAPSHOT}.tar.xz"
+	elif tc_version_is_at_least 5 ; then
 		GCC_SRC_URI="http://mirrors.ustc.edu.cn/gnu/gcc/gcc-${GCC_PV}/gcc-${GCC_RELEASE_VER}.tar.xz"
 	elif tc_version_is_between 3.2 5 ; then
 		GCC_SRC_URI="http://mirrors.ustc.edu.cn/gnu/gcc/gcc-${GCC_PV}/gcc-${GCC_RELEASE_VER}.tar.bz2"
@@ -531,6 +533,14 @@ get_gcc_src_uri() {
 		GCC_SRC_URI="http://gcc.gnu.org/pub/gcc/old-releases/gcc-2/gcc-${GCC_PV}.tar.bz2"
 	elif tc_version_is_between 1.0 2.0 ; then
 		GCC_SRC_URI="http://gcc.gnu.org/pub/gcc/old-releases/gcc-1/gcc-${GCC_PV}.tar.bz2"
+	fi
+
+	if tc_version_is_at_least 11 ; then
+		[[ -n ${PATCH_VER} ]] && \
+			GCC_SRC_URI+=" $(gentoo_urls gcc-${PATCH_GCC_VER}-patches-${PATCH_VER}.tar.${TOOLCHAIN_PATCH_SUFFIX})"
+		[[ -n ${MUSL_VER} ]] && \
+			GCC_SRC_URI+=" $(gentoo_urls gcc-${MUSL_GCC_VER}-musl-patches-${MUSL_VER}.tar.${TOOLCHAIN_PATCH_SUFFIX})"
+
 	fi
 
 	echo "${GCC_SRC_URI}"
@@ -983,6 +993,20 @@ gcc_version_patch() {
 #---->> src_configure <<----
 
 toolchain_src_configure() {
+	# Allow users to explicitly avoid flag sanitization via
+	# USE=custom-cflags.
+	if ! _tc_use_if_iuse custom-cflags; then
+		# Over-zealous CFLAGS can often cause problems.  What may work for one
+		# person may not work for another.  To avoid a large influx of bugs
+		# relating to failed builds, we strip most CFLAGS out to ensure as few
+		# problems as possible.
+		strip-flags
+
+		# Lock gcc at -O2; we want to be conservative here.
+		filter-flags '-O?'
+		append-flags -O2
+	fi
+
 	downgrade_arch_flags ${GCC_BRANCH_VER}
 	gcc_do_filter_flags
 
@@ -1743,20 +1767,6 @@ toolchain_src_configure() {
 }
 
 gcc_do_filter_flags() {
-	# Allow users to explicitly avoid flag sanitization via
-	# USE=custom-cflags.
-	if ! _tc_use_if_iuse custom-cflags; then
-		# Over-zealous CFLAGS can often cause problems.  What may work for one
-		# person may not work for another.  To avoid a large influx of bugs
-		# relating to failed builds, we strip most CFLAGS out to ensure as few
-		# problems as possible.
-		strip-flags
-
-		# Lock gcc at -O2; we want to be conservative here.
-		filter-flags '-O?'
-		append-flags -O2
-	fi
-
 	# Avoid shooting self in foot
 	filter-flags '-mabi*' -m31 -m32 -m64
 
