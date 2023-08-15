@@ -85,7 +85,7 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/50_pr15097.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/51_pr3698-86208.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/52_pr34178.patch
-	eapply "${FILESDIR}"/${PV}/postrelease/53_pr29484.patch
 
 	is_crosscompile || eapply "${FILESDIR}"/${PV}/postrelease/90_fix-known-test-fail.patch
+	is_crosscompile || ([[ $(tc-arch) == "x86" || $(tc-arch) == "amd64" ]] && eapply "${FILESDIR}"/${PV}/postrelease/91_fix-known-test-fail-x86.patch)
 }
