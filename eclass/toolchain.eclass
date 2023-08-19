@@ -2316,7 +2316,7 @@ toolchain_src_install() {
 	# libvtv.la: gcc itself handles linkage correctly.
 	# lib*san.la: Sanitizer linkage is handled internally by gcc, and they
 	# do not support static linking. bug #487550, bug #546700
-	find "${D}${LIBPATH}" \
+	find "${D}${LIBPATH}" "${D}${PREFIX}/libexec/gcc/" \
 		'(' \
 			-name libstdc++.la -o \
 			-name libstdc++fs.la -o \
@@ -2342,7 +2342,8 @@ toolchain_src_install() {
 			-name libgo.la -o \
 			-name libcaf_single.la -o \
 			-name 'libmudflap*.la' -o \
-			-name 'lib*san.la' \
+			-name 'lib*san.la' -o \
+			-name liblto_plugin.la \
 		')' -type f -delete
 
 	case $(tc-arch) in
