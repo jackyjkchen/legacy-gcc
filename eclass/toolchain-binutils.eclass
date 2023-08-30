@@ -12,7 +12,7 @@
 # binutils-9999_preYYMMDD -> nightly snapshot date YYMMDD
 # binutils-#              -> normal release
 
-inherit eutils libtool flag-o-matic gnuconfig multilib downgrade-arch-flags
+inherit libtool flag-o-matic gnuconfig multilib downgrade-arch-flags
 case ${EAPI:-0} in
 7|8)
 	EXPORT_FUNCTIONS src_unpack src_prepare src_configure src_compile src_test src_install pkg_postinst pkg_postrm ;;

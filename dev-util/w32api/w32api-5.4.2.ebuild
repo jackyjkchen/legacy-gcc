@@ -16,7 +16,7 @@ if [[ ${CTARGET} == ${CHOST} ]] ; then
 	fi
 fi
 
-inherit eutils flag-o-matic
+inherit flag-o-matic
 
 DESCRIPTION="Free Win32 runtime and import library definitions"
 HOMEPAGE="http://www.mingw.org/"

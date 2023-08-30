@@ -8,8 +8,7 @@
 # @BLURB: Common code for sys-devel/gcc ebuilds
 
 case ${EAPI} in
-	7) inherit eutils ;;
-	8) ;;
+	7|8) ;;
 	*) die "${ECLASS}: EAPI ${EAPI:-0} not supported" ;;
 esac
 
