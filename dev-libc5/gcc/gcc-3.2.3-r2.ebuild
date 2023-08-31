@@ -17,14 +17,14 @@ CC="${CTARGET}-gcc-3.4.6"
 CXX="${CTARGET}-g++-3.4.6"
 
 src_prepare() {
-	eapply "${FILESDIR}"/${PV}/00_gentoo-patchset.patch
+	eapply "${FILESDIR}"/${PV}/00_gcc-${PV}.patch
 	toolchain-oldlibc_src_prepare
 
 	eapply "${FILESDIR}"/${PV}/01_workaround-for-legacy-glibc-in-non-system-dir.patch
-	if use objc ; then
-		eapply "${FILESDIR}"/${PV}/05_libffi-without-libgcj.patch
-	fi
-
 	eapply "${FILESDIR}"/${PV}/10_fix-for-libc5.patch
+
+	eapply "${FILESDIR}"/${PV}/postrelease/00_pr13685.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/01_pr45262.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/02_pr25572.patch
 }
 

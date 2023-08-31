@@ -33,9 +33,6 @@ if [[ ${CATEGORY} != cross-* ]] ; then
 	s390)
 		TOOL_PREFIX="s390x-legacy"
 		;;
-	sh)
-		TOOL_PREFIX="sh4-legacy"
-		;;
 	sparc)
 		TOOL_PREFIX="${PROFILE_ARCH}-legacy"
 		;;
@@ -61,15 +58,15 @@ fi
 inherit toolchain
 
 # ia64 - broken static handling; USE=static emerge busybox
-KEYWORDS="alpha amd64 hppa m68k mips ppc ppc64 s390 sh sparc x86"
+KEYWORDS="alpha amd64 hppa m68k mips ppc ppc64 s390 sparc x86"
 
 RDEPEND=""
 DEPEND="${CATEGORY}/binutils"
 
 if is_crosscompile ; then
-	BDEPEND="sys-devel/gcc:3.3.6"
-	CC="gcc-3.3.6"
-	CXX="g++-3.3.6"
+	BDEPEND="sys-devel/gcc:3.2.3"
+	CC="gcc-3.2.3"
+	CXX="g++-3.2.3"
 else
 	DEPEND="${DEPEND} ${LEGACY_DEPEND}"
 	BDEPEND="sys-devel/gcc:3.4.6"
@@ -78,25 +75,16 @@ else
 fi
 
 src_prepare() {
-	eapply "${FILESDIR}"/${PV}/00_gentoo-patchset.patch
+	eapply "${FILESDIR}"/${PV}/00_gcc-${PV}.patch
 	toolchain_src_prepare
 
 	[[ ${TOOL_PREFIX} != "" ]] && eapply "${FILESDIR}"/${PV}/01_workaround-for-legacy-glibc-in-non-system-dir.patch
 	[[ $(tc-arch) == "mips" ]] && eapply "${FILESDIR}"/${PV}/02_support-mips64.patch
-	[[ $(tc-arch) == "sh" ]] && eapply "${FILESDIR}"/${PV}/03_fix-for-sh4.patch
-	[[ $(tc-arch) == "ppc64" || $(tc-arch) == "ppc" ]] && eapply "${FILESDIR}"/${PV}/04_workaround-for-ppc64-ppc.patch
-
-	if use objc ; then
-		[[ $(tc-arch) != "mips" ]] && eapply "${FILESDIR}"/${PV}/05_libffi-without-libgcj.patch
-	fi
-	[[ $(tc-arch) == "hppa" ]] && eapply "${FILESDIR}"/${PV}/06_hppa-fix-build.patch
+	[[ $(tc-arch) == "hppa" ]] && eapply "${FILESDIR}"/${PV}/03_hppa-fix-build.patch
 
 	eapply "${FILESDIR}"/${PV}/postrelease/00_pr13685.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/01_pr45262.patch
-	eapply "${FILESDIR}"/${PV}/postrelease/02_pr24580.patch
-	eapply "${FILESDIR}"/${PV}/postrelease/03_pr24969.patch
-	eapply "${FILESDIR}"/${PV}/postrelease/04_pr25572.patch
-	eapply "${FILESDIR}"/${PV}/postrelease/05_pr26729.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/02_pr25572.patch
 }
 
 src_install() {
@@ -105,20 +93,19 @@ src_install() {
 		mkdir -p ${ED}/etc/ld.so.conf.d/ || die
 		case ${TOOL_PREFIX} in
 			x86_64-legacy|sparc64-legacy)
-				cat <<-_EOF_ > "${ED}"/etc/ld.so.conf.d/07-${CHOST}-gcc-${PV}.conf || die
+				cat <<-_EOF_ > "${ED}"/etc/ld.so.conf.d/08-${CHOST}-gcc-${PV}.conf || die
 /usr/lib/gcc-lib/${CHOST}/${PV}
 /usr/lib/gcc-lib/${CHOST}/${PV}/32
 _EOF_
 				;;
 			mips64*-legacy)
-				cat <<-_EOF_ > "${ED}"/etc/ld.so.conf.d/07-${CHOST}-gcc-${PV}.conf || die
-/usr/lib/gcc-lib/${CHOST}/${PV}
+				cat <<-_EOF_ > "${ED}"/etc/ld.so.conf.d/08-${CHOST}-gcc-${PV}.conf || die
 /usr/lib/gcc-lib/${CHOST}/${PV}/32
 /usr/lib/gcc-lib/${CHOST}/${PV}/n32
 _EOF_
 				;;
 			*)
-				cat <<-_EOF_ > "${ED}"/etc/ld.so.conf.d/07-${CHOST}-gcc-${PV}.conf || die
+				cat <<-_EOF_ > "${ED}"/etc/ld.so.conf.d/08-${CHOST}-gcc-${PV}.conf || die
 /usr/lib/gcc-lib/${CHOST}/${PV}
 _EOF_
 				;;
