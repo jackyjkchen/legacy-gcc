@@ -81,6 +81,7 @@ src_prepare() {
 	[[ $(tc-arch) == "alpha" ]] && eapply "${FILESDIR}"/${PV}/02_alpha-debian.patch
 	[[ $(tc-arch) == "m68k" ]] && eapply "${FILESDIR}"/${PV}/03_m68k-debian.patch
 	[[ $(tc-arch) == "sparc" ]] && eapply "${FILESDIR}"/${PV}/04_sparc-debian.patch
+	[[ $(tc-arch) == "sparc" ]] && eapply "${FILESDIR}"/${PV}/05_sparc-build-hang.patch
 
 	eapply "${FILESDIR}"/${PV}/postrelease/00_pr45262.patch
 }
