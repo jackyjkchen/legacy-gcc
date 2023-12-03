@@ -388,6 +388,7 @@ BDEPEND="
 	test? (
 		>=dev-util/dejagnu-1.4.4
 		>=sys-devel/autogen-5.5.4
+		sys-devel/binutils:2.38
 	)"
 DEPEND="${RDEPEND}"
 
@@ -1707,6 +1708,13 @@ toolchain_src_configure() {
 	# Older gcc versions will detect ac_x_libraries=/usr/lib64 which ends up
 	# killing the 32bit builds which want /usr/lib.
 	export ac_cv_have_x='have_x=yes ac_x_includes= ac_x_libraries='
+
+	# for testsuite
+	if tc_version_is_between 4 10 ; then
+		if _tc_use_if_iuse test ; then
+			confgcc+=( --with-as=/usr/$CHOST/binutils-bin/2.38/as --with-ld=/usr/$CHOST/binutils-bin/2.38/ld )
+		fi
+	fi
 
 	confgcc+=( "$@" ${EXTRA_ECONF} )
 
