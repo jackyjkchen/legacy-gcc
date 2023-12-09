@@ -16,7 +16,7 @@ KEYWORDS="loong"
 src_prepare() {
 	toolchain-binutils_src_prepare
 
-	[[ $(tc-arch) == "loong" ]] && eapply "${FILESDIR}"/${PV}/00_disable-pie-warning.patch
+	[[ $(tc-arch) == "loong" ]] && eapply "${FILESDIR}"/${PV}/00_disable-test-warning.patch
 }
 src_configure() {
 	downgrade_arch_flags 9.5.0
