@@ -12,7 +12,7 @@
 # binutils-9999_preYYMMDD -> nightly snapshot date YYMMDD
 # binutils-#              -> normal release
 
-inherit libtool flag-o-matic gnuconfig multilib downgrade-arch-flags
+inherit libtool flag-o-matic gnuconfig strip-linguas toolchain-funcs downgrade-arch-flags
 case ${EAPI:-0} in
 7|8)
 	EXPORT_FUNCTIONS src_unpack src_prepare src_configure src_compile src_test src_install pkg_postinst pkg_postrm ;;
@@ -100,6 +100,9 @@ IUSE="+cxx doc multitarget +nls static-libs test vanilla"
 if tc_version_is_at_least 2.21 ; then
 	IUSE+=" gold"
 fi
+if tc_version_is_at_least 2.39 ; then
+	IUSE+=" gprofng"
+fi
 
 #
 # The dependencies
@@ -149,7 +152,7 @@ toolchain-binutils_src_prepare() {
 			eapply "${WORKDIR}/patch"/*.patch
 		fi
 
-		# Make sure our explicit libdir paths don't get clobbered. #562460
+		# Make sure our explicit libdir paths don't get clobbered, bug #562460
 		sed -i \
 			-e 's:@bfdlibdir@:@libdir@:g' \
 			-e 's:@bfdincludedir@:@includedir@:g' \
@@ -158,7 +161,7 @@ toolchain-binutils_src_prepare() {
 		eapply_user
 	fi
 
-	# Fix locale issues if possible #122216
+	# Fix locale issues if possible, bug #122216
 	if [[ -e ${FILESDIR}/binutils-configure-LANG.patch ]] ; then
 		einfo "Fixing misc issues in configure files"
 		for f in $(find "${S}" -name configure -exec grep -l 'autoconf version 2.13' {} +) ; do
@@ -170,12 +173,14 @@ toolchain-binutils_src_prepare() {
 	fi
 
 	# Fix conflicts with newer glibc #272594
-	if [[ -e libiberty/testsuite/test-demangle.c ]] ; then
-		sed -i 's:\<getline\>:get_line:g' libiberty/testsuite/test-demangle.c
+	if ! tc_version_is_at_least 2.39 ; then
+		if [[ -e libiberty/testsuite/test-demangle.c ]] ; then
+			sed -i 's:\<getline\>:get_line:g' libiberty/testsuite/test-demangle.c
+		fi
 	fi
 
 	# Fix po Makefile generators
-	if ! tc_version_is_at_least 2.30  && tc_version_is_at_least 2.10 ; then
+	if ! tc_version_is_at_least 2.30 && tc_version_is_at_least 2.10 ; then
 		sed -i \
 			-e '/^datadir = /s:$(prefix)/@DATADIRNAME@:@datadir@:' \
 			-e '/^gnulocaledir = /s:$(prefix)/share:$(datadir):' \
@@ -219,7 +224,7 @@ toolchain-binutils_src_configure() {
 	BINPATH=${TOOLPATH}/binutils-bin/${BVER}
 
 	# Make sure we filter $LINGUAS so that only ones that
-	# actually work make it through #42033
+	# actually work make it throughi, bug #42033
 	strip-linguas -u */po
 
 	# Keep things sane
@@ -232,7 +237,7 @@ toolchain-binutils_src_configure() {
 	done
 	echo
 
-	cd "${MY_BUILDDIR}"
+	cd "${MY_BUILDDIR}" || die
 	local myconf=()
 
 	# enable gold (installed as ld.gold) and ld's plugin architecture
@@ -254,9 +259,10 @@ toolchain-binutils_src_configure() {
 		myconf+=( --with-system-zlib )
 	fi
 
-	# For bi-arch systems, enable a 64bit bfd.  This matches
-	# the bi-arch logic in toolchain.eclass. #446946
-	# We used to do it for everyone, but it's slow on 32bit arches. #438522
+	# For bi-arch systems, enable a 64bit bfd. This matches the bi-arch
+	# logic in toolchain.eclass. bug #446946
+	#
+	# We used to do it for everyone, but it's slow on 32bit arches. bug #438522
 	case $(tc-arch) in
 		ppc|sparc|x86) myconf+=( --enable-64-bit-bfd ) ;;
 	esac
@@ -270,10 +276,7 @@ toolchain-binutils_src_configure() {
 		--enable-poison-system-directories
 	)
 
-	# glibc-2.3.6 lacks support for this ... so rather than force glibc-2.5+
-	# on everyone in alpha (for now), we'll just enable it when possible
-	has_version ">=${CATEGORY}/glibc-2.5" && myconf+=( --enable-secureplt )
-	has_version ">=sys-libs/glibc-2.5" && myconf+=( --enable-secureplt )
+	myconf+=( --enable-secureplt )
 
 	myconf+=(
 		--prefix="${EPREFIX}"/usr
@@ -288,8 +291,7 @@ toolchain-binutils_src_configure() {
 		--includedir="${EPREFIX}"${INCPATH}
 		--disable-werror
 		$(use_enable static-libs static)
-		${EXTRA_ECONF}
-		# Disable modules that are in a combined binutils/gdb tree. #490566
+		# Disable modules that are in a combined binutils/gdb tree, bug #490566
 		--disable-{gdb,libdecnumber,readline,sim}
 		# Strip out broken static link flags.
 		# https://gcc.gnu.org/PR56750
@@ -303,7 +305,7 @@ toolchain-binutils_src_configure() {
 			--enable-threads
 			# Newer versions (>=2.27) offer a configure flag now.
 			--enable-relro
-			# Newer versions (>=2.24) make this an explicit option. #497268
+			# Newer versions (>=2.24) make this an explicit option, bug #497268
 			--enable-install-libiberty
 		)
 	fi
@@ -324,7 +326,7 @@ toolchain-binutils_src_configure() {
 		myconf+=( 
 			--datarootdir="${EPREFIX}"${DATAPATH}
 			# Change SONAME to avoid conflict across
-			# {native,cross}/binutils, binutils-libs. #666100
+			# {native,cross}/binutils, binutils-libs, bug #666100
 			--with-extra-soversion-suffix=gentoo-${CATEGORY}-${PN}-$(usex multitarget mt st)
 		)
 	fi
@@ -345,13 +347,24 @@ toolchain-binutils_src_configure() {
 	fi
 
 	if tc_version_is_at_least 2.37 ; then
-		# Works better than vapier's patch... #808787
+		# These hardening options are available from 2.39+ but
+		# they unconditionally enable the behaviour even on arches
+		# where e.g. execstacks can't be avoided.
+		# See https://sourceware.org/bugzilla/show_bug.cgi?id=29592.
+		#--enable-warn-execstack
+		#--enable-warn-rwx-segments
+		#--disable-default-execstack (or is it --enable-default-execstack=no? docs are confusing)
+
+		# Things to think about
+		#--enable-deterministic-archives
+
+		# Works better than vapier's patch, bug #808787
 		myconf+=( 
 			--enable-new-dtags
 		)
 	fi
 
-	if tc_version_is_at_least 2.38 ; then
+	if ! tc_version_is_at_least 2.39 && tc_version_is_at_least 2.38 ; then
 		# (--disable-silent-rules should get passed automatically w/ econf which we use
 		# in >= 2.39, so can drop it then.)
 		myconf+=( 
@@ -359,8 +372,26 @@ toolchain-binutils_src_configure() {
 		)
 	fi
 
-	echo "${S}"/configure "${myconf[@]}"
-	"${S}"/configure "${myconf[@]}" || die
+	if tc_version_is_at_least 2.39 ; then
+		myconf+=( 
+			--disable-jansson
+			# Avoid automagic dev-libs/msgpack dep, bug #865875
+			--without-msgpack
+			# We can enable this by default in future, but it's brand new
+			# in 2.39 with several bugs:
+			# - Doesn't build on musl (https://sourceware.org/bugzilla/show_bug.cgi?id=29477)
+			# - No man pages (https://sourceware.org/bugzilla/show_bug.cgi?id=29521)
+			# - Broken at runtime without Java (https://sourceware.org/bugzilla/show_bug.cgi?id=29479)
+			# - binutils-config (and this ebuild?) needs adaptation first (https://bugs.gentoo.org/865113)
+			$(use_enable gprofng)
+		)
+	fi
+
+	myconf+=( 
+		${EXTRA_ECONF}
+	)
+
+	ECONF_SOURCE="${S}" econf "${myconf[@]}" || die
 
 	# Prevent makeinfo from running if doc is unset.
 	if ! use doc ; then
@@ -371,7 +402,7 @@ toolchain-binutils_src_configure() {
 }
 
 toolchain-binutils_src_compile() {
-	cd "${MY_BUILDDIR}"
+	cd "${MY_BUILDDIR}" || die
 	# see Note [tooldir hack for ldscripts]
 	emake tooldir="${EPREFIX}${TOOLPATH}" all
 
@@ -386,21 +417,24 @@ toolchain-binutils_src_compile() {
 }
 
 toolchain-binutils_src_test() {
-	cd "${MY_BUILDDIR}"
-	emake -k check
+	cd "${MY_BUILDDIR}" || die
+
+	# bug #637066
+	filter-flags -Wall -Wreturn-type
+	emake -k V=1 check
 }
 
 toolchain-binutils_src_install() {
 	local x d
 
-	cd "${MY_BUILDDIR}"
+	cd "${MY_BUILDDIR}" || die
 	# see Note [tooldir hack for ldscripts]
 	emake DESTDIR="${D}" tooldir="${EPREFIX}${LIBPATH}" install
-	rm -rf "${ED}"/${LIBPATH}/bin
+	rm -rf "${ED}"/${LIBPATH}/bin || die
 	use static-libs || find "${ED}" -name '*.la' -delete
 
-	# Newer versions of binutils get fancy with ${LIBPATH} #171905
-	cd "${ED}"/${LIBPATH}
+	# Newer versions of binutils get fancy with ${LIBPATH}, bug #171905
+	cd "${ED}"/${LIBPATH} || die
 	for d in ../* ; do
 		[[ ${d} == ../${BVER} ]] && continue
 		mv ${d}/* . || die
@@ -411,9 +445,9 @@ toolchain-binutils_src_install() {
 	# When something is built to cross-compile, it installs into
 	# /usr/$CHOST/ by default ... we have to 'fix' that :)
 	if is_cross ; then
-		cd "${ED}"/${BINPATH}
+		cd "${ED}"/${BINPATH} || die
 		for x in * ; do
-			mv ${x} ${x/${CTARGET}-}
+			mv ${x} ${x/${CTARGET}-} || die
 		done
 
 		if [[ -d ${ED}/usr/${CHOST}/${CTARGET} ]] && ! is_oldlibc ; then
@@ -422,6 +456,7 @@ toolchain-binutils_src_install() {
 			rm -r "${ED}"/usr/${CHOST}/{include,lib}
 		fi
 	fi
+
 	insinto ${INCPATH}
 	if tc_version_is_at_least 2.12 ; then
 		local libiberty_headers=(
@@ -437,8 +472,8 @@ toolchain-binutils_src_install() {
 		doins "${libiberty_headers[@]/#/${S}/include/}"
 	fi
 	if [[ -d ${ED}/${LIBPATH}/lib ]] ; then
-		mv "${ED}"/${LIBPATH}/lib/* "${ED}"/${LIBPATH}/
-		rm -r "${ED}"/${LIBPATH}/lib
+		mv "${ED}"/${LIBPATH}/lib/* "${ED}"/${LIBPATH}/ || die
+		rm -r "${ED}"/${LIBPATH}/lib || die
 	fi
 
 	# Generate an env.d entry for this binutils

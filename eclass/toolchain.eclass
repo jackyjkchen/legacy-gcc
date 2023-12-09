@@ -388,9 +388,19 @@ BDEPEND="
 	test? (
 		>=dev-util/dejagnu-1.4.4
 		>=sys-devel/autogen-5.5.4
-		sys-devel/binutils:2.38
 	)"
 DEPEND="${RDEPEND}"
+
+if ! tc_version_is_at_least 10 ; then
+	case $(tc-arch) in
+		loong)
+			BDEPEND+=" test? ( sys-devel/binutils:2.39 )"
+			;;
+		*)
+			BDEPEND+=" test? ( sys-devel/binutils:2.38 )"
+			;;
+	esac
+fi
 
 if tc_has_feature sanitize ; then
 	# libsanitizer relies on 'crypt.h' to be present
@@ -1712,7 +1722,14 @@ toolchain_src_configure() {
 	# for testsuite
 	if tc_version_is_between 4 10 ; then
 		if _tc_use_if_iuse test ; then
-			confgcc+=( --with-as=/usr/$CHOST/binutils-bin/2.38/as --with-ld=/usr/$CHOST/binutils-bin/2.38/ld )
+			case $(tc-arch) in
+				loong)
+					confgcc+=( --with-as=/usr/$CHOST/binutils-bin/2.39/as --with-ld=/usr/$CHOST/binutils-bin/2.39/ld )
+					;;
+				*)
+					confgcc+=( --with-as=/usr/$CHOST/binutils-bin/2.38/as --with-ld=/usr/$CHOST/binutils-bin/2.38/ld )
+					;;
+			esac
 		fi
 	fi
 
