@@ -391,7 +391,7 @@ BDEPEND="
 	)"
 DEPEND="${RDEPEND}"
 
-if ! tc_version_is_at_least 10 ; then
+if ! tc_version_is_at_least 11 ; then
 	case $(tc-arch) in
 		loong)
 			BDEPEND+=" test? ( sys-devel/binutils:2.39 )"
@@ -1720,7 +1720,7 @@ toolchain_src_configure() {
 	export ac_cv_have_x='have_x=yes ac_x_includes= ac_x_libraries='
 
 	# for testsuite
-	if tc_version_is_between 4 10 ; then
+	if tc_version_is_between 4 11 ; then
 		if _tc_use_if_iuse test ; then
 			case $(tc-arch) in
 				loong)
