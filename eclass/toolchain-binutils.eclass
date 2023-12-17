@@ -224,7 +224,7 @@ toolchain-binutils_src_configure() {
 	BINPATH=${TOOLPATH}/binutils-bin/${BVER}
 
 	# Make sure we filter $LINGUAS so that only ones that
-	# actually work make it throughi, bug #42033
+	# actually work make it through, bug #42033
 	strip-linguas -u */po
 
 	# Keep things sane
