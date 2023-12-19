@@ -38,6 +38,7 @@ src_prepare() {
 	[[ $(tc-arch) == "alpha" ]] && eapply "${FILESDIR}"/${PV}/00_fix-alpha-bootstrap.patch
 	[[ $(tc-arch) == "mips" && ${DEFAULT_ABI} == "n64" ]] && eapply "${FILESDIR}"/${PV}/01_mips64-default-n64-abi.patch
 	eapply "${FILESDIR}"/${PV}/02_fix-cpp98-break.patch
+	eapply "${FILESDIR}"/${PV}/03_fix-werror.patch
 	[[ ${CHOST} == ${CTARGET} ]] && eapply "${FILESDIR}"/gcc-spec-env.patch
 
 	eapply "${FILESDIR}"/${PV}/postrelease/00_pr77605-78185-78333.patch
