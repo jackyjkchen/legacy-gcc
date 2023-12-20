@@ -38,6 +38,7 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/00_fix-building-on-ppc64.patch
 	[[ $(tc-arch) == "sh" ]] && eapply "${FILESDIR}"/${PV}/01_workaround-bootstrap-for-sh4.patch
 	use go && eapply "${FILESDIR}"/${PV}/02_fix-libgo-for-new-glibc.patch
+	eapply "${FILESDIR}"/${PV}/03_fix-werror.patch
 
 	eapply "${FILESDIR}"/${PV}/postrelease/00_pr94460.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/01_pr85257.patch
