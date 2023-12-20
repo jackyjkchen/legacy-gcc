@@ -27,6 +27,7 @@ src_prepare() {
 	use vanilla && return 0
 
 	eapply "${FILESDIR}"/${PV}/00_riscv-fix-multilib.patch
+	eapply "${FILESDIR}"/${PV}/01_fix-werror.patch
 
 	eapply "${FILESDIR}"/${PV}/postrelease/00_pr94460.patch
 	[[ $(tc-arch) == "arm64" ]] && eapply "${FILESDIR}"/${PV}/postrelease/01_pr94383.patch

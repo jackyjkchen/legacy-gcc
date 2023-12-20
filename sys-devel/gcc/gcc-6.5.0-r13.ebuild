@@ -27,6 +27,7 @@ src_prepare() {
 	use vanilla && return 0
 
 	eapply "${FILESDIR}"/${PV}/00_compat-new-isl.patch
+	eapply "${FILESDIR}"/${PV}/01_fix-werror.patch
 
 	eapply "${FILESDIR}"/${PV}/postrelease/00_pr94460.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/01_pr80693-81019-81020.patch
