@@ -1,24 +1,40 @@
 diff --git a/gcc/Makefile.in b/gcc/Makefile.in
-index 49952a552..0c49f3751 100644
+index fb0920ad3..32dbe8cb3 100644
 --- a/gcc/Makefile.in
 +++ b/gcc/Makefile.in
-@@ -221,6 +221,11 @@ libgcov-merge-tool.o-warn = -Wno-error
+@@ -221,6 +221,14 @@ libgcov-merge-tool.o-warn = -Wno-error
  gimple-match.o-warn = -Wno-unused
  generic-match.o-warn = -Wno-unused
  dfp.o-warn = -Wno-strict-aliasing
-+arm.o-warn = -Wno-error=format-truncation=
++arm.o-warn = -Wno-error=format-diag
 +build/genhooks.o-warn = -Wno-error=unused-result
 +gcc.o-warn = -Wno-error=unused-result
++ggc-common.o-warn = -Wno-error=deprecated-declarations
++lto/lto-common.o-warn = -Wno-error=unused-result
 +lto-wrapper.o-warn = -Wno-error=unused-result
-+lto/lto.o-warn = -Wno-error=unused-result
++objc/objc-next-runtime-abi-02.o-warn = -Wno-error=unused-result
++objcp/objc-next-runtime-abi-02.o-warn = -Wno-error=unused-result
  
  # All warnings have to be shut off in stage1 if the compiler used then
  # isn't gcc; configure determines that.  WARN_CFLAGS will be either
+diff --git a/gcc/calls.c b/gcc/calls.c
+index 45c137cee..e5e2a916f 100644
+--- a/gcc/calls.c
++++ b/gcc/calls.c
+@@ -1446,7 +1446,7 @@ maybe_warn_alloc_args_overflow (tree fn, tree exp, tree args[2], int idx[2])
+ 	}
+     }
+ 
+-  if (!argrange[0])
++  if (!argrange[0][0])
+     return;
+ 
+   /* For a two-argument alloc_size, validate the product of the two
 diff --git a/gcc/config/aarch64/aarch64.c b/gcc/config/aarch64/aarch64.c
-index f023818cd..b718e99c1 100644
+index e6bf5ae38..bdab04d7e 100644
 --- a/gcc/config/aarch64/aarch64.c
 +++ b/gcc/config/aarch64/aarch64.c
-@@ -19140,7 +19140,7 @@ aarch64_simd_clone_compute_vecsize_and_simdlen (struct cgraph_node *node,
+@@ -23244,7 +23244,7 @@ aarch64_simd_clone_compute_vecsize_and_simdlen (struct cgraph_node *node,
  					struct cgraph_simd_clone *clonei,
  					tree base_type, int num)
  {
@@ -27,23 +43,11 @@ index f023818cd..b718e99c1 100644
    unsigned int elt_bits, vec_bits, count;
  
    if (!TARGET_SIMD)
-diff --git a/gcc/config/i386/i386.c b/gcc/config/i386/i386.c
-index c5d50f54c..ef31aebb5 100644
---- a/gcc/config/i386/i386.c
-+++ b/gcc/config/i386/i386.c
-@@ -32262,6 +32262,7 @@ get_builtin_code_for_version (tree decl, tree *predicate_list)
- 	    case PROCESSOR_TIGERLAKE:
- 	      arg_str = "tigerlake";
- 	      priority = P_PROC_AVX512F;
-+	      break;
- 	    case PROCESSOR_BONNELL:
- 	      arg_str = "bonnell";
- 	      priority = P_PROC_SSSE3;
 diff --git a/gcc/gensupport.c b/gcc/gensupport.c
-index 31a67d5ad..266e93c94 100644
+index f2ad54f0c..ef468a2f1 100644
 --- a/gcc/gensupport.c
 +++ b/gcc/gensupport.c
-@@ -1431,8 +1431,9 @@ alter_attrs_for_subst_insn (struct queue_elem * elem, int n_dup)
+@@ -1499,8 +1499,9 @@ alter_attrs_for_subst_insn (class queue_elem * elem, int n_dup)
        switch (GET_CODE (sub))
  	{
  	case SET_ATTR:
@@ -55,10 +59,10 @@ index 31a67d5ad..266e93c94 100644
  
  	case SET_ATTR_ALTERNATIVE:
 diff --git a/gcc/lra-constraints.c b/gcc/lra-constraints.c
-index db4b507c4..7ce9e7791 100644
+index 30d088afb..2fe131923 100644
 --- a/gcc/lra-constraints.c
 +++ b/gcc/lra-constraints.c
-@@ -4700,8 +4700,9 @@ multi_block_pseudo_p (int regno)
+@@ -4751,8 +4751,9 @@ multi_block_pseudo_p (int regno)
    unsigned int uid;
    bitmap_iterator bi;
  
@@ -69,30 +73,28 @@ index db4b507c4..7ce9e7791 100644
  
      EXECUTE_IF_SET_IN_BITMAP (&lra_reg_info[regno].insn_bitmap, 0, uid, bi)
        if (bb == NULL)
-diff --git a/gcc/symbol-summary.h b/gcc/symbol-summary.h
-index 74544fbf8..b1deac503 100644
---- a/gcc/symbol-summary.h
-+++ b/gcc/symbol-summary.h
-@@ -148,7 +148,7 @@ public:
-   template<typename Arg, bool (*f)(const T &, Arg)>
-   void traverse (Arg a) const
-   {
--    m_map.traverse <f> (a);
-+    m_map.template traverse <f> (a);
-   }
+diff --git a/gcc/sel-sched-ir.c b/gcc/sel-sched-ir.c
+index 4f1e4afdc..49a6debf7 100644
+--- a/gcc/sel-sched-ir.c
++++ b/gcc/sel-sched-ir.c
+@@ -701,6 +701,7 @@ merge_fences (fence_t f, insn_t insn,
+ 	  FENCE_ISSUE_MORE (f) = issue_rate;
+         }
+       else
++		{
+         if (candidate->src == BLOCK_FOR_INSN (last_scheduled_insn))
+           {
+             state_free (FENCE_STATE (f));
+@@ -721,6 +722,7 @@ merge_fences (fence_t f, insn_t insn,
+             gcc_assert (BLOCK_FOR_INSN (insn)->prev_bb
+                         != BLOCK_FOR_INSN (last_scheduled_insn));
+           }
++		}
  
-   /* Getter for summary callgraph node pointer.  If a summary for a node
-@@ -663,7 +663,7 @@ public:
-   template<typename Arg, bool (*f)(const T &, Arg)>
-   void traverse (Arg a) const
-   {
--    m_map.traverse <f> (a);
-+    m_map.template traverse <f> (a);
-   }
- 
-   /* Getter for summary callgraph edge pointer.
+         /* Find edge of first predecessor (last_scheduled_insn_old->insn).  */
+         FOR_EACH_SUCC_1 (succ, si, last_scheduled_insn_old,
 diff --git a/libstdc++-v3/config/locale/gnu/ctype_members.cc b/libstdc++-v3/config/locale/gnu/ctype_members.cc
-index 9f7256f1c..441e9df4f 100644
+index 61ab0a02c..b62302edc 100644
 --- a/libstdc++-v3/config/locale/gnu/ctype_members.cc
 +++ b/libstdc++-v3/config/locale/gnu/ctype_members.cc
 @@ -221,7 +221,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
@@ -114,7 +116,7 @@ index 9f7256f1c..441e9df4f 100644
  	  else
  	    {
 diff --git a/libstdc++-v3/libsupc++/pure.cc b/libstdc++-v3/libsupc++/pure.cc
-index 6934ce990..fe28c1ce7 100644
+index b943214de..c97f66888 100644
 --- a/libstdc++-v3/libsupc++/pure.cc
 +++ b/libstdc++-v3/libsupc++/pure.cc
 @@ -46,13 +46,19 @@
