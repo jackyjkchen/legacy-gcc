@@ -1,0 +1,129 @@
+diff --git a/gcc/Makefile.in b/gcc/Makefile.in
+index 49952a552..0c49f3751 100644
+--- a/gcc/Makefile.in
++++ b/gcc/Makefile.in
+@@ -221,6 +221,11 @@ libgcov-merge-tool.o-warn = -Wno-error
+ gimple-match.o-warn = -Wno-unused
+ generic-match.o-warn = -Wno-unused
+ dfp.o-warn = -Wno-strict-aliasing
++arm.o-warn = -Wno-error=format-truncation=
++build/genhooks.o-warn = -Wno-error=unused-result
++gcc.o-warn = -Wno-error=unused-result
++lto-wrapper.o-warn = -Wno-error=unused-result
++lto/lto.o-warn = -Wno-error=unused-result
+ 
+ # All warnings have to be shut off in stage1 if the compiler used then
+ # isn't gcc; configure determines that.  WARN_CFLAGS will be either
+diff --git a/gcc/config/aarch64/aarch64.c b/gcc/config/aarch64/aarch64.c
+index f023818cd..b718e99c1 100644
+--- a/gcc/config/aarch64/aarch64.c
++++ b/gcc/config/aarch64/aarch64.c
+@@ -19140,7 +19140,7 @@ aarch64_simd_clone_compute_vecsize_and_simdlen (struct cgraph_node *node,
+ 					struct cgraph_simd_clone *clonei,
+ 					tree base_type, int num)
+ {
+-  tree t, ret_type, arg_type;
++  tree t, ret_type;
+   unsigned int elt_bits, vec_bits, count;
+ 
+   if (!TARGET_SIMD)
+diff --git a/gcc/gensupport.c b/gcc/gensupport.c
+index 31a67d5ad..266e93c94 100644
+--- a/gcc/gensupport.c
++++ b/gcc/gensupport.c
+@@ -1431,8 +1431,9 @@ alter_attrs_for_subst_insn (struct queue_elem * elem, int n_dup)
+       switch (GET_CODE (sub))
+ 	{
+ 	case SET_ATTR:
+-	  if (strchr (XSTR (sub, 1), ',') != NULL)
++	  if (strchr (XSTR (sub, 1), ',') != NULL) {
+ 	    XSTR (sub, 1) = duplicate_alternatives (XSTR (sub, 1), n_dup);
++	}
+ 	    break;
+ 
+ 	case SET_ATTR_ALTERNATIVE:
+diff --git a/gcc/lra-constraints.c b/gcc/lra-constraints.c
+index db4b507c4..7ce9e7791 100644
+--- a/gcc/lra-constraints.c
++++ b/gcc/lra-constraints.c
+@@ -4700,8 +4700,9 @@ multi_block_pseudo_p (int regno)
+   unsigned int uid;
+   bitmap_iterator bi;
+ 
+-  if (regno < FIRST_PSEUDO_REGISTER)
++  if (regno < FIRST_PSEUDO_REGISTER) {
+     return false;
++  }
+ 
+     EXECUTE_IF_SET_IN_BITMAP (&lra_reg_info[regno].insn_bitmap, 0, uid, bi)
+       if (bb == NULL)
+diff --git a/gcc/symbol-summary.h b/gcc/symbol-summary.h
+index 74544fbf8..b1deac503 100644
+--- a/gcc/symbol-summary.h
++++ b/gcc/symbol-summary.h
+@@ -148,7 +148,7 @@ public:
+   template<typename Arg, bool (*f)(const T &, Arg)>
+   void traverse (Arg a) const
+   {
+-    m_map.traverse <f> (a);
++    m_map.template traverse <f> (a);
+   }
+ 
+   /* Getter for summary callgraph node pointer.  If a summary for a node
+@@ -663,7 +663,7 @@ public:
+   template<typename Arg, bool (*f)(const T &, Arg)>
+   void traverse (Arg a) const
+   {
+-    m_map.traverse <f> (a);
++    m_map.template traverse <f> (a);
+   }
+ 
+   /* Getter for summary callgraph edge pointer.
+diff --git a/libstdc++-v3/config/locale/gnu/ctype_members.cc b/libstdc++-v3/config/locale/gnu/ctype_members.cc
+index 9f7256f1c..441e9df4f 100644
+--- a/libstdc++-v3/config/locale/gnu/ctype_members.cc
++++ b/libstdc++-v3/config/locale/gnu/ctype_members.cc
+@@ -221,7 +221,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
+   ctype<wchar_t>::
+   do_narrow(wchar_t __wc, char __dfault) const
+   {
+-    if (__wc >= 0 && __wc < 128 && _M_narrow_ok)
++    if (__wc < 128 && _M_narrow_ok)
+       return _M_narrow[__wc];
+ #if __GLIBC__ > 2 || (__GLIBC__ == 2 && __GLIBC_MINOR__ > 2)
+     __c_locale __old = __uselocale(_M_c_locale_ctype);
+@@ -244,7 +244,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
+     if (_M_narrow_ok)
+       while (__lo < __hi)
+ 	{
+-	  if (*__lo >= 0 && *__lo < 128)
++	  if (*__lo < 128)
+ 	    *__dest = _M_narrow[*__lo];
+ 	  else
+ 	    {
+diff --git a/libstdc++-v3/libsupc++/pure.cc b/libstdc++-v3/libsupc++/pure.cc
+index 6934ce990..fe28c1ce7 100644
+--- a/libstdc++-v3/libsupc++/pure.cc
++++ b/libstdc++-v3/libsupc++/pure.cc
+@@ -46,13 +46,19 @@
+ extern "C" void
+ __cxxabiv1::__cxa_pure_virtual (void)
+ {
+-  writestr ("pure virtual method called\n");
++#if _GLIBCXX_HOSTED && _GLIBCXX_VERBOSE
++  auto ret = writestr ("pure virtual method called\n");
++  (void)ret;
++#endif
+   std::terminate ();
+ }
+ 
+ extern "C" void
+ __cxxabiv1::__cxa_deleted_virtual (void)
+ {
+-  writestr ("deleted virtual method called\n");
++#if _GLIBCXX_HOSTED && _GLIBCXX_VERBOSE
++  auto ret = writestr ("deleted virtual method called\n");
++  (void)ret;
++#endif
+   std::terminate ();
+ }
