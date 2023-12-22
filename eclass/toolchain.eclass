@@ -636,9 +636,9 @@ toolchain_src_prepare() {
 	export BRANDING_GCC_PKGVERSION="Gentoo ${GCC_PVR}"
 	cd "${S}" || die
 
+	do_gcc_ARCH_patches
 	do_gcc_gentoo_patches
 	do_gcc_PIE_patches
-	do_gcc_ARCH_patches
 	do_gcc_MINGW64_patches
 	do_gcc_MINGW_patches
 	do_gcc_CYGWIN_patches
@@ -1141,7 +1141,7 @@ toolchain_src_configure() {
 
 	if tc_version_is_at_least 2.7 ; then
 		case $(tc-arch) in
-			amd64|x86|arm64|alpha|hppa|mips|ppc|ppc64|s390|sparc)
+			amd64|x86|arm64|alpha|hppa|loong|mips|ppc|ppc64|riscv|s390|sparc)
 				tc_version_is_at_least 11 || ENABLE_WERROR="yes"
 				;;
 			m68k)
