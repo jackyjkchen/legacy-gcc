@@ -1152,7 +1152,7 @@ toolchain_src_configure() {
 				;;
 			arm)
 				if [[ ${CTARGET} == arm*-*-linux-gnueabihf ]] ; then
-					tc_version_is_between 4.7 11 && ENABLE_WERROR="yes"
+					tc_version_is_between 4.5 11 && ENABLE_WERROR="yes"
 				fi
 				if [[ ${CTARGET} == arm*-*-linux-gnueabi ]] ; then
 					tc_version_is_at_least 11 || ENABLE_WERROR="yes"
