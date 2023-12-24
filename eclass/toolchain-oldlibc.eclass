@@ -123,8 +123,12 @@ else
 	LICENSE="GPL-2+ LGPL-2.1+ FDL-1.1+"
 fi
 
-IUSE="test vanilla"
-RESTRICT="!test? ( test )"
+IUSE=""
+RESTRICT=""
+if tc_version_is_at_least 2.95 ; then
+	IUSE+="test"
+	RESTRICT+="!test? ( test )"
+fi
 
 RESTRICT+=" strip"
 
@@ -148,11 +152,8 @@ fi
 
 BDEPEND="
 	>=sys-devel/bison-1.875
-	>=sys-devel/flex-2.5.4
-	test? (
-		>=dev-util/dejagnu-1.4.4
-		>=sys-devel/autogen-5.5.4
-	)"
+	>=sys-devel/flex-2.5.4"
+tc_version_is_at_least 2.95 && BDEPEND+=" test? ( >=dev-util/dejagnu-1.4.4 >=sys-devel/autogen-5.5.4 )"
 DEPEND="${RDEPEND}"
 
 PDEPEND=">=sys-devel/gcc-config-2.3"
@@ -287,12 +288,10 @@ toolchain-oldlibc_src_prepare() {
 }
 
 do_gcc_gentoo_patches() {
-	if ! use vanilla ; then
-		if [[ -n ${PATCH_VER} ]] ; then
-			einfo "Applying Gentoo patches ..."
-			eapply "${WORKDIR}"/patch/*.patch
-			BRANDING_GCC_PKGVERSION="${BRANDING_GCC_PKGVERSION} p${PATCH_VER}"
-		fi
+	if [[ -n ${PATCH_VER} ]] ; then
+		einfo "Applying Gentoo patches ..."
+		eapply "${WORKDIR}"/patch/*.patch
+		BRANDING_GCC_PKGVERSION="${BRANDING_GCC_PKGVERSION} p${PATCH_VER}"
 	fi
 }
 
@@ -377,14 +376,6 @@ toolchain-oldlibc_src_configure() {
 		)
 	fi
 
-	### general options
-
-	confgcc+=(
-		--enable-obsolete
-	)
-
-	### language options
-
 	local GCC_LANG="c"
 	if [[ "${STAGE1}" != "yes" ]] ; then
 		is_cxx && GCC_LANG+=",c++"
@@ -396,29 +387,15 @@ toolchain-oldlibc_src_configure() {
 
 	tc_version_is_at_least 2.9 && confgcc+=( --enable-languages=${GCC_LANG} )
 
-	if tc_version_is_at_least 2.7 ; then
-		confgcc+=( --disable-werror )
-	fi
+	tc_version_is_at_least 2.8 && confgcc+=( --enable-threads=single --disable-shared )
 
-	tc_version_is_at_least 2.7 && confgcc+=( --disable-nls )
+	tc_version_is_at_least 2.9 && confgcc+=( --disable-nls --disable-multilib )
 
-	if tc_version_is_between 2.7 3.4 ; then
-		confgcc+=( --disable-libunwind-exceptions )
-	fi
+	tc_version_is_at_least 3.1 && confgcc+=( --enable-obsolete --disable-libunwind-exceptions )
 
-	# Support to disable pch when building libstdcxx
-	if tc_version_is_at_least 3.4 ; then
-		confgcc+=( --disable-libstdcxx-pch )
-	fi
+	tc_version_is_at_least 3.4 && confgcc+=( --disable-werror --disable-libstdcxx-pch )
 
-	confgcc+=( --enable-threads=single )
-	if tc_version_is_at_least 2.7 ; then
-		confgcc+=( --disable-multilib --disable-shared )
-	fi
-
-	confgcc+=(
-		--enable-clocale=generic
-	)
+	tc_version_is_at_least 3.0 && confgcc+=( --enable-clocale=generic --disable-libgcj )
 
 	### arch options
 
@@ -431,13 +408,7 @@ toolchain-oldlibc_src_configure() {
 		;;
 	esac
 
-	tc_version_is_between 2.7 3.1 && confgcc+=( --enable-version-specific-runtime-libs )
-
-	### library options
-
-	if tc_version_is_between 3.0 7.0 ; then
-		confgcc+=( --disable-libgcj )
-	fi
+	tc_version_is_between 2.9 3.1 && confgcc+=( --enable-version-specific-runtime-libs )
 
 	# Disable gcc info regeneration -- it ships with generated info pages
 	# already.  Our custom version/urls/etc... trigger it.  #464008

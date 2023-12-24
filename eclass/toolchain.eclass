@@ -241,8 +241,14 @@ else
 	LICENSE="GPL-2+ LGPL-2.1+ FDL-1.1+"
 fi
 
-IUSE="test vanilla +nls"
-RESTRICT="!test? ( test )"
+IUSE=""
+RESTRICT=""
+if tc_version_is_at_least 2.95 ; then
+	IUSE+="test"
+	RESTRICT+="!test? ( test )"
+fi
+tc_version_is_at_least 4.0 && IUSE+=" vanilla"
+tc_version_is_at_least 2.9 && IUSE+=" +nls"
 
 is_crosscompile && RESTRICT+=" strip" # cross-compilers need controlled stripping
 
@@ -289,8 +295,7 @@ if [[ ${PN} != kgcc64 && ${PN} != gcc-* ]] ; then
 	tc_version_is_at_least 3 && IUSE+=" doc hardened"
 	tc_version_is_at_least 3.1 && IUSE+=" multilib"
 	tc_version_is_at_least 3.4 && IUSE+=" pgo"
-	tc_version_is_at_least 4.0 &&
-		IUSE+=" objc-gc" TC_FEATURES+=(objc-gc)
+	tc_version_is_at_least 4.0 && IUSE+=" objc-gc" TC_FEATURES+=( objc-gc )
 	tc_version_is_at_least 4.1 && IUSE+=" libssp objc++"
 	tc_version_is_at_least 4.2 && IUSE+=" +openmp"
 
@@ -310,8 +315,7 @@ if [[ ${PN} != kgcc64 && ${PN} != gcc-* ]] ; then
 	#     the older versions, we don't want to bother supporting it.  #448024
 	#   <gcc-5 supported graphite, it required cloog
 	#   <gcc-6.5 supported graphite, it required old incompatible isl
-	tc_version_is_at_least 6.5 &&
-		IUSE+=" graphite" TC_FEATURES+=( graphite )
+	tc_version_is_at_least 6.5 && IUSE+=" graphite" TC_FEATURES+=( graphite )
 
 	tc_version_is_between 4.9 8 && IUSE+=" cilk"
 	tc_version_is_at_least 4.9 && IUSE+=" ada"
@@ -322,10 +326,9 @@ if [[ ${PN} != kgcc64 && ${PN} != gcc-* ]] ; then
 	tc_version_is_at_least 3.4 && IUSE+=" pch"
 
 	# systemtap is a gentoo-specific switch: bug #654748
-	tc_version_is_at_least 8.0 &&
-		IUSE+=" systemtap" TC_FEATURES+=( systemtap )
+	tc_version_is_at_least 8.0 && IUSE+=" systemtap" TC_FEATURES+=( systemtap )
 
-	tc_version_is_at_least 9.0 && IUSE+=" d"
+	tc_version_is_at_least 9.0 && IUSE+=" d" TC_FEATURES+=( d )
 	case $(tc-arch) in
 		amd64)
 			tc_version_is_at_least 4.6 && IUSE+=" lto"
@@ -355,8 +358,9 @@ fi
 
 #---->> DEPEND <<----
 
-RDEPEND="sys-libs/zlib
-	nls? ( virtual/libintl )"
+RDEPEND="sys-libs/zlib"
+
+tc_version_is_at_least 2.9 && RDEPEND+=" nls? ( virtual/libintl )"
 
 tc_version_is_at_least 3 && RDEPEND+=" virtual/libiconv"
 
@@ -383,15 +387,12 @@ fi
 
 BDEPEND="
 	>=sys-devel/bison-1.875
-	>=sys-devel/flex-2.5.4
-	nls? ( sys-devel/gettext )
-	test? (
-		>=dev-util/dejagnu-1.4.4
-		>=sys-devel/autogen-5.5.4
-	)"
+	>=sys-devel/flex-2.5.4"
+tc_version_is_at_least 2.9 && BDEPEND+=" nls? ( sys-devel/gettext )"
+tc_version_is_at_least 2.95 && BDEPEND+=" test? ( >=dev-util/dejagnu-1.4.4 >=sys-devel/autogen-5.5.4 )"
 DEPEND="${RDEPEND}"
 
-if ! tc_version_is_at_least 11 ; then
+if tc_version_is_between 2.95 11 ; then
 	case $(tc-arch) in
 		loong)
 			BDEPEND+=" test? ( sys-devel/binutils:2.39 )"
@@ -651,7 +652,7 @@ toolchain_src_prepare() {
 	eapply_user
 
 	if ( tc_version_is_at_least 4.8.2 || _tc_use_if_iuse hardened ) \
-		   && ! use vanilla ; then
+		   && ! _tc_use_if_iuse vanilla ; then
 		make_gcc_hard
 	fi
 
@@ -762,36 +763,36 @@ toolchain_src_prepare() {
 }
 
 do_gcc_gentoo_patches() {
-	if ! use vanilla ; then
-		if [[ -n ${PATCH_VER} ]] ; then
-			einfo "Applying Gentoo patches ..."
-			eapply "${WORKDIR}"/patch/*.patch
-			BRANDING_GCC_PKGVERSION="${BRANDING_GCC_PKGVERSION} p${PATCH_VER}"
-		fi
+	_tc_use_if_iuse vanilla && return 0
 
-		if [[ -n ${MUSL_VER} ]] && [[ ${CTARGET} == *musl* ]] ; then
-			if [[ ${CATEGORY} == cross-* ]] ; then
-				# We don't want to apply some patches when cross-compiling.
-				if [[ -d "${WORKDIR}"/musl/nocross ]] ; then
-					rm -fv "${WORKDIR}"/musl/nocross/*.patch || die
-				else
-					# Just make an empty directory to make the glob below easier.
-					mkdir -p "${WORKDIR}"/musl/nocross || die
-				fi
+	if [[ -n ${PATCH_VER} ]] ; then
+		einfo "Applying Gentoo patches ..."
+		eapply "${WORKDIR}"/patch/*.patch
+		BRANDING_GCC_PKGVERSION="${BRANDING_GCC_PKGVERSION} p${PATCH_VER}"
+	fi
+
+	if [[ -n ${MUSL_VER} ]] && [[ ${CTARGET} == *musl* ]] ; then
+		if [[ ${CATEGORY} == cross-* ]] ; then
+			# We don't want to apply some patches when cross-compiling.
+			if [[ -d "${WORKDIR}"/musl/nocross ]] ; then
+				rm -fv "${WORKDIR}"/musl/nocross/*.patch || die
+			else
+				# Just make an empty directory to make the glob below easier.
+				mkdir -p "${WORKDIR}"/musl/nocross || die
 			fi
-
-			local shopt_save=$(shopt -p nullglob)
-			shopt -s nullglob
-			einfo "Applying musl patches ..."
-			eapply "${WORKDIR}"/musl/{,nocross/}*.patch
-			${shopt_save}
 		fi
+
+		local shopt_save=$(shopt -p nullglob)
+		shopt -s nullglob
+		einfo "Applying musl patches ..."
+		eapply "${WORKDIR}"/musl/{,nocross/}*.patch
+		${shopt_save}
 	fi
 }
 
 do_gcc_PIE_patches() {
 	want_pie || return 0
-	use vanilla && return 0
+	_tc_use_if_iuse vanilla && return 0
 
 	einfo "Applying PIE patches ..."
 	eapply "${WORKDIR}"/piepatch/*.patch
@@ -1082,7 +1083,7 @@ toolchain_src_configure() {
 	fi
 
 	if tc_version_is_at_least 2.8 ; then
-		confgcc+=(
+		confgcc+=( 
 			--bindir="${BINPATH}"
 			--includedir="${INCLUDEPATH}"
 			--datadir="${DATAPATH}"
@@ -1133,13 +1134,11 @@ toolchain_src_configure() {
 
 	### general options
 
-	confgcc+=(
-		--enable-obsolete
-		--enable-secureplt
-		--with-system-zlib
-	)
+	tc_version_is_at_least 3.1 && confgcc+=( --enable-obsolete )
+	tc_version_is_at_least 4.0 && confgcc+=( --enable-secureplt )
+	tc_version_is_at_least 3.0 && confgcc+=( --with-system-zlib )
 
-	if tc_version_is_at_least 2.7 ; then
+	if tc_version_is_at_least 3.4 ; then
 		case $(tc-arch) in
 			amd64|x86|arm64|alpha|hppa|loong|m68k|mips|ppc|ppc64|riscv|s390|sparc)
 				tc_version_is_at_least 11 || ENABLE_WERROR="yes"
@@ -1153,6 +1152,7 @@ toolchain_src_configure() {
 				fi
 				;;
 			*)
+				# sh4 and so on
 				;;
 		esac
 		if [[ ${ENABLE_WERROR} == "yes" ]] && ! is_crosscompile ; then
@@ -1162,14 +1162,15 @@ toolchain_src_configure() {
 		fi
 	fi
 
-	if use nls ; then
-		confgcc+=( --enable-nls )
-		tc_version_is_at_least 2.6 && confgcc+=( --without-included-gettext )
-	else
-		tc_version_is_at_least 2.7 && confgcc+=( --disable-nls )
+	if tc_version_is_at_least 2.9 ; then
+		if _tc_use_if_iuse nls ; then
+			confgcc+=( --enable-nls --without-included-gettext )
+		else
+			confgcc+=( --disable-nls )
+		fi
 	fi
 
-	if tc_version_is_between 2.7 3.4 ; then
+	if tc_version_is_between 3.1 3.4 ; then
 		confgcc+=( --disable-libunwind-exceptions )
 	fi
 
@@ -1330,19 +1331,21 @@ toolchain_src_configure() {
 
 		tc_version_is_at_least 4.2 && confgcc+=( --disable-bootstrap )
 	else
-		if tc-is-static-only ; then
-			confgcc+=( --disable-shared )
-		elif [[ $(tc-arch) == "ppc64" ]] && ! tc_version_is_at_least 3.3 ; then
-			confgcc+=( --enable-shared=libgcc)
-		else
-			confgcc+=( --enable-shared )
+		if tc_version_is_at_least 2.8 ; then
+			if tc-is-static-only ; then
+				confgcc+=( --disable-shared )
+			elif [[ $(tc-arch) == "ppc64" ]] && ! tc_version_is_at_least 3.3 ; then
+				confgcc+=( --enable-shared=libgcc )
+			else
+				confgcc+=( --enable-shared )
+			fi
 		fi
 		case ${CHOST} in
 			mingw*|*-mingw*)
 				confgcc+=( --enable-threads=win32 )
 				;;
 			*)
-				confgcc+=( --enable-threads=posix )
+				tc_version_is_at_least 2.8 && confgcc+=( --enable-threads=posix )
 				;;
 		esac
 
@@ -1369,13 +1372,15 @@ toolchain_src_configure() {
 			confgcc+=( --with-newlib )
 			;;
 		*-musl*)
-			confgcc+=( --enable-__cxa_atexit )
+			tc_version_is_at_least 3.0 && confgcc+=( --enable-__cxa_atexit )
 			;;
 		*-gnu*)
-			confgcc+=(
-				--enable-__cxa_atexit
-				--enable-clocale=gnu
-			)
+			if tc_version_is_at_least 3.0 ; then
+				confgcc+=( 
+					--enable-__cxa_atexit
+					--enable-clocale=gnu
+				)
+			fi
 			;;
 		*-cygwin)
 			if tc_version_is_at_least 4.8 ; then
@@ -1387,7 +1392,7 @@ toolchain_src_configure() {
 				confgcc+=( 
 					--enable-clocale=gnu
 				)
-			else
+			elif tc_version_is_at_least 3.0 ; then
 				confgcc+=( 
 					--enable-clocale=generic
 				)
@@ -1401,7 +1406,7 @@ toolchain_src_configure() {
 			)
 			;;
 		*-solaris*)
-			confgcc+=( --enable-__cxa_atexit )
+			tc_version_is_at_least 3.0 && confgcc+=( --enable-__cxa_atexit )
 			;;
 	esac
 
@@ -1559,14 +1564,7 @@ toolchain_src_configure() {
 			;;
 	esac
 
-	tc_version_is_between 2.7 3.1 && confgcc+=( --enable-version-specific-runtime-libs )
-
-	# On Darwin we need libdir to be set in order to get correct install names
-	# for things like libobjc-gnu, libgcj and libfortran.  If we enable it on
-	# non-Darwin we screw up the behaviour this eclass relies on.  We in
-	# particular need this over --libdir for bug #255315.
-	[[ ${CTARGET} == *-darwin* ]] && \
-		confgcc+=( --enable-version-specific-runtime-libs )
+	tc_version_is_between 2.9 3.1 && confgcc+=( --enable-version-specific-runtime-libs )
 
 	### library options
 
@@ -1700,7 +1698,7 @@ toolchain_src_configure() {
 	fi
 
 	if tc_version_is_at_least 6.0 && in_iuse ssp ; then
-		confgcc+=(
+		confgcc+=( 
 			# This defaults to -fstack-protector-strong.
 			$(use_enable ssp default-ssp)
 		)
@@ -1890,9 +1888,7 @@ setup_minispecs_gcc_build_specs() {
 
 gcc-multilib-configure() {
 	if ! is_multilib ; then
-		if tc_version_is_at_least 2.7 ; then
-			confgcc+=( --disable-multilib )
-		fi
+		tc_version_is_at_least 2.9 && confgcc+=( --disable-multilib )
 		# Fun times: if we are building for a target that has multiple
 		# possible ABI formats, and the user has told us to pick one
 		# that isn't the default, then not specifying it via the list
@@ -2404,7 +2400,7 @@ toolchain_src_install() {
 		pax-mark -r "${D}${PREFIX}/libexec/gcc/${CTARGET}/${GCC_CONFIG_VER}/cc1plus"
 	fi
 
-	if use test ; then
+	if _tc_use_if_iuse test ; then
 		# TODO: In future, install orphaned to allow comparison across
 		# more versions even after unmerged? Also would be useful for
 		# historical records and tracking down regressions a while
@@ -2862,7 +2858,7 @@ want_minispecs() {
 	if tc_version_is_at_least 4.3.2 && _tc_use_if_iuse hardened ; then
 		if ! want_pie ; then
 			ewarn "PIE_VER or SPECS_VER is not defined in the GCC ebuild."
-		elif use vanilla ; then
+		elif _tc_use_if_iuse vanilla ; then
 			ewarn "You will not get hardened features if you have the vanilla USE-flag."
 		elif _tc_use_if_iuse nopie && _tc_use_if_iuse nossp ; then
 			ewarn "You will not get hardened features if you have the nopie and nossp USE-flag."
