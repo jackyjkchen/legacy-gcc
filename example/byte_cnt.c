@@ -5,19 +5,16 @@
 #undef __USE_MINGW_ANSI_STDIO
 #define __USE_MINGW_ANSI_STDIO 0
 #endif
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <math.h>
 
 #ifdef _WIN64
 static unsigned __int64 max_count = 0;
 static unsigned __int64 count[256] = { 0 };
-#elif COUNT64
+#elif LARGE_FILE
 #if defined(_MSC_VER) || defined(__BORLANDC__) || defined(__WATCOMC__)
 static unsigned __int64 max_count = 0;
 static unsigned __int64 count[256] = { 0 };
 #else
+#define _FILE_OFFSET_BITS 64
 static unsigned long long max_count = 0;
 static unsigned long long count[256] = { 0 };
 #endif
@@ -27,6 +24,11 @@ static unsigned long count[256] = { 0 };
 #endif
 static unsigned char overflow[256] = { 0 };
 static unsigned char print_all = 0;
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <math.h>
 
 static void read_file(const char *filename) {
     unsigned char buf[BUFSIZ];
@@ -73,7 +75,7 @@ static void print_number(void) {
 #if _WIN64
 /* Windows LLP64 model, long = 32bit, only long long = 64bit */
         printf(" 0x%02X  %llu %s\r\n", i, (unsigned __int64)(count[i]), msg);
-#elif COUNT64
+#elif LARGE_FILE
 /* Support 64bit count in 32bit platform */
 #if defined(_MSC_VER) || defined(__BORLANDC__) || defined(__WATCOMC__)
         printf(" 0x%02X  %llu %s\r\n", i, (unsigned __int64)(count[i]), msg);
@@ -149,6 +151,7 @@ int main(int argc, char **argv) {
 
     if (!fn) {
         help();
+        free(arg_attr);
         return -1;
     }
 
