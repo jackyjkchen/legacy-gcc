@@ -462,6 +462,22 @@ if [[ ${TOOLCHAIN_SET_S} == yes ]] ; then
 fi
 
 gentoo_urls() {
+	# the list is sorted by likelihood of getting the patches tarball from
+	# respective devspace
+	# slyfox's distfiles are mirrored to sam's devspace
+	declare -A devspace_urls=(
+		[soap]=HTTP~soap/distfiles/URI
+		[sam]=HTTP~sam/distfiles/sys-devel/gcc/URI
+		[slyfox]=HTTP~sam/distfiles/URI
+		[xen0n]=HTTP~xen0n/distfiles/sys-devel/gcc/URI
+		[tamiko]=HTTP~tamiko/distfiles/URI
+		[zorry]=HTTP~zorry/patches/gcc/URI
+		[vapier]=HTTP~vapier/dist/URI
+		[blueness]=HTTP~blueness/dist/URI
+	)
+
+	# But we keep the old fallback list for compatibility with
+	# older ebuilds (overlays etc).
 	local devspace="
 		HTTP~soap/distfiles/URI
 		HTTP~sam/distfiles/URI
@@ -469,7 +485,8 @@ gentoo_urls() {
 		HTTP~tamiko/distfiles/URI
 		HTTP~zorry/patches/gcc/URI
 		HTTP~vapier/dist/URI
-		HTTP~blueness/dist/URI"
+		HTTP~blueness/dist/URI
+	"
 	devspace=${devspace//HTTP/https:\/\/dev.gentoo.org\/}
 	echo ${devspace//URI/$1} mirror://gentoo/$1
 }
@@ -609,6 +626,11 @@ toolchain_pkg_setup() {
 
 	# bug #265283
 	unset LANGUAGES
+
+	# See https://www.gnu.org/software/make/manual/html_node/Parallel-Output.html
+	# Avoid really confusing logs from subconfigure spam, makes logs far
+	# more legible.
+	MAKEOPTS="--output-sync=line ${MAKEOPTS}"
 }
 
 git_init_src() {
