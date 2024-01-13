@@ -292,7 +292,7 @@ if [[ ${PN} != kgcc64 && ${PN} != gcc-* ]] ; then
 	# fortran support appeared in 4.1, but 4.1 needs outdated mpfr
 	tc_version_is_at_least 4.1 && IUSE+=" +fortran" TC_FEATURES+=( fortran )
 	tc_version_is_between 4.0 4.1 && IUSE+=" f95"
-	tc_version_is_at_least 3 && IUSE+=" doc hardened"
+	tc_version_is_at_least 3.0 && IUSE+=" doc hardened"
 	tc_version_is_at_least 3.1 && IUSE+=" multilib"
 	tc_version_is_at_least 3.4 && IUSE+=" pgo"
 	tc_version_is_at_least 4.0 && IUSE+=" objc-gc" TC_FEATURES+=( objc-gc )
@@ -301,8 +301,6 @@ if [[ ${PN} != kgcc64 && ${PN} != gcc-* ]] ; then
 
 	tc_version_is_at_least 4.3 && IUSE+=" fixed-point"
 	tc_version_is_at_least 4.7 && IUSE+=" go"
-
-	tc_version_is_between 4.0 4.9 && IUSE+=" libmudflap"
 
 	# sanitizer support appeared in gcc-4.8, but <gcc-5 does not
 	# support modern glibc.
@@ -317,7 +315,7 @@ if [[ ${PN} != kgcc64 && ${PN} != gcc-* ]] ; then
 	#   <gcc-6.5 supported graphite, it required old incompatible isl
 	tc_version_is_at_least 6.5 && IUSE+=" graphite" TC_FEATURES+=( graphite )
 
-	tc_version_is_at_least 4.9 && IUSE+=" ada"
+	tc_version_is_at_least 3.1 && IUSE+=" ada"
 	tc_version_is_at_least 4.9 && IUSE+=" vtv"
 	tc_version_is_at_least 5.0 && IUSE+=" jit"
 	tc_version_is_at_least 6.0 && IUSE+=" +pie +ssp"
@@ -384,7 +382,7 @@ if tc_has_feature graphite ; then
 fi
 
 BDEPEND="
-	>=sys-devel/bison-1.875
+	app-alternatives/yacc
 	>=sys-devel/flex-2.5.4"
 tc_version_is_at_least 2.9 && BDEPEND+=" nls? ( sys-devel/gettext )"
 tc_version_is_at_least 2.95 && BDEPEND+=" test? ( >=dev-util/dejagnu-1.4.4 >=sys-devel/autogen-5.5.4 )"
@@ -1693,7 +1691,15 @@ toolchain_src_configure() {
 	fi
 
 	if tc_version_is_between 4.0 4.9; then
-		confgcc+=( $(use_enable libmudflap) )
+		confgcc+=( --disable-libmudflap )
+	fi
+
+	if tc_version_is_between 4.9 8; then
+		confgcc+=( --disable-libcilkrts )
+	fi
+
+	if tc_version_is_between 5.0 9; then
+		confgcc+=( --disable-libmpx )
 	fi
 
 	if tc_version_is_at_least 4.8; then
@@ -2366,7 +2372,6 @@ toolchain_src_install() {
 			-name libf2c.la -o \
 			-name libgo.la -o \
 			-name libcaf_single.la -o \
-			-name 'libmudflap*.la' -o \
 			-name 'lib*san.la' -o \
 			-name liblto_plugin.la \
 		')' -type f -delete
