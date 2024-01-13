@@ -259,7 +259,7 @@ tc_has_feature() {
 }
 
 if [[ ${PN} != kgcc64 && ${PN} != gcc-* ]] ; then
-	IUSE+=" debug +nptl" TC_FEATURES+=( nptl )
+	IUSE+=" debug"
 	[[ -n ${PIE_VER} ]] && IUSE+=" nopie"
 	[[ -n ${SPECS_VER} ]] && IUSE+=" nossp"
 	case $(tc-arch) in
@@ -317,11 +317,9 @@ if [[ ${PN} != kgcc64 && ${PN} != gcc-* ]] ; then
 	#   <gcc-6.5 supported graphite, it required old incompatible isl
 	tc_version_is_at_least 6.5 && IUSE+=" graphite" TC_FEATURES+=( graphite )
 
-	tc_version_is_between 4.9 8 && IUSE+=" cilk"
 	tc_version_is_at_least 4.9 && IUSE+=" ada"
 	tc_version_is_at_least 4.9 && IUSE+=" vtv"
 	tc_version_is_at_least 5.0 && IUSE+=" jit"
-	tc_version_is_between 5.0 9 && IUSE+=" mpx"
 	tc_version_is_at_least 6.0 && IUSE+=" +pie +ssp"
 	tc_version_is_at_least 3.4 && IUSE+=" pch"
 
@@ -1643,14 +1641,6 @@ toolchain_src_configure() {
 		confgcc+=( $(use_enable cet) )
 	fi
 
-	if in_iuse cilk ; then
-		confgcc+=( $(use_enable cilk libcilkrts) )
-	fi
-
-	if in_iuse mpx ; then
-		confgcc+=( $(use_enable mpx libmpx) )
-	fi
-
 	if in_iuse systemtap ; then
 		confgcc+=( $(use_enable systemtap) )
 	fi
@@ -2349,8 +2339,6 @@ toolchain_src_install() {
 	# libgfortran.la: gfortran itself handles linkage correctly in the
 	# dynamic & static case (libgfortran.spec). bug #573302
 	# libgfortranbegin.la: Same as above, and it's an internal lib.
-	# libmpx.la: gcc itself handles linkage correctly (libmpx.spec).
-	# libmpxwrappers.la: See above.
 	# libitm.la: gcc itself handles linkage correctly (libitm.spec).
 	# libvtv.la: gcc itself handles linkage correctly.
 	# lib*san.la: Sanitizer linkage is handled internally by gcc, and they
@@ -2368,8 +2356,6 @@ toolchain_src_install() {
 			-name libgfortran.la -o \
 			-name libgfortranbegin.la -o \
 			-name libgf95begin.la -o \
-			-name libmpx.la -o \
-			-name libmpxwrappers.la -o \
 			-name libitm.la -o \
 			-name libvtv.la -o \
 			-name libobjc.la -o \
