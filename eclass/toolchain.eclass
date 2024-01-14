@@ -260,8 +260,6 @@ tc_has_feature() {
 
 if [[ ${PN} != kgcc64 && ${PN} != gcc-* ]] ; then
 	IUSE+=" debug"
-	[[ -n ${PIE_VER} ]] && IUSE+=" nopie"
-	[[ -n ${SPECS_VER} ]] && IUSE+=" nossp"
 	case $(tc-arch) in
 		alpha)
 			tc_version_is_at_least 2.8 && IUSE+=" +cxx"
@@ -292,7 +290,8 @@ if [[ ${PN} != kgcc64 && ${PN} != gcc-* ]] ; then
 	# fortran support appeared in 4.1, but 4.1 needs outdated mpfr
 	tc_version_is_at_least 4.1 && IUSE+=" +fortran" TC_FEATURES+=( fortran )
 	tc_version_is_between 4.0 4.1 && IUSE+=" f95"
-	tc_version_is_at_least 3.0 && IUSE+=" doc hardened"
+	tc_version_is_at_least 3.0 && IUSE+=" doc"
+	tc_version_is_at_least 6.0 && IUSE+=" hardened"
 	tc_version_is_at_least 3.1 && IUSE+=" multilib"
 	tc_version_is_at_least 3.4 && IUSE+=" pgo"
 	tc_version_is_at_least 4.0 && IUSE+=" objc-gc" TC_FEATURES+=( objc-gc )
@@ -511,35 +510,9 @@ gentoo_urls() {
 #			The resulting filename of this tarball will be:
 #			gcc-${PATCH_GCC_VER:-${GCC_RELEASE_VER}}-patches-${PATCH_VER}.tar.xz
 #
-#	PIE_VER
-#	PIE_GCC_VER
-#			These variables control patching in various updates for the logic
-#			controlling Position Independent Executables. PIE_VER is expected
-#			to be the version of this patch, and PIE_GCC_VER the gcc version of
-#			the patch:
-#			An example:
-#					PIE_VER="8.7.6.5"
-#					PIE_GCC_VER="3.4.0"
-#			The resulting filename of this tarball will be:
-#			gcc-${PIE_GCC_VER:-${GCC_RELEASE_VER}}-piepatches-v${PIE_VER}.tar.xz
-#
-#	SPECS_VER
-#	SPECS_GCC_VER
-#			This is for the minispecs files included in the hardened gcc-4.x
-#			The specs files for hardenedno*, vanilla and for building the "specs" file.
-#			SPECS_VER is expected to be the version of this patch, SPECS_GCC_VER
-#			the gcc version of the patch.
-#			An example:
-#					SPECS_VER="8.7.6.5"
-#					SPECS_GCC_VER="3.4.0"
-#			The resulting filename of this tarball will be:
-#			gcc-${SPECS_GCC_VER:-${GCC_RELEASE_VER}}-specs-${SPECS_VER}.tar.xz
-#
 get_gcc_src_uri() {
 	export PATCH_GCC_VER=${PATCH_GCC_VER:-${GCC_RELEASE_VER}}
 	export MUSL_GCC_VER=${MUSL_GCC_VER:-${PATCH_GCC_VER}}
-	export PIE_GCC_VER=${PIE_GCC_VER:-${GCC_RELEASE_VER}}
-	export SPECS_GCC_VER=${SPECS_GCC_VER:-${GCC_RELEASE_VER}}
 
 	# Set where to download gcc itself depending on whether we're using a
 	# live git tree, snapshot, or release tarball.
@@ -574,8 +547,6 @@ SRC_URI=$(get_gcc_src_uri)
 
 unpack_gcc_patchset() {
 	export PATCH_GCC_VER=${PATCH_GCC_VER:-${GCC_RELEASE_VER}}
-	export PIE_GCC_VER=${PIE_GCC_VER:-${GCC_RELEASE_VER}}
-	export SPECS_GCC_VER=${SPECS_GCC_VER:-${GCC_RELEASE_VER}}
 
 	if [[ -n ${PATCH_VER} ]] ; then
 		local PATCH_FILE=gcc-${PATCH_GCC_VER}-patches-${PATCH_VER}.tar.${TOOLCHAIN_PATCH_SUFFIX}
@@ -585,17 +556,6 @@ unpack_gcc_patchset() {
 	if [[ -n ${MUSL_VER} ]] ; then
 		local MUSL_FILE=gcc-${PATCH_GCC_VER}-musl-patches-${MUSL_VER}.tar.${TOOLCHAIN_PATCH_SUFFIX}
 		tar -pxf ${FILESDIR}/patchset/${MUSL_FILE} -C ${WORKDIR}/ || die
-	fi
-
-	if [[ -n ${PIE_VER} ]] ; then
-		local PIE_CORE=${PIE_CORE:-gcc-${PIE_GCC_VER}-piepatches-v${PIE_VER}.tar.${TOOLCHAIN_PATCH_SUFFIX}}
-		tar -pxf ${FILESDIR}/patchset/${PIE_CORE} -C ${WORKDIR}/ || die
-	fi
-
-	# gcc minispec for the hardened gcc 4 compiler
-	if [[ -n ${SPECS_VER} ]] ; then
-		local SPECS_FILE=gcc-${SPECS_GCC_VER}-specs-${SPECS_VER}.tar.${TOOLCHAIN_PATCH_SUFFIX}
-		tar -pxf ${FILESDIR}/patchset/${SPECS_FILE} -C ${WORKDIR}/ || die
 	fi
 
 }
@@ -610,8 +570,6 @@ toolchain_pkg_pretend() {
 		_tc_use_if_iuse objc++ && \
 			ewarn 'Obj-C++ requires a C++ compiler, disabled due to USE="-cxx"'
 	fi
-
-	want_minispecs
 }
 
 #---->> pkg_setup <<----
@@ -657,7 +615,6 @@ toolchain_src_prepare() {
 
 	do_gcc_ARCH_patches
 	do_gcc_gentoo_patches
-	do_gcc_PIE_patches
 	do_gcc_MINGW64_patches
 	do_gcc_MINGW_patches
 	do_gcc_CYGWIN_patches
@@ -669,9 +626,8 @@ toolchain_src_prepare() {
 
 	eapply_user
 
-	if ( tc_version_is_at_least 4.8.2 || _tc_use_if_iuse hardened ) \
-		   && ! _tc_use_if_iuse vanilla ; then
-		make_gcc_hard
+	if ! use vanilla ; then
+		tc_enable_hardened_gcc
 	fi
 
 	# install the libstdc++ python into the right location
@@ -711,13 +667,11 @@ toolchain_src_prepare() {
 		fi
 	fi
 
-	if tc_version_is_at_least 3.1 ; then
+	if tc_version_is_between 3.1 3.4.4 ; then
 		# disable --as-needed from being compiled into gcc specs
 		# natively when using a gcc version < 3.4.4
 		# http://gcc.gnu.org/PR14992
-		if ! tc_version_is_at_least 3.4.4 ; then
-			sed -i -e s/HAVE_LD_AS_NEEDED/USE_LD_AS_NEEDED/g "${S}"/gcc/config.in || die
-		fi
+		sed -i -e s/HAVE_LD_AS_NEEDED/USE_LD_AS_NEEDED/g "${S}"/gcc/config.in || die
 	fi
 
 	# Prevent libffi from being installed
@@ -808,16 +762,6 @@ do_gcc_gentoo_patches() {
 	fi
 }
 
-do_gcc_PIE_patches() {
-	want_pie || return 0
-	_tc_use_if_iuse vanilla && return 0
-
-	einfo "Applying PIE patches ..."
-	eapply "${WORKDIR}"/piepatch/*.patch
-
-	BRANDING_GCC_PKGVERSION="${BRANDING_GCC_PKGVERSION}, pie-${PIE_VER}"
-}
-
 do_gcc_ARCH_patches() {
 	if [ -d "${FILESDIR}/${GCC_RELEASE_VER}/$(tc-arch)" ]; then
 		einfo "Applying arch port patches ..."
@@ -874,65 +818,46 @@ do_gcc_DJGPP_patches() {
 }
 
 # configure to build with the hardened GCC specs as the default
-make_gcc_hard() {
-	local gcc_hard_flags=""
+tc_enable_hardened_gcc() {
+	local hardened_gcc_flags=""
 
-	# If we use gcc-6 or newer with PIE enabled to compile older gcc,
-	# we need to pass -no-pie to stage1; bug #618908
-	if ! tc_version_is_at_least 6.0 && [[ $(gcc-major-version) -ge 6 ]] ; then
-		einfo "Disabling PIE in stage1 (only) ..."
-		sed -i -e "/^STAGE1_LDFLAGS/ s/$/ -no-pie/" "${S}"/Makefile.in || die
+	if _tc_use_if_iuse pie ; then
+		einfo "Updating gcc to use automatic PIE building ..."
 	fi
 
-	# For gcc >= 6.x, we can use configuration options to turn PIE/SSP
-	# on as default
-	if tc_version_is_at_least 6.0 ; then
-		if _tc_use_if_iuse pie ; then
-			einfo "Updating gcc to use automatic PIE building ..."
-		fi
-		if _tc_use_if_iuse ssp ; then
-			einfo "Updating gcc to use automatic SSP building ..."
-		fi
-		if _tc_use_if_iuse hardened ; then
-			# Will add some hardened options as default, like:
-			# * -fstack-clash-protection
-			# * -z now
-			# See gcc *_all_extra-options.patch patches.
-			gcc_hard_flags+=" -DEXTRA_OPTIONS"
+	if _tc_use_if_iuse ssp ; then
+		einfo "Updating gcc to use automatic SSP building ..."
+	fi
 
-			if _tc_use_if_iuse cet && [[ ${CTARGET} == *x86_64*-linux* ]] ; then
-				gcc_hard_flags+=" -DEXTRA_OPTIONS_CF"
-			fi
+	if _tc_use_if_iuse default-stack-clash-protection ; then
+		# The define DEF_GENTOO_SCP is checked in 24_all_DEF_GENTOO_SCP-fstack-clash-protection.patch
+		einfo "Updating gcc to use automatic stack clash protection ..."
+		hardened_gcc_flags+=" -DDEF_GENTOO_SCP"
+	fi
 
-			# Rebrand to make bug reports easier
-			BRANDING_GCC_PKGVERSION=${BRANDING_GCC_PKGVERSION/Gentoo/Gentoo Hardened}
+	if _tc_use_if_iuse default-znow ; then
+		# The define DEF_GENTOO_ZNOW is checked in 23_all_DEF_GENTOO_ZNOW-z-now.patch
+		einfo "Updating gcc to request symbol resolution at start (-z now) ..."
+		hardened_gcc_flags+=" -DDEF_GENTOO_ZNOW"
+	fi
+
+	if _tc_use_if_iuse hardened ; then
+		# Will add some hardened options as default, e.g. for gcc-12
+		# * -fstack-clash-protection
+		# * -z now
+		# See gcc *_all_extra-options.patch patches.
+		hardened_gcc_flags+=" -DEXTRA_OPTIONS"
+		# Default to -D_FORTIFY_SOURCE=3 instead of -D_FORTIFY_SOURCE=2
+		hardened_gcc_flags+=" -DGENTOO_FORTIFY_SOURCE_LEVEL=3"
+		# Add -D_GLIBCXX_ASSERTIONS
+		hardened_gcc_flags+=" -DDEF_GENTOO_GLIBCXX_ASSERTIONS"
+
+		if _tc_use_if_iuse cet && [[ ${CTARGET} == *x86_64*-linux* ]] ; then
+			hardened_gcc_flags+=" -DEXTRA_OPTIONS_CF"
 		fi
-	else
-		if _tc_use_if_iuse hardened ; then
-			# Rebrand to make bug reports easier
-			BRANDING_GCC_PKGVERSION=${BRANDING_GCC_PKGVERSION/Gentoo/Gentoo Hardened}
-			if hardened_gcc_works ; then
-				einfo "Updating gcc to use automatic PIE + SSP building ..."
-				gcc_hard_flags+=" -DEFAULT_PIE_SSP"
-			elif hardened_gcc_works pie ; then
-				einfo "Updating gcc to use automatic PIE building ..."
-				ewarn "SSP has not been enabled by default"
-				gcc_hard_flags+=" -DEFAULT_PIE"
-			elif hardened_gcc_works ssp ; then
-				einfo "Updating gcc to use automatic SSP building ..."
-				ewarn "PIE has not been enabled by default"
-				gcc_hard_flags+=" -DEFAULT_SSP"
-			else
-				# Do nothing if hardened isn't supported, but don't die either
-				ewarn "hardened is not supported for this arch in this gcc version"
-				return 0
-			fi
-		else
-			if hardened_gcc_works ssp ; then
-				einfo "Updating gcc to use automatic SSP building ..."
-				gcc_hard_flags+=" -DEFAULT_SSP"
-			fi
-		fi
+
+		# Rebrand to make bug reports easier
+		BRANDING_GCC_PKGVERSION=${BRANDING_GCC_PKGVERSION/Gentoo/Gentoo Hardened}
 	fi
 
 	# We want to be able to control the PIE patch logic via something other
@@ -940,15 +865,13 @@ make_gcc_hard() {
 	sed -e '/^ALL_CFLAGS/iHARD_CFLAGS = ' \
 		-e 's|^ALL_CFLAGS = |ALL_CFLAGS = $(HARD_CFLAGS) |' \
 		-i "${S}"/gcc/Makefile.in || die
-	# Need to add HARD_CFLAGS to ALL_CXXFLAGS on >= 4.7
-	if tc_version_is_at_least 4.7 ; then
-		sed -e '/^ALL_CXXFLAGS/iHARD_CFLAGS = ' \
-			-e 's|^ALL_CXXFLAGS = |ALL_CXXFLAGS = $(HARD_CFLAGS) |' \
-			-i "${S}"/gcc/Makefile.in || die
-	fi
+
+	sed -e '/^ALL_CXXFLAGS/iHARD_CFLAGS = ' \
+		-e 's|^ALL_CXXFLAGS = |ALL_CXXFLAGS = $(HARD_CFLAGS) |' \
+		-i "${S}"/gcc/Makefile.in || die
 
 	sed -i \
-		-e "/^HARD_CFLAGS = /s|=|= ${gcc_hard_flags} |" \
+		-e "/^HARD_CFLAGS = /s|=|= ${hardened_gcc_flags} |" \
 		"${S}"/gcc/Makefile.in || die
 
 }
@@ -1046,12 +969,6 @@ toolchain_src_configure() {
 	# Force internal zip based jar script to avoid random
 	# issues with 3rd party jar implementations. bug #384291
 	export JAR=no
-
-	# For hardened gcc 4.3: add the pie patchset to build the hardened specs
-	# file (build.specs) to use when building gcc.
-	if ! tc_version_is_at_least 4.4 && want_minispecs ; then
-		setup_minispecs_gcc_build_specs
-	fi
 
 	local confgcc
 	if tc_version_is_at_least 2.0 ; then
@@ -1208,11 +1125,6 @@ toolchain_src_configure() {
 
 	if tc_use_major_version_only ; then
 		confgcc+=( --with-gcc-major-version-only )
-	fi
-
-	# If we want hardened support with the newer PIE patchset for >=gcc 4.4
-	if tc_version_is_at_least 4.4 && want_minispecs && in_iuse hardened ; then
-		confgcc+=( $(use_enable hardened esp) )
 	fi
 
 	# Allow gcc to search for clock funcs in the main C lib.
@@ -1610,20 +1522,21 @@ toolchain_src_configure() {
 		fi
 	fi
 
-	if tc_version_is_at_least 4.0 ; then
+	if tc_version_is_at_least 4.1 ; then
 		if _tc_use_if_iuse libssp ; then
 			confgcc+=( --enable-libssp )
 		else
-			if hardened_gcc_is_stable ssp; then
-				export gcc_cv_libc_provides_ssp=yes
-			fi
 			if _tc_use_if_iuse ssp; then
 				# On some targets USE="ssp -libssp" is an invalid
 				# configuration as the target libc does not provide
 				# stack_chk_* functions. Do not disable libssp there.
 				case ${CTARGET} in
-					mingw*|*-mingw*) ewarn "Not disabling libssp" ;;
-					*) confgcc+=( --disable-libssp ) ;;
+					mingw*|*-mingw*)
+						ewarn "Not disabling libssp"
+						;;
+					*)
+						confgcc+=( --disable-libssp )
+						;;
 				esac
 			else
 				confgcc+=( --disable-libssp )
@@ -1780,20 +1693,46 @@ toolchain_src_configure() {
 	if is_jit ; then
 		einfo "Configuring JIT gcc"
 
+		local confgcc_jit=(
+			"${confgcc[@]}"
+
+			--disable-analyzer
+			--disable-bootstrap
+			--disable-cet
+			--disable-default-pie
+			--disable-default-ssp
+			--disable-gcov
+			--disable-libada
+			--disable-libatomic
+			--disable-libgomp
+			--disable-libitm
+			--disable-libquadmath
+			--disable-libsanitizer
+			--disable-libssp
+			--disable-libstdcxx-pch
+			--disable-libvtv
+			--disable-lto
+			--disable-nls
+			--disable-objc-gc
+			--disable-systemtap
+			--enable-host-shared
+			--enable-languages=jit
+			# Might be used for the just-built GCC. Easier to just
+			# respect USE=graphite here in case the user passes some
+			# graphite flags rather than try strip them out.
+			$(use_with graphite isl)
+			--without-zstd
+			--with-system-zlib
+		)
+
+		if tc_version_is_at_least 13.1 ; then
+			confgcc_jit+=( --disable-fixincludes )
+		fi
+
 		mkdir -p "${WORKDIR}"/build-jit || die
 		pushd "${WORKDIR}"/build-jit > /dev/null || die
-		CONFIG_SHELL="${gcc_shell}" edo "${gcc_shell}" "${S}"/configure \
-				"${confgcc[@]}" \
-				--disable-libada \
-				--disable-libsanitizer \
-				--disable-libvtv \
-				--disable-libgomp \
-				--disable-libquadmath \
-				--disable-libatomic \
-				--disable-lto \
-				--disable-bootstrap \
-				--enable-host-shared \
-				--enable-languages=jit
+
+		CONFIG_SHELL="${gcc_shell}" edo "${gcc_shell}" "${S}"/configure "${confgcc_jit[@]}"
 		popd > /dev/null || die
 	fi
 
@@ -1883,25 +1822,6 @@ gcc_do_filter_flags() {
 	fi
 
 	export GCJFLAGS=${GCJFLAGS:-${CFLAGS}}
-}
-
-setup_minispecs_gcc_build_specs() {
-	# Setup the "build.specs" file for gcc 4.3 to use when building.
-	if hardened_gcc_works pie ; then
-		cat "${WORKDIR}"/specs/pie.specs >> "${WORKDIR}"/build.specs
-	fi
-
-	if hardened_gcc_works ssp ; then
-		for s in ssp sspall ; do
-			cat "${WORKDIR}"/specs/${s}.specs >> "${WORKDIR}"/build.specs
-		done
-	fi
-
-	for s in nostrict znow ; do
-		cat "${WORKDIR}"/specs/${s}.specs >> "${WORKDIR}"/build.specs
-	done
-
-	export GCC_SPECS="${WORKDIR}"/build.specs
 }
 
 gcc-multilib-configure() {
@@ -2248,9 +2168,6 @@ toolchain_src_install() {
 	create_gcc_env_entry
 	create_revdep_rebuild_entry
 
-	# Setup the gcc_env_entry for hardened gcc 4 with minispecs
-	want_minispecs && copy_minispecs_gcc_specs
-
 	dodir /usr/bin
 	cd "${D}"${BINPATH} || die
 	# Ugh: we really need to auto-detect this list.
@@ -2589,34 +2506,6 @@ create_revdep_rebuild_entry() {
 	EOF
 }
 
-copy_minispecs_gcc_specs() {
-	# On gcc 6, we don't need minispecs
-	if tc_version_is_at_least 6.0 ; then
-		return 0
-	fi
-
-	# Setup the hardenedno* specs files and the vanilla specs file.
-	if hardened_gcc_works ; then
-		create_gcc_env_entry hardenednopiessp
-	fi
-	if hardened_gcc_works pie ; then
-		create_gcc_env_entry hardenednopie
-	fi
-	if hardened_gcc_works ssp ; then
-		create_gcc_env_entry hardenednossp
-	fi
-	create_gcc_env_entry vanilla
-	insinto ${LIBPATH#${EPREFIX}}
-	doins "${WORKDIR}"/specs/*.specs || die "failed to install specs"
-	# Build system specs file which, if it exists, must be a complete set of
-	# specs as it completely and unconditionally overrides the builtin specs.
-	if ! tc_version_is_at_least 4.4 ; then
-		$(XGCC) -dumpspecs > "${WORKDIR}"/specs/specs
-		cat "${WORKDIR}"/build.specs >> "${WORKDIR}"/specs/specs
-		doins "${WORKDIR}"/specs/specs || die "failed to install the specs file"
-	fi
-}
-
 #---->> pkg_post* <<----
 
 toolchain_pkg_postinst() {
@@ -2821,80 +2710,6 @@ get_make_var() {
 }
 
 XGCC() { get_make_var GCC_FOR_TARGET ; }
-
-# The gentoo pie-ssp patches allow for 3 configurations:
-# 1) PIE+SSP by default
-# 2) PIE by default
-# 3) SSP by default
-hardened_gcc_works() {
-	if [[ $1 == "pie" ]] ; then
-		# $gcc_cv_ld_pie is unreliable as it simply take the output of
-		# `ld --help | grep -- -pie`, that reports the option in all cases, also if
-		# the loader doesn't actually load the resulting executables.
-
-		want_pie || return 1
-		_tc_use_if_iuse nopie && return 1
-		hardened_gcc_is_stable pie
-		return $?
-	elif [[ $1 == "ssp" ]] ; then
-		[[ -n ${SPECS_VER} ]] || return 1
-		_tc_use_if_iuse nossp && return 1
-		hardened_gcc_is_stable ssp
-		return $?
-	else
-		# laziness ;)
-		hardened_gcc_works pie || return 1
-		hardened_gcc_works ssp || return 1
-		return 0
-	fi
-}
-
-hardened_gcc_is_stable() {
-	local tocheck
-	if [[ $1 == "pie" ]] ; then
-		tocheck=${PIE_GLIBC_STABLE}
-	elif [[ $1 == "ssp" ]] ; then
-		tocheck=${SSP_STABLE}
-	else
-		die "hardened_gcc_stable needs to be called with pie or ssp"
-	fi
-
-	has $(tc-arch) ${tocheck} && return 0
-	return 1
-}
-
-want_minispecs() {
-	# On gcc 6, we don't need minispecs
-	if tc_version_is_at_least 6.0 ; then
-		return 0
-	fi
-	if tc_version_is_at_least 4.3.2 && _tc_use_if_iuse hardened ; then
-		if ! want_pie ; then
-			ewarn "PIE_VER or SPECS_VER is not defined in the GCC ebuild."
-		elif _tc_use_if_iuse vanilla ; then
-			ewarn "You will not get hardened features if you have the vanilla USE-flag."
-		elif _tc_use_if_iuse nopie && _tc_use_if_iuse nossp ; then
-			ewarn "You will not get hardened features if you have the nopie and nossp USE-flag."
-		elif ! hardened_gcc_works ; then
-			ewarn "Your $(tc-arch) arch is not supported."
-		else
-			return 0
-		fi
-		ewarn "Hope you know what you are doing. Hardened will not work."
-		return 0
-	fi
-	return 1
-}
-
-want_pie() {
-	! _tc_use_if_iuse hardened && [[ -n ${PIE_VER} ]] \
-		&& _tc_use_if_iuse nopie && return 1
-	[[ -n ${PIE_VER} ]] && [[ -n ${SPECS_VER} ]] && return 0
-	tc_version_is_at_least 4.3.2 && return 1
-	[[ -z ${PIE_VER} ]] && return 1
-	_tc_use_if_iuse nopie || return 0
-	return 1
-}
 
 has toolchain_death_notice ${EBUILD_DEATH_HOOKS} || EBUILD_DEATH_HOOKS+=" toolchain_death_notice"
 toolchain_death_notice() {
