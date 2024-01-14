@@ -315,7 +315,7 @@ if [[ ${PN} != kgcc64 && ${PN} != gcc-* ]] ; then
 	#   <gcc-6.5 supported graphite, it required old incompatible isl
 	tc_version_is_at_least 6.5 && IUSE+=" graphite" TC_FEATURES+=( graphite )
 
-	tc_version_is_at_least 3.1 && IUSE+=" ada"
+	tc_version_is_at_least 4.9 && IUSE+=" ada"
 	tc_version_is_at_least 4.9 && IUSE+=" vtv"
 	tc_version_is_at_least 5.0 && IUSE+=" jit"
 	tc_version_is_at_least 6.0 && IUSE+=" +pie +ssp"
