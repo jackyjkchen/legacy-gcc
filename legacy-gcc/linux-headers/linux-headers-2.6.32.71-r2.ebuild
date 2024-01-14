@@ -44,8 +44,7 @@ SLOT="0"
 
 DEPEND=""
 RDEPEND="${DEPEND}"
-BDEPEND="sys-devel/make
-	sys-devel/gcc:4.4.7"
+BDEPEND="sys-devel/gcc:4.4.7"
 
 unset ARCH
 HOSTCC="gcc-4.4.7"
