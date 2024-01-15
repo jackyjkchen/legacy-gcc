@@ -291,7 +291,6 @@ if [[ ${PN} != kgcc64 && ${PN} != gcc-* ]] ; then
 	tc_version_is_at_least 4.1 && IUSE+=" +fortran" TC_FEATURES+=( fortran )
 	tc_version_is_between 4.0 4.1 && IUSE+=" f95"
 	tc_version_is_at_least 3.0 && IUSE+=" doc"
-	tc_version_is_at_least 6.0 && IUSE+=" hardened"
 	tc_version_is_at_least 3.1 && IUSE+=" multilib"
 	tc_version_is_at_least 3.4 && IUSE+=" pgo"
 	tc_version_is_at_least 4.0 && IUSE+=" objc-gc" TC_FEATURES+=( objc-gc )
@@ -317,7 +316,7 @@ if [[ ${PN} != kgcc64 && ${PN} != gcc-* ]] ; then
 	tc_version_is_at_least 4.9 && IUSE+=" ada"
 	tc_version_is_at_least 4.9 && IUSE+=" vtv"
 	tc_version_is_at_least 5.0 && IUSE+=" jit"
-	tc_version_is_at_least 6.0 && IUSE+=" +pie +ssp"
+	tc_version_is_at_least 6.0 && IUSE+=" +pie +ssp hardened"
 	tc_version_is_at_least 3.4 && IUSE+=" pch"
 
 	# systemtap is a gentoo-specific switch: bug #654748
@@ -819,6 +818,8 @@ do_gcc_DJGPP_patches() {
 
 # configure to build with the hardened GCC specs as the default
 tc_enable_hardened_gcc() {
+	tc_version_is_at_least 6.0 || return 0
+
 	local hardened_gcc_flags=""
 
 	if _tc_use_if_iuse pie ; then
