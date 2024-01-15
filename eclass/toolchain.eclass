@@ -626,7 +626,7 @@ toolchain_src_prepare() {
 
 	eapply_user
 
-	if ! use vanilla ; then
+	if ! _tc_use_if_iuse vanilla ; then
 		tc_enable_hardened_gcc
 	fi
 
