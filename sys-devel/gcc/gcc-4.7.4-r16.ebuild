@@ -3,8 +3,6 @@
 
 EAPI="7"
 
-PATCH_VER="1.6"
-
 inherit toolchain
 
 KEYWORDS="alpha amd64 arm hppa ia64 m68k mips ppc ppc64 s390 sh sparc x86"
@@ -23,14 +21,14 @@ else
 fi
 
 src_prepare() {
+	! use vanilla && eapply "${FILESDIR}"/${PV}/00_gentoo-patchset.patch
 	toolchain_src_prepare
 	use vanilla && return 0
 
-	[[ $(tc-arch) == "alpha" ]] && eapply "${FILESDIR}"/${PV}/00_fix-alpha-bootstrap.patch
 	[[ $(tc-arch) == "mips" && ${DEFAULT_ABI} == "n64" ]] && eapply "${FILESDIR}"/${PV}/01_mips64-default-n64-abi.patch
 	eapply "${FILESDIR}"/${PV}/02_fix-cpp98-break.patch
-	eapply "${FILESDIR}"/${PV}/03_fix-werror.patch
-	[[ ${CHOST} == ${CTARGET} ]] && eapply "${FILESDIR}"/gcc-spec-env.patch
+	[[ $(tc-arch) == "alpha" ]] && eapply "${FILESDIR}"/${PV}/03_fix-alpha-bootstrap.patch
+	eapply "${FILESDIR}"/${PV}/04_fix-werror.patch
 
 	eapply "${FILESDIR}"/${PV}/postrelease/00_pr77605-78185-78333.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/01_pr58943.patch

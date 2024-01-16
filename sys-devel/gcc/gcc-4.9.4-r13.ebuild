@@ -3,8 +3,6 @@
 
 EAPI="7"
 
-PATCH_VER="2"
-
 inherit toolchain
 
 KEYWORDS="alpha amd64 arm arm64 hppa ia64 m68k mips ppc ppc64 s390 sh sparc x86"
@@ -23,18 +21,13 @@ else
 fi
 
 src_prepare() {
-	# Bug 638056
-	eapply "${FILESDIR}/${PV}/00_${P}-bootstrap.patch"
-
+	! use vanilla && eapply "${FILESDIR}"/${PV}/00_gentoo-patchset.patch
 	toolchain_src_prepare
 	use vanilla && return 0
 
 	[[ $(tc-arch) == "sh" ]] && eapply "${FILESDIR}"/${PV}/01_workaround-bootstrap-for-sh4.patch
 	[[ $(tc-arch) == "mips" && ${DEFAULT_ABI} == "n64" ]] && eapply "${FILESDIR}"/${PV}/02_mips64-default-n64-abi.patch
 	eapply "${FILESDIR}"/${PV}/03_fix-werror.patch
-
-	# Use -r1 for newer pieapplyet that use DRIVER_SELF_SPECS for the hardened specs.
-	[[ ${CHOST} == ${CTARGET} ]] && eapply "${FILESDIR}"/gcc-spec-env-r1.patch
 
 	eapply "${FILESDIR}"/${PV}/postrelease/00_pr77450-77605-78185-78333.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/01_pr81395.patch

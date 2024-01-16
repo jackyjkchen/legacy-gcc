@@ -1,0 +1,1212 @@
+diff --git a/gcc/Makefile.in b/gcc/Makefile.in
+index f3cc49fdb..e60866b28 100644
+--- a/gcc/Makefile.in
++++ b/gcc/Makefile.in
+@@ -479,6 +479,7 @@ LIMITS_H_TEST = [ -f $(SYSTEM_HEADER_DIR)/limits.h ]
+ # Directory for prefix to system directories, for
+ # each of $(system_prefix)/usr/include, $(system_prefix)/usr/lib, etc.
+ TARGET_SYSTEM_ROOT = @TARGET_SYSTEM_ROOT@
++TARGET_SYSTEM_ROOT_DEFINE = @TARGET_SYSTEM_ROOT_DEFINE@
+ 
+ xmake_file=@xmake_file@
+ tmake_file=@tmake_file@
+@@ -2081,7 +2082,7 @@ attribs.o : attribs.c $(CONFIG_H) $(SYSTEM_H) coretypes.h $(TM_H) $(TREE_H) \
+ 
+ incpath.o: incpath.c incpath.h $(CONFIG_H) $(SYSTEM_H) $(CPPLIB_H) \
+ 		intl.h prefix.h coretypes.h $(TM_H) cppdefault.h $(TARGET_H) \
+-		$(MACHMODE_H)
++		$(MACHMODE_H) $(FLAGS_H) toplev.h
+ 
+ CFLAGS-prefix.o += -DPREFIX=\"$(prefix)\" -DBASEVER=$(BASEVER_s)
+ prefix.o: prefix.c $(CONFIG_H) $(SYSTEM_H) coretypes.h prefix.h \
+@@ -3904,7 +3905,7 @@ build/genflags.o : genflags.c $(RTL_BASE_H) $(OBSTACK_H) $(BCONFIG_H)	\
+   $(SYSTEM_H) coretypes.h $(GTM_H) errors.h $(READ_MD_H) gensupport.h
+ build/gengenrtl.o : gengenrtl.c $(BCONFIG_H) $(SYSTEM_H) rtl.def
+ gengtype-lex.o build/gengtype-lex.o : gengtype-lex.c gengtype.h $(SYSTEM_H)
+-gengtype-lex.o: $(CONFIG_H)
++gengtype-lex.o: $(CONFIG_H) $(BCONFIG_H)
+ build/gengtype-lex.o: $(BCONFIG_H)
+ gengtype-parse.o build/gengtype-parse.o : gengtype-parse.c gengtype.h \
+   $(SYSTEM_H)
+diff --git a/gcc/c-family/c-common.c b/gcc/c-family/c-common.c
+index 82a2b8d6c..ad883fe27 100644
+--- a/gcc/c-family/c-common.c
++++ b/gcc/c-family/c-common.c
+@@ -202,7 +202,7 @@ int warn_unknown_pragmas; /* Tri state variable.  */
+ /* Warn about format/argument anomalies in calls to formatted I/O functions
+    (*printf, *scanf, strftime, strfmon, etc.).  */
+ 
+-int warn_format;
++int warn_format = 1;
+ 
+ /* C/ObjC language option variables.  */
+ 
+diff --git a/gcc/c-family/c-cppbuiltin.c b/gcc/c-family/c-cppbuiltin.c
+index 608dba6ec..92d2b9546 100644
+--- a/gcc/c-family/c-cppbuiltin.c
++++ b/gcc/c-family/c-cppbuiltin.c
+@@ -854,6 +854,9 @@ c_cpp_builtins (cpp_reader *pfile)
+   builtin_define_with_value ("__REGISTER_PREFIX__", REGISTER_PREFIX, 0);
+   builtin_define_with_value ("__USER_LABEL_PREFIX__", user_label_prefix, 0);
+ 
++  /* Fortify Source enabled by default w/optimization.  */
++  cpp_define (pfile, "_FORTIFY_SOURCE=((defined __OPTIMIZE__ && __OPTIMIZE__ > 0) ? 2 : 0)");
++
+   /* Misc.  */
+   if (flag_gnu89_inline)
+     cpp_define (pfile, "__GNUC_GNU_INLINE__");
+diff --git a/gcc/c-family/c.opt b/gcc/c-family/c.opt
+index 8c65e33c2..e8369458d 100644
+--- a/gcc/c-family/c.opt
++++ b/gcc/c-family/c.opt
+@@ -392,7 +392,7 @@ C ObjC C++ ObjC++ Var(warn_format_contains_nul) Warning
+ Warn about format strings that contain NUL bytes
+ 
+ Wformat-security
+-C ObjC C++ ObjC++ Var(warn_format_security) Warning
++C ObjC C++ ObjC++ Var(warn_format_security) Init(1) Warning
+ Warn about possible security problems with format functions
+ 
+ Wformat-y2k
+diff --git a/gcc/common.opt b/gcc/common.opt
+index e72d8cf3c..7b96a1aaf 100644
+--- a/gcc/common.opt
++++ b/gcc/common.opt
+@@ -585,6 +585,10 @@ Wpadded
+ Common Var(warn_padded) Warning
+ Warn when padding is required to align structure members
+ 
++Wpoison-system-directories
++Common Var(flag_poison_system_directories) Init(1) Warning
++Warn for -I and -L options using system directories if cross compiling
++
+ Wshadow
+ Common Var(warn_shadow) Warning
+ Warn when one local variable shadows another
+@@ -642,7 +646,7 @@ Common Var(warn_system_headers) Warning
+ Do not suppress warnings from system headers
+ 
+ Wtrampolines
+-Common Var(warn_trampolines) Warning
++Common Var(warn_trampolines) Init(1) Warning
+ Warn whenever a trampoline is generated
+ 
+ Wtype-limits
+diff --git a/gcc/config.gcc b/gcc/config.gcc
+index 9503b96cf..c7f892a3a 100644
+--- a/gcc/config.gcc
++++ b/gcc/config.gcc
+@@ -512,6 +512,9 @@ x86_64-*-*)
+ 	fi
+ 	tm_file="vxworks-dummy.h ${tm_file}"
+ 	;;
++arm*-*-* | mips*-*-* | sh*-*-* | sparc*-*-*)
++	tm_file="vxworks-dummy.h ${tm_file}"
++	;;
+ esac
+ 
+ # On a.out targets, we need to use collect2.
+@@ -843,7 +846,7 @@ arm*-*-freebsd*)
+ 	tmake_file="${tmake_file} arm/t-arm arm/t-strongarm-elf"
+ 	;;
+ arm*-*-netbsdelf*)
+-	tm_file="dbxelf.h elfos.h netbsd.h netbsd-elf.h arm/elf.h arm/aout.h arm/arm.h arm/netbsd-elf.h"
++	tm_file="dbxelf.h elfos.h netbsd.h netbsd-elf.h arm/elf.h arm/aout.h ${tm_file} arm/netbsd-elf.h"
+ 	extra_options="${extra_options} netbsd.opt netbsd-elf.opt"
+ 	tmake_file="${tmake_file} arm/t-arm"
+ 	;;
+@@ -877,7 +880,7 @@ arm*-*-linux*)			# ARM GNU/Linux with ELF
+ 	    ;;
+ 	esac
+ 	with_tls=${with_tls:-gnu}
+-	tm_file="$tm_file arm/aout.h arm/arm.h"
++	tm_file="$tm_file arm/aout.h vxworks-dummy.h arm/arm.h"
+ 	;;
+ arm*-*-uclinux*)		# ARM ucLinux
+ 	tm_file="dbxelf.h elfos.h arm/unknown-elf.h arm/elf.h arm/linux-gas.h arm/uclinux-elf.h glibc-stdint.h"
+@@ -893,7 +896,7 @@ arm*-*-uclinux*)		# ARM ucLinux
+ 	    # The EABI requires the use of __cxa_atexit.
+ 	    default_use_cxa_atexit=yes
+ 	esac
+-	tm_file="$tm_file arm/aout.h arm/arm.h"
++	tm_file="$tm_file arm/aout.h vxworks-dummy.h arm/arm.h"
+ 	;;
+ arm*-*-ecos-elf)
+ 	tm_file="dbxelf.h elfos.h newlib-stdint.h arm/unknown-elf.h arm/elf.h arm/aout.h arm/arm.h arm/ecos-elf.h"
+@@ -928,10 +931,10 @@ arm*-*-eabi* | arm*-*-symbianelf* | arm*-*-rtems*)
+ 	  tmake_file="${tmake_file} arm/t-symbian"
+ 	  ;;
+ 	esac
+-	tm_file="${tm_file} arm/aout.h arm/arm.h"
++	tm_file="${tm_file} arm/aout.h vxworks-dummy.h arm/arm.h"
+ 	;;
+ arm*-*-elf)
+-	tm_file="dbxelf.h elfos.h newlib-stdint.h arm/unknown-elf.h arm/elf.h arm/aout.h arm/arm.h"
++	tm_file="dbxelf.h elfos.h newlib-stdint.h arm/unknown-elf.h arm/elf.h arm/aout.h vxworks-dummy.h arm/arm.h"
+ 	tmake_file="arm/t-arm arm/t-arm-elf"
+ 	;;
+ arm*-wince-pe*)
+@@ -2351,7 +2354,7 @@ sh-*-elf* | sh[12346l]*-*-elf* | \
+ 	if test "$sh_multilibs" = "default" ; then
+ 		case ${target} in
+ 		sh64-superh-linux* | \
+-		sh[1234]*)	sh_multilibs=${sh_cpu_target} ;;
++		sh[1234]*)	sh_multilibs=$(echo $(sed -n '/^[[:space:]]*case ${sh_multilib} in/,/)/{s:case ${sh_multilib} in::;s: | *:,:g;s:[\\)]::g;p}' ${srcdir}/config.gcc) | sed 's: ::g') ;;
+ 		sh64* | sh5*)	sh_multilibs=m5-32media,m5-32media-nofpu,m5-compact,m5-compact-nofpu,m5-64media,m5-64media-nofpu ;;
+ 		sh-superh-*)	sh_multilibs=m4,m4-single,m4-single-only,m4-nofpu ;;
+ 		sh*-*-linux*)	sh_multilibs=m1,m2,m2a,m3e,m4 ;;
+diff --git a/gcc/config.in b/gcc/config.in
+index 2e632b242..f66f0fbd3 100644
+--- a/gcc/config.in
++++ b/gcc/config.in
+@@ -144,6 +144,12 @@
+ #endif
+ 
+ 
++/* Define to warn for use of native system header directories */
++#ifndef USED_FOR_TARGET
++#undef ENABLE_POISON_SYSTEM_DIRECTORIES
++#endif
++
++
+ /* Define if you want all operations on RTL (the basic data structure of the
+    optimizer and back end) to be checked for dynamic type safety at runtime.
+    This is quite expensive. */
+diff --git a/gcc/config/alpha/alpha.h b/gcc/config/alpha/alpha.h
+index 07ffa9fe8..ec12a6ecf 100644
+--- a/gcc/config/alpha/alpha.h
++++ b/gcc/config/alpha/alpha.h
+@@ -96,6 +96,8 @@ along with GCC; see the file COPYING3.  If not see
+   while (0)
+ #endif
+ 
++#define CPP_SPEC "%{!no-ieee:-mieee}"
++
+ /* Run-time compilation parameters selecting different hardware subsets.  */
+ 
+ /* Which processor to schedule for. The cpu attribute defines a list that
+diff --git a/gcc/config/alpha/alpha.opt b/gcc/config/alpha/alpha.opt
+index fb7db3775..e11721350 100644
+--- a/gcc/config/alpha/alpha.opt
++++ b/gcc/config/alpha/alpha.opt
+@@ -39,7 +39,7 @@ Target RejectNegative Mask(IEEE_CONFORMANT)
+ Request IEEE-conformant math library routines (OSF/1)
+ 
+ mieee
+-Target Report RejectNegative Mask(IEEE)
++Target Report Mask(IEEE)
+ Emit IEEE-conformant code, without inexact exceptions
+ 
+ mieee-with-inexact
+diff --git a/gcc/config/alpha/elf.h b/gcc/config/alpha/elf.h
+index 3b5ec08e9..a01db469c 100644
+--- a/gcc/config/alpha/elf.h
++++ b/gcc/config/alpha/elf.h
+@@ -47,7 +47,7 @@ along with GCC; see the file COPYING3.  If not see
+ #define CC1_SPEC  "%{G*}"
+ 
+ #undef  ASM_SPEC
+-#define ASM_SPEC  "%{G*} %{relax:-relax} %{!gstabs*:-no-mdebug}%{gstabs*:-mdebug}"
++#define ASM_SPEC  "%{G*} %{relax:-relax} %{!gstabs*:-no-mdebug}%{gstabs*:-mdebug} %{mcpu=*:-m%*}"
+ 
+ #undef  IDENT_ASM_OP
+ #define IDENT_ASM_OP "\t.ident\t"
+diff --git a/gcc/config/arm/linux-eabi.h b/gcc/config/arm/linux-eabi.h
+index 80bd82593..3ec11339f 100644
+--- a/gcc/config/arm/linux-eabi.h
++++ b/gcc/config/arm/linux-eabi.h
+@@ -32,7 +32,8 @@
+   while (false)
+ 
+ /* We default to a soft-float ABI so that binaries can run on all
+-   target hardware.  */
++   target hardware.  If you override this to use the hard-float ABI then
++   change the setting of GLIBC_DYNAMIC_LINKER_DEFAULT as well.  */
+ #undef  TARGET_DEFAULT_FLOAT_ABI
+ #define TARGET_DEFAULT_FLOAT_ABI ARM_FLOAT_ABI_SOFT
+ 
+@@ -45,7 +46,7 @@
+    The ARM10TDMI core is the default for armv5t, so set
+    SUBTARGET_CPU_DEFAULT to achieve this.  */
+ #undef  SUBTARGET_CPU_DEFAULT
+-#define SUBTARGET_CPU_DEFAULT TARGET_CPU_arm10tdmi
++#define SUBTARGET_CPU_DEFAULT TARGET_CPU_arm9tdmi
+ 
+ /* TARGET_BIG_ENDIAN_DEFAULT is set in
+    config.gcc for big endian configurations.  */
+@@ -59,15 +60,28 @@
+ #undef  SUBTARGET_EXTRA_LINK_SPEC
+ #define SUBTARGET_EXTRA_LINK_SPEC " -m " TARGET_LINKER_EMULATION
+ 
+-/* Use ld-linux.so.3 so that it will be possible to run "classic"
+-   GNU/Linux binaries on an EABI system.  */
++/* GNU/Linux on ARM currently supports three dynamic linkers:
++   - ld-linux.so.2 - for the legacy ABI
++   - ld-linux.so.3 - for the EABI-derived soft-float ABI
++   - ld-linux-armhf.so.3 - for the EABI-derived hard-float ABI.
++   All the dynamic linkers live in /lib.
++   We default to soft-float, but this can be overridden by changing both
++   GLIBC_DYNAMIC_LINKER_DEFAULT and TARGET_DEFAULT_FLOAT_ABI.  */
++
+ #undef  GLIBC_DYNAMIC_LINKER
+-#define GLIBC_DYNAMIC_LINKER "/lib/ld-linux.so.3"
++#define GLIBC_DYNAMIC_LINKER_SOFT_FLOAT "/lib/ld-linux.so.3"
++#define GLIBC_DYNAMIC_LINKER_HARD_FLOAT "/lib/ld-linux-armhf.so.3"
++#define GLIBC_DYNAMIC_LINKER_DEFAULT GLIBC_DYNAMIC_LINKER_SOFT_FLOAT
++
++#define GLIBC_DYNAMIC_LINKER \
++   "%{mfloat-abi=hard:" GLIBC_DYNAMIC_LINKER_HARD_FLOAT "} \
++    %{mfloat-abi=soft*:" GLIBC_DYNAMIC_LINKER_SOFT_FLOAT "} \
++    %{!mfloat-abi=*:" GLIBC_DYNAMIC_LINKER_DEFAULT "}"
+ 
+ /* At this point, bpabi.h will have clobbered LINK_SPEC.  We want to
+    use the GNU/Linux version, not the generic BPABI version.  */
+ #undef  LINK_SPEC
+-#define LINK_SPEC BE8_LINK_SPEC						\
++#define LINK_SPEC TARGET_FIX_V4BX_SPEC BE8_LINK_SPEC			\
+   LINUX_OR_ANDROID_LD (LINUX_TARGET_LINK_SPEC,				\
+ 		       LINUX_TARGET_LINK_SPEC " " ANDROID_LINK_SPEC)
+ 
+diff --git a/gcc/config/arm/t-arm b/gcc/config/arm/t-arm
+index 1128d1904..611eca18c 100644
+--- a/gcc/config/arm/t-arm
++++ b/gcc/config/arm/t-arm
+@@ -19,6 +19,9 @@
+ # along with GCC; see the file COPYING3.  If not see
+ # <http://www.gnu.org/licenses/>.
+ 
++TM_H += $(srcdir)/config/arm/arm-cores.def
++OPTIONS_H_EXTRA += $(srcdir)/config/arm/arm-cores.def
++
+ # All md files - except for arm.md.
+ # This list should be kept in alphabetical order and updated whenever an md
+ # file is added or removed.
+diff --git a/gcc/config/freebsd-spec.h b/gcc/config/freebsd-spec.h
+index 770a3d1dc..280858203 100644
+--- a/gcc/config/freebsd-spec.h
++++ b/gcc/config/freebsd-spec.h
+@@ -64,11 +64,8 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+ 	before entering `main'.  */
+    
+ #define FBSD_STARTFILE_SPEC \
+-  "%{!shared: \
+-     %{pg:gcrt1.o%s} %{!pg:%{p:gcrt1.o%s} \
+-		       %{!p:%{profile:gcrt1.o%s} \
+-			 %{!profile:crt1.o%s}}}} \
+-   crti.o%s %{!shared:crtbegin.o%s} %{shared:crtbeginS.o%s}"
++  "%{!shared: %{pg|p|profile:gcrt1.o%s;pie:Scrt1.o%s;:crt1.o%s}} \
++   crti.o%s %{shared|pie:crtbeginS.o%s;:crtbegin.o%s}"
+ 
+ /* Provide a ENDFILE_SPEC appropriate for FreeBSD.  Here we tack on
+    the magical crtend.o file (see crtstuff.c) which provides part of 
+@@ -77,7 +74,7 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+ 	`crtn.o'.  */
+ 
+ #define FBSD_ENDFILE_SPEC \
+-  "%{!shared:crtend.o%s} %{shared:crtendS.o%s} crtn.o%s"
++  "%{shared|pie:crtendS.o%s;:crtend.o%s} crtn.o%s"
+ 
+ /* Provide a LIB_SPEC appropriate for FreeBSD as configured and as
+    required by the user-land thread model.  Before __FreeBSD_version
+diff --git a/gcc/config/i386/freebsd.h b/gcc/config/i386/freebsd.h
+index 649274d92..dd69e430c 100644
+--- a/gcc/config/i386/freebsd.h
++++ b/gcc/config/i386/freebsd.h
+@@ -67,11 +67,8 @@ along with GCC; see the file COPYING3.  If not see
+    
+ #undef	STARTFILE_SPEC
+ #define STARTFILE_SPEC \
+-  "%{!shared: \
+-     %{pg:gcrt1.o%s} %{!pg:%{p:gcrt1.o%s} \
+-		       %{!p:%{profile:gcrt1.o%s} \
+-			 %{!profile:crt1.o%s}}}} \
+-   crti.o%s %{!shared:crtbegin.o%s} %{shared:crtbeginS.o%s}"
++  "%{!shared: %{pg|p|profile:gcrt1.o%s;pie:Scrt1.o%s;:crt1.o%s}} \
++   crti.o%s %{shared|pie:crtbeginS.o%s;:crtbegin.o%s}"
+ 
+ /* Provide a ENDFILE_SPEC appropriate for FreeBSD.  Here we tack on
+    the magical crtend.o file (see crtstuff.c) which provides part of 
+@@ -81,7 +78,7 @@ along with GCC; see the file COPYING3.  If not see
+ 
+ #undef	ENDFILE_SPEC
+ #define ENDFILE_SPEC \
+-  "%{!shared:crtend.o%s} %{shared:crtendS.o%s} crtn.o%s"
++  "%{shared|pie:crtendS.o%s;:crtend.o%s} crtn.o%s"
+ 
+ /* Provide a LINK_SPEC appropriate for FreeBSD.  Here we provide support
+    for the special GCC options -static and -shared, which allow us to
+diff --git a/gcc/config/ia64/linux.h b/gcc/config/ia64/linux.h
+index 00b0ddba1..c3219f73d 100644
+--- a/gcc/config/ia64/linux.h
++++ b/gcc/config/ia64/linux.h
+@@ -24,6 +24,8 @@ a copy of the GCC Runtime Library Exception along with this program;
+ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+ <http://www.gnu.org/licenses/>.  */
+ 
++#define TARGET_ASM_FILE_END file_end_indicate_exec_stack
++
+ /* This is for -profile to use -lc_p instead of -lc.  */
+ #undef CC1_SPEC
+ #define CC1_SPEC "%{profile:-p} %{G*}"
+diff --git a/gcc/config/microblaze/linux.h b/gcc/config/microblaze/linux.h
+index 3c13fabcb..2eec4644e 100644
+--- a/gcc/config/microblaze/linux.h
++++ b/gcc/config/microblaze/linux.h
+@@ -20,6 +20,9 @@
+    <http://www.gnu.org/licenses/>.  */
+ 
+ 
++#undef CPP_SPEC
++#define CPP_SPEC "%{posix:-D_POSIX_SOURCE} %{pthread:-D_REENTRANT}"
++
+ #define DYNAMIC_LINKER "/lib/ld.so.1"
+ #undef  SUBTARGET_EXTRA_SPECS
+ #define SUBTARGET_EXTRA_SPECS \
+diff --git a/gcc/config/netbsd-elf.h b/gcc/config/netbsd-elf.h
+index 4fd55c189..e68fafd94 100644
+--- a/gcc/config/netbsd-elf.h
++++ b/gcc/config/netbsd-elf.h
+@@ -70,6 +70,7 @@ along with GCC; see the file COPYING3.  If not see
+ #define NETBSD_LINK_SPEC_ELF \
+   "%{assert*} %{R*} %{rpath*} \
+    %{shared:-shared} \
++   %{symbolic:-Bsymbolic} \
+    %{!shared: \
+      -dc -dp \
+      %{!nostdlib: \
+diff --git a/gcc/config/pa/pa-linux.h b/gcc/config/pa/pa-linux.h
+index 6cc68a5c6..3f64a03d5 100644
+--- a/gcc/config/pa/pa-linux.h
++++ b/gcc/config/pa/pa-linux.h
+@@ -30,7 +30,7 @@ along with GCC; see the file COPYING3.  If not see
+   while (0)
+ 
+ #undef CPP_SPEC
+-#define CPP_SPEC "%{posix:-D_POSIX_SOURCE}"
++#define CPP_SPEC "%{posix:-D_POSIX_SOURCE} %{pthread:-D_REENTRANT}"
+ 
+ #undef ASM_SPEC
+ #define ASM_SPEC \
+diff --git a/gcc/config/rs6000/ppc-asm.h b/gcc/config/rs6000/ppc-asm.h
+index c963eb98a..c30a43d7d 100644
+--- a/gcc/config/rs6000/ppc-asm.h
++++ b/gcc/config/rs6000/ppc-asm.h
+@@ -352,7 +352,7 @@ GLUE(.L,name): \
+ #endif
+ #endif
+ 
+-#if defined __linux__ && !defined __powerpc64__
++#if defined __linux__
+ 	.section .note.GNU-stack
+ 	.previous
+ #endif
+diff --git a/gcc/configure b/gcc/configure
+index 0d8c5e71d..8192d3d72 100755
+--- a/gcc/configure
++++ b/gcc/configure
+@@ -918,6 +918,7 @@ with_gc
+ with_system_zlib
+ enable_maintainer_mode
+ enable_version_specific_runtime_libs
++enable_poison_system_directories
+ enable_plugin
+ enable_libquadmath_support
+ with_linker_hash_style
+@@ -1632,6 +1633,8 @@ Optional Features:
+   --enable-version-specific-runtime-libs
+                           specify that runtime libraries should be installed
+                           in a compiler-specific directory
++  --enable-poison-system-directories
++                          warn for use of native system header directories
+   --enable-plugin         enable plugin support
+   --disable-libquadmath-support
+                           disable libquadmath support for Fortran
+@@ -23554,7 +23557,7 @@ foo:	.long	25
+ 	tls_first_minor=14
+ 	tls_as_opt="-m64 -Aesame --fatal-warnings"
+ 	;;
+-  sh-*-* | sh[34]-*-*)
++  sh-*-* | sh[34]*-*-*)
+     conftest_s='
+ 	.section ".tdata","awT",@progbits
+ foo:	.long	25
+@@ -27179,6 +27182,19 @@ if test "${enable_version_specific_runtime_libs+set}" = set; then :
+ fi
+ 
+ 
++# Check whether --enable-poison-system-directories was given.
++if test "${enable_poison_system_directories+set}" = set; then :
++  enableval=$enable_poison_system_directories;
++else
++  enable_poison_system_directories=no
++fi
++
++if test "x${enable_poison_system_directories}" = "xyes"; then
++
++$as_echo "#define ENABLE_POISON_SYSTEM_DIRECTORIES 1" >>confdefs.h
++
++fi
++
+ # Substitute configuration variables
+ 
+ 
+diff --git a/gcc/configure.ac b/gcc/configure.ac
+index a78a1d76d..d40e640dd 100644
+--- a/gcc/configure.ac
++++ b/gcc/configure.ac
+@@ -3105,7 +3105,7 @@ foo:	.long	25
+ 	tls_first_minor=14
+ 	tls_as_opt="-m64 -Aesame --fatal-warnings"
+ 	;;
+-  sh-*-* | sh[34]-*-*)
++  sh-*-* | sh[34]*-*-*)
+     conftest_s='
+ 	.section ".tdata","awT",@progbits
+ foo:	.long	25
+@@ -5030,6 +5030,16 @@ AC_ARG_ENABLE(version-specific-runtime-libs,
+                 [specify that runtime libraries should be
+                  installed in a compiler-specific directory])])
+ 
++AC_ARG_ENABLE([poison-system-directories],
++             AS_HELP_STRING([--enable-poison-system-directories],
++                            [warn for use of native system header directories]),,
++             [enable_poison_system_directories=no])
++if test "x${enable_poison_system_directories}" = "xyes"; then
++  AC_DEFINE([ENABLE_POISON_SYSTEM_DIRECTORIES],
++           [1],
++           [Define to warn for use of native system header directories])
++fi
++
+ # Substitute configuration variables
+ AC_SUBST(subdirs)
+ AC_SUBST(srcdir)
+diff --git a/gcc/cp/cfns.gperf b/gcc/cp/cfns.gperf
+index ef1ed083d..ba0c487a6 100644
+--- a/gcc/cp/cfns.gperf
++++ b/gcc/cp/cfns.gperf
+@@ -22,6 +22,9 @@ __inline
+ static unsigned int hash (const char *, unsigned int);
+ #ifdef __GNUC__
+ __inline
++#ifdef __GNUC_STDC_INLINE__
++__attribute__ ((__gnu_inline__))
++#endif
+ #endif
+ const char * libc_name_p (const char *, unsigned int);
+ %}
+diff --git a/gcc/cp/cfns.h b/gcc/cp/cfns.h
+index 62cdfab93..2fb9b4632 100644
+--- a/gcc/cp/cfns.h
++++ b/gcc/cp/cfns.h
+@@ -53,6 +53,9 @@ __inline
+ static unsigned int hash (const char *, unsigned int);
+ #ifdef __GNUC__
+ __inline
++#ifdef __GNUC_STDC_INLINE__
++__attribute__ ((__gnu_inline__))
++#endif
+ #endif
+ const char * libc_name_p (const char *, unsigned int);
+ /* maximum key range = 391, duplicates = 0 */
+diff --git a/gcc/doc/gcc.info b/gcc/doc/gcc.info
+index 864573b94..5b418e885 100644
+--- a/gcc/doc/gcc.info
++++ b/gcc/doc/gcc.info
+@@ -3237,6 +3237,9 @@ option was used.
+      `-Wformat-nonliteral', `-Wformat-security', and `-Wformat=2' are
+      available, but are not included in `-Wall'.
+ 
++     In Gentoo this option is enabled by default for C, C++, ObjC, ObjC++.
++     To disable, use `-Wformat=0'.
++
+ `-Wformat-y2k'
+      If `-Wformat' is specified, also warn about `strftime' formats
+      that may yield only a two-digit year.
+@@ -3279,6 +3282,11 @@ option was used.
+      about, but in future warnings may be added to `-Wformat-security'
+      that are not included in `-Wformat-nonliteral'.)
+ 
++     In Gentoo this option is enabled by default for C, C++, ObjC, ObjC++.
++     To disable, use `-Wno-format-security', or disable all format warnings
++     with `-Wformat=0'.  To make format security warnings fatal, specify
++     `-Werror=format-security'.
++
+ `-Wformat=2'
+      Enable `-Wformat' plus format checks not included in `-Wformat'.
+      Currently equivalent to `-Wformat -Wformat-nonliteral
+@@ -3782,6 +3790,8 @@ option was used.
+      and thus requires the stack  to be made executable in order for
+      the program to work properly.
+ 
++     This warning is enabled by default in Gentoo.
++
+ `-Wfloat-equal'
+      Warn if floating-point values are used in equality comparisons.
+ 
+@@ -5786,6 +5796,11 @@ find out the exact set of optimizations that are enabled at each level.
+      Please note the warning under `-fgcse' about invoking `-O2' on
+      programs that use computed gotos.
+ 
++     NOTE: In Gentoo, `-D_FORTIFY_SOURCE=2' is set by default, and is
++     activated when `-O' is set to 2 or higher.  This enables additional
++     compile-time and run-time checks for several libc functions.  To disable,
++     specify either `-U_FORTIFY_SOURCE' or `-D_FORTIFY_SOURCE=0'.
++
+ `-O3'
+      Optimize yet more.  `-O3' turns on all optimizations specified by
+      `-O2' and also turns on the `-finline-functions',
+diff --git a/gcc/doc/invoke.texi b/gcc/doc/invoke.texi
+index 625fef25a..450b6ba2c 100644
+--- a/gcc/doc/invoke.texi
++++ b/gcc/doc/invoke.texi
+@@ -260,6 +260,7 @@ Objective-C and Objective-C++ Dialects}.
+ -Woverlength-strings  -Wpacked  -Wpacked-bitfield-compat  -Wpadded @gol
+ -Wparentheses  -Wpedantic-ms-format -Wno-pedantic-ms-format @gol
+ -Wpointer-arith  -Wno-pointer-to-int-cast @gol
++-Wno-poison-system-directories @gol
+ -Wredundant-decls @gol
+ -Wreturn-type  -Wsequence-point  -Wshadow @gol
+ -Wsign-compare  -Wsign-conversion  -Wstack-protector @gol
+@@ -3880,6 +3881,14 @@ headers---for that, @option{-Wunknown-pragmas} must also be used.
+  for most targets, it is made up of code and thus requires the stack
+  to be made executable in order for the program to work properly.
+ 
++@item -Wno-poison-system-directories
++@opindex Wno-poison-system-directories
++Do not warn for @option{-I} or @option{-L} options using system
++directories such as @file{/usr/include} when cross compiling.  This
++option is intended for use in chroot environments when such
++directories contain the correct headers and libraries for the target
++system rather than the host.
++
+ @item -Wfloat-equal
+ @opindex Wfloat-equal
+ @opindex Wno-float-equal
+diff --git a/gcc/fortran/Make-lang.in b/gcc/fortran/Make-lang.in
+index 2602b157a..b4c5ea214 100644
+--- a/gcc/fortran/Make-lang.in
++++ b/gcc/fortran/Make-lang.in
+@@ -340,6 +340,7 @@ GFORTRAN_TRANS_DEPS = fortran/gfortran.h fortran/libgfortran.h \
+     $(CONFIG_H) $(SYSTEM_H) $(TREE_H) $(TM_H) coretypes.h $(GGC_H) \
+     fortran/iso-c-binding.def fortran/iso-fortran-env.def
+ 
++CFLAGS-fortran/cpp.o += $(TARGET_SYSTEM_ROOT_DEFINE)
+ fortran/f95-lang.o: $(GFORTRAN_TRANS_DEPS) fortran/mathbuiltins.def \
+   gt-fortran-f95-lang.h gtype-fortran.h $(CGRAPH_H) $(TARGET_H) fortran/cpp.h \
+   $(BUILTINS_DEF) fortran/types.def \
+diff --git a/gcc/fortran/cpp.c b/gcc/fortran/cpp.c
+index 2f1889331..d7e19649c 100644
+--- a/gcc/fortran/cpp.c
++++ b/gcc/fortran/cpp.c
+@@ -38,6 +38,10 @@ along with GCC; see the file COPYING3.  If not see
+ #include "cppbuiltin.h"
+ #include "mkdeps.h"
+ 
++#ifndef TARGET_SYSTEM_ROOT
++# define TARGET_SYSTEM_ROOT NULL
++#endif
++
+ #ifndef TARGET_CPU_CPP_BUILTINS
+ # define TARGET_CPU_CPP_BUILTINS()
+ #endif
+@@ -267,7 +271,7 @@ gfc_cpp_init_options (unsigned int decoded_options_count,
+ 
+   gfc_cpp_option.multilib = NULL;
+   gfc_cpp_option.prefix = NULL;
+-  gfc_cpp_option.sysroot = NULL;
++  gfc_cpp_option.sysroot = TARGET_SYSTEM_ROOT;
+ 
+   gfc_cpp_option.deferred_opt = XNEWVEC (gfc_cpp_deferred_opt_t,
+ 					 decoded_options_count);
+diff --git a/gcc/gcc.c b/gcc/gcc.c
+index 939dcc873..2acb1b89a 100644
+--- a/gcc/gcc.c
++++ b/gcc/gcc.c
+@@ -674,6 +674,8 @@ proper position among the other output files.  */
+     %{flto} %{flto=*} %l " LINK_PIE_SPEC \
+    "%X %{o*} %{e*} %{N} %{n} %{r}\
+     %{s} %{t} %{u*} %{z} %{Z} %{!nostdlib:%{!nostartfiles:%S}}\
++    %{Wno-poison-system-directories:--no-poison-system-directories}\
++    %{Werror=poison-system-directories:--error-poison-system-directories}\
+     %{static:} %{L*} %(mfwrap) %(link_libgcc) %o\
+     %{fopenmp|ftree-parallelize-loops=*:%:include(libgomp.spec)%(link_gomp)}\
+     %{fgnu-tm:%:include(libitm.spec)%(link_itm)}\
+diff --git a/gcc/gcse.c b/gcc/gcse.c
+index 0fdc51a74..7e6274490 100644
+--- a/gcc/gcse.c
++++ b/gcc/gcse.c
+@@ -2466,6 +2466,65 @@ pre_insert_copies (void)
+       }
+ }
+ 
++struct set_data
++{
++  rtx insn;
++  const_rtx set;
++  int nsets;
++};
++
++/* Increment number of sets and record set in DATA.  */
++
++static void
++record_set_data (rtx dest, const_rtx set, void *data)
++{
++  struct set_data *s = (struct set_data *)data;
++
++  if (GET_CODE (set) == SET)
++    {
++      /* We allow insns having multiple sets, where all but one are
++	 dead as single set insns.  In the common case only a single
++	 set is present, so we want to avoid checking for REG_UNUSED
++	 notes unless necessary.  */
++      if (s->nsets == 1
++	  && find_reg_note (s->insn, REG_UNUSED, SET_DEST (s->set))
++	  && !side_effects_p (s->set))
++	s->nsets = 0;
++
++      if (!s->nsets)
++	{
++	  /* Record this set.  */
++	  s->nsets += 1;
++	  s->set = set;
++	}
++      else if (!find_reg_note (s->insn, REG_UNUSED, dest)
++	       || side_effects_p (set))
++	s->nsets += 1;
++    }
++}
++
++static const_rtx
++single_set_gcse (rtx insn)
++{
++  struct set_data s;
++  rtx pattern;
++  
++  gcc_assert (INSN_P (insn));
++
++  /* Optimize common case.  */
++  pattern = PATTERN (insn);
++  if (GET_CODE (pattern) == SET)
++    return pattern;
++
++  s.insn = insn;
++  s.nsets = 0;
++  note_stores (pattern, record_set_data, &s);
++
++  /* Considered invariant insns have exactly one set.  */
++  gcc_assert (s.nsets == 1);
++  return s.set;
++}
++
+ /* Emit move from SRC to DEST noting the equivalence with expression computed
+    in INSN.  */
+ 
+@@ -2473,7 +2532,8 @@ static rtx
+ gcse_emit_move_after (rtx dest, rtx src, rtx insn)
+ {
+   rtx new_rtx;
+-  rtx set = single_set (insn), set2;
++  const_rtx set = single_set_gcse (insn);
++  rtx set2;
+   rtx note;
+   rtx eqv;
+ 
+@@ -3114,13 +3174,12 @@ hoist_code (void)
+ 	      FOR_EACH_VEC_ELT (occr_t, occrs_to_hoist, j, occr)
+ 		{
+ 		  rtx insn;
+-		  rtx set;
++		  const_rtx set;
+ 
+ 		  gcc_assert (!occr->deleted_p);
+ 
+ 		  insn = occr->insn;
+-		  set = single_set (insn);
+-		  gcc_assert (set);
++		  set = single_set_gcse (insn);
+ 
+ 		  /* Create a pseudo-reg to store the result of reaching
+ 		     expressions into.  Get the mode for the new pseudo
+diff --git a/gcc/incpath.c b/gcc/incpath.c
+index efcd2c75e..5da65ce6c 100644
+--- a/gcc/incpath.c
++++ b/gcc/incpath.c
+@@ -30,6 +30,7 @@
+ #include "intl.h"
+ #include "incpath.h"
+ #include "cppdefault.h"
++#include "diagnostic-core.h"
+ 
+ /* Microsoft Windows does not natively support inodes.
+    VMS has non-numeric inodes.  */
+@@ -373,6 +374,26 @@ merge_include_chains (const char *sysroot, cpp_reader *pfile, int verbose)
+ 	}
+       fprintf (stderr, _("End of search list.\n"));
+     }
++
++#ifdef ENABLE_POISON_SYSTEM_DIRECTORIES
++  if (flag_poison_system_directories)
++    {
++       struct cpp_dir *p;
++
++       for (p = heads[QUOTE]; p; p = p->next)
++         {
++          if ((!strncmp (p->name, "/usr/include", 12))
++              || (!strncmp (p->name, "/usr/local/include", 18))
++              || (!strncmp (p->name, "/usr/X11R6/include", 18))
++              || (!strncmp (p->name, "/sw/include", 11))
++              || (!strncmp (p->name, "/opt/include", 12)))
++            warning (OPT_Wpoison_system_directories,
++                     "include location \"%s\" is unsafe for "
++                     "cross-compilation",
++                     p->name);
++         }
++    }
++#endif
+ }
+ 
+ /* Use given -I paths for #include "..." but not #include <...>, and
+diff --git a/include/libiberty.h b/include/libiberty.h
+index cacde800e..d805694e7 100644
+--- a/include/libiberty.h
++++ b/include/libiberty.h
+@@ -613,8 +613,11 @@ extern int pwait (int, int *, int);
+ /* Like sprintf but provides a pointer to malloc'd storage, which must
+    be freed by the caller.  */
+ 
++/* asprintf may be declared as a macro by glibc with __USE_FORTIFY_LEVEL.  */
++#ifndef asprintf
+ extern int asprintf (char **, const char *, ...) ATTRIBUTE_PRINTF_2;
+ #endif
++#endif
+ 
+ #if !HAVE_DECL_VASPRINTF
+ /* Like vsprintf but provides a pointer to malloc'd storage, which
+diff --git a/libgcc/Makefile.in b/libgcc/Makefile.in
+index c301ff03c..3ceb55726 100644
+--- a/libgcc/Makefile.in
++++ b/libgcc/Makefile.in
+@@ -207,7 +207,7 @@ export slibdir
+ export toolexecdir
+ export toolexeclibdir
+ 
+-version := $(shell $(CC) -dumpversion)
++version := $(shell cat $(srcdir)/../gcc/BASE-VER)
+ 
+ ifeq ($(decimal_float),yes)
+ ifeq ($(enable_decimal_float),bid)
+diff --git a/libgcc/config/alpha/linux-unwind.h b/libgcc/config/alpha/linux-unwind.h
+index 6c2f02891..c1fc84486 100644
+--- a/libgcc/config/alpha/linux-unwind.h
++++ b/libgcc/config/alpha/linux-unwind.h
+@@ -51,7 +51,7 @@ alpha_fallback_frame_state (struct _Unwind_Context *context,
+     {
+       struct rt_sigframe {
+ 	siginfo_t info;
+-	struct ucontext uc;
++	ucontext_t uc;
+       } *rt_ = context->cfa;
+       sc = &rt_->uc.uc_mcontext;
+     }
+diff --git a/libgcc/config/bfin/linux-unwind.h b/libgcc/config/bfin/linux-unwind.h
+index 15bb2f12b..28d9f4207 100644
+--- a/libgcc/config/bfin/linux-unwind.h
++++ b/libgcc/config/bfin/linux-unwind.h
+@@ -52,7 +52,7 @@ bfin_fallback_frame_state (struct _Unwind_Context *context,
+ 	void *puc;
+ 	char retcode[8];
+ 	siginfo_t info;
+-	struct ucontext uc;
++	ucontext_t uc;
+       } *rt_ = context->cfa;
+ 
+       /* The void * cast is necessary to avoid an aliasing warning.
+diff --git a/libgcc/config/i386/linux-unwind.h b/libgcc/config/i386/linux-unwind.h
+index cd9a9a1e2..4518c1ff9 100644
+--- a/libgcc/config/i386/linux-unwind.h
++++ b/libgcc/config/i386/linux-unwind.h
+@@ -53,7 +53,7 @@ x86_64_fallback_frame_state (struct _Unwind_Context *context,
+   if (*(unsigned char *)(pc+0) == 0x48
+       && *(unsigned long long *)(pc+1) == RT_SIGRETURN_SYSCALL)
+     {
+-      struct ucontext *uc_ = context->cfa;
++      ucontext_t *uc_ = context->cfa;
+       /* The void * cast is necessary to avoid an aliasing warning.
+          The aliasing warning is correct, but should not be a problem
+          because it does not alias anything.  */
+@@ -142,7 +142,7 @@ x86_fallback_frame_state (struct _Unwind_Context *context,
+ 	siginfo_t *pinfo;
+ 	void *puc;
+ 	siginfo_t info;
+-	struct ucontext uc;
++	ucontext_t uc;
+       } *rt_ = context->cfa;
+       /* The void * cast is necessary to avoid an aliasing warning.
+          The aliasing warning is correct, but should not be a problem
+diff --git a/libgcc/config/ia64/crtbegin.S b/libgcc/config/ia64/crtbegin.S
+index cfb54d310..23cd72a6b 100644
+--- a/libgcc/config/ia64/crtbegin.S
++++ b/libgcc/config/ia64/crtbegin.S
+@@ -252,3 +252,7 @@ __do_jv_register_classes:
+ .weak __cxa_finalize
+ #endif
+ .weak _Jv_RegisterClasses
++
++#ifdef __linux__
++.section .note.GNU-stack; .previous
++#endif
+diff --git a/libgcc/config/ia64/crtend.S b/libgcc/config/ia64/crtend.S
+index 9ee151711..23efc2980 100644
+--- a/libgcc/config/ia64/crtend.S
++++ b/libgcc/config/ia64/crtend.S
+@@ -119,3 +119,6 @@ __do_global_ctors_aux:
+ 
+ 	br.ret.sptk.many rp
+ 	.endp __do_global_ctors_aux
++#ifdef __linux__
++.section .note.GNU-stack; .previous
++#endif
+diff --git a/libgcc/config/ia64/crti.S b/libgcc/config/ia64/crti.S
+index c15ff662b..5e5f51449 100644
+--- a/libgcc/config/ia64/crti.S
++++ b/libgcc/config/ia64/crti.S
+@@ -49,5 +49,8 @@ _fini:
+ 	.save rp, r33
+ 	mov	r33 = b0
+ 	.body
++#ifdef __linux__
++.section .note.GNU-stack; .previous
++#endif
+ 
+ # end of crti.S
+diff --git a/libgcc/config/ia64/crtn.S b/libgcc/config/ia64/crtn.S
+index d44abbea3..5ab88ed60 100644
+--- a/libgcc/config/ia64/crtn.S
++++ b/libgcc/config/ia64/crtn.S
+@@ -39,5 +39,8 @@
+ 	.restore sp
+ 	mov	r12 = r35
+ 	br.ret.sptk.many b0
++#ifdef __linux__
++.section .note.GNU-stack; .previous
++#endif
+ 
+ # end of crtn.S
+diff --git a/libgcc/config/ia64/lib1funcs.S b/libgcc/config/ia64/lib1funcs.S
+index b7eaa6eca..30c8783a5 100644
+--- a/libgcc/config/ia64/lib1funcs.S
++++ b/libgcc/config/ia64/lib1funcs.S
+@@ -793,3 +793,6 @@ __floattitf:
+ 	.endp __floattitf
+ #endif
+ #endif
++#ifdef __linux__
++.section .note.GNU-stack; .previous
++#endif
+diff --git a/libgcc/config/m68k/linux-unwind.h b/libgcc/config/m68k/linux-unwind.h
+index 053c15558..d7bc1f2c0 100644
+--- a/libgcc/config/m68k/linux-unwind.h
++++ b/libgcc/config/m68k/linux-unwind.h
+@@ -33,7 +33,7 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+ /* <sys/ucontext.h> is unfortunately broken right now.  */
+ struct uw_ucontext {
+ 	unsigned long	  uc_flags;
+-	struct ucontext  *uc_link;
++	ucontext_t	 *uc_link;
+ 	stack_t		  uc_stack;
+ 	mcontext_t	  uc_mcontext;
+ 	unsigned long	  uc_filler[80];
+diff --git a/libgcc/config/pa/linux-unwind.h b/libgcc/config/pa/linux-unwind.h
+index 38b4eda7a..45ea66cf3 100644
+--- a/libgcc/config/pa/linux-unwind.h
++++ b/libgcc/config/pa/linux-unwind.h
+@@ -64,7 +64,7 @@ pa32_fallback_frame_state (struct _Unwind_Context *context,
+   struct sigcontext *sc;
+   struct rt_sigframe {
+     siginfo_t info;
+-    struct ucontext uc;
++    ucontext_t uc;
+   } *frame;
+ 
+   /* rt_sigreturn trampoline:
+diff --git a/libgcc/config/sh/linux-unwind.h b/libgcc/config/sh/linux-unwind.h
+index 5a78e3172..eefad5175 100644
+--- a/libgcc/config/sh/linux-unwind.h
++++ b/libgcc/config/sh/linux-unwind.h
+@@ -181,7 +181,7 @@ sh_fallback_frame_state (struct _Unwind_Context *context,
+     {
+       struct rt_sigframe {
+ 	siginfo_t info;
+-	struct ucontext uc;
++	ucontext_t uc;
+       } *rt_ = context->cfa;
+       /* The void * cast is necessary to avoid an aliasing warning.
+          The aliasing warning is correct, but should not be a problem
+diff --git a/libgcc/config/tilepro/linux-unwind.h b/libgcc/config/tilepro/linux-unwind.h
+index 27a6c4351..d2a15bb9f 100644
+--- a/libgcc/config/tilepro/linux-unwind.h
++++ b/libgcc/config/tilepro/linux-unwind.h
+@@ -62,7 +62,7 @@ tile_fallback_frame_state (struct _Unwind_Context *context,
+   struct rt_sigframe {
+     unsigned char save_area[C_ABI_SAVE_AREA_SIZE];
+     siginfo_t info;
+-    struct ucontext uc;
++    ucontext_t uc;
+   } *rt_;
+ 
+   /* Return if this is not a signal handler.  */
+diff --git a/libgcc/config/xtensa/linux-unwind.h b/libgcc/config/xtensa/linux-unwind.h
+index 245649728..b7b128cf0 100644
+--- a/libgcc/config/xtensa/linux-unwind.h
++++ b/libgcc/config/xtensa/linux-unwind.h
+@@ -63,7 +63,7 @@ xtensa_fallback_frame_state (struct _Unwind_Context *context,
+ 
+   struct rt_sigframe {
+     siginfo_t info;
+-    struct ucontext uc;
++    ucontext_t uc;
+   } *rt_;
+ 
+   /* movi a2, __NR_rt_sigreturn; syscall */
+diff --git a/libgfortran/configure b/libgfortran/configure
+index 227f556fd..20678ac68 100755
+--- a/libgfortran/configure
++++ b/libgfortran/configure
+@@ -5757,7 +5757,7 @@ fi
+ 
+ # Add -Wall -fno-repack-arrays -fno-underscoring if we are using GCC.
+ if test "x$GCC" = "xyes"; then
+-  AM_FCFLAGS="-I . -Wall -Werror -fimplicit-none -fno-repack-arrays -fno-underscoring"
++  AM_FCFLAGS="-I . -Wall -fimplicit-none -fno-repack-arrays -fno-underscoring"
+   ## We like to use C99 routines when available.  This makes sure that
+   ## __STDC_VERSION__ is set such that libc includes make them available.
+   AM_CFLAGS="-std=gnu99 -Wall -Wstrict-prototypes -Wmissing-prototypes -Wold-style-definition -Wextra -Wwrite-strings"
+diff --git a/libgo/configure b/libgo/configure
+index dc85ccfa9..9569bb341 100755
+--- a/libgo/configure
++++ b/libgo/configure
+@@ -13384,7 +13384,7 @@ done
+ WARN_FLAGS='-Wall -Wextra -Wwrite-strings -Wcast-qual'
+ 
+ 
+-WERROR="-Werror"
++WERROR=""
+ 
+ 
+ glibgo_toolexecdir=no
+diff --git a/libgomp/configure b/libgomp/configure
+index 8ed841a06..45c2750a8 100755
+--- a/libgomp/configure
++++ b/libgomp/configure
+@@ -4282,7 +4282,7 @@ save_CFLAGS="$CFLAGS"
+ 
+ # Add -Wall -Werror if we are using GCC.
+ if test "x$GCC" = "xyes"; then
+-  XCFLAGS="$XCFLAGS -Wall -Werror"
++  XCFLAGS="$XCFLAGS -Wall"
+ fi
+ 
+ # Find other programs we need.
+diff --git a/libiberty/Makefile.in b/libiberty/Makefile.in
+index 5280bc158..d7b99dde0 100644
+--- a/libiberty/Makefile.in
++++ b/libiberty/Makefile.in
+@@ -248,6 +248,7 @@ $(TARGETLIB): $(REQUIRED_OFILES) $(EXTRA_OFILES) $(LIBOBJS)
+ 	  $(AR) $(AR_FLAGS) $(TARGETLIB) \
+ 	    $(REQUIRED_OFILES) $(EXTRA_OFILES) $(LIBOBJS); \
+ 	  $(RANLIB) $(TARGETLIB); \
++	  cp $(TARGETLIB) ../ ; \
+ 	  cd ..; \
+ 	else true; fi
+ 
+diff --git a/libitm/config/x86/target.h b/libitm/config/x86/target.h
+index 5c7e6fbee..afa1da5a5 100644
+--- a/libitm/config/x86/target.h
++++ b/libitm/config/x86/target.h
+@@ -69,16 +69,4 @@ cpu_relax (void)
+ } // namespace GTM
+ 
+ // We'll be using some of the cpu builtins, and their associated types.
+-#ifndef __cplusplus
+-/* ??? It's broken for C++. */
+ #include <x86intrin.h>
+-#else
+-# ifdef __SSE2__
+-#  include <emmintrin.h>
+-# elif defined(__SSE__)
+-#  include <xmmintrin.h>
+-# endif
+-# ifdef __AVX__
+-#  include <immintrin.h>
+-# endif
+-#endif
+diff --git a/libitm/config/x86/x86_avx.cc b/libitm/config/x86/x86_avx.cc
+index 6a5e29711..66edfe1f3 100644
+--- a/libitm/config/x86/x86_avx.cc
++++ b/libitm/config/x86/x86_avx.cc
+@@ -29,7 +29,7 @@
+ 
+ extern "C" {
+ 
+-#ifndef HAVE_AS_AVX
++#if !defined (HAVE_AS_AVX) || !defined(__AVX__)
+ // If we don't have an AVX capable assembler, we didn't set -mavx on the
+ // command-line either, which means that libitm.h defined neither this type
+ // nor the functions in this file.  Define the type and unconditionally
+@@ -40,7 +40,7 @@ typedef float _ITM_TYPE_M256 __attribute__((vector_size(32), may_alias));
+ // Re-define the memcpy implementations so that we can frob the
+ // interface to deal with possibly missing AVX instruction set support.
+ 
+-#ifdef HAVE_AS_AVX
++#if defined(HAVE_AS_AVX) && defined(__AVX__)
+ #define RETURN(X)	return X
+ #define STORE(X,Y)	X = Y
+ #define OUTPUT(T)	_ITM_TYPE_##T
+diff --git a/libitm/configure b/libitm/configure
+index 30d2f73b0..c47a58df9 100644
+--- a/libitm/configure
++++ b/libitm/configure
+@@ -775,6 +775,7 @@ enable_maintainer_mode
+ enable_linux_futex
+ enable_tls
+ enable_symvers
++enable_werror
+ '
+       ac_precious_vars='build_alias
+ host_alias
+@@ -1423,6 +1424,7 @@ Optional Features:
+   --enable-tls            Use thread-local storage [default=yes]
+   --enable-symvers=STYLE  enables symbol versioning of the shared library
+                           [default=yes]
++  --enable-werror         turns on -Werror [default=yes]
+ 
+ Optional Packages:
+   --with-PACKAGE[=ARG]    use PACKAGE [ARG=yes]
+@@ -17446,9 +17448,18 @@ $as_echo "$as_me: not updating unwritable cache $cache_file" >&6;}
+ fi
+ rm -f confcache
+ 
+-# Add -Wall -Werror if we are using GCC.
++# Check whether --enable-werror was given.
++if test "${enable_werror+set}" = set; then :
++  enableval=$enable_werror;
++fi
++
++# Add -Wall if we are using GCC.
+ if test "x$GCC" = "xyes"; then
+-  XCFLAGS="$XCFLAGS -Wall -Werror"
++  XCFLAGS="$XCFLAGS -Wall"
++  # Add -Werror if requested.
++  if test "x$enable_werror" != "xno"; then
++    XCFLAGS="$XCFLAGS -Werror"
++  fi
+ fi
+ 
+ XCFLAGS="$XCFLAGS $XPCFLAGS"
+diff --git a/libitm/configure.ac b/libitm/configure.ac
+index 198ca3277..3cf8a7c8d 100644
+--- a/libitm/configure.ac
++++ b/libitm/configure.ac
+@@ -251,9 +251,15 @@ GCC_CHECK_ELF_STYLE_WEAKREF
+ CFLAGS="$save_CFLAGS"
+ AC_CACHE_SAVE
+ 
+-# Add -Wall -Werror if we are using GCC.
++AC_ARG_ENABLE(werror, [AS_HELP_STRING([--enable-werror],
++                                      [turns on -Werror @<:@default=yes@:>@])])
++# Add -Wall if we are using GCC.
+ if test "x$GCC" = "xyes"; then
+-  XCFLAGS="$XCFLAGS -Wall -Werror"
++  XCFLAGS="$XCFLAGS -Wall"
++  # Add -Werror if requested.
++  if test "x$enable_werror" != "xno"; then
++    XCFLAGS="$XCFLAGS -Werror"
++  fi
+ fi
+ 
+ XCFLAGS="$XCFLAGS $XPCFLAGS"
+diff --git a/libjava/classpath/scripts/check_jni_methods.sh.in b/libjava/classpath/scripts/check_jni_methods.sh.in
+index facf34b34..fb9d104e3 100644
+--- a/libjava/classpath/scripts/check_jni_methods.sh.in
++++ b/libjava/classpath/scripts/check_jni_methods.sh.in
+@@ -14,7 +14,7 @@ grep -h '^JNIEXPORT .* Java_' @abs_top_srcdir@/include/*.h | \
+         LC_ALL=C sed -e 's,.*JNICALL \(Java_[a-z_A-Z0-9]*\).*$,\1,' > $TMPFILE
+ grep -h '^JNIEXPORT .* Java_' @abs_top_builddir@/include/*.h | \
+         LC_ALL=C sed -e 's,.*JNICALL \(Java_[a-z_A-Z0-9]*\).*$,\1,' >> $TMPFILE
+-sort -u $TMPFILE > $TMPFILE4
++LC_ALL=C sort -u $TMPFILE > $TMPFILE4
+ mv $TMPFILE4 $TMPFILE
+ 
+ # Find all methods in the JNI C source files.
+@@ -31,7 +31,7 @@ find @abs_top_srcdir@/native/jni -name \*.cpp | \
+ 	cut -f4 -d\  | \
+         LC_ALL=C sed -e 's,^\JNIEXPORT .* JNICALL \(Java_[a-z_A-Z0-9]*\).*$,\1,' >> $TMPFILE2
+ mv $TMPFILE2 $TMPFILE3
+-sort $TMPFILE3 | uniq > $TMPFILE2
++LC_ALL=C sort -u $TMPFILE3 > $TMPFILE2
+ rm $TMPFILE3
+ 
+ # Write temporary ignore file.
+diff --git a/libjava/include/i386-signal.h b/libjava/include/i386-signal.h
+index c2409b0e3..ef77e7e99 100644
+--- a/libjava/include/i386-signal.h
++++ b/libjava/include/i386-signal.h
+@@ -29,7 +29,7 @@ static void _Jv_##_name (int, siginfo_t *,			\
+ #define HANDLE_DIVIDE_OVERFLOW						\
+ do									\
+ {									\
+-  struct ucontext *_uc = (struct ucontext *)_p;				\
++  ucontext_t *_uc = (ucontext_t *)_p;					\
+   gregset_t &_gregs = _uc->uc_mcontext.gregs;				\
+   unsigned char *_eip = (unsigned char *)_gregs[REG_EIP];		\
+ 									\
+diff --git a/libjava/include/s390-signal.h b/libjava/include/s390-signal.h
+index 4ca4c1088..9261b52be 100644
+--- a/libjava/include/s390-signal.h
++++ b/libjava/include/s390-signal.h
+@@ -51,7 +51,7 @@ do									\
+   struct                                                                \
+   {                                                                     \
+     unsigned long int uc_flags;                                         \
+-    struct ucontext *uc_link;                                           \
++    ucontext_t *uc_link;                                                \
+     stack_t uc_stack;                                                   \
+     mcontext_t uc_mcontext;                                             \
+     unsigned long sigmask[2];                                           \
+diff --git a/libjava/include/x86_64-signal.h b/libjava/include/x86_64-signal.h
+index 4bd8a3601..d04e86893 100644
+--- a/libjava/include/x86_64-signal.h
++++ b/libjava/include/x86_64-signal.h
+@@ -28,7 +28,7 @@ static void _Jv_##_name (int, siginfo_t *,			\
+ #define HANDLE_DIVIDE_OVERFLOW						\
+ do									\
+ {									\
+-  struct ucontext *_uc = (struct ucontext *)_p;				\
++  ucontext_t *_uc = (ucontext_t *)_p;					\
+   gregset_t &_gregs = _uc->uc_mcontext.gregs;				\
+   unsigned char *_rip = (unsigned char *)_gregs[REG_RIP];		\
+ 									\
+diff --git a/libstdc++-v3/po/Makefile.am b/libstdc++-v3/po/Makefile.am
+index c1ce99864..926ec68d0 100644
+--- a/libstdc++-v3/po/Makefile.am
++++ b/libstdc++-v3/po/Makefile.am
+@@ -38,6 +38,7 @@ MSGFMT = msgfmt
+ EXTRA_DIST = string_literals.cc POTFILES.in $(PACKAGE).pot $(LOCALE_IN)
+ 
+ .po.mo:
++	env --unset=LD_LIBRARY_PATH \
+ 	$(MSGFMT) -o $@ $<
+ 
+ all-local: all-local-$(USE_NLS)
+diff --git a/libstdc++-v3/po/Makefile.in b/libstdc++-v3/po/Makefile.in
+index a30765058..2555e0bd4 100644
+--- a/libstdc++-v3/po/Makefile.in
++++ b/libstdc++-v3/po/Makefile.in
+@@ -452,6 +452,7 @@ uninstall-am:
+ 
+ 
+ .po.mo:
++	env --unset=LD_LIBRARY_PATH \
+ 	$(MSGFMT) -o $@ $<
+ 
+ all-local: all-local-$(USE_NLS)

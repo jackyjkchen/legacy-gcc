@@ -3,8 +3,6 @@
 
 EAPI="7"
 
-PATCH_VER="3"
-
 inherit toolchain
 
 KEYWORDS="alpha amd64 arm arm64 hppa ia64 m68k mips ppc ppc64 s390 sh sparc x86"
@@ -23,13 +21,14 @@ else
 fi
 
 src_prepare() {
+	! use vanilla && eapply "${FILESDIR}"/${PV}/00_gentoo-patchset.patch
 	toolchain_src_prepare
 	use vanilla && return 0
 
-	eapply "${FILESDIR}"/${PV}/00_fix-building-on-ppc64.patch
 	[[ $(tc-arch) == "sh" ]] && eapply "${FILESDIR}"/${PV}/01_workaround-bootstrap-for-sh4.patch
 	use go && eapply "${FILESDIR}"/${PV}/02_fix-libgo-for-new-glibc.patch
-	eapply "${FILESDIR}"/${PV}/03_fix-werror.patch
+	eapply "${FILESDIR}"/${PV}/03_fix-building-on-ppc64.patch
+	eapply "${FILESDIR}"/${PV}/04_fix-werror.patch
 
 	eapply "${FILESDIR}"/${PV}/postrelease/00_pr94460.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/01_pr85257.patch

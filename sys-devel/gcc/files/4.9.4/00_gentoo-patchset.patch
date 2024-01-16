@@ -1,0 +1,1997 @@
+diff --git a/Makefile.in b/Makefile.in
+index ebbc46f1b..026211680 100644
+--- a/Makefile.in
++++ b/Makefile.in
+@@ -838,7 +838,9 @@ EXTRA_TARGET_FLAGS = \
+ 	'AS=$(COMPILER_AS_FOR_TARGET)' \
+ 	'CC=$$(CC_FOR_TARGET) $$(XGCC_FLAGS_FOR_TARGET) $$(TFLAGS)' \
+ 	'CFLAGS=$$(CFLAGS_FOR_TARGET)' \
+-	'CXX=$$(CXX_FOR_TARGET) $$(XGCC_FLAGS_FOR_TARGET) $$(TFLAGS)' \
++	'CXX=$$(CXX_FOR_TARGET) -B$$r/$$(TARGET_SUBDIR)/libstdc++-v3/src/.libs \
++	 -B$$r/$$(TARGET_SUBDIR)/libstdc++-v3/libsupc++/.libs \
++	 $$(XGCC_FLAGS_FOR_TARGET) $$(TFLAGS)' \
+ 	'CXXFLAGS=$$(CXXFLAGS_FOR_TARGET)' \
+ 	'DLLTOOL=$$(DLLTOOL_FOR_TARGET)' \
+ 	'GCJ=$$(GCJ_FOR_TARGET) $$(XGCC_FLAGS_FOR_TARGET) $$(TFLAGS)' \
+@@ -856,6 +858,8 @@ EXTRA_TARGET_FLAGS = \
+ 	'WINDRES=$$(WINDRES_FOR_TARGET)' \
+ 	'WINDMC=$$(WINDMC_FOR_TARGET)' \
+ 	'XGCC_FLAGS_FOR_TARGET=$(XGCC_FLAGS_FOR_TARGET)' \
++	'STAGE1_LDFLAGS=$$(POSTSTAGE1_LDFLAGS)' \
++	'STAGE1_LIBS=$$(POSTSTAGE1_LIBS)' \
+ 	"TFLAGS=$$TFLAGS"
+ 
+ TARGET_FLAGS_TO_PASS = $(BASE_FLAGS_TO_PASS) $(EXTRA_TARGET_FLAGS)
+diff --git a/Makefile.tpl b/Makefile.tpl
+index 54a8dc3dd..d11fea4c6 100644
+--- a/Makefile.tpl
++++ b/Makefile.tpl
+@@ -643,7 +643,9 @@ EXTRA_TARGET_FLAGS = \
+ 	'AS=$(COMPILER_AS_FOR_TARGET)' \
+ 	'CC=$$(CC_FOR_TARGET) $$(XGCC_FLAGS_FOR_TARGET) $$(TFLAGS)' \
+ 	'CFLAGS=$$(CFLAGS_FOR_TARGET)' \
+-	'CXX=$$(CXX_FOR_TARGET) $$(XGCC_FLAGS_FOR_TARGET) $$(TFLAGS)' \
++	'CXX=$$(CXX_FOR_TARGET) -B$$r/$$(TARGET_SUBDIR)/libstdc++-v3/src/.libs \
++	 -B$$r/$$(TARGET_SUBDIR)/libstdc++-v3/libsupc++/.libs \
++	 $$(XGCC_FLAGS_FOR_TARGET) $$(TFLAGS)' \
+ 	'CXXFLAGS=$$(CXXFLAGS_FOR_TARGET)' \
+ 	'DLLTOOL=$$(DLLTOOL_FOR_TARGET)' \
+ 	'GCJ=$$(GCJ_FOR_TARGET) $$(XGCC_FLAGS_FOR_TARGET) $$(TFLAGS)' \
+@@ -661,6 +663,8 @@ EXTRA_TARGET_FLAGS = \
+ 	'WINDRES=$$(WINDRES_FOR_TARGET)' \
+ 	'WINDMC=$$(WINDMC_FOR_TARGET)' \
+ 	'XGCC_FLAGS_FOR_TARGET=$(XGCC_FLAGS_FOR_TARGET)' \
++	'STAGE1_LDFLAGS=$$(POSTSTAGE1_LDFLAGS)' \
++	'STAGE1_LIBS=$$(POSTSTAGE1_LIBS)' \
+ 	"TFLAGS=$$TFLAGS"
+ 
+ TARGET_FLAGS_TO_PASS = $(BASE_FLAGS_TO_PASS) $(EXTRA_TARGET_FLAGS)
+diff --git a/contrib/texi2pod.pl b/contrib/texi2pod.pl
+index 5a4bbacdf..7a036d339 100755
+--- a/contrib/texi2pod.pl
++++ b/contrib/texi2pod.pl
+@@ -316,7 +316,7 @@ while(<$inf>) {
+ 	@columns = ();
+ 	for $column (split (/\s*\@tab\s*/, $1)) {
+ 	    # @strong{...} is used a @headitem work-alike
+-	    $column =~ s/^\@strong{(.*)}$/$1/;
++	    $column =~ s/^\@strong\{(.*)}$/$1/;
+ 	    push @columns, $column;
+ 	}
+ 	$_ = "\n=item ".join (" : ", @columns)."\n";
+diff --git a/gcc/Makefile.in b/gcc/Makefile.in
+index b47733cef..b6985e2ec 100644
+--- a/gcc/Makefile.in
++++ b/gcc/Makefile.in
+@@ -1006,7 +1006,7 @@ BUILD_LIBDEPS= $(BUILD_LIBIBERTY)
+ # and the system's installed libraries.
+ LIBS = @LIBS@ libcommon.a $(CPPLIB) $(LIBINTL) $(LIBICONV) $(LIBBACKTRACE) \
+ 	$(LIBIBERTY) $(LIBDECNUMBER) $(HOST_LIBS)
+-BACKENDLIBS = $(CLOOGLIBS) $(GMPLIBS) $(PLUGINLIBS) $(HOST_LIBS) \
++BACKENDLIBS = $(if $(CLOOGLIBS),@DL_LIB@) $(GMPLIBS) $(PLUGINLIBS) $(HOST_LIBS) \
+ 	$(ZLIB)
+ # Any system libraries needed just for GNAT.
+ SYSLIBS = @GNAT_LIBEXC@
+@@ -1487,7 +1487,7 @@ ALL_HOST_FRONTEND_OBJS = $(foreach v,$(CONFIG_LANGUAGES),$($(v)_OBJS))
+ ALL_HOST_BACKEND_OBJS = $(GCC_OBJS) $(OBJS) $(OBJS-libcommon) \
+   $(OBJS-libcommon-target) @TREEBROWSER@ main.o c-family/cppspec.o \
+   $(COLLECT2_OBJS) $(EXTRA_GCC_OBJS) $(GCOV_OBJS) $(GCOV_DUMP_OBJS) \
+-  lto-wrapper.o
++  lto-wrapper.o $(GENGTYPE_OBJS) gcc-ar.o gcc-nm.o gcc-ranlib.o
+ 
+ # This lists all host object files, whether they are included in this
+ # compilation or not.
+@@ -2011,6 +2011,15 @@ $(out_object_file): $(out_file)
+ $(common_out_object_file): $(common_out_file)
+ 	$(COMPILE) $<
+ 	$(POSTCOMPILE)
++
++graphite%.o : \
++  ALL_CFLAGS := -O $(filter-out -fkeep-inline-functions, $(ALL_CFLAGS))
++graphite.o : \
++  ALL_CFLAGS := -O $(filter-out -fkeep-inline-functions, $(ALL_CFLAGS))
++graphite%.o : \
++  ALL_CXXFLAGS := -O $(filter-out -fkeep-inline-functions, $(ALL_CXXFLAGS))
++graphite.o : \
++  ALL_CXXFLAGS := -O $(filter-out -fkeep-inline-functions, $(ALL_CXXFLAGS))
+ #
+ # Generate header and source files from the machine description,
+ # and compile them.
+@@ -2428,31 +2437,32 @@ build/gengenrtl.o : gengenrtl.c $(BCONFIG_H) $(SYSTEM_H) rtl.def
+ # on BCONFIG_H.  For the build objects, add -DGENERATOR_FILE manually,
+ # the build-%: rule doesn't apply to them.
+ 
++GENGTYPE_OBJS = gengtype.o gengtype-parse.o gengtype-state.o \
++  gengtype-lex.o errors.o
++
+ gengtype-lex.o build/gengtype-lex.o : gengtype-lex.c gengtype.h $(SYSTEM_H)
+-gengtype-lex.o: $(CONFIG_H) $(BCONFIG_H)
+-CFLAGS-gengtype-lex.o += -DGENERATOR_FILE
++CFLAGS-gengtype-lex.o += -DHOST_GENERATOR_FILE
+ build/gengtype-lex.o: $(BCONFIG_H)
+ 
+ gengtype-parse.o build/gengtype-parse.o : gengtype-parse.c gengtype.h \
+   $(SYSTEM_H)
+-gengtype-parse.o: $(CONFIG_H)
+-CFLAGS-gengtype-parse.o += -DGENERATOR_FILE
++CFLAGS-gengtype-parse.o += -DHOST_GENERATOR_FILE
+ build/gengtype-parse.o: $(BCONFIG_H)
+ 
+ gengtype-state.o build/gengtype-state.o: gengtype-state.c $(SYSTEM_H) \
+   gengtype.h errors.h double-int.h version.h $(HASHTAB_H) $(OBSTACK_H) \
+   $(XREGEX_H)
+-gengtype-state.o: $(CONFIG_H)
+-CFLAGS-gengtype-state.o += -DGENERATOR_FILE
++CFLAGS-gengtype-state.o += -DHOST_GENERATOR_FILE
+ build/gengtype-state.o: $(BCONFIG_H)
+ 
+ gengtype.o build/gengtype.o : gengtype.c $(SYSTEM_H) gengtype.h 	\
+   rtl.def insn-notes.def errors.h double-int.h version.h $(HASHTAB_H) \
+   $(OBSTACK_H) $(XREGEX_H)
+-gengtype.o: $(CONFIG_H)
+-CFLAGS-gengtype.o += -DGENERATOR_FILE
++CFLAGS-gengtype.o += -DHOST_GENERATOR_FILE
+ build/gengtype.o: $(BCONFIG_H)
+ 
++CFLAGS-errors.o += -DHOST_GENERATOR_FILE
++
+ build/genmddeps.o: genmddeps.c $(BCONFIG_H) $(SYSTEM_H) coretypes.h	\
+   errors.h $(READ_MD_H)
+ build/genmodes.o : genmodes.c $(BCONFIG_H) $(SYSTEM_H) errors.h		\
+@@ -2514,11 +2524,7 @@ $(genprog:%=build/gen%$(build_exeext)): build/gen%$(build_exeext): build/gen%.o
+ # bconfig.h because AIX requires _LARGE_FILES to be defined before
+ # any system header is included.
+ gengtype-lex.c : gengtype-lex.l
+-	-$(FLEX) $(FLEXFLAGS) -o$@ $< && { \
+-	  echo '#include "bconfig.h"' > $@.tmp; \
+-	  cat $@ >> $@.tmp; \
+-	  mv $@.tmp $@; \
+-	}
++	$(FLEX) $(FLEXFLAGS) -o$@ $<
+ 
+ #
+ # Remake internationalization support.
+diff --git a/gcc/c-family/c-cppbuiltin.c b/gcc/c-family/c-cppbuiltin.c
+index 1ba91b7aa..443e5c6ea 100644
+--- a/gcc/c-family/c-cppbuiltin.c
++++ b/gcc/c-family/c-cppbuiltin.c
+@@ -1000,6 +1000,9 @@ c_cpp_builtins (cpp_reader *pfile)
+   builtin_define_with_value ("__REGISTER_PREFIX__", REGISTER_PREFIX, 0);
+   builtin_define_with_value ("__USER_LABEL_PREFIX__", user_label_prefix, 0);
+ 
++  /* Fortify Source enabled by default w/optimization.  */
++  cpp_define (pfile, "_FORTIFY_SOURCE=((defined __OPTIMIZE__ && __OPTIMIZE__ > 0) ? 2 : 0)");
++
+   /* Misc.  */
+   if (flag_gnu89_inline)
+     cpp_define (pfile, "__GNUC_GNU_INLINE__");
+diff --git a/gcc/c-family/c.opt b/gcc/c-family/c.opt
+index 2abf66cb7..defae0f5f 100644
+--- a/gcc/c-family/c.opt
++++ b/gcc/c-family/c.opt
+@@ -412,7 +412,7 @@ C ObjC C++ ObjC++ Var(warn_format_nonliteral) Warning LangEnabledBy(C ObjC C++ O
+ Warn about format strings that are not literals
+ 
+ Wformat-security
+-C ObjC C++ ObjC++ Var(warn_format_security) Warning LangEnabledBy(C ObjC C++ ObjC++,Wformat=, warn_format >= 2, 0)
++C ObjC C++ ObjC++ Var(warn_format_security) Init(1) Warning LangEnabledBy(C ObjC C++ ObjC++,Wformat=, warn_format >= 2, 0)
+ Warn about possible security problems with format functions
+ 
+ Wformat-y2k
+@@ -424,7 +424,7 @@ C ObjC C++ ObjC++ Var(warn_format_zero_length) Warning LangEnabledBy(C ObjC C++
+ Warn about zero-length formats
+ 
+ Wformat=
+-C ObjC C++ ObjC++ Joined RejectNegative UInteger Var(warn_format) Warning LangEnabledBy(C ObjC C++ ObjC++,Wall, 1, 0)
++C ObjC C++ ObjC++ Joined RejectNegative UInteger Var(warn_format) Init(1) Warning LangEnabledBy(C ObjC C++ ObjC++,Wall, 1, 0)
+ Warn about printf/scanf/strftime/strfmon format string anomalies
+ 
+ Wignored-qualifiers
+diff --git a/gcc/common.opt b/gcc/common.opt
+index 51ddd77c9..297178b22 100644
+--- a/gcc/common.opt
++++ b/gcc/common.opt
+@@ -603,6 +603,10 @@ Wpedantic
+ Common Var(pedantic) Warning
+ Issue warnings needed for strict compliance to the standard
+ 
++Wpoison-system-directories
++Common Var(flag_poison_system_directories) Init(1) Warning
++Warn for -I and -L options using system directories if cross compiling
++
+ Wshadow
+ Common Var(warn_shadow) Warning
+ Warn when one local variable shadows another
+@@ -648,7 +652,7 @@ Common Var(warn_system_headers) Warning
+ Do not suppress warnings from system headers
+ 
+ Wtrampolines
+-Common Var(warn_trampolines) Warning
++Common Var(warn_trampolines) Init(1) Warning
+ Warn whenever a trampoline is generated
+ 
+ Wtype-limits
+@@ -1045,7 +1049,7 @@ Common Alias(fdiagnostics-color=,always,never)
+ ;
+ 
+ fdiagnostics-color=
+-Common Joined RejectNegative Var(flag_diagnostics_show_color) Enum(diagnostic_color_rule) Init(DIAGNOSTICS_COLOR_NO)
++Common Joined RejectNegative Var(flag_diagnostics_show_color) Enum(diagnostic_color_rule) Init(DIAGNOSTICS_COLOR_AUTO)
+ -fdiagnostics-color=[never|always|auto]	Colorize diagnostics
+ 
+ ; Required for these enum values.
+diff --git a/gcc/config.gcc b/gcc/config.gcc
+index f02ddbd51..c5c16e2ee 100644
+--- a/gcc/config.gcc
++++ b/gcc/config.gcc
+@@ -2600,7 +2600,7 @@ sh-*-elf* | sh[12346l]*-*-elf* | \
+ 	if test "$sh_multilibs" = "default" ; then
+ 		case ${target} in
+ 		sh64-superh-linux* | \
+-		sh[1234]*)	sh_multilibs=${sh_cpu_target} ;;
++		sh[1234]*)	sh_multilibs=$(echo $(sed -n '/^[[:space:]]*case ${sh_multilib} in/,/)/{s:case ${sh_multilib} in::;s: | *:,:g;s:[\\)]::g;p}' ${srcdir}/config.gcc) | sed 's: ::g') ;;
+ 		sh64* | sh5*)	sh_multilibs=m5-32media,m5-32media-nofpu,m5-compact,m5-compact-nofpu,m5-64media,m5-64media-nofpu ;;
+ 		sh-superh-*)	sh_multilibs=m4,m4-single,m4-single-only,m4-nofpu ;;
+ 		sh*-*-linux*)	sh_multilibs=m1,m2,m2a,m3e,m4 ;;
+diff --git a/gcc/config.in b/gcc/config.in
+index f86133120..94008a9f8 100644
+--- a/gcc/config.in
++++ b/gcc/config.in
+@@ -138,6 +138,12 @@
+ #endif
+ 
+ 
++/* Define to warn for use of native system header directories */
++#ifndef USED_FOR_TARGET
++#undef ENABLE_POISON_SYSTEM_DIRECTORIES
++#endif
++
++
+ /* Define if you want all operations on RTL (the basic data structure of the
+    optimizer and back end) to be checked for dynamic type safety at runtime.
+    This is quite expensive. */
+diff --git a/gcc/config/alpha/alpha.h b/gcc/config/alpha/alpha.h
+index 0ff793f14..6556311e8 100644
+--- a/gcc/config/alpha/alpha.h
++++ b/gcc/config/alpha/alpha.h
+@@ -94,6 +94,8 @@ along with GCC; see the file COPYING3.  If not see
+   while (0)
+ #endif
+ 
++#define CPP_SPEC "%{!no-ieee:-mieee}"
++
+ /* Run-time compilation parameters selecting different hardware subsets.  */
+ 
+ /* Which processor to schedule for. The cpu attribute defines a list that
+diff --git a/gcc/config/alpha/alpha.opt b/gcc/config/alpha/alpha.opt
+index dc937ac66..b21c0637c 100644
+--- a/gcc/config/alpha/alpha.opt
++++ b/gcc/config/alpha/alpha.opt
+@@ -35,7 +35,7 @@ Target RejectNegative Mask(IEEE_CONFORMANT)
+ Request IEEE-conformant math library routines (OSF/1)
+ 
+ mieee
+-Target Report RejectNegative Mask(IEEE)
++Target Report Mask(IEEE)
+ Emit IEEE-conformant code, without inexact exceptions
+ 
+ mieee-with-inexact
+diff --git a/gcc/config/alpha/elf.h b/gcc/config/alpha/elf.h
+index ec90fca2e..481c9a4b1 100644
+--- a/gcc/config/alpha/elf.h
++++ b/gcc/config/alpha/elf.h
+@@ -22,7 +22,7 @@ along with GCC; see the file COPYING3.  If not see
+ #define CC1_SPEC  "%{G*}"
+ 
+ #undef  ASM_SPEC
+-#define ASM_SPEC  "%{G*} %{relax:-relax} %{!gstabs*:-no-mdebug}%{gstabs*:-mdebug}"
++#define ASM_SPEC  "%{G*} %{relax:-relax} %{!gstabs*:-no-mdebug}%{gstabs*:-mdebug} %{mcpu=*:-m%*}"
+ 
+ /* Do not output a .file directive at the beginning of the input file.  */
+  
+diff --git a/gcc/config/arm/linux-eabi.h b/gcc/config/arm/linux-eabi.h
+index f1f3448f1..b459a2a22 100644
+--- a/gcc/config/arm/linux-eabi.h
++++ b/gcc/config/arm/linux-eabi.h
+@@ -45,7 +45,7 @@
+    The ARM10TDMI core is the default for armv5t, so set
+    SUBTARGET_CPU_DEFAULT to achieve this.  */
+ #undef  SUBTARGET_CPU_DEFAULT
+-#define SUBTARGET_CPU_DEFAULT TARGET_CPU_arm10tdmi
++#define SUBTARGET_CPU_DEFAULT TARGET_CPU_arm9tdmi
+ 
+ /* TARGET_BIG_ENDIAN_DEFAULT is set in
+    config.gcc for big endian configurations.  */
+diff --git a/gcc/config/gnu-user.h b/gcc/config/gnu-user.h
+index 9b4662120..b8d8e10df 100644
+--- a/gcc/config/gnu-user.h
++++ b/gcc/config/gnu-user.h
+@@ -84,7 +84,7 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+ 
+ #define GNU_USER_TARGET_NO_PTHREADS_LIB_SPEC \
+   "%{shared:-lc} \
+-   %{!shared:%{mieee-fp:-lieee} %{profile:-lc_p}%{!profile:-lc}}"
++   %{!shared:%{profile:-lc_p}%{!profile:-lc}}"
+ 
+ #define GNU_USER_TARGET_LIB_SPEC \
+   "%{pthread:-lpthread} " \
+diff --git a/gcc/config/ia64/linux.h b/gcc/config/ia64/linux.h
+index e4a3ea750..a309c177c 100644
+--- a/gcc/config/ia64/linux.h
++++ b/gcc/config/ia64/linux.h
+@@ -23,6 +23,8 @@ a copy of the GCC Runtime Library Exception along with this program;
+ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+ <http://www.gnu.org/licenses/>.  */
+ 
++#define TARGET_ASM_FILE_END file_end_indicate_exec_stack
++
+ /* This is for -profile to use -lc_p instead of -lc.  */
+ #undef CC1_SPEC
+ #define CC1_SPEC "%{profile:-p} %{G*}"
+diff --git a/gcc/config/mips/mips.c b/gcc/config/mips/mips.c
+index 143169bc1..481784572 100644
+--- a/gcc/config/mips/mips.c
++++ b/gcc/config/mips/mips.c
+@@ -12867,7 +12867,14 @@ mips_process_sync_loop (rtx insn, rtx *operands)
+      This will sometimes be a delayed branch; see the write code below
+      for details.  */
+   mips_multi_add_insn (is_64bit_p ? "scd\t%0,%1" : "sc\t%0,%1", at, mem, NULL);
+-  mips_multi_add_insn ("beq%?\t%0,%.,1b", at, NULL);
++
++  /* When using branch likely (-mfix-r10000), the delay slot instruction
++     will be annulled on false.  The normal delay slot instructions
++     calculate the overall result of the atomic operation and must not
++     be annulled.  To ensure this behaviour unconditionally use a NOP
++     in the delay slot for the branch likely case.  */
++
++  mips_multi_add_insn ("beq%?\t%0,%.,1b%~", at, NULL);
+ 
+   /* if (INSN1 != MOVE && INSN1 != LI) NEWVAL = $TMP3 [delay slot].  */
+   if (insn1 != SYNC_INSN1_MOVE && insn1 != SYNC_INSN1_LI && tmp3 != newval)
+@@ -12875,7 +12882,7 @@ mips_process_sync_loop (rtx insn, rtx *operands)
+       mips_multi_copy_insn (tmp3_insn);
+       mips_multi_set_operand (mips_multi_last_index (), 0, newval);
+     }
+-  else if (!(required_oldval && cmp))
++  else if (!(required_oldval && cmp) && !mips_branch_likely)
+     mips_multi_add_insn ("nop", NULL);
+ 
+   /* CMP = 1 -- either standalone or in a delay slot.  */
+@@ -12899,12 +12906,12 @@ mips_process_sync_loop (rtx insn, rtx *operands)
+ const char *
+ mips_output_sync_loop (rtx insn, rtx *operands)
+ {
+-  mips_process_sync_loop (insn, operands);
+-
+   /* Use branch-likely instructions to work around the LL/SC R10000
+      errata.  */
+   mips_branch_likely = TARGET_FIX_R10000;
+ 
++  mips_process_sync_loop (insn, operands);
++
+   mips_push_asm_switch (&mips_noreorder);
+   mips_push_asm_switch (&mips_nomacro);
+   mips_push_asm_switch (&mips_noat);
+@@ -12926,6 +12933,9 @@ mips_output_sync_loop (rtx insn, rtx *operands)
+ unsigned int
+ mips_sync_loop_insns (rtx insn, rtx *operands)
+ {
++  /* Use branch-likely instructions to work around the LL/SC R10000
++     errata.  */
++  mips_branch_likely = TARGET_FIX_R10000;
+   mips_process_sync_loop (insn, operands);
+   return mips_multi_num_insns;
+ }
+diff --git a/gcc/config/netbsd-elf.h b/gcc/config/netbsd-elf.h
+index d5eb83b1f..4bc1bdb4f 100644
+--- a/gcc/config/netbsd-elf.h
++++ b/gcc/config/netbsd-elf.h
+@@ -70,6 +70,7 @@ along with GCC; see the file COPYING3.  If not see
+ #define NETBSD_LINK_SPEC_ELF \
+   "%{assert*} %{R*} %{rpath*} \
+    %{shared:-shared} \
++   %{symbolic:-Bsymbolic} \
+    %{!shared: \
+      -dc -dp \
+      %{!nostdlib: \
+diff --git a/gcc/config/pa/pa.c b/gcc/config/pa/pa.c
+index aeafd44f6..f2884dd26 100644
+--- a/gcc/config/pa/pa.c
++++ b/gcc/config/pa/pa.c
+@@ -10195,8 +10195,8 @@ pa_trampoline_init (rtx m_tramp, tree fndecl, rtx chain_value)
+     }
+ 
+ #ifdef HAVE_ENABLE_EXECUTE_STACK
+-  emit_library_call (gen_rtx_SYMBOL_REF (Pmode, "__enable_execute_stack"),
+-		     LCT_NORMAL, VOIDmode, 1, XEXP (m_tramp, 0), Pmode);
++  emit_library_call (gen_rtx_SYMBOL_REF (Pmode, "__enable_execute_stack"),
++		      LCT_NORMAL, VOIDmode, 1, XEXP (m_tramp, 0), Pmode);
+ #endif
+ }
+ 
+diff --git a/gcc/config/rs6000/ppc-asm.h b/gcc/config/rs6000/ppc-asm.h
+index c26a11a98..0ba3d7699 100644
+--- a/gcc/config/rs6000/ppc-asm.h
++++ b/gcc/config/rs6000/ppc-asm.h
+@@ -375,7 +375,7 @@ GLUE(.L,name): \
+ #endif
+ #endif
+ 
+-#if defined __linux__ && !defined __powerpc64__
++#if defined __linux__
+ 	.section .note.GNU-stack
+ 	.previous
+ #endif
+diff --git a/gcc/configure b/gcc/configure
+index 282878fbd..a7a54a3ec 100755
+--- a/gcc/configure
++++ b/gcc/configure
+@@ -604,6 +604,7 @@ PICFLAG
+ enable_host_shared
+ enable_plugin
+ pluginlibs
++DL_LIB
+ CLOOGINC
+ CLOOGLIBS
+ ISLINC
+@@ -930,6 +931,7 @@ with_system_zlib
+ enable_maintainer_mode
+ enable_link_mutex
+ enable_version_specific_runtime_libs
++enable_poison_system_directories
+ enable_plugin
+ enable_host_shared
+ enable_libquadmath_support
+@@ -1666,6 +1668,8 @@ Optional Features:
+   --enable-version-specific-runtime-libs
+                           specify that runtime libraries should be installed
+                           in a compiler-specific directory
++  --enable-poison-system-directories
++                          warn for use of native system header directories
+   --enable-plugin         enable plugin support
+   --enable-host-shared    build host code as shared libraries
+   --disable-libquadmath-support
+@@ -23592,7 +23596,7 @@ foo:	.long	25
+ 	tls_first_minor=14
+ 	tls_as_opt="-m64 -Aesame --fatal-warnings"
+ 	;;
+-  sh-*-* | sh[34]-*-*)
++  sh-*-* | sh[34]*-*-*)
+     conftest_s='
+ 	.section ".tdata","awT",@progbits
+ foo:	.long	25
+@@ -27882,6 +27886,19 @@ if test "${enable_version_specific_runtime_libs+set}" = set; then :
+ fi
+ 
+ 
++# Check whether --enable-poison-system-directories was given.
++if test "${enable_poison_system_directories+set}" = set; then :
++  enableval=$enable_poison_system_directories;
++else
++  enable_poison_system_directories=no
++fi
++
++if test "x${enable_poison_system_directories}" = "xyes"; then
++
++$as_echo "#define ENABLE_POISON_SYSTEM_DIRECTORIES 1" >>confdefs.h
++
++fi
++
+ # Substitute configuration variables
+ 
+ 
+@@ -28113,6 +28130,7 @@ $as_echo "unable to check" >&6; }
+   fi
+ 
+   # Check -ldl
++  DL_LIB=
+   saved_LIBS="$LIBS"
+   { $as_echo "$as_me:${as_lineno-$LINENO}: checking for library containing dlopen" >&5
+ $as_echo_n "checking for library containing dlopen... " >&6; }
+@@ -28172,9 +28190,11 @@ fi
+ 
+   if test x"$ac_cv_search_dlopen" = x"-ldl"; then
+     pluginlibs="$pluginlibs -ldl"
++    DL_LIB=$ac_cv_search_dlopen
+   fi
+   LIBS="$saved_LIBS"
+ 
++
+   # Check that we can build shared objects with -fPIC -shared
+   saved_LDFLAGS="$LDFLAGS"
+   saved_CFLAGS="$CFLAGS"
+diff --git a/gcc/configure.ac b/gcc/configure.ac
+index a57c0a2fb..4a4854652 100644
+--- a/gcc/configure.ac
++++ b/gcc/configure.ac
+@@ -3220,7 +3220,7 @@ foo:	.long	25
+ 	tls_first_minor=14
+ 	tls_as_opt="-m64 -Aesame --fatal-warnings"
+ 	;;
+-  sh-*-* | sh[34]-*-*)
++  sh-*-* | sh[34]*-*-*)
+     conftest_s='
+ 	.section ".tdata","awT",@progbits
+ foo:	.long	25
+@@ -5446,6 +5446,16 @@ AC_ARG_ENABLE(version-specific-runtime-libs,
+                 [specify that runtime libraries should be
+                  installed in a compiler-specific directory])])
+ 
++AC_ARG_ENABLE([poison-system-directories],
++             AS_HELP_STRING([--enable-poison-system-directories],
++                            [warn for use of native system header directories]),,
++             [enable_poison_system_directories=no])
++if test "x${enable_poison_system_directories}" = "xyes"; then
++  AC_DEFINE([ENABLE_POISON_SYSTEM_DIRECTORIES],
++           [1],
++           [Define to warn for use of native system header directories])
++fi
++
+ # Substitute configuration variables
+ AC_SUBST(subdirs)
+ AC_SUBST(srcdir)
+@@ -5632,12 +5642,15 @@ if test x"$enable_plugin" = x"yes"; then
+   fi
+ 
+   # Check -ldl
++  DL_LIB=
+   saved_LIBS="$LIBS"
+   AC_SEARCH_LIBS([dlopen], [dl])
+   if test x"$ac_cv_search_dlopen" = x"-ldl"; then
+     pluginlibs="$pluginlibs -ldl"
++    DL_LIB=$ac_cv_search_dlopen
+   fi
+   LIBS="$saved_LIBS"
++  AC_SUBST(DL_LIB)
+ 
+   # Check that we can build shared objects with -fPIC -shared
+   saved_LDFLAGS="$LDFLAGS"
+diff --git a/gcc/doc/gcc.info b/gcc/doc/gcc.info
+index 48bfcf0d9..3019a5424 100644
+--- a/gcc/doc/gcc.info
++++ b/gcc/doc/gcc.info
+@@ -564,6 +564,7 @@ _Warning Options_
+           -Woverlength-strings  -Wpacked  -Wpacked-bitfield-compat  -Wpadded
+           -Wparentheses  -Wpedantic-ms-format -Wno-pedantic-ms-format
+           -Wpointer-arith  -Wno-pointer-to-int-cast
++          -Wno-poison-system-directories
+           -Wredundant-decls  -Wno-return-local-addr
+           -Wreturn-type  -Wsequence-point  -Wshadow
+           -Wsign-compare  -Wsign-conversion -Wfloat-conversion
+@@ -3129,10 +3130,9 @@ language front ends may not honor these options.
+ `-fdiagnostics-color[=WHEN]'
+ `-fno-diagnostics-color'
+      Use color in diagnostics.  WHEN is `never', `always', or `auto'.
+-     The default is `never' if `GCC_COLORS' environment variable isn't
+-     present in the environment, and `auto' otherwise.  `auto' means to
+-     use color only when the standard error is a terminal.  The forms
+-     `-fdiagnostics-color' and `-fno-diagnostics-color' are aliases for
++     The default is 'auto.  'auto' means to use color only when the
++     standard error is a terminal.  The forms '-fdiagnostics-color'
++     and '-fno-diagnostics-color' are aliases for
+      `-fdiagnostics-color=always' and `-fdiagnostics-color=never',
+      respectively.
+ 
+@@ -3482,6 +3482,8 @@ present.
+           `-Wno-format-extra-args', and `-Wno-format-zero-length'.
+           `-Wformat' is enabled by `-Wall'.
+ 
++          This option is enabled by default in Gentoo.
++
+     `-Wno-format-contains-nul'
+           If `-Wformat' is specified, do not warn about format strings
+           that contain NUL bytes.
+@@ -3527,6 +3529,8 @@ present.
+           future warnings may be added to `-Wformat-security' that are
+           not included in `-Wformat-nonliteral'.)
+ 
++          This option is enabled by default in Gentoo.
++
+     `-Wformat-y2k'
+           If `-Wformat' is specified, also warn about `strftime'
+           formats that may yield only a two-digit year.
+@@ -4044,6 +4048,13 @@ present.
+      unknown pragmas in system headers--for that, `-Wunknown-pragmas'
+      must also be used.
+ 
++'-Wno-poison-system-directories'
++     Do not warn for @option{-I} or @option{-L} options using system
++     directories such as @file{/usr/include} when cross compiling.  This
++     option is intended for use in chroot environments when such
++     directories contain the correct headers and libraries for the target
++     system rather than the host.
++
+ `-Wtrampolines'
+      Warn about trampolines generated for pointers to nested functions.
+ 
+@@ -4055,6 +4066,8 @@ present.
+      and thus requires the stack  to be made executable in order for
+      the program to work properly.
+ 
++     This warning is enabled by default in Gentoo.
++
+ `-Wfloat-equal'
+      Warn if floating-point values are used in equality comparisons.
+ 
+@@ -6325,6 +6338,11 @@ find out the exact set of optimizations that are enabled at each level.
+      Please note the warning under `-fgcse' about invoking `-O2' on
+      programs that use computed gotos.
+ 
++     NOTE: In Gentoo, `-D_FORTIFY_SOURCE=2' is set by default, and is
++     activated when `-O' is set to 2 or higher.  This enables additional
++     compile-time and run-time checks for several libc functions.  To disable,
++     specify either `-U_FORTIFY_SOURCE' or `-D_FORTIFY_SOURCE=0'.
++
+ `-O3'
+      Optimize yet more.  `-O3' turns on all optimizations specified by
+      `-O2' and also turns on the `-finline-functions',
+diff --git a/gcc/errors.c b/gcc/errors.c
+index be38b1f27..a6a30fee8 100644
+--- a/gcc/errors.c
++++ b/gcc/errors.c
+@@ -21,10 +21,11 @@ along with GCC; see the file COPYING3.  If not see
+    in the generator programs; the compiler has a more elaborate suite
+    of diagnostic printers, found in diagnostic.c.  */
+ 
+-#ifdef GENERATOR_FILE
+-#include "bconfig.h"
+-#else
++#ifdef HOST_GENERATOR_FILE
+ #include "config.h"
++#define GENERATOR_FILE 1
++#else
++#include "bconfig.h"
+ #endif
+ #include "system.h"
+ #include "errors.h"
+diff --git a/gcc/gcc.c b/gcc/gcc.c
+index adbf0c4eb..28fc93928 100644
+--- a/gcc/gcc.c
++++ b/gcc/gcc.c
+@@ -770,6 +770,8 @@ proper position among the other output files.  */
+    "%{fuse-ld=*:-fuse-ld=%*}\
+     %X %{o*} %{e*} %{N} %{n} %{r}\
+     %{s} %{t} %{u*} %{z} %{Z} %{!nostdlib:%{!nostartfiles:%S}} " VTABLE_VERIFICATION_SPEC " \
++    %{Wno-poison-system-directories:--no-poison-system-directories}\
++    %{Werror=poison-system-directories:--error-poison-system-directories}\
+     %{static:} %{L*} %(mfwrap) %(link_libgcc) " SANITIZER_EARLY_SPEC " %o\
+     %{fopenmp|ftree-parallelize-loops=*:%:include(libgomp.spec)%(link_gomp)}\
+     %{fcilkplus:%:include(libcilkrts.spec)%(link_cilkrts)}\
+diff --git a/gcc/gengtype-lex.l b/gcc/gengtype-lex.l
+index 09fbc9b85..e56f2ef55 100644
+--- a/gcc/gengtype-lex.l
++++ b/gcc/gengtype-lex.l
+@@ -21,10 +21,11 @@ along with GCC; see the file COPYING3.  If not see
+ %option noinput
+ 
+ %{
+-#ifdef GENERATOR_FILE
+-#include "bconfig.h"
+-#else
++#ifdef HOST_GENERATOR_FILE
+ #include "config.h"
++#define GENERATOR_FILE 1
++#else
++#include "bconfig.h"
+ #endif
+ #include "system.h"
+ 
+diff --git a/gcc/gengtype-parse.c b/gcc/gengtype-parse.c
+index bb7bcf725..2cc29186a 100644
+--- a/gcc/gengtype-parse.c
++++ b/gcc/gengtype-parse.c
+@@ -17,10 +17,11 @@
+    along with GCC; see the file COPYING3.  If not see
+    <http://www.gnu.org/licenses/>.  */
+ 
+-#ifdef GENERATOR_FILE
+-#include "bconfig.h"
+-#else
++#ifdef HOST_GENERATOR_FILE
+ #include "config.h"
++#define GENERATOR_FILE 1
++#else
++#include "bconfig.h"
+ #endif
+ #include "system.h"
+ #include "gengtype.h"
+diff --git a/gcc/gengtype-state.c b/gcc/gengtype-state.c
+index 0b925b539..3a4883b7a 100644
+--- a/gcc/gengtype-state.c
++++ b/gcc/gengtype-state.c
+@@ -23,10 +23,11 @@
+    and Basile Starynkevitch <basile@starynkevitch.net>
+ */
+ 
+-#ifdef GENERATOR_FILE
+-#include "bconfig.h"
+-#else
++#ifdef HOST_GENERATOR_FILE
+ #include "config.h"
++#define GENERATOR_FILE 1
++#else
++#include "bconfig.h"
+ #endif
+ #include "system.h"
+ #include "errors.h"	/* For fatal.  */
+diff --git a/gcc/gengtype.c b/gcc/gengtype.c
+index 031004a7b..31002d984 100644
+--- a/gcc/gengtype.c
++++ b/gcc/gengtype.c
+@@ -17,10 +17,11 @@
+    along with GCC; see the file COPYING3.  If not see
+    <http://www.gnu.org/licenses/>.  */
+ 
+-#ifdef GENERATOR_FILE
+-#include "bconfig.h"
+-#else
++#ifdef HOST_GENERATOR_FILE
+ #include "config.h"
++#define GENERATOR_FILE 1
++#else
++#include "bconfig.h"
+ #endif
+ #include "system.h"
+ #include "errors.h"		/* for fatal */
+diff --git a/gcc/graphite-clast-to-gimple.c b/gcc/graphite-clast-to-gimple.c
+index 134388c14..15c513901 100644
+--- a/gcc/graphite-clast-to-gimple.c
++++ b/gcc/graphite-clast-to-gimple.c
+@@ -935,7 +935,7 @@ compute_bounds_for_loop (struct clast_for *loop, mpz_t low, mpz_t up)
+    from STMT_FOR.  */
+ 
+ static tree
+-type_for_clast_for (struct clast_for *stmt_for, ivs_params_p ip)
++type_for_clast_for (struct clast_for *stmt_fora, ivs_params_p ip)
+ {
+   mpz_t bound_one, bound_two;
+   tree lb_type, ub_type;
+@@ -943,8 +943,8 @@ type_for_clast_for (struct clast_for *stmt_for, ivs_params_p ip)
+   mpz_init (bound_one);
+   mpz_init (bound_two);
+ 
+-  lb_type = type_for_clast_expr (stmt_for->LB, ip, bound_one, bound_two);
+-  ub_type = type_for_clast_expr (stmt_for->UB, ip, bound_one, bound_two);
++  lb_type = type_for_clast_expr (stmt_fora->LB, ip, bound_one, bound_two);
++  ub_type = type_for_clast_expr (stmt_fora->UB, ip, bound_one, bound_two);
+ 
+   mpz_clear (bound_one);
+   mpz_clear (bound_two);
+diff --git a/gcc/graphite-poly.h b/gcc/graphite-poly.h
+index c75200e1d..c239239ea 100644
+--- a/gcc/graphite-poly.h
++++ b/gcc/graphite-poly.h
+@@ -27,6 +27,409 @@ along with GCC; see the file COPYING3.  If not see
+ # define isl_stat_ok 0
+ #endif
+ 
++#include <isl/aff.h>
++#include <isl/constraint.h>
++#include <isl/union_set.h>
++#include <isl/schedule.h>
++#include <isl/ilp.h>
++#include <isl/flow.h>
++#include <isl/options.h>
++#include <isl/ast.h>
++#include <isl/ast_build.h>
++#include <cloog/isl/cloog.h>
++#include <dlfcn.h>
++#ifdef HAVE_ISL_SCHED_CONSTRAINTS_COMPUTE_SCHEDULE
++#include <isl/deprecated/aff_int.h>
++#include <isl/deprecated/ilp_int.h>
++#include <isl/deprecated/constraint_int.h>
++#define DYNSYM_ZERO_DISTANCE DYNSYM (isl_band_member_is_coincident)
++#define NEW_DYNSYMS \
++  DYNSYM (isl_schedule_constraints_compute_schedule); \
++  DYNSYM (isl_schedule_constraints_on_domain); \
++  DYNSYM (isl_schedule_constraints_set_coincidence); \
++  DYNSYM (isl_schedule_constraints_set_proximity); \
++  DYNSYM (isl_schedule_constraints_set_validity);
++#else
++#define DYNSYM_ZERO_DISTANCE DYNSYM (isl_band_member_is_zero_distance)
++#define NEW_DYNSYMS
++#endif
++#ifdef HAVE_ISL_OPTIONS_SET_SCHEDULE_SERIALIZE_SCCS
++#define DYNSYM_FUSE DYNSYM (isl_options_set_schedule_serialize_sccs)
++#else
++#define DYNSYM_FUSE DYNSYM (isl_options_set_schedule_fuse)
++#endif
++#define DYNSYMS \
++  DYNSYM (clast_pprint); \
++  DYNSYM (cloog_clast_create_from_input); \
++  DYNSYM (cloog_clast_free); \
++  DYNSYM (cloog_domain_from_isl_set); \
++  DYNSYM (cloog_input_alloc); \
++  DYNSYM (cloog_isl_state_malloc); \
++  DYNSYM (cloog_options_free); \
++  DYNSYM (cloog_options_malloc); \
++  DYNSYM (cloog_scattering_from_isl_map); \
++  DYNSYM (cloog_state_free); \
++  DYNSYM (cloog_union_domain_add_domain); \
++  DYNSYM (cloog_union_domain_alloc); \
++  DYNSYM (cloog_union_domain_set_name); \
++  DYNSYM (isl_aff_add_coefficient_si); \
++  DYNSYM (isl_aff_add_constant); \
++  DYNSYM (isl_aff_free); \
++  DYNSYM (isl_aff_get_coefficient); \
++  DYNSYM (isl_aff_get_space); \
++  DYNSYM (isl_aff_mod); \
++  DYNSYM (isl_aff_set_coefficient_si); \
++  DYNSYM (isl_aff_set_constant_si); \
++  DYNSYM (isl_aff_zero_on_domain); \
++  DYNSYM (isl_band_free); \
++  DYNSYM (isl_band_get_children); \
++  DYNSYM (isl_band_get_partial_schedule); \
++  DYNSYM (isl_band_has_children); \
++  DYNSYM (isl_band_list_free); \
++  DYNSYM (isl_band_list_get_band); \
++  DYNSYM (isl_band_list_get_ctx); \
++  DYNSYM (isl_band_list_n_band); \
++  DYNSYM_ZERO_DISTANCE; \
++  DYNSYM (isl_band_n_member); \
++  DYNSYM (isl_basic_map_add_constraint); \
++  DYNSYM (isl_basic_map_project_out); \
++  DYNSYM (isl_basic_map_universe); \
++  DYNSYM (isl_constraint_set_coefficient); \
++  DYNSYM (isl_constraint_set_coefficient_si); \
++  DYNSYM (isl_constraint_set_constant); \
++  DYNSYM (isl_constraint_set_constant_si); \
++  DYNSYM (isl_ctx_alloc); \
++  DYNSYM (isl_ctx_free); \
++  DYNSYM (isl_equality_alloc); \
++  DYNSYM (isl_id_alloc); \
++  DYNSYM (isl_id_copy); \
++  DYNSYM (isl_id_free); \
++  DYNSYM (isl_inequality_alloc); \
++  DYNSYM (isl_local_space_copy); \
++  DYNSYM (isl_local_space_free); \
++  DYNSYM (isl_local_space_from_space); \
++  DYNSYM (isl_local_space_range); \
++  DYNSYM (isl_map_add_constraint); \
++  DYNSYM (isl_map_add_dims); \
++  DYNSYM (isl_map_align_params); \
++  DYNSYM (isl_map_apply_range); \
++  DYNSYM (isl_map_copy); \
++  DYNSYM (isl_map_dim); \
++  DYNSYM (isl_map_dump); \
++  DYNSYM (isl_map_equate); \
++  DYNSYM (isl_map_fix_si); \
++  DYNSYM (isl_map_flat_product); \
++  DYNSYM (isl_map_flat_range_product); \
++  DYNSYM (isl_map_free); \
++  DYNSYM (isl_map_from_basic_map); \
++  DYNSYM (isl_map_from_pw_aff); \
++  DYNSYM (isl_map_from_union_map); \
++  DYNSYM (isl_map_get_ctx); \
++  DYNSYM (isl_map_get_space); \
++  DYNSYM (isl_map_get_tuple_id); \
++  DYNSYM (isl_map_insert_dims); \
++  DYNSYM (isl_map_intersect); \
++  DYNSYM (isl_map_intersect_domain); \
++  DYNSYM (isl_map_intersect_range); \
++  DYNSYM (isl_map_is_empty); \
++  DYNSYM (isl_map_lex_ge); \
++  DYNSYM (isl_map_lex_le); \
++  DYNSYM (isl_map_n_out); \
++  DYNSYM (isl_map_range); \
++  DYNSYM (isl_map_set_tuple_id); \
++  DYNSYM (isl_map_universe); \
++  DYNSYM (isl_options_set_on_error); \
++  DYNSYM_FUSE; \
++  DYNSYM (isl_options_set_schedule_max_constant_term); \
++  DYNSYM (isl_options_set_schedule_maximize_band_depth); \
++  DYNSYM (isl_printer_free); \
++  DYNSYM (isl_printer_print_aff); \
++  DYNSYM (isl_printer_print_constraint); \
++  DYNSYM (isl_printer_print_map); \
++  DYNSYM (isl_printer_print_set); \
++  DYNSYM (isl_printer_to_file); \
++  DYNSYM (isl_pw_aff_add); \
++  DYNSYM (isl_pw_aff_alloc); \
++  DYNSYM (isl_pw_aff_copy); \
++  DYNSYM (isl_pw_aff_eq_set); \
++  DYNSYM (isl_pw_aff_free); \
++  DYNSYM (isl_pw_aff_from_aff); \
++  DYNSYM (isl_pw_aff_ge_set); \
++  DYNSYM (isl_pw_aff_gt_set); \
++  DYNSYM (isl_pw_aff_is_cst); \
++  DYNSYM (isl_pw_aff_le_set); \
++  DYNSYM (isl_pw_aff_lt_set); \
++  DYNSYM (isl_pw_aff_mod); \
++  DYNSYM (isl_pw_aff_mul); \
++  DYNSYM (isl_pw_aff_ne_set); \
++  DYNSYM (isl_pw_aff_nonneg_set); \
++  DYNSYM (isl_pw_aff_set_tuple_id); \
++  DYNSYM (isl_pw_aff_sub); \
++  DYNSYM (isl_pw_aff_zero_set); \
++  DYNSYM (isl_schedule_free); \
++  DYNSYM (isl_schedule_get_band_forest); \
++  DYNSYM (isl_set_add_constraint); \
++  DYNSYM (isl_set_add_dims); \
++  DYNSYM (isl_set_apply); \
++  DYNSYM (isl_set_coalesce); \
++  DYNSYM (isl_set_copy); \
++  DYNSYM (isl_set_dim); \
++  DYNSYM (isl_set_fix_si); \
++  DYNSYM (isl_set_free); \
++  DYNSYM (isl_set_from_cloog_domain); \
++  DYNSYM (isl_set_get_space); \
++  DYNSYM (isl_set_get_tuple_id); \
++  DYNSYM (isl_set_intersect); \
++  DYNSYM (isl_set_is_empty); \
++  DYNSYM (isl_set_max); \
++  DYNSYM (isl_set_min); \
++  DYNSYM (isl_set_n_dim); \
++  DYNSYM (isl_set_nat_universe); \
++  DYNSYM (isl_set_project_out); \
++  DYNSYM (isl_set_set_tuple_id); \
++  DYNSYM (isl_set_universe); \
++  DYNSYM (isl_space_add_dims); \
++  DYNSYM (isl_space_alloc); \
++  DYNSYM (isl_space_copy); \
++  DYNSYM (isl_space_dim); \
++  DYNSYM (isl_space_domain); \
++  DYNSYM (isl_space_find_dim_by_id); \
++  DYNSYM (isl_space_free); \
++  DYNSYM (isl_space_from_domain); \
++  DYNSYM (isl_space_get_tuple_id); \
++  DYNSYM (isl_space_params_alloc); \
++  DYNSYM (isl_space_range); \
++  DYNSYM (isl_space_set_alloc); \
++  DYNSYM (isl_space_set_dim_id); \
++  DYNSYM (isl_space_set_tuple_id); \
++  DYNSYM (isl_union_map_add_map); \
++  DYNSYM (isl_union_map_align_params); \
++  DYNSYM (isl_union_map_apply_domain); \
++  DYNSYM (isl_union_map_apply_range); \
++  DYNSYM (isl_union_map_compute_flow); \
++  DYNSYM (isl_union_map_copy); \
++  DYNSYM (isl_union_map_empty); \
++  DYNSYM (isl_union_map_flat_range_product); \
++  DYNSYM (isl_union_map_foreach_map); \
++  DYNSYM (isl_union_map_free); \
++  DYNSYM (isl_union_map_from_map); \
++  DYNSYM (isl_union_map_get_ctx); \
++  DYNSYM (isl_union_map_get_space); \
++  DYNSYM (isl_union_map_gist_domain); \
++  DYNSYM (isl_union_map_gist_range); \
++  DYNSYM (isl_union_map_intersect_domain); \
++  DYNSYM (isl_union_map_is_empty); \
++  DYNSYM (isl_union_map_subtract); \
++  DYNSYM (isl_union_map_union); \
++  DYNSYM (isl_union_set_add_set); \
++  DYNSYM (isl_union_set_compute_schedule); \
++  DYNSYM (isl_union_set_copy); \
++  DYNSYM (isl_union_set_empty); \
++  DYNSYM (isl_union_set_from_set); \
++  DYNSYM (stmt_ass); \
++  DYNSYM (stmt_block); \
++  DYNSYM (stmt_for); \
++  DYNSYM (stmt_guard); \
++  DYNSYM (stmt_root); \
++  DYNSYM (stmt_user);
++extern struct cloog_pointers_s__
++{
++  bool inited;
++  void *h;
++#define DYNSYM(x) __typeof (x) *p_##x
++  DYNSYMS
++  NEW_DYNSYMS
++#undef DYNSYM
++} cloog_pointers__;
++
++#define cloog_block_alloc (*cloog_pointers__.p_cloog_block_alloc)
++#define clast_pprint (*cloog_pointers__.p_clast_pprint)
++#define cloog_clast_create_from_input (*cloog_pointers__.p_cloog_clast_create_from_input)
++#define cloog_clast_free (*cloog_pointers__.p_cloog_clast_free)
++#define cloog_domain_from_isl_set (*cloog_pointers__.p_cloog_domain_from_isl_set)
++#define cloog_input_alloc (*cloog_pointers__.p_cloog_input_alloc)
++#define cloog_isl_state_malloc (*cloog_pointers__.p_cloog_isl_state_malloc)
++#define cloog_options_free (*cloog_pointers__.p_cloog_options_free)
++#define cloog_options_malloc (*cloog_pointers__.p_cloog_options_malloc)
++#define cloog_scattering_from_isl_map (*cloog_pointers__.p_cloog_scattering_from_isl_map)
++#define cloog_state_free (*cloog_pointers__.p_cloog_state_free)
++#define cloog_union_domain_add_domain (*cloog_pointers__.p_cloog_union_domain_add_domain)
++#define cloog_union_domain_alloc (*cloog_pointers__.p_cloog_union_domain_alloc)
++#define cloog_union_domain_set_name (*cloog_pointers__.p_cloog_union_domain_set_name)
++#define isl_aff_add_coefficient_si (*cloog_pointers__.p_isl_aff_add_coefficient_si)
++#define isl_aff_add_constant (*cloog_pointers__.p_isl_aff_add_constant)
++#define isl_aff_free (*cloog_pointers__.p_isl_aff_free)
++#define isl_aff_get_coefficient (*cloog_pointers__.p_isl_aff_get_coefficient)
++#define isl_aff_get_space (*cloog_pointers__.p_isl_aff_get_space)
++#define isl_aff_mod (*cloog_pointers__.p_isl_aff_mod)
++#define isl_aff_set_coefficient_si (*cloog_pointers__.p_isl_aff_set_coefficient_si)
++#define isl_aff_set_constant_si (*cloog_pointers__.p_isl_aff_set_constant_si)
++#define isl_aff_zero_on_domain (*cloog_pointers__.p_isl_aff_zero_on_domain)
++#define isl_band_free (*cloog_pointers__.p_isl_band_free)
++#define isl_band_get_children (*cloog_pointers__.p_isl_band_get_children)
++#define isl_band_get_partial_schedule (*cloog_pointers__.p_isl_band_get_partial_schedule)
++#define isl_band_has_children (*cloog_pointers__.p_isl_band_has_children)
++#define isl_band_list_free (*cloog_pointers__.p_isl_band_list_free)
++#define isl_band_list_get_band (*cloog_pointers__.p_isl_band_list_get_band)
++#define isl_band_list_get_ctx (*cloog_pointers__.p_isl_band_list_get_ctx)
++#define isl_band_list_n_band (*cloog_pointers__.p_isl_band_list_n_band)
++#ifdef HAVE_ISL_SCHED_CONSTRAINTS_COMPUTE_SCHEDULE
++#define isl_band_member_is_coincident (*cloog_pointers__.p_isl_band_member_is_coincident)
++#else
++#define isl_band_member_is_zero_distance (*cloog_pointers__.p_isl_band_member_is_zero_distance)
++#endif
++#define isl_band_n_member (*cloog_pointers__.p_isl_band_n_member)
++#define isl_basic_map_add_constraint (*cloog_pointers__.p_isl_basic_map_add_constraint)
++#define isl_basic_map_project_out (*cloog_pointers__.p_isl_basic_map_project_out)
++#define isl_basic_map_universe (*cloog_pointers__.p_isl_basic_map_universe)
++#define isl_constraint_set_coefficient (*cloog_pointers__.p_isl_constraint_set_coefficient)
++#define isl_constraint_set_coefficient_si (*cloog_pointers__.p_isl_constraint_set_coefficient_si)
++#define isl_constraint_set_constant (*cloog_pointers__.p_isl_constraint_set_constant)
++#define isl_constraint_set_constant_si (*cloog_pointers__.p_isl_constraint_set_constant_si)
++#define isl_ctx_alloc (*cloog_pointers__.p_isl_ctx_alloc)
++#define isl_ctx_free (*cloog_pointers__.p_isl_ctx_free)
++#define isl_equality_alloc (*cloog_pointers__.p_isl_equality_alloc)
++#define isl_id_alloc (*cloog_pointers__.p_isl_id_alloc)
++#define isl_id_copy (*cloog_pointers__.p_isl_id_copy)
++#define isl_id_free (*cloog_pointers__.p_isl_id_free)
++#define isl_inequality_alloc (*cloog_pointers__.p_isl_inequality_alloc)
++#define isl_local_space_copy (*cloog_pointers__.p_isl_local_space_copy)
++#define isl_local_space_free (*cloog_pointers__.p_isl_local_space_free)
++#define isl_local_space_from_space (*cloog_pointers__.p_isl_local_space_from_space)
++#define isl_local_space_range (*cloog_pointers__.p_isl_local_space_range)
++#define isl_map_add_constraint (*cloog_pointers__.p_isl_map_add_constraint)
++#define isl_map_add_dims (*cloog_pointers__.p_isl_map_add_dims)
++#define isl_map_align_params (*cloog_pointers__.p_isl_map_align_params)
++#define isl_map_apply_range (*cloog_pointers__.p_isl_map_apply_range)
++#define isl_map_copy (*cloog_pointers__.p_isl_map_copy)
++#define isl_map_dim (*cloog_pointers__.p_isl_map_dim)
++#define isl_map_dump (*cloog_pointers__.p_isl_map_dump)
++#define isl_map_equate (*cloog_pointers__.p_isl_map_equate)
++#define isl_map_fix_si (*cloog_pointers__.p_isl_map_fix_si)
++#define isl_map_flat_product (*cloog_pointers__.p_isl_map_flat_product)
++#define isl_map_flat_range_product (*cloog_pointers__.p_isl_map_flat_range_product)
++#define isl_map_free (*cloog_pointers__.p_isl_map_free)
++#define isl_map_from_basic_map (*cloog_pointers__.p_isl_map_from_basic_map)
++#define isl_map_from_pw_aff (*cloog_pointers__.p_isl_map_from_pw_aff)
++#define isl_map_from_union_map (*cloog_pointers__.p_isl_map_from_union_map)
++#define isl_map_get_ctx (*cloog_pointers__.p_isl_map_get_ctx)
++#define isl_map_get_space (*cloog_pointers__.p_isl_map_get_space)
++#define isl_map_get_tuple_id (*cloog_pointers__.p_isl_map_get_tuple_id)
++#define isl_map_insert_dims (*cloog_pointers__.p_isl_map_insert_dims)
++#define isl_map_intersect (*cloog_pointers__.p_isl_map_intersect)
++#define isl_map_intersect_domain (*cloog_pointers__.p_isl_map_intersect_domain)
++#define isl_map_intersect_range (*cloog_pointers__.p_isl_map_intersect_range)
++#define isl_map_is_empty (*cloog_pointers__.p_isl_map_is_empty)
++#define isl_map_lex_ge (*cloog_pointers__.p_isl_map_lex_ge)
++#define isl_map_lex_le (*cloog_pointers__.p_isl_map_lex_le)
++#define isl_map_n_out (*cloog_pointers__.p_isl_map_n_out)
++#define isl_map_range (*cloog_pointers__.p_isl_map_range)
++#define isl_map_set_tuple_id (*cloog_pointers__.p_isl_map_set_tuple_id)
++#define isl_map_universe (*cloog_pointers__.p_isl_map_universe)
++#define isl_options_set_on_error (*cloog_pointers__.p_isl_options_set_on_error)
++#ifdef HAVE_ISL_OPTIONS_SET_SCHEDULE_SERIALIZE_SCCS
++#define isl_options_set_schedule_serialize_sccs (*cloog_pointers__.p_isl_options_set_schedule_serialize_sccs)
++#else
++#define isl_options_set_schedule_fuse (*cloog_pointers__.p_isl_options_set_schedule_fuse)
++#endif
++#define isl_options_set_schedule_max_constant_term (*cloog_pointers__.p_isl_options_set_schedule_max_constant_term)
++#define isl_options_set_schedule_maximize_band_depth (*cloog_pointers__.p_isl_options_set_schedule_maximize_band_depth)
++#define isl_printer_free (*cloog_pointers__.p_isl_printer_free)
++#define isl_printer_print_aff (*cloog_pointers__.p_isl_printer_print_aff)
++#define isl_printer_print_constraint (*cloog_pointers__.p_isl_printer_print_constraint)
++#define isl_printer_print_map (*cloog_pointers__.p_isl_printer_print_map)
++#define isl_printer_print_set (*cloog_pointers__.p_isl_printer_print_set)
++#define isl_printer_to_file (*cloog_pointers__.p_isl_printer_to_file)
++#define isl_pw_aff_add (*cloog_pointers__.p_isl_pw_aff_add)
++#define isl_pw_aff_alloc (*cloog_pointers__.p_isl_pw_aff_alloc)
++#define isl_pw_aff_copy (*cloog_pointers__.p_isl_pw_aff_copy)
++#define isl_pw_aff_eq_set (*cloog_pointers__.p_isl_pw_aff_eq_set)
++#define isl_pw_aff_free (*cloog_pointers__.p_isl_pw_aff_free)
++#define isl_pw_aff_from_aff (*cloog_pointers__.p_isl_pw_aff_from_aff)
++#define isl_pw_aff_ge_set (*cloog_pointers__.p_isl_pw_aff_ge_set)
++#define isl_pw_aff_gt_set (*cloog_pointers__.p_isl_pw_aff_gt_set)
++#define isl_pw_aff_is_cst (*cloog_pointers__.p_isl_pw_aff_is_cst)
++#define isl_pw_aff_le_set (*cloog_pointers__.p_isl_pw_aff_le_set)
++#define isl_pw_aff_lt_set (*cloog_pointers__.p_isl_pw_aff_lt_set)
++#define isl_pw_aff_mod (*cloog_pointers__.p_isl_pw_aff_mod)
++#define isl_pw_aff_mul (*cloog_pointers__.p_isl_pw_aff_mul)
++#define isl_pw_aff_ne_set (*cloog_pointers__.p_isl_pw_aff_ne_set)
++#define isl_pw_aff_nonneg_set (*cloog_pointers__.p_isl_pw_aff_nonneg_set)
++#define isl_pw_aff_set_tuple_id (*cloog_pointers__.p_isl_pw_aff_set_tuple_id)
++#define isl_pw_aff_sub (*cloog_pointers__.p_isl_pw_aff_sub)
++#define isl_pw_aff_zero_set (*cloog_pointers__.p_isl_pw_aff_zero_set)
++#define isl_schedule_constraints_compute_schedule (*cloog_pointers__.p_isl_schedule_constraints_compute_schedule)
++#define isl_schedule_constraints_on_domain (*cloog_pointers__.p_isl_schedule_constraints_on_domain)
++#define isl_schedule_constraints_set_coincidence (*cloog_pointers__.p_isl_schedule_constraints_set_coincidence)
++#define isl_schedule_constraints_set_proximity (*cloog_pointers__.p_isl_schedule_constraints_set_proximity)
++#define isl_schedule_constraints_set_validity (*cloog_pointers__.p_isl_schedule_constraints_set_validity)
++#define isl_schedule_free (*cloog_pointers__.p_isl_schedule_free)
++#define isl_schedule_get_band_forest (*cloog_pointers__.p_isl_schedule_get_band_forest)
++#define isl_set_add_constraint (*cloog_pointers__.p_isl_set_add_constraint)
++#define isl_set_add_dims (*cloog_pointers__.p_isl_set_add_dims)
++#define isl_set_apply (*cloog_pointers__.p_isl_set_apply)
++#define isl_set_coalesce (*cloog_pointers__.p_isl_set_coalesce)
++#define isl_set_copy (*cloog_pointers__.p_isl_set_copy)
++#define isl_set_dim (*cloog_pointers__.p_isl_set_dim)
++#define isl_set_fix_si (*cloog_pointers__.p_isl_set_fix_si)
++#define isl_set_free (*cloog_pointers__.p_isl_set_free)
++#define isl_set_from_cloog_domain (*cloog_pointers__.p_isl_set_from_cloog_domain)
++#define isl_set_get_space (*cloog_pointers__.p_isl_set_get_space)
++#define isl_set_get_tuple_id (*cloog_pointers__.p_isl_set_get_tuple_id)
++#define isl_set_intersect (*cloog_pointers__.p_isl_set_intersect)
++#define isl_set_is_empty (*cloog_pointers__.p_isl_set_is_empty)
++#define isl_set_max (*cloog_pointers__.p_isl_set_max)
++#define isl_set_min (*cloog_pointers__.p_isl_set_min)
++#define isl_set_n_dim (*cloog_pointers__.p_isl_set_n_dim)
++#define isl_set_nat_universe (*cloog_pointers__.p_isl_set_nat_universe)
++#define isl_set_project_out (*cloog_pointers__.p_isl_set_project_out)
++#define isl_set_set_tuple_id (*cloog_pointers__.p_isl_set_set_tuple_id)
++#define isl_set_universe (*cloog_pointers__.p_isl_set_universe)
++#define isl_space_add_dims (*cloog_pointers__.p_isl_space_add_dims)
++#define isl_space_alloc (*cloog_pointers__.p_isl_space_alloc)
++#define isl_space_copy (*cloog_pointers__.p_isl_space_copy)
++#define isl_space_dim (*cloog_pointers__.p_isl_space_dim)
++#define isl_space_domain (*cloog_pointers__.p_isl_space_domain)
++#define isl_space_find_dim_by_id (*cloog_pointers__.p_isl_space_find_dim_by_id)
++#define isl_space_free (*cloog_pointers__.p_isl_space_free)
++#define isl_space_from_domain (*cloog_pointers__.p_isl_space_from_domain)
++#define isl_space_get_tuple_id (*cloog_pointers__.p_isl_space_get_tuple_id)
++#define isl_space_params_alloc (*cloog_pointers__.p_isl_space_params_alloc)
++#define isl_space_range (*cloog_pointers__.p_isl_space_range)
++#define isl_space_set_alloc (*cloog_pointers__.p_isl_space_set_alloc)
++#define isl_space_set_dim_id (*cloog_pointers__.p_isl_space_set_dim_id)
++#define isl_space_set_tuple_id (*cloog_pointers__.p_isl_space_set_tuple_id)
++#define isl_union_map_add_map (*cloog_pointers__.p_isl_union_map_add_map)
++#define isl_union_map_align_params (*cloog_pointers__.p_isl_union_map_align_params)
++#define isl_union_map_apply_domain (*cloog_pointers__.p_isl_union_map_apply_domain)
++#define isl_union_map_apply_range (*cloog_pointers__.p_isl_union_map_apply_range)
++#define isl_union_map_compute_flow (*cloog_pointers__.p_isl_union_map_compute_flow)
++#define isl_union_map_copy (*cloog_pointers__.p_isl_union_map_copy)
++#define isl_union_map_empty (*cloog_pointers__.p_isl_union_map_empty)
++#define isl_union_map_flat_range_product (*cloog_pointers__.p_isl_union_map_flat_range_product)
++#define isl_union_map_foreach_map (*cloog_pointers__.p_isl_union_map_foreach_map)
++#define isl_union_map_free (*cloog_pointers__.p_isl_union_map_free)
++#define isl_union_map_from_map (*cloog_pointers__.p_isl_union_map_from_map)
++#define isl_union_map_get_ctx (*cloog_pointers__.p_isl_union_map_get_ctx)
++#define isl_union_map_get_space (*cloog_pointers__.p_isl_union_map_get_space)
++#define isl_union_map_gist_domain (*cloog_pointers__.p_isl_union_map_gist_domain)
++#define isl_union_map_gist_range (*cloog_pointers__.p_isl_union_map_gist_range)
++#define isl_union_map_intersect_domain (*cloog_pointers__.p_isl_union_map_intersect_domain)
++#define isl_union_map_is_empty (*cloog_pointers__.p_isl_union_map_is_empty)
++#define isl_union_map_subtract (*cloog_pointers__.p_isl_union_map_subtract)
++#define isl_union_map_union (*cloog_pointers__.p_isl_union_map_union)
++#define isl_union_set_add_set (*cloog_pointers__.p_isl_union_set_add_set)
++#define isl_union_set_compute_schedule (*cloog_pointers__.p_isl_union_set_compute_schedule)
++#define isl_union_set_copy (*cloog_pointers__.p_isl_union_set_copy)
++#define isl_union_set_empty (*cloog_pointers__.p_isl_union_set_empty)
++#define isl_union_set_from_set (*cloog_pointers__.p_isl_union_set_from_set)
++#define stmt_ass (*cloog_pointers__.p_stmt_ass)
++#define stmt_block (*cloog_pointers__.p_stmt_block)
++#define stmt_for (*cloog_pointers__.p_stmt_for)
++#define stmt_guard (*cloog_pointers__.p_stmt_guard)
++#define stmt_root (*cloog_pointers__.p_stmt_root)
++#define stmt_user (*cloog_pointers__.p_stmt_user)
++
+ typedef struct poly_dr *poly_dr_p;
+ 
+ typedef struct poly_bb *poly_bb_p;
+diff --git a/gcc/graphite.c b/gcc/graphite.c
+index 52182a55a..73de8ce60 100644
+--- a/gcc/graphite.c
++++ b/gcc/graphite.c
+@@ -79,6 +79,34 @@ along with GCC; see the file COPYING3.  If not see
+ 
+ CloogState *cloog_state;
+ 
++__typeof (cloog_pointers__) cloog_pointers__;
++
++static bool
++init_cloog_pointers (void)
++{
++  void *h;
++
++  if (cloog_pointers__.inited)
++    return cloog_pointers__.h != NULL;
++  h = dlopen ("libcloog-isl.so.4", RTLD_LAZY);
++  cloog_pointers__.h = h;
++  if (h == NULL)
++    return false;
++#define DYNSYM(x) \
++  do \
++    { \
++      union { __typeof (cloog_pointers__.p_##x) p; void *q; } u; \
++      u.q = dlsym (h, #x); \
++      if (u.q == NULL) \
++	return false; \
++      cloog_pointers__.p_##x = u.p; \
++    } \
++  while (0)
++  DYNSYMS
++#undef DYNSYM
++  return true;
++}
++
+ /* Print global statistics to FILE.  */
+ 
+ static void
+@@ -278,6 +306,15 @@ graphite_transform_loops (void)
+   if (parallelized_function_p (cfun->decl))
+     return;
+ 
++  if (number_of_loops (cfun) <= 1)
++    return;
++
++  if (!init_cloog_pointers ())
++    {
++      sorry ("Graphite loop optimizations cannot be used; rebuild gcc to fix");
++      return;
++    }
++
+   ctx = isl_ctx_alloc ();
+   isl_options_set_on_error (ctx, ISL_ON_ERROR_ABORT);
+   if (!graphite_initialize (ctx))
+diff --git a/gcc/incpath.c b/gcc/incpath.c
+index f495c0a7f..b96382b7c 100644
+--- a/gcc/incpath.c
++++ b/gcc/incpath.c
+@@ -28,6 +28,7 @@
+ #include "intl.h"
+ #include "incpath.h"
+ #include "cppdefault.h"
++#include "diagnostic-core.h"
+ 
+ /* Microsoft Windows does not natively support inodes.
+    VMS has non-numeric inodes.  */
+@@ -382,6 +383,24 @@ merge_include_chains (const char *sysroot, cpp_reader *pfile, int verbose)
+ 	}
+       fprintf (stderr, _("End of search list.\n"));
+     }
++
++#ifdef ENABLE_POISON_SYSTEM_DIRECTORIES
++  if (flag_poison_system_directories)
++    {
++       struct cpp_dir *p;
++
++       for (p = heads[QUOTE]; p; p = p->next)
++         {
++          if ((!strncmp (p->name, "/usr/include", 12))
++              || (!strncmp (p->name, "/usr/local/include", 18))
++              || (!strncmp (p->name, "/usr/X11R6/include", 18)))
++            warning (OPT_Wpoison_system_directories,
++                     "include location \"%s\" is unsafe for "
++                     "cross-compilation",
++                     p->name);
++         }
++    }
++#endif
+ }
+ 
+ /* Use given -I paths for #include "..." but not #include <...>, and
+diff --git a/gcc/testsuite/gcc.target/i386/pr84829.c b/gcc/testsuite/gcc.target/i386/pr84829.c
+new file mode 100644
+index 000000000..a63a49b13
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/i386/pr84829.c
+@@ -0,0 +1,7 @@
++/* { dg-do link } */
++/* { dg-options "-mieee-fp" } */
++
++int main()
++{
++  return 0;
++}
+diff --git a/gcc/toplev.c b/gcc/toplev.c
+index 588fa2bd4..3ea0bd393 100644
+--- a/gcc/toplev.c
++++ b/gcc/toplev.c
+@@ -1232,10 +1232,8 @@ process_options (void)
+ 
+   maximum_field_alignment = initial_max_fld_align * BITS_PER_UNIT;
+ 
+-  /* Default to -fdiagnostics-color=auto if GCC_COLORS is in the environment,
+-     otherwise default to -fdiagnostics-color=never.  */
+-  if (!global_options_set.x_flag_diagnostics_show_color
+-      && getenv ("GCC_COLORS"))
++  /* Default to -fdiagnostics-color=auto.  */
++  if (!global_options_set.x_flag_diagnostics_show_color)
+     pp_show_color (global_dc->printer)
+       = colorize_init (DIAGNOSTICS_COLOR_AUTO);
+ 
+diff --git a/include/libiberty.h b/include/libiberty.h
+index 78c42eb88..d72204f91 100644
+--- a/include/libiberty.h
++++ b/include/libiberty.h
+@@ -613,8 +613,11 @@ extern int pwait (int, int *, int);
+ /* Like sprintf but provides a pointer to malloc'd storage, which must
+    be freed by the caller.  */
+ 
++/* asprintf may be declared as a macro by glibc with __USE_FORTIFY_LEVEL.  */
++#ifndef asprintf
+ extern int asprintf (char **, const char *, ...) ATTRIBUTE_PRINTF_2;
+ #endif
++#endif
+ 
+ #if !HAVE_DECL_VASPRINTF
+ /* Like vsprintf but provides a pointer to malloc'd storage, which
+diff --git a/libatomic/Makefile.in b/libatomic/Makefile.in
+index 42fd2c7fd..15ada75c4 100644
+--- a/libatomic/Makefile.in
++++ b/libatomic/Makefile.in
+@@ -300,7 +300,8 @@ PAT_N = $(word 2,$(PAT_SPLIT))
+ PAT_S = $(word 3,$(PAT_SPLIT))
+ IFUNC_DEF = -DIFUNC_ALT=$(PAT_S)
+ IFUNC_OPT = $(word $(PAT_S),$(IFUNC_OPTIONS))
+-M_DEPS = -MT $@ -MD -MP -MF $(DEPDIR)/$(@F).Ppo
++@AMDEP_TRUE@M_DEPS = -MT $@ -MD -MP -MF $(DEPDIR)/$(@F).Ppo
++@AMDEP_FALSE@M_DEPS =
+ M_SIZE = -DN=$(PAT_N)
+ M_IFUNC = $(if $(PAT_S),$(IFUNC_DEF) $(IFUNC_OPT))
+ M_FILE = $(PAT_BASE)_n.c
+diff --git a/libatomic/configure b/libatomic/configure
+index d707b096c..5227e3591 100755
+--- a/libatomic/configure
++++ b/libatomic/configure
+@@ -761,6 +761,7 @@ with_gnu_ld
+ enable_libtool_lock
+ enable_maintainer_mode
+ enable_symvers
++enable_werror
+ '
+       ac_precious_vars='build_alias
+ host_alias
+@@ -1406,6 +1407,7 @@ Optional Features:
+ 			  (and sometimes confusing) to the casual installer
+   --enable-symvers=STYLE  enables symbol versioning of the shared library
+                           [default=yes]
++  --enable-werror         turns on -Werror [default=yes]
+ 
+ Optional Packages:
+   --with-PACKAGE[=ARG]    use PACKAGE [ARG=yes]
+@@ -15176,9 +15178,18 @@ $as_echo "$as_me: not updating unwritable cache $cache_file" >&6;}
+ fi
+ rm -f confcache
+ 
+-# Add -Wall -Werror if we are using GCC.
++# Check whether --enable-werror was given.
++if test "${enable_werror+set}" = set; then :
++  enableval=$enable_werror;
++fi
++
++# Add -Wall if we are using GCC.
+ if test "x$GCC" = "xyes"; then
+-  XCFLAGS="$XCFLAGS -Wall -Werror"
++  XCFLAGS="$XCFLAGS -Wall"
++  # Add -Werror if requested.
++  if test "x$enable_werror" != "xno"; then
++    XCFLAGS="$XCFLAGS -Werror"
++  fi
+ fi
+ 
+ XCFLAGS="$XCFLAGS $XPCFLAGS"
+diff --git a/libatomic/configure.ac b/libatomic/configure.ac
+index 9e8678df5..dc37207ba 100644
+--- a/libatomic/configure.ac
++++ b/libatomic/configure.ac
+@@ -227,9 +227,15 @@ LIBAT_ENABLE_SYMVERS
+ CFLAGS="$save_CFLAGS"
+ AC_CACHE_SAVE
+ 
+-# Add -Wall -Werror if we are using GCC.
++AC_ARG_ENABLE(werror, [AS_HELP_STRING([--enable-werror],
++                                      [turns on -Werror @<:@default=yes@:>@])])
++# Add -Wall if we are using GCC.
+ if test "x$GCC" = "xyes"; then
+-  XCFLAGS="$XCFLAGS -Wall -Werror"
++  XCFLAGS="$XCFLAGS -Wall"
++  # Add -Werror if requested.
++  if test "x$enable_werror" != "xno"; then
++    XCFLAGS="$XCFLAGS -Werror"
++  fi
+ fi
+ 
+ XCFLAGS="$XCFLAGS $XPCFLAGS"
+diff --git a/libbacktrace/configure b/libbacktrace/configure
+index 57a0f940f..1cac07009 100755
+--- a/libbacktrace/configure
++++ b/libbacktrace/configure
+@@ -730,6 +730,7 @@ with_pic
+ enable_fast_install
+ with_gnu_ld
+ enable_libtool_lock
++enable_werror
+ with_system_libunwind
+ enable_host_shared
+ '
+@@ -1370,6 +1371,7 @@ Optional Features:
+   --enable-fast-install[=PKGS]
+                           optimize for fast installation [default=yes]
+   --disable-libtool-lock  avoid locking (might break parallel builds)
++  --enable-werror         turns on -Werror [default=yes]
+   --enable-host-shared    build host code as shared libraries
+ 
+ Optional Packages:
+@@ -11617,8 +11619,16 @@ fi
+ CFLAGS="$save_CFLAGS"
+ 
+ 
++# Check whether --enable-werror was given.
++if test "${enable_werror+set}" = set; then :
++  enableval=$enable_werror;
++fi
++
++
+ if test -n "${with_target_subdir}"; then
+-  WARN_FLAGS="$WARN_FLAGS -Werror"
++  if test "x$enable_werror" != "xno"; then
++    WARN_FLAGS="$WARN_FLAGS -Werror"
++  fi
+ fi
+ 
+ 
+diff --git a/libbacktrace/configure.ac b/libbacktrace/configure.ac
+index 40b4d547c..dd1dbe4f1 100644
+--- a/libbacktrace/configure.ac
++++ b/libbacktrace/configure.ac
+@@ -135,8 +135,13 @@ ACX_PROG_CC_WARNING_OPTS([-W -Wall -Wwrite-strings -Wstrict-prototypes \
+ 			  -Wmissing-format-attribute -Wcast-qual],
+ 			  [WARN_FLAGS])
+ 
++AC_ARG_ENABLE(werror, [AS_HELP_STRING([--enable-werror],
++                                      [turns on -Werror @<:@default=yes@:>@])])
++
+ if test -n "${with_target_subdir}"; then
+-  WARN_FLAGS="$WARN_FLAGS -Werror"
++  if test "x$enable_werror" != "xno"; then
++    WARN_FLAGS="$WARN_FLAGS -Werror"
++  fi
+ fi
+ 
+ AC_SUBST(WARN_FLAGS)
+diff --git a/libgcc/config/aarch64/linux-unwind.h b/libgcc/config/aarch64/linux-unwind.h
+index 6b5b3cd1d..d13dc3482 100644
+--- a/libgcc/config/aarch64/linux-unwind.h
++++ b/libgcc/config/aarch64/linux-unwind.h
+@@ -52,7 +52,7 @@ aarch64_fallback_frame_state (struct _Unwind_Context *context,
+   struct rt_sigframe
+   {
+     siginfo_t info;
+-    struct ucontext uc;
++    ucontext_t uc;
+   };
+ 
+   struct rt_sigframe *rt_;
+diff --git a/libgcc/config/alpha/linux-unwind.h b/libgcc/config/alpha/linux-unwind.h
+index b5bfd1c91..166d3d2cf 100644
+--- a/libgcc/config/alpha/linux-unwind.h
++++ b/libgcc/config/alpha/linux-unwind.h
+@@ -51,7 +51,7 @@ alpha_fallback_frame_state (struct _Unwind_Context *context,
+     {
+       struct rt_sigframe {
+ 	siginfo_t info;
+-	struct ucontext uc;
++	ucontext_t uc;
+       } *rt_ = context->cfa;
+       sc = &rt_->uc.uc_mcontext;
+     }
+diff --git a/libgcc/config/bfin/linux-unwind.h b/libgcc/config/bfin/linux-unwind.h
+index dc58f0a81..8b94568bb 100644
+--- a/libgcc/config/bfin/linux-unwind.h
++++ b/libgcc/config/bfin/linux-unwind.h
+@@ -52,7 +52,7 @@ bfin_fallback_frame_state (struct _Unwind_Context *context,
+ 	void *puc;
+ 	char retcode[8];
+ 	siginfo_t info;
+-	struct ucontext uc;
++	ucontext_t uc;
+       } *rt_ = context->cfa;
+ 
+       /* The void * cast is necessary to avoid an aliasing warning.
+diff --git a/libgcc/config/i386/linux-unwind.h b/libgcc/config/i386/linux-unwind.h
+index 7986928cf..a9d621c31 100644
+--- a/libgcc/config/i386/linux-unwind.h
++++ b/libgcc/config/i386/linux-unwind.h
+@@ -58,7 +58,7 @@ x86_64_fallback_frame_state (struct _Unwind_Context *context,
+   if (*(unsigned char *)(pc+0) == 0x48
+       && *(unsigned long long *)(pc+1) == RT_SIGRETURN_SYSCALL)
+     {
+-      struct ucontext *uc_ = context->cfa;
++      ucontext_t *uc_ = context->cfa;
+       /* The void * cast is necessary to avoid an aliasing warning.
+          The aliasing warning is correct, but should not be a problem
+          because it does not alias anything.  */
+@@ -138,7 +138,7 @@ x86_fallback_frame_state (struct _Unwind_Context *context,
+ 	siginfo_t *pinfo;
+ 	void *puc;
+ 	siginfo_t info;
+-	struct ucontext uc;
++	ucontext_t uc;
+       } *rt_ = context->cfa;
+       /* The void * cast is necessary to avoid an aliasing warning.
+          The aliasing warning is correct, but should not be a problem
+diff --git a/libgcc/config/ia64/crtbegin.S b/libgcc/config/ia64/crtbegin.S
+index 001b69bb4..4b2924089 100644
+--- a/libgcc/config/ia64/crtbegin.S
++++ b/libgcc/config/ia64/crtbegin.S
+@@ -252,3 +252,7 @@ __do_jv_register_classes:
+ .weak __cxa_finalize
+ #endif
+ .weak _Jv_RegisterClasses
++
++#ifdef __linux__
++.section .note.GNU-stack; .previous
++#endif
+diff --git a/libgcc/config/ia64/crtend.S b/libgcc/config/ia64/crtend.S
+index 72bdca089..622d61c55 100644
+--- a/libgcc/config/ia64/crtend.S
++++ b/libgcc/config/ia64/crtend.S
+@@ -119,3 +119,6 @@ __do_global_ctors_aux:
+ 
+ 	br.ret.sptk.many rp
+ 	.endp __do_global_ctors_aux
++#ifdef __linux__
++.section .note.GNU-stack; .previous
++#endif
+diff --git a/libgcc/config/ia64/crti.S b/libgcc/config/ia64/crti.S
+index 6326053de..cd033c599 100644
+--- a/libgcc/config/ia64/crti.S
++++ b/libgcc/config/ia64/crti.S
+@@ -49,5 +49,8 @@ _fini:
+ 	.save rp, r33
+ 	mov	r33 = b0
+ 	.body
++#ifdef __linux__
++.section .note.GNU-stack; .previous
++#endif
+ 
+ # end of crti.S
+diff --git a/libgcc/config/ia64/crtn.S b/libgcc/config/ia64/crtn.S
+index 7a9558fd0..18bc4baac 100644
+--- a/libgcc/config/ia64/crtn.S
++++ b/libgcc/config/ia64/crtn.S
+@@ -39,5 +39,8 @@
+ 	.restore sp
+ 	mov	r12 = r35
+ 	br.ret.sptk.many b0
++#ifdef __linux__
++.section .note.GNU-stack; .previous
++#endif
+ 
+ # end of crtn.S
+diff --git a/libgcc/config/ia64/lib1funcs.S b/libgcc/config/ia64/lib1funcs.S
+index d47a00f8f..2bc93edbb 100644
+--- a/libgcc/config/ia64/lib1funcs.S
++++ b/libgcc/config/ia64/lib1funcs.S
+@@ -793,3 +793,6 @@ __floattitf:
+ 	.endp __floattitf
+ #endif
+ #endif
++#ifdef __linux__
++.section .note.GNU-stack; .previous
++#endif
+diff --git a/libgcc/config/m68k/linux-unwind.h b/libgcc/config/m68k/linux-unwind.h
+index 1ba2a0c43..d67767e33 100644
+--- a/libgcc/config/m68k/linux-unwind.h
++++ b/libgcc/config/m68k/linux-unwind.h
+@@ -33,7 +33,7 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+ /* <sys/ucontext.h> is unfortunately broken right now.  */
+ struct uw_ucontext {
+ 	unsigned long	  uc_flags;
+-	struct ucontext  *uc_link;
++	ucontext_t	 *uc_link;
+ 	stack_t		  uc_stack;
+ 	mcontext_t	  uc_mcontext;
+ 	unsigned long	  uc_filler[80];
+diff --git a/libgcc/config/nios2/linux-unwind.h b/libgcc/config/nios2/linux-unwind.h
+index ba4bd801d..897886852 100644
+--- a/libgcc/config/nios2/linux-unwind.h
++++ b/libgcc/config/nios2/linux-unwind.h
+@@ -38,7 +38,7 @@ struct nios2_mcontext {
+ 
+ struct nios2_ucontext {
+   unsigned long uc_flags;
+-  struct ucontext *uc_link;
++  ucontext_t *uc_link;
+   stack_t uc_stack;
+   struct nios2_mcontext uc_mcontext;
+   sigset_t uc_sigmask;	/* mask last for extensibility */
+diff --git a/libgcc/config/pa/linux-unwind.h b/libgcc/config/pa/linux-unwind.h
+index 4a3cfffd1..d2ac437a4 100644
+--- a/libgcc/config/pa/linux-unwind.h
++++ b/libgcc/config/pa/linux-unwind.h
+@@ -80,7 +80,7 @@ pa32_fallback_frame_state (struct _Unwind_Context *context,
+   struct sigcontext *sc;
+   struct rt_sigframe {
+     siginfo_t info;
+-    struct ucontext uc;
++    ucontext_t uc;
+   } *frame;
+ 
+   /* rt_sigreturn trampoline:
+diff --git a/libgcc/config/sh/linux-unwind.h b/libgcc/config/sh/linux-unwind.h
+index 4875706d4..671bde715 100644
+--- a/libgcc/config/sh/linux-unwind.h
++++ b/libgcc/config/sh/linux-unwind.h
+@@ -180,7 +180,7 @@ sh_fallback_frame_state (struct _Unwind_Context *context,
+     {
+       struct rt_sigframe {
+ 	siginfo_t info;
+-	struct ucontext uc;
++	ucontext_t uc;
+       } *rt_ = context->cfa;
+       /* The void * cast is necessary to avoid an aliasing warning.
+          The aliasing warning is correct, but should not be a problem
+diff --git a/libgcc/config/tilepro/linux-unwind.h b/libgcc/config/tilepro/linux-unwind.h
+index 27481cfcd..c24d58c94 100644
+--- a/libgcc/config/tilepro/linux-unwind.h
++++ b/libgcc/config/tilepro/linux-unwind.h
+@@ -61,7 +61,7 @@ tile_fallback_frame_state (struct _Unwind_Context *context,
+   struct rt_sigframe {
+     unsigned char save_area[C_ABI_SAVE_AREA_SIZE];
+     siginfo_t info;
+-    struct ucontext uc;
++    ucontext_t uc;
+   } *rt_;
+ 
+   /* Return if this is not a signal handler.  */
+diff --git a/libgcc/config/xtensa/linux-unwind.h b/libgcc/config/xtensa/linux-unwind.h
+index 6832d0b48..cb15b4c71 100644
+--- a/libgcc/config/xtensa/linux-unwind.h
++++ b/libgcc/config/xtensa/linux-unwind.h
+@@ -63,7 +63,7 @@ xtensa_fallback_frame_state (struct _Unwind_Context *context,
+ 
+   struct rt_sigframe {
+     siginfo_t info;
+-    struct ucontext uc;
++    ucontext_t uc;
+   } *rt_;
+ 
+   /* movi a2, __NR_rt_sigreturn; syscall */
+diff --git a/libgfortran/configure b/libgfortran/configure
+index f90fbc507..3b1e9416b 100755
+--- a/libgfortran/configure
++++ b/libgfortran/configure
+@@ -5769,7 +5769,7 @@ fi
+ 
+ # Add -Wall -fno-repack-arrays -fno-underscoring if we are using GCC.
+ if test "x$GCC" = "xyes"; then
+-  AM_FCFLAGS="-I . -Wall -Werror -fimplicit-none -fno-repack-arrays -fno-underscoring"
++  AM_FCFLAGS="-I . -Wall -fimplicit-none -fno-repack-arrays -fno-underscoring"
+   ## We like to use C99 routines when available.  This makes sure that
+   ## __STDC_VERSION__ is set such that libc includes make them available.
+   AM_CFLAGS="-std=gnu99 -Wall -Wstrict-prototypes -Wmissing-prototypes -Wold-style-definition -Wextra -Wwrite-strings"
+diff --git a/libgomp/configure b/libgomp/configure
+index 32d932503..4a18882cb 100755
+--- a/libgomp/configure
++++ b/libgomp/configure
+@@ -4282,7 +4282,7 @@ save_CFLAGS="$CFLAGS"
+ 
+ # Add -Wall -Werror if we are using GCC.
+ if test "x$GCC" = "xyes"; then
+-  XCFLAGS="$XCFLAGS -Wall -Werror"
++  XCFLAGS="$XCFLAGS -Wall"
+ fi
+ 
+ # Find other programs we need.
+diff --git a/libiberty/Makefile.in b/libiberty/Makefile.in
+index 75ff82d98..a55137e5f 100644
+--- a/libiberty/Makefile.in
++++ b/libiberty/Makefile.in
+@@ -250,6 +250,7 @@ $(TARGETLIB): $(REQUIRED_OFILES) $(EXTRA_OFILES) $(LIBOBJS)
+ 	  $(AR) $(AR_FLAGS) $(TARGETLIB) \
+ 	    $(REQUIRED_OFILES) $(EXTRA_OFILES) $(LIBOBJS); \
+ 	  $(RANLIB) $(TARGETLIB); \
++	  cp $(TARGETLIB) ../ ; \
+ 	  cd ..; \
+ 	else true; fi
+ 
+diff --git a/libitm/configure b/libitm/configure
+index ce6d50a7d..5511d8302 100644
+--- a/libitm/configure
++++ b/libitm/configure
+@@ -775,6 +775,7 @@ enable_maintainer_mode
+ enable_linux_futex
+ enable_tls
+ enable_symvers
++enable_werror
+ '
+       ac_precious_vars='build_alias
+ host_alias
+@@ -1423,6 +1424,7 @@ Optional Features:
+   --enable-tls            Use thread-local storage [default=yes]
+   --enable-symvers=STYLE  enables symbol versioning of the shared library
+                           [default=yes]
++  --enable-werror         turns on -Werror [default=yes]
+ 
+ Optional Packages:
+   --with-PACKAGE[=ARG]    use PACKAGE [ARG=yes]
+@@ -17570,9 +17572,18 @@ $as_echo "$as_me: not updating unwritable cache $cache_file" >&6;}
+ fi
+ rm -f confcache
+ 
+-# Add -Wall -Werror if we are using GCC.
++# Check whether --enable-werror was given.
++if test "${enable_werror+set}" = set; then :
++  enableval=$enable_werror;
++fi
++
++# Add -Wall if we are using GCC.
+ if test "x$GCC" = "xyes"; then
+-  XCFLAGS="$XCFLAGS -Wall -Werror"
++  XCFLAGS="$XCFLAGS -Wall"
++  # Add -Werror if requested.
++  if test "x$enable_werror" != "xno"; then
++    XCFLAGS="$XCFLAGS -Werror"
++  fi
+ fi
+ 
+ XCFLAGS="$XCFLAGS $XPCFLAGS"
+diff --git a/libitm/configure.ac b/libitm/configure.ac
+index 70feff23d..661464c39 100644
+--- a/libitm/configure.ac
++++ b/libitm/configure.ac
+@@ -253,9 +253,15 @@ GCC_CHECK_ELF_STYLE_WEAKREF
+ CFLAGS="$save_CFLAGS"
+ AC_CACHE_SAVE
+ 
+-# Add -Wall -Werror if we are using GCC.
++AC_ARG_ENABLE(werror, [AS_HELP_STRING([--enable-werror],
++                                      [turns on -Werror @<:@default=yes@:>@])])
++# Add -Wall if we are using GCC.
+ if test "x$GCC" = "xyes"; then
+-  XCFLAGS="$XCFLAGS -Wall -Werror"
++  XCFLAGS="$XCFLAGS -Wall"
++  # Add -Werror if requested.
++  if test "x$enable_werror" != "xno"; then
++    XCFLAGS="$XCFLAGS -Werror"
++  fi
+ fi
+ 
+ XCFLAGS="$XCFLAGS $XPCFLAGS"
+diff --git a/libitm/configure.tgt b/libitm/configure.tgt
+index bd95509be..27c80ac1a 100644
+--- a/libitm/configure.tgt
++++ b/libitm/configure.tgt
+@@ -43,6 +43,16 @@ if test "$gcc_cv_have_tls" = yes ; then
+   esac
+ fi
+ 
++# FIXME: error: inlining failed in call to always_inline 
++# ‘int vfprintf(FILE*, const char*, __va_list_tag*)’
++# : function body can be overwritten at link time
++# Disable Fortify in libitm for now. #508852
++case "${target}" in
++    *-*-linux*)
++	XCFLAGS="${XCFLAGS} -U_FORTIFY_SOURCE"
++	;;
++esac
++
+ # Map the target cpu to an ARCH sub-directory.  At the same time,
+ # work out any special compilation flags as necessary.
+ case "${target_cpu}" in
+diff --git a/libjava/classpath/doc/texi2pod.pl b/libjava/classpath/doc/texi2pod.pl
+index e7b983bd2..867e8d4b4 100755
+--- a/libjava/classpath/doc/texi2pod.pl
++++ b/libjava/classpath/doc/texi2pod.pl
+@@ -311,7 +311,7 @@ while(<$inf>) {
+ 	@columns = ();
+ 	for $column (split (/\s*\@tab\s*/, $1)) {
+ 	    # @strong{...} is used a @headitem work-alike
+-	    $column =~ s/^\@strong{(.*)}$/$1/;
++	    $column =~ s/^\@strong\{(.*)}$/$1/;
+ 	    push @columns, $column;
+ 	}
+ 	$_ = "\n=item ".join (" : ", @columns)."\n";
+diff --git a/libjava/classpath/scripts/check_jni_methods.sh.in b/libjava/classpath/scripts/check_jni_methods.sh.in
+index facf34b34..fb9d104e3 100644
+--- a/libjava/classpath/scripts/check_jni_methods.sh.in
++++ b/libjava/classpath/scripts/check_jni_methods.sh.in
+@@ -14,7 +14,7 @@ grep -h '^JNIEXPORT .* Java_' @abs_top_srcdir@/include/*.h | \
+         LC_ALL=C sed -e 's,.*JNICALL \(Java_[a-z_A-Z0-9]*\).*$,\1,' > $TMPFILE
+ grep -h '^JNIEXPORT .* Java_' @abs_top_builddir@/include/*.h | \
+         LC_ALL=C sed -e 's,.*JNICALL \(Java_[a-z_A-Z0-9]*\).*$,\1,' >> $TMPFILE
+-sort -u $TMPFILE > $TMPFILE4
++LC_ALL=C sort -u $TMPFILE > $TMPFILE4
+ mv $TMPFILE4 $TMPFILE
+ 
+ # Find all methods in the JNI C source files.
+@@ -31,7 +31,7 @@ find @abs_top_srcdir@/native/jni -name \*.cpp | \
+ 	cut -f4 -d\  | \
+         LC_ALL=C sed -e 's,^\JNIEXPORT .* JNICALL \(Java_[a-z_A-Z0-9]*\).*$,\1,' >> $TMPFILE2
+ mv $TMPFILE2 $TMPFILE3
+-sort $TMPFILE3 | uniq > $TMPFILE2
++LC_ALL=C sort -u $TMPFILE3 > $TMPFILE2
+ rm $TMPFILE3
+ 
+ # Write temporary ignore file.
+diff --git a/libjava/include/i386-signal.h b/libjava/include/i386-signal.h
+index c2409b0e3..ef77e7e99 100644
+--- a/libjava/include/i386-signal.h
++++ b/libjava/include/i386-signal.h
+@@ -29,7 +29,7 @@ static void _Jv_##_name (int, siginfo_t *,			\
+ #define HANDLE_DIVIDE_OVERFLOW						\
+ do									\
+ {									\
+-  struct ucontext *_uc = (struct ucontext *)_p;				\
++  ucontext_t *_uc = (ucontext_t *)_p;					\
+   gregset_t &_gregs = _uc->uc_mcontext.gregs;				\
+   unsigned char *_eip = (unsigned char *)_gregs[REG_EIP];		\
+ 									\
+diff --git a/libjava/include/s390-signal.h b/libjava/include/s390-signal.h
+index 4ca4c1088..9261b52be 100644
+--- a/libjava/include/s390-signal.h
++++ b/libjava/include/s390-signal.h
+@@ -51,7 +51,7 @@ do									\
+   struct                                                                \
+   {                                                                     \
+     unsigned long int uc_flags;                                         \
+-    struct ucontext *uc_link;                                           \
++    ucontext_t *uc_link;                                                \
+     stack_t uc_stack;                                                   \
+     mcontext_t uc_mcontext;                                             \
+     unsigned long sigmask[2];                                           \
+diff --git a/libjava/include/x86_64-signal.h b/libjava/include/x86_64-signal.h
+index 12383b548..e36c5a32a 100644
+--- a/libjava/include/x86_64-signal.h
++++ b/libjava/include/x86_64-signal.h
+@@ -28,7 +28,7 @@ static void _Jv_##_name (int, siginfo_t *,			\
+ #define HANDLE_DIVIDE_OVERFLOW						\
+ do									\
+ {									\
+-  struct ucontext *_uc = (struct ucontext *)_p;				\
++  ucontext_t *_uc = (ucontext_t *)_p;					\
+   gregset_t &_gregs = _uc->uc_mcontext.gregs;				\
+   unsigned char *_rip = (unsigned char *)_gregs[REG_RIP];		\
+ 									\
+diff --git a/libsanitizer/asan/asan_linux.cc b/libsanitizer/asan/asan_linux.cc
+index 0692eb1f4..472f73400 100644
+--- a/libsanitizer/asan/asan_linux.cc
++++ b/libsanitizer/asan/asan_linux.cc
+@@ -26,6 +26,7 @@
+ #include <sys/types.h>
+ #include <fcntl.h>
+ #include <pthread.h>
++#include <signal.h>
+ #include <stdio.h>
+ #include <unistd.h>
+ #include <unwind.h>
+diff --git a/libsanitizer/libbacktrace/Makefile.am b/libsanitizer/libbacktrace/Makefile.am
+index fd9eb65f7..386495cbd 100644
+--- a/libsanitizer/libbacktrace/Makefile.am
++++ b/libsanitizer/libbacktrace/Makefile.am
+@@ -35,7 +35,7 @@ AM_CPPFLAGS = -I $(top_srcdir)/../include -I $(top_srcdir)/../libgcc \
+ 	-I ../../libgcc -I .. -I $(top_srcdir) -I $(top_srcdir)/../libbacktrace
+ 
+ WARN_FLAGS = -W -Wall -Wwrite-strings -Wmissing-format-attribute \
+-	     -Wcast-qual -Werror
++	     -Wcast-qual
+ C_WARN_FLAGS = $(WARN_FLAGS) -Wstrict-prototypes -Wmissing-prototypes -Wold-style-definition
+ CXX_WARN_FLAGS = $(WARN_FLAGS) -Wno-unused-parameter
+ AM_CFLAGS = $(C_WARN_FLAGS)
+diff --git a/libsanitizer/libbacktrace/Makefile.in b/libsanitizer/libbacktrace/Makefile.in
+index 0dfb53d2c..6a3bd6c69 100644
+--- a/libsanitizer/libbacktrace/Makefile.in
++++ b/libsanitizer/libbacktrace/Makefile.in
+@@ -265,7 +265,7 @@ AM_CPPFLAGS = -I $(top_srcdir)/../include -I $(top_srcdir)/../libgcc \
+ 	-I ../../libgcc -I .. -I $(top_srcdir) -I $(top_srcdir)/../libbacktrace
+ 
+ WARN_FLAGS = -W -Wall -Wwrite-strings -Wmissing-format-attribute \
+-	     -Wcast-qual -Werror
++	     -Wcast-qual
+ 
+ C_WARN_FLAGS = $(WARN_FLAGS) -Wstrict-prototypes -Wmissing-prototypes -Wold-style-definition
+ CXX_WARN_FLAGS = $(WARN_FLAGS) -Wno-unused-parameter
+diff --git a/libsanitizer/sanitizer_common/sanitizer_linux.cc b/libsanitizer/sanitizer_common/sanitizer_linux.cc
+index 69c9c1063..8e5367355 100644
+--- a/libsanitizer/sanitizer_common/sanitizer_linux.cc
++++ b/libsanitizer/sanitizer_common/sanitizer_linux.cc
+@@ -599,8 +599,7 @@ uptr internal_prctl(int option, uptr arg2, uptr arg3, uptr arg4, uptr arg5) {
+   return internal_syscall(__NR_prctl, option, arg2, arg3, arg4, arg5);
+ }
+ 
+-uptr internal_sigaltstack(const struct sigaltstack *ss,
+-                         struct sigaltstack *oss) {
++uptr internal_sigaltstack(const void *ss, void *oss) {
+   return internal_syscall(__NR_sigaltstack, (uptr)ss, (uptr)oss);
+ }
+ 
+diff --git a/libsanitizer/sanitizer_common/sanitizer_linux.h b/libsanitizer/sanitizer_common/sanitizer_linux.h
+index 6422df142..8e111d113 100644
+--- a/libsanitizer/sanitizer_common/sanitizer_linux.h
++++ b/libsanitizer/sanitizer_common/sanitizer_linux.h
+@@ -18,7 +18,6 @@
+ #include "sanitizer_platform_limits_posix.h"
+ 
+ struct link_map;  // Opaque type returned by dlopen().
+-struct sigaltstack;
+ 
+ namespace __sanitizer {
+ // Dirent structure for getdents(). Note that this structure is different from
+@@ -28,8 +27,7 @@ struct linux_dirent;
+ // Syscall wrappers.
+ uptr internal_getdents(fd_t fd, struct linux_dirent *dirp, unsigned int count);
+ uptr internal_prctl(int option, uptr arg2, uptr arg3, uptr arg4, uptr arg5);
+-uptr internal_sigaltstack(const struct sigaltstack* ss,
+-                          struct sigaltstack* oss);
++uptr internal_sigaltstack(const void* ss, void* oss);
+ uptr internal_sigaction(int signum, const __sanitizer_kernel_sigaction_t *act,
+     __sanitizer_kernel_sigaction_t *oldact);
+ uptr internal_sigprocmask(int how, __sanitizer_kernel_sigset_t *set,
+diff --git a/libsanitizer/sanitizer_common/sanitizer_platform_limits_posix.cc b/libsanitizer/sanitizer_common/sanitizer_platform_limits_posix.cc
+index 196eb3b3c..22cd2ea6c 100644
+--- a/libsanitizer/sanitizer_common/sanitizer_platform_limits_posix.cc
++++ b/libsanitizer/sanitizer_common/sanitizer_platform_limits_posix.cc
+@@ -81,7 +81,6 @@
+ #include <sys/statvfs.h>
+ #include <sys/timex.h>
+ #include <sys/user.h>
+-#include <sys/ustat.h>
+ #include <linux/cyclades.h>
+ #include <linux/if_eql.h>
+ #include <linux/if_plip.h>
+@@ -163,7 +162,19 @@ namespace __sanitizer {
+   unsigned struct_old_utsname_sz = sizeof(struct old_utsname);
+   unsigned struct_oldold_utsname_sz = sizeof(struct oldold_utsname);
+   unsigned struct_itimerspec_sz = sizeof(struct itimerspec);
+-  unsigned struct_ustat_sz = sizeof(struct ustat);
++  // Use pre-computed size of struct ustat to avoid <sys/ustat.h> which
++  // has been removed from glibc 2.28.
++#if defined(__aarch64__) || defined(__s390x__) || defined (__mips64) \
++  || defined(__powerpc64__) || defined(__arch64__) || defined(__sparcv9) \
++  || defined(__x86_64__)
++#define SIZEOF_STRUCT_USTAT 32
++#elif defined(__arm__) || defined(__i386__) || defined(__mips__) \
++  || defined(__powerpc__) || defined(__s390__) || defined(__sparc__)
++#define SIZEOF_STRUCT_USTAT 20
++#else
++#error Unknown size of struct ustat
++#endif
++  unsigned struct_ustat_sz = SIZEOF_STRUCT_USTAT;
+ #endif // SANITIZER_LINUX
+ 
+ #if SANITIZER_LINUX && !SANITIZER_ANDROID
+diff --git a/libsanitizer/sanitizer_common/sanitizer_stoptheworld_linux_libcdep.cc b/libsanitizer/sanitizer_common/sanitizer_stoptheworld_linux_libcdep.cc
+index 6ee63ec31..50c21a38a 100644
+--- a/libsanitizer/sanitizer_common/sanitizer_stoptheworld_linux_libcdep.cc
++++ b/libsanitizer/sanitizer_common/sanitizer_stoptheworld_linux_libcdep.cc
+@@ -238,7 +238,7 @@ static int TracerThread(void* argument) {
+ 
+   // Alternate stack for signal handling.
+   InternalScopedBuffer<char> handler_stack_memory(kHandlerStackSize);
+-  struct sigaltstack handler_stack;
++  stack_t handler_stack;
+   internal_memset(&handler_stack, 0, sizeof(handler_stack));
+   handler_stack.ss_sp = handler_stack_memory.data();
+   handler_stack.ss_size = kHandlerStackSize;
+diff --git a/libsanitizer/tsan/tsan_platform_linux.cc b/libsanitizer/tsan/tsan_platform_linux.cc
+index fe69430b7..49f527012 100644
+--- a/libsanitizer/tsan/tsan_platform_linux.cc
++++ b/libsanitizer/tsan/tsan_platform_linux.cc
+@@ -351,7 +351,7 @@ bool IsGlobalVar(uptr addr) {
+ // closes within glibc. The code is a pure hack.
+ int ExtractResolvFDs(void *state, int *fds, int nfd) {
+   int cnt = 0;
+-  __res_state *statp = (__res_state*)state;
++  struct __res_state *statp = (struct __res_state*)state;
+   for (int i = 0; i < MAXNS && cnt < nfd; i++) {
+     if (statp->_u._ext.nsaddrs[i] && statp->_u._ext.nssocks[i] != -1)
+       fds[cnt++] = statp->_u._ext.nssocks[i];
+diff --git a/libstdc++-v3/po/Makefile.am b/libstdc++-v3/po/Makefile.am
+index 2e23a0e39..dc475facb 100644
+--- a/libstdc++-v3/po/Makefile.am
++++ b/libstdc++-v3/po/Makefile.am
+@@ -38,6 +38,7 @@ MSGFMT = msgfmt
+ EXTRA_DIST = string_literals.cc POTFILES.in $(PACKAGE).pot $(LOCALE_IN)
+ 
+ .po.mo:
++	env --unset=LD_LIBRARY_PATH \
+ 	$(MSGFMT) -o $@ $<
+ 
+ all-local: all-local-$(USE_NLS)
+diff --git a/libstdc++-v3/po/Makefile.in b/libstdc++-v3/po/Makefile.in
+index 52f5256a6..8e6749829 100644
+--- a/libstdc++-v3/po/Makefile.in
++++ b/libstdc++-v3/po/Makefile.in
+@@ -462,6 +462,7 @@ uninstall-am:
+ 
+ 
+ .po.mo:
++	env --unset=LD_LIBRARY_PATH \
+ 	$(MSGFMT) -o $@ $<
+ 
+ all-local: all-local-$(USE_NLS)
