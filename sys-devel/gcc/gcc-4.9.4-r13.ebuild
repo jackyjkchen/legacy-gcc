@@ -25,7 +25,11 @@ src_prepare() {
 	toolchain_src_prepare
 	use vanilla && return 0
 
-	[[ $(tc-arch) == "sh" ]] && eapply "${FILESDIR}"/${PV}/01_workaround-bootstrap-for-sh4.patch
+	case $(tc-arch) in
+		sh)
+			eapply "${FILESDIR}"/${PV}/01_remove-gtoggle-stage2.patch
+			;;
+	esac
 	[[ $(tc-arch) == "mips" && ${DEFAULT_ABI} == "n64" ]] && eapply "${FILESDIR}"/${PV}/02_mips64-default-n64-abi.patch
 	eapply "${FILESDIR}"/${PV}/03_fix-werror.patch
 
