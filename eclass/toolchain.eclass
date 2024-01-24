@@ -406,7 +406,7 @@ fi
 
 if tc_has_feature systemtap ; then
 	# gcc needs sys/sdt.h headers on target
-	DEPEND+=" systemtap? ( dev-util/systemtap )"
+	DEPEND+=" systemtap? ( dev-debug/systemtap )"
 fi
 
 if tc_has_feature zstd ; then
@@ -415,7 +415,7 @@ if tc_has_feature zstd ; then
 fi
 
 if tc_has_feature valgrind ; then
-	BDEPEND+=" valgrind? ( dev-util/valgrind )"
+	BDEPEND+=" valgrind? ( dev-debug/valgrind )"
 fi
 
 PDEPEND=">=sys-devel/gcc-config-2.3"
