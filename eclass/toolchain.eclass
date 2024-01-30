@@ -2214,10 +2214,10 @@ toolchain_src_install() {
 
 	if is_crosscompile; then
 		if [[ ${CTARGET} == 'avr' ]] ; then
-			find ${D}${LIBPATH} | grep "\.a"| xargs ${CTARGET}-strip -d
+			find ${D}${LIBPATH} | grep "\.a"| xargs ${CTARGET}-strip -d -N __gentoo_check_ldflags__ -R .comment -R .GCC.command.line -R .note.gnu.gold-version
 		else
-			${CTARGET}-strip -d ${D}${LIBPATH}/{*.a,*.o,32/*.a,32/*.o,n32/*.o,n32/*.a}
-			${CTARGET}-strip -s ${D}${LIBPATH}/{*.so*,32/*.so*,n32/*.so*,*.dll,32/*.dll}
+			${CTARGET}-strip -d -N __gentoo_check_ldflags__ -R .comment -R .GCC.command.line -R .note.gnu.gold-version ${D}${LIBPATH}/{*.a,*.o,32/*.a,32/*.o,n32/*.o,n32/*.a}
+			${CTARGET}-strip -s -N __gentoo_check_ldflags__ -R .comment -R .GCC.command.line -R .note.gnu.gold-version ${D}${LIBPATH}/{*.so*,32/*.so*,n32/*.so*,*.dll,32/*.dll}
 		fi
 		${CHOST}-strip -s -N __gentoo_check_ldflags__ -R .comment -R .GCC.command.line -R .note.gnu.gold-version ${D}${BINPATH}/*
 		${CHOST}-strip -s -N __gentoo_check_ldflags__ -R .comment -R .GCC.command.line -R .note.gnu.gold-version ${D}${HOSTLIBPATH}/*
@@ -2297,6 +2297,10 @@ toolchain_src_install() {
 	case $(tc-arch) in
 		riscv)
 			tc_version_is_at_least 11 || (is_multilib && rm -rfv "${D}${LIBPATH}"/{*.a,*.o})
+			# VER=11 && rm -rfv /usr/lib/gcc/riscv64-unknown-linux-gnu/${VER}/{*.a,*.o,*.so*,*.spec,*.la} && cp -avxl /usr/lib/gcc/riscv64-unknown-linux-gnu/${VER}/lib64/lp64d/{*.a,*.o,*.so*,*.spec} /usr/lib/gcc/riscv64-unknown-linux-gnu/${VER}/
+			# tc_version_is_at_least 11 && (is_multilib && rm -rfv "${D}${LIBPATH}"/{*.a,*.o,*.so*,*.spec,*.la} && cp -avxl "${D}${LIBPATH}"/lib64/lp64d/{*.a,*.o,*.so*,*.spec} "${D}${LIBPATH}"/)
+			find ${D}${LIBPATH} | grep "\.a"| xargs strip --strip-unneeded -N __gentoo_check_ldflags__ -R .comment -R .GCC.command.line -R .note.gnu.gold-version
+			find ${D}${LIBPATH} | grep "\.a"| xargs ranlib
 			;;
 	esac
 	rm -rfv "${D}${BINPATH}"/{*c++filt,*gccbug,*protoize,*unprotoize}
