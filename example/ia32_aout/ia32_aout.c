@@ -13,14 +13,28 @@
 #error "Please use ia32_aout module in kernel tree when version < 5.0."
 #endif
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 0, 0)
+#include <uapi/linux/a.out.h>
+#ifndef __ASSEMBLY__
+#ifdef linux
+#include <asm/page.h>
+#if defined(__i386__) || defined(__mc68000__)
+#else
+#ifndef SEGMENT_SIZE
+#define SEGMENT_SIZE    PAGE_SIZE
+#endif
+#endif
+#endif
+#endif /*__ASSEMBLY__ */
+#else
+#include <linux/a.out.h>
+#endif
 #include <linux/module.h>
 #include <linux/mman.h>
-#include <linux/a.out.h>
 #include <linux/binfmts.h>
 #include <linux/perf_event.h>
 #include <asm/ia32.h>
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
-#include <linux/uaccess.h>
 #include <asm/cacheflush.h>
 #endif
 
@@ -224,9 +238,7 @@ beyond_if:
 	(regs)->ss = __USER32_DS;
 	regs->r8 = regs->r9 = regs->r10 = regs->r11 =
 	regs->r12 = regs->r13 = regs->r14 = regs->r15 = 0;
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
-	force_uaccess_begin();
-#else
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0)
 	set_fs(USER_DS);
 #endif
 	return 0;

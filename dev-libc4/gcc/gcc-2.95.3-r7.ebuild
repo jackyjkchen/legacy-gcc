@@ -36,7 +36,7 @@ src_prepare() {
 
 	eapply "${FILESDIR}"/${PV}/postrelease/00_pr45262.patch
 
-	rm -rf libstdc++
+	rm -rf libstdc++ gcc/testsuite/g++*
 }
 
 src_install() {

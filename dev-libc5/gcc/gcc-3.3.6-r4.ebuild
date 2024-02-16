@@ -21,10 +21,6 @@ src_prepare() {
 	toolchain-oldlibc_src_prepare
 
 	eapply "${FILESDIR}"/${PV}/01_workaround-for-legacy-glibc-in-non-system-dir.patch
-	if use objc ; then
-		eapply "${FILESDIR}"/${PV}/05_libffi-without-libgcj.patch
-	fi
-
 	eapply "${FILESDIR}"/${PV}/10_fix-for-libc5.patch
 
 	eapply "${FILESDIR}"/${PV}/postrelease/00_pr13685.patch

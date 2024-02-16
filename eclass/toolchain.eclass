@@ -243,7 +243,7 @@ fi
 
 IUSE=""
 RESTRICT=""
-if tc_version_is_at_least 2.95 ; then
+if tc_version_is_at_least 2.9 ; then
 	IUSE+="test"
 	RESTRICT+="!test? ( test )"
 fi

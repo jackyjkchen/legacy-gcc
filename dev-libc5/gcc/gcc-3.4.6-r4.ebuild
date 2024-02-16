@@ -26,9 +26,6 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/00_gentoo-patchset.patch
 	toolchain-oldlibc_src_prepare
 
-	if use objc ; then
-		eapply "${FILESDIR}"/${PV}/03_libffi-without-libgcj.patch
-	fi
 	eapply "${FILESDIR}"/${PV}/04_workaround-for-legacy-glibc-in-non-system-dir.patch
 
 	eapply "${FILESDIR}"/${PV}/10_fix-for-libc5.patch

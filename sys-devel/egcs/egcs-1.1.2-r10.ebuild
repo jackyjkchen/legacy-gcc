@@ -64,6 +64,8 @@ src_prepare() {
 		rm -r libf2c gcc/f || die
 	fi
 	touch -r gcc/README gcc/configure.in || die
+
+	eapply "${FILESDIR}"/${PV}/postrelease/00_pr45262.patch
 }
 
 src_install() {
