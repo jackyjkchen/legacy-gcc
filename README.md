@@ -77,7 +77,7 @@ USE参数可使用equery u sys-devel/gcc:${slot}查询。
 
 4.7.4以上版本支持go（USE=go默认关闭）。
 
-本项目提供可选的dev-libs/stlport用于增强gcc-2.6.3 - gcc-2.95.3的STL，目前仅支持x86/ppc/m68k，gcc-3.0之后的C++标准库libstdc++-v3已兼容C++98标准，无需STLPort。
+本项目提供可选的dev-libs/stlport用于增强gcc-2.6.3 - gcc-2.95.3的STL，目前仅支持x86/alpha/ppc/m68k，gcc-3.0之后的C++标准库libstdc++-v3已兼容C++98标准，无需STLPort。
 
 dev-libs/stlport:5.2.1用于sys-devel/gcc:2.95.3。
 

@@ -11,13 +11,13 @@ inherit downgrade-arch-flags
 
 LICENSE=""
 SLOT="$(ver_cut 1-3 ${PV})"
-KEYWORDS="amd64 m68k ppc x86"
+KEYWORDS="alpha amd64 m68k ppc x86"
 
 case ${ARCH} in
 	amd64|x86)
 		TOOL_PREFIX="i686-legacy"
 		;;
-	m68k)
+	alpha|m68k)
 		TOOL_PREFIX="${ARCH}-legacy"
 		;;
 	ppc)
@@ -41,6 +41,7 @@ S="${WORKDIR}"/STLport-${PV}
 src_prepare() {
 	pushd "${S}" > /dev/null
 	default
+	eapply "${FILESDIR}"/${PV}/00_stlport-${PV}.patch || die
 	popd > /dev/null
 }
 
