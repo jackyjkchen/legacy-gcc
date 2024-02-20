@@ -24,9 +24,10 @@ fi
 
 src_prepare() {
 	toolchain_src_prepare
-	use vanilla && return 0
 
 	eapply "${FILESDIR}"/${PV}/00_riscv-fix-multilib.patch
+
+	use vanilla && return 0
 	eapply "${FILESDIR}"/${PV}/01_fix-werror.patch
 
 	eapply "${FILESDIR}"/${PV}/postrelease/00_pr94460.patch

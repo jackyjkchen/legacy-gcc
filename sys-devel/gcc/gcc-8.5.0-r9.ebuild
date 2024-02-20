@@ -29,10 +29,11 @@ src_prepare() {
 	fi
 
 	toolchain_src_prepare
-	use vanilla && return 0
 
 	eapply "${FILESDIR}"/${PV}/00_riscv-fix-multilib.patch
 	is_djgpp || eapply "${FILESDIR}"/${PV}/01_fix-ia32-sanitizer-malloc.patch
+
+	use vanilla && return 0
 	eapply "${FILESDIR}"/${PV}/02_fix-werror.patch
 
 	eapply "${FILESDIR}"/${PV}/postrelease/00_pr101384.patch

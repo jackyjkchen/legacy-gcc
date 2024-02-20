@@ -82,10 +82,22 @@ src_prepare() {
 	toolchain_src_prepare
 
 	[[ ${TOOL_PREFIX} != "" ]] && eapply "${FILESDIR}"/${PV}/01_workaround-for-legacy-glibc-in-non-system-dir.patch
-	[[ $(tc-arch) == "mips" ]] && eapply "${FILESDIR}"/${PV}/02_support-mips64.patch
-	[[ $(tc-arch) == "sh" ]] && eapply "${FILESDIR}"/${PV}/03_fix-for-sh4.patch
-	[[ $(tc-arch) == "ppc64" || $(tc-arch) == "ppc" ]] && eapply "${FILESDIR}"/${PV}/04_workaround-for-ppc64-ppc.patch
-	[[ $(tc-arch) == "hppa" ]] && eapply "${FILESDIR}"/${PV}/05_hppa-fix-build.patch
+	case $(tc-arch) in
+		mips)
+			eapply "${FILESDIR}"/${PV}/02_support-mips64.patch
+			# c++ coredump on n64 and more testcase fail on n32
+			# [[ ${DEFAULT_ABI} == "n64" || ${DEFAULT_ABI} == "n32" ]] && eapply "${FILESDIR}"/${PV}/02_mips64-default-n32-abi.patch
+			;;
+		ppc64|ppc)
+			eapply "${FILESDIR}"/${PV}/04_workaround-for-ppc64-ppc.patch
+			;;
+		hppa)
+			eapply "${FILESDIR}"/${PV}/05_hppa-fix-build.patch
+			;;
+		sh)
+			eapply "${FILESDIR}"/${PV}/06_fix-for-sh4.patch
+			;;
+	esac
 
 	eapply "${FILESDIR}"/${PV}/postrelease/00_pr13685.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/01_pr45262.patch

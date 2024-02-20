@@ -64,9 +64,9 @@ RDEPEND=""
 DEPEND="${CATEGORY}/binutils"
 
 if is_crosscompile ; then
-	BDEPEND="sys-devel/gcc:3.1.1"
-	CC="gcc-3.1.1"
-	CXX="g++-3.1.1"
+	BDEPEND="sys-devel/gcc:3.2.3"
+	CC="gcc-3.2.3"
+	CXX="g++-3.2.3"
 else
 	DEPEND="${DEPEND} ${LEGACY_DEPEND}"
 	BDEPEND="sys-devel/gcc:3.4.6"
@@ -79,10 +79,20 @@ src_prepare() {
 	toolchain_src_prepare
 
 	[[ ${TOOL_PREFIX} != "" ]] && eapply "${FILESDIR}"/${PV}/01_workaround-for-legacy-glibc-in-non-system-dir.patch
-	[[ $(tc-arch) == "mips" ]] && eapply "${FILESDIR}"/${PV}/02_support-mips64.patch
-	[[ $(tc-arch) == "hppa" ]] && eapply "${FILESDIR}"/${PV}/03_hppa-fix-build.patch
+	case $(tc-arch) in
+		mips)
+			eapply "${FILESDIR}"/${PV}/02_support-mips64.patch
+			# coredump on n64 and more testcase fail on n32
+			# [[ ${DEFAULT_ABI} == "n64" || ${DEFAULT_ABI} == "n32" ]] && eapply "${FILESDIR}"/${PV}/02_mips64-default-n32-abi.patch
+			;;
+		hppa)
+			eapply "${FILESDIR}"/${PV}/04_hppa-fix-build.patch
+			;;
+	esac
 
-	eapply "${FILESDIR}"/${PV}/postrelease/00_pr45262.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/00_pr13685.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/01_pr45262.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/02_pr25572.patch
 }
 
 src_install() {
@@ -91,19 +101,19 @@ src_install() {
 		mkdir -p ${ED}/etc/ld.so.conf.d/ || die
 		case ${TOOL_PREFIX} in
 			x86_64-legacy|sparc64-legacy)
-				cat <<-_EOF_ > "${ED}"/etc/ld.so.conf.d/09-${CHOST}-gcc-${PV}.conf || die
+				cat <<-_EOF_ > "${ED}"/etc/ld.so.conf.d/08-${CHOST}-gcc-${PV}.conf || die
 /usr/lib/gcc-lib/${CHOST}/${PV}
 /usr/lib/gcc-lib/${CHOST}/${PV}/32
 _EOF_
 				;;
 			mips64*-legacy)
-				cat <<-_EOF_ > "${ED}"/etc/ld.so.conf.d/09-${CHOST}-gcc-${PV}.conf || die
+				cat <<-_EOF_ > "${ED}"/etc/ld.so.conf.d/08-${CHOST}-gcc-${PV}.conf || die
 /usr/lib/gcc-lib/${CHOST}/${PV}/32
 /usr/lib/gcc-lib/${CHOST}/${PV}/n32
 _EOF_
 				;;
 			*)
-				cat <<-_EOF_ > "${ED}"/etc/ld.so.conf.d/09-${CHOST}-gcc-${PV}.conf || die
+				cat <<-_EOF_ > "${ED}"/etc/ld.so.conf.d/08-${CHOST}-gcc-${PV}.conf || die
 /usr/lib/gcc-lib/${CHOST}/${PV}
 _EOF_
 				;;

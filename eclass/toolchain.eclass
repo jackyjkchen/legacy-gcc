@@ -1091,7 +1091,7 @@ toolchain_src_configure() {
 				# sh4 and so on
 				;;
 		esac
-		if [[ ${ENABLE_WERROR} == "yes" ]] && ! is_crosscompile ; then
+		if [[ ${ENABLE_WERROR} == "yes" ]] && ! is_crosscompile && ! _tc_use_if_iuse vanilla ; then
 			confgcc+=( --enable-werror )
 		else
 			confgcc+=( --disable-werror )

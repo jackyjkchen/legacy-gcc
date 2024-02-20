@@ -23,7 +23,6 @@ fi
 src_prepare() {
 	! use vanilla && eapply "${FILESDIR}"/${PV}/00_gentoo-patchset.patch
 	toolchain_src_prepare
-	use vanilla && return 0
 
 	case $(tc-arch) in
 		sh)
@@ -31,6 +30,8 @@ src_prepare() {
 			;;
 	esac
 	[[ $(tc-arch) == "mips" && ${DEFAULT_ABI} == "n64" ]] && eapply "${FILESDIR}"/${PV}/02_mips64-default-n64-abi.patch
+
+	use vanilla && return 0
 	eapply "${FILESDIR}"/${PV}/03_fix-werror.patch
 
 	eapply "${FILESDIR}"/${PV}/postrelease/00_pr77450-77605-78185-78333.patch

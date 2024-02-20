@@ -23,13 +23,14 @@ fi
 src_prepare() {
 	! use vanilla && eapply "${FILESDIR}"/${PV}/00_gentoo-patchset.patch
 	toolchain_src_prepare
-	use vanilla && return 0
+
+	sed -i 's/use_fixproto=yes/:/' gcc/config.gcc #PR33200
 
 	[[ $(tc-arch) == "arm" ]] && eapply "${FILESDIR}"/${PV}/01_support-armhf.patch
 	[[ $(tc-arch) == "mips" && ${DEFAULT_ABI} == "n64" ]] && eapply "${FILESDIR}"/${PV}/02_mips64-default-n64-abi.patch
-	eapply "${FILESDIR}"/${PV}/03_fix-werror.patch
 
-	sed -i 's/use_fixproto=yes/:/' gcc/config.gcc #PR33200
+	use vanilla && return 0
+	eapply "${FILESDIR}"/${PV}/03_fix-werror.patch
 
 	eapply "${FILESDIR}"/${PV}/postrelease/00_pr78185.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/01_pr58726.patch

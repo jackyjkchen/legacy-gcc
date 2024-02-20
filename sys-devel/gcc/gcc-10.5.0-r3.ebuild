@@ -27,10 +27,11 @@ src_prepare() {
 	fi
 
 	toolchain_src_prepare
-	use vanilla && return 0
 
 	eapply "${FILESDIR}"/${PV}/00_workaround-for-gcc12-host.patch
 	eapply "${FILESDIR}"/${PV}/01_riscv-fix-multilib.patch
+
+	use vanilla && return 0
 	eapply "${FILESDIR}"/${PV}/02_fix-werror.patch
 
 	eapply "${FILESDIR}"/${PV}/postrelease/00_pr97164.patch
