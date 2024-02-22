@@ -32,7 +32,6 @@ RESTRICT="strip"
 S="${WORKDIR}/mingw-w64-v${PV}"
 
 PATCHES=(
-	"${FILESDIR}"/${PN}-7.0.0-fortify-only-ssp.patch
 	"${FILESDIR}"/${PN}-8.0.0-__rdtsc.patch
 )
 
