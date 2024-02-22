@@ -278,7 +278,7 @@ if [[ ${PN} != kgcc64 && ${PN} != gcc-* ]] ; then
 			tc_version_is_at_least 2.4 && IUSE+=" objc"
 			;;
 		hppa)
-			tc_version_is_at_least 3.2 && IUSE+=" +cxx"
+			tc_version_is_at_least 3.1 && IUSE+=" +cxx"
 			tc_version_is_at_least 3.1 && IUSE+=" objc"
 			;;
 		*)
@@ -1266,6 +1266,8 @@ toolchain_src_configure() {
 			if tc-is-static-only ; then
 				confgcc+=( --disable-shared )
 			elif [[ $(tc-arch) == "ppc64" ]] && ! tc_version_is_at_least 3.3 ; then
+				confgcc+=( --enable-shared=libgcc )
+			elif [[ $(tc-arch) == "hppa" ]] && ! tc_version_is_at_least 3.2 ; then
 				confgcc+=( --enable-shared=libgcc )
 			else
 				confgcc+=( --enable-shared )
