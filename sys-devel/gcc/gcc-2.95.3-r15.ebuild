@@ -7,53 +7,51 @@ inherit toolchain-funcs
 
 CC="gcc-3.4.6"
 CXX="g++-3.4.6"
-if [[ ${CATEGORY} != cross-* ]] ; then
-	case $(tc-arch) in
-	amd64|x86)
-		CC="${CC} ${CFLAGS_x86}"
-		CXX="${CXX} ${CFLAGS_x86}"
-		TOOL_PREFIX="i686-legacy"
-		CHOST_x86="${TOOL_PREFIX}-linux-gnu"
-		ABI='x86'
-		DEFAULT_ABI='x86'
-		ABI_X86='32'
-		CFLAGS_x86=""
-		;;
-	alpha)
-		TOOL_PREFIX="$(tc-arch)-legacy"
-		;;
-	m68k)
-		TOOL_PREFIX="$(tc-arch)-legacy"
-		;;
-	mips)
-		CC="${CC} ${CFLAGS_o32}"
-		CXX="${CXX} ${CFLAGS_o32}"
-		TOOL_PREFIX="${PROFILE_ARCH/64/}-legacy"
-		;;
-	ppc)
-		TOOL_PREFIX="powerpc-legacy"
-		;;
-	sparc)
-		CC="${CC} ${CFLAGS_sparc32}"
-		CXX="${CXX} ${CFLAGS_sparc32}"
-		TOOL_PREFIX="sparc-legacy"
-		;;
-	*)
-		;;
-	esac
+case $(tc-arch) in
+amd64|x86)
+	CC="${CC} ${CFLAGS_x86}"
+	CXX="${CXX} ${CFLAGS_x86}"
+	TOOL_PREFIX="i686-legacy"
+	CHOST_x86="${TOOL_PREFIX}-linux-gnu"
+	ABI='x86'
+	DEFAULT_ABI='x86'
+	ABI_X86='32'
+	CFLAGS_x86=""
+	;;
+alpha)
+	TOOL_PREFIX="$(tc-arch)-legacy"
+	;;
+m68k)
+	TOOL_PREFIX="$(tc-arch)-legacy"
+	;;
+mips)
+	CC="${CC} ${CFLAGS_o32}"
+	CXX="${CXX} ${CFLAGS_o32}"
+	TOOL_PREFIX="${PROFILE_ARCH/64/}-legacy"
+	;;
+ppc)
+	TOOL_PREFIX="powerpc-legacy"
+	;;
+sparc)
+	CC="${CC} ${CFLAGS_sparc32}"
+	CXX="${CXX} ${CFLAGS_sparc32}"
+	TOOL_PREFIX="sparc-legacy"
+	;;
+*)
+	;;
+esac
 
-	if [[ ${TOOL_PREFIX} != "" ]]; then
-		CBUILD="${TOOL_PREFIX}-linux-gnu"
-		CHOST=${CBUILD}
-		AS="${CHOST}-as"
-		LD="${CHOST}-ld"
-		AR="${CHOST}-ar"
-		RANLIB="${CHOST}-ranlib"
-		LEGACY_DEPEND="
-			legacy-gcc/linux-headers
-			legacy-gcc/glibc-headers
-			legacy-gcc/binutils-wrapper"
-    fi
+if [[ ${TOOL_PREFIX} != "" ]]; then
+	CBUILD="${TOOL_PREFIX}-linux-gnu"
+	CHOST=${CBUILD}
+	AS="${CHOST}-as"
+	LD="${CHOST}-ld"
+	AR="${CHOST}-ar"
+	RANLIB="${CHOST}-ranlib"
+	LEGACY_DEPEND="
+		legacy-gcc/linux-headers
+		legacy-gcc/glibc-headers
+		legacy-gcc/binutils-wrapper"
 fi
 
 inherit toolchain
