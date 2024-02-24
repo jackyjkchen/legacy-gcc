@@ -23,5 +23,8 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/01_gcc-${PV}-workaround-for-new-glibc.patch
 	eapply "${FILESDIR}"/${PV}/02_sjlj-exception-default.patch
 	eapply "${FILESDIR}"/${PV}/10_fix-for-libc5.patch
+	eapply "${FILESDIR}"/${PV}/11_fix-for-libc4.patch
+
+	eapply "${FILESDIR}"/${PV}/postrelease/00_pr45262.patch
 }
 

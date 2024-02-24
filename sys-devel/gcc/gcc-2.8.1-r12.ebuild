@@ -53,6 +53,8 @@ src_prepare() {
 
 	eapply "${FILESDIR}"/${PV}/01_gcc-${PV}-workaround-for-new-glibc.patch
 	eapply "${FILESDIR}"/${PV}/02_sjlj-exception-default.patch
+
+	eapply "${FILESDIR}"/${PV}/postrelease/00_pr45262.patch
 }
 
 src_install() {
