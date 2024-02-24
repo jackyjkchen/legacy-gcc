@@ -36,7 +36,7 @@ Linux glibc本地工具链——
 * s390x：>=gcc-3.0.4
 * sh4：>=gcc-3.3.6
 * sparc：>=gcc-2.8.1
-* sparc64：>=gcc-2.95.3
+* sparc64：>=gcc-3.1.1
 
 其中amd64/x86/x32，mips64el/mipsel，mips64/mips，sparc64/sparc已测试支持multilib。
 
