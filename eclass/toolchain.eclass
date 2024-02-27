@@ -2156,6 +2156,7 @@ toolchain_src_install() {
 	find "${ED}" -name install-tools -prune -type d -exec rm -rf "{}" \;
 	# This one comes with binutils
 	find "${ED}" -name libiberty.a -delete
+	tc_version_is_between 3.3 4.3 && find "${ED}" -name libstdc++_pic.a -delete
 
 	# Move the libraries to the proper location
 	gcc_movelibs

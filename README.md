@@ -61,8 +61,6 @@ cygwin64/cygwin/cygwin-legacy不支持multilib，异常机制与cygwin官方二�
 
 libc5为ELF格式，libc4为a.out格式，a.out格式依赖内核模块ia32_aout，仅5.0以下内核支持，对于5.0或以上内核，可使用example/ia32_aout自行编译内核模块。
 
-所有可安装版本的gcc均为bootstrap构建，即3遍构建，自己编译自己，这是验证编译器移植后可用性的重要保证。
-
 USE参数可使用equery u sys-devel/gcc:${slot}查询。
 
 全部版本支持c语言。
