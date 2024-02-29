@@ -21,8 +21,8 @@ else
 fi
 
 src_prepare() {
-	! use vanilla && eapply "${FILESDIR}"/${PV}/00_gcc-4.1.3-without-change-version.patch
-	! use vanilla && eapply "${FILESDIR}"/${PV}/01_gentoo-patchset.patch
+	eapply "${FILESDIR}"/${PV}/00_gcc-4.1.3-without-change-version.patch
+	eapply "${FILESDIR}"/${PV}/01_gentoo-patchset.patch
 	toolchain_src_prepare
 
 	eapply "${FILESDIR}"/${PV}/02_compat-new-mpfr.patch

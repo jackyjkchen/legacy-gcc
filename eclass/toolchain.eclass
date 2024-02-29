@@ -247,7 +247,7 @@ if tc_version_is_at_least 2.9 ; then
 	IUSE+="test"
 	RESTRICT+="!test? ( test )"
 fi
-tc_version_is_at_least 4.0 && IUSE+=" vanilla"
+tc_version_is_at_least 2.8 && IUSE+=" vanilla"
 tc_version_is_at_least 2.9 && IUSE+=" +nls"
 
 is_crosscompile && RESTRICT+=" strip" # cross-compilers need controlled stripping
@@ -734,8 +734,6 @@ toolchain_src_prepare() {
 }
 
 do_gcc_gentoo_patches() {
-	_tc_use_if_iuse vanilla && return 0
-
 	if [[ -n ${PATCH_VER} ]] ; then
 		einfo "Applying Gentoo patches ..."
 		eapply "${WORKDIR}"/patch/*.patch

@@ -21,8 +21,8 @@ else
 fi
 
 src_prepare() {
-	! use vanilla && eapply "${FILESDIR}"/${PV}/00_gcc-4.2.5-without-change-version.patch
-	! use vanilla && eapply "${FILESDIR}"/${PV}/01_gentoo-patchset.patch
+	eapply "${FILESDIR}"/${PV}/00_gcc-4.2.5-without-change-version.patch
+	eapply "${FILESDIR}"/${PV}/01_gentoo-patchset.patch
 	toolchain_src_prepare
 
 	[[ $(tc-arch) == "mips" && ${DEFAULT_ABI} == "n64" ]] && eapply "${FILESDIR}"/${PV}/02_mips64-default-n64-abi.patch

@@ -90,6 +90,7 @@ src_prepare() {
 			;;
 	esac
 
+	use vanilla && return 0
 	eapply "${FILESDIR}"/${PV}/postrelease/00_pr45262.patch
 }
 

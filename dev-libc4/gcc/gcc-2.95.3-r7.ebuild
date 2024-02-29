@@ -34,9 +34,10 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/11_fix-for-libc4.patch
 	touch -r gcc/README gcc/configure.in || die
 
-	eapply "${FILESDIR}"/${PV}/postrelease/00_pr45262.patch
-
 	rm -rf libstdc++ gcc/testsuite/g++*
+
+	use vanilla && return 0
+	eapply "${FILESDIR}"/${PV}/postrelease/00_pr45262.patch
 }
 
 src_install() {

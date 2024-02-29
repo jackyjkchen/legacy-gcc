@@ -25,6 +25,7 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/10_fix-for-libc5.patch
 	eapply "${FILESDIR}"/${PV}/11_fix-for-libc4.patch
 
+	use vanilla && return 0
 	eapply "${FILESDIR}"/${PV}/postrelease/00_pr45262.patch
 }
 

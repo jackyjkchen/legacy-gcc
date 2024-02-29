@@ -21,7 +21,7 @@ else
 fi
 
 src_prepare() {
-	! use vanilla && eapply "${FILESDIR}"/${PV}/00_gentoo-patchset.patch
+	eapply "${FILESDIR}"/${PV}/00_gentoo-patchset.patch
 	[[ ${CTARGET} == arm*-*-*eabihf* ]] && eapply "${FILESDIR}"/${PV}/01_support-armhf.patch
 	toolchain_src_prepare
 

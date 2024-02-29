@@ -83,6 +83,7 @@ src_prepare() {
 	[[ $(tc-arch) == "sparc" ]] && eapply "${FILESDIR}"/${PV}/04_sparc-debian.patch
 	[[ $(tc-arch) == "sparc" ]] && eapply "${FILESDIR}"/${PV}/05_sparc-build-hang.patch
 
+	use vanilla && return 0
 	eapply "${FILESDIR}"/${PV}/postrelease/00_pr45262.patch
 }
 

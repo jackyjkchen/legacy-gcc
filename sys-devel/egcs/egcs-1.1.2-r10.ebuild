@@ -65,6 +65,7 @@ src_prepare() {
 	fi
 	touch -r gcc/README gcc/configure.in || die
 
+	use vanilla && return 0
 	eapply "${FILESDIR}"/${PV}/postrelease/00_pr45262.patch
 }
 

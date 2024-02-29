@@ -26,6 +26,7 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/11_fix-for-libc4.patch
 	rm -rf libstdc++ gcc/testsuite/g++*
 
+	use vanilla && return 0
 	eapply "${FILESDIR}"/${PV}/postrelease/00_pr45262.patch
 }
 

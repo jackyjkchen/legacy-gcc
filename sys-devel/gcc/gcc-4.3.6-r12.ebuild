@@ -21,7 +21,7 @@ else
 fi
 
 src_prepare() {
-	! use vanilla && eapply "${FILESDIR}"/${PV}/00_gentoo-patchset.patch
+	eapply "${FILESDIR}"/${PV}/00_gentoo-patchset.patch
 	toolchain_src_prepare
 
 	sed -i 's/use_fixproto=yes/:/' gcc/config.gcc #PR33200

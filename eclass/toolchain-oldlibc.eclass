@@ -130,6 +130,7 @@ if tc_version_is_at_least 2.95 ; then
 	RESTRICT+="!test? ( test )"
 fi
 
+tc_version_is_at_least 2.8 && IUSE+=" vanilla"
 RESTRICT+=" strip"
 
 TC_FEATURES=()

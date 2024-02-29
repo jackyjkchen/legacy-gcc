@@ -90,6 +90,7 @@ src_prepare() {
 			;;
 	esac
 
+	use vanilla && return 0
 	eapply "${FILESDIR}"/${PV}/postrelease/00_pr13685.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/01_pr45262.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/02_pr25572.patch
