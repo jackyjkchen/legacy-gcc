@@ -277,10 +277,6 @@ if [[ ${PN} != kgcc64 && ${PN} != gcc-* ]] ; then
 			tc_version_is_at_least 2.1 && IUSE+=" +cxx"
 			tc_version_is_at_least 2.4 && IUSE+=" objc"
 			;;
-		hppa)
-			tc_version_is_at_least 3.1 && IUSE+=" +cxx"
-			tc_version_is_at_least 3.1 && IUSE+=" objc"
-			;;
 		*)
 			tc_version_is_at_least 2.1 && IUSE+=" +cxx"
 			tc_version_is_at_least 2.1 && IUSE+=" objc"

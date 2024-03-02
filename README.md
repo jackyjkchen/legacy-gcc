@@ -73,7 +73,7 @@ USE参数可使用equery u sys-devel/gcc:${slot}查询。
 
 4.0.4以上版本支持f95/fortran。
 
-4.7.4以上版本支持go（USE=go默认关闭）。
+gcc 2.2.2 - 2.8.1不自带c++库，安装libg++和libstdc++的独立包，标准c++库支持较差。
 
 本项目提供可选的dev-libs/stlport用于增强gcc-2.6.3 - gcc-2.95.3的STL，目前仅支持x86/alpha/ppc/m68k，gcc-3.0之后的C++标准库libstdc++-v3已兼容C++98标准，无需STLPort。
 
@@ -86,6 +86,16 @@ dev-libs/stlport:3.12.3用于sys-devel/gcc:2.8.1和sys-devel/gcc:2.7.2。
 dev-libs/stlport:2.033用于sys-devel/gcc:2.6.3，注意gcc-2.6.3不支持weak符号，因此不支持STL多目标文件编译。
 
 gcc-2.5.8或更低版本，其C++编译器无法支持STLPort。
+
+
+go/ada/d支持未测试，相应USE默认关闭。由于gcj已经在最新版本中废弃，类似其他更早废弃的语言前端一样不再支持。
+
+4.7.4以上版本支持go。
+
+4.9.4以上版本支持ada。
+
+9.5.0以上包本支持d。
+
 
 # 原理
 
