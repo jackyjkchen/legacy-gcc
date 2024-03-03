@@ -1,4 +1,4 @@
-# Copyright 1999-2023 Gentoo Authors
+# Copyright 1999-2024 Gentoo Authors
 # Distributed under the terms of the GNU General Public License v2
 
 # @ECLASS: toolchain.eclass
@@ -148,6 +148,11 @@ GCCMINOR=$(ver_cut 2 ${GCC_PV})
 # @DESCRIPTION:
 # GCC micro version.
 GCCMICRO=$(ver_cut 3 ${GCC_PV})
+# @ECLASS_VARIABLE: GCC_RUN_FIXINCLUDES
+# @INTERNAL
+# @DESCRIPTION:
+# Controls whether fixincludes should be used.
+GCC_RUN_FIXINCLUDES=0
 
 tc_use_major_version_only() {
 	local use_major_version_only=0
@@ -298,7 +303,7 @@ if [[ ${PN} != kgcc64 && ${PN} != gcc-* ]] ; then
 
 	# sanitizer support appeared in gcc-4.8, but <gcc-5 does not
 	# support modern glibc.
-	# only >=gcc-8 support sanitizer in >=glibc-2.36
+	# update: only >=gcc-8 support sanitizer in >=glibc-2.36
 	tc_version_is_at_least 8 && IUSE+=" +sanitize"  TC_FEATURES+=( sanitize )
 
 	# Note:
@@ -724,7 +729,7 @@ toolchain_src_prepare() {
 			done
 	fi
 
-	if tc_version_is_between 4.9 10 && ! is_djgpp ; then
+	if tc_version_is_between 4.9 10 && _tc_use_if_iuse sanitize && ! is_djgpp ; then
 		eapply "${FILESDIR}"/san-fix-for-glibc-2_36.patch
 	fi
 }
@@ -1632,6 +1637,34 @@ toolchain_src_configure() {
 		)
 	fi
 
+	if tc_version_is_at_least 13.1 ; then
+		# Re-enable fixincludes for >= GCC 13 with older glibc
+		# https://gcc.gnu.org/PR107128
+		if ! is_crosscompile && use elibc_glibc && has_version "<sys-libs/glibc-2.38" ; then
+			GCC_RUN_FIXINCLUDES=1
+		fi
+
+		case ${CBUILD}-${CHOST}-${CTARGET} in
+			*mips*-sde-elf*)
+				# config/mips/t-sdemtk needs fixincludes too (bug #925204)
+				# It maps to mips*-sde-elf*, but only with --without-newlib.
+				if [[ ${confgcc} != *with-newlib* ]] ; then
+					GCC_RUN_FIXINCLUDES=1
+				fi
+				;;
+			*)
+				# config/i386/t-cygming requires fixincludes (bug #925204)
+				( is_mingw64 || is_cygwin ) && GCC_RUN_FIXINCLUDES=1
+				;;
+		esac
+
+		if [[ ${GCC_RUN_FIXINCLUDES} == 1 ]] ; then
+			confgcc+=( --enable-fixincludes )
+		else
+			confgcc+=( --disable-fixincludes )
+		fi
+	fi
+
 	# Disable gcc info regeneration -- it ships with generated info pages
 	# already.  Our custom version/urls/etc... trigger it. bug #464008
 	export gcc_cv_prog_makeinfo_modern=no
@@ -2102,24 +2135,17 @@ toolchain_src_install() {
 		fi
 	done
 
-	# We remove the generated fixincludes, as they can cause things to break
-	# (ncurses, openssl, etc).  We do not prevent them from being built, as
-	# in the following commit which we revert:
-	# https://sources.gentoo.org/cgi-bin/viewvc.cgi/gentoo-x86/eclass/toolchain.eclass?r1=1.647&r2=1.648
-	# This is because bsd userland needs fixedincludes to build gcc, while
-	# linux does not.  Both can dispose of them afterwards.
-	while read x ; do
-		grep -q 'It has been auto-edited by fixincludes from' "${x}" \
-			&& rm -f "${x}"
-	done < <(find gcc/include*/ -name '*.h')
-
-	# Do the 'make install' from the build directory
-	if tc_version_is_at_least 4.5 ; then
-		S="${WORKDIR}"/build emake DESTDIR="${D}" install || die
-	elif tc_version_is_at_least 2.9 ; then
-		S="${WORKDIR}"/build emake -j1 DESTDIR="${D}" install || die
-	else
-		S="${WORKDIR}"/build emake CC="${CC}" CXX="${CXX}" LANGUAGES="${LANGUAGES}" -j1 DESTDIR="${D}" install || die
+	if [[ ${GCC_RUN_FIXINCLUDES} == 0 ]] ; then
+		# We remove the generated fixincludes, as they can cause things to break
+		# (ncurses, openssl, etc).  We do not prevent them from being built, as
+		# in the following commit which we revert:
+		# https://sources.gentoo.org/cgi-bin/viewvc.cgi/gentoo-x86/eclass/toolchain.eclass?r1=1.647&r2=1.648
+		# This is because bsd userland needs fixedincludes to build gcc, while
+		# linux does not.  Both can dispose of them afterwards.
+		while read x ; do
+			grep -q 'It has been auto-edited by fixincludes from' "${x}" \
+				&& rm -f "${x}"
+		done < <(find gcc/include*/ -name '*.h')
 	fi
 
 	if is_jit ; then
@@ -2144,6 +2170,15 @@ toolchain_src_install() {
 		gcc_movelibs
 
 		popd > /dev/null || die
+	fi
+
+	# Do the 'make install' from the build directory
+	if tc_version_is_at_least 4.5 ; then
+		S="${WORKDIR}"/build emake DESTDIR="${D}" install || die
+	elif tc_version_is_at_least 2.9 ; then
+		S="${WORKDIR}"/build emake -j1 DESTDIR="${D}" install || die
+	else
+		S="${WORKDIR}"/build emake CC="${CC}" CXX="${CXX}" LANGUAGES="${LANGUAGES}" -j1 DESTDIR="${D}" install || die
 	fi
 
 	# Punt some tools which are really only useful while building gcc
@@ -2268,6 +2303,7 @@ toolchain_src_install() {
 		'(' \
 			-name libstdc++.la -o \
 			-name libstdc++fs.la -o \
+			-name libstdc++exp.la -o \
 			-name libsupc++.la -o \
 			-name libcc1.la -o \
 			-name libcc1plugin.la -o \
