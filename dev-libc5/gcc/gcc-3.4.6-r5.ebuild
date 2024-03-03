@@ -31,6 +31,8 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/10_fix-for-libc5.patch
 
 	use vanilla && return 0
+	eapply "${FILESDIR}"/${PV}/07_backport-static-libstdc++-option.patch
+
 	eapply "${FILESDIR}"/${PV}/postrelease/00_pr13685.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/01_pr22127.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/02_pr32245.patch
@@ -43,5 +45,7 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/09_pr45262.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/10_pr34130.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/11_pr35146.patch
+
+	eapply "${FILESDIR}"/${PV}/postrelease/90_fix-known-test-fail.patch
 }
 
