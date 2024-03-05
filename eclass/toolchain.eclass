@@ -334,7 +334,7 @@ if [[ ${PN} != kgcc64 && ${PN} != gcc-* ]] ; then
 		*)
 			tc_version_is_at_least 9.1 && IUSE+=" lto"
 			;;
-		esac
+	esac
 	tc_version_is_at_least 10 && IUSE+=" cet"
 	tc_version_is_at_least 10 && IUSE+=" zstd" TC_FEATURES+=( zstd )
 	tc_version_is_at_least 11 && IUSE+=" valgrind" TC_FEATURES+=( valgrind )
