@@ -1586,9 +1586,7 @@ toolchain_src_configure() {
 	# This only controls whether the compiler *supports* LTO, not whether
 	# it's *built using* LTO. Hence we do it without a USE flag.
 	if is_djgpp ; then
-		if tc_version_is_at_least 4.8 ; then
-			confgcc+=( --enable-lto )
-		fi
+		tc_version_is_at_least 4.8 && confgcc+=( --enable-lto )
 	elif tc_version_is_at_least 4.6 ; then
 		confgcc+=( --enable-lto )
 	elif tc_version_is_at_least 4.5 ; then
