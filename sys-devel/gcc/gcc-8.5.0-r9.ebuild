@@ -79,4 +79,5 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/40_pr84543.patch
 
 	is_crosscompile || eapply "${FILESDIR}"/${PV}/postrelease/90_fix-known-test-fail.patch
+	is_crosscompile || ([[ $(tc-arch) == "arm64" ]] && eapply "${FILESDIR}"/${PV}/postrelease/91_fix-aarch64-test-fail.patch)
 }

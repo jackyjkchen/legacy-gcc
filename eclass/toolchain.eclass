@@ -1318,7 +1318,8 @@ toolchain_src_configure() {
 			if tc_version_is_at_least 4.8 ; then
 				confgcc+=( --enable-__cxa_atexit )
 			else
-				confgcc+=( --disable-__cxa_atexit --disable-libitm )
+				confgcc+=( --disable-__cxa_atexit )
+				tc_version_is_at_least 4.7 && confgcc+=( --disable-libitm )
 			fi
 			if tc_version_is_at_least 4.0 ; then
 				confgcc+=( 
@@ -1358,9 +1359,11 @@ toolchain_src_configure() {
 			case $(tc-is-softfloat) in
 				yes)
 					confgcc+=( --with-float=soft )
+					tc_version_is_at_least 4.7 && confgcc+=( --disable-libitm )
 					;;
 				softfp)
 					confgcc+=( --with-float=softfp )
+					tc_version_is_at_least 4.7 && confgcc+=( --disable-libitm )
 					;;
 				*)
 					# If they've explicitly opt-ed in, do hardfloat,
