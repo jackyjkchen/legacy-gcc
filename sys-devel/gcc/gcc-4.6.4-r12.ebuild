@@ -64,4 +64,5 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/32_pr3698-86208.patch
 
 	is_crosscompile || eapply "${FILESDIR}"/${PV}/postrelease/90_fix-known-test-fail.patch
+	is_crosscompile || ([[ $(tc-arch) == "arm" ]] && eapply "${FILESDIR}"/${PV}/postrelease/91_fix-arm-test-fail.patch)
 }

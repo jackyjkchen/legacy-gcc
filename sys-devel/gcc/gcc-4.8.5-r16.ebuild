@@ -92,6 +92,7 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/60_pr3698-86208.patch
 
 	is_crosscompile || eapply "${FILESDIR}"/${PV}/postrelease/90_fix-known-test-fail.patch
+	is_crosscompile || ([[ $(tc-arch) == "arm" ]] && eapply "${FILESDIR}"/${PV}/postrelease/91_fix-arm-test-fail.patch)
 
 	# gcc-4.8.5 on aarch64, pch case random build crash
 	[[ $(tc-arch) == "arm64" ]] && rm -rf gcc/testsuite/gcc.dg/pch gcc/testsuite/g++.dg/pch gcc/testsuite/objc.dg/pch
