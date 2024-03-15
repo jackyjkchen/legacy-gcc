@@ -1554,7 +1554,8 @@ toolchain_src_configure() {
 	fi
 
 	if in_iuse cet ; then
-		confgcc+=( $(use_enable cet) )
+		[[ ${CTARGET} == x86_64-*-gnu* ]] && confgcc+=( $(use_enable cet) )
+		[[ ${CTARGET} == aarch64-*-gnu* ]] && confgcc+=( $(use_enable cet standard-branch-protection) )
 	fi
 
 	if in_iuse systemtap ; then
@@ -1690,7 +1691,8 @@ toolchain_src_configure() {
 		fi
 	fi
 
-	confgcc+=( "$@" ${EXTRA_ECONF} )
+	eval "local -a EXTRA_ECONF=(${EXTRA_ECONF})"
+	confgcc+=( "$@" "${EXTRA_ECONF[@]}" )
 
 	if [[ -n ${build_config_targets} ]] ; then
 		# ./configure --with-build-config='bootstrap-lto bootstrap-cet'
@@ -1727,6 +1729,7 @@ toolchain_src_configure() {
 		local confgcc_jit=(
 			"${confgcc[@]}"
 
+			--enable-lto
 			--disable-analyzer
 			--disable-bootstrap
 			--disable-cet
@@ -1742,7 +1745,6 @@ toolchain_src_configure() {
 			--disable-libssp
 			--disable-libstdcxx-pch
 			--disable-libvtv
-			--disable-lto
 			--disable-nls
 			--disable-objc-gc
 			--disable-systemtap
