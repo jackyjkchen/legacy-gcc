@@ -25,6 +25,7 @@ HOMEPAGE="https://sourceware.org/binutils/"
 if [[ ${CATEGORY} != cross-* ]] ; then
 	case ${CATEGORY} in
 	dev-libc5)
+		OLDLIBC="yes"
 		TOOL_SUFFIX="linux-gnulibc1"
 		case $(tc-arch) in
 		amd64|x86)
@@ -35,6 +36,7 @@ if [[ ${CATEGORY} != cross-* ]] ; then
 		esac
 		;;
 	dev-libc4)
+		OLDLIBC="yes"
 		TOOL_SUFFIX="linuxaout"
 		case $(tc-arch) in
 		amd64|x86)
@@ -49,7 +51,6 @@ if [[ ${CATEGORY} != cross-* ]] ; then
 	esac
 
 	if [[ ${TOOL_PREFIX} != "" ]]; then
-		OLDLIBC="yes"
 		CTARGET="${TOOL_PREFIX}-${TOOL_SUFFIX}"
 	fi
 fi
@@ -67,18 +68,7 @@ is_djgpp() { [[ ${CTARGET} == *-msdosdjgpp* ]] ; }
 is_cross() { [[ ${CHOST} != ${CTARGET} ]] ; }
 is_oldlibc() { [[ ${OLDLIBC} == "yes" ]] ; }
 
-case ${PV} in
-	9999)
-		BVER="git"
-		EGIT_REPO_URI="https://sourceware.org/git/binutils-gdb.git"
-		inherit git-r3
-		S=${WORKDIR}/binutils
-		EGIT_CHECKOUT_DIR=${S}
-		;;
-	*)
-		BVER=${PV}
-		;;
-esac
+BVER=${PV}
 SLOT="${BVER}"
 
 # General purpose version check.  Without a second arg matches up to minor version (x.x.x)
@@ -86,10 +76,12 @@ BINUTILS_RELEASE_VER=$(ver_cut 1-3 ${BVER})
 tc_version_is_at_least() {
 	ver_test "${2:-${BINUTILS_RELEASE_VER}}" -ge "$1"
 }
-if tc_version_is_at_least 2.12 ; then
-	is_djgpp || SRC_URI="https://mirrors.ustc.edu.cn/gnu/binutils/binutils-${BVER}.tar.bz2"
+if tc_version_is_at_least 2.28.1 ; then
+	SRC_URI="https://mirrors.ustc.edu.cn/gnu/binutils/binutils-${BVER}.tar.xz"
+elif tc_version_is_at_least 2.12 ; then
+	SRC_URI="https://mirrors.ustc.edu.cn/gnu/binutils/binutils-${BVER}.tar.bz2"
 else
-	is_djgpp || SRC_URI="https://mirrors.ustc.edu.cn/gnu/binutils/binutils-${BVER}.tar.gz"
+	SRC_URI="https://mirrors.ustc.edu.cn/gnu/binutils/binutils-${BVER}.tar.gz"
 fi
 if tc_version_is_at_least 2.18 ; then
 	LICENSE="|| ( GPL-3 LGPL-3 )"

@@ -1,0 +1,1996 @@
+diff --git a/bfd/Makefile.in b/bfd/Makefile.in
+index d0d14c6a..d161aea0 100644
+--- a/bfd/Makefile.in
++++ b/bfd/Makefile.in
+@@ -2012,7 +2012,7 @@ aout-params.h: gen-aout
+ gen-aout: $(srcdir)/gen-aout.c Makefile
+ 	$(CC) -o gen-aout $(CFLAGS) $(LFLAGS) $(srcdir)/gen-aout.c
+ 
+-$(BFD_H): stmp-bfd-h ; @true
++$(BFD_H): stmp-lcoff-h stmp-bfd-h ; @true
+ 
+ stmp-bfd-h: bfd-in3.h
+ 	rm -f bfd-tmp.h
+@@ -2034,7 +2034,7 @@ headers:
+ # We only rebuild the header files automatically if we have been
+ # configured with --enable-maintainer-mode.
+ 
+-$(srcdir)/bfd-in2.h: @MAINT@ stmp-bin2-h ; @true
++$(srcdir)/bfd-in2.h: stmp-bin2-h ; @true
+ stmp-bin2-h: $(BFD_H_FILES) $(BFD64_H_FILES)
+ 	(cd $(bfddocdir); $(MAKE) $(FLAGS_TO_PASS) bfd.h)
+ 	cp $(bfddocdir)/bfd.h bfd-in2.h-new
+diff --git a/bfd/bfd-in.h b/bfd/bfd-in.h
+index 76b17bf7..ff627546 100644
+--- a/bfd/bfd-in.h
++++ b/bfd/bfd-in.h
+@@ -564,3 +564,9 @@ struct ecoff_debug_swap;
+ struct ecoff_extr;
+ struct bfd_link_info;
+ struct bfd_link_hash_entry;
++
++/* This controls if the coff 64k relocation support shall be disabled or not.
++   By default always enabled.  */
++#if defined(__DJGPP__) || defined(COFF_GO32_EXE) || defined(COFF_GO32)
++extern bfd_boolean coff_64k_relocation_enabled;
++#endif
+diff --git a/bfd/cache.c b/bfd/cache.c
+index 93abff33..1e22ef8c 100644
+--- a/bfd/cache.c
++++ b/bfd/cache.c
+@@ -77,7 +77,7 @@ bfd_cache_max_open (void)
+   if (max_open_files == 0)
+     {
+       int max;
+-#if defined(__sun) && !defined(__sparcv9) && !defined(__x86_64__)
++#if defined(__sun) && !defined(__sparcv9) && !defined(__x86_64__) || defined(__DJGPP__)
+       /* PR ld/19260: 32-bit Solaris has very inelegant handling of the 255
+ 	 file descriptor limit.  The problem is that setrlimit(2) can raise
+ 	 RLIMIT_NOFILE to a value that is not supported by libc, resulting
+diff --git a/bfd/coffcode.h b/bfd/coffcode.h
+index 9a97ba74..7675056a 100644
+--- a/bfd/coffcode.h
++++ b/bfd/coffcode.h
+@@ -1973,31 +1973,34 @@ coff_set_alignment_hook (bfd *abfd, asection *section, void * scnhdr)
+ static void
+ coff_set_alignment_hook (bfd * abfd, asection * section, void * scnhdr)
+ {
+-  struct internal_scnhdr *hdr = (struct internal_scnhdr *) scnhdr;
+-
+-  /* Check for extended relocs.  */
+-  if (hdr->s_flags & IMAGE_SCN_LNK_NRELOC_OVFL)
++  if (coff_64k_relocation_enabled)
+     {
+-      struct external_reloc dst;
+-      struct internal_reloc n;
+-      const file_ptr oldpos = bfd_tell (abfd);
+-      const bfd_size_type relsz = bfd_coff_relsz (abfd);
++        struct internal_scnhdr *hdr = (struct internal_scnhdr *) scnhdr;
+ 
+-      if (bfd_seek (abfd, (file_ptr) hdr->s_relptr, 0) != 0)
++        /* Check for extended relocs.  */
++        if (hdr->s_flags & IMAGE_SCN_LNK_NRELOC_OVFL)
++          {
++            struct external_reloc dst;
++            struct internal_reloc n;
++            const file_ptr oldpos = bfd_tell (abfd);
++            const bfd_size_type relsz = bfd_coff_relsz (abfd);
++
++            if (bfd_seek (abfd, (file_ptr) hdr->s_relptr, 0) != 0)
+ 	return;
+-      if (bfd_bread (& dst, relsz, abfd) != relsz)
++            if (bfd_bread (& dst, relsz, abfd) != relsz)
+ 	return;
+ 
+-      coff_swap_reloc_in (abfd, &dst, &n);
+-      if (bfd_seek (abfd, oldpos, 0) != 0)
++            coff_swap_reloc_in (abfd, &dst, &n);
++            if (bfd_seek (abfd, oldpos, 0) != 0)
+ 	return;
+-      section->reloc_count = hdr->s_nreloc = n.r_vaddr - 1;
+-      section->rel_filepos += relsz;
++            section->reloc_count = hdr->s_nreloc = n.r_vaddr - 1;
++            section->rel_filepos += relsz;
++          }
++        else if (hdr->s_nreloc == 0xffff)
++          _bfd_error_handler
++            (_("%pB: warning: claims to have 0xffff relocs, without overflow"),
++             abfd);
+     }
+-  else if (hdr->s_nreloc == 0xffff)
+-    _bfd_error_handler
+-      (_("%pB: warning: claims to have 0xffff relocs, without overflow"),
+-       abfd);
+ }
+ 
+ #else /* ! COFF_GO32_EXE && ! COFF_GO32 */
+diff --git a/bfd/coffswap.h b/bfd/coffswap.h
+index f75001e0..762b8ea4 100644
+--- a/bfd/coffswap.h
++++ b/bfd/coffswap.h
+@@ -747,6 +747,19 @@ coff_swap_scnhdr_in (bfd * abfd, void * ext, void * in)
+   scnhdr_int->s_flags = GET_SCNHDR_FLAGS (abfd, scnhdr_ext->s_flags);
+   scnhdr_int->s_nreloc = GET_SCNHDR_NRELOC (abfd, scnhdr_ext->s_nreloc);
+   scnhdr_int->s_nlnno = GET_SCNHDR_NLNNO (abfd, scnhdr_ext->s_nlnno);
++#if defined (COFF_GO32_EXE) || defined(COFF_GO32)
++  /* DJGPP follows the same strategy than PE COFF.
++     Iff the file is an executable then the higher 16 bits
++     of the line number have been stored in the relocation
++     counter field.  */
++  if (coff_64k_relocation_enabled && abfd->flags & EXEC_P
++      && (strcmp(scnhdr_ext->s_name, ".text") == 0))
++  {
++    scnhdr_int->s_nlnno = (GET_SCNHDR_NRELOC(abfd, scnhdr_ext->s_nreloc) << 16)
++                          + GET_SCNHDR_NLNNO(abfd, scnhdr_ext->s_nlnno);
++    scnhdr_int->s_nreloc = 0;
++  }
++#endif
+ #ifdef COFF_ADJUST_SCNHDR_IN_POST
+   COFF_ADJUST_SCNHDR_IN_POST (abfd, ext, in);
+ #endif
+@@ -772,6 +785,61 @@ coff_swap_scnhdr_out (bfd * abfd, void * in, void * out)
+   PUT_SCNHDR_RELPTR (abfd, scnhdr_int->s_relptr, scnhdr_ext->s_relptr);
+   PUT_SCNHDR_LNNOPTR (abfd, scnhdr_int->s_lnnoptr, scnhdr_ext->s_lnnoptr);
+   PUT_SCNHDR_FLAGS (abfd, scnhdr_int->s_flags, scnhdr_ext->s_flags);
++#if defined (COFF_GO32_EXE) || defined(COFF_GO32)
++  if (coff_64k_relocation_enabled)
++    {
++      if (abfd->flags & EXEC_P
++	  && (strcmp(scnhdr_int->s_name, ".text") == 0))
++	{
++	  /* DJGPP follows the same strategy than PE COFF.
++	     By inference from looking at MS output, the 32 bit field
++	     which is the combination of the number_of_relocs and
++	     number_of_linenos is used for the line number count in
++	     executables.  A 16-bit field won't do for cc1.  The MS
++	     document says that the number of relocs is zero for
++	     executables, but the 17-th bit has been observed to be there.
++	     Overflow is not an issue: a 4G-line program will overflow a
++	     bunch of other fields long before this!  */
++	  PUT_SCNHDR_NLNNO (abfd, (scnhdr_int->s_nlnno & 0xffff), scnhdr_ext->s_nlnno);
++	  PUT_SCNHDR_NRELOC (abfd, (scnhdr_int->s_nlnno >> 16), scnhdr_ext->s_nreloc);
++	}
++      else
++	{
++	  /* DJGPP follows the same strategy than PE COFF. */
++	  if (scnhdr_int->s_nlnno <= MAX_SCNHDR_NLNNO)
++	    PUT_SCNHDR_NLNNO (abfd, scnhdr_int->s_nlnno, scnhdr_ext->s_nlnno);
++	  else
++	    {
++	       char buf[sizeof (scnhdr_int->s_name) + 1];
++
++	       memcpy (buf, scnhdr_int->s_name, sizeof (scnhdr_int->s_name));
++	       buf[sizeof (scnhdr_int->s_name)] = '\0';
++	       (*_bfd_error_handler)
++		(_("%s: %s: line number overflow: 0x%lx > 0xffff"),
++		 bfd_get_filename (abfd),
++		 buf, scnhdr_int->s_nlnno);
++	       bfd_set_error (bfd_error_file_truncated);
++	       PUT_SCNHDR_NLNNO (abfd, 0xffff, scnhdr_ext->s_nlnno);
++	       ret = 0;
++	    }
++
++	  /* Although we could encode 0xffff relocs here, we do not, to be
++	     consistent with other parts of bfd. Also it lets us warn, as
++	     we should never see 0xffff here w/o having the overflow flag
++	     set.  */
++	  if (scnhdr_int->s_nreloc < MAX_SCNHDR_NRELOC)
++	    PUT_SCNHDR_NRELOC (abfd, scnhdr_int->s_nreloc, scnhdr_ext->s_nreloc);
++	  else
++	    {
++	       /* DJGPP can deal with large #s of relocs, but not here.  */
++	       PUT_SCNHDR_NRELOC (abfd, 0xffff, scnhdr_ext->s_nreloc);
++	       scnhdr_int->s_flags |= IMAGE_SCN_LNK_NRELOC_OVFL;
++	       PUT_SCNHDR_FLAGS (abfd, scnhdr_int->s_flags, scnhdr_ext->s_flags);
++	    }
++	}
++      goto finalization;
++    }
++#endif
+   if (scnhdr_int->s_nlnno <= MAX_SCNHDR_NLNNO)
+     PUT_SCNHDR_NLNNO (abfd, scnhdr_int->s_nlnno, scnhdr_ext->s_nlnno);
+   else
+@@ -803,6 +871,9 @@ coff_swap_scnhdr_out (bfd * abfd, void * in, void * out)
+       ret = 0;
+     }
+ 
++#if defined (COFF_GO32_EXE) || defined(COFF_GO32)
++finalization:
++#endif
+ #ifdef COFF_ADJUST_SCNHDR_OUT_POST
+   COFF_ADJUST_SCNHDR_OUT_POST (abfd, in, out);
+ #endif
+diff --git a/bfd/config.in b/bfd/config.in
+index be572969..70edcae7 100644
+--- a/bfd/config.in
++++ b/bfd/config.in
+@@ -416,3 +416,37 @@
+ 
+ /* Define to 1 if you need to in order for `stat' and other things to work. */
+ #undef _POSIX_SOURCE
++#ifdef __DJGPP__
++# if defined (__GNUC__) && (__GNUC__ > 2 || (__GNUC__ == 2 && __GNUC_MINOR__ >= 8))
++#  define __gnuc_extension__  __extension__
++# else
++#  define __gnuc_extension__
++# endif
++
++# undef  IS_SLASH
++# define IS_SLASH(c)                ((c) == '/' || (c) == '\\')
++# undef  IS_DIRECTORY_SEPARATOR
++# define IS_DIRECTORY_SEPARATOR(c)  (IS_SLASH(c) || (c) == ':')
++
++# include <libc/unconst.h>
++# define STRIP_FULL_PATH_AND_EXTENSION(file_name)   \
++  (__gnuc_extension__                               \
++    ({                                              \
++       char *_dst, *_src;                           \
++       _dst = _src = unconst((file_name), char *);  \
++       while (*_src++)                              \
++         ;                                          \
++       while ((_src - _dst) && (*--_src != '.'))    \
++         ;                                          \
++       for (*_src = '\0'; (_src - _dst); _src--)    \
++         if (IS_DIRECTORY_SEPARATOR(*_src))         \
++           break;                                   \
++       if (_src - _dst)                             \
++         while ((*_dst++ = *++_src))                \
++           ;                                        \
++       (file_name);                                 \
++    })                                              \
++  )
++#else
++# define STRIP_FULL_PATH_AND_EXTENSION(file_name)  (file_name)
++#endif
+diff --git a/bfd/init.c b/bfd/init.c
+index 463b4f33..8de24fe8 100644
+--- a/bfd/init.c
++++ b/bfd/init.c
+@@ -23,6 +23,12 @@
+ #include "bfd.h"
+ #include "libbfd.h"
+ 
++/* This controls if the coff 64k support shall be disabled or not.
++   By default always enabled.  */
++/* #if defined(__DJGPP__) || defined(COFF_GO32_EXE) || defined(COFF_GO32) */
++bfd_boolean coff_64k_relocation_enabled = TRUE;
++/* #endif */
++
+ /*
+ SECTION
+ 	Initialization
+@@ -57,5 +63,11 @@ DESCRIPTION
+ unsigned int
+ bfd_init (void)
+ {
++#if defined(__DJGPP__) || defined(COFF_GO32_EXE) || defined(COFF_GO32)
++  const char *disable_64k_reloc_support = getenv("DISABLE_64K_RELOC_SUPPORT");
++  coff_64k_relocation_enabled = !(disable_64k_reloc_support &&
++                                  (disable_64k_reloc_support[0] == 'y' || disable_64k_reloc_support[0] == 'Y') &&
++                                  disable_64k_reloc_support[1] == '\0') ? TRUE : FALSE;
++#endif
+   return BFD_INIT_MAGIC;
+ }
+diff --git a/binutils/ar.c b/binutils/ar.c
+index 85b342a6..6c019bfb 100644
+--- a/binutils/ar.c
++++ b/binutils/ar.c
+@@ -721,7 +721,7 @@ main (int argc, char **argv)
+   bindtextdomain (PACKAGE, LOCALEDIR);
+   textdomain (PACKAGE);
+ 
+-  program_name = argv[0];
++  program_name = STRIP_FULL_PATH_AND_EXTENSION(argv[0]);
+   xmalloc_set_program_name (program_name);
+   bfd_set_error_program_name (program_name);
+ #if BFD_SUPPORTS_PLUGINS
+diff --git a/binutils/coffdump.c b/binutils/coffdump.c
+index 336da57c..70750418 100644
+--- a/binutils/coffdump.c
++++ b/binutils/coffdump.c
+@@ -497,7 +497,7 @@ main (int ac, char **av)
+   bindtextdomain (PACKAGE, LOCALEDIR);
+   textdomain (PACKAGE);
+ 
+-  program_name = av[0];
++  program_name = STRIP_FULL_PATH_AND_EXTENSION(av[0]);
+   xmalloc_set_program_name (program_name);
+   bfd_set_error_program_name (program_name);
+ 
+diff --git a/binutils/config.in b/binutils/config.in
+index 3adc32bb..64e1c308 100644
+--- a/binutils/config.in
++++ b/binutils/config.in
+@@ -305,3 +305,38 @@
+ 
+ /* Define to `unsigned int' if <sys/types.h> does not define. */
+ #undef size_t
++
++#ifdef __DJGPP__
++# if defined (__GNUC__) && (__GNUC__ > 2 || (__GNUC__ == 2 && __GNUC_MINOR__ >= 8))
++#  define __gnuc_extension__  __extension__
++# else
++#  define __gnuc_extension__
++# endif
++
++# undef  IS_SLASH
++# define IS_SLASH(c)                ((c) == '/' || (c) == '\\')
++# undef  IS_DIRECTORY_SEPARATOR
++# define IS_DIRECTORY_SEPARATOR(c)  (IS_SLASH(c) || (c) == ':')
++
++# include <libc/unconst.h>
++# define STRIP_FULL_PATH_AND_EXTENSION(file_name)   \
++  (__gnuc_extension__                               \
++    ({                                              \
++       char *_dst, *_src;                           \
++       _dst = _src = unconst((file_name), char *);  \
++       while (*_src++)                              \
++         ;                                          \
++       while ((_src - _dst) && (*--_src != '.'))    \
++         ;                                          \
++       for (*_src = '\0'; (_src - _dst); _src--)    \
++         if (IS_DIRECTORY_SEPARATOR(*_src))         \
++           break;                                   \
++       if (_src - _dst)                             \
++         while ((*_dst++ = *++_src))                \
++           ;                                        \
++       (file_name);                                 \
++    })                                              \
++  )
++#else
++# define STRIP_FULL_PATH_AND_EXTENSION(file_name)  (file_name)
++#endif
+diff --git a/binutils/cxxfilt.c b/binutils/cxxfilt.c
+index eeeca2f3..d841f99a 100644
+--- a/binutils/cxxfilt.c
++++ b/binutils/cxxfilt.c
+@@ -144,7 +144,7 @@ main (int argc, char **argv)
+   const char *valid_symbols;
+   enum demangling_styles style = auto_demangling;
+ 
+-  program_name = argv[0];
++  program_name = STRIP_FULL_PATH_AND_EXTENSION(argv[0]);
+   xmalloc_set_program_name (program_name);
+   bfd_set_error_program_name (program_name);
+ 
+diff --git a/binutils/nm.c b/binutils/nm.c
+index 1b5122d5..ea5a96fb 100644
+--- a/binutils/nm.c
++++ b/binutils/nm.c
+@@ -1711,7 +1711,7 @@ main (int argc, char **argv)
+   bindtextdomain (PACKAGE, LOCALEDIR);
+   textdomain (PACKAGE);
+ 
+-  program_name = *argv;
++  program_name = STRIP_FULL_PATH_AND_EXTENSION(argv[0]);
+   xmalloc_set_program_name (program_name);
+   bfd_set_error_program_name (program_name);
+ #if BFD_SUPPORTS_PLUGINS
+diff --git a/binutils/objcopy.c b/binutils/objcopy.c
+index 3866c7f4..a7653c7a 100644
+--- a/binutils/objcopy.c
++++ b/binutils/objcopy.c
+@@ -5979,7 +5979,7 @@ main (int argc, char *argv[])
+   bindtextdomain (PACKAGE, LOCALEDIR);
+   textdomain (PACKAGE);
+ 
+-  program_name = argv[0];
++  program_name = STRIP_FULL_PATH_AND_EXTENSION(argv[0]);
+   xmalloc_set_program_name (program_name);
+ 
+   START_PROGRESS (program_name, 0);
+diff --git a/binutils/objdump.c b/binutils/objdump.c
+index 93508e2a..b3cca6aa 100644
+--- a/binutils/objdump.c
++++ b/binutils/objdump.c
+@@ -5115,7 +5115,7 @@ main (int argc, char **argv)
+   bindtextdomain (PACKAGE, LOCALEDIR);
+   textdomain (PACKAGE);
+ 
+-  program_name = *argv;
++  program_name = STRIP_FULL_PATH_AND_EXTENSION(argv[0]);
+   xmalloc_set_program_name (program_name);
+   bfd_set_error_program_name (program_name);
+ 
+diff --git a/binutils/readelf.c b/binutils/readelf.c
+index 6057515a..8d165225 100644
+--- a/binutils/readelf.c
++++ b/binutils/readelf.c
+@@ -624,7 +624,12 @@ print_symbol (signed int width, const char * symbol)
+ 	  /* Try to find out how many bytes made up the character that was
+ 	     just printed.  Advance the symbol pointer past the bytes that
+ 	     were displayed.  */
++#ifdef __DJGPP__
++	  /* DJGPP does not provide mbrtowc.  */
++	  n = mbtowc (& w, symbol - 1, MB_CUR_MAX);
++#else
+ 	  n = mbrtowc (& w, symbol - 1, MB_CUR_MAX, & state);
++#endif
+ #else
+ 	  n = 1;
+ #endif
+@@ -13979,7 +13984,12 @@ dump_section_as_strings (Elf_Internal_Shdr * section, Filedata * filedata)
+ 		      /* Try to find out how many bytes made up the character that was
+ 			 just printed.  Advance the symbol pointer past the bytes that
+ 			 were displayed.  */
++#ifdef __DJGPP__
++		      /* DJGPP does not provide mbrtowc.  */
++		      n = mbtowc (& w, (char *)(data - 1), MB_CUR_MAX);
++#else
+ 		      n = mbrtowc (& w, (char *)(data - 1), MB_CUR_MAX, & state);
++#endif
+ #else
+ 		      n = 1;
+ #endif
+diff --git a/binutils/size.c b/binutils/size.c
+index 36970877..641121f8 100644
+--- a/binutils/size.c
++++ b/binutils/size.c
+@@ -143,7 +143,7 @@ main (int argc, char **argv)
+   bindtextdomain (PACKAGE, LOCALEDIR);
+   textdomain (PACKAGE);
+ 
+-  program_name = *argv;
++  program_name = STRIP_FULL_PATH_AND_EXTENSION(argv[0]);
+   xmalloc_set_program_name (program_name);
+   bfd_set_error_program_name (program_name);
+ 
+diff --git a/binutils/srconv.c b/binutils/srconv.c
+index f071794f..3363710c 100644
+--- a/binutils/srconv.c
++++ b/binutils/srconv.c
+@@ -1731,7 +1731,7 @@ main (int ac, char **av)
+   bindtextdomain (PACKAGE, LOCALEDIR);
+   textdomain (PACKAGE);
+ 
+-  program_name = av[0];
++  program_name = STRIP_FULL_PATH_AND_EXTENSION(av[0]);
+   xmalloc_set_program_name (program_name);
+   bfd_set_error_program_name (program_name);
+ 
+diff --git a/binutils/strings.c b/binutils/strings.c
+index dc42a6f2..0e8d540c 100644
+--- a/binutils/strings.c
++++ b/binutils/strings.c
+@@ -155,7 +155,7 @@ main (int argc, char **argv)
+   bindtextdomain (PACKAGE, LOCALEDIR);
+   textdomain (PACKAGE);
+ 
+-  program_name = argv[0];
++  program_name = STRIP_FULL_PATH_AND_EXTENSION(argv[0]);
+   xmalloc_set_program_name (program_name);
+   bfd_set_error_program_name (program_name);
+ 
+diff --git a/binutils/sysdump.c b/binutils/sysdump.c
+index 7eebbd61..0655d6f9 100644
+--- a/binutils/sysdump.c
++++ b/binutils/sysdump.c
+@@ -668,7 +668,7 @@ main (int ac, char **av)
+   bindtextdomain (PACKAGE, LOCALEDIR);
+   textdomain (PACKAGE);
+ 
+-  program_name = av[0];
++  program_name = STRIP_FULL_PATH_AND_EXTENSION(av[0]);
+   xmalloc_set_program_name (program_name);
+   bfd_set_error_program_name (program_name);
+ 
+diff --git a/config.sub b/config.sub
+index f02d43ad..73400019 100755
+--- a/config.sub
++++ b/config.sub
+@@ -303,6 +303,15 @@ case $1 in
+ 				;;
+ 			djgpp)
+ 				basic_machine=i586-pc
++				UNAME_MACHINE=`(uname -m) 2>/dev/null` || UNAME_MACHINE=unknown
++				case $UNAME_MACHINE in
++					*386*) basic_machine=i386-pc;;
++					*486*) basic_machine=i486-pc;;
++					*586*) basic_machine=i586-pc;;
++					*686*) basic_machine=i686-pc;;
++					*786*) basic_machine=i786-pc;;
++					*)     basic_machine=i586-pc;;
++				esac
+ 				os=msdosdjgpp
+ 				;;
+ 			ebmon29k)
+diff --git a/gas/as.c b/gas/as.c
+index 08019031..18fb210c 100644
+--- a/gas/as.c
++++ b/gas/as.c
+@@ -1293,7 +1293,7 @@ main (int argc, char ** argv)
+   HOST_SPECIAL_INIT (argc, argv);
+ #endif
+ 
+-  myname = argv[0];
++  myname = STRIP_FULL_PATH_AND_EXTENSION(argv[0]);
+   xmalloc_set_program_name (myname);
+ 
+   expandargv (&argc, &argv);
+diff --git a/gas/config.in b/gas/config.in
+index bd125047..dda20ee2 100644
+--- a/gas/config.in
++++ b/gas/config.in
+@@ -423,3 +423,40 @@
+ 
+ /* Define to `unsigned int' if <sys/types.h> does not define. */
+ #undef size_t
++
++#ifdef __DJGPP__
++# include <sys/version.h>
++
++# if defined (__GNUC__) && (__GNUC__ > 2 || (__GNUC__ == 2 && __GNUC_MINOR__ >= 8))
++#  define __gnuc_extension__  __extension__
++# else
++#  define __gnuc_extension__
++# endif
++
++# undef  IS_SLASH
++# define IS_SLASH(c)                ((c) == '/' || (c) == '\\')
++# undef  IS_DIRECTORY_SEPARATOR
++# define IS_DIRECTORY_SEPARATOR(c)  (IS_SLASH(c) || (c) == ':')
++
++# include <libc/unconst.h>
++# define STRIP_FULL_PATH_AND_EXTENSION(file_name)   \
++  (__gnuc_extension__                               \
++    ({                                              \
++       char *_dst, *_src;                           \
++       _dst = _src = unconst((file_name), char *);  \
++       while (*_src++)                              \
++         ;                                          \
++       while ((_src - _dst) && (*--_src != '.'))    \
++         ;                                          \
++       for (*_src = '\0'; (_src - _dst); _src--)    \
++         if (IS_DIRECTORY_SEPARATOR(*_src))         \
++           break;                                   \
++       if (_src - _dst)                             \
++         while ((*_dst++ = *++_src))                \
++           ;                                        \
++       (file_name);                                 \
++    })                                              \
++  )
++#else
++# define STRIP_FULL_PATH_AND_EXTENSION(file_name)  (file_name)
++#endif
+diff --git a/gas/config/obj-coff-seh.c b/gas/config/obj-coff-seh.c
+index 9a44c44e..7e66ce24 100644
+--- a/gas/config/obj-coff-seh.c
++++ b/gas/config/obj-coff-seh.c
+@@ -64,7 +64,7 @@ get_pxdata_name (segT seg, const char *base_name)
+   else
+     name = dollar;
+ 
+-  sname = concat (base_name, name, NULL);
++  sname = concat (base_name, name, (char *)NULL);
+ 
+   return sname;
+ }
+diff --git a/gas/dw2gencfi.c b/gas/dw2gencfi.c
+index a4fe8ac9..18f14f5a 100644
+--- a/gas/dw2gencfi.c
++++ b/gas/dw2gencfi.c
+@@ -257,7 +257,7 @@ get_debugseg_name (segT seg, const char *base_name)
+   else
+     name = dollar;
+ 
+-  return concat (base_name, name, NULL);
++  return concat (base_name, name, (char *)NULL);
+ }
+ 
+ /* Allocate a dwcfi_seg_list structure.  */
+diff --git a/gold/config.in b/gold/config.in
+index aaad1bee..c93aefab 100644
+--- a/gold/config.in
++++ b/gold/config.in
+@@ -309,3 +309,37 @@
+ 
+ /* Define to 1 if you need to in order for `stat' and other things to work. */
+ #undef _POSIX_SOURCE
++#ifdef __DJGPP__
++# if defined (__GNUC__) && (__GNUC__ > 2 || (__GNUC__ == 2 && __GNUC_MINOR__ >= 8))
++#  define __gnuc_extension__  __extension__
++# else
++#  define __gnuc_extension__
++# endif
++
++# undef  IS_SLASH
++# define IS_SLASH(c)                ((c) == '/' || (c) == '\\')
++# undef  IS_DIRECTORY_SEPARATOR
++# define IS_DIRECTORY_SEPARATOR(c)  (IS_SLASH(c) || (c) == ':')
++
++# include <libc/unconst.h>
++# define STRIP_FULL_PATH_AND_EXTENSION(file_name)   \
++  (__gnuc_extension__                               \
++    ({                                              \
++       char *_dst, *_src;                           \
++       _dst = _src = unconst((file_name), char *);  \
++       while (*_src++)                              \
++         ;                                          \
++       while ((_src - _dst) && (*--_src != '.'))    \
++         ;                                          \
++       for (*_src = '\0'; (_src - _dst); _src--)    \
++         if (IS_DIRECTORY_SEPARATOR(*_src))         \
++           break;                                   \
++       if (_src - _dst)                             \
++         while ((*_dst++ = *++_src))                \
++           ;                                        \
++       (file_name);                                 \
++    })                                              \
++  )
++#else
++# define STRIP_FULL_PATH_AND_EXTENSION(file_name)  (file_name)
++#endif
+diff --git a/gprof/gconfig.in b/gprof/gconfig.in
+index fadb3783..0e0e6679 100644
+--- a/gprof/gconfig.in
++++ b/gprof/gconfig.in
+@@ -119,3 +119,40 @@
+ 
+ /* Define to 1 if you need to in order for `stat' and other things to work. */
+ #undef _POSIX_SOURCE
++
++#ifdef __DJGPP__
++# include <sys/version.h>
++
++# if defined (__GNUC__) && (__GNUC__ > 2 || (__GNUC__ == 2 && __GNUC_MINOR__ >= 8))
++#  define __gnuc_extension__  __extension__
++# else
++#  define __gnuc_extension__
++# endif
++
++# undef  IS_SLASH
++# define IS_SLASH(c)                ((c) == '/' || (c) == '\\')
++# undef  IS_DIRECTORY_SEPARATOR
++# define IS_DIRECTORY_SEPARATOR(c)  (IS_SLASH(c) || (c) == ':')
++
++# include <libc/unconst.h>
++# define STRIP_FULL_PATH_AND_EXTENSION(file_name)   \
++  (__gnuc_extension__                               \
++    ({                                              \
++       char *_dst, *_src;                           \
++       _dst = _src = unconst((file_name), char *);  \
++       while (*_src++)                              \
++         ;                                          \
++       while ((_src - _dst) && (*--_src != '.'))    \
++         ;                                          \
++       for (*_src = '\0'; (_src - _dst); _src--)    \
++         if (IS_DIRECTORY_SEPARATOR(*_src))         \
++           break;                                   \
++       if (_src - _dst)                             \
++         while ((*_dst++ = *++_src))                \
++           ;                                        \
++       (file_name);                                 \
++    })                                              \
++  )
++#else
++# define STRIP_FULL_PATH_AND_EXTENSION(file_name)  (file_name)
++#endif
+diff --git a/gprof/gprof.c b/gprof/gprof.c
+index da1411b3..f9b1d868 100644
+--- a/gprof/gprof.c
++++ b/gprof/gprof.c
+@@ -198,7 +198,13 @@ main (int argc, char **argv)
+   textdomain (PACKAGE);
+ #endif
+ 
+-  whoami = argv[0];
++#if defined (COFF_GO32_EXE) || defined (COFF_GO32)
++  /*  This call is necessary to check if coff
++      64k relocation support shall be enabled or not.  */
++  bfd_init ();
++#endif
++
++  whoami = STRIP_FULL_PATH_AND_EXTENSION(argv[0]);
+   xmalloc_set_program_name (whoami);
+ 
+   expandargv (&argc, &argv);
+diff --git a/include/bfdlink.h b/include/bfdlink.h
+index 3badfbdb..90ae4d22 100644
+--- a/include/bfdlink.h
++++ b/include/bfdlink.h
+@@ -315,7 +315,7 @@ enum output_type
+   type_pde,
+   type_pie,
+   type_relocatable,
+-  type_dll,
++  type_dll
+ };
+ 
+ #define bfd_link_pde(info)	   ((info)->type == type_pde)
+diff --git a/include/plugin-api.h b/include/plugin-api.h
+index e317d784..95bf01ab 100644
+--- a/include/plugin-api.h
++++ b/include/plugin-api.h
+@@ -79,7 +79,7 @@
+ #endif
+ #endif
+ /* Detect based on _WIN32.  */
+-#if defined(_WIN32)
++#if defined(_WIN32) || defined(__MSDOS__)
+ #define PLUGIN_LITTLE_ENDIAN 1
+ #endif
+ /* Detect based on __BIG_ENDIAN__ and __LITTLE_ENDIAN__ */
+diff --git a/include/simple-object.h b/include/simple-object.h
+index e0025eda..6dcac198 100644
+--- a/include/simple-object.h
++++ b/include/simple-object.h
+@@ -206,7 +206,7 @@ simple_object_release_write (simple_object_write *);
+ extern const char *
+ simple_object_copy_lto_debug_sections (simple_object_read *src_object,
+ 				       const char *dest,
+-				       int *err, int rename);
++				       int *err, int lib_rename);
+ 
+ #ifdef __cplusplus
+ }
+diff --git a/ld/config.in b/ld/config.in
+index 2f4e5ea3..cc1a2f67 100644
+--- a/ld/config.in
++++ b/ld/config.in
+@@ -267,3 +267,50 @@
+ 
+ /* Define to 1 if you need to in order for `stat' and other things to work. */
+ #undef _POSIX_SOURCE
++
++
++
++/*
++ * DJGPP specific stuff.
++ */
++
++/* DJGPP, DXE3 support: Enable resolution of multiple symbol definition
++   introduced by the import libraries by the linker. */
++#undef HAVE_DXE3_SUPPORT
++
++#ifdef __DJGPP__
++# include <sys/version.h>
++
++# if defined (__GNUC__) && (__GNUC__ > 2 || (__GNUC__ == 2 && __GNUC_MINOR__ >= 8))
++#  define __gnuc_extension__  __extension__
++# else
++#  define __gnuc_extension__
++# endif
++
++# undef  IS_SLASH
++# define IS_SLASH(c)                ((c) == '/' || (c) == '\\')
++# undef  IS_DIRECTORY_SEPARATOR
++# define IS_DIRECTORY_SEPARATOR(c)  (IS_SLASH(c) || (c) == ':')
++
++# include <libc/unconst.h>
++# define STRIP_FULL_PATH_AND_EXTENSION(file_name)   \
++  (__gnuc_extension__                               \
++    ({                                              \
++       char *_dst, *_src;                           \
++       _dst = _src = unconst((file_name), char *);  \
++       while (*_src++)                              \
++         ;                                          \
++       while ((_src - _dst) && (*--_src != '.'))    \
++         ;                                          \
++       for (*_src = '\0'; (_src - _dst); _src--)    \
++         if (IS_DIRECTORY_SEPARATOR(*_src))         \
++           break;                                   \
++       if (_src - _dst)                             \
++         while ((*_dst++ = *++_src))                \
++           ;                                        \
++       (file_name);                                 \
++    })                                              \
++  )
++#else
++# define STRIP_FULL_PATH_AND_EXTENSION(file_name)  (file_name)
++#endif
+diff --git a/ld/configure b/ld/configure
+index 6be52806..a933c373 100755
+--- a/ld/configure
++++ b/ld/configure
+@@ -17773,6 +17773,15 @@ ac_config_commands="$ac_config_commands default"
+ 
+ 
+ 
++case "$target_os" in
++  *djgpp)
++cat >>confdefs.h <<_ACEOF
++#define HAVE_DXE3_SUPPORT 1
++_ACEOF
++ ;;
++esac
++
++
+ ac_config_files="$ac_config_files Makefile po/Makefile.in:po/Make-in"
+ 
+ cat >confcache <<\_ACEOF
+diff --git a/ld/ldfile.c b/ld/ldfile.c
+index e39170b5..1264279b 100644
+--- a/ld/ldfile.c
++++ b/ld/ldfile.c
+@@ -65,6 +65,123 @@ static search_dirs_type **search_tail_ptr = &search_head;
+ static search_arch_type *search_arch_head;
+ static search_arch_type **search_arch_tail_ptr = &search_arch_head;
+ 
++
++#ifdef __DJGPP__
++/*  Map library long filename to a library short filename according
++    to the filename table stored in /dev/env/DJDIR/lib/libnames.tab.  */
++
++static bfd_boolean
++map_LFN_to_SFN (const char **filename)
++{
++  static char **table = NULL;
++  static int last_index = 0;
++
++
++  /*
++   *  Initialize library name table from libnames.tab content.
++   */
++  if (!table)
++  {
++    FILE *map = fopen ("/dev/env/DJDIR/lib/libnames.tab", "r");
++
++    if (map)
++    {
++      char line[128];
++      int i = 0;
++
++      while (fscanf(map, "%[^\n]\n", line) != EOF)
++      {
++        if (line[0] == '#')
++          continue;
++        else
++          i++;
++      }
++
++      if (i)
++      {
++        last_index = 2 * i;
++        table = xmalloc(last_index * sizeof(char *));
++
++        i = 0;
++        rewind(map);
++        while (fscanf(map, "%[^\n]\n", line) != EOF)
++        {
++          if (line[0] != '#')
++          {
++            char long_name[FILENAME_MAX + 1], short_name[FILENAME_MAX + 1];
++
++            sscanf(line, "%s %s", long_name, short_name);
++            table[i++] = concat(long_name, (const char *) NULL);
++            table[i++] = concat(short_name, (const char *) NULL);
++          }
++        }
++      }
++
++      fclose(map);
++    }
++    else if (verbose)
++      info_msg(_("cannot find \"/dev/env/DJDIR/lib/libnames.tab\"\n"));
++  }
++
++
++  /*
++   *  Map library LFN to SFN using the table read from libnames.tab content.
++   */
++  if (table)
++  {
++    char *extension, *libname, *prefix = concat(*filename, (const char *)NULL);
++    int i;
++
++    /*  Strip library prefix and suffix.  */
++    for (libname = prefix, i = 0; libname[i]; i++)
++      ;
++
++#define IS_DOT_A_SUFFIX(filename)  ((filename)[--i] == 'a' && (filename)[--i] == '.')
++#define IS_LIB_PREFIX(filename)    ((filename)[--i] == 'b' && (filename)[--i] == 'i' && (filename)[--i] == 'l')
++    while (i)
++      if (IS_DOT_A_SUFFIX(libname))
++      {
++        libname[i] = '\0';
++        extension = libname + i;
++        break;
++      }
++    while (i)
++      if (IS_LIB_PREFIX(libname))
++      {
++        if (i == 0)
++        {
++          libname += 3;
++          break;
++        }
++        if (libname[--i] == '/')
++        {
++          libname += i + 4;
++          break;
++        }
++      }
++#undef IS_DOT_A_SUFFIX
++#undef IS_LIB_PREFIX
++
++    for (i = 0; i < last_index; i++)
++      if (strcmp(libname, table[i++]) == 0)
++      {
++        /*  Create a short filename for the library.  */
++        *libname = '\0';
++        *extension = '.';
++        *filename = concat(prefix, table[i], extension, (const char *)NULL);
++        if (verbose)
++          info_msg(_("mapped \"%s\" to \"%s\"\n"), table[i - 1], table[i]);
++
++        return TRUE;
++      }
++
++    free(prefix);
++  }
++
++  return FALSE;
++}
++#endif  /* __DJGPP__ */
++
+ /* Test whether a pathname, after canonicalization, is the same or a
+    sub-directory of the sysroot directory.  */
+ 
+@@ -125,8 +242,19 @@ bfd_boolean
+ ldfile_try_open_bfd (const char *attempt,
+ 		     lang_input_statement_type *entry)
+ {
++#ifdef __DJGPP__
++  bfd_boolean already_tried_SFN = FALSE;
++
++again:
++#endif  /* __DJGPP__ */
++
+   entry->the_bfd = bfd_openr (attempt, entry->target);
+ 
++#ifdef __DJGPP__
++  if (!entry->the_bfd && !already_tried_SFN && (already_tried_SFN = map_LFN_to_SFN(&attempt)))
++    goto again;
++#endif  /* __DJGPP__ */
++
+   if (verbose)
+     {
+       if (entry->the_bfd == NULL)
+@@ -373,7 +501,7 @@ ldfile_open_file_search (const char *arch,
+ 			 arch, suffix, (const char *) NULL);
+       else
+ 	string = concat (search->name, slash, entry->filename,
+-			 (const char *) 0);
++			 (const char *) NULL);
+ 
+       if (ldfile_try_open_bfd (string, entry))
+ 	{
+diff --git a/ld/ldmain.c b/ld/ldmain.c
+index 08be9030..568aa7eb 100644
+--- a/ld/ldmain.c
++++ b/ld/ldmain.c
+@@ -253,7 +253,7 @@ main (int argc, char **argv)
+   bindtextdomain (PACKAGE, LOCALEDIR);
+   textdomain (PACKAGE);
+ 
+-  program_name = argv[0];
++  program_name = STRIP_FULL_PATH_AND_EXTENSION(argv[0]);
+   xmalloc_set_program_name (program_name);
+ 
+   START_PROGRESS (program_name, 0);
+@@ -1060,6 +1060,30 @@ multiple_definition (struct bfd_link_info *info,
+ 	      && bfd_is_abs_section (nsec->output_section))))
+     return;
+ 
++#if defined(HAVE_DXE3_SUPPORT) && HAVE_DXE3_SUPPORT == 1
++  /*  DJGPP specific resolution of multiple symbol definitions.
++      A symbol defined in an object file or in an static library
++      and at the same time in an import library belonging to a
++      DXE3 module will be replaced by the symbol provided by the
++      import library.  If more than one import library provides
++      the same symbol the first one will be used and all other
++      ones will be ignored.
++      A symbol from an import library is identified by its "dxe_tmp.o"
++      or "$$dxe$$.o" file name.  */
++
++#define IS_IMPORT_LIBRARY_SYMBOL(name)  (((name)[0] == 'd' && (name)[1] == 'x' && (name)[2] == 'e' && (name)[3] == '_' && \
++                                          (name)[4] == 't' && (name)[5] == 'm' && (name)[6] == 'p' && (name)[7] == '.' && \
++                                          (name)[8] == 'o') ||                                                            \
++                                         ((name)[0] == '$' && (name)[1] == '$' && (name)[2] == 'd' && (name)[3] == 'x' && \
++                                          (name)[4] == 'e' && (name)[5] == '$' && (name)[6] == '$' && (name)[7] == '.' && \
++                                          (name)[8] == 'o'))
++
++    if (h->type == bfd_link_hash_defined && IS_IMPORT_LIBRARY_SYMBOL(nsec->owner->filename))
++      return;
++
++#undef IS_IMPORT_LIBRARY_SYMBOL
++#endif /*  HAVE_DXE3_SUPPORT  */
++
+   name = h->root.string;
+   if (nbfd == NULL)
+     {
+diff --git a/ld/libnames.tab b/ld/libnames.tab
+new file mode 100644
+index 00000000..b612d53b
+--- /dev/null
++++ b/ld/libnames.tab
+@@ -0,0 +1,31 @@
++#
++#  Table to map libraries long file name to short file names.
++#  The entry is:
++#    LFN   SFN
++#  The library name is the name stripped from its directory name,
++#  stripped from its "lib" prefix and its ".a" suffix.
++#
++#
++#  E.g.: for the library
++#
++#    /dev/env/DJDIR/lib/foobar-1.2.3/libverylongname-1.2.3.a
++#
++#  the mapping entry will look like this:
++#
++#    verylongname-1.2.3   vln123
++#
++
++
++#  LFN           SFN
++
++#  Map for GNU gettext libraries.
++gettextlib     gtxtlib
++gettextpo      gtxtpo
++gettextsrc     gtxtsrc
++
++
++#  Map for perl compatible regular expressions libraries with API 2 (aka PCRE2).
++pcre2-8        pcr28
++pcre2-16       pcr216
++pcre2-32       pcr232
++pcre2-posix    pcr2posix
+diff --git a/ld/scripttempl/i386go32.sc b/ld/scripttempl/i386go32.sc
+index 60171fc8..b6606c0f 100644
+--- a/ld/scripttempl/i386go32.sc
++++ b/ld/scripttempl/i386go32.sc
+@@ -61,6 +61,10 @@ SECTIONS
+     *(.data)
+     ${RELOCATING+*(.data.*)}
+ 
++    /* Ugly workaround to prevent entire .bss to have attribute CONTENT */
++    /* for C++ executables. */
++    *(.bss.*)
++
+     ${RELOCATING+*(.gcc_exc*)}
+     ${RELOCATING+___EH_FRAME_BEGIN__ = . ;}
+     ${RELOCATING+*(.eh_fram*)}
+@@ -77,7 +81,7 @@ SECTIONS
+   
+   .bss ${RELOCATING+ SIZEOF(.data) + ADDR(.data)} :
+   {
+-    *(.bss${RELOCATING+ .bss.* .gnu.linkonce.b.*})
++    *(.bss${RELOCATING+ .gnu.linkonce.b.*})
+     *(COMMON)
+     ${RELOCATING+ end = . ; PROVIDE(_end = .) ;}
+     ${RELOCATING+ . = ALIGN(${SEGMENT_SIZE});}
+diff --git a/libctf/config.h.in b/libctf/config.h.in
+index e663c694..df28346f 100644
+--- a/libctf/config.h.in
++++ b/libctf/config.h.in
+@@ -171,3 +171,33 @@
+ 
+ /* Define to 1 if you need to in order for `stat' and other things to work. */
+ #undef _POSIX_SOURCE
++
++#ifdef __DJGPP__
++/*  gcc no longer includes this by default.  */
++# include <sys/version.h>
++
++/*
++ *  (ENOTSUP and EOPNOTSUPP have the same value on Linux,
++ *  but according to POSIX.1 these error values should be
++ *  distinct.)
++ */
++
++# if !defined(ENOTSUP) && defined(EOPNOTSUPP)
++#  define ENOTSUP  EOPNOTSUPP
++# endif
++
++/* Values taken from FreeBSD.  */
++# ifndef ENOTSUP
++#  define ENOTSUP  9926  /* Operation not supported (POSIX.1-2001).  */
++# endif
++
++# undef  DJGPP_GCC_VERSION
++# define DJGPP_GCC_VERSION  ((__GNUC__) * 10000 + (__GNUC_MINOR__) * 100 + (__GNUC_PATCHLEVEL__))
++# if DJGPP_GCC_VERSION < 40300
++#  define HAVE_TSL_SUPPORT  0
++# else
++#  define HAVE_TSL_SUPPORT  1
++# endif  /* DJGPP_GCC_VERSION */
++# undef DJGPP_GCC_VERSION
++
++#endif  /* __DJGPP__ */
+diff --git a/libctf/swap.h b/libctf/swap.h
+index c8962a27..e20e8075 100644
+--- a/libctf/swap.h
++++ b/libctf/swap.h
+@@ -27,6 +27,7 @@
+ #include <byteswap.h>
+ #endif /* defined(HAVE_BYTESWAP_H) */
+ 
++#ifndef __DJGPP__
+ /* Provide our own versions of the byteswap functions.  */
+ 
+ #if !HAVE_DECL_BSWAP_16
+@@ -62,5 +63,60 @@ bswap_64 (uint64_t v)
+ 	  | ((v & 0x00000000000000ffULL) << 56));
+ }
+ #endif /* !HAVE_DECL_BSWAP64 */
++#else  /* __DJGPP__ */
++
++/*  The inline functions make trouble with diferent versions of gcc thus use macros.  */
++# if defined (__GNUC__) && (__GNUC__ > 2 || (__GNUC__ == 2 && __GNUC_MINOR__ >= 8))
++#  define __gnuc_extension__  __extension__
++# else
++#  define __gnuc_extension__
++# endif
++
++# define bswap_identity_64(v)                                      \
++  (__gnuc_extension__                                              \
++    ({                                                             \
++       uint64_t value = (v);                                       \
++       value;                                                      \
++    })                                                             \
++  )
++
++# define bswap_16(v)                                               \
++  (__gnuc_extension__                                              \
++    ({                                                             \
++       uint16_t _v = (v);                                          \
++       uint16_t value = (  ((_v >> 8) & 0xFF)                      \
++                         | ((_v & 0xFF) << 8));                    \
++       value;                                                      \
++    })                                                             \
++  )
++
++# define bswap_32(v)                                               \
++  (__gnuc_extension__                                              \
++    ({                                                             \
++       uint32_t _v = (v);                                          \
++       uint32_t value = (  ((_v & 0xFF000000) >> 24)               \
++                         | ((_v & 0x00FF0000) >>  8)               \
++                         | ((_v & 0x0000FF00) <<  8)               \
++                         | ((_v & 0x000000FF) << 24));             \
++       value;                                                      \
++    })                                                             \
++  )
++
++# define bswap_64(v)                                               \
++  (__gnuc_extension__                                              \
++    ({                                                             \
++       uint64_t _v = (v);                                          \
++       uint64_t value = (  ((_v & 0xFF00000000000000ULL) >> 56)    \
++                         | ((_v & 0x00FF000000000000ULL) >> 40)    \
++                         | ((_v & 0x0000FF0000000000ULL) >> 24)    \
++                         | ((_v & 0x000000FF00000000ULL) >>  8)    \
++                         | ((_v & 0x00000000FF000000ULL) <<  8)    \
++                         | ((_v & 0x0000000000FF0000ULL) << 24)    \
++                         | ((_v & 0x000000000000FF00ULL) << 40)    \
++                         | ((_v & 0x00000000000000FFULL) << 56));  \
++       value;                                                      \
++    })                                                             \
++  )
++#endif /* __DJGPP__ */
+ 
+ #endif /* !defined(_CTF_SWAP_H) */
+diff --git a/libiberty/config.in b/libiberty/config.in
+index f7052b5d..cd1c5a6a 100644
+--- a/libiberty/config.in
++++ b/libiberty/config.in
+@@ -575,3 +575,57 @@
+ 
+ /* Define as `fork' if `vfork' does not work. */
+ #undef vfork
++
++#ifdef __DJGPP__
++# if defined (__GNUC__) && (__GNUC__ > 2 || (__GNUC__ == 2 && __GNUC_MINOR__ >= 8))
++#  define __gnuc_extension__  __extension__
++# else
++#  define __gnuc_extension__
++# endif
++
++/*
++ *  (ENOTSUP and EOPNOTSUPP have the same value on Linux,
++ *  but according to POSIX.1 these error values should be
++ *  distinct.)
++ */
++
++# if !defined(ENOTSUP) && defined(EOPNOTSUPP)
++#  define ENOTSUP  EOPNOTSUPP
++# endif
++
++/* Values taken from FreeBSD.  */
++# ifndef ENOTSUP
++#  define ENOTSUP  9926  /* Operation not supported (POSIX.1-2001).  */
++# endif
++
++# ifndef EOPNOTSUPP
++#  define EOPNOTSUPP  9929  /* Operation not supported on socket (POSIX.1-2001).  */
++# endif
++
++# undef  IS_SLASH
++# define IS_SLASH(c)                ((c) == '/' || (c) == '\\')
++# undef  IS_DIRECTORY_SEPARATOR
++# define IS_DIRECTORY_SEPARATOR(c)  (IS_SLASH(c) || (c) == ':')
++
++# include <libc/unconst.h>
++# define STRIP_FULL_PATH_AND_EXTENSION(file_name)   \
++  (__gnuc_extension__                               \
++    ({                                              \
++       char *_dst, *_src;                           \
++       _dst = _src = unconst((file_name), char *);  \
++       while (*_src++)                              \
++         ;                                          \
++       while ((_src - _dst) && (*--_src != '.'))    \
++         ;                                          \
++       for (*_src = '\0'; (_src - _dst); _src--)    \
++         if (IS_DIRECTORY_SEPARATOR(*_src))         \
++           break;                                   \
++       if (_src - _dst)                             \
++         while ((*_dst++ = *++_src))                \
++           ;                                        \
++       (file_name);                                 \
++    })                                              \
++  )
++#else  /* !__DJGPP__ */
++# define STRIP_FULL_PATH_AND_EXTENSION(file_name)  (file_name)
++#endif  /* !__DJGPP__ */
+diff --git a/libiberty/cp-demangle.c b/libiberty/cp-demangle.c
+index cbfb2f93..b079a197 100644
+--- a/libiberty/cp-demangle.c
++++ b/libiberty/cp-demangle.c
+@@ -2954,7 +2954,7 @@ d_parmlist (struct d_info *di)
+ /* <bare-function-type> ::= [J]<type>+  */
+ 
+ static struct demangle_component *
+-d_bare_function_type (struct d_info *di, int has_return_type)
++d_bare_function_type (struct d_info *di, int has_return_type_flag)
+ {
+   struct demangle_component *return_type;
+   struct demangle_component *tl;
+@@ -2966,10 +2966,10 @@ d_bare_function_type (struct d_info *di, int has_return_type)
+   if (peek == 'J')
+     {
+       d_advance (di, 1);
+-      has_return_type = 1;
++      has_return_type_flag = 1;
+     }
+ 
+-  if (has_return_type)
++  if (has_return_type_flag)
+     {
+       return_type = cplus_demangle_type (di);
+       if (return_type == NULL)
+@@ -3327,22 +3327,22 @@ d_expression_1 (struct d_info *di)
+   else if (peek == 'f' && d_peek_next_char (di) == 'p')
+     {
+       /* Function parameter used in a late-specified return type.  */
+-      int index;
++      int lib_index;
+       d_advance (di, 2);
+       if (d_peek_char (di) == 'T')
+ 	{
+ 	  /* 'this' parameter.  */
+ 	  d_advance (di, 1);
+-	  index = 0;
++	  lib_index = 0;
+ 	}
+       else
+ 	{
+-	  index = d_compact_number (di);
+-	  if (index == INT_MAX || index == -1)
++	  lib_index = d_compact_number (di);
++	  if (lib_index == INT_MAX || lib_index == -1)
+ 	    return NULL;
+-	  index++;
++	  lib_index++;
+ 	}
+-      return d_make_function_param (di, index);
++      return d_make_function_param (di, lib_index);
+     }
+   else if (IS_DIGIT (peek)
+ 	   || (peek == 'o' && d_peek_next_char (di) == 'n'))
+@@ -4687,7 +4687,7 @@ d_print_comp_inner (struct d_print_info *dpi, int options,
+ 
+   /* Variable used to store the current templates while a previously
+      captured scope is used.  */
+-  struct d_print_template *saved_templates;
++  struct d_print_template *saved_templates = NULL;
+ 
+   /* Nonzero if templates have been stored in the above variable.  */
+   int need_template_restore = 0;
+@@ -6275,7 +6275,7 @@ d_demangle_callback (const char *mangled, int options,
+     }
+   type;
+   struct d_info di;
+-  struct demangle_component *dc;
++  struct demangle_component *dc = NULL;
+   int status;
+ 
+   if (mangled[0] == '_' && mangled[1] == 'Z')
+diff --git a/libiberty/floatformat.c b/libiberty/floatformat.c
+index 2fd5e688..e8d6c3c9 100644
+--- a/libiberty/floatformat.c
++++ b/libiberty/floatformat.c
+@@ -486,7 +486,7 @@ floatformat_to_double (const struct floatformat *fmt,
+      don't try to preserve the type of NaN.  FIXME.  */
+   if ((unsigned long) exponent == fmt->exp_nan)
+     {
+-      int nan = mant_bits_set (fmt, ufrom);
++      int bfd_nan = mant_bits_set (fmt, ufrom);
+ 
+       /* On certain systems (such as GNU/Linux), the use of the
+ 	 INFINITY macro below may generate a warning that cannot be
+@@ -495,7 +495,7 @@ floatformat_to_double (const struct floatformat *fmt,
+ 	 conjunction with the GNU/C99 extension for hexadecimal
+ 	 floating point constants and will issue a warning when
+ 	 compiling with -pedantic.  */
+-      if (nan)
++      if (bfd_nan)
+ 	dto = NAN;
+       else
+ 	dto = INFINITY;
+diff --git a/libiberty/hashtab.c b/libiberty/hashtab.c
+index 225e9e54..95b78ef4 100644
+--- a/libiberty/hashtab.c
++++ b/libiberty/hashtab.c
+@@ -480,9 +480,9 @@ htab_empty (htab_t htab)
+ static PTR *
+ find_empty_slot_for_expand (htab_t htab, hashval_t hash)
+ {
+-  hashval_t index = htab_mod (hash, htab);
++  hashval_t lib_index = htab_mod (hash, htab);
+   size_t size = htab_size (htab);
+-  PTR *slot = htab->entries + index;
++  PTR *slot = htab->entries + lib_index;
+   hashval_t hash2;
+ 
+   if (*slot == HTAB_EMPTY_ENTRY)
+@@ -493,11 +493,11 @@ find_empty_slot_for_expand (htab_t htab, hashval_t hash)
+   hash2 = htab_mod_m2 (hash, htab);
+   for (;;)
+     {
+-      index += hash2;
+-      if (index >= size)
+-	index -= size;
++      lib_index += hash2;
++      if (lib_index >= size)
++	lib_index -= size;
+ 
+-      slot = htab->entries + index;
++      slot = htab->entries + lib_index;
+       if (*slot == HTAB_EMPTY_ENTRY)
+ 	return slot;
+       else if (*slot == HTAB_DELETED_ENTRY)
+@@ -584,15 +584,15 @@ htab_expand (htab_t htab)
+ PTR
+ htab_find_with_hash (htab_t htab, const PTR element, hashval_t hash)
+ {
+-  hashval_t index, hash2;
++  hashval_t lib_index, hash2;
+   size_t size;
+   PTR entry;
+ 
+   htab->searches++;
+   size = htab_size (htab);
+-  index = htab_mod (hash, htab);
++  lib_index = htab_mod (hash, htab);
+ 
+-  entry = htab->entries[index];
++  entry = htab->entries[lib_index];
+   if (entry == HTAB_EMPTY_ENTRY
+       || (entry != HTAB_DELETED_ENTRY && (*htab->eq_f) (entry, element)))
+     return entry;
+@@ -601,11 +601,11 @@ htab_find_with_hash (htab_t htab, const PTR element, hashval_t hash)
+   for (;;)
+     {
+       htab->collisions++;
+-      index += hash2;
+-      if (index >= size)
+-	index -= size;
++      lib_index += hash2;
++      if (lib_index >= size)
++	lib_index -= size;
+ 
+-      entry = htab->entries[index];
++      entry = htab->entries[lib_index];
+       if (entry == HTAB_EMPTY_ENTRY
+ 	  || (entry != HTAB_DELETED_ENTRY && (*htab->eq_f) (entry, element)))
+ 	return entry;
+@@ -634,7 +634,7 @@ htab_find_slot_with_hash (htab_t htab, const PTR element,
+                           hashval_t hash, enum insert_option insert)
+ {
+   PTR *first_deleted_slot;
+-  hashval_t index, hash2;
++  hashval_t lib_index, hash2;
+   size_t size;
+   PTR entry;
+ 
+@@ -646,37 +646,37 @@ htab_find_slot_with_hash (htab_t htab, const PTR element,
+       size = htab_size (htab);
+     }
+ 
+-  index = htab_mod (hash, htab);
++  lib_index = htab_mod (hash, htab);
+ 
+   htab->searches++;
+   first_deleted_slot = NULL;
+ 
+-  entry = htab->entries[index];
++  entry = htab->entries[lib_index];
+   if (entry == HTAB_EMPTY_ENTRY)
+     goto empty_entry;
+   else if (entry == HTAB_DELETED_ENTRY)
+-    first_deleted_slot = &htab->entries[index];
++    first_deleted_slot = &htab->entries[lib_index];
+   else if ((*htab->eq_f) (entry, element))
+-    return &htab->entries[index];
+-      
++    return &htab->entries[lib_index];
++
+   hash2 = htab_mod_m2 (hash, htab);
+   for (;;)
+     {
+       htab->collisions++;
+-      index += hash2;
+-      if (index >= size)
+-	index -= size;
++      lib_index += hash2;
++      if (lib_index >= size)
++	lib_index -= size;
+       
+-      entry = htab->entries[index];
++      entry = htab->entries[lib_index];
+       if (entry == HTAB_EMPTY_ENTRY)
+ 	goto empty_entry;
+       else if (entry == HTAB_DELETED_ENTRY)
+ 	{
+ 	  if (!first_deleted_slot)
+-	    first_deleted_slot = &htab->entries[index];
++	    first_deleted_slot = &htab->entries[lib_index];
+ 	}
+       else if ((*htab->eq_f) (entry, element))
+-	return &htab->entries[index];
++	return &htab->entries[lib_index];
+     }
+ 
+  empty_entry:
+@@ -691,7 +691,7 @@ htab_find_slot_with_hash (htab_t htab, const PTR element,
+     }
+ 
+   htab->n_elements++;
+-  return &htab->entries[index];
++  return &htab->entries[lib_index];
+ }
+ 
+ /* Like htab_find_slot_with_hash, but compute the hash value from the
+diff --git a/libiberty/make-relative-prefix.c b/libiberty/make-relative-prefix.c
+index e3f9f920..ade9f124 100644
+--- a/libiberty/make-relative-prefix.c
++++ b/libiberty/make-relative-prefix.c
+@@ -81,6 +81,7 @@ relative prefix can be found, return @code{NULL}.
+ #  define HAVE_DOS_BASED_FILE_SYSTEM
+ #  define HAVE_HOST_EXECUTABLE_SUFFIX
+ #  define HOST_EXECUTABLE_SUFFIX ".exe"
++#  define FILENAME_COMPARE strcasecmp
+ #  ifndef DIR_SEPARATOR_2 
+ #    define DIR_SEPARATOR_2 '\\'
+ #  endif
+@@ -96,6 +97,9 @@ relative prefix can be found, return @code{NULL}.
+ 	(((ch) == DIR_SEPARATOR) || ((ch) == DIR_SEPARATOR_2))
+ #endif
+ 
++#ifndef FILENAME_COMPARE
++#  define FILENAME_COMPARE strcmp
++#endif
+ #define DIR_UP ".."
+ 
+ static char *save_string (const char *, int);
+@@ -340,7 +344,7 @@ make_relative_prefix_1 (const char *progname, const char *bin_prefix,
+     {
+       for (i = 0; i < bin_num; i++)
+ 	{
+-	  if (strcmp (prog_dirs[i], bin_dirs[i]) != 0)
++	  if (FILENAME_COMPARE (prog_dirs[i], bin_dirs[i]) != 0)
+ 	    break;
+ 	}
+ 
+@@ -356,7 +360,7 @@ make_relative_prefix_1 (const char *progname, const char *bin_prefix,
+   n = (prefix_num < bin_num) ? prefix_num : bin_num;
+   for (common = 0; common < n; common++)
+     {
+-      if (strcmp (bin_dirs[common], prefix_dirs[common]) != 0)
++      if (FILENAME_COMPARE (bin_dirs[common], prefix_dirs[common]) != 0)
+ 	break;
+     }
+ 
+diff --git a/libiberty/make-temp-file.c b/libiberty/make-temp-file.c
+index cb08c27a..963c6557 100644
+--- a/libiberty/make-temp-file.c
++++ b/libiberty/make-temp-file.c
+@@ -54,12 +54,27 @@ extern int mkstemps (char *, int);
+ #define DIR_SEPARATOR '/'
+ #endif
+ 
++#if defined (_WIN32) || defined (__MSDOS__) \
++    || defined (__DJGPP__) || defined (__OS2__)
++#  define HAVE_DOS_BASED_FILE_SYSTEM
++#  ifndef DIR_SEPARATOR_2 
++#    define DIR_SEPARATOR_2 '\\'
++#  endif
++#endif
++
++#ifndef DIR_SEPARATOR_2
++#  define IS_DIR_SEPARATOR(ch) ((ch) == DIR_SEPARATOR)
++#else
++#  define IS_DIR_SEPARATOR(ch) \
++     (((ch) == DIR_SEPARATOR) || ((ch) == DIR_SEPARATOR_2))
++#endif
++
+ /* Name of temporary file.
+    mktemp requires 6 trailing X's.  */
+ #define TEMP_FILE "XXXXXX"
+ #define TEMP_FILE_LEN (sizeof(TEMP_FILE) - 1)
+ 
+-#if !defined(_WIN32) || defined(__CYGWIN__)
++#if !defined(_WIN32) || defined(__CYGWIN__) || defined(__DJGPP__)
+ 
+ /* Subroutine of choose_tmpdir.
+    If BASE is non-NULL, return it.
+@@ -106,7 +121,7 @@ choose_tmpdir (void)
+ {
+   if (!memoized_tmpdir)
+     {
+-#if !defined(_WIN32) || defined(__CYGWIN__)
++#if !defined(_WIN32) || defined(__CYGWIN__) || defined(__DJGPP__)
+       const char *base = 0;
+       char *tmpdir;
+       unsigned int len;
+@@ -142,7 +157,8 @@ choose_tmpdir (void)
+       len = strlen (base);
+       tmpdir = XNEWVEC (char, len + 2);
+       strcpy (tmpdir, base);
+-      tmpdir[len] = DIR_SEPARATOR;
++      if (len > 0 && !IS_DIR_SEPARATOR(tmpdir[len - 1]))
++        tmpdir[len] = DIR_SEPARATOR;
+       tmpdir[len+1] = '\0';
+       memoized_tmpdir = tmpdir;
+ #else /* defined(_WIN32) && !defined(__CYGWIN__) */
+diff --git a/libiberty/pex-common.c b/libiberty/pex-common.c
+index 30cd9040..552cebe1 100644
+--- a/libiberty/pex-common.c
++++ b/libiberty/pex-common.c
+@@ -117,7 +117,7 @@ temp_file (struct pex_obj *obj, int flags, char *name)
+               && strcmp (obj->tempbase + len - 6, "XXXXXX") == 0)
+             name = xstrdup (obj->tempbase);
+           else
+-            name = concat (obj->tempbase, "XXXXXX", NULL);
++            name = concat (obj->tempbase, "XXXXXX", (char *)NULL);
+ 
+           out = mkstemps (name, 0);
+           if (out < 0)
+@@ -138,7 +138,7 @@ temp_file (struct pex_obj *obj, int flags, char *name)
+       if (obj->tempbase == NULL)
+         name = make_temp_file (name);
+       else
+-        name = concat (obj->tempbase, name, NULL);
++        name = concat (obj->tempbase, name, (char *)NULL);
+     }
+ 
+   return name;
+@@ -222,7 +222,7 @@ pex_run_in_environment (struct pex_obj *obj, int flags, const char *executable,
+ 	out = STDOUT_FILE_NO;
+       else if ((flags & PEX_SUFFIX) != 0)
+ 	{
+-	  outname = concat (obj->tempbase, outname, NULL);
++	  outname = concat (obj->tempbase, outname, (char *)NULL);
+ 	  outname_allocated = 1;
+ 	}
+       obj->next_input = -1;
+diff --git a/libiberty/simple-object-coff.c b/libiberty/simple-object-coff.c
+index 104cd560..133e7ba9 100644
+--- a/libiberty/simple-object-coff.c
++++ b/libiberty/simple-object-coff.c
+@@ -651,13 +651,13 @@ simple_object_coff_write_to_file (simple_object_write *sobj, int descriptor,
+       while (new_offset > offset)
+ 	{
+ 	  unsigned char zeroes[16];
+-	  size_t write;
++	  size_t lib_write;
+ 
+ 	  memset (zeroes, 0, sizeof zeroes);
+-	  write = new_offset - offset;
+-	  if (write > sizeof zeroes)
+-	    write = sizeof zeroes;
+-	  if (!simple_object_internal_write (descriptor, offset, zeroes, write,
++	  lib_write = new_offset - offset;
++	  if (lib_write > sizeof zeroes)
++	    lib_write = sizeof zeroes;
++	  if (!simple_object_internal_write (descriptor, offset, zeroes, lib_write,
+ 					     &errmsg, err))
+ 	    return errmsg;
+ 	}
+diff --git a/libiberty/simple-object-elf.c b/libiberty/simple-object-elf.c
+index c62d5bba..b288afe2 100644
+--- a/libiberty/simple-object-elf.c
++++ b/libiberty/simple-object-elf.c
+@@ -1000,16 +1000,16 @@ simple_object_elf_write_to_file (simple_object_write *sobj, int descriptor,
+       while (new_sh_offset > sh_offset)
+ 	{
+ 	  unsigned char zeroes[16];
+-	  size_t write;
++	  size_t lib_write;
+ 
+ 	  memset (zeroes, 0, sizeof zeroes);
+-	  write = new_sh_offset - sh_offset;
+-	  if (write > sizeof zeroes)
+-	    write = sizeof zeroes;
++	  lib_write = new_sh_offset - sh_offset;
++	  if (lib_write > sizeof zeroes)
++	    lib_write = sizeof zeroes;
+ 	  if (!simple_object_internal_write (descriptor, sh_offset, zeroes,
+-					     write, &errmsg, err))
++					     lib_write, &errmsg, err))
+ 	    return errmsg;
+-	  sh_offset += write;
++	  sh_offset += lib_write;
+ 	}
+ 
+       sh_size = 0;
+diff --git a/libiberty/simple-object-mach-o.c b/libiberty/simple-object-mach-o.c
+index 14f53428..610e99d0 100644
+--- a/libiberty/simple-object-mach-o.c
++++ b/libiberty/simple-object-mach-o.c
+@@ -426,7 +426,7 @@ simple_object_mach_o_segment (simple_object_read *sobj, off_t offset,
+   unsigned int sections_index;
+   char *strtab;
+   char *nametab;
+-  unsigned char *index;
++  unsigned char *lib_index;
+   size_t strtab_size;
+   size_t nametab_size;
+   size_t index_size;
+@@ -546,13 +546,13 @@ simple_object_mach_o_segment (simple_object_read *sobj, off_t offset,
+       simple_object_mach_o_section_info (omr->is_big_endian, is_32,
+ 					 secdata + index_index * sechdrsize,
+ 					 &index_offset, &index_size);
+-      index = XNEWVEC (unsigned char, index_size);
++      lib_index = XNEWVEC (unsigned char, index_size);
+       if (!simple_object_internal_read (sobj->descriptor,
+ 					sobj->offset + index_offset,
+-					index, index_size,
++					lib_index, index_size,
+ 					errmsg, err))
+ 	{
+-	  XDELETEVEC (index);
++	  XDELETEVEC (lib_index);
+ 	  XDELETEVEC (nametab);
+ 	  XDELETEVEC (secdata);
+ 	  return 0;
+@@ -572,7 +572,7 @@ simple_object_mach_o_segment (simple_object_read *sobj, off_t offset,
+     }
+   else
+     {
+-      index = NULL;
++      lib_index = NULL;
+       index_size = 0;
+       nametab = NULL;
+       nametab_size = 0;
+@@ -595,7 +595,7 @@ simple_object_mach_o_segment (simple_object_read *sobj, off_t offset,
+ 					errmsg, err))
+ 	{
+ 	  XDELETEVEC (strtab);
+-	  XDELETEVEC (index);
++	  XDELETEVEC (lib_index);
+ 	  XDELETEVEC (nametab);
+ 	  XDELETEVEC (secdata);
+ 	  return 0;
+@@ -645,9 +645,9 @@ simple_object_mach_o_segment (simple_object_read *sobj, off_t offset,
+ 	      for (j = 0; j < n_wrapped_sects; ++j)
+ 		{
+ 		  unsigned int subsect_offset, subsect_length, name_offset;
+-		  subsect_offset = (*fetch_32) (index + 16 * j);
+-		  subsect_length = (*fetch_32) (index + 16 * j + 4);
+-		  name_offset = (*fetch_32) (index + 16 * j + 8);
++		  subsect_offset = (*fetch_32) (lib_index + 16 * j);
++		  subsect_length = (*fetch_32) (lib_index + 16 * j + 4);
++		  name_offset = (*fetch_32) (lib_index + 16 * j + 8);
+ 		  /* We don't need the name_length yet.  */
+ 
+ 		  secoffset = wrapper_sect_offset + subsect_offset;
+@@ -658,7 +658,7 @@ simple_object_mach_o_segment (simple_object_read *sobj, off_t offset,
+ 		    {
+ 		      *errmsg = NULL;
+ 		      *err = 0;
+-		      XDELETEVEC (index);
++		      XDELETEVEC (lib_index);
+ 		      XDELETEVEC (nametab);
+ 		      XDELETEVEC (strtab);
+ 		      XDELETEVEC (secdata);
+@@ -685,7 +685,7 @@ simple_object_mach_o_segment (simple_object_read *sobj, off_t offset,
+ 		    {
+ 		      *errmsg = "section name offset out of range";
+ 		      *err = 0;
+-		      XDELETEVEC (index);
++		      XDELETEVEC (lib_index);
+ 		      XDELETEVEC (nametab);
+ 		      XDELETEVEC (strtab);
+ 		      XDELETEVEC (secdata);
+@@ -717,7 +717,7 @@ simple_object_mach_o_segment (simple_object_read *sobj, off_t offset,
+ 	{
+ 	  *errmsg = NULL;
+ 	  *err = 0;
+-	  XDELETEVEC (index);
++	  XDELETEVEC (lib_index);
+ 	  XDELETEVEC (nametab);
+ 	  XDELETEVEC (strtab);
+ 	  XDELETEVEC (secdata);
+@@ -725,7 +725,7 @@ simple_object_mach_o_segment (simple_object_read *sobj, off_t offset,
+ 	}
+     }
+ 
+-  XDELETEVEC (index);
++  XDELETEVEC (lib_index);
+   XDELETEVEC (nametab);
+   XDELETEVEC (strtab);
+   XDELETEVEC (secdata);
+@@ -1045,7 +1045,7 @@ simple_object_mach_o_write_segment (simple_object_write *sobj, int descriptor,
+   unsigned char hdrbuf[sizeof (struct mach_o_segment_command_64)];
+   unsigned char *hdr;
+   size_t nsects_in;
+-  unsigned int *index;
++  unsigned int *lib_index;
+   char *snames;
+   unsigned int sect;
+ 
+@@ -1090,7 +1090,7 @@ simple_object_mach_o_write_segment (simple_object_write *sobj, int descriptor,
+ 	 since the size of a mach-o MH_OBJECT cannot exceed 4G owing to
+ 	 other constraints.  */
+ 
+-      index = XNEWVEC (unsigned int, nsects_in * 4);
++      lib_index = XNEWVEC (unsigned int, nsects_in * 4);
+ 
+       /* We now need to figure out the size of the names section.  This just
+ 	 stores the names as null-terminated c strings, packed without any
+@@ -1099,8 +1099,8 @@ simple_object_mach_o_write_segment (simple_object_write *sobj, int descriptor,
+       for (section = sobj->sections, sect = 0; section != NULL;
+ 	   section = section->next, sect++)
+ 	{
+-	  index[sect*4+2] = name_offset;
+-	  index[sect*4+3] = strlen (section->name) + 1;
++	  lib_index[sect*4+2] = name_offset;
++	  lib_index[sect*4+3] = strlen (section->name) + 1;
+ 	  name_offset += strlen (section->name) + 1;
+ 	}
+       snames = XNEWVEC (char, name_offset);
+@@ -1108,7 +1108,7 @@ simple_object_mach_o_write_segment (simple_object_write *sobj, int descriptor,
+   else
+     {
+       *nsects = nsects_in;
+-      index = NULL;
++      lib_index = NULL;
+       snames = NULL;
+     }
+ 
+@@ -1131,16 +1131,16 @@ simple_object_mach_o_write_segment (simple_object_write *sobj, int descriptor,
+       while (new_offset > offset)
+ 	{
+ 	  unsigned char zeroes[16];
+-	  size_t write;
++	  size_t lib_write;
+ 
+ 	  memset (zeroes, 0, sizeof zeroes);
+-	  write = new_offset - offset;
+-	  if (write > sizeof zeroes)
+-	    write = sizeof zeroes;
+-	  if (!simple_object_internal_write (descriptor, offset, zeroes, write,
++	  lib_write = new_offset - offset;
++	  if (lib_write > sizeof zeroes)
++	    lib_write = sizeof zeroes;
++	  if (!simple_object_internal_write (descriptor, offset, zeroes, lib_write,
+ 					     errmsg, err))
+ 	    return 0;
+-	  offset += write;
++	  offset += lib_write;
+ 	}
+ 
+       secsize = 0;
+@@ -1156,11 +1156,11 @@ simple_object_mach_o_write_segment (simple_object_write *sobj, int descriptor,
+ 
+       if (sobj->segment_name != NULL)
+ 	{
+-	  index[sect*4+0] = (unsigned int) offset;
+-	  index[sect*4+1] = secsize;
++	  lib_index[sect*4+0] = (unsigned int) offset;
++	  lib_index[sect*4+1] = secsize;
+ 	  /* Stash the section name in our table.  */
+-	  memcpy (snames + index[sect * 4 + 2], section->name,
+-		  index[sect * 4 + 3]);
++	  memcpy (snames + lib_index[sect * 4 + 2], section->name,
++		  lib_index[sect * 4 + 3]);
+ 	}
+       else
+ 	{
+@@ -1207,13 +1207,13 @@ simple_object_mach_o_write_segment (simple_object_write *sobj, int descriptor,
+       /* Account for any initial aligment - which becomes the alignment for this
+ 	 created section.  */
+ 
+-      secsize = (offset - index[0]);
++      secsize = (offset - lib_index[0]);
+       if (!simple_object_mach_o_write_section_header (sobj, descriptor,
+ 						      sechdr_offset,
+ 						      GNU_WRAPPER_SECTS,
+ 						      sobj->segment_name,
+ 						      0 /*secaddr*/,
+-						      secsize, index[0],
++						      secsize, lib_index[0],
+ 						      sobj->sections->align,
+ 						      errmsg, err))
+ 	return 0;
+@@ -1222,8 +1222,8 @@ simple_object_mach_o_write_segment (simple_object_write *sobj, int descriptor,
+ 	 section.  */
+ 
+       for (i = 1; i < nsects_in; ++i)
+-	index[4 * i] -= index[0];
+-      index[0] = 0;
++	lib_index[4 * i] -= lib_index[0];
++      lib_index[0] = 0;
+ 
+       sechdr_offset += sechdrsize;
+ 
+@@ -1268,11 +1268,11 @@ simple_object_mach_o_write_segment (simple_object_write *sobj, int descriptor,
+ 
+       /* ... and the content.. */
+       if (!simple_object_internal_write (descriptor, offset,
+-					 (const unsigned char *) index,
++					 (const unsigned char *) lib_index,
+ 					 nsects_in*16, errmsg, err))
+ 	return 0;
+ 
+-      XDELETEVEC (index);
++      XDELETEVEC (lib_index);
+       XDELETEVEC (snames);
+     }
+ 
+diff --git a/libiberty/simple-object-xcoff.c b/libiberty/simple-object-xcoff.c
+index d874de25..0846e5ea 100644
+--- a/libiberty/simple-object-xcoff.c
++++ b/libiberty/simple-object-xcoff.c
+@@ -907,13 +907,13 @@ simple_object_xcoff_write_to_file (simple_object_write *sobj, int descriptor,
+       while (new_offset > offset)
+ 	{
+ 	  unsigned char zeroes[16];
+-	  size_t write;
++	  size_t lib_write;
+ 
+ 	  memset (zeroes, 0, sizeof zeroes);
+-	  write = new_offset - offset;
+-	  if (write > sizeof zeroes)
+-	    write = sizeof zeroes;
+-	  if (!simple_object_internal_write (descriptor, offset, zeroes, write,
++	  lib_write = new_offset - offset;
++	  if (lib_write > sizeof zeroes)
++	    lib_write = sizeof zeroes;
++	  if (!simple_object_internal_write (descriptor, offset, zeroes, lib_write,
+ 					     &errmsg, err))
+ 	    return errmsg;
+ 	}
+diff --git a/libiberty/simple-object.c b/libiberty/simple-object.c
+index 92f5698d..a514e45d 100644
+--- a/libiberty/simple-object.c
++++ b/libiberty/simple-object.c
+@@ -260,9 +260,9 @@ simple_object_find_section (simple_object_read *sobj, const char *name,
+    ones.  */
+ 
+ static char *
+-handle_lto_debug_sections (const char *name, int rename)
++handle_lto_debug_sections (const char *name, int lib_rename)
+ {
+-  char *newname = rename ? XCNEWVEC (char, strlen (name) + 1)
++  char *newname = lib_rename ? XCNEWVEC (char, strlen (name) + 1)
+ 	  	         : xstrdup (name);
+ 
+   /* ???  So we can't use .gnu.lto_ prefixed sections as the assembler
+@@ -272,13 +272,13 @@ handle_lto_debug_sections (const char *name, int rename)
+   /* Also include corresponding reloc sections.  */
+   if (strncmp (name, ".rela", sizeof (".rela") - 1) == 0)
+     {
+-      if (rename)
++      if (lib_rename)
+         strncpy (newname, name, sizeof (".rela") - 1);
+       name += sizeof (".rela") - 1;
+     }
+   else if (strncmp (name, ".rel", sizeof (".rel") - 1) == 0)
+     {
+-      if (rename)
++      if (lib_rename)
+         strncpy (newname, name, sizeof (".rel") - 1);
+       name += sizeof (".rel") - 1;
+     }
+@@ -286,10 +286,10 @@ handle_lto_debug_sections (const char *name, int rename)
+      sections.  */
+   /* Copy LTO debug sections and rename them to their non-LTO name.  */
+   if (strncmp (name, ".gnu.debuglto_", sizeof (".gnu.debuglto_") - 1) == 0)
+-    return rename ? strcat (newname, name + sizeof (".gnu.debuglto_") - 1) : newname;
++    return lib_rename ? strcat (newname, name + sizeof (".gnu.debuglto_") - 1) : newname;
+   else if (strncmp (name, ".gnu.lto_.debug_",
+ 		    sizeof (".gnu.lto_.debug_") -1) == 0)
+-    return rename ? strcat (newname, name + sizeof (".gnu.lto_") - 1) : newname;
++    return lib_rename ? strcat (newname, name + sizeof (".gnu.lto_") - 1) : newname;
+   /* Copy over .note.GNU-stack section under the same name if present.  */
+   else if (strcmp (name, ".note.GNU-stack") == 0)
+     return strcpy (newname, name);
+@@ -328,7 +328,7 @@ handle_lto_debug_sections_norename (const char *name)
+ 
+ const char *
+ simple_object_copy_lto_debug_sections (simple_object_read *sobj,
+-				       const char *dest, int *err, int rename)
++				       const char *dest, int *err, int lib_rename)
+ {
+   const char *errmsg;
+   simple_object_write *dest_sobj;
+@@ -351,7 +351,7 @@ simple_object_copy_lto_debug_sections (simple_object_read *sobj,
+ 
+   errmsg = sobj->functions->copy_lto_debug_sections
+ 	 	 (sobj, dest_sobj,
+-		  rename ? handle_lto_debug_sections_rename
++		  lib_rename ? handle_lto_debug_sections_rename
+ 			 : handle_lto_debug_sections_norename,  err);
+   if (errmsg)
+     {
+diff --git a/libiberty/stack-limit.c b/libiberty/stack-limit.c
+index 390adf32..cc9ae1e8 100644
+--- a/libiberty/stack-limit.c
++++ b/libiberty/stack-limit.c
+@@ -51,7 +51,7 @@ stack_limit_increase (unsigned long pref ATTRIBUTE_UNUSED)
+   struct rlimit rlim;
+   if (getrlimit (RLIMIT_STACK, &rlim) == 0
+       && rlim.rlim_cur != RLIM_INFINITY
+-      && rlim.rlim_cur < pref
++      && rlim.rlim_cur < (rlim_t) pref
+       && (rlim.rlim_max == RLIM_INFINITY || rlim.rlim_cur < rlim.rlim_max))
+     {
+       rlim.rlim_cur = pref;
+diff --git a/opcodes/config.in b/opcodes/config.in
+index 55a80fd9..371bbe92 100644
+--- a/opcodes/config.in
++++ b/opcodes/config.in
+@@ -120,3 +120,40 @@
+ 
+ /* Define to 1 if you need to in order for `stat' and other things to work. */
+ #undef _POSIX_SOURCE
++
++#ifdef __DJGPP__
++# include <sys/version.h>
++
++# if defined (__GNUC__) && (__GNUC__ > 2 || (__GNUC__ == 2 && __GNUC_MINOR__ >= 8))
++#  define __gnuc_extension__  __extension__
++# else
++#  define __gnuc_extension__
++# endif
++
++# undef  IS_SLASH
++# define IS_SLASH(c)                ((c) == '/' || (c) == '\\')
++# undef  IS_DIRECTORY_SEPARATOR
++# define IS_DIRECTORY_SEPARATOR(c)  (IS_SLASH(c) || (c) == ':')
++
++# include <libc/unconst.h>
++# define STRIP_FULL_PATH_AND_EXTENSION(file_name)   \
++  (__gnuc_extension__                               \
++    ({                                              \
++       char *_dst, *_src;                           \
++       _dst = _src = unconst((file_name), char *);  \
++       while (*_src++)                              \
++         ;                                          \
++       while ((_src - _dst) && (*--_src != '.'))    \
++         ;                                          \
++       for (*_src = '\0'; (_src - _dst); _src--)    \
++         if (IS_DIRECTORY_SEPARATOR(*_src))         \
++           break;                                   \
++       if (_src - _dst)                             \
++         while ((*_dst++ = *++_src))                \
++           ;                                        \
++       (file_name);                                 \
++    })                                              \
++  )
++#else
++# define STRIP_FULL_PATH_AND_EXTENSION(file_name)  (file_name)
++#endif
