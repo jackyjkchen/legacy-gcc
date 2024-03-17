@@ -28,18 +28,6 @@ tc_is_live() {
 	[[ ${PV} == *9999* ]]
 }
 
-if tc_is_live ; then
-	EGIT_REPO_URI="https://gcc.gnu.org/git/gcc.git"
-	# Naming style:
-	# gcc-10.1.0_pre9999 -> gcc-10-branch
-	#  Note that the micro version is required or lots of stuff will break.
-	#  To checkout master set gcc_LIVE_BRANCH="master" in the ebuild before
-	#  inheriting this eclass.
-	EGIT_BRANCH="releases/${PN}-${PV%.?.?_pre9999}"
-	EGIT_BRANCH=${EGIT_BRANCH//./_}
-	inherit git-r3
-fi
-
 FEATURES=${FEATURES/multilib-strict/}
 
 #---->> globals <<----
@@ -444,9 +432,7 @@ fi
 # a live git tree, snapshot, or release tarball.
 if [[ ${TOOLCHAIN_SET_S} == yes ]] ; then
 	S=$(
-		if tc_is_live ; then
-			echo ${EGIT_CHECKOUT_DIR}
-		elif [[ -n ${SNAPSHOT} ]] ; then
+		if [[ -n ${SNAPSHOT} ]] ; then
 			echo ${WORKDIR}/gcc-${SNAPSHOT}
 		elif [[ ${PN} == "egcs" ]] ; then
 			echo ${WORKDIR}/${P}
@@ -598,10 +584,6 @@ git_init_src() {
 #---->> src_unpack <<----
 
 toolchain_src_unpack() {
-	if tc_is_live ; then
-		git-r3_src_unpack
-	fi
-
 	default_src_unpack
 	tc_version_is_at_least 11 || unpack_gcc_patchset
 	#tc_version_is_at_least 4.7 || git_init_src
@@ -619,10 +601,6 @@ toolchain_src_prepare() {
 	do_gcc_MINGW_patches
 	do_gcc_CYGWIN_patches
 	do_gcc_DJGPP_patches
-
-	if tc_is_live ; then
-		BRANDING_GCC_PKGVERSION="${BRANDING_GCC_PKGVERSION}, commit ${EGIT_VERSION}"
-	fi
 
 	eapply_user
 

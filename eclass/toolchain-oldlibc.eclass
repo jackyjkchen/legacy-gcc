@@ -1,11 +1,5 @@
-# Copyright 1999-2022 Gentoo Authors
+# Copyright 1999-2024 Gentoo Authors
 # Distributed under the terms of the GNU General Public License v2
-
-# @ECLASS: toolchain.eclass
-# @MAINTAINER:
-# Toolchain Ninjas <toolchain@gentoo.org>
-# @SUPPORTED_EAPIS: 7 8
-# @BLURB: Common code for sys-devel/gcc ebuilds
 
 case ${EAPI} in
 	7|8) ;;
