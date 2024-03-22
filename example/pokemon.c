@@ -98,7 +98,7 @@ static void print_attr_table() {
     }
 }
 
-int main(int argc, char *argv[]) {
+int main() {
     print_attr_table();
     return 0;
 }

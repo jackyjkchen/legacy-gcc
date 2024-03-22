@@ -7,38 +7,29 @@
 
 #include <linux/version.h>
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0)
-#define lk_access_ok(type, addr, size) access_ok((addr),(size))
-#else
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 0, 0)
 #error "Please use ia32_aout module in kernel tree when version < 5.0."
+#else
+#define lk_access_ok(type, addr, size) access_ok((addr),(size))
 #endif
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 0, 0)
-#include <uapi/linux/a.out.h>
-#ifndef __ASSEMBLY__
-#ifdef linux
-#include <asm/page.h>
-#if defined(__i386__) || defined(__mc68000__)
-#else
-#ifndef SEGMENT_SIZE
-#define SEGMENT_SIZE    PAGE_SIZE
-#endif
-#endif
-#endif
-#endif /*__ASSEMBLY__ */
-#else
-#include <linux/a.out.h>
-#endif
 #include <linux/module.h>
 #include <linux/mman.h>
 #include <linux/binfmts.h>
 #include <linux/perf_event.h>
 #include <asm/ia32.h>
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
-#include <asm/cacheflush.h>
+
+#include <uapi/linux/a.out.h>
+#include <asm/page.h>
+#if !(defined(__i386__) || defined(__mc68000__))
+#ifndef SEGMENT_SIZE
+#define SEGMENT_SIZE PAGE_SIZE
+#endif
 #endif
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
+#include <asm/cacheflush.h>
+
 static ssize_t lk_read_code(struct file *file, unsigned long addr, loff_t pos, size_t len)
 {
 	ssize_t res = kernel_read(file, (void __user *)addr, len, &pos);
@@ -48,6 +39,11 @@ static ssize_t lk_read_code(struct file *file, unsigned long addr, loff_t pos, s
 }
 #else
 #define lk_read_code read_code
+#endif
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
+#include <asm/gsseg.h>
+#define __USER32_DS			__USER_DS
 #endif
 
 static int load_aout_binary(struct linux_binprm *);
@@ -238,9 +234,6 @@ beyond_if:
 	(regs)->ss = __USER32_DS;
 	regs->r8 = regs->r9 = regs->r10 = regs->r11 =
 	regs->r12 = regs->r13 = regs->r14 = regs->r15 = 0;
-#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0)
-	set_fs(USER_DS);
-#endif
 	return 0;
 }
 
