@@ -1,0 +1,964 @@
+diff --git a/Makefile.in b/Makefile.in
+index b824e0a0c..0d62ce634 100644
+--- a/Makefile.in
++++ b/Makefile.in
+@@ -168,6 +168,7 @@ BUILD_EXPORTS = \
+ # built for the build system to override those in BASE_FLAGS_TO_PASS.
+ EXTRA_BUILD_FLAGS = \
+ 	CFLAGS="$(CFLAGS_FOR_BUILD)" \
++	CXXFLAGS="$(CXXFLAGS_FOR_BUILD)" \
+ 	LDFLAGS="$(LDFLAGS_FOR_BUILD)"
+ 
+ # This is the list of directories to built for the host system.
+@@ -733,6 +734,7 @@ BASE_FLAGS_TO_PASS = \
+ 	"CC_FOR_BUILD=$(CC_FOR_BUILD)" \
+ 	"CFLAGS_FOR_BUILD=$(CFLAGS_FOR_BUILD)" \
+ 	"CXX_FOR_BUILD=$(CXX_FOR_BUILD)" \
++	"CXXFLAGS_FOR_BUILD=$(CXXFLAGS_FOR_BUILD)" \
+ 	"EXPECT=$(EXPECT)" \
+ 	"FLEX=$(FLEX)" \
+ 	"INSTALL=$(INSTALL)" \
+diff --git a/Makefile.tpl b/Makefile.tpl
+index d0fa07005..b1f8377d8 100644
+--- a/Makefile.tpl
++++ b/Makefile.tpl
+@@ -171,6 +171,7 @@ BUILD_EXPORTS = \
+ # built for the build system to override those in BASE_FLAGS_TO_PASS.
+ EXTRA_BUILD_FLAGS = \
+ 	CFLAGS="$(CFLAGS_FOR_BUILD)" \
++	CXXFLAGS="$(CXXFLAGS_FOR_BUILD)" \
+ 	LDFLAGS="$(LDFLAGS_FOR_BUILD)"
+ 
+ # This is the list of directories to built for the host system.
+diff --git a/config/gcc-plugin.m4 b/config/gcc-plugin.m4
+index dd06a58cd..29ba842a3 100644
+--- a/config/gcc-plugin.m4
++++ b/config/gcc-plugin.m4
+@@ -32,7 +32,7 @@ AC_DEFUN([GCC_ENABLE_PLUGINS],
+      ;;
+      *)
+        if test x$build = x$host; then
+-	 export_sym_check="objdump${exeext} -T"
++	 export_sym_check="$ac_cv_prog_OBJDUMP -T"
+        elif test x$host = x$target; then
+ 	 export_sym_check="$gcc_cv_objdump -T"
+        else
+diff --git a/gcc/Makefile.in b/gcc/Makefile.in
+index f675e073e..3ea71d3fa 100644
+--- a/gcc/Makefile.in
++++ b/gcc/Makefile.in
+@@ -1019,10 +1019,10 @@ ALL_CXXFLAGS = $(T_CFLAGS) $(CFLAGS-$@) $(CXXFLAGS) $(INTERNAL_CFLAGS) \
+ ALL_CPPFLAGS = $(INCLUDES) $(CPPFLAGS)
+ 
+ # This is the variable to use when using $(COMPILER).
+-ALL_COMPILERFLAGS = $(ALL_CXXFLAGS)
++ALL_COMPILERFLAGS = $(NO_PIE_CFLAGS) $(ALL_CXXFLAGS)
+ 
+ # This is the variable to use when using $(LINKER).
+-ALL_LINKERFLAGS = $(ALL_CXXFLAGS)
++ALL_LINKERFLAGS = $(NO_PIE_CFLAGS) $(ALL_CXXFLAGS)
+ 
+ # Build and host support libraries.
+ 
+diff --git a/gcc/c-family/c-cppbuiltin.c b/gcc/c-family/c-cppbuiltin.c
+index 041cc6469..53bbc07b4 100644
+--- a/gcc/c-family/c-cppbuiltin.c
++++ b/gcc/c-family/c-cppbuiltin.c
+@@ -1337,6 +1337,12 @@ c_cpp_builtins (cpp_reader *pfile)
+   builtin_define_with_value ("__REGISTER_PREFIX__", REGISTER_PREFIX, 0);
+   builtin_define_with_value ("__USER_LABEL_PREFIX__", user_label_prefix, 0);
+ 
++#if !defined(ACCEL_COMPILER)
++  /* Fortify Source enabled by default for optimization levels > 0 */
++  if (optimize)
++    builtin_define_with_int_value ("_FORTIFY_SOURCE", 2);
++#endif
++
+   /* Misc.  */
+   if (flag_gnu89_inline)
+     cpp_define (pfile, "__GNUC_GNU_INLINE__");
+diff --git a/gcc/c-family/c.opt b/gcc/c-family/c.opt
+index 13b930d75..b80fe82fb 100644
+--- a/gcc/c-family/c.opt
++++ b/gcc/c-family/c.opt
+@@ -534,7 +534,7 @@ Warn about function calls with format strings that write past the end
+ of the destination region.  Same as -Wformat-overflow=1.
+ 
+ Wformat-security
+-C ObjC C++ ObjC++ Var(warn_format_security) Warning LangEnabledBy(C ObjC C++ ObjC++,Wformat=, warn_format >= 2, 0)
++C ObjC C++ ObjC++ Var(warn_format_security) Init(1) Warning LangEnabledBy(C ObjC C++ ObjC++,Wformat=, warn_format >= 2, 0)
+ Warn about possible security problems with format functions.
+ 
+ Wformat-signedness
+@@ -555,7 +555,7 @@ C ObjC C++ ObjC++ Var(warn_format_zero_length) Warning LangEnabledBy(C ObjC C++
+ Warn about zero-length formats.
+ 
+ Wformat=
+-C ObjC C++ ObjC++ Joined RejectNegative UInteger Var(warn_format) Warning LangEnabledBy(C ObjC C++ ObjC++,Wall, 1, 0)
++C ObjC C++ ObjC++ Joined RejectNegative UInteger Var(warn_format) Init(1) Warning LangEnabledBy(C ObjC C++ ObjC++,Wall, 1, 0)
+ Warn about printf/scanf/strftime/strfmon format string anomalies.
+ 
+ Wformat-overflow=
+diff --git a/gcc/common.opt b/gcc/common.opt
+index 437db8e86..f7cbad47b 100644
+--- a/gcc/common.opt
++++ b/gcc/common.opt
+@@ -738,7 +738,7 @@ Common Var(warn_system_headers) Warning
+ Do not suppress warnings from system headers.
+ 
+ Wtrampolines
+-Common Var(warn_trampolines) Warning
++Common Var(warn_trampolines) Init(1) Warning
+ Warn whenever a trampoline is generated.
+ 
+ Wtype-limits
+diff --git a/gcc/config.gcc b/gcc/config.gcc
+index 504b282db..61d9216e5 100644
+--- a/gcc/config.gcc
++++ b/gcc/config.gcc
+@@ -2824,8 +2824,6 @@ sh-*-elf* | sh[12346l]*-*-elf* | \
+ 	if test x${enable_incomplete_targets} = xyes ; then
+ 		tm_defines="$tm_defines SUPPORT_SH1=1 SUPPORT_SH2E=1 SUPPORT_SH4=1 SUPPORT_SH4_SINGLE=1 SUPPORT_SH2A=1 SUPPORT_SH2A_SINGLE=1"
+ 	fi
+-	tm_file="$tm_file ./sysroot-suffix.h"
+-	tmake_file="$tmake_file t-sysroot-suffix"
+ 	;;
+ sh-*-rtems*)
+ 	tmake_file="${tmake_file} sh/t-sh sh/t-rtems"
+diff --git a/gcc/config/alpha/alpha.h b/gcc/config/alpha/alpha.h
+index 460e83715..7c685e6be 100644
+--- a/gcc/config/alpha/alpha.h
++++ b/gcc/config/alpha/alpha.h
+@@ -94,6 +94,8 @@ along with GCC; see the file COPYING3.  If not see
+   while (0)
+ #endif
+ 
++#define CPP_SPEC "%{!no-ieee:-mieee}"
++
+ /* Run-time compilation parameters selecting different hardware subsets.  */
+ 
+ /* Which processor to schedule for. The cpu attribute defines a list that
+diff --git a/gcc/config/alpha/alpha.opt b/gcc/config/alpha/alpha.opt
+index 234e2f4df..998f85360 100644
+--- a/gcc/config/alpha/alpha.opt
++++ b/gcc/config/alpha/alpha.opt
+@@ -35,7 +35,7 @@ Target RejectNegative Mask(IEEE_CONFORMANT)
+ Request IEEE-conformant math library routines (OSF/1).
+ 
+ mieee
+-Target Report RejectNegative Mask(IEEE)
++Target Report Mask(IEEE)
+ Emit IEEE-conformant code, without inexact exceptions.
+ 
+ mieee-with-inexact
+diff --git a/gcc/config/ia64/linux.h b/gcc/config/ia64/linux.h
+index cf47145fb..9674874a2 100644
+--- a/gcc/config/ia64/linux.h
++++ b/gcc/config/ia64/linux.h
+@@ -23,6 +23,8 @@ a copy of the GCC Runtime Library Exception along with this program;
+ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+ <http://www.gnu.org/licenses/>.  */
+ 
++#define TARGET_ASM_FILE_END file_end_indicate_exec_stack
++
+ /* This is for -profile to use -lc_p instead of -lc.  */
+ #undef CC1_SPEC
+ #define CC1_SPEC "%{profile:-p} %{G*}"
+diff --git a/gcc/config/rs6000/ppc-asm.h b/gcc/config/rs6000/ppc-asm.h
+index 080be3f7b..1e207df46 100644
+--- a/gcc/config/rs6000/ppc-asm.h
++++ b/gcc/config/rs6000/ppc-asm.h
+@@ -375,7 +375,7 @@ GLUE(.L,name): \
+ #endif
+ #endif
+ 
+-#if defined __linux__ && !defined __powerpc64__
++#if defined __linux__
+ 	.section .note.GNU-stack
+ 	.previous
+ #endif
+diff --git a/gcc/configure b/gcc/configure
+index 5dab9142e..0615d91ca 100755
+--- a/gcc/configure
++++ b/gcc/configure
+@@ -29532,7 +29532,7 @@ fi
+      ;;
+      *)
+        if test x$build = x$host; then
+-	 export_sym_check="objdump${exeext} -T"
++	 export_sym_check="$ac_cv_prog_OBJDUMP -T"
+        elif test x$host = x$target; then
+ 	 export_sym_check="$gcc_cv_objdump -T"
+        else
+diff --git a/gcc/defaults.h b/gcc/defaults.h
+index 7ad92d920..e7e3c7dd7 100644
+--- a/gcc/defaults.h
++++ b/gcc/defaults.h
+@@ -1381,8 +1381,12 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+ /* Default value for flag_stack_protect when flag_stack_protect is initialized to -1:
+    --enable-default-ssp: Default flag_stack_protect to -fstack-protector-strong.
+    --disable-default-ssp: Default flag_stack_protect to 0.
++   Hardened: Default flag_stack_protect to -fstack-protector-all.
+  */
+ #ifdef ENABLE_DEFAULT_SSP
++# ifdef EXTRA_OPTIONS
++#  define DEFAULT_FLAG_SSP 2
++# endif
+ # ifndef DEFAULT_FLAG_SSP
+ #  define DEFAULT_FLAG_SSP 3
+ # endif
+diff --git a/gcc/gcc.c b/gcc/gcc.c
+index eced0d53a..38a3a246f 100644
+--- a/gcc/gcc.c
++++ b/gcc/gcc.c
+@@ -860,6 +860,12 @@ proper position among the other output files.  */
+ #define LINK_GCC_C_SEQUENCE_SPEC "%G %L %G"
+ #endif
+ 
++#ifdef ENABLE_DEFAULT_SSP
++#define NO_SSP_SPEC "%{nostdlib|nodefaultlibs|ffreestanding:-fno-stack-protector} "
++#else
++#define NO_SSP_SPEC ""
++#endif
++
+ #ifndef LINK_SSP_SPEC
+ #ifdef TARGET_LIBC_PROVIDES_SSP
+ #define LINK_SSP_SPEC "%{fstack-protector|fstack-protector-all" \
+@@ -871,6 +877,13 @@ proper position among the other output files.  */
+ #endif
+ #endif
+ 
++#define STACK_CHECK_SPEC ""
++#ifdef EXTRA_OPTIONS
++#define LINK_NOW_SPEC "%{!nonow:-z now} "
++#else
++#define LINK_NOW_SPEC ""
++#endif
++
+ #ifdef ENABLE_DEFAULT_PIE
+ #define PIE_SPEC		"!no-pie"
+ #define NO_FPIE1_SPEC		"fno-pie"
+@@ -1025,7 +1038,7 @@ proper position among the other output files.  */
+     %(linker) " \
+     LINK_PLUGIN_SPEC \
+    "%{flto|flto=*:%<fcompare-debug*} \
+-    %{flto} %{fno-lto} %{flto=*} %l " LINK_PIE_SPEC \
++    %{flto} %{fno-lto} %{flto=*} %l " LINK_PIE_SPEC LINK_NOW_SPEC \
+    "%{fuse-ld=*:-fuse-ld=%*} " LINK_COMPRESS_DEBUG_SPEC \
+    "%X %{o*} %{e*} %{N} %{n} %{r}\
+     %{s} %{t} %{u*} %{z} %{Z} %{!nostdlib:%{!nostartfiles:%S}} \
+@@ -1064,7 +1077,11 @@ proper position among the other output files.  */
+ 
+ static const char *asm_debug = ASM_DEBUG_SPEC;
+ static const char *cpp_spec = CPP_SPEC;
++#ifdef EXTRA_OPTIONS
++static const char *cc1_spec = CC1_SPEC STACK_CHECK_SPEC;
++#else
+ static const char *cc1_spec = CC1_SPEC;
++#endif
+ static const char *cc1plus_spec = CC1PLUS_SPEC;
+ static const char *link_gcc_c_sequence_spec = LINK_GCC_C_SEQUENCE_SPEC;
+ static const char *link_ssp_spec = LINK_SSP_SPEC;
+@@ -1144,7 +1161,7 @@ static const char *cc1_options =
+  %{-version:--version}\
+  %{-help=*:--help=%*}\
+  %{!fsyntax-only:%{S:%W{o*}%{!o*:-o %b.s}}}\
+- %{fsyntax-only:-o %j} %{-param*}\
++ %{fsyntax-only:-o %j} %{-param*} " NO_SSP_SPEC "\
+  %{coverage:-fprofile-arcs -ftest-coverage}\
+  %{fprofile-arcs|fprofile-generate*|coverage:\
+    %{!fprofile-update=single:\
+diff --git a/gcc/ipa.c b/gcc/ipa.c
+index a74f28c2a..04f39e61e 100644
+--- a/gcc/ipa.c
++++ b/gcc/ipa.c
+@@ -900,7 +900,9 @@ make_pass_ipa_free_inline_summary (gcc::context *ctxt)
+    be produced. */
+ 
+ static void
+-cgraph_build_static_cdtor_1 (char which, tree body, int priority, bool final)
++cgraph_build_static_cdtor_1 (char which, tree body, int priority, bool final,
++			     tree optimization,
++			     tree target)
+ {
+   static int counter = 0;
+   char which_buf[16];
+@@ -931,6 +933,8 @@ cgraph_build_static_cdtor_1 (char which, tree body, int priority, bool final)
+ 
+   TREE_STATIC (decl) = 1;
+   TREE_USED (decl) = 1;
++  DECL_FUNCTION_SPECIFIC_OPTIMIZATION (decl) = optimization;
++  DECL_FUNCTION_SPECIFIC_TARGET (decl) = target;
+   DECL_ARTIFICIAL (decl) = 1;
+   DECL_IGNORED_P (decl) = 1;
+   DECL_NO_INSTRUMENT_FUNCTION_ENTRY_EXIT (decl) = 1;
+@@ -995,7 +999,7 @@ cgraph_build_static_cdtor_1 (char which, tree body, int priority, bool final)
+ void
+ cgraph_build_static_cdtor (char which, tree body, int priority)
+ {
+-  cgraph_build_static_cdtor_1 (which, body, priority, false);
++  cgraph_build_static_cdtor_1 (which, body, priority, false, NULL, NULL);
+ }
+ 
+ /* When target does not have ctors and dtors, we call all constructor
+@@ -1077,7 +1081,9 @@ build_cdtor (bool ctor_p, const vec<tree> &cdtors)
+       gcc_assert (body != NULL_TREE);
+       /* Generate a function to call all the function of like
+ 	 priority.  */
+-      cgraph_build_static_cdtor_1 (ctor_p ? 'I' : 'D', body, priority, true);
++      cgraph_build_static_cdtor_1 (ctor_p ? 'I' : 'D', body, priority, true,
++				   DECL_FUNCTION_SPECIFIC_OPTIMIZATION (cdtors[0]),
++				   DECL_FUNCTION_SPECIFIC_TARGET (cdtors[0]));
+     }
+ }
+ 
+diff --git a/gcc/opts.c b/gcc/opts.c
+index b98a0ca73..fbb11cd56 100644
+--- a/gcc/opts.c
++++ b/gcc/opts.c
+@@ -496,7 +496,9 @@ static const struct default_options default_options_table[] =
+     { OPT_LEVELS_2_PLUS, OPT_fschedule_insns2, NULL, 1 },
+ #endif
+     { OPT_LEVELS_2_PLUS, OPT_fstrict_aliasing, NULL, 1 },
++#ifndef EXTRA_OPTIONS
+     { OPT_LEVELS_2_PLUS, OPT_fstrict_overflow, NULL, 1 },
++#endif
+     { OPT_LEVELS_2_PLUS_SPEED_ONLY, OPT_freorder_blocks_algorithm_, NULL,
+       REORDER_BLOCKS_ALGORITHM_STC },
+     { OPT_LEVELS_2_PLUS, OPT_freorder_functions, NULL, 1 },
+diff --git a/gcc/params.def b/gcc/params.def
+index 9c83b0af3..badeb5bf9 100644
+--- a/gcc/params.def
++++ b/gcc/params.def
+@@ -696,7 +696,7 @@ DEFPARAM (PARAM_INTEGER_SHARE_LIMIT,
+ DEFPARAM (PARAM_SSP_BUFFER_SIZE,
+ 	  "ssp-buffer-size",
+ 	  "The lower bound for a buffer to be considered for stack smashing protection.",
+-	  8, 1, 0)
++	  4, 1, 0)
+ 
+ DEFPARAM (PARAM_MIN_SIZE_FOR_STACK_SHARING,
+ 	  "min-size-for-stack-sharing",
+diff --git a/include/libiberty.h b/include/libiberty.h
+index 7a796124b..66cce6eae 100644
+--- a/include/libiberty.h
++++ b/include/libiberty.h
+@@ -636,8 +636,11 @@ extern int pwait (int, int *, int);
+ /* Like sprintf but provides a pointer to malloc'd storage, which must
+    be freed by the caller.  */
+ 
++/* asprintf may be declared as a macro by glibc with __USE_FORTIFY_LEVEL.  */
++#ifndef asprintf
+ extern int asprintf (char **, const char *, ...) ATTRIBUTE_PRINTF_2;
+ #endif
++#endif
+ 
+ /* Like asprintf but allocates memory without fail. This works like
+    xmalloc.  */
+diff --git a/libatomic/Makefile.in b/libatomic/Makefile.in
+index f6eeab312..3f06a8940 100644
+--- a/libatomic/Makefile.in
++++ b/libatomic/Makefile.in
+@@ -331,7 +331,8 @@ PAT_N = $(word 2,$(PAT_SPLIT))
+ PAT_S = $(word 3,$(PAT_SPLIT))
+ IFUNC_DEF = -DIFUNC_ALT=$(PAT_S)
+ IFUNC_OPT = $(word $(PAT_S),$(IFUNC_OPTIONS))
+-M_DEPS = -MT $@ -MD -MP -MF $(DEPDIR)/$(@F).Ppo
++@AMDEP_TRUE@M_DEPS = -MT $@ -MD -MP -MF $(DEPDIR)/$(@F).Ppo
++@AMDEP_FALSE@M_DEPS =
+ M_SIZE = -DN=$(PAT_N)
+ M_IFUNC = $(if $(PAT_S),$(IFUNC_DEF) $(IFUNC_OPT))
+ M_FILE = $(PAT_BASE)_n.c
+diff --git a/libatomic/configure b/libatomic/configure
+index 2ae9b8d40..4b05ee403 100755
+--- a/libatomic/configure
++++ b/libatomic/configure
+@@ -15221,7 +15221,7 @@ rm -f confcache
+ 
+ # Add -Wall -Werror if we are using GCC.
+ if test "x$GCC" = "xyes"; then
+-  XCFLAGS="$XCFLAGS -Wall -Werror"
++  XCFLAGS="$XCFLAGS -Wall"
+ fi
+ 
+ XCFLAGS="$XCFLAGS $XPCFLAGS"
+diff --git a/libatomic/configure.ac b/libatomic/configure.ac
+index 023f1727b..3dfae0197 100644
+--- a/libatomic/configure.ac
++++ b/libatomic/configure.ac
+@@ -235,7 +235,7 @@ AC_CACHE_SAVE
+ 
+ # Add -Wall -Werror if we are using GCC.
+ if test "x$GCC" = "xyes"; then
+-  XCFLAGS="$XCFLAGS -Wall -Werror"
++  XCFLAGS="$XCFLAGS -Wall"
+ fi
+ 
+ XCFLAGS="$XCFLAGS $XPCFLAGS"
+diff --git a/libbacktrace/configure b/libbacktrace/configure
+index ee90bc6de..8c3f4baf8 100755
+--- a/libbacktrace/configure
++++ b/libbacktrace/configure
+@@ -11632,7 +11632,7 @@ ac_compiler_gnu=$ac_cv_c_compiler_gnu
+ 
+ 
+ if test -n "${with_target_subdir}"; then
+-  WARN_FLAGS="$WARN_FLAGS -Werror"
++  WARN_FLAGS="$WARN_FLAGS"
+ fi
+ 
+ 
+diff --git a/libbacktrace/configure.ac b/libbacktrace/configure.ac
+index f9cad2144..7fff80a2c 100644
+--- a/libbacktrace/configure.ac
++++ b/libbacktrace/configure.ac
+@@ -136,7 +136,7 @@ ACX_PROG_CC_WARNING_OPTS([-W -Wall -Wwrite-strings -Wstrict-prototypes \
+ 			  [WARN_FLAGS])
+ 
+ if test -n "${with_target_subdir}"; then
+-  WARN_FLAGS="$WARN_FLAGS -Werror"
++  WARN_FLAGS="$WARN_FLAGS"
+ fi
+ 
+ AC_SUBST(WARN_FLAGS)
+diff --git a/libcc1/configure b/libcc1/configure
+index 962d34d92..635d6bb43 100755
+--- a/libcc1/configure
++++ b/libcc1/configure
+@@ -14565,7 +14565,7 @@ fi
+      ;;
+      *)
+        if test x$build = x$host; then
+-	 export_sym_check="objdump${exeext} -T"
++	 export_sym_check="$ac_cv_prog_OBJDUMP -T"
+        elif test x$host = x$target; then
+ 	 export_sym_check="$gcc_cv_objdump -T"
+        else
+diff --git a/libcpp/Makefile.in b/libcpp/Makefile.in
+index 0bd3787c2..6c9a8845d 100644
+--- a/libcpp/Makefile.in
++++ b/libcpp/Makefile.in
+@@ -25,7 +25,7 @@ srcdir = @srcdir@
+ top_builddir = .
+ VPATH = @srcdir@
+ INSTALL = @INSTALL@
+-AR = ar
++AR = @AR@
+ ARFLAGS = cru
+ ACLOCAL = @ACLOCAL@
+ AUTOCONF = @AUTOCONF@
+diff --git a/libcpp/configure b/libcpp/configure
+index 12c1907ed..e718015e3 100755
+--- a/libcpp/configure
++++ b/libcpp/configure
+@@ -626,6 +626,7 @@ ACLOCAL
+ EGREP
+ GREP
+ CPP
++AR
+ RANLIB
+ ac_ct_CXX
+ CXXFLAGS
+@@ -1006,6 +1007,7 @@ do
+   | -silent | --silent | --silen | --sile | --sil)
+     silent=yes ;;
+ 
++
+   -sbindir | --sbindir | --sbindi | --sbind | --sbin | --sbi | --sb)
+     ac_prev=sbindir ;;
+   -sbindir=* | --sbindir=* | --sbindi=* | --sbind=* | --sbin=* \
+@@ -3942,6 +3944,98 @@ else
+   RANLIB="$ac_cv_prog_RANLIB"
+ fi
+ 
++if test -n "$ac_tool_prefix"; then
++  # Extract the first word of "${ac_tool_prefix}ar", so it can be a program name with args.
++set dummy ${ac_tool_prefix}ar; ac_word=$2
++{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
++$as_echo_n "checking for $ac_word... " >&6; }
++if ${ac_cv_prog_AR+:} false; then :
++  $as_echo_n "(cached) " >&6
++else
++  if test -n "$AR"; then
++  ac_cv_prog_AR="$AR" # Let the user override the test.
++else
++as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
++for as_dir in $PATH
++do
++  IFS=$as_save_IFS
++  test -z "$as_dir" && as_dir=.
++    for ac_exec_ext in '' $ac_executable_extensions; do
++  if as_fn_executable_p "$as_dir/$ac_word$ac_exec_ext"; then
++    ac_cv_prog_AR="${ac_tool_prefix}ar"
++    $as_echo "$as_me:${as_lineno-$LINENO}: found $as_dir/$ac_word$ac_exec_ext" >&5
++    break 2
++  fi
++done
++  done
++IFS=$as_save_IFS
++
++fi
++fi
++AR=$ac_cv_prog_AR
++if test -n "$AR"; then
++  { $as_echo "$as_me:${as_lineno-$LINENO}: result: $AR" >&5
++$as_echo "$AR" >&6; }
++else
++  { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
++$as_echo "no" >&6; }
++fi
++
++
++fi
++if test -z "$ac_cv_prog_AR"; then
++  ac_ct_AR=$AR
++  # Extract the first word of "ar", so it can be a program name with args.
++set dummy ar; ac_word=$2
++{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
++$as_echo_n "checking for $ac_word... " >&6; }
++if ${ac_cv_prog_ac_ct_AR+:} false; then :
++  $as_echo_n "(cached) " >&6
++else
++  if test -n "$ac_ct_AR"; then
++  ac_cv_prog_ac_ct_AR="$ac_ct_AR" # Let the user override the test.
++else
++as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
++for as_dir in $PATH
++do
++  IFS=$as_save_IFS
++  test -z "$as_dir" && as_dir=.
++    for ac_exec_ext in '' $ac_executable_extensions; do
++  if as_fn_executable_p "$as_dir/$ac_word$ac_exec_ext"; then
++    ac_cv_prog_ac_ct_AR="ar"
++    $as_echo "$as_me:${as_lineno-$LINENO}: found $as_dir/$ac_word$ac_exec_ext" >&5
++    break 2
++  fi
++done
++  done
++IFS=$as_save_IFS
++
++fi
++fi
++ac_ct_AR=$ac_cv_prog_ac_ct_AR
++if test -n "$ac_ct_AR"; then
++  { $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_ct_AR" >&5
++$as_echo "$ac_ct_AR" >&6; }
++else
++  { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
++$as_echo "no" >&6; }
++fi
++
++  if test "x$ac_ct_AR" = x; then
++    AR=""
++  else
++    case $cross_compiling:$ac_tool_warned in
++yes:)
++{ $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: using cross tools not prefixed with host triplet" >&5
++$as_echo "$as_me: WARNING: using cross tools not prefixed with host triplet" >&2;}
++ac_tool_warned=yes ;;
++esac
++    AR=$ac_ct_AR
++  fi
++else
++  AR="$ac_cv_prog_AR"
++fi
++
+ 
+ 
+ ac_ext=c
+diff --git a/libcpp/configure.ac b/libcpp/configure.ac
+index d0a59dc3e..ecd6fc9c2 100644
+--- a/libcpp/configure.ac
++++ b/libcpp/configure.ac
+@@ -13,6 +13,7 @@ AC_PROG_INSTALL
+ AC_PROG_CC
+ AC_PROG_CXX
+ AC_PROG_RANLIB
++AC_CHECK_TOOL(AR, ar)
+ 
+ AC_USE_SYSTEM_EXTENSIONS
+ AC_SYS_LARGEFILE
+diff --git a/libgcc/Makefile.in b/libgcc/Makefile.in
+index a1a392de8..ec47f0dff 100644
+--- a/libgcc/Makefile.in
++++ b/libgcc/Makefile.in
+@@ -242,7 +242,7 @@ endif
+ LIBGCC2_DEBUG_CFLAGS = -g
+ LIBGCC2_CFLAGS = -O2 $(LIBGCC2_INCLUDES) $(GCC_CFLAGS) $(HOST_LIBGCC2_CFLAGS) \
+ 		 $(LIBGCC2_DEBUG_CFLAGS) -DIN_LIBGCC2 \
+-		 -fbuilding-libgcc -fno-stack-protector \
++		 -fbuilding-libgcc -fno-stack-protector -fstack-check=no \
+ 		 $(INHIBIT_LIBC_CFLAGS)
+ 
+ # Additional options to use when compiling libgcc2.a.
+@@ -294,7 +294,7 @@ CRTSTUFF_CFLAGS = -O2 $(GCC_CFLAGS) $(INCLUDES) $(MULTILIB_CFLAGS) -g0 \
+   $(NO_PIE_CFLAGS) -finhibit-size-directive -fno-inline -fno-exceptions \
+   -fno-zero-initialized-in-bss -fno-toplevel-reorder -fno-tree-vectorize \
+   -fbuilding-libgcc -fno-stack-protector $(FORCE_EXPLICIT_EH_REGISTRY) \
+-  $(INHIBIT_LIBC_CFLAGS)
++  -fstack-check=no $(INHIBIT_LIBC_CFLAGS)
+ 
+ # Extra flags to use when compiling crt{begin,end}.o.
+ CRTSTUFF_T_CFLAGS =
+diff --git a/libgcc/config/ia64/crtbegin.S b/libgcc/config/ia64/crtbegin.S
+index 1a8485529..1b6b32076 100644
+--- a/libgcc/config/ia64/crtbegin.S
++++ b/libgcc/config/ia64/crtbegin.S
+@@ -185,3 +185,7 @@ __do_global_dtors_aux:
+ .weak __cxa_finalize
+ #endif
+ .weak _Jv_RegisterClasses
++
++#ifdef __linux__
++.section .note.GNU-stack; .previous
++#endif
+diff --git a/libgcc/config/ia64/crtend.S b/libgcc/config/ia64/crtend.S
+index 019297b80..718b9dd50 100644
+--- a/libgcc/config/ia64/crtend.S
++++ b/libgcc/config/ia64/crtend.S
+@@ -114,3 +114,6 @@ __do_global_ctors_aux:
+ 
+ 	br.ret.sptk.many rp
+ 	.endp __do_global_ctors_aux
++#ifdef __linux__
++.section .note.GNU-stack; .previous
++#endif
+diff --git a/libgcc/config/ia64/crti.S b/libgcc/config/ia64/crti.S
+index 9a580ba82..fd4218cb5 100644
+--- a/libgcc/config/ia64/crti.S
++++ b/libgcc/config/ia64/crti.S
+@@ -49,5 +49,8 @@ _fini:
+ 	.save rp, r33
+ 	mov	r33 = b0
+ 	.body
++#ifdef __linux__
++.section .note.GNU-stack; .previous
++#endif
+ 
+ # end of crti.S
+diff --git a/libgcc/config/ia64/crtn.S b/libgcc/config/ia64/crtn.S
+index 17b57a938..541934647 100644
+--- a/libgcc/config/ia64/crtn.S
++++ b/libgcc/config/ia64/crtn.S
+@@ -39,5 +39,8 @@
+ 	.restore sp
+ 	mov	r12 = r35
+ 	br.ret.sptk.many b0
++#ifdef __linux__
++.section .note.GNU-stack; .previous
++#endif
+ 
+ # end of crtn.S
+diff --git a/libgcc/config/ia64/lib1funcs.S b/libgcc/config/ia64/lib1funcs.S
+index 85b7c48e3..f5694a60d 100644
+--- a/libgcc/config/ia64/lib1funcs.S
++++ b/libgcc/config/ia64/lib1funcs.S
+@@ -793,3 +793,6 @@ __floattitf:
+ 	.endp __floattitf
+ #endif
+ #endif
++#ifdef __linux__
++.section .note.GNU-stack; .previous
++#endif
+diff --git a/libgfortran/configure b/libgfortran/configure
+index 1db8f5f52..52941ab67 100755
+--- a/libgfortran/configure
++++ b/libgfortran/configure
+@@ -5775,7 +5775,7 @@ fi
+ 
+ # Add -Wall -fno-repack-arrays -fno-underscoring if we are using GCC.
+ if test "x$GCC" = "xyes"; then
+-  AM_FCFLAGS="-I . -Wall -Werror -fimplicit-none -fno-repack-arrays -fno-underscoring"
++  AM_FCFLAGS="-I . -Wall -fimplicit-none -fno-repack-arrays -fno-underscoring"
+   ## We like to use C11 and C99 routines when available.  This makes
+   ## sure that
+   ## __STDC_VERSION__ is set such that libc includes make them available.
+diff --git a/libgfortran/configure.ac b/libgfortran/configure.ac
+index 37b12d299..367a24784 100644
+--- a/libgfortran/configure.ac
++++ b/libgfortran/configure.ac
+@@ -138,7 +138,7 @@ AM_PROG_CC_C_O
+ 
+ # Add -Wall -fno-repack-arrays -fno-underscoring if we are using GCC.
+ if test "x$GCC" = "xyes"; then
+-  AM_FCFLAGS="-I . -Wall -Werror -fimplicit-none -fno-repack-arrays -fno-underscoring"
++  AM_FCFLAGS="-I . -Wall -fimplicit-none -fno-repack-arrays -fno-underscoring"
+   ## We like to use C11 and C99 routines when available.  This makes
+   ## sure that
+   ## __STDC_VERSION__ is set such that libc includes make them available.
+diff --git a/libgomp/configure b/libgomp/configure
+index 06166c661..878df750c 100755
+--- a/libgomp/configure
++++ b/libgomp/configure
+@@ -4343,7 +4343,7 @@ save_CFLAGS="$CFLAGS"
+ 
+ # Add -Wall -Werror if we are using GCC.
+ if test "x$GCC" = "xyes"; then
+-  XCFLAGS="$XCFLAGS -Wall -Werror"
++  XCFLAGS="$XCFLAGS -Wall"
+ fi
+ 
+ # Find other programs we need.
+diff --git a/libgomp/configure.ac b/libgomp/configure.ac
+index a42d4f08b..a58c03469 100644
+--- a/libgomp/configure.ac
++++ b/libgomp/configure.ac
+@@ -115,7 +115,7 @@ save_CFLAGS="$CFLAGS"
+ 
+ # Add -Wall -Werror if we are using GCC.
+ if test "x$GCC" = "xyes"; then
+-  XCFLAGS="$XCFLAGS -Wall -Werror"
++  XCFLAGS="$XCFLAGS -Wall"
+ fi
+ 
+ # Find other programs we need.
+diff --git a/libiberty/Makefile.in b/libiberty/Makefile.in
+index 25cfa29ad..556c06872 100644
+--- a/libiberty/Makefile.in
++++ b/libiberty/Makefile.in
+@@ -261,6 +261,7 @@ $(TARGETLIB): $(REQUIRED_OFILES) $(EXTRA_OFILES) $(LIBOBJS)
+ 	  $(AR) $(AR_FLAGS) $(TARGETLIB) \
+ 	    $(REQUIRED_OFILES) $(EXTRA_OFILES) $(LIBOBJS); \
+ 	  $(RANLIB) $(TARGETLIB); \
++	  cp $(TARGETLIB) ../ ; \
+ 	  cd ..; \
+ 	else true; fi
+ 
+diff --git a/libitm/configure b/libitm/configure
+index 96c494d4a..c85fa8120 100644
+--- a/libitm/configure
++++ b/libitm/configure
+@@ -17581,7 +17581,7 @@ rm -f confcache
+ 
+ # Add -Wall -Werror if we are using GCC.
+ if test "x$GCC" = "xyes"; then
+-  XCFLAGS="$XCFLAGS -Wall -Werror"
++  XCFLAGS="$XCFLAGS -Wall"
+ fi
+ 
+ XCFLAGS="$XCFLAGS $XPCFLAGS"
+diff --git a/libitm/configure.ac b/libitm/configure.ac
+index c5ecd394a..4e738c71a 100644
+--- a/libitm/configure.ac
++++ b/libitm/configure.ac
+@@ -255,7 +255,7 @@ AC_CACHE_SAVE
+ 
+ # Add -Wall -Werror if we are using GCC.
+ if test "x$GCC" = "xyes"; then
+-  XCFLAGS="$XCFLAGS -Wall -Werror"
++  XCFLAGS="$XCFLAGS -Wall"
+ fi
+ 
+ XCFLAGS="$XCFLAGS $XPCFLAGS"
+diff --git a/libsanitizer/libbacktrace/Makefile.am b/libsanitizer/libbacktrace/Makefile.am
+index 34bfb1eef..e784bb5d3 100644
+--- a/libsanitizer/libbacktrace/Makefile.am
++++ b/libsanitizer/libbacktrace/Makefile.am
+@@ -35,7 +35,7 @@ AM_CPPFLAGS = -I $(top_srcdir)/../include -I $(top_srcdir)/../libgcc \
+ 	-I ../../libgcc -I .. -I $(top_srcdir) -I $(top_srcdir)/../libbacktrace
+ 
+ WARN_FLAGS = -W -Wall -Wwrite-strings -Wmissing-format-attribute \
+-	     -Wcast-qual -Werror
++	     -Wcast-qual
+ C_WARN_FLAGS = $(WARN_FLAGS) -Wstrict-prototypes -Wmissing-prototypes -Wold-style-definition
+ CXX_WARN_FLAGS = $(WARN_FLAGS) -Wno-unused-parameter
+ AM_CFLAGS = $(C_WARN_FLAGS)
+diff --git a/libsanitizer/libbacktrace/Makefile.in b/libsanitizer/libbacktrace/Makefile.in
+index dff04cfa3..38a3d1fce 100644
+--- a/libsanitizer/libbacktrace/Makefile.in
++++ b/libsanitizer/libbacktrace/Makefile.in
+@@ -291,7 +291,7 @@ AM_CPPFLAGS = -I $(top_srcdir)/../include -I $(top_srcdir)/../libgcc \
+ 	-I ../../libgcc -I .. -I $(top_srcdir) -I $(top_srcdir)/../libbacktrace
+ 
+ WARN_FLAGS = -W -Wall -Wwrite-strings -Wmissing-format-attribute \
+-	     -Wcast-qual -Werror
++	     -Wcast-qual
+ 
+ C_WARN_FLAGS = $(WARN_FLAGS) -Wstrict-prototypes -Wmissing-prototypes -Wold-style-definition
+ CXX_WARN_FLAGS = $(WARN_FLAGS) -Wno-unused-parameter
+diff --git a/libsanitizer/sanitizer_common/sanitizer_common_interceptors_ioctl.inc b/libsanitizer/sanitizer_common/sanitizer_common_interceptors_ioctl.inc
+index a68534c5a..85ab53e74 100755
+--- a/libsanitizer/sanitizer_common/sanitizer_common_interceptors_ioctl.inc
++++ b/libsanitizer/sanitizer_common/sanitizer_common_interceptors_ioctl.inc
+@@ -361,15 +361,6 @@ static void ioctl_table_fill() {
+ 
+ #if SANITIZER_LINUX && !SANITIZER_ANDROID
+   // _(SIOCDEVPLIP, WRITE, struct_ifreq_sz); // the same as EQL_ENSLAVE
+-  _(CYGETDEFTHRESH, WRITE, sizeof(int));
+-  _(CYGETDEFTIMEOUT, WRITE, sizeof(int));
+-  _(CYGETMON, WRITE, struct_cyclades_monitor_sz);
+-  _(CYGETTHRESH, WRITE, sizeof(int));
+-  _(CYGETTIMEOUT, WRITE, sizeof(int));
+-  _(CYSETDEFTHRESH, NONE, 0);
+-  _(CYSETDEFTIMEOUT, NONE, 0);
+-  _(CYSETTHRESH, NONE, 0);
+-  _(CYSETTIMEOUT, NONE, 0);
+   _(EQL_EMANCIPATE, WRITE, struct_ifreq_sz);
+   _(EQL_ENSLAVE, WRITE, struct_ifreq_sz);
+   _(EQL_GETMASTRCFG, WRITE, struct_ifreq_sz);
+diff --git a/libsanitizer/sanitizer_common/sanitizer_platform_limits_posix.cc b/libsanitizer/sanitizer_common/sanitizer_platform_limits_posix.cc
+index 97eae3fc7..86809b5fb 100644
+--- a/libsanitizer/sanitizer_common/sanitizer_platform_limits_posix.cc
++++ b/libsanitizer/sanitizer_common/sanitizer_platform_limits_posix.cc
+@@ -154,7 +154,6 @@ typedef struct user_fpregs elf_fpregset_t;
+ # include <sys/procfs.h>
+ #endif
+ #include <sys/user.h>
+-#include <linux/cyclades.h>
+ #include <linux/if_eql.h>
+ #include <linux/if_plip.h>
+ #include <linux/lp.h>
+@@ -454,7 +453,6 @@ unsigned struct_ElfW_Phdr_sz = sizeof(Elf_Phdr);
+ 
+ #if SANITIZER_LINUX && !SANITIZER_ANDROID
+   unsigned struct_ax25_parms_struct_sz = sizeof(struct ax25_parms_struct);
+-  unsigned struct_cyclades_monitor_sz = sizeof(struct cyclades_monitor);
+ #if EV_VERSION > (0x010000)
+   unsigned struct_input_keymap_entry_sz = sizeof(struct input_keymap_entry);
+ #else
+@@ -821,15 +819,6 @@ unsigned struct_ElfW_Phdr_sz = sizeof(Elf_Phdr);
+ #endif // SANITIZER_LINUX || SANITIZER_FREEBSD
+ 
+ #if SANITIZER_LINUX && !SANITIZER_ANDROID
+-  unsigned IOCTL_CYGETDEFTHRESH = CYGETDEFTHRESH;
+-  unsigned IOCTL_CYGETDEFTIMEOUT = CYGETDEFTIMEOUT;
+-  unsigned IOCTL_CYGETMON = CYGETMON;
+-  unsigned IOCTL_CYGETTHRESH = CYGETTHRESH;
+-  unsigned IOCTL_CYGETTIMEOUT = CYGETTIMEOUT;
+-  unsigned IOCTL_CYSETDEFTHRESH = CYSETDEFTHRESH;
+-  unsigned IOCTL_CYSETDEFTIMEOUT = CYSETDEFTIMEOUT;
+-  unsigned IOCTL_CYSETTHRESH = CYSETTHRESH;
+-  unsigned IOCTL_CYSETTIMEOUT = CYSETTIMEOUT;
+   unsigned IOCTL_EQL_EMANCIPATE = EQL_EMANCIPATE;
+   unsigned IOCTL_EQL_ENSLAVE = EQL_ENSLAVE;
+   unsigned IOCTL_EQL_GETMASTRCFG = EQL_GETMASTRCFG;
+@@ -1145,8 +1134,9 @@ CHECK_SIZE_AND_OFFSET(ipc_perm, uid);
+ CHECK_SIZE_AND_OFFSET(ipc_perm, gid);
+ CHECK_SIZE_AND_OFFSET(ipc_perm, cuid);
+ CHECK_SIZE_AND_OFFSET(ipc_perm, cgid);
+-#if !defined(__aarch64__) || !SANITIZER_LINUX || __GLIBC_PREREQ (2, 21)
+-/* On aarch64 glibc 2.20 and earlier provided incorrect mode field.  */
++#if !SANITIZER_LINUX || __GLIBC_PREREQ (2, 31)
++/* glibc 2.30 and earlier provided 16-bit mode field instead of 32-bit
++   on many architectures.  */
+ CHECK_SIZE_AND_OFFSET(ipc_perm, mode);
+ #endif
+ 
+diff --git a/libsanitizer/sanitizer_common/sanitizer_platform_limits_posix.h b/libsanitizer/sanitizer_common/sanitizer_platform_limits_posix.h
+index c13932283..0ffd2133f 100644
+--- a/libsanitizer/sanitizer_common/sanitizer_platform_limits_posix.h
++++ b/libsanitizer/sanitizer_common/sanitizer_platform_limits_posix.h
+@@ -211,20 +211,13 @@ namespace __sanitizer {
+     unsigned long __unused1;
+     unsigned long __unused2;
+ #elif defined(__sparc__)
+-# if defined(__arch64__)
+     unsigned mode;
+-    unsigned short __pad1;
+-# else
+-    unsigned short __pad1;
+-    unsigned short mode;
+     unsigned short __pad2;
+-# endif
+     unsigned short __seq;
+     unsigned long long __unused1;
+     unsigned long long __unused2;
+ #else
+-    unsigned short mode;
+-    unsigned short __pad1;
++    unsigned int mode;
+     unsigned short __seq;
+     unsigned short __pad2;
+ #if defined(__x86_64__) && !defined(_LP64)
+@@ -1000,7 +993,6 @@ struct __sanitizer_cookie_io_functions_t {
+ 
+ #if SANITIZER_LINUX && !SANITIZER_ANDROID
+   extern unsigned struct_ax25_parms_struct_sz;
+-  extern unsigned struct_cyclades_monitor_sz;
+   extern unsigned struct_input_keymap_entry_sz;
+   extern unsigned struct_ipx_config_data_sz;
+   extern unsigned struct_kbdiacrs_sz;
+@@ -1345,15 +1337,6 @@ struct __sanitizer_cookie_io_functions_t {
+ #endif  // SANITIZER_LINUX || SANITIZER_FREEBSD
+ 
+ #if SANITIZER_LINUX && !SANITIZER_ANDROID
+-  extern unsigned IOCTL_CYGETDEFTHRESH;
+-  extern unsigned IOCTL_CYGETDEFTIMEOUT;
+-  extern unsigned IOCTL_CYGETMON;
+-  extern unsigned IOCTL_CYGETTHRESH;
+-  extern unsigned IOCTL_CYGETTIMEOUT;
+-  extern unsigned IOCTL_CYSETDEFTHRESH;
+-  extern unsigned IOCTL_CYSETDEFTIMEOUT;
+-  extern unsigned IOCTL_CYSETTHRESH;
+-  extern unsigned IOCTL_CYSETTIMEOUT;
+   extern unsigned IOCTL_EQL_EMANCIPATE;
+   extern unsigned IOCTL_EQL_ENSLAVE;
+   extern unsigned IOCTL_EQL_GETMASTRCFG;
+diff --git a/libstdc++-v3/src/Makefile.am b/libstdc++-v3/src/Makefile.am
+index 0d07285af..1dede62b7 100644
+--- a/libstdc++-v3/src/Makefile.am
++++ b/libstdc++-v3/src/Makefile.am
+@@ -217,7 +217,6 @@ CXXLINK = \
+ 	$(LIBTOOL) --tag CXX \
+ 	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) \
+ 	--mode=link $(CXX) \
+-	$(VTV_CXXLINKFLAGS) \
+ 	$(OPT_LDFLAGS) $(SECTION_LDFLAGS) $(AM_CXXFLAGS) $(LTLDFLAGS) -o $@
+ 
+ # Symbol versioning for shared libraries.
+diff --git a/libstdc++-v3/src/Makefile.in b/libstdc++-v3/src/Makefile.in
+index f0755f015..cf552adb8 100644
+--- a/libstdc++-v3/src/Makefile.in
++++ b/libstdc++-v3/src/Makefile.in
+@@ -511,7 +511,6 @@ CXXLINK = \
+ 	$(LIBTOOL) --tag CXX \
+ 	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) \
+ 	--mode=link $(CXX) \
+-	$(VTV_CXXLINKFLAGS) \
+ 	$(OPT_LDFLAGS) $(SECTION_LDFLAGS) $(AM_CXXFLAGS) $(LTLDFLAGS) -o $@
+ 
+ @ENABLE_SYMVERS_TRUE@CLEANFILES = libstdc++-symbols.ver $(version_dep)
+diff --git a/libstdc++-v3/src/c++11/Makefile.am b/libstdc++-v3/src/c++11/Makefile.am
+index 776a4ba36..fa131bd71 100644
+--- a/libstdc++-v3/src/c++11/Makefile.am
++++ b/libstdc++-v3/src/c++11/Makefile.am
+@@ -204,5 +204,4 @@ CXXLINK = \
+ 	$(LIBTOOL) --tag CXX --tag disable-shared \
+ 	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) \
+ 	--mode=link $(CXX) \
+-	$(VTV_CXXLINKFLAGS) \
+ 	$(OPT_LDFLAGS) $(SECTION_LDFLAGS) $(AM_CXXFLAGS) $(LTLDFLAGS) -o $@
+diff --git a/libstdc++-v3/src/c++11/Makefile.in b/libstdc++-v3/src/c++11/Makefile.in
+index 73852e75c..7f8d0702d 100644
+--- a/libstdc++-v3/src/c++11/Makefile.in
++++ b/libstdc++-v3/src/c++11/Makefile.in
+@@ -496,7 +496,6 @@ CXXLINK = \
+ 	$(LIBTOOL) --tag CXX --tag disable-shared \
+ 	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) \
+ 	--mode=link $(CXX) \
+-	$(VTV_CXXLINKFLAGS) \
+ 	$(OPT_LDFLAGS) $(SECTION_LDFLAGS) $(AM_CXXFLAGS) $(LTLDFLAGS) -o $@
+ 
+ all: all-am
+diff --git a/libstdc++-v3/src/c++98/Makefile.am b/libstdc++-v3/src/c++98/Makefile.am
+index aa0ac5c10..34e7372b5 100644
+--- a/libstdc++-v3/src/c++98/Makefile.am
++++ b/libstdc++-v3/src/c++98/Makefile.am
+@@ -273,5 +273,4 @@ CXXLINK = \
+ 	$(LIBTOOL) --tag CXX --tag disable-shared \
+ 	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) \
+ 	--mode=link $(CXX) \
+-	$(VTV_CXXLINKFLAGS) \
+ 	$(OPT_LDFLAGS) $(SECTION_LDFLAGS) $(AM_CXXFLAGS) $(LTLDFLAGS) -o $@
+diff --git a/libstdc++-v3/src/c++98/Makefile.in b/libstdc++-v3/src/c++98/Makefile.in
+index c0a551719..db2c259c2 100644
+--- a/libstdc++-v3/src/c++98/Makefile.in
++++ b/libstdc++-v3/src/c++98/Makefile.in
+@@ -500,7 +500,6 @@ CXXLINK = \
+ 	$(LIBTOOL) --tag CXX --tag disable-shared \
+ 	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) \
+ 	--mode=link $(CXX) \
+-	$(VTV_CXXLINKFLAGS) \
+ 	$(OPT_LDFLAGS) $(SECTION_LDFLAGS) $(AM_CXXFLAGS) $(LTLDFLAGS) -o $@
+ 
+ all: all-am

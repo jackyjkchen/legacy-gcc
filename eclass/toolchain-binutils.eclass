@@ -88,7 +88,7 @@ if tc_version_is_at_least 2.18 ; then
 else
 	LICENSE="|| ( GPL-2 LGPL-2 )"
 fi
-IUSE="+cxx doc multitarget +nls static-libs test vanilla"
+IUSE="+cxx doc multitarget +nls static-libs test"
 if tc_version_is_at_least 2.21 ; then
 	IUSE+=" gold"
 fi
@@ -133,25 +133,23 @@ toolchain-binutils_src_unpack() {
 }
 
 toolchain-binutils_src_prepare() {
-	if ! use vanilla ; then
-		if [[ ! -z ${PATCH_VER} ]] ; then
-			PATCH_BINUTILS_VER=${PATCH_BINUTILS_VER:-${BVER}}
-			einfo "Applying binutils-${PATCH_BINUTILS_VER} patchset ${PATCH_VER}"
-			tar -pxf ${FILESDIR}/binutils-${PATCH_BINUTILS_VER}-patches-${PATCH_VER}.tar.xz -C ${WORKDIR}/ || die
-			if [[ ${CTARGET} == mips* ]] ; then
-				rm -rfv ${WORKDIR}/patch/77_all_generate-gnu-hash.patch
-			fi
-			eapply "${WORKDIR}/patch"/*.patch
+	if [[ ! -z ${PATCH_VER} ]] ; then
+		PATCH_BINUTILS_VER=${PATCH_BINUTILS_VER:-${BVER}}
+		einfo "Applying binutils-${PATCH_BINUTILS_VER} patchset ${PATCH_VER}"
+		tar -pxf ${FILESDIR}/binutils-${PATCH_BINUTILS_VER}-patches-${PATCH_VER}.tar.xz -C ${WORKDIR}/ || die
+		if [[ ${CTARGET} == mips* ]] ; then
+			rm -rfv ${WORKDIR}/patch/77_all_generate-gnu-hash.patch
 		fi
-
-		# Make sure our explicit libdir paths don't get clobbered, bug #562460
-		sed -i \
-			-e 's:@bfdlibdir@:@libdir@:g' \
-			-e 's:@bfdincludedir@:@includedir@:g' \
-			{bfd,opcodes}/Makefile.in || die
-
-		eapply_user
+		eapply "${WORKDIR}/patch"/*.patch
 	fi
+
+	# Make sure our explicit libdir paths don't get clobbered, bug #562460
+	sed -i \
+		-e 's:@bfdlibdir@:@libdir@:g' \
+		-e 's:@bfdincludedir@:@includedir@:g' \
+		{bfd,opcodes}/Makefile.in || die
+
+	eapply_user
 
 	# Fix locale issues if possible, bug #122216
 	if [[ -e ${FILESDIR}/binutils-configure-LANG.patch ]] ; then

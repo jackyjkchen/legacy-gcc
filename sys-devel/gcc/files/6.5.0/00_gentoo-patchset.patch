@@ -1,0 +1,1109 @@
+diff --git a/Makefile.in b/Makefile.in
+index 1522e39ec..1458e86df 100644
+--- a/Makefile.in
++++ b/Makefile.in
+@@ -169,6 +169,7 @@ BUILD_EXPORTS = \
+ # built for the build system to override those in BASE_FLAGS_TO_PASS.
+ EXTRA_BUILD_FLAGS = \
+ 	CFLAGS="$(CFLAGS_FOR_BUILD)" \
++	CXXFLAGS="$(CXXFLAGS_FOR_BUILD)" \
+ 	LDFLAGS="$(LDFLAGS_FOR_BUILD)"
+ 
+ # This is the list of directories to built for the host system.
+@@ -712,6 +713,7 @@ BASE_FLAGS_TO_PASS = \
+ 	"CC_FOR_BUILD=$(CC_FOR_BUILD)" \
+ 	"CFLAGS_FOR_BUILD=$(CFLAGS_FOR_BUILD)" \
+ 	"CXX_FOR_BUILD=$(CXX_FOR_BUILD)" \
++	"CXXFLAGS_FOR_BUILD=$(CXXFLAGS_FOR_BUILD)" \
+ 	"EXPECT=$(EXPECT)" \
+ 	"FLEX=$(FLEX)" \
+ 	"INSTALL=$(INSTALL)" \
+diff --git a/Makefile.tpl b/Makefile.tpl
+index 6b2eb6aca..50b283f4e 100644
+--- a/Makefile.tpl
++++ b/Makefile.tpl
+@@ -172,6 +172,7 @@ BUILD_EXPORTS = \
+ # built for the build system to override those in BASE_FLAGS_TO_PASS.
+ EXTRA_BUILD_FLAGS = \
+ 	CFLAGS="$(CFLAGS_FOR_BUILD)" \
++	CXXFLAGS="$(CXXFLAGS_FOR_BUILD)" \
+ 	LDFLAGS="$(LDFLAGS_FOR_BUILD)"
+ 
+ # This is the list of directories to built for the host system.
+diff --git a/config/gcc-plugin.m4 b/config/gcc-plugin.m4
+index dd06a58cd..29ba842a3 100644
+--- a/config/gcc-plugin.m4
++++ b/config/gcc-plugin.m4
+@@ -32,7 +32,7 @@ AC_DEFUN([GCC_ENABLE_PLUGINS],
+      ;;
+      *)
+        if test x$build = x$host; then
+-	 export_sym_check="objdump${exeext} -T"
++	 export_sym_check="$ac_cv_prog_OBJDUMP -T"
+        elif test x$host = x$target; then
+ 	 export_sym_check="$gcc_cv_objdump -T"
+        else
+diff --git a/gcc/Makefile.in b/gcc/Makefile.in
+index 51e2bc86e..39f436872 100644
+--- a/gcc/Makefile.in
++++ b/gcc/Makefile.in
+@@ -1006,10 +1006,10 @@ ALL_CXXFLAGS = $(T_CFLAGS) $(CFLAGS-$@) $(CXXFLAGS) $(INTERNAL_CFLAGS) \
+ ALL_CPPFLAGS = $(INCLUDES) $(CPPFLAGS)
+ 
+ # This is the variable to use when using $(COMPILER).
+-ALL_COMPILERFLAGS = $(ALL_CXXFLAGS)
++ALL_COMPILERFLAGS = $(NO_PIE_CFLAGS) $(ALL_CXXFLAGS)
+ 
+ # This is the variable to use when using $(LINKER).
+-ALL_LINKERFLAGS = $(ALL_CXXFLAGS)
++ALL_LINKERFLAGS = $(NO_PIE_CFLAGS) $(ALL_CXXFLAGS)
+ 
+ # Build and host support libraries.
+ 
+diff --git a/gcc/c-family/c-cppbuiltin.c b/gcc/c-family/c-cppbuiltin.c
+index 3ef909159..1661fd933 100644
+--- a/gcc/c-family/c-cppbuiltin.c
++++ b/gcc/c-family/c-cppbuiltin.c
+@@ -1185,6 +1185,9 @@ c_cpp_builtins (cpp_reader *pfile)
+   builtin_define_with_value ("__REGISTER_PREFIX__", REGISTER_PREFIX, 0);
+   builtin_define_with_value ("__USER_LABEL_PREFIX__", user_label_prefix, 0);
+ 
++  /* Fortify Source enabled by default w/optimization.  */
++  cpp_define (pfile, "_FORTIFY_SOURCE=((defined __OPTIMIZE__ && __OPTIMIZE__ > 0) ? 2 : 0)");
++
+   /* Misc.  */
+   if (flag_gnu89_inline)
+     cpp_define (pfile, "__GNUC_GNU_INLINE__");
+diff --git a/gcc/c-family/c.opt b/gcc/c-family/c.opt
+index 88038a076..75e4aba18 100644
+--- a/gcc/c-family/c.opt
++++ b/gcc/c-family/c.opt
+@@ -459,7 +459,7 @@ C ObjC C++ ObjC++ Var(warn_format_nonliteral) Warning LangEnabledBy(C ObjC C++ O
+ Warn about format strings that are not literals.
+ 
+ Wformat-security
+-C ObjC C++ ObjC++ Var(warn_format_security) Warning LangEnabledBy(C ObjC C++ ObjC++,Wformat=, warn_format >= 2, 0)
++C ObjC C++ ObjC++ Var(warn_format_security) Init(1) Warning LangEnabledBy(C ObjC C++ ObjC++,Wformat=, warn_format >= 2, 0)
+ Warn about possible security problems with format functions.
+ 
+ Wformat-signedness
+@@ -475,7 +475,7 @@ C ObjC C++ ObjC++ Var(warn_format_zero_length) Warning LangEnabledBy(C ObjC C++
+ Warn about zero-length formats.
+ 
+ Wformat=
+-C ObjC C++ ObjC++ Joined RejectNegative UInteger Var(warn_format) Warning LangEnabledBy(C ObjC C++ ObjC++,Wall, 1, 0)
++C ObjC C++ ObjC++ Joined RejectNegative UInteger Var(warn_format) Init(1) Warning LangEnabledBy(C ObjC C++ ObjC++,Wall, 1, 0)
+ Warn about printf/scanf/strftime/strfmon format string anomalies.
+ 
+ Wignored-qualifiers
+diff --git a/gcc/common.opt b/gcc/common.opt
+index a25557720..d3ec542c1 100644
+--- a/gcc/common.opt
++++ b/gcc/common.opt
+@@ -712,7 +712,7 @@ Common Var(warn_system_headers) Warning
+ Do not suppress warnings from system headers.
+ 
+ Wtrampolines
+-Common Var(warn_trampolines) Warning
++Common Var(warn_trampolines) Init(1) Warning
+ Warn whenever a trampoline is generated.
+ 
+ Wtype-limits
+diff --git a/gcc/config.gcc b/gcc/config.gcc
+index bf3f32da0..eb8b5ba36 100644
+--- a/gcc/config.gcc
++++ b/gcc/config.gcc
+@@ -2767,7 +2767,7 @@ sh-*-elf* | sh[12346l]*-*-elf* | \
+ 	if test "$sh_multilibs" = "default" ; then
+ 		case ${target} in
+ 		sh64-superh-linux* | \
+-		sh[1234]*)	sh_multilibs=${sh_cpu_target} ;;
++		sh[1234]*)	sh_multilibs=$(echo $(sed -n '/^[[:space:]]*case ${sh_multilib} in/,/)/{s:case ${sh_multilib} in::;s: | *:,:g;s:[\\)]::g;p}' ${srcdir}/config.gcc) | sed 's: ::g') ;;
+ 		sh64* | sh5*)	sh_multilibs=m5-32media,m5-32media-nofpu,m5-compact,m5-compact-nofpu,m5-64media,m5-64media-nofpu ;;
+ 		sh-superh-*)	sh_multilibs=m4,m4-single,m4-single-only,m4-nofpu ;;
+ 		sh*-*-linux*)	sh_multilibs=m1,m2,m2a,m3e,m4 ;;
+diff --git a/gcc/config/alpha/alpha.h b/gcc/config/alpha/alpha.h
+index ba90a44d7..947c3018e 100644
+--- a/gcc/config/alpha/alpha.h
++++ b/gcc/config/alpha/alpha.h
+@@ -94,6 +94,8 @@ along with GCC; see the file COPYING3.  If not see
+   while (0)
+ #endif
+ 
++#define CPP_SPEC "%{!no-ieee:-mieee}"
++
+ /* Run-time compilation parameters selecting different hardware subsets.  */
+ 
+ /* Which processor to schedule for. The cpu attribute defines a list that
+diff --git a/gcc/config/alpha/alpha.opt b/gcc/config/alpha/alpha.opt
+index 3bd96ea3b..a2b878cdd 100644
+--- a/gcc/config/alpha/alpha.opt
++++ b/gcc/config/alpha/alpha.opt
+@@ -35,7 +35,7 @@ Target RejectNegative Mask(IEEE_CONFORMANT)
+ Request IEEE-conformant math library routines (OSF/1).
+ 
+ mieee
+-Target Report RejectNegative Mask(IEEE)
++Target Report Mask(IEEE)
+ Emit IEEE-conformant code, without inexact exceptions.
+ 
+ mieee-with-inexact
+diff --git a/gcc/config/arm/linux-eabi.h b/gcc/config/arm/linux-eabi.h
+index ace84816e..d20a62337 100644
+--- a/gcc/config/arm/linux-eabi.h
++++ b/gcc/config/arm/linux-eabi.h
+@@ -45,7 +45,7 @@
+    The ARM10TDMI core is the default for armv5t, so set
+    SUBTARGET_CPU_DEFAULT to achieve this.  */
+ #undef  SUBTARGET_CPU_DEFAULT
+-#define SUBTARGET_CPU_DEFAULT TARGET_CPU_arm10tdmi
++#define SUBTARGET_CPU_DEFAULT TARGET_CPU_arm9tdmi
+ 
+ /* TARGET_BIG_ENDIAN_DEFAULT is set in
+    config.gcc for big endian configurations.  */
+diff --git a/gcc/config/ia64/linux.h b/gcc/config/ia64/linux.h
+index e0395a693..8d431ef7b 100644
+--- a/gcc/config/ia64/linux.h
++++ b/gcc/config/ia64/linux.h
+@@ -23,6 +23,8 @@ a copy of the GCC Runtime Library Exception along with this program;
+ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+ <http://www.gnu.org/licenses/>.  */
+ 
++#define TARGET_ASM_FILE_END file_end_indicate_exec_stack
++
+ /* This is for -profile to use -lc_p instead of -lc.  */
+ #undef CC1_SPEC
+ #define CC1_SPEC "%{profile:-p} %{G*}"
+diff --git a/gcc/config/pa/pa.c b/gcc/config/pa/pa.c
+index 9946ae8a6..2338a4c91 100644
+--- a/gcc/config/pa/pa.c
++++ b/gcc/config/pa/pa.c
+@@ -10152,8 +10152,8 @@ pa_trampoline_init (rtx m_tramp, tree fndecl, rtx chain_value)
+     }
+ 
+ #ifdef HAVE_ENABLE_EXECUTE_STACK
+-  emit_library_call (gen_rtx_SYMBOL_REF (Pmode, "__enable_execute_stack"),
+-		     LCT_NORMAL, VOIDmode, 1, XEXP (m_tramp, 0), Pmode);
++  emit_library_call (gen_rtx_SYMBOL_REF (Pmode, "__enable_execute_stack"),
++		      LCT_NORMAL, VOIDmode, 1, XEXP (m_tramp, 0), Pmode);
+ #endif
+ }
+ 
+diff --git a/gcc/config/rs6000/ppc-asm.h b/gcc/config/rs6000/ppc-asm.h
+index a7eda88c3..c2fd6a047 100644
+--- a/gcc/config/rs6000/ppc-asm.h
++++ b/gcc/config/rs6000/ppc-asm.h
+@@ -375,7 +375,7 @@ GLUE(.L,name): \
+ #endif
+ #endif
+ 
+-#if defined __linux__ && !defined __powerpc64__
++#if defined __linux__
+ 	.section .note.GNU-stack
+ 	.previous
+ #endif
+diff --git a/gcc/configure b/gcc/configure
+index b4caeeb81..bc52c9db5 100755
+--- a/gcc/configure
++++ b/gcc/configure
+@@ -29250,7 +29250,7 @@ fi
+      ;;
+      *)
+        if test x$build = x$host; then
+-	 export_sym_check="objdump${exeext} -T"
++	 export_sym_check="$ac_cv_prog_OBJDUMP -T"
+        elif test x$host = x$target; then
+ 	 export_sym_check="$gcc_cv_objdump -T"
+        else
+diff --git a/gcc/defaults.h b/gcc/defaults.h
+index 3e18338c9..f283f08e3 100644
+--- a/gcc/defaults.h
++++ b/gcc/defaults.h
+@@ -1398,8 +1398,12 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+ /* Default value for flag_stack_protect when flag_stack_protect is initialized to -1:
+    --enable-default-ssp: Default flag_stack_protect to -fstack-protector-strong.
+    --disable-default-ssp: Default flag_stack_protect to 0.
++   Hardened: Default flag_stack_protect to -fstack-protector-all.
+  */
+ #ifdef ENABLE_DEFAULT_SSP
++# ifdef EXTRA_OPTIONS
++#  define DEFAULT_FLAG_SSP 2
++# endif
+ # ifndef DEFAULT_FLAG_SSP
+ #  define DEFAULT_FLAG_SSP 3
+ # endif
+diff --git a/gcc/gcc.c b/gcc/gcc.c
+index d47108852..b4a2f3696 100644
+--- a/gcc/gcc.c
++++ b/gcc/gcc.c
+@@ -857,6 +857,12 @@ proper position among the other output files.  */
+ #define LINK_GCC_C_SEQUENCE_SPEC "%G %L %G"
+ #endif
+ 
++#ifdef ENABLE_DEFAULT_SSP
++#define NO_SSP_SPEC "%{nostdlib|nodefaultlibs|ffreestanding:-fno-stack-protector} "
++#else
++#define NO_SSP_SPEC ""
++#endif
++
+ #ifndef LINK_SSP_SPEC
+ #ifdef TARGET_LIBC_PROVIDES_SSP
+ #define LINK_SSP_SPEC "%{fstack-protector|fstack-protector-all" \
+@@ -868,6 +874,13 @@ proper position among the other output files.  */
+ #endif
+ #endif
+ 
++#define STACK_CHECK_SPEC "%{fstack-check|fstack-check=*:;: -fstack-check} "
++#ifdef EXTRA_OPTIONS
++#define LINK_NOW_SPEC "%{!nonow:-z now} "
++#else
++#define LINK_NOW_SPEC ""
++#endif
++
+ #ifdef ENABLE_DEFAULT_PIE
+ #define PIE_SPEC		"!no-pie"
+ #define NO_FPIE1_SPEC		"fno-pie"
+@@ -1013,7 +1026,7 @@ proper position among the other output files.  */
+     %(linker) " \
+     LINK_PLUGIN_SPEC \
+    "%{flto|flto=*:%<fcompare-debug*} \
+-    %{flto} %{fno-lto} %{flto=*} %l " LINK_PIE_SPEC \
++    %{flto} %{fno-lto} %{flto=*} %l " LINK_PIE_SPEC LINK_NOW_SPEC \
+    "%{fuse-ld=*:-fuse-ld=%*} " LINK_COMPRESS_DEBUG_SPEC \
+    "%X %{o*} %{e*} %{N} %{n} %{r}\
+     %{s} %{t} %{u*} %{z} %{Z} %{!nostdlib:%{!nostartfiles:%S}} \
+@@ -1052,7 +1065,11 @@ proper position among the other output files.  */
+ 
+ static const char *asm_debug = ASM_DEBUG_SPEC;
+ static const char *cpp_spec = CPP_SPEC;
++#ifdef EXTRA_OPTIONS
++static const char *cc1_spec = CC1_SPEC STACK_CHECK_SPEC;
++#else
+ static const char *cc1_spec = CC1_SPEC;
++#endif
+ static const char *cc1plus_spec = CC1PLUS_SPEC;
+ static const char *link_gcc_c_sequence_spec = LINK_GCC_C_SEQUENCE_SPEC;
+ static const char *link_ssp_spec = LINK_SSP_SPEC;
+@@ -1131,7 +1148,7 @@ static const char *cc1_options =
+  %{-version:--version}\
+  %{-help=*:--help=%*}\
+  %{!fsyntax-only:%{S:%W{o*}%{!o*:-o %b.s}}}\
+- %{fsyntax-only:-o %j} %{-param*}\
++ %{fsyntax-only:-o %j} %{-param*} " NO_SSP_SPEC "\
+  %{coverage:-fprofile-arcs -ftest-coverage}";
+ 
+ static const char *asm_options =
+diff --git a/gcc/opts.c b/gcc/opts.c
+index 1467782bc..4a0e7a1fe 100644
+--- a/gcc/opts.c
++++ b/gcc/opts.c
+@@ -495,7 +495,9 @@ static const struct default_options default_options_table[] =
+     { OPT_LEVELS_2_PLUS, OPT_fschedule_insns2, NULL, 1 },
+ #endif
+     { OPT_LEVELS_2_PLUS, OPT_fstrict_aliasing, NULL, 1 },
++#ifndef EXTRA_OPTIONS
+     { OPT_LEVELS_2_PLUS, OPT_fstrict_overflow, NULL, 1 },
++#endif
+     { OPT_LEVELS_2_PLUS_SPEED_ONLY, OPT_freorder_blocks_algorithm_, NULL,
+       REORDER_BLOCKS_ALGORITHM_STC },
+     { OPT_LEVELS_2_PLUS, OPT_freorder_functions, NULL, 1 },
+diff --git a/gcc/params.def b/gcc/params.def
+index ce83aa71e..ccae2268b 100644
+--- a/gcc/params.def
++++ b/gcc/params.def
+@@ -673,7 +673,7 @@ DEFPARAM (PARAM_INTEGER_SHARE_LIMIT,
+ DEFPARAM (PARAM_SSP_BUFFER_SIZE,
+ 	  "ssp-buffer-size",
+ 	  "The lower bound for a buffer to be considered for stack smashing protection.",
+-	  8, 1, 0)
++	  4, 1, 0)
+ 
+ DEFPARAM (PARAM_MIN_SIZE_FOR_STACK_SHARING,
+ 	  "min-size-for-stack-sharing",
+diff --git a/include/libiberty.h b/include/libiberty.h
+index a9c885fc6..13d08ed29 100644
+--- a/include/libiberty.h
++++ b/include/libiberty.h
+@@ -625,8 +625,11 @@ extern int pwait (int, int *, int);
+ /* Like sprintf but provides a pointer to malloc'd storage, which must
+    be freed by the caller.  */
+ 
++/* asprintf may be declared as a macro by glibc with __USE_FORTIFY_LEVEL.  */
++#ifndef asprintf
+ extern int asprintf (char **, const char *, ...) ATTRIBUTE_PRINTF_2;
+ #endif
++#endif
+ 
+ /* Like asprintf but allocates memory without fail. This works like
+    xmalloc.  */
+diff --git a/libatomic/Makefile.in b/libatomic/Makefile.in
+index a083d8702..a92cfce88 100644
+--- a/libatomic/Makefile.in
++++ b/libatomic/Makefile.in
+@@ -330,7 +330,8 @@ PAT_N = $(word 2,$(PAT_SPLIT))
+ PAT_S = $(word 3,$(PAT_SPLIT))
+ IFUNC_DEF = -DIFUNC_ALT=$(PAT_S)
+ IFUNC_OPT = $(word $(PAT_S),$(IFUNC_OPTIONS))
+-M_DEPS = -MT $@ -MD -MP -MF $(DEPDIR)/$(@F).Ppo
++@AMDEP_TRUE@M_DEPS = -MT $@ -MD -MP -MF $(DEPDIR)/$(@F).Ppo
++@AMDEP_FALSE@M_DEPS =
+ M_SIZE = -DN=$(PAT_N)
+ M_IFUNC = $(if $(PAT_S),$(IFUNC_DEF) $(IFUNC_OPT))
+ M_FILE = $(PAT_BASE)_n.c
+diff --git a/libatomic/configure b/libatomic/configure
+index 8526abff9..a53981b76 100755
+--- a/libatomic/configure
++++ b/libatomic/configure
+@@ -15212,7 +15212,7 @@ rm -f confcache
+ 
+ # Add -Wall -Werror if we are using GCC.
+ if test "x$GCC" = "xyes"; then
+-  XCFLAGS="$XCFLAGS -Wall -Werror"
++  XCFLAGS="$XCFLAGS -Wall"
+ fi
+ 
+ XCFLAGS="$XCFLAGS $XPCFLAGS"
+diff --git a/libatomic/configure.ac b/libatomic/configure.ac
+index cf40ea19a..8217013da 100644
+--- a/libatomic/configure.ac
++++ b/libatomic/configure.ac
+@@ -235,7 +235,7 @@ AC_CACHE_SAVE
+ 
+ # Add -Wall -Werror if we are using GCC.
+ if test "x$GCC" = "xyes"; then
+-  XCFLAGS="$XCFLAGS -Wall -Werror"
++  XCFLAGS="$XCFLAGS -Wall"
+ fi
+ 
+ XCFLAGS="$XCFLAGS $XPCFLAGS"
+diff --git a/libbacktrace/configure b/libbacktrace/configure
+index 4e720e19f..b8298f777 100755
+--- a/libbacktrace/configure
++++ b/libbacktrace/configure
+@@ -11632,7 +11632,7 @@ ac_compiler_gnu=$ac_cv_c_compiler_gnu
+ 
+ 
+ if test -n "${with_target_subdir}"; then
+-  WARN_FLAGS="$WARN_FLAGS -Werror"
++  WARN_FLAGS="$WARN_FLAGS"
+ fi
+ 
+ 
+diff --git a/libbacktrace/configure.ac b/libbacktrace/configure.ac
+index 71e85187e..84bbaad41 100644
+--- a/libbacktrace/configure.ac
++++ b/libbacktrace/configure.ac
+@@ -136,7 +136,7 @@ ACX_PROG_CC_WARNING_OPTS([-W -Wall -Wwrite-strings -Wstrict-prototypes \
+ 			  [WARN_FLAGS])
+ 
+ if test -n "${with_target_subdir}"; then
+-  WARN_FLAGS="$WARN_FLAGS -Werror"
++  WARN_FLAGS="$WARN_FLAGS"
+ fi
+ 
+ AC_SUBST(WARN_FLAGS)
+diff --git a/libcc1/configure b/libcc1/configure
+index bf112bb46..27dfe4811 100755
+--- a/libcc1/configure
++++ b/libcc1/configure
+@@ -14543,7 +14543,7 @@ fi
+      ;;
+      *)
+        if test x$build = x$host; then
+-	 export_sym_check="objdump${exeext} -T"
++	 export_sym_check="$ac_cv_prog_OBJDUMP -T"
+        elif test x$host = x$target; then
+ 	 export_sym_check="$gcc_cv_objdump -T"
+        else
+diff --git a/libcpp/Makefile.in b/libcpp/Makefile.in
+index a7d782803..096febd62 100644
+--- a/libcpp/Makefile.in
++++ b/libcpp/Makefile.in
+@@ -25,7 +25,7 @@ srcdir = @srcdir@
+ top_builddir = .
+ VPATH = @srcdir@
+ INSTALL = @INSTALL@
+-AR = ar
++AR = @AR@
+ ARFLAGS = cru
+ ACLOCAL = @ACLOCAL@
+ AUTOCONF = @AUTOCONF@
+diff --git a/libcpp/configure b/libcpp/configure
+index 0342f163c..1f04932cb 100755
+--- a/libcpp/configure
++++ b/libcpp/configure
+@@ -626,6 +626,7 @@ ACLOCAL
+ EGREP
+ GREP
+ CPP
++AR
+ RANLIB
+ ac_ct_CXX
+ CXXFLAGS
+@@ -1005,6 +1006,7 @@ do
+   | -silent | --silent | --silen | --sile | --sil)
+     silent=yes ;;
+ 
++
+   -sbindir | --sbindir | --sbindi | --sbind | --sbin | --sbi | --sb)
+     ac_prev=sbindir ;;
+   -sbindir=* | --sbindir=* | --sbindi=* | --sbind=* | --sbin=* \
+@@ -3939,6 +3941,98 @@ else
+   RANLIB="$ac_cv_prog_RANLIB"
+ fi
+ 
++if test -n "$ac_tool_prefix"; then
++  # Extract the first word of "${ac_tool_prefix}ar", so it can be a program name with args.
++set dummy ${ac_tool_prefix}ar; ac_word=$2
++{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
++$as_echo_n "checking for $ac_word... " >&6; }
++if ${ac_cv_prog_AR+:} false; then :
++  $as_echo_n "(cached) " >&6
++else
++  if test -n "$AR"; then
++  ac_cv_prog_AR="$AR" # Let the user override the test.
++else
++as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
++for as_dir in $PATH
++do
++  IFS=$as_save_IFS
++  test -z "$as_dir" && as_dir=.
++    for ac_exec_ext in '' $ac_executable_extensions; do
++  if as_fn_executable_p "$as_dir/$ac_word$ac_exec_ext"; then
++    ac_cv_prog_AR="${ac_tool_prefix}ar"
++    $as_echo "$as_me:${as_lineno-$LINENO}: found $as_dir/$ac_word$ac_exec_ext" >&5
++    break 2
++  fi
++done
++  done
++IFS=$as_save_IFS
++
++fi
++fi
++AR=$ac_cv_prog_AR
++if test -n "$AR"; then
++  { $as_echo "$as_me:${as_lineno-$LINENO}: result: $AR" >&5
++$as_echo "$AR" >&6; }
++else
++  { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
++$as_echo "no" >&6; }
++fi
++
++
++fi
++if test -z "$ac_cv_prog_AR"; then
++  ac_ct_AR=$AR
++  # Extract the first word of "ar", so it can be a program name with args.
++set dummy ar; ac_word=$2
++{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
++$as_echo_n "checking for $ac_word... " >&6; }
++if ${ac_cv_prog_ac_ct_AR+:} false; then :
++  $as_echo_n "(cached) " >&6
++else
++  if test -n "$ac_ct_AR"; then
++  ac_cv_prog_ac_ct_AR="$ac_ct_AR" # Let the user override the test.
++else
++as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
++for as_dir in $PATH
++do
++  IFS=$as_save_IFS
++  test -z "$as_dir" && as_dir=.
++    for ac_exec_ext in '' $ac_executable_extensions; do
++  if as_fn_executable_p "$as_dir/$ac_word$ac_exec_ext"; then
++    ac_cv_prog_ac_ct_AR="ar"
++    $as_echo "$as_me:${as_lineno-$LINENO}: found $as_dir/$ac_word$ac_exec_ext" >&5
++    break 2
++  fi
++done
++  done
++IFS=$as_save_IFS
++
++fi
++fi
++ac_ct_AR=$ac_cv_prog_ac_ct_AR
++if test -n "$ac_ct_AR"; then
++  { $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_ct_AR" >&5
++$as_echo "$ac_ct_AR" >&6; }
++else
++  { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
++$as_echo "no" >&6; }
++fi
++
++  if test "x$ac_ct_AR" = x; then
++    AR=""
++  else
++    case $cross_compiling:$ac_tool_warned in
++yes:)
++{ $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: using cross tools not prefixed with host triplet" >&5
++$as_echo "$as_me: WARNING: using cross tools not prefixed with host triplet" >&2;}
++ac_tool_warned=yes ;;
++esac
++    AR=$ac_ct_AR
++  fi
++else
++  AR="$ac_cv_prog_AR"
++fi
++
+ 
+ 
+ ac_ext=c
+diff --git a/libcpp/configure.ac b/libcpp/configure.ac
+index 0005c589f..8e348d948 100644
+--- a/libcpp/configure.ac
++++ b/libcpp/configure.ac
+@@ -13,6 +13,7 @@ AC_PROG_INSTALL
+ AC_PROG_CC
+ AC_PROG_CXX
+ AC_PROG_RANLIB
++AC_CHECK_TOOL(AR, ar)
+ 
+ AC_USE_SYSTEM_EXTENSIONS
+ AC_SYS_LARGEFILE
+diff --git a/libgcc/Makefile.in b/libgcc/Makefile.in
+index f09b39b0e..25492d17d 100644
+--- a/libgcc/Makefile.in
++++ b/libgcc/Makefile.in
+@@ -232,7 +232,7 @@ endif
+ LIBGCC2_DEBUG_CFLAGS = -g
+ LIBGCC2_CFLAGS = -O2 $(LIBGCC2_INCLUDES) $(GCC_CFLAGS) $(HOST_LIBGCC2_CFLAGS) \
+ 		 $(LIBGCC2_DEBUG_CFLAGS) -DIN_LIBGCC2 \
+-		 -fbuilding-libgcc -fno-stack-protector \
++		 -fbuilding-libgcc -fno-stack-protector -fstack-check=no \
+ 		 $(INHIBIT_LIBC_CFLAGS)
+ 
+ # Additional options to use when compiling libgcc2.a.
+@@ -288,7 +288,7 @@ CRTSTUFF_CFLAGS = -O2 $(GCC_CFLAGS) $(INCLUDES) $(MULTILIB_CFLAGS) -g0 \
+   $(NO_PIE_CFLAGS) -finhibit-size-directive -fno-inline -fno-exceptions \
+   -fno-zero-initialized-in-bss -fno-toplevel-reorder -fno-tree-vectorize \
+   -fbuilding-libgcc -fno-stack-protector $(FORCE_EXPLICIT_EH_REGISTRY) \
+-  $(INHIBIT_LIBC_CFLAGS)
++  -fstack-check=no $(INHIBIT_LIBC_CFLAGS)
+ 
+ # Extra flags to use when compiling crt{begin,end}.o.
+ CRTSTUFF_T_CFLAGS =
+diff --git a/libgcc/config/ia64/crtbegin.S b/libgcc/config/ia64/crtbegin.S
+index a8d738b95..322969f15 100644
+--- a/libgcc/config/ia64/crtbegin.S
++++ b/libgcc/config/ia64/crtbegin.S
+@@ -252,3 +252,7 @@ __do_jv_register_classes:
+ .weak __cxa_finalize
+ #endif
+ .weak _Jv_RegisterClasses
++
++#ifdef __linux__
++.section .note.GNU-stack; .previous
++#endif
+diff --git a/libgcc/config/ia64/crtend.S b/libgcc/config/ia64/crtend.S
+index 743493004..67bdadff9 100644
+--- a/libgcc/config/ia64/crtend.S
++++ b/libgcc/config/ia64/crtend.S
+@@ -119,3 +119,6 @@ __do_global_ctors_aux:
+ 
+ 	br.ret.sptk.many rp
+ 	.endp __do_global_ctors_aux
++#ifdef __linux__
++.section .note.GNU-stack; .previous
++#endif
+diff --git a/libgcc/config/ia64/crti.S b/libgcc/config/ia64/crti.S
+index b54ae5799..a3e5f6e05 100644
+--- a/libgcc/config/ia64/crti.S
++++ b/libgcc/config/ia64/crti.S
+@@ -49,5 +49,8 @@ _fini:
+ 	.save rp, r33
+ 	mov	r33 = b0
+ 	.body
++#ifdef __linux__
++.section .note.GNU-stack; .previous
++#endif
+ 
+ # end of crti.S
+diff --git a/libgcc/config/ia64/crtn.S b/libgcc/config/ia64/crtn.S
+index 76e19cb68..e6a5bc29d 100644
+--- a/libgcc/config/ia64/crtn.S
++++ b/libgcc/config/ia64/crtn.S
+@@ -39,5 +39,8 @@
+ 	.restore sp
+ 	mov	r12 = r35
+ 	br.ret.sptk.many b0
++#ifdef __linux__
++.section .note.GNU-stack; .previous
++#endif
+ 
+ # end of crtn.S
+diff --git a/libgcc/config/ia64/lib1funcs.S b/libgcc/config/ia64/lib1funcs.S
+index 7a36d9b2f..43511dba9 100644
+--- a/libgcc/config/ia64/lib1funcs.S
++++ b/libgcc/config/ia64/lib1funcs.S
+@@ -793,3 +793,6 @@ __floattitf:
+ 	.endp __floattitf
+ #endif
+ #endif
++#ifdef __linux__
++.section .note.GNU-stack; .previous
++#endif
+diff --git a/libgfortran/configure b/libgfortran/configure
+index db607eb59..6ed01c280 100755
+--- a/libgfortran/configure
++++ b/libgfortran/configure
+@@ -5768,7 +5768,7 @@ fi
+ 
+ # Add -Wall -fno-repack-arrays -fno-underscoring if we are using GCC.
+ if test "x$GCC" = "xyes"; then
+-  AM_FCFLAGS="-I . -Wall -Werror -fimplicit-none -fno-repack-arrays -fno-underscoring"
++  AM_FCFLAGS="-I . -Wall -fimplicit-none -fno-repack-arrays -fno-underscoring"
+   ## We like to use C11 and C99 routines when available.  This makes
+   ## sure that
+   ## __STDC_VERSION__ is set such that libc includes make them available.
+diff --git a/libgfortran/configure.ac b/libgfortran/configure.ac
+index 5a264942b..b2cb3acd2 100644
+--- a/libgfortran/configure.ac
++++ b/libgfortran/configure.ac
+@@ -138,7 +138,7 @@ AM_PROG_CC_C_O
+ 
+ # Add -Wall -fno-repack-arrays -fno-underscoring if we are using GCC.
+ if test "x$GCC" = "xyes"; then
+-  AM_FCFLAGS="-I . -Wall -Werror -fimplicit-none -fno-repack-arrays -fno-underscoring"
++  AM_FCFLAGS="-I . -Wall -fimplicit-none -fno-repack-arrays -fno-underscoring"
+   ## We like to use C11 and C99 routines when available.  This makes
+   ## sure that
+   ## __STDC_VERSION__ is set such that libc includes make them available.
+diff --git a/libgomp/configure b/libgomp/configure
+index 8d03eb6cd..2896340c0 100755
+--- a/libgomp/configure
++++ b/libgomp/configure
+@@ -4333,7 +4333,7 @@ save_CFLAGS="$CFLAGS"
+ 
+ # Add -Wall -Werror if we are using GCC.
+ if test "x$GCC" = "xyes"; then
+-  XCFLAGS="$XCFLAGS -Wall -Werror"
++  XCFLAGS="$XCFLAGS -Wall"
+ fi
+ 
+ # Find other programs we need.
+diff --git a/libgomp/configure.ac b/libgomp/configure.ac
+index 2e41ca8ae..90a053160 100644
+--- a/libgomp/configure.ac
++++ b/libgomp/configure.ac
+@@ -115,7 +115,7 @@ save_CFLAGS="$CFLAGS"
+ 
+ # Add -Wall -Werror if we are using GCC.
+ if test "x$GCC" = "xyes"; then
+-  XCFLAGS="$XCFLAGS -Wall -Werror"
++  XCFLAGS="$XCFLAGS -Wall"
+ fi
+ 
+ # Find other programs we need.
+diff --git a/libiberty/Makefile.in b/libiberty/Makefile.in
+index c7a456809..ce2ff9378 100644
+--- a/libiberty/Makefile.in
++++ b/libiberty/Makefile.in
+@@ -261,6 +261,7 @@ $(TARGETLIB): $(REQUIRED_OFILES) $(EXTRA_OFILES) $(LIBOBJS)
+ 	  $(AR) $(AR_FLAGS) $(TARGETLIB) \
+ 	    $(REQUIRED_OFILES) $(EXTRA_OFILES) $(LIBOBJS); \
+ 	  $(RANLIB) $(TARGETLIB); \
++	  cp $(TARGETLIB) ../ ; \
+ 	  cd ..; \
+ 	else true; fi
+ 
+diff --git a/libitm/configure b/libitm/configure
+index 55332bb9d..6fd3794cf 100644
+--- a/libitm/configure
++++ b/libitm/configure
+@@ -17577,7 +17577,7 @@ rm -f confcache
+ 
+ # Add -Wall -Werror if we are using GCC.
+ if test "x$GCC" = "xyes"; then
+-  XCFLAGS="$XCFLAGS -Wall -Werror"
++  XCFLAGS="$XCFLAGS -Wall"
+ fi
+ 
+ XCFLAGS="$XCFLAGS $XPCFLAGS"
+diff --git a/libitm/configure.ac b/libitm/configure.ac
+index 3875aa0b4..bf6c4c52f 100644
+--- a/libitm/configure.ac
++++ b/libitm/configure.ac
+@@ -255,7 +255,7 @@ AC_CACHE_SAVE
+ 
+ # Add -Wall -Werror if we are using GCC.
+ if test "x$GCC" = "xyes"; then
+-  XCFLAGS="$XCFLAGS -Wall -Werror"
++  XCFLAGS="$XCFLAGS -Wall"
+ fi
+ 
+ XCFLAGS="$XCFLAGS $XPCFLAGS"
+diff --git a/libjava/Makefile.am b/libjava/Makefile.am
+index 96a081571..06b259cbb 100644
+--- a/libjava/Makefile.am
++++ b/libjava/Makefile.am
+@@ -44,7 +44,7 @@ libexecsubdir = $(libexecdir)/gcc/$(target_noncanonical)/$(gcc_version)
+ ##
+ 
+ toolexeclib_LTLIBRARIES = libgcj.la libgij.la libgcj-tools.la
+-toolexecmainlib_DATA = libgcj.spec
++toolexeclib_DATA = libgcj.spec
+ 
+ ##
+ ## These files form a closed dependency group at the lower
+diff --git a/libjava/Makefile.in b/libjava/Makefile.in
+index 9aca8d639..294c778a3 100644
+--- a/libjava/Makefile.in
++++ b/libjava/Makefile.in
+@@ -178,7 +178,7 @@ am__installdirs = "$(DESTDIR)$(dbexecdir)" \
+ 	"$(DESTDIR)$(toolexeclibdir)" "$(DESTDIR)$(bindir)" \
+ 	"$(DESTDIR)$(libexecsubdir)" "$(DESTDIR)$(bindir)" \
+ 	"$(DESTDIR)$(dbexecdir)" "$(DESTDIR)$(jardir)" \
+-	"$(DESTDIR)$(toolexecmainlibdir)"
++	"$(DESTDIR)$(toolexeclibdir)"
+ LTLIBRARIES = $(dbexec_LTLIBRARIES) $(noinst_LTLIBRARIES) \
+ 	$(toolexeclib_LTLIBRARIES)
+ install_libgcj_bc_la_LIBADD =
+@@ -540,7 +540,7 @@ am__can_run_installinfo = \
+     n|no|NO) false;; \
+     *) (install-info --version) >/dev/null 2>&1;; \
+   esac
+-DATA = $(dbexec_DATA) $(jar_DATA) $(toolexecmainlib_DATA)
++DATA = $(dbexec_DATA) $(jar_DATA) $(toolexeclib_DATA)
+ RECURSIVE_CLEAN_TARGETS = mostlyclean-recursive clean-recursive	\
+   distclean-recursive maintainer-clean-recursive
+ AM_RECURSIVE_TARGETS = $(RECURSIVE_TARGETS:-recursive=) \
+@@ -828,7 +828,7 @@ libsubdir = $(libdir)/gcc/$(target_noncanonical)/$(gcc_version)
+ libexecsubdir = $(libexecdir)/gcc/$(target_noncanonical)/$(gcc_version)
+ toolexeclib_LTLIBRARIES = libgcj.la libgij.la libgcj-tools.la \
+ 	$(am__append_2) $(am__append_3) $(am__append_4)
+-toolexecmainlib_DATA = libgcj.spec
++toolexeclib_DATA = libgcj.spec
+ LOWER_PACKAGE_FILES_LO = \
+ 	$(propertyo_files) \
+ 	gnu-CORBA.lo \
+@@ -10249,27 +10249,27 @@ uninstall-jarDATA:
+ 	@list='$(jar_DATA)'; test -n "$(jardir)" || list=; \
+ 	files=`for p in $$list; do echo $$p; done | sed -e 's|^.*/||'`; \
+ 	dir='$(DESTDIR)$(jardir)'; $(am__uninstall_files_from_dir)
+-install-toolexecmainlibDATA: $(toolexecmainlib_DATA)
++install-toolexeclibDATA: $(toolexeclib_DATA)
+ 	@$(NORMAL_INSTALL)
+-	@list='$(toolexecmainlib_DATA)'; test -n "$(toolexecmainlibdir)" || list=; \
++	@list='$(toolexeclib_DATA)'; test -n "$(toolexeclibdir)" || list=; \
+ 	if test -n "$$list"; then \
+-	  echo " $(MKDIR_P) '$(DESTDIR)$(toolexecmainlibdir)'"; \
+-	  $(MKDIR_P) "$(DESTDIR)$(toolexecmainlibdir)" || exit 1; \
++	  echo " $(MKDIR_P) '$(DESTDIR)$(toolexeclibdir)'"; \
++	  $(MKDIR_P) "$(DESTDIR)$(toolexeclibdir)" || exit 1; \
+ 	fi; \
+ 	for p in $$list; do \
+ 	  if test -f "$$p"; then d=; else d="$(srcdir)/"; fi; \
+ 	  echo "$$d$$p"; \
+ 	done | $(am__base_list) | \
+ 	while read files; do \
+-	  echo " $(INSTALL_DATA) $$files '$(DESTDIR)$(toolexecmainlibdir)'"; \
+-	  $(INSTALL_DATA) $$files "$(DESTDIR)$(toolexecmainlibdir)" || exit $$?; \
++	  echo " $(INSTALL_DATA) $$files '$(DESTDIR)$(toolexeclibdir)'"; \
++	  $(INSTALL_DATA) $$files "$(DESTDIR)$(toolexeclibdir)" || exit $$?; \
+ 	done
+ 
+-uninstall-toolexecmainlibDATA:
++uninstall-toolexeclibDATA:
+ 	@$(NORMAL_UNINSTALL)
+-	@list='$(toolexecmainlib_DATA)'; test -n "$(toolexecmainlibdir)" || list=; \
++	@list='$(toolexeclib_DATA)'; test -n "$(toolexeclibdir)" || list=; \
+ 	files=`for p in $$list; do echo $$p; done | sed -e 's|^.*/||'`; \
+-	dir='$(DESTDIR)$(toolexecmainlibdir)'; $(am__uninstall_files_from_dir)
++	dir='$(DESTDIR)$(toolexeclibdir)'; $(am__uninstall_files_from_dir)
+ 
+ # This directory's subdirectories are mostly independent; you can cd
+ # into them and run `make' without going through this Makefile.
+@@ -10411,7 +10411,7 @@ all-am: Makefile $(LTLIBRARIES) $(PROGRAMS) $(SCRIPTS) all-multi \
+ 		$(DATA)
+ installdirs: installdirs-recursive
+ installdirs-am:
+-	for dir in "$(DESTDIR)$(dbexecdir)" "$(DESTDIR)$(toolexeclibdir)" "$(DESTDIR)$(bindir)" "$(DESTDIR)$(libexecsubdir)" "$(DESTDIR)$(bindir)" "$(DESTDIR)$(dbexecdir)" "$(DESTDIR)$(jardir)" "$(DESTDIR)$(toolexecmainlibdir)"; do \
++	for dir in "$(DESTDIR)$(dbexecdir)" "$(DESTDIR)$(toolexeclibdir)" "$(DESTDIR)$(bindir)" "$(DESTDIR)$(libexecsubdir)" "$(DESTDIR)$(bindir)" "$(DESTDIR)$(dbexecdir)" "$(DESTDIR)$(jardir)" "$(DESTDIR)$(toolexeclibdir)"; do \
+ 	  test -z "$$dir" || $(MKDIR_P) "$$dir"; \
+ 	done
+ install: install-recursive
+@@ -10546,7 +10546,7 @@ install-dvi-am:
+ install-exec-am: install-binPROGRAMS install-binSCRIPTS \
+ 	install-dbexecDATA install-dbexecLTLIBRARIES \
+ 	install-libexecsubPROGRAMS install-multi \
+-	install-toolexeclibLTLIBRARIES install-toolexecmainlibDATA
++	install-toolexeclibDATA install-toolexeclibLTLIBRARIES
+ 	@$(NORMAL_INSTALL)
+ 	$(MAKE) $(AM_MAKEFLAGS) install-exec-hook
+ install-html: install-html-recursive
+@@ -10592,7 +10592,7 @@ ps-am:
+ uninstall-am: uninstall-binPROGRAMS uninstall-binSCRIPTS \
+ 	uninstall-dbexecDATA uninstall-dbexecLTLIBRARIES \
+ 	uninstall-jarDATA uninstall-libexecsubPROGRAMS \
+-	uninstall-toolexeclibLTLIBRARIES uninstall-toolexecmainlibDATA
++	uninstall-toolexeclibDATA uninstall-toolexeclibLTLIBRARIES
+ 
+ .MAKE: $(RECURSIVE_CLEAN_TARGETS) $(RECURSIVE_TARGETS) all-multi \
+ 	clean-multi ctags-recursive distclean-multi install-am \
+@@ -10615,8 +10615,8 @@ uninstall-am: uninstall-binPROGRAMS uninstall-binSCRIPTS \
+ 	install-html-am install-info install-info-am install-jarDATA \
+ 	install-libexecsubPROGRAMS install-man install-multi \
+ 	install-pdf install-pdf-am install-ps install-ps-am \
+-	install-strip install-toolexeclibLTLIBRARIES \
+-	install-toolexecmainlibDATA installcheck installcheck-am \
++	install-strip install-toolexeclibDATA \
++	install-toolexeclibLTLIBRARIES installcheck installcheck-am \
+ 	installdirs installdirs-am maintainer-clean \
+ 	maintainer-clean-generic maintainer-clean-multi mostlyclean \
+ 	mostlyclean-compile mostlyclean-generic mostlyclean-libtool \
+@@ -10624,8 +10624,8 @@ uninstall-am: uninstall-binPROGRAMS uninstall-binSCRIPTS \
+ 	tags-recursive uninstall uninstall-am uninstall-binPROGRAMS \
+ 	uninstall-binSCRIPTS uninstall-dbexecDATA \
+ 	uninstall-dbexecLTLIBRARIES uninstall-jarDATA \
+-	uninstall-libexecsubPROGRAMS uninstall-toolexeclibLTLIBRARIES \
+-	uninstall-toolexecmainlibDATA
++	uninstall-libexecsubPROGRAMS uninstall-toolexeclibDATA \
++	uninstall-toolexeclibLTLIBRARIES
+ 
+ export gcc_version
+ 
+diff --git a/libsanitizer/asan/asan_linux.cc b/libsanitizer/asan/asan_linux.cc
+index 4e47d5a04..7be92ae92 100644
+--- a/libsanitizer/asan/asan_linux.cc
++++ b/libsanitizer/asan/asan_linux.cc
+@@ -29,6 +29,7 @@
+ #include <dlfcn.h>
+ #include <fcntl.h>
+ #include <pthread.h>
++#include <signal.h>
+ #include <stdio.h>
+ #include <unistd.h>
+ #include <unwind.h>
+diff --git a/libsanitizer/libbacktrace/Makefile.am b/libsanitizer/libbacktrace/Makefile.am
+index 34bfb1eef..e784bb5d3 100644
+--- a/libsanitizer/libbacktrace/Makefile.am
++++ b/libsanitizer/libbacktrace/Makefile.am
+@@ -35,7 +35,7 @@ AM_CPPFLAGS = -I $(top_srcdir)/../include -I $(top_srcdir)/../libgcc \
+ 	-I ../../libgcc -I .. -I $(top_srcdir) -I $(top_srcdir)/../libbacktrace
+ 
+ WARN_FLAGS = -W -Wall -Wwrite-strings -Wmissing-format-attribute \
+-	     -Wcast-qual -Werror
++	     -Wcast-qual
+ C_WARN_FLAGS = $(WARN_FLAGS) -Wstrict-prototypes -Wmissing-prototypes -Wold-style-definition
+ CXX_WARN_FLAGS = $(WARN_FLAGS) -Wno-unused-parameter
+ AM_CFLAGS = $(C_WARN_FLAGS)
+diff --git a/libsanitizer/libbacktrace/Makefile.in b/libsanitizer/libbacktrace/Makefile.in
+index 57eaaf0f3..7b708e7a1 100644
+--- a/libsanitizer/libbacktrace/Makefile.in
++++ b/libsanitizer/libbacktrace/Makefile.in
+@@ -290,7 +290,7 @@ AM_CPPFLAGS = -I $(top_srcdir)/../include -I $(top_srcdir)/../libgcc \
+ 	-I ../../libgcc -I .. -I $(top_srcdir) -I $(top_srcdir)/../libbacktrace
+ 
+ WARN_FLAGS = -W -Wall -Wwrite-strings -Wmissing-format-attribute \
+-	     -Wcast-qual -Werror
++	     -Wcast-qual
+ 
+ C_WARN_FLAGS = $(WARN_FLAGS) -Wstrict-prototypes -Wmissing-prototypes -Wold-style-definition
+ CXX_WARN_FLAGS = $(WARN_FLAGS) -Wno-unused-parameter
+diff --git a/libsanitizer/sanitizer_common/sanitizer_common_interceptors_ioctl.inc b/libsanitizer/sanitizer_common/sanitizer_common_interceptors_ioctl.inc
+index 6c5fda09f..8f9314142 100755
+--- a/libsanitizer/sanitizer_common/sanitizer_common_interceptors_ioctl.inc
++++ b/libsanitizer/sanitizer_common/sanitizer_common_interceptors_ioctl.inc
+@@ -358,15 +358,6 @@ static void ioctl_table_fill() {
+ 
+ #if SANITIZER_LINUX && !SANITIZER_ANDROID
+   // _(SIOCDEVPLIP, WRITE, struct_ifreq_sz); // the same as EQL_ENSLAVE
+-  _(CYGETDEFTHRESH, WRITE, sizeof(int));
+-  _(CYGETDEFTIMEOUT, WRITE, sizeof(int));
+-  _(CYGETMON, WRITE, struct_cyclades_monitor_sz);
+-  _(CYGETTHRESH, WRITE, sizeof(int));
+-  _(CYGETTIMEOUT, WRITE, sizeof(int));
+-  _(CYSETDEFTHRESH, NONE, 0);
+-  _(CYSETDEFTIMEOUT, NONE, 0);
+-  _(CYSETTHRESH, NONE, 0);
+-  _(CYSETTIMEOUT, NONE, 0);
+   _(EQL_EMANCIPATE, WRITE, struct_ifreq_sz);
+   _(EQL_ENSLAVE, WRITE, struct_ifreq_sz);
+   _(EQL_GETMASTRCFG, WRITE, struct_ifreq_sz);
+diff --git a/libsanitizer/sanitizer_common/sanitizer_platform_limits_posix.cc b/libsanitizer/sanitizer_common/sanitizer_platform_limits_posix.cc
+index 069d8d557..33d6b82ee 100644
+--- a/libsanitizer/sanitizer_common/sanitizer_platform_limits_posix.cc
++++ b/libsanitizer/sanitizer_common/sanitizer_platform_limits_posix.cc
+@@ -150,7 +150,6 @@ typedef struct user_fpregs elf_fpregset_t;
+ # include <sys/procfs.h>
+ #endif
+ #include <sys/user.h>
+-#include <linux/cyclades.h>
+ #include <linux/if_eql.h>
+ #include <linux/if_plip.h>
+ #include <linux/lp.h>
+@@ -445,7 +444,6 @@ unsigned struct_ElfW_Phdr_sz = sizeof(Elf_Phdr);
+ 
+ #if SANITIZER_LINUX && !SANITIZER_ANDROID
+   unsigned struct_ax25_parms_struct_sz = sizeof(struct ax25_parms_struct);
+-  unsigned struct_cyclades_monitor_sz = sizeof(struct cyclades_monitor);
+ #if EV_VERSION > (0x010000)
+   unsigned struct_input_keymap_entry_sz = sizeof(struct input_keymap_entry);
+ #else
+@@ -812,15 +810,6 @@ unsigned struct_ElfW_Phdr_sz = sizeof(Elf_Phdr);
+ #endif // SANITIZER_LINUX || SANITIZER_FREEBSD
+ 
+ #if SANITIZER_LINUX && !SANITIZER_ANDROID
+-  unsigned IOCTL_CYGETDEFTHRESH = CYGETDEFTHRESH;
+-  unsigned IOCTL_CYGETDEFTIMEOUT = CYGETDEFTIMEOUT;
+-  unsigned IOCTL_CYGETMON = CYGETMON;
+-  unsigned IOCTL_CYGETTHRESH = CYGETTHRESH;
+-  unsigned IOCTL_CYGETTIMEOUT = CYGETTIMEOUT;
+-  unsigned IOCTL_CYSETDEFTHRESH = CYSETDEFTHRESH;
+-  unsigned IOCTL_CYSETDEFTIMEOUT = CYSETDEFTIMEOUT;
+-  unsigned IOCTL_CYSETTHRESH = CYSETTHRESH;
+-  unsigned IOCTL_CYSETTIMEOUT = CYSETTIMEOUT;
+   unsigned IOCTL_EQL_EMANCIPATE = EQL_EMANCIPATE;
+   unsigned IOCTL_EQL_ENSLAVE = EQL_ENSLAVE;
+   unsigned IOCTL_EQL_GETMASTRCFG = EQL_GETMASTRCFG;
+@@ -1130,8 +1119,9 @@ CHECK_SIZE_AND_OFFSET(ipc_perm, cgid);
+ #ifndef __GLIBC_PREREQ
+ #define __GLIBC_PREREQ(x, y) 0
+ #endif
+-#if !defined(__aarch64__) || !SANITIZER_LINUX || __GLIBC_PREREQ (2, 21)
+-/* On aarch64 glibc 2.20 and earlier provided incorrect mode field.  */
++#if !SANITIZER_LINUX || __GLIBC_PREREQ (2, 31)
++/* glibc 2.30 and earlier provided 16-bit mode field instead of 32-bit
++   on many architectures.  */
+ CHECK_SIZE_AND_OFFSET(ipc_perm, mode);
+ #endif
+ 
+diff --git a/libsanitizer/sanitizer_common/sanitizer_platform_limits_posix.h b/libsanitizer/sanitizer_common/sanitizer_platform_limits_posix.h
+index 304d04e39..55cae4e1a 100644
+--- a/libsanitizer/sanitizer_common/sanitizer_platform_limits_posix.h
++++ b/libsanitizer/sanitizer_common/sanitizer_platform_limits_posix.h
+@@ -207,20 +207,13 @@ namespace __sanitizer {
+     unsigned long __unused1;
+     unsigned long __unused2;
+ #elif defined(__sparc__)
+-# if defined(__arch64__)
+     unsigned mode;
+-    unsigned short __pad1;
+-# else
+-    unsigned short __pad1;
+-    unsigned short mode;
+     unsigned short __pad2;
+-# endif
+     unsigned short __seq;
+     unsigned long long __unused1;
+     unsigned long long __unused2;
+ #else
+-    unsigned short mode;
+-    unsigned short __pad1;
++    unsigned int mode;
+     unsigned short __seq;
+     unsigned short __pad2;
+ #if defined(__x86_64__) && !defined(_LP64)
+@@ -963,7 +956,6 @@ struct __sanitizer_cookie_io_functions_t {
+ 
+ #if SANITIZER_LINUX && !SANITIZER_ANDROID
+   extern unsigned struct_ax25_parms_struct_sz;
+-  extern unsigned struct_cyclades_monitor_sz;
+   extern unsigned struct_input_keymap_entry_sz;
+   extern unsigned struct_ipx_config_data_sz;
+   extern unsigned struct_kbdiacrs_sz;
+@@ -1308,15 +1300,6 @@ struct __sanitizer_cookie_io_functions_t {
+ #endif  // SANITIZER_LINUX || SANITIZER_FREEBSD
+ 
+ #if SANITIZER_LINUX && !SANITIZER_ANDROID
+-  extern unsigned IOCTL_CYGETDEFTHRESH;
+-  extern unsigned IOCTL_CYGETDEFTIMEOUT;
+-  extern unsigned IOCTL_CYGETMON;
+-  extern unsigned IOCTL_CYGETTHRESH;
+-  extern unsigned IOCTL_CYGETTIMEOUT;
+-  extern unsigned IOCTL_CYSETDEFTHRESH;
+-  extern unsigned IOCTL_CYSETDEFTIMEOUT;
+-  extern unsigned IOCTL_CYSETTHRESH;
+-  extern unsigned IOCTL_CYSETTIMEOUT;
+   extern unsigned IOCTL_EQL_EMANCIPATE;
+   extern unsigned IOCTL_EQL_ENSLAVE;
+   extern unsigned IOCTL_EQL_GETMASTRCFG;
+diff --git a/libstdc++-v3/include/bits/stl_pair.h b/libstdc++-v3/include/bits/stl_pair.h
+index a30b630b4..5a4823ab0 100644
+--- a/libstdc++-v3/include/bits/stl_pair.h
++++ b/libstdc++-v3/include/bits/stl_pair.h
+@@ -183,7 +183,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
+   };
+ #endif // C++11
+ 
+-  class __pair_base
++  template<typename _U1, typename _U2> class __pair_base
+   {
+ #if __cplusplus >= 201103L
+     template<typename _T1, typename _T2> friend struct pair;
+@@ -202,7 +202,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
+    */
+   template<typename _T1, typename _T2>
+     struct pair
+-    : private __pair_base
++    : private __pair_base<_T1, _T2>
+     {
+       typedef _T1 first_type;    /// @c first_type is the first bound type
+       typedef _T2 second_type;   /// @c second_type is the second bound type
+diff --git a/libstdc++-v3/src/Makefile.am b/libstdc++-v3/src/Makefile.am
+index dce25a6bd..fd6635b4c 100644
+--- a/libstdc++-v3/src/Makefile.am
++++ b/libstdc++-v3/src/Makefile.am
+@@ -217,7 +217,6 @@ CXXLINK = \
+ 	$(LIBTOOL) --tag CXX \
+ 	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) \
+ 	--mode=link $(CXX) \
+-	$(VTV_CXXLINKFLAGS) \
+ 	$(OPT_LDFLAGS) $(SECTION_LDFLAGS) $(AM_CXXFLAGS) $(LTLDFLAGS) -o $@
+ 
+ # Symbol versioning for shared libraries.
+diff --git a/libstdc++-v3/src/Makefile.in b/libstdc++-v3/src/Makefile.in
+index 75a207a5e..27c89cf32 100644
+--- a/libstdc++-v3/src/Makefile.in
++++ b/libstdc++-v3/src/Makefile.in
+@@ -507,7 +507,6 @@ CXXLINK = \
+ 	$(LIBTOOL) --tag CXX \
+ 	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) \
+ 	--mode=link $(CXX) \
+-	$(VTV_CXXLINKFLAGS) \
+ 	$(OPT_LDFLAGS) $(SECTION_LDFLAGS) $(AM_CXXFLAGS) $(LTLDFLAGS) -o $@
+ 
+ @ENABLE_SYMVERS_TRUE@CLEANFILES = libstdc++-symbols.ver $(version_dep)
+diff --git a/libstdc++-v3/src/c++11/Makefile.am b/libstdc++-v3/src/c++11/Makefile.am
+index 275a8709c..2bb5c0e3e 100644
+--- a/libstdc++-v3/src/c++11/Makefile.am
++++ b/libstdc++-v3/src/c++11/Makefile.am
+@@ -184,5 +184,4 @@ CXXLINK = \
+ 	$(LIBTOOL) --tag CXX --tag disable-shared \
+ 	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) \
+ 	--mode=link $(CXX) \
+-	$(VTV_CXXLINKFLAGS) \
+ 	$(OPT_LDFLAGS) $(SECTION_LDFLAGS) $(AM_CXXFLAGS) $(LTLDFLAGS) -o $@
+diff --git a/libstdc++-v3/src/c++11/Makefile.in b/libstdc++-v3/src/c++11/Makefile.in
+index c8dea4bce..5a30a5cc4 100644
+--- a/libstdc++-v3/src/c++11/Makefile.in
++++ b/libstdc++-v3/src/c++11/Makefile.in
+@@ -489,7 +489,6 @@ CXXLINK = \
+ 	$(LIBTOOL) --tag CXX --tag disable-shared \
+ 	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) \
+ 	--mode=link $(CXX) \
+-	$(VTV_CXXLINKFLAGS) \
+ 	$(OPT_LDFLAGS) $(SECTION_LDFLAGS) $(AM_CXXFLAGS) $(LTLDFLAGS) -o $@
+ 
+ all: all-am
+diff --git a/libstdc++-v3/src/c++98/Makefile.am b/libstdc++-v3/src/c++98/Makefile.am
+index 0b95c247a..be9a5cadd 100644
+--- a/libstdc++-v3/src/c++98/Makefile.am
++++ b/libstdc++-v3/src/c++98/Makefile.am
+@@ -293,5 +293,4 @@ CXXLINK = \
+ 	$(LIBTOOL) --tag CXX --tag disable-shared \
+ 	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) \
+ 	--mode=link $(CXX) \
+-	$(VTV_CXXLINKFLAGS) \
+ 	$(OPT_LDFLAGS) $(SECTION_LDFLAGS) $(AM_CXXFLAGS) $(LTLDFLAGS) -o $@
+diff --git a/libstdc++-v3/src/c++98/Makefile.in b/libstdc++-v3/src/c++98/Makefile.in
+index ab7464fdd..39bb696bc 100644
+--- a/libstdc++-v3/src/c++98/Makefile.in
++++ b/libstdc++-v3/src/c++98/Makefile.in
+@@ -499,7 +499,6 @@ CXXLINK = \
+ 	$(LIBTOOL) --tag CXX --tag disable-shared \
+ 	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) \
+ 	--mode=link $(CXX) \
+-	$(VTV_CXXLINKFLAGS) \
+ 	$(OPT_LDFLAGS) $(SECTION_LDFLAGS) $(AM_CXXFLAGS) $(LTLDFLAGS) -o $@
+ 
+ all: all-am
