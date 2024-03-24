@@ -11,9 +11,11 @@ RDEPEND=""
 BDEPEND="${CATEGORY}/binutils"
 
 if [[ ${CATEGORY} != cross-* ]] ; then
-	BDEPEND="sys-devel/gcc:10"
-	CC="gcc-10"
-	CXX="g++-10"
+	if [[ $(tc-arch) != "loong" ]] ; then
+		BDEPEND="sys-devel/gcc:10"
+		CC="gcc-10"
+		CXX="g++-10"
+	fi
 else
 	BDEPEND="sys-devel/gcc:9.5.0"
 	CC="gcc-9.5.0"
