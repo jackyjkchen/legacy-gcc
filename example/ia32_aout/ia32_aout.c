@@ -30,7 +30,8 @@
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
 #include <asm/cacheflush.h>
 
-static ssize_t lk_read_code(struct file *file, unsigned long addr, loff_t pos, size_t len)
+static ssize_t lk_read_code(struct file *file, unsigned long addr,
+			    loff_t pos, size_t len)
 {
 	ssize_t res = kernel_read(file, (void __user *)addr, len, &pos);
 	if (res > 0)
@@ -50,10 +51,10 @@ static int load_aout_binary(struct linux_binprm *);
 static int load_aout_library(struct file *);
 
 static struct linux_binfmt aout_format = {
-	.module		= THIS_MODULE,
-	.load_binary	= load_aout_binary,
-	.load_shlib	= load_aout_library,
-	.min_coredump	= PAGE_SIZE
+	.module       = THIS_MODULE,
+	.load_binary  = load_aout_binary,
+	.load_shlib   = load_aout_library,
+	.min_coredump = PAGE_SIZE
 };
 
 static int set_brk(unsigned long start, unsigned long end)
@@ -75,35 +76,35 @@ static u32 __user *create_aout_tables(char __user *p, struct linux_binprm *bprm)
 	u32 __user *argv, *envp, *sp;
 	int argc = bprm->argc, envc = bprm->envc;
 
-	sp = (u32 __user *) ((-(unsigned long)sizeof(u32)) & (unsigned long) p);
-	sp -= envc+1;
+	sp = (u32 __user *) ((-(unsigned long)sizeof(u32)) & (unsigned long)p);
+	sp -= envc + 1;
 	envp = sp;
-	sp -= argc+1;
+	sp -= argc + 1;
 	argv = sp;
-	put_user((unsigned long) envp, --sp);
-	put_user((unsigned long) argv, --sp);
+	put_user((unsigned long)envp, --sp);
+	put_user((unsigned long)argv, --sp);
 	put_user(argc, --sp);
-	current->mm->arg_start = (unsigned long) p;
+	current->mm->arg_start = (unsigned long)p;
 	while (argc-- > 0) {
 		char c;
 
-		put_user((u32)(unsigned long)p, argv++);
+		put_user((u32) (unsigned long)p, argv++);
 		do {
 			get_user(c, p++);
 		} while (c);
 	}
 	put_user(0, argv);
-	current->mm->arg_end = current->mm->env_start = (unsigned long) p;
+	current->mm->arg_end = current->mm->env_start = (unsigned long)p;
 	while (envc-- > 0) {
 		char c;
 
-		put_user((u32)(unsigned long)p, envp++);
+		put_user((u32) (unsigned long)p, envp++);
 		do {
 			get_user(c, p++);
 		} while (c);
 	}
 	put_user(0, envp);
-	current->mm->env_end = (unsigned long) p;
+	current->mm->env_end = (unsigned long)p;
 	return sp;
 }
 
@@ -118,12 +119,12 @@ static int load_aout_binary(struct linux_binprm *bprm)
 	struct exec ex;
 	int retval;
 
-	ex = *((struct exec *) bprm->buf);		/* exec-header */
+	ex = *((struct exec *)bprm->buf);	/* exec-header */
 	if ((N_MAGIC(ex) != ZMAGIC && N_MAGIC(ex) != OMAGIC &&
 	     N_MAGIC(ex) != QMAGIC && N_MAGIC(ex) != NMAGIC) ||
 	    N_TRSIZE(ex) || N_DRSIZE(ex) ||
 	    i_size_read(file_inode(bprm->file)) <
-	    ex.a_text+ex.a_data+N_SYMSIZE(ex)+N_TXTOFF(ex)) {
+	    ex.a_text + ex.a_data + N_SYMSIZE(ex) + N_TXTOFF(ex)) {
 		return -ENOEXEC;
 	}
 
@@ -156,14 +157,13 @@ static int load_aout_binary(struct linux_binprm *bprm)
 
 	regs->cs = __USER32_CS;
 	regs->r8 = regs->r9 = regs->r10 = regs->r11 = regs->r12 =
-		regs->r13 = regs->r14 = regs->r15 = 0;
+	    regs->r13 = regs->r14 = regs->r15 = 0;
 
 	current->mm->end_code = ex.a_text +
-		(current->mm->start_code = N_TXTADDR(ex));
+	    (current->mm->start_code = N_TXTADDR(ex));
 	current->mm->end_data = ex.a_data +
-		(current->mm->start_data = N_DATADDR(ex));
-	current->mm->brk = ex.a_bss +
-		(current->mm->start_brk = N_BSSADDR(ex));
+	    (current->mm->start_data = N_DATADDR(ex));
+	current->mm->brk = ex.a_bss + (current->mm->start_brk = N_BSSADDR(ex));
 
 	retval = setup_arg_pages(bprm, IA32_STACK_TOP, EXSTACK_DEFAULT);
 	if (retval < 0)
@@ -173,7 +173,7 @@ static int load_aout_binary(struct linux_binprm *bprm)
 		unsigned long text_addr, map_size;
 
 		text_addr = N_TXTADDR(ex);
-		map_size = ex.a_text+ex.a_data;
+		map_size = ex.a_text + ex.a_data;
 
 		error = vm_brk(text_addr & PAGE_MASK, map_size);
 
@@ -181,25 +181,24 @@ static int load_aout_binary(struct linux_binprm *bprm)
 			return error;
 
 		error = lk_read_code(bprm->file, text_addr, 32,
-				  ex.a_text + ex.a_data);
+				     ex.a_text + ex.a_data);
 		if ((signed long)error < 0)
 			return error;
 	} else {
 		if (!bprm->file->f_op->mmap || (fd_offset & ~PAGE_MASK) != 0) {
-			error = vm_brk(N_TXTADDR(ex), ex.a_text+ex.a_data);
+			error = vm_brk(N_TXTADDR(ex), ex.a_text + ex.a_data);
 			if (error)
 				return error;
 
 			lk_read_code(bprm->file, N_TXTADDR(ex), fd_offset,
-					ex.a_text+ex.a_data);
+				     ex.a_text + ex.a_data);
 			goto beyond_if;
 		}
 
 		error = vm_mmap(bprm->file, N_TXTADDR(ex), ex.a_text,
 				PROT_READ | PROT_EXEC,
 				MAP_FIXED | MAP_PRIVATE | MAP_DENYWRITE |
-				MAP_EXECUTABLE | MAP_32BIT,
-				fd_offset);
+				MAP_EXECUTABLE | MAP_32BIT, fd_offset);
 
 		if (error != N_TXTADDR(ex))
 			return error;
@@ -213,7 +212,7 @@ static int load_aout_binary(struct linux_binprm *bprm)
 			return error;
 	}
 
-beyond_if:
+ beyond_if:
 	error = set_brk(current->mm->start_brk, current->mm->brk);
 	if (error)
 		return error;
@@ -221,7 +220,7 @@ beyond_if:
 	set_binfmt(&aout_format);
 
 	current->mm->start_stack =
-		(unsigned long)create_aout_tables((char __user *)bprm->p, bprm);
+	    (unsigned long)create_aout_tables((char __user *)bprm->p, bprm);
 	/* start thread */
 	loadsegment(fs, 0);
 	loadsegment(ds, __USER32_DS);
@@ -233,7 +232,7 @@ beyond_if:
 	(regs)->cs = __USER32_CS;
 	(regs)->ss = __USER32_DS;
 	regs->r8 = regs->r9 = regs->r10 = regs->r11 =
-	regs->r12 = regs->r13 = regs->r14 = regs->r15 = 0;
+	    regs->r12 = regs->r13 = regs->r14 = regs->r15 = 0;
 	return 0;
 }
 
@@ -253,7 +252,7 @@ static int load_aout_library(struct file *file)
 	if ((N_MAGIC(ex) != ZMAGIC && N_MAGIC(ex) != QMAGIC) || N_TRSIZE(ex) ||
 	    N_DRSIZE(ex) || ((ex.a_entry & 0xfff) && N_MAGIC(ex) == ZMAGIC) ||
 	    i_size_read(file_inode(file)) <
-	    ex.a_text+ex.a_data+N_SYMSIZE(ex)+N_TXTOFF(ex)) {
+	    ex.a_text + ex.a_data + N_SYMSIZE(ex) + N_TXTOFF(ex)) {
 		goto out;
 	}
 
@@ -263,7 +262,7 @@ static int load_aout_library(struct file *file)
 	/* For  QMAGIC, the starting address is 0x20 into the page.  We mask
 	   this off to get the starting address for the page */
 
-	start_addr =  ex.a_entry & 0xfffff000;
+	start_addr = ex.a_entry & 0xfffff000;
 
 	if ((N_TXTOFF(ex) & ~PAGE_MASK) != 0) {
 		retval = vm_brk(start_addr, ex.a_text + ex.a_data + ex.a_bss);
@@ -271,7 +270,7 @@ static int load_aout_library(struct file *file)
 			goto out;
 
 		lk_read_code(file, start_addr, N_TXTOFF(ex),
-			  ex.a_text + ex.a_data);
+			     ex.a_text + ex.a_data);
 		retval = 0;
 		goto out;
 	}
@@ -292,7 +291,7 @@ static int load_aout_library(struct file *file)
 			goto out;
 	}
 	retval = 0;
-out:
+ out:
 	return retval;
 }
 
