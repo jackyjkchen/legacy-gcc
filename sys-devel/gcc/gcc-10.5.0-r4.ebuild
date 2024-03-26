@@ -28,7 +28,6 @@ src_prepare() {
 
 	toolchain_src_prepare
 
-	eapply "${FILESDIR}"/${PV}/00_workaround-for-gcc12-host.patch
 	eapply "${FILESDIR}"/${PV}/01_riscv-fix-multilib.patch
 
 	use vanilla && return 0

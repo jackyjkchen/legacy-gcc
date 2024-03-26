@@ -26,11 +26,10 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/00_gentoo-patchset.patch
 	toolchain_src_prepare
 
-	eapply "${FILESDIR}"/${PV}/01_workaround-for-gcc12-host.patch
-	eapply "${FILESDIR}"/${PV}/02_riscv-fix-multilib.patch
+	eapply "${FILESDIR}"/${PV}/01_riscv-fix-multilib.patch
 
 	use vanilla && return 0
-	eapply "${FILESDIR}"/${PV}/03_fix-werror.patch
+	eapply "${FILESDIR}"/${PV}/02_fix-werror.patch
 
 	eapply "${FILESDIR}"/${PV}/postrelease/00_pr90320.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/01_pr106513.patch

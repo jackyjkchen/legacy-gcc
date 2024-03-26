@@ -386,6 +386,13 @@ if tc_version_is_between 2.95 11 ; then
 	esac
 fi
 
+if [[ ${PN} == gcc && ${PV} == *_p* ]] ; then
+	# Snapshots don't contain info pages.
+	# If they start to, adjust gcc_cv_prog_makeinfo_modern logic in toolchain_src_configure.
+	# Needed unless/until https://gcc.gnu.org/PR106899 is fixed
+	BDEPEND+=" sys-apps/texinfo"
+fi
+
 if tc_has_feature sanitize ; then
 	# libsanitizer relies on 'crypt.h' to be present
 	# on target. glibc user to provide it unconditionally.
@@ -819,6 +826,11 @@ tc_enable_hardened_gcc() {
 		hardened_gcc_flags+=" -DDEF_GENTOO_ZNOW"
 	fi
 
+	if _tc_use_if_iuse cet && [[ ${CTARGET} == *x86_64*-linux-gnu* ]] ; then
+		einfo "Updating gcc to use x86-64 control flow protection by default ..."
+		hardened_gcc_flags+=" -DEXTRA_OPTIONS_CF"
+	fi
+
 	if _tc_use_if_iuse hardened ; then
 		# Will add some hardened options as default, e.g. for gcc-12
 		# * -fstack-clash-protection
@@ -829,10 +841,6 @@ tc_enable_hardened_gcc() {
 		hardened_gcc_flags+=" -DGENTOO_FORTIFY_SOURCE_LEVEL=3"
 		# Add -D_GLIBCXX_ASSERTIONS
 		hardened_gcc_flags+=" -DDEF_GENTOO_GLIBCXX_ASSERTIONS"
-
-		if _tc_use_if_iuse cet && [[ ${CTARGET} == *x86_64*-linux* ]] ; then
-			hardened_gcc_flags+=" -DEXTRA_OPTIONS_CF"
-		fi
 
 		# Rebrand to make bug reports easier
 		BRANDING_GCC_PKGVERSION=${BRANDING_GCC_PKGVERSION/Gentoo/Gentoo Hardened}
@@ -940,6 +948,12 @@ toolchain_src_configure() {
 	downgrade_arch_flags ${GCC_BRANCH_VER}
 	gcc_do_filter_flags
 
+	if tc_version_is_between 9 11 && [[ $(gcc-major-version) -ge 12 ]] ; then
+		# https://gcc.gnu.org/PR105695
+		# bug #849359
+		export ac_cv_std_swap_in_utility=no
+	fi
+
 	einfo "CFLAGS=\"${CFLAGS}\""
 	einfo "CXXFLAGS=\"${CXXFLAGS}\""
 	einfo "LDFLAGS=\"${LDFLAGS}\""
@@ -1006,6 +1020,32 @@ toolchain_src_configure() {
 		)
 	fi
 
+	declare -A l1_cache_sizes=()
+	# Workaround for inconsistent cache sizes on hybrid P/E cores
+	# See PR111768 (and bug #904426, bug #908523, and bug #915389)
+	if [[ ${CBUILD} == @(x86_64|i?86)* ]] && [[ ${CFLAGS} == *-march=native* ]] && tc-is-gcc ; then
+		local x
+		local l1_cache_size
+		# Iterate over all cores and find their L1 cache size
+		for x in $(seq 0 $(($(nproc)-1))) ; do
+			[[ -z ${x} || ${x} -gt 64 ]] && break
+			l1_cache_size=$(taskset --cpu-list ${x} $(tc-getCC) -Q --help=params -O2 -march=native \
+				| awk '{ if ($1 ~ /^.*param.*l1-cache-size/) print $2; }' || die)
+			[[ -n ${l1_cache_size} && ${l1_cache_size} =~ ^[0-9]+$ ]] || break
+			l1_cache_sizes[${l1_cache_size}]=1
+		done
+		# If any of them are different, abort. We can't just pass one value of
+		# l1-cache-size because it doesn't cancel out the -march=native one.
+		if [[ ${#l1_cache_sizes[@]} -gt 1 ]] ; then
+			eerror "Different values of l1-cache-size detected!"
+			eerror "GCC will fail to bootstrap when comparing files with these flags."
+			eerror "This CPU is likely big.little/hybrid hardware with power/efficiency cores."
+			eerror "Please install app-misc/resolve-march-native and run 'resolve-march-native'"
+			eerror "to find a safe value of CFLAGS for this CPU. Note that this may vary"
+			eerror "depending on the core it ran on. taskset can be used to fix the cores used."
+			die "Varying l1-cache-size found, aborting (bug #915389, gcc PR#111768)"
+		fi
+	fi
 
 	# Stick the python scripts in their own slotted directory (bug #279252)
 	#
@@ -1117,7 +1157,7 @@ toolchain_src_configure() {
 		build_config_targets+=( bootstrap-lto )
 	fi
 
-	if tc_version_is_at_least 12 && _tc_use_if_iuse cet ; then
+	if tc_version_is_at_least 12 && _tc_use_if_iuse cet && [[ ${CTARGET} == x86_64-*-gnu* ]] ; then
 		build_config_targets+=( bootstrap-cet )
 	fi
 
@@ -1237,7 +1277,13 @@ toolchain_src_configure() {
 			fi
 		fi
 
-		tc_version_is_at_least 4.2 && confgcc+=( --disable-bootstrap )
+		tc_version_is_at_least 4.2 && confgcc+=(
+			# https://gcc.gnu.org/PR100289
+			# TOOD: Find a way to disable this just for stage1 cross?
+			--disable-gcov
+
+			--disable-bootstrap
+		)
 	else
 		if tc_version_is_at_least 2.8 ; then
 			if tc-is-static-only ; then
@@ -1649,6 +1695,14 @@ toolchain_src_configure() {
 	# already.  Our custom version/urls/etc... trigger it. bug #464008
 	export gcc_cv_prog_makeinfo_modern=no
 
+	# TODO: Ignore RCs here (but TOOLCHAIN_IS_RC isn't yet an eclass var)
+	if [[ ${PV} == *_p* && -f "${S}"/gcc/doc/gcc.info ]] ; then
+		# Safeguard against https://gcc.gnu.org/PR106899 being fixed
+		# without corresponding ebuild changes.
+		eqawarn "Snapshot release with pre-generated info pages found!"
+		eqawarn "The BDEPEND in the ebuild should be updated to drop texinfo."
+	fi
+
 	# Do not let the X detection get in our way.  We know things can be found
 	# via system paths, so no need to hardcode things that'll break multilib.
 	# Older gcc versions will detect ac_x_libraries=/usr/lib64 which ends up
@@ -2034,7 +2088,7 @@ gcc_do_make() {
 				emake doxygen-man
 			fi
 			# Clean bogus manpages. bug #113902
-			find -name '*_build_*' -delete
+			find -name '*_build_*' -delete || die
 
 			# Blow away generated directory references. Newer versions of gcc
 			# have gotten better at this, but not perfect. This is easier than
@@ -2133,7 +2187,7 @@ toolchain_src_install() {
 		# See https://gcc.gnu.org/onlinedocs/gcc-11.3.0/jit/internals/index.html#packaging-notes
 		# and bug #843341.
 		#
-		# Both of the non-JIT and JIT builds  are configured to install to $(DESTDIR)
+		# Both of the non-JIT and JIT builds are configured to install to $(DESTDIR)
 		# Install the configuration with --enable-host-shared first
 		# *then* the one without, so that the faster build
 		# of "cc1" et al overwrites the slower build.
@@ -2143,9 +2197,9 @@ toolchain_src_install() {
 		S="${WORKDIR}"/build-jit emake DESTDIR="${D}" install
 
 		# Punt some tools which are really only useful while building gcc
-		find "${ED}" -name install-tools -prune -type d -exec rm -rf "{}" \;
+		find "${ED}" -name install-tools -prune -type d -exec rm -rf "{}" \; || die
 		# This one comes with binutils
-		find "${ED}" -name libiberty.a -delete
+		find "${ED}" -name libiberty.a -delete || die
 
 		# Move the libraries to the proper location
 		gcc_movelibs
@@ -2258,7 +2312,8 @@ toolchain_src_install() {
 		rm "${D}${DATAPATH}"/info/dir || die
 	fi
 
-	# Prune empty dirs left behind
+	# Prune empty dirs left behind. It's fine not to die here as we may
+	# really have no empty dirs left.
 	find "${ED}" -depth -type d -delete 2>/dev/null
 
 	# libstdc++.la: Delete as it doesn't add anything useful: g++ itself
@@ -2337,7 +2392,7 @@ toolchain_src_install() {
 
 		rm "${py}" || die
 	done
-	popd >/dev/null
+	popd >/dev/null || die
 
 	# Don't scan .gox files for executable stacks - false positives
 	export QA_EXECSTACK="usr/lib*/go/*/*.gox"
@@ -2409,7 +2464,7 @@ gcc_movelibs() {
 			removedirs="${removedirs} ${FROMDIR}"
 			FROMDIR=${D}${FROMDIR}
 			if [[ ${FROMDIR} != "${TODIR}" && -d ${FROMDIR} ]] ; then
-				local files=$(find "${FROMDIR}" -maxdepth 1 ! -type d 2>/dev/null)
+				local files=$(find "${FROMDIR}" -maxdepth 1 ! -type d 2>/dev/null || die)
 				if [[ -n ${files} ]] ; then
 					mv ${files} "${TODIR}" || die
 				fi
@@ -2425,7 +2480,7 @@ gcc_movelibs() {
 	for FROMDIR in ${removedirs} ; do
 		rmdir "${D}"${FROMDIR} >& /dev/null
 	done
-
+	# XXX: Intentionally no die, here to remove empty dirs
 	find -depth "${ED}" -type d -exec rmdir {} + >& /dev/null
 
 	if is_mingw || is_cygwin ; then
