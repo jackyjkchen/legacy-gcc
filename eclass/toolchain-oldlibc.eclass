@@ -146,12 +146,12 @@ fi
 #---->> DEPEND <<----
 
 BDEPEND="
-	>=sys-devel/bison-1.875
-	>=sys-devel/flex-2.5.4"
-tc_version_is_at_least 2.95 && BDEPEND+=" test? ( >=dev-util/dejagnu-1.4.4 >=sys-devel/autogen-5.5.4 )"
+	app-alternatives/yacc
+	sys-devel/flex"
+tc_version_is_at_least 2.95 && BDEPEND+=" test? ( dev-util/dejagnu sys-devel/autogen )"
 DEPEND="${RDEPEND}"
 
-PDEPEND=">=sys-devel/gcc-config-2.3"
+PDEPEND="sys-devel/gcc-config"
 
 #---->> S + SRC_URI essentials <<----
 
