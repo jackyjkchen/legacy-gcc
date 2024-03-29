@@ -1,0 +1,221 @@
+diff --git a/gcc/gcc.c b/gcc/gcc.c
+index 087fdfe0..7a6574d6 100644
+--- a/gcc/gcc.c
++++ b/gcc/gcc.c
+@@ -6176,6 +6176,10 @@ main (int argc, char **argv)
+   signal (SIGCHLD, SIG_DFL);
+ #endif
+ 
++  /* Parsing and gimplification sometimes need quite large stack.
++     Increase stack size limits if possible.  */
++  stack_limit_increase (64 * 1024 * 1024);
++
+   /* Allocate the argument vector.  */
+   alloc_args ();
+ 
+diff --git a/gcc/toplev.c b/gcc/toplev.c
+index 23699c61..c9657fc7 100644
+--- a/gcc/toplev.c
++++ b/gcc/toplev.c
+@@ -1979,7 +1979,7 @@ process_options (void)
+   if (flag_signaling_nans)
+     flag_trapping_math = 1;
+ 
+-  /* We cannot reassociate if we want traps or signed zeros.  */
++  /* We cannot reassociate if we want traps or signed zeros. ?*/
+   if (flag_associative_math && (flag_trapping_math || flag_signed_zeros))
+     {
+       warning (0, "-fassociative-math disabled; other options take precedence");
+@@ -2252,6 +2252,10 @@ do_compile (void)
+ int
+ toplev_main (unsigned int argc, const char **argv)
+ {
++  /* Parsing and gimplification sometimes need quite large stack.
++     Increase stack size limits if possible.  */
++  stack_limit_increase (64 * 1024 * 1024);
++
+   save_argv = argv;
+ 
+   /* Initialization of GCC's environment, and diagnostics.  */
+diff --git a/include/libiberty.h b/include/libiberty.h
+index 19d1d46d..8649b6ed 100644
+--- a/include/libiberty.h
++++ b/include/libiberty.h
+@@ -615,6 +615,9 @@ extern int vsnprintf (char *, size_t, const char *, va_list) ATTRIBUTE_PRINTF(3,
+ extern int strverscmp (const char *, const char *);
+ #endif
+ 
++/* Increase stack limit if possible.  */
++extern void stack_limit_increase (unsigned long);
++
+ #define ARRAY_SIZE(a) (sizeof (a) / sizeof ((a)[0]))
+ 
+ /* Drastically simplified alloca configurator.  If we're using GCC,
+diff --git a/libiberty/Makefile.in b/libiberty/Makefile.in
+index d2f322fe..0edcc83d 100644
+--- a/libiberty/Makefile.in
++++ b/libiberty/Makefile.in
+@@ -147,7 +147,7 @@ CFILES = alloca.c argv.c asprintf.c atexit.c				\
+ 	 splay-tree.c stpcpy.c stpncpy.c strcasecmp.c strchr.c strdup.c	\
+ 	 strerror.c strncasecmp.c strncmp.c strrchr.c strsignal.c	\
+ 	 strstr.c strtod.c strtol.c strtoul.c strndup.c	strverscmp.c	\
+-	tmpnam.c							\
++	stack-limit.c tmpnam.c							\
+ 	unlink-if-ordinary.c						\
+ 	vasprintf.c vfork.c vfprintf.c vprintf.c vsnprintf.c vsprintf.c	\
+ 	waitpid.c							\
+@@ -170,7 +170,7 @@ REQUIRED_OFILES = ./regex.o ./cplus-dem.o ./cp-demangle.o ./md5.o	\
+ 	./partition.o ./pexecute.o ./physmem.o				\
+ 	./pex-common.o ./pex-one.o @pexecute@				\
+ 	./safe-ctype.o ./sort.o ./spaces.o ./splay-tree.o ./strerror.o	\
+-	 ./strsignal.o							\
++	 ./strsignal.o ./stack-limit.o							\
+ 	./unlink-if-ordinary.o						\
+ 	./xatexit.o ./xexit.o ./xmalloc.o ./xmemdup.o ./xstrdup.o	\
+ 	 ./xstrerror.o ./xstrndup.o
+@@ -977,6 +977,12 @@ $(CONFIGURED_OFILES): stamp-picdir
+ 	else true; fi
+ 	$(COMPILE.c) $(srcdir)/splay-tree.c $(OUTPUT_OPTION)
+ 
++./stack-limit.o: $(srcdir)/stack-limit.c config.h
++	if [ x"$(PICFLAG)" != x ]; then \
++	  $(COMPILE.c) $(PICFLAG) $(srcdir)/stack-limit.c -o pic/$@; \
++	else true; fi
++	$(COMPILE.c) $(srcdir)/stack-limit.c $(OUTPUT_OPTION)
++
+ ./stpcpy.o: $(srcdir)/stpcpy.c $(INCDIR)/ansidecl.h
+ 	if [ x"$(PICFLAG)" != x ]; then \
+ 	  $(COMPILE.c) $(PICFLAG) $(srcdir)/stpcpy.c -o pic/$@; \
+diff --git a/libiberty/config.in b/libiberty/config.in
+index 436a58d7..8da28248 100644
+--- a/libiberty/config.in
++++ b/libiberty/config.in
+@@ -103,6 +103,9 @@
+ /* Define to 1 if you have the `getpagesize' function. */
+ #undef HAVE_GETPAGESIZE
+ 
++/* Define to 1 if you have the `getrlimit' function. */
++#undef HAVE_GETRLIMIT
++
+ /* Define to 1 if you have the `getrusage' function. */
+ #undef HAVE_GETRUSAGE
+ 
+@@ -190,6 +193,9 @@
+ /* Define to 1 if you have the `setenv' function. */
+ #undef HAVE_SETENV
+ 
++/* Define to 1 if you have the `setrlimit' function. */
++#undef HAVE_SETRLIMIT
++
+ /* Define to 1 if you have the `sigsetmask' function. */
+ #undef HAVE_SIGSETMASK
+ 
+diff --git a/libiberty/configure b/libiberty/configure
+index 14542e77..030d3800 100755
+--- a/libiberty/configure
++++ b/libiberty/configure
+@@ -5061,7 +5061,7 @@ vars="sys_errlist sys_nerr sys_siglist"
+ 
+ checkfuncs="getrusage on_exit psignal strerror strsignal sysconf times sbrk gettimeofday"
+ checkfuncs="$checkfuncs realpath canonicalize_file_name pstat_getstatic pstat_getdynamic sysmp"
+-checkfuncs="$checkfuncs getsysinfo table sysctl wait3 wait4 __fsetlocking"
++checkfuncs="$checkfuncs getsysinfo table sysctl wait3 wait4 __fsetlocking getrlimit setrlimit"
+ 
+ # These are neither executed nor required, but they help keep
+ # autoheader happy without adding a bunch of text to acconfig.h.
+@@ -5143,7 +5143,7 @@ for ac_func in asprintf atexit basename bcmp bcopy bsearch bzero calloc clock \
+   vsprintf waitpid getrusage on_exit psignal strerror strsignal \
+   sysconf times sbrk gettimeofday ffs snprintf vsnprintf \
+   pstat_getstatic pstat_getdynamic sysmp getsysinfo table sysctl wait3 wait4 \
+-  realpath canonicalize_file_name __fsetlocking
++  realpath canonicalize_file_name __fsetlocking getrlimit setrlimit
+ do
+ as_ac_var=`echo "ac_cv_func_$ac_func" | $as_tr_sh`
+ echo "$as_me:$LINENO: checking for $ac_func" >&5
+diff --git a/libiberty/configure.ac b/libiberty/configure.ac
+index 9263c82e..6791d63c 100644
+--- a/libiberty/configure.ac
++++ b/libiberty/configure.ac
+@@ -355,7 +355,7 @@ vars="sys_errlist sys_nerr sys_siglist"
+ 
+ checkfuncs="getrusage on_exit psignal strerror strsignal sysconf times sbrk gettimeofday"
+ checkfuncs="$checkfuncs realpath canonicalize_file_name pstat_getstatic pstat_getdynamic sysmp"
+-checkfuncs="$checkfuncs getsysinfo table sysctl wait3 wait4 __fsetlocking"
++checkfuncs="$checkfuncs getsysinfo table sysctl wait3 wait4 __fsetlocking getrlimit setrlimit"
+ 
+ # These are neither executed nor required, but they help keep
+ # autoheader happy without adding a bunch of text to acconfig.h.
+@@ -368,7 +368,7 @@ if test "x" = "y"; then
+   vsprintf waitpid getrusage on_exit psignal strerror strsignal \
+   sysconf times sbrk gettimeofday ffs snprintf vsnprintf \
+   pstat_getstatic pstat_getdynamic sysmp getsysinfo table sysctl wait3 wait4 \
+-  realpath canonicalize_file_name __fsetlocking)
++  realpath canonicalize_file_name __fsetlocking getrlimit setrlimit)
+   AC_CHECK_DECLS([basename, ffs, asprintf, vasprintf, snprintf, vsnprintf])
+   AC_DEFINE(HAVE_SYS_ERRLIST, 1, [Define if you have the sys_errlist variable.])
+   AC_DEFINE(HAVE_SYS_NERR,    1, [Define if you have the sys_nerr variable.])
+diff --git a/libiberty/stack-limit.c b/libiberty/stack-limit.c
+new file mode 100644
+index 00000000..28541b1d
+--- /dev/null
++++ b/libiberty/stack-limit.c
+@@ -0,0 +1,59 @@
++/* Increase stack size limit if possible.
++   Copyright (C) 2011 Free Software Foundation, Inc.
++
++This file is part of the libiberty library.  This library is free
++software; you can redistribute it and/or modify it under the
++terms of the GNU General Public License as published by the
++Free Software Foundation; either version 2, or (at your option)
++any later version.
++
++This library is distributed in the hope that it will be useful,
++but WITHOUT ANY WARRANTY; without even the implied warranty of
++MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++GNU General Public License for more details.
++
++You should have received a copy of the GNU General Public License
++along with GNU CC; see the file COPYING.  If not, write to
++the Free Software Foundation, 51 Franklin Street - Fifth Floor,
++Boston, MA 02110-1301, USA.
++
++As a special exception, if you link this library with files
++compiled with a GNU compiler to produce an executable, this does not cause
++the resulting executable to be covered by the GNU General Public License.
++This exception does not however invalidate any other reasons why
++the executable file might be covered by the GNU General Public License. */
++
++/*
++
++@deftypefn Extension void stack_limit_increase (unsigned long @var{pref})
++
++Attempt to increase stack size limit to @var{pref} bytes if possible.
++
++@end deftypefn
++
++*/
++
++#include "config.h"
++
++#ifdef HAVE_SYS_RESOURCE_H
++#include <sys/resource.h>
++#endif
++
++void
++stack_limit_increase (unsigned long pref)
++{
++#if defined(HAVE_SETRLIMIT) && defined(HAVE_GETRLIMIT) \
++    && defined(RLIMIT_STACK) && defined(RLIM_INFINITY)
++  struct rlimit rlim;
++  if (getrlimit (RLIMIT_STACK, &rlim) == 0
++      && rlim.rlim_cur != RLIM_INFINITY
++      && rlim.rlim_cur < pref
++      && (rlim.rlim_max == RLIM_INFINITY || rlim.rlim_cur < rlim.rlim_max))
++    {
++      rlim.rlim_cur = pref;
++      if (rlim.rlim_max != RLIM_INFINITY && rlim.rlim_cur > rlim.rlim_max)
++	rlim.rlim_cur = rlim.rlim_max;
++      setrlimit (RLIMIT_STACK, &rlim);
++    }
++#endif
++}
