@@ -1,0 +1,243 @@
+diff --git a/gcc/builtins.c b/gcc/builtins.c
+index 654f88bb..bd8b80d4 100644
+--- a/gcc/builtins.c
++++ b/gcc/builtins.c
+@@ -1669,10 +1669,15 @@ expand_builtin_classify_type (tree exp)
+   fcodel = BUILT_IN_MATHFN##L_R ; break;
+ 
+ /* Return mathematic function equivalent to FN but operating directly
+-   on TYPE, if available.  If we can't do the conversion, return zero.  */
+-tree
+-mathfn_built_in (tree type, enum built_in_function fn)
++   on TYPE, if available.  If IMPLICIT is true find the function in
++   implicit_built_in_decls[], otherwise use built_in_decls[].  If we
++   can't do the conversion, return zero.  */
++
++static tree
++mathfn_built_in_1 (tree type, enum built_in_function fn, bool implicit)
+ {
++  tree const *const fn_arr
++    = implicit ? implicit_built_in_decls : built_in_decls;
+   enum built_in_function fcode, fcodef, fcodel;
+ 
+   switch (fn)
+@@ -1747,6 +1752,7 @@ mathfn_built_in (tree type, enum built_in_function fn)
+       CASE_MATHFN (BUILT_IN_SCALB)
+       CASE_MATHFN (BUILT_IN_SCALBLN)
+       CASE_MATHFN (BUILT_IN_SCALBN)
++      CASE_MATHFN (BUILT_IN_SIGNBIT)
+       CASE_MATHFN (BUILT_IN_SIGNIFICAND)
+       CASE_MATHFN (BUILT_IN_SIN)
+       CASE_MATHFN (BUILT_IN_SINCOS)
+@@ -1765,15 +1771,23 @@ mathfn_built_in (tree type, enum built_in_function fn)
+       }
+ 
+   if (TYPE_MAIN_VARIANT (type) == double_type_node)
+-    return implicit_built_in_decls[fcode];
++    return fn_arr[fcode];
+   else if (TYPE_MAIN_VARIANT (type) == float_type_node)
+-    return implicit_built_in_decls[fcodef];
++    return fn_arr[fcodef];
+   else if (TYPE_MAIN_VARIANT (type) == long_double_type_node)
+-    return implicit_built_in_decls[fcodel];
++    return fn_arr[fcodel];
+   else
+     return NULL_TREE;
+ }
+ 
++/* Like mathfn_built_in_1(), but always use the implicit array.  */
++
++tree
++mathfn_built_in (tree type, enum built_in_function fn)
++{
++  return mathfn_built_in_1 (type, fn, /*implicit=*/ 1);
++}
++
+ /* If errno must be maintained, expand the RTL to check if the result,
+    TARGET, of a built-in function call, EXP, is NaN, and if so set
+    errno to EDOM.  */
+@@ -9667,6 +9681,37 @@ fold_builtin_classify (tree fndecl, tree arg, int builtin_index)
+ 
+       return NULL_TREE;
+ 
++    case BUILT_IN_ISINF_SIGN:
++      {
++	/* isinf_sign(x) -> isinf(x) ? (signbit(x) ? -1 : 1) : 0 */
++	/* In a boolean context, GCC will fold the inner COND_EXPR to
++	   1.  So e.g. "if (isinf_sign(x))" would be folded to just
++	   "if (isinf(x) ? 1 : 0)" which becomes "if (isinf(x))". */
++	tree signbit_fn = mathfn_built_in_1 (TREE_TYPE (arg), BUILT_IN_SIGNBIT, 0);
++	tree isinf_fn = built_in_decls[BUILT_IN_ISINF];
++	tree tmp = NULL_TREE;
++
++	arg = builtin_save_expr (arg);
++
++	if (signbit_fn && isinf_fn)
++	  {
++	    tree signbit_call = build_call_expr (signbit_fn, 1, arg);
++	    tree isinf_call = build_call_expr (isinf_fn, 1, arg);
++
++	    signbit_call = fold_build2 (NE_EXPR, integer_type_node,
++					signbit_call, integer_zero_node);
++	    isinf_call = fold_build2 (NE_EXPR, integer_type_node,
++				      isinf_call, integer_zero_node);
++	    
++	    tmp = fold_build3 (COND_EXPR, integer_type_node, signbit_call,
++			       integer_minus_one_node, integer_one_node);
++	    tmp = fold_build3 (COND_EXPR, integer_type_node, isinf_call, tmp,
++			       integer_zero_node);
++	  }
++
++	return tmp;
++      }
++
+     case BUILT_IN_ISFINITE:
+       if (!HONOR_NANS (TYPE_MODE (TREE_TYPE (arg)))
+ 	  && !HONOR_INFINITIES (TYPE_MODE (TREE_TYPE (arg))))
+@@ -10079,6 +10124,9 @@ fold_builtin_1 (tree fndecl, tree arg0, bool ignore)
+     case BUILT_IN_ISINFD128:
+       return fold_builtin_classify (fndecl, arg0, BUILT_IN_ISINF);
+ 
++    case BUILT_IN_ISINF_SIGN:
++      return fold_builtin_classify (fndecl, arg0, BUILT_IN_ISINF_SIGN);
++
+     CASE_FLT_FN (BUILT_IN_ISNAN):
+     case BUILT_IN_ISNAND32:
+     case BUILT_IN_ISNAND64:
+@@ -10448,6 +10496,7 @@ fold_builtin_n (tree fndecl, tree *args, int nargs, bool ignore)
+     {
+     case BUILT_IN_ISFINITE:
+     case BUILT_IN_ISINF:
++    case BUILT_IN_ISINF_SIGN:
+     case BUILT_IN_ISNAN:
+     case BUILT_IN_ISNORMAL:
+       if (nargs < 1)
+diff --git a/gcc/builtins.def b/gcc/builtins.def
+index 4c4e2755..b7eed240 100644
+--- a/gcc/builtins.def
++++ b/gcc/builtins.def
+@@ -655,6 +655,7 @@ DEF_EXT_LIB_BUILTIN    (BUILT_IN_FINITED32, "finited32", BT_FN_INT_DFLOAT32, ATT
+ DEF_EXT_LIB_BUILTIN    (BUILT_IN_FINITED64, "finited64", BT_FN_INT_DFLOAT64, ATTR_CONST_NOTHROW_LIST)
+ DEF_EXT_LIB_BUILTIN    (BUILT_IN_FINITED128, "finited128", BT_FN_INT_DFLOAT128, ATTR_CONST_NOTHROW_LIST)
+ DEF_GCC_BUILTIN        (BUILT_IN_ISFINITE, "isfinite", BT_FN_INT_VAR, ATTR_CONST_NOTHROW_TYPEGENERIC)
++DEF_GCC_BUILTIN        (BUILT_IN_ISINF_SIGN, "isinf_sign", BT_FN_INT_VAR, ATTR_CONST_NOTHROW_TYPEGENERIC)
+ DEF_C99_C90RES_BUILTIN (BUILT_IN_ISINF, "isinf", BT_FN_INT_VAR, ATTR_CONST_NOTHROW_TYPEGENERIC)
+ DEF_EXT_LIB_BUILTIN    (BUILT_IN_ISINFF, "isinff", BT_FN_INT_FLOAT, ATTR_CONST_NOTHROW_LIST)
+ DEF_EXT_LIB_BUILTIN    (BUILT_IN_ISINFL, "isinfl", BT_FN_INT_LONGDOUBLE, ATTR_CONST_NOTHROW_LIST)
+diff --git a/gcc/doc/extend.texi b/gcc/doc/extend.texi
+index 77e2e4af..78854010 100644
+--- a/gcc/doc/extend.texi
++++ b/gcc/doc/extend.texi
+@@ -5735,6 +5735,7 @@ should be called and the @var{flag} argument passed to it.
+ @findex __builtin_isnormal
+ @findex __builtin_isgreater
+ @findex __builtin_isgreaterequal
++@findex __builtin_isinf_sign
+ @findex __builtin_isless
+ @findex __builtin_islessequal
+ @findex __builtin_islessgreater
+@@ -6261,8 +6262,10 @@ the same names as the standard macros ( @code{isgreater},
+ @code{islessgreater}, and @code{isunordered}) , with @code{__builtin_}
+ prefixed.  We intend for a library implementor to be able to simply
+ @code{#define} each standard macro to its built-in equivalent.
+-In the same fashion, GCC provides @code{isfinite} and @code{isnormal}
+-built-ins used with @code{__builtin_} prefixed.
++In the same fashion, GCC provides @code{isfinite}, @code{isinf_sign}
++and @code{isnormal} built-ins used with @code{__builtin_} prefixed.
++The @code{isinf} and @code{isnan} builtins appear both with and
++without the @code{__builtin_} prefix.
+ 
+ @deftypefn {Built-in Function} int __builtin_types_compatible_p (@var{type1}, @var{type2})
+ 
+@@ -6546,6 +6549,14 @@ Similar to @code{__builtin_inf}, except the return
+ type is @code{long double}.
+ @end deftypefn
+ 
++@deftypefn {Built-in Function} int __builtin_isinf_sign (...)
++Similar to @code{isinf}, except the return value will be negative for
++an argument of @code{-Inf}.  Note while the parameter list is an
++ellipsis, this function only accepts exactly one floating point
++argument.  GCC treats this parameter as type-generic, which means it
++does not do default promotion from float to double.
++@end deftypefn
++
+ @deftypefn {Built-in Function} double __builtin_nan (const char *str)
+ This is an implementation of the ISO C99 function @code{nan}.
+ 
+diff --git a/gcc/fold-const.c b/gcc/fold-const.c
+index 8b2e1d15..3bb21c3d 100644
+--- a/gcc/fold-const.c
++++ b/gcc/fold-const.c
+@@ -3250,6 +3250,9 @@ operand_equal_p (const_tree arg0, const_tree arg1, unsigned int flags)
+ 		  && operand_equal_p (TREE_OPERAND (arg0, 1),
+ 				      TREE_OPERAND (arg1, 0), flags));
+ 
++	case COND_EXPR:
++	  return OP_SAME (0) && OP_SAME (1) && OP_SAME (2);
++	  
+ 	default:
+ 	  return 0;
+ 	}
+diff --git a/gcc/testsuite/gcc.dg/builtins-error.c b/gcc/testsuite/gcc.dg/builtins-error.c
+index 6acc215a..1b18d4ee 100644
+--- a/gcc/testsuite/gcc.dg/builtins-error.c
++++ b/gcc/testsuite/gcc.dg/builtins-error.c
+@@ -16,3 +16,8 @@ int test3(double x)
+ {
+   return __builtin_isinf(x, x); /* { dg-error "too many arguments" } */
+ }
++
++int test4(double x)
++{
++  return __builtin_isinf_sign(x, x); /* { dg-error "too many arguments" } */
++}
+diff --git a/gcc/testsuite/gcc.dg/tg-tests.h b/gcc/testsuite/gcc.dg/tg-tests.h
+index 9d31e4b7..c34e8888 100644
+--- a/gcc/testsuite/gcc.dg/tg-tests.h
++++ b/gcc/testsuite/gcc.dg/tg-tests.h
+@@ -3,7 +3,7 @@
+ void __attribute__ ((__noinline__))
+ foo_1 (float f, double d, long double ld,
+        int res_unord, int res_isnan, int res_isinf,
+-       int res_isfin, int res_isnorm)
++       int res_isinf_sign, int res_isfin, int res_isnorm)
+ {
+   if (__builtin_isunordered (f, 0) != res_unord)
+     __builtin_abort ();
+@@ -40,6 +40,13 @@ foo_1 (float f, double d, long double ld,
+   if (__builtin_isinfl (ld) != res_isinf)
+     __builtin_abort ();
+ 
++  if (__builtin_isinf_sign (f) != res_isinf_sign)
++    __builtin_abort ();
++  if (__builtin_isinf_sign (d) != res_isinf_sign)
++    __builtin_abort ();
++  if (__builtin_isinf_sign (ld) != res_isinf_sign)
++    __builtin_abort ();
++
+   if (__builtin_isnormal (f) != res_isnorm)
+     __builtin_abort ();
+   if (__builtin_isnormal (d) != res_isnorm)
+@@ -71,17 +78,17 @@ foo (float f, double d, long double ld,
+      int res_unord, int res_isnan, int res_isinf,
+      int res_isfin, int res_isnorm)
+ {
+-  foo_1 (f, d, ld, res_unord, res_isnan, res_isinf, res_isfin, res_isnorm);
++  foo_1 (f, d, ld, res_unord, res_isnan, res_isinf, res_isinf, res_isfin, res_isnorm);
+   /* Try all the values negated as well.  */
+-  foo_1 (-f, -d, -ld, res_unord, res_isnan, res_isinf, res_isfin, res_isnorm);
++  foo_1 (-f, -d, -ld, res_unord, res_isnan, res_isinf, -res_isinf, res_isfin, res_isnorm);
+ }
+ 
+ int __attribute__ ((__noinline__))
+ main_tests (void)
+ {
+-  float f;
+-  double d;
+-  long double ld;
++  volatile float f;
++  volatile double d;
++  volatile long double ld;
+   
+   /* Test NaN.  */
+   f = __builtin_nanf(""); d = __builtin_nan(""); ld = __builtin_nanl("");
