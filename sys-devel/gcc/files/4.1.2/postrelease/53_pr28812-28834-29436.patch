@@ -1,0 +1,157 @@
+diff --git a/gcc/alias.c b/gcc/alias.c
+index 68dff253..7aa6eab9 100644
+--- a/gcc/alias.c
++++ b/gcc/alias.c
+@@ -1912,13 +1912,15 @@ fixed_scalar_and_varying_struct_p (rtx mem1, rtx mem2, rtx mem1_addr,
+   if (! flag_strict_aliasing)
+     return NULL_RTX;
+ 
+-  if (MEM_SCALAR_P (mem1) && MEM_IN_STRUCT_P (mem2)
++  if (MEM_ALIAS_SET (mem2)
++      && MEM_SCALAR_P (mem1) && MEM_IN_STRUCT_P (mem2)
+       && !varies_p (mem1_addr, 1) && varies_p (mem2_addr, 1))
+     /* MEM1 is a scalar at a fixed address; MEM2 is a struct at a
+        varying address.  */
+     return mem1;
+ 
+-  if (MEM_IN_STRUCT_P (mem1) && MEM_SCALAR_P (mem2)
++  if (MEM_ALIAS_SET (mem1)
++      && MEM_IN_STRUCT_P (mem1) && MEM_SCALAR_P (mem2)
+       && varies_p (mem1_addr, 1) && !varies_p (mem2_addr, 1))
+     /* MEM2 is a scalar at a fixed address; MEM1 is a struct at a
+        varying address.  */
+diff --git a/gcc/c-common.c b/gcc/c-common.c
+index 020a64bd..1ce1fbcf 100644
+--- a/gcc/c-common.c
++++ b/gcc/c-common.c
+@@ -4381,17 +4381,9 @@ handle_transparent_union_attribute (tree *node, tree name,
+ 
+   *no_add_attrs = true;
+ 
+-  if (DECL_P (*node))
+-    {
+-      if (TREE_CODE (*node) != TYPE_DECL)
+-	goto ignored;
+-      node = &TREE_TYPE (*node);
+-      type = *node;
+-    }
+-  else if (TYPE_P (*node))
+-    type = *node;
+-  else
+-    goto ignored;
++  if (TREE_CODE (*node) == TYPE_DECL)
++    node = &TREE_TYPE (*node);
++  type = *node;
+ 
+   if (TREE_CODE (type) == UNION_TYPE)
+     {
+diff --git a/gcc/doc/extend.texi b/gcc/doc/extend.texi
+index f7b6f4a1..412bc877 100644
+--- a/gcc/doc/extend.texi
++++ b/gcc/doc/extend.texi
+@@ -3395,11 +3395,11 @@ less useful.  Instead, @code{<sys/wait.h>} might define the interface
+ as follows:
+ 
+ @smallexample
+-typedef union
++typedef union __attribute__ ((__transparent_union__))
+   @{
+     int *__ip;
+     union wait *__up;
+-  @} wait_status_ptr_t __attribute__ ((__transparent_union__));
++  @} wait_status_ptr_t;
+ 
+ pid_t wait (wait_status_ptr_t);
+ @end smallexample
+diff --git a/gcc/testsuite/gcc.c-torture/execute/mayalias-2.c b/gcc/testsuite/gcc.c-torture/execute/mayalias-2.c
+new file mode 100644
+index 00000000..39c010d9
+--- /dev/null
++++ b/gcc/testsuite/gcc.c-torture/execute/mayalias-2.c
+@@ -0,0 +1,16 @@
++typedef struct __attribute__((__may_alias__)) { short x; } test;
++
++int f() {
++  int a=10;
++  test *p=(test *)&a;
++  p->x = 1;
++  return a;
++}
++
++int main() {
++  if (f() == 10)
++    __builtin_abort();
++  return 0;
++}
++
++
+diff --git a/gcc/testsuite/gcc.c-torture/execute/mayalias-3.c b/gcc/testsuite/gcc.c-torture/execute/mayalias-3.c
+new file mode 100644
+index 00000000..53bd07ab
+--- /dev/null
++++ b/gcc/testsuite/gcc.c-torture/execute/mayalias-3.c
+@@ -0,0 +1,26 @@
++typedef struct __attribute__((__may_alias__)) { short x; } test;
++
++test *p;
++
++int g(int *a)
++{
++ p = (test*)a;
++}
++
++int f()
++{
++  int a;
++  g(&a);
++  a = 10;
++  test s={1};
++  *p=s;
++  return a;
++}
++
++int main() {
++  if (f() == 10)
++    __builtin_abort();
++  return 0;
++}
++
++
+diff --git a/gcc/tree.c b/gcc/tree.c
+index 6541344f..c43a3447 100644
+--- a/gcc/tree.c
++++ b/gcc/tree.c
+@@ -3265,15 +3265,26 @@ build_type_attribute_qual_variant (tree ttype, tree attribute, int quals)
+       tree ntype;
+       enum tree_code code = TREE_CODE (ttype);
+ 
+-      ntype = copy_node (ttype);
++      /* Building a distinct copy of a tagged type is inappropriate; it
++	 causes breakage in code that expects there to be a one-to-one
++	 relationship between a struct and its fields.
++	 build_duplicate_type is another solution (as used in
++	 handle_transparent_union_attribute), but that doesn't play well
++	 with the stronger C++ type identity model.  */
++      if (TREE_CODE (ttype) == RECORD_TYPE
++	  || TREE_CODE (ttype) == UNION_TYPE
++	  || TREE_CODE (ttype) == QUAL_UNION_TYPE
++	  || TREE_CODE (ttype) == ENUMERAL_TYPE)
++	{
++	  warning (OPT_Wattributes,
++		   "ignoring attributes applied to %qT after definition",
++		   TYPE_MAIN_VARIANT (ttype));
++	  return build_qualified_type (ttype, quals);
++	}
+ 
+-      TYPE_POINTER_TO (ntype) = 0;
+-      TYPE_REFERENCE_TO (ntype) = 0;
+-      TYPE_ATTRIBUTES (ntype) = attribute;
++      ntype = build_distinct_type_copy (ttype);
+ 
+-      /* Create a new main variant of TYPE.  */
+-      TYPE_MAIN_VARIANT (ntype) = ntype;
+-      TYPE_NEXT_VARIANT (ntype) = 0;
++      TYPE_ATTRIBUTES (ntype) = attribute;
+       set_type_quals (ntype, TYPE_UNQUALIFIED);
+ 
+       hashcode = iterative_hash_object (code, hashcode);

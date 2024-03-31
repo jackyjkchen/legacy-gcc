@@ -1,0 +1,211 @@
+diff --git a/gcc/alias.c b/gcc/alias.c
+index b9d5c667..dd5110a3 100644
+--- a/gcc/alias.c
++++ b/gcc/alias.c
+@@ -1856,13 +1856,15 @@ fixed_scalar_and_varying_struct_p (rtx mem1, rtx mem2, rtx mem1_addr,
+   if (! flag_strict_aliasing)
+     return NULL_RTX;
+ 
+-  if (MEM_SCALAR_P (mem1) && MEM_IN_STRUCT_P (mem2)
++  if (MEM_ALIAS_SET (mem2)
++      && MEM_SCALAR_P (mem1) && MEM_IN_STRUCT_P (mem2)
+       && !varies_p (mem1_addr, 1) && varies_p (mem2_addr, 1))
+     /* MEM1 is a scalar at a fixed address; MEM2 is a struct at a
+        varying address.  */
+     return mem1;
+ 
+-  if (MEM_IN_STRUCT_P (mem1) && MEM_SCALAR_P (mem2)
++  if (MEM_ALIAS_SET (mem1)
++      && MEM_IN_STRUCT_P (mem1) && MEM_SCALAR_P (mem2)
+       && varies_p (mem1_addr, 1) && !varies_p (mem2_addr, 1))
+     /* MEM2 is a scalar at a fixed address; MEM1 is a struct at a
+        varying address.  */
+diff --git a/gcc/c-common.c b/gcc/c-common.c
+index b04f7b14..fe6b2205 100644
+--- a/gcc/c-common.c
++++ b/gcc/c-common.c
+@@ -4384,17 +4384,9 @@ handle_transparent_union_attribute (tree *node, tree name,
+ 
+   *no_add_attrs = true;
+ 
+-  if (DECL_P (*node))
+-    {
+-      if (TREE_CODE (*node) != TYPE_DECL)
+-	goto ignored;
+-      node = &TREE_TYPE (*node);
+-      type = *node;
+-    }
+-  else if (TYPE_P (*node))
+-    type = *node;
+-  else
+-    goto ignored;
++  if (TREE_CODE (*node) == TYPE_DECL)
++    node = &TREE_TYPE (*node);
++  type = *node;
+ 
+   if (TREE_CODE (type) == UNION_TYPE)
+     {
+diff --git a/gcc/doc/extend.texi b/gcc/doc/extend.texi
+index 2b29dfbf..f62a20f0 100644
+--- a/gcc/doc/extend.texi
++++ b/gcc/doc/extend.texi
+@@ -3481,8 +3481,9 @@ attributes in header files without being concerned about a possible
+ macro of the same name.  For example, you may use @code{__aligned__}
+ instead of @code{aligned}.
+ 
+-You may specify type attributes either in a @code{typedef} declaration
+-or in an enum, struct or union type declaration or definition.
++You may specify type attributes in an enum, struct or union type
++declaration or definition, or for other types in a @code{typedef}
++declaration.
+ 
+ For an enum, struct or union type, you may specify attributes either
+ between the enum, struct or union tag and the name of the type, or
+@@ -3641,11 +3642,11 @@ less useful.  Instead, @code{<sys/wait.h>} might define the interface
+ as follows:
+ 
+ @smallexample
+-typedef union
++typedef union __attribute__ ((__transparent_union__))
+   @{
+     int *__ip;
+     union wait *__up;
+-  @} wait_status_ptr_t __attribute__ ((__transparent_union__));
++  @} wait_status_ptr_t;
+ 
+ pid_t wait (wait_status_ptr_t);
+ @end smallexample
+diff --git a/gcc/testsuite/gcc.c-torture/execute/mayalias-2.c b/gcc/testsuite/gcc.c-torture/execute/mayalias-2.c
+index 5a1a9d5e..39c010d9 100644
+--- a/gcc/testsuite/gcc.c-torture/execute/mayalias-2.c
++++ b/gcc/testsuite/gcc.c-torture/execute/mayalias-2.c
+@@ -1,5 +1,4 @@
+-struct S { short x; };
+-typedef struct S __attribute__((__may_alias__)) test;
++typedef struct __attribute__((__may_alias__)) { short x; } test;
+ 
+ int f() {
+   int a=10;
+diff --git a/gcc/testsuite/gcc.c-torture/execute/mayalias-2.x b/gcc/testsuite/gcc.c-torture/execute/mayalias-2.x
+deleted file mode 100644
+index b21a3414..00000000
+--- a/gcc/testsuite/gcc.c-torture/execute/mayalias-2.x
++++ /dev/null
+@@ -1,10 +0,0 @@
+-set torture_eval_before_compile {
+-    set compiler_conditional_xfail_data {
+-        "PR 28834" \
+-        { "*-*-*" } \
+-        { "-O3 -g" } \
+-        { "" }
+-    }
+-}
+-
+-return 0
+diff --git a/gcc/testsuite/gcc.c-torture/execute/mayalias-3.c b/gcc/testsuite/gcc.c-torture/execute/mayalias-3.c
+new file mode 100644
+index 00000000..53bd07ab
+--- /dev/null
++++ b/gcc/testsuite/gcc.c-torture/execute/mayalias-3.c
+@@ -0,0 +1,26 @@
++typedef struct __attribute__((__may_alias__)) { short x; } test;
++
++test *p;
++
++int g(int *a)
++{
++ p = (test*)a;
++}
++
++int f()
++{
++  int a;
++  g(&a);
++  a = 10;
++  test s={1};
++  *p=s;
++  return a;
++}
++
++int main() {
++  if (f() == 10)
++    __builtin_abort();
++  return 0;
++}
++
++
+diff --git a/gcc/tree-inline.c b/gcc/tree-inline.c
+index 4eb9162b..e7233da7 100644
+--- a/gcc/tree-inline.c
++++ b/gcc/tree-inline.c
+@@ -196,24 +196,8 @@ remap_decl (tree decl, copy_body_data *id)
+ static tree
+ remap_type_1 (tree type, copy_body_data *id)
+ {
+-  splay_tree_node node;
+   tree new, t;
+ 
+-  if (type == NULL)
+-    return type;
+-
+-  /* See if we have remapped this type.  */
+-  node = splay_tree_lookup (id->decl_map, (splay_tree_key) type);
+-  if (node)
+-    return (tree) node->value;
+-
+-  /* The type only needs remapping if it's variably modified.  */
+-  if (! variably_modified_type_p (type, id->src_fn))
+-    {
+-      insert_decl_map (id, type, type);
+-      return type;
+-    }
+-
+   /* We do need a copy.  build and register it now.  If this is a pointer or
+      reference type, remap the designated type and make a new pointer or
+      reference type.  */
+@@ -2900,6 +2884,7 @@ build_duplicate_type (tree type)
+   id.dst_fn = current_function_decl;
+   id.src_cfun = cfun;
+   id.decl_map = splay_tree_new (splay_tree_compare_pointers, NULL, NULL);
++  id.copy_decl = copy_decl_no_change;
+ 
+   type = remap_type_1 (type, &id);
+ 
+diff --git a/gcc/tree.c b/gcc/tree.c
+index 21ab1cbe..55786403 100644
+--- a/gcc/tree.c
++++ b/gcc/tree.c
+@@ -3371,15 +3371,26 @@ build_type_attribute_qual_variant (tree ttype, tree attribute, int quals)
+       tree ntype;
+       enum tree_code code = TREE_CODE (ttype);
+ 
+-      ntype = copy_node (ttype);
++      /* Building a distinct copy of a tagged type is inappropriate; it
++	 causes breakage in code that expects there to be a one-to-one
++	 relationship between a struct and its fields.
++	 build_duplicate_type is another solution (as used in
++	 handle_transparent_union_attribute), but that doesn't play well
++	 with the stronger C++ type identity model.  */
++      if (TREE_CODE (ttype) == RECORD_TYPE
++	  || TREE_CODE (ttype) == UNION_TYPE
++	  || TREE_CODE (ttype) == QUAL_UNION_TYPE
++	  || TREE_CODE (ttype) == ENUMERAL_TYPE)
++	{
++	  warning (OPT_Wattributes,
++		   "ignoring attributes applied to %qT after definition",
++		   TYPE_MAIN_VARIANT (ttype));
++	  return build_qualified_type (ttype, quals);
++	}
+ 
+-      TYPE_POINTER_TO (ntype) = 0;
+-      TYPE_REFERENCE_TO (ntype) = 0;
+-      TYPE_ATTRIBUTES (ntype) = attribute;
++      ntype = build_distinct_type_copy (ttype);
+ 
+-      /* Create a new main variant of TYPE.  */
+-      TYPE_MAIN_VARIANT (ntype) = ntype;
+-      TYPE_NEXT_VARIANT (ntype) = 0;
++      TYPE_ATTRIBUTES (ntype) = attribute;
+       set_type_quals (ntype, TYPE_UNQUALIFIED);
+ 
+       hashcode = iterative_hash_object (code, hashcode);

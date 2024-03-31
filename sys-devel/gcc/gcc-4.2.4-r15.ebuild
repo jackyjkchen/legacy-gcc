@@ -26,9 +26,10 @@ src_prepare() {
 	toolchain_src_prepare
 
 	[[ $(tc-arch) == "mips" && ${DEFAULT_ABI} == "n64" ]] && eapply "${FILESDIR}"/${PV}/02_mips64-default-n64-abi.patch
+	[[ $(tc-arch) == "arm" ]] && eapply "${FILESDIR}"/${PV}/03_add-.note.GNU-stack.patch
 
 	use vanilla && return 0
-	eapply "${FILESDIR}"/${PV}/03_backport-static-libstdc++-option.patch
+	eapply "${FILESDIR}"/${PV}/04_backport-static-libstdc++-option.patch
 
 	eapply "${FILESDIR}"/${PV}/postrelease/00_pr35146.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/01_pr33619.patch
@@ -80,6 +81,7 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/47_pr19771.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/48_pr3698-86208.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/49_pr34178.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/50_pr28812-28834-29436.patch
 
 	is_crosscompile || eapply "${FILESDIR}"/${PV}/postrelease/90_fix-known-test-fail.patch
 	is_crosscompile || ([[ $(tc-arch) == "x86" || $(tc-arch) == "amd64" ]] && eapply "${FILESDIR}"/${PV}/postrelease/91_fix-known-test-fail-x86.patch)

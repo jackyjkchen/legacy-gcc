@@ -1,0 +1,111 @@
+diff --git a/gcc/config/arm/arm.c b/gcc/config/arm/arm.c
+index 98f6d57f..ab9161ba 100644
+--- a/gcc/config/arm/arm.c
++++ b/gcc/config/arm/arm.c
+@@ -14368,6 +14368,10 @@ arm_file_end (void)
+ {
+   int regno;
+ 
++  if (NEED_INDICATE_EXEC_STACK)
++    /* Add .note.GNU-stack.  */
++    file_end_indicate_exec_stack ();
++
+   if (! thumb_call_reg_needed)
+     return;
+ 
+diff --git a/gcc/config/arm/arm.h b/gcc/config/arm/arm.h
+index 2bca1538..df34af27 100644
+--- a/gcc/config/arm/arm.h
++++ b/gcc/config/arm/arm.h
+@@ -2701,4 +2701,10 @@ enum arm_builtins
+ 
+   ARM_BUILTIN_MAX
+ };
++
++/* Do not emit .note.GNU-stack by default.  */
++#ifndef NEED_INDICATE_EXEC_STACK
++#define NEED_INDICATE_EXEC_STACK	0
++#endif
++
+ #endif /* ! GCC_ARM_H */
+diff --git a/gcc/config/arm/crti.asm b/gcc/config/arm/crti.asm
+index 166a3ce3..6f0acd19 100644
+--- a/gcc/config/arm/crti.asm
++++ b/gcc/config/arm/crti.asm
+@@ -31,6 +31,12 @@
+ #    the executable file might be covered by the GNU General Public License.
+ # 
+ 
++/* An executable stack is *not* required for these functions.  */
++#if defined(__ELF__) && defined(__linux__)
++.section .note.GNU-stack,"",%progbits
++.previous
++#endif
++
+ # This file just make a stack frame for the contents of the .fini and
+ # .init sections.  Users may put any desired instructions in those
+ # sections.
+diff --git a/gcc/config/arm/crtn.asm b/gcc/config/arm/crtn.asm
+index 360afae9..36c417d7 100644
+--- a/gcc/config/arm/crtn.asm
++++ b/gcc/config/arm/crtn.asm
+@@ -31,6 +31,12 @@
+ #    the executable file might be covered by the GNU General Public License.
+ # 
+ 
++/* An executable stack is *not* required for these functions.  */
++#if defined(__ELF__) && defined(__linux__)
++.section .note.GNU-stack,"",%progbits
++.previous
++#endif
++
+ # This file just makes sure that the .fini and .init sections do in
+ # fact return.  Users may put any desired instructions in those sections.
+ # This file is the last thing linked into any executable.
+diff --git a/gcc/config/arm/lib1funcs.asm b/gcc/config/arm/lib1funcs.asm
+index 8494a973..a448b76e 100644
+--- a/gcc/config/arm/lib1funcs.asm
++++ b/gcc/config/arm/lib1funcs.asm
+@@ -27,6 +27,13 @@ You should have received a copy of the GNU General Public License
+ along with this program; see the file COPYING.  If not, write to
+ the Free Software Foundation, 51 Franklin Street, Fifth Floor,
+ Boston, MA 02110-1301, USA.  */
++
++/* An executable stack is *not* required for these functions.  */
++#if defined(__ELF__) && defined(__linux__)
++.section .note.GNU-stack,"",%progbits
++.previous
++#endif
++
+ /* ------------------------------------------------------------------------ */
+ 
+ /* We need to know what prefix to add to function names.  */
+diff --git a/gcc/config/arm/libunwind.S b/gcc/config/arm/libunwind.S
+index 06e13107..f53a2023 100644
+--- a/gcc/config/arm/libunwind.S
++++ b/gcc/config/arm/libunwind.S
+@@ -26,6 +26,12 @@
+    the Free Software Foundation, 51 Franklin Street, Fifth Floor,
+    Boston, MA 02110-1301, USA.  */
+ 
++/* An executable stack is *not* required for these functions.  */
++#if defined(__ELF__) && defined(__linux__)
++.section .note.GNU-stack,"",%progbits
++.previous
++#endif
++
+ #ifndef __symbian__
+ 
+ #include "lib1funcs.asm"
+diff --git a/gcc/config/arm/linux-elf.h b/gcc/config/arm/linux-elf.h
+index d81b7dc9..1e6c4841 100644
+--- a/gcc/config/arm/linux-elf.h
++++ b/gcc/config/arm/linux-elf.h
+@@ -123,3 +123,7 @@
+ 
+ /* The GNU/Linux profiler needs a frame pointer.  */
+ #define SUBTARGET_FRAME_POINTER_REQUIRED current_function_profile
++
++/* Add .note.GNU-stack.  */
++#undef NEED_INDICATE_EXEC_STACK
++#define NEED_INDICATE_EXEC_STACK	1
