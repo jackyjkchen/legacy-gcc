@@ -94,6 +94,8 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/00_pr13685.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/01_pr45262.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/02_pr25572.patch
+
+	is_crosscompile || eapply "${FILESDIR}"/${PV}/postrelease/90_fix-known-test-fail.patch
 }
 
 src_install() {
