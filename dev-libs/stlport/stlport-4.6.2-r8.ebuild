@@ -55,6 +55,8 @@ src_configure() {
 src_compile() {
 	pushd "${S}"/src > /dev/null
 	case ${ARCH} in
+		alpha)
+			emake CC="${CC} ${CFLAGS}" CXX="${CXX} ${CXXFLAGS} -pthread -fexceptions" AR="${CHOST}-ar" RANLIB="${CHOST}-ranlib" NM="${CHOST}-nm" DYN_LINK='${CXX} ${CXXFLAGS} -pthread -fexceptions -shared -o' -f gcc-linux.mak release_dynamic release_static -j1
 		ppc)
 			emake CC="${CC} ${CFLAGS}" CXX="${CXX} ${CXXFLAGS} -pthread -fexceptions" AR="${CHOST}-ar" RANLIB="${CHOST}-ranlib" NM="${CHOST}-nm" DYN_LINK='${CXX} ${CXXFLAGS} -pthread -fexceptions -shared -o' -f gcc-linux.mak release_static
 			;;
