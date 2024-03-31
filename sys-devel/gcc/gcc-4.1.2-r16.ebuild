@@ -33,6 +33,7 @@ src_prepare() {
 
 	use vanilla && return 0
 	eapply "${FILESDIR}"/${PV}/07_backport-static-libstdc++-option.patch
+	eapply "${FILESDIR}"/${PV}/08_Unset-_M_init.patch
 
 	eapply "${FILESDIR}"/${PV}/postrelease/00_pr33619.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/01_pr36013.patch
