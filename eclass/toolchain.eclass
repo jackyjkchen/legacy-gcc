@@ -373,18 +373,20 @@ BDEPEND="
 	>=sys-devel/flex-2.5.4"
 tc_version_is_at_least 2.9 && BDEPEND+=" nls? ( sys-devel/gettext )"
 tc_version_is_at_least 2.95 && BDEPEND+=" test? ( >=dev-util/dejagnu-1.4.4 >=sys-devel/autogen-5.5.4 )"
-DEPEND="${RDEPEND}"
 
-if tc_version_is_between 2.95 11 ; then
-	case $(tc-arch) in
-		loong)
-			BDEPEND+=" test? ( sys-devel/binutils:2.39 )"
-			;;
-		*)
+case $(tc-arch) in
+	loong)
+		if tc_version_is_between 8 10 ; then
+			RDEPEND+=" sys-devel/binutils:2.39"
+		fi
+		;;
+	*)
+		if tc_version_is_between 2.95 11 ; then
 			BDEPEND+=" test? ( sys-devel/binutils:2.38 )"
-			;;
-	esac
-fi
+		fi
+		;;
+esac
+DEPEND="${RDEPEND}"
 
 if [[ ${PN} == gcc && ${PV} == *_p* ]] ; then
 	# Snapshots don't contain info pages.
@@ -1710,18 +1712,18 @@ toolchain_src_configure() {
 	export ac_cv_have_x='have_x=yes ac_x_includes= ac_x_libraries='
 
 	# for testsuite
-	if tc_version_is_between 4 11 ; then
-		if _tc_use_if_iuse test ; then
-			case $(tc-arch) in
-				loong)
-					confgcc+=( --with-as=/usr/$CHOST/binutils-bin/2.39/as --with-ld=/usr/$CHOST/binutils-bin/2.39/ld )
-					;;
-				*)
-					confgcc+=( --with-as=/usr/$CHOST/binutils-bin/2.38/as --with-ld=/usr/$CHOST/binutils-bin/2.38/ld )
-					;;
-			esac
-		fi
-	fi
+	case $(tc-arch) in
+		loong)
+			if tc_version_is_between 8 10 ; then
+				confgcc+=( --with-as=/usr/$CHOST/binutils-bin/2.39/as --with-ld=/usr/$CHOST/binutils-bin/2.39/ld )
+			fi
+			;;
+		*)
+			if _tc_use_if_iuse test && tc_version_is_between 4 11 ; then
+				confgcc+=( --with-as=/usr/$CHOST/binutils-bin/2.38/as --with-ld=/usr/$CHOST/binutils-bin/2.38/ld )
+			fi
+			;;
+	esac
 
 	eval "local -a EXTRA_ECONF=(${EXTRA_ECONF})"
 	confgcc+=( "$@" "${EXTRA_ECONF[@]}" )
