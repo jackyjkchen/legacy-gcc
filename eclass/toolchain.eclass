@@ -2373,6 +2373,10 @@ toolchain_src_install() {
 			find ${D}${LIBPATH} | grep "\.a"| xargs strip --strip-unneeded -N __gentoo_check_ldflags__ -R .comment -R .GCC.command.line -R .note.gnu.gold-version
 			find ${D}${LIBPATH} | grep "\.a"| xargs ranlib
 			;;
+		loong)
+			find ${D}${LIBPATH} | grep "\.a"| xargs strip --strip-unneeded -N __gentoo_check_ldflags__ -R .comment -R .GCC.command.line -R .note.gnu.gold-version
+			find ${D}${LIBPATH} | grep "\.a"| xargs ranlib
+			;;
 	esac
 	rm -rfv "${D}${BINPATH}"/{*c++filt,*gccbug,*protoize,*unprotoize}
 
