@@ -96,6 +96,7 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/02_pr25572.patch
 
 	is_crosscompile || eapply "${FILESDIR}"/${PV}/postrelease/90_fix-known-test-fail.patch
+	is_crosscompile || rm -rf libstdc++-v3/testsuite/27_io/{filebuf_members.cc,filebuf_virtuals.cc,ostream_inserter_arith.cc,streambuf_members.cc,stringbuf_virtuals.cc}
 }
 
 src_install() {

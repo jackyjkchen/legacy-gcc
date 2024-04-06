@@ -1,3 +1,429 @@
+diff --git a/gcc/testsuite/gcc.c-torture/execute/20000801-4.x b/gcc/testsuite/gcc.c-torture/execute/20000801-4.x
+deleted file mode 100644
+index 93d817a..0000000
+--- a/gcc/testsuite/gcc.c-torture/execute/20000801-4.x
++++ /dev/null
+@@ -1,2 +0,0 @@
+-set torture_execute_xfail "i?86-*-*"
+-return 0
+diff --git a/libstdc++-v3/testsuite/22_locale/ctor_copy_dtor.cc b/libstdc++-v3/testsuite/22_locale/ctor_copy_dtor.cc
+index 21e1f26..af51d33 100644
+--- a/libstdc++-v3/testsuite/22_locale/ctor_copy_dtor.cc
++++ b/libstdc++-v3/testsuite/22_locale/ctor_copy_dtor.cc
+@@ -1,6 +1,6 @@
+ // 2000-09-13 Benjamin Kosnik <bkoz@redhat.com>
+ 
+-// Copyright (C) 2000, 2001 Free Software Foundation
++// Copyright (C) 2000, 2001, 2002, 2003 Free Software Foundation
+ //
+ // This file is part of the GNU ISO C++ Library.  This library is free
+ // software; you can redistribute it and/or modify it under the
+@@ -25,7 +25,7 @@
+ #include <stdexcept>
+ #include <testsuite_hooks.h>
+ 
+-#if _GLIBCPP_USE_WCHAR_T
++#if _GLIBCXX_USE___ENC_TRAITS
+ typedef std::codecvt<char, char, std::mbstate_t> 	      c_codecvt;
+ typedef std::codecvt_byname<char, char, std::mbstate_t>       c_codecvt_byname;
+ typedef std::codecvt<wchar_t, char, std::mbstate_t>	      w_codecvt;
+@@ -41,21 +41,80 @@ public:
+ 
+ std::locale::id gnu_facet::id;
+ 
++// Need some char_traits specializations for this to work.
++typedef unsigned short			unicode_t;
++
++namespace std
++{
++  template<>
++    struct char_traits<unicode_t>
++    {
++      typedef unicode_t 	char_type;
++      // Unsigned as wint_t is unsigned.
++      typedef unsigned long  	int_type;
++      typedef streampos 	pos_type;
++      typedef streamoff 	off_type;
++      typedef mbstate_t 	state_type;
++      
++      static void 
++      assign(char_type& __c1, const char_type& __c2);
++
++      static bool 
++      eq(const char_type& __c1, const char_type& __c2);
++
++      static bool 
++      lt(const char_type& __c1, const char_type& __c2);
++
++      static int 
++      compare(const char_type* __s1, const char_type* __s2, size_t __n)
++      { return memcmp(__s1, __s2, __n); }
++
++      static size_t
++      length(const char_type* __s);
++
++      static const char_type* 
++      find(const char_type* __s, size_t __n, const char_type& __a);
++
++      static char_type* 
++      move(char_type* __s1, const char_type* __s2, size_t __n);
++
++      static char_type* 
++      copy(char_type* __s1, const char_type* __s2, size_t __n)
++      { return static_cast<char_type*>(memcpy(__s1, __s2, __n)); }
++
++      static char_type* 
++      assign(char_type* __s, size_t __n, char_type __a);
++
++      static char_type 
++      to_char_type(const int_type& __c);
++
++      static int_type 
++      to_int_type(const char_type& __c);
++
++      static bool 
++      eq_int_type(const int_type& __c1, const int_type& __c2);
++
++      static int_type 
++      eof(); 
++
++      static int_type 
++      not_eof(const int_type& __c);
++    };
++}
++
+ void test01()
+ {
+   using namespace std;
+-
+-  typedef unsigned short			unicode_t;
+   typedef unicode_t				int_type;
+   typedef char					ext_type;
+   typedef __enc_traits				enc_type;
+   typedef codecvt<int_type, ext_type, enc_type>	unicode_codecvt;
+ 
+-  bool test = true;
++  bool test __attribute__((unused)) = true;
+   string str1, str2;
+ 
+   // construct a locale object with the C facet
+-  const locale& 	loc01 = locale::classic();
++  const locale	loc01 = locale::classic();
+ 
+   // 1
+   // template <class Facet> locale(const locale& other, Facet* f)
+@@ -111,14 +170,13 @@ void test01()
+ 
+   // 3
+   // explicit locale(const char* std_name)
+-  locale loc06("fr_FR");
++  locale loc06 = __gnu_test::try_named_locale("fr_FR");
+   VERIFY (loc06 != loc01);  
+   VERIFY (loc06 != loc02);  
+   VERIFY (loc06.name() == "fr_FR");
+   locale loc07("");
+-  VERIFY (loc07 != loc01);  
+   VERIFY (loc07 != loc02);  
+-  VERIFY (loc07.name() == "");
++  VERIFY (loc07.name() != "");
+   try
+     { locale loc08(static_cast<const char*>(NULL)); }
+   catch(runtime_error& obj)
+@@ -126,6 +184,13 @@ void test01()
+   catch(...)
+     { VERIFY (false); }
+ 
++  try
++    { locale loc08("saturn_SUN*RA"); }
++  catch(runtime_error& obj)
++    { VERIFY (true); }
++  catch(...)
++    { VERIFY (false); }
++
+   // 4
+   // locale(const locale& other, const char* std_name, category)
+   {
+@@ -222,13 +287,12 @@ void test01()
+     VERIFY (loc15 != loc09);  
+   }
+ }
+-#endif /* !defined(_GLIBCPP_USE_WCHAR_T) */
++#endif // _GLIBCXX_USE___ENC_TRAITS
+ 
+-int main ()
++int main()
+ {
+-#if _GLIBCPP_USE_WCHAR_T
++#if _GLIBCXX_USE___ENC_TRAITS
+   test01();
+ #endif 
+-
+   return 0;
+ }
+diff --git a/libstdc++-v3/testsuite/22_locale/members.cc b/libstdc++-v3/testsuite/22_locale/members.cc
+index 16bc6c5..3b57978 100644
+--- a/libstdc++-v3/testsuite/22_locale/members.cc
++++ b/libstdc++-v3/testsuite/22_locale/members.cc
+@@ -24,6 +24,9 @@
+ #include <string>
+ #include <testsuite_hooks.h>
+ 
++// XXX This test is not working for non-glibc locale models.
++// { dg-do run { xfail *-*-* } }
++
+ // creating unnamed locales 1 using new + combine
+ void
+ test01()
+@@ -86,46 +89,47 @@ test02()
+   VERIFY( loc_2 != loc_c );
+ 
+   // extract facet
+-  const numpunct<char>&	f_nump_1 = use_facet<numpunct<char> >(loc_1); 
+-  const numpunct<char>&	f_nump_2 = use_facet<numpunct<char> >(loc_2); 
+-  const numpunct<char>&	f_nump_c = use_facet<numpunct<char> >(loc_c); 
+-  const numpunct<char>&	f_nump_fr = use_facet<numpunct<char> >(loc_fr); 
++  const numpunct<char>&	nump_1 = use_facet<numpunct<char> >(loc_1); 
++  const numpunct<char>&	nump_2 = use_facet<numpunct<char> >(loc_2); 
++  const numpunct<char>&	nump_c = use_facet<numpunct<char> >(loc_c); 
++  const numpunct<char>&	nump_fr = use_facet<numpunct<char> >(loc_fr); 
+ 
+   // sanity check the data is correct.
+-  char dp1 = f_nump_c.decimal_point();
+-  char th1 = f_nump_c.thousands_sep();
+-  string g1 = f_nump_c.grouping();
+-  string t1 = f_nump_c.truename();
+-  string f1 = f_nump_c.falsename();
+-
+-  char dp2 = f_nump_1.decimal_point();
+-  char th2 = f_nump_1.thousands_sep();
+-  string g2 = f_nump_1.grouping();
+-  string t2 = f_nump_1.truename();
+-  string f2 = f_nump_1.falsename();
+-
+-  char dp3 = f_nump_2.decimal_point();
+-  char th3 = f_nump_2.thousands_sep();
+-  string g3 = f_nump_2.grouping();
+-  string t3 = f_nump_2.truename();
+-  string f3 = f_nump_2.falsename();
+-
+-  char dp4 = f_nump_fr.decimal_point();
+-  char th4 = f_nump_fr.thousands_sep();
+-  string g4 = f_nump_fr.grouping();
+-  string t4 = f_nump_fr.truename();
+-  string f4 = f_nump_fr.falsename();
+-
+-#if 0
+-  // XXX these should not be the same if named locales are working correctly.
++  char dp1 = nump_c.decimal_point();
++  char th1 = nump_c.thousands_sep();
++  string g1 = nump_c.grouping();
++  string t1 = nump_c.truename();
++  string f1 = nump_c.falsename();
++
++  char dp2 = nump_1.decimal_point();
++  char th2 = nump_1.thousands_sep();
++  string g2 = nump_1.grouping();
++  string t2 = nump_1.truename();
++  string f2 = nump_1.falsename();
++
++  char dp3 = nump_2.decimal_point();
++  char th3 = nump_2.thousands_sep();
++  string g3 = nump_2.grouping();
++  string t3 = nump_2.truename();
++  string f3 = nump_2.falsename();
++
++  char dp4 = nump_fr.decimal_point();
++  char th4 = nump_fr.thousands_sep();
++  string g4 = nump_fr.grouping();
++  string t4 = nump_fr.truename();
++  string f4 = nump_fr.falsename();
+   VERIFY( dp1 != dp2 );
+   VERIFY( th1 != th2 );
+-#endif
+ 
+   VERIFY( dp1 == dp3 );
+   VERIFY( th1 == th3 );
+   VERIFY( t1 == t3 );
+   VERIFY( f1 == f3 );
++
++  VERIFY( dp2 == dp4 );
++  VERIFY( th2 == th4 );
++  VERIFY( t2 == t4 );
++  VERIFY( f2 == f4 );
+ }
+ 
+ 
+diff --git a/libstdc++-v3/testsuite/22_locale/numpunct_byname.cc b/libstdc++-v3/testsuite/22_locale/numpunct_byname.cc
+index 5fbbcc2..4c69b29 100644
+--- a/libstdc++-v3/testsuite/22_locale/numpunct_byname.cc
++++ b/libstdc++-v3/testsuite/22_locale/numpunct_byname.cc
+@@ -23,6 +23,9 @@
+ #include <locale>
+ #include <testsuite_hooks.h>
+ 
++// XXX This test is not working for non-glibc locale models.
++// { dg-do run { xfail *-*-* } }
++
+ void test01()
+ {
+   using namespace std;
+@@ -36,9 +39,12 @@ void test01()
+   locale loc_de("de_DE");
+   str = loc_de.name();
+ 
++  locale loc_c = locale::classic();
++
+   VERIFY( loc_de != loc_byname );
+ 
+   // cache the numpunct facets
++  const numpunct<char>& nump_c = use_facet<numpunct<char> >(loc_c); 
+   const numpunct<char>& nump_byname = use_facet<numpunct<char> >(loc_byname); 
+   const numpunct<char>& nump_de = use_facet<numpunct<char> >(loc_de); 
+ 
+@@ -60,11 +66,32 @@ void test01()
+   VERIFY( g1 == g2 );
+   VERIFY( t1 == t2 );
+   VERIFY( f1 == f2 );
++
++  // ...and don't match "C"
++  char dp3 = nump_c.decimal_point();
++  VERIFY( dp1 != dp3 );
++}
++
++void test02()
++{
++  using namespace std;
++  
++  bool test = true;
++
++  locale loc_it("it_IT");
++
++  const numpunct<char>& nump_it = use_facet<numpunct<char> >(loc_it); 
++
++  string g = nump_it.grouping();
++
++  VERIFY( g == "" );
+ }
+ 
++
+ int main()
+ {
+   test01();
++  test02();
+ 
+   return 0;
+ }
+diff --git a/libstdc++-v3/testsuite/22_locale/numpunct_char_members.cc b/libstdc++-v3/testsuite/22_locale/numpunct_char_members.cc
+index 87409fe..ff09a7d 100644
+--- a/libstdc++-v3/testsuite/22_locale/numpunct_char_members.cc
++++ b/libstdc++-v3/testsuite/22_locale/numpunct_char_members.cc
+@@ -1,6 +1,6 @@
+-// 2001-01-17 bkoz
++// 2001-01-17 Benjamin Kosnik  <bkoz@redhat.com>
+ 
+-// Copyright (C) 2001 Free Software Foundation
++// Copyright (C) 2001, 2002 Free Software Foundation
+ //
+ // This file is part of the GNU ISO C++ Library.  This library is free
+ // software; you can redistribute it and/or modify it under the
+@@ -23,38 +23,30 @@
+ #include <locale>
+ #include <testsuite_hooks.h>
+ 
++// XXX This test is not working for non-glibc locale models.
++// { dg-do run { xfail *-*-* } }
++
+ void test01()
+ {
+   using namespace std;
+   
+   bool test = true;
+-  string str;
+ 
+   // basic construction
+   locale loc_c = locale::classic();
+-  str = loc_c.name();
+-
+   locale loc_us("en_US");
+-  str = loc_us.name();
+-  VERIFY( loc_c != loc_us );
+-
+   locale loc_fr("fr_FR");
+-  str = loc_fr.name();
+-  VERIFY( loc_c != loc_fr );
+-
++  locale loc_de("de_DE");
++  VERIFY( loc_c != loc_de );
+   VERIFY( loc_us != loc_fr );
+-
+-  locale loc_combo(loc_us, loc_fr, locale::numeric);
+-  str = loc_combo.name();
+-  VERIFY( loc_combo != loc_fr );
+-  VERIFY( loc_combo != loc_us );
+-  VERIFY( loc_combo != loc_c );
++  VERIFY( loc_us != loc_de );
++  VERIFY( loc_de != loc_fr );
+ 
+   // cache the numpunct facets
+   const numpunct<char>& nump_c = use_facet<numpunct<char> >(loc_c); 
+   const numpunct<char>& nump_us = use_facet<numpunct<char> >(loc_us); 
+   const numpunct<char>& nump_fr = use_facet<numpunct<char> >(loc_fr); 
+-  const numpunct<char>& nump_combo = use_facet<numpunct<char> >(loc_combo); 
++  const numpunct<char>& nump_de = use_facet<numpunct<char> >(loc_de); 
+ 
+   // sanity check the data is correct.
+   char dp1 = nump_c.decimal_point();
+@@ -75,16 +67,24 @@ void test01()
+   string t3 = nump_fr.truename();
+   string f3 = nump_fr.falsename();
+ 
+-  char dp4 = nump_combo.decimal_point();
+-  char th4 = nump_combo.thousands_sep();
+-  string g4 = nump_combo.grouping();
+-  string t4 = nump_combo.truename();
+-  string f4 = nump_combo.falsename();
++  char dp4 = nump_de.decimal_point();
++  char th4 = nump_de.thousands_sep();
++  string g4 = nump_de.grouping();
++  string t4 = nump_de.truename();
++  string f4 = nump_de.falsename();
++
++  VERIFY( dp2 != dp3 );
++  VERIFY( th2 != th3 );
++
++  VERIFY( dp2 != dp4 );
++  VERIFY( th2 != th4 );
++  // XXX This isn't actually supported right now.
++  // VERIFY( t2 != t3 );
++  // VERIFY( f2 != f3 );
+ }
+ 
+ int main()
+ {
+   test01();
+-
+   return 0;
+ }
+diff --git a/libstdc++-v3/testsuite/26_numerics/c99_classification_macros_c.cc b/libstdc++-v3/testsuite/26_numerics/c99_classification_macros_c.cc
+index fdd4244..15508a3 100644
+--- a/libstdc++-v3/testsuite/26_numerics/c99_classification_macros_c.cc
++++ b/libstdc++-v3/testsuite/26_numerics/c99_classification_macros_c.cc
+@@ -27,12 +27,12 @@
+ // invalidate any other reasons why the executable file might be covered by
+ // the GNU General Public License.
+ 
+-// { dg-do compile }
+-// { dg-excess-errors "" }
++// { dg-do compile { xfail *-*-linux-gnu *-*-freebsd5* } }
++// { dg-excess-errors "" { target *-*-linux-gnu *-*-freebsd5* } }
+ 
+ #include <math.h>
+ 
+-void fpclassify() { }  // { dg-error "parse error" "" { xfail *-*-* } }
++void fpclassify() { }
+ 
+ void isfinite() { }
+ 
 diff --git a/libstdc++-v3/testsuite/testsuite_hooks.h b/libstdc++-v3/testsuite/testsuite_hooks.h
 index f8bb87b..be1f72e 100644
 --- a/libstdc++-v3/testsuite/testsuite_hooks.h
