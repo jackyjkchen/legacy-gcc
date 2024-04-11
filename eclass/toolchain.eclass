@@ -30,38 +30,6 @@ tc_is_live() {
 
 FEATURES=${FEATURES/multilib-strict/}
 
-#---->> globals <<----
-
-export CTARGET=${CTARGET:-${CHOST}}
-if [[ ${CTARGET} = ${CHOST} ]] ; then
-	if [[ ${CATEGORY} == cross-* ]] ; then
-		export CTARGET=${CATEGORY#cross-}
-	fi
-fi
-: "${TARGET_ABI:=${ABI}}"
-: "${TARGET_MULTILIB_ABIS:=${MULTILIB_ABIS}}"
-: "${TARGET_DEFAULT_ABI:=${DEFAULT_ABI}}"
-
-is_crosscompile() {
-	[[ ${CHOST} != ${CTARGET} ]]
-}
-
-is_mingw64() {
-	[[ ${CTARGET} == *-w64-mingw* || ${CTARGET} == x86_64-*-mingw* ]]
-}
-
-is_mingw() {
-	[[ ${CTARGET} == mingw* || ${CTARGET} == *-mingw* ]] && ! is_mingw64
-}
-
-is_cygwin() {
-	[[ ${CTARGET} == *-cygwin ]]
-}
-
-is_djgpp() {
-	[[ ${CTARGET} == *-msdosdjgpp* ]]
-}
-
 # @FUNCTION: tc_version_is_at_least
 # @USAGE: ver1 [ver2]
 # @DESCRIPTION:
@@ -141,6 +109,109 @@ GCCMICRO=$(ver_cut 3 ${GCC_PV})
 # @DESCRIPTION:
 # Controls whether fixincludes should be used.
 GCC_RUN_FIXINCLUDES=0
+
+if [[ ${CATEGORY} != cross-* ]] && ! tc_version_is_at_least 4.0 ; then
+	case $(tc-arch) in
+	amd64)
+		if tc_version_is_at_least 3.1 ; then
+			TOOL_PREFIX="x86_64-legacy"
+		else
+			TOOL_PREFIX="i686-legacy"
+			CHOST_x86="${TOOL_PREFIX}-linux-gnu"
+			ABI='x86'
+			DEFAULT_ABI='x86'
+			ABI_X86='32'
+		fi
+		;;
+	x86)
+		TOOL_PREFIX="i686-legacy"
+		CHOST_x86="${TOOL_PREFIX}-linux-gnu"
+		ABI='x86'
+		DEFAULT_ABI='x86'
+		ABI_X86='32'
+		;;
+	alpha|m68k)
+		TOOL_PREFIX="$(tc-arch)-legacy"
+		;;
+	hppa)
+		TOOL_PREFIX="hppa1.1-legacy"
+		;;
+	mips)
+		if tc_version_is_at_least 3.1 ; then
+			TOOL_PREFIX="${PROFILE_ARCH}-legacy"
+		else
+			TOOL_PREFIX="${PROFILE_ARCH/64/}-legacy"
+		fi
+		;;
+	ppc)
+		TOOL_PREFIX="powerpc-legacy"
+		;;
+	ppc64)
+		TOOL_PREFIX="powerpc64-legacy"
+		;;
+	s390)
+		TOOL_PREFIX="s390x-legacy"
+		;;
+	sh)
+		TOOL_PREFIX="sh4-legacy"
+		;;
+	sparc)
+		if tc_version_is_at_least 3.1 ; then
+			TOOL_PREFIX="${PROFILE_ARCH}-legacy"
+		else
+			TOOL_PREFIX="sparc-legacy"
+		fi
+		;;
+	*)
+		TOOL_PREFIX=""
+		;;
+	esac
+
+	if [[ ${TOOL_PREFIX} != "" ]]; then
+		CBUILD="${TOOL_PREFIX}-linux-gnu"
+		CHOST=${CBUILD}
+		AS="${CHOST}-as"
+		LD="${CHOST}-ld"
+		AR="${CHOST}-ar"
+		RANLIB="${CHOST}-ranlib"
+		LEGACY_DEPEND="
+			legacy-gcc/linux-headers
+			legacy-gcc/glibc-headers
+			legacy-gcc/binutils-wrapper"
+	fi
+fi
+
+#---->> globals <<----
+
+export CTARGET=${CTARGET:-${CHOST}}
+if [[ ${CTARGET} = ${CHOST} ]] ; then
+	if [[ ${CATEGORY} == cross-* ]] ; then
+		export CTARGET=${CATEGORY#cross-}
+	fi
+fi
+: "${TARGET_ABI:=${ABI}}"
+: "${TARGET_MULTILIB_ABIS:=${MULTILIB_ABIS}}"
+: "${TARGET_DEFAULT_ABI:=${DEFAULT_ABI}}"
+
+is_crosscompile() {
+	[[ ${CHOST} != ${CTARGET} ]]
+}
+
+is_mingw64() {
+	[[ ${CTARGET} == *-w64-mingw* || ${CTARGET} == x86_64-*-mingw* ]]
+}
+
+is_mingw() {
+	[[ ${CTARGET} == mingw* || ${CTARGET} == *-mingw* ]] && ! is_mingw64
+}
+
+is_cygwin() {
+	[[ ${CTARGET} == *-cygwin ]]
+}
+
+is_djgpp() {
+	[[ ${CTARGET} == *-msdosdjgpp* ]]
+}
 
 tc_use_major_version_only() {
 	local use_major_version_only=0
@@ -348,7 +419,7 @@ tc_version_is_at_least 2.9 && RDEPEND+=" nls? ( virtual/libintl )"
 tc_version_is_at_least 3 && RDEPEND+=" virtual/libiconv"
 
 if tc_version_is_at_least 4 ; then
-	GMP_MPFR_DEPS=">=dev-libs/gmp-4.3.2:0= >=dev-libs/mpfr-2.4.2:0="
+	GMP_MPFR_DEPS="dev-libs/gmp dev-libs/mpfr"
 	if tc_version_is_at_least 4.3 ; then
 		RDEPEND+=" ${GMP_MPFR_DEPS}"
 	elif tc_has_feature fortran ; then
@@ -356,36 +427,37 @@ if tc_version_is_at_least 4 ; then
 	fi
 fi
 
-tc_version_is_at_least 4.5 && RDEPEND+=" >=dev-libs/mpc-0.8.1:0="
+tc_version_is_at_least 4.5 && RDEPEND+=" dev-libs/mpc"
 
 if tc_has_feature objc-gc ; then
 	if tc_version_is_at_least 7 ; then
-		RDEPEND+=" objc-gc? ( >=dev-libs/boehm-gc-7.4.2 )"
+		RDEPEND+=" objc-gc? ( dev-libs/boehm-gc )"
 	fi
 fi
 
 if tc_has_feature graphite ; then
-	RDEPEND+=" graphite? ( >=dev-libs/isl-0.14:0= )"
+	RDEPEND+=" graphite? ( dev-libs/isl )"
 fi
 
 BDEPEND="
 	app-alternatives/yacc
-	>=sys-devel/flex-2.5.4"
+	sys-devel/flex"
 tc_version_is_at_least 2.9 && BDEPEND+=" nls? ( sys-devel/gettext )"
-tc_version_is_at_least 2.95 && BDEPEND+=" test? ( >=dev-util/dejagnu-1.4.4 >=sys-devel/autogen-5.5.4 )"
+tc_version_is_at_least 2.95 && BDEPEND+=" test? ( dev-util/dejagnu sys-devel/autogen )"
 
 case $(tc-arch) in
 	loong)
 		if tc_version_is_between 8 10 ; then
-			RDEPEND+=" sys-devel/binutils:2.39"
+			BDEPEND+=" ${CATEGORY}/binutils:2.39"
 		fi
 		;;
 	*)
-		if tc_version_is_between 2.95 11 ; then
-			BDEPEND+=" test? ( sys-devel/binutils:2.38 )"
+		if tc_version_is_between 4.0 11 ; then
+			BDEPEND+=" ${CATEGORY}/binutils:2.38"
 		fi
 		;;
 esac
+
 DEPEND="${RDEPEND}"
 
 if [[ ${PN} == gcc && ${PV} == *_p* ]] ; then
@@ -416,7 +488,70 @@ if tc_has_feature valgrind ; then
 	BDEPEND+=" valgrind? ( dev-debug/valgrind )"
 fi
 
-PDEPEND=">=sys-devel/gcc-config-2.3"
+PDEPEND="sys-devel/gcc-config"
+
+if ! is_crosscompile ; then
+	if tc_version_is_between 4.9 10 ; then
+		if [[ $(tc-arch) != "loong" ]] ; then
+			BDEPEND+=" sys-devel/gcc:10"
+			CC="gcc-10"
+			CXX="g++-10"
+		fi
+	elif tc_version_is_between 4.5 4.9 ; then
+		BDEPEND+=" sys-devel/gcc:4.9.4"
+		CC="gcc-4.9.4"
+		CXX="g++-4.9.4"
+	elif tc_version_is_between 4.0 4.5 ; then
+		if [[ $(tc-arch) == "sh" ]] && tc_version_is_between 4.0 4.1 ; then
+			BDEPEND+=" sys-devel/gcc:4.1.2"
+			CC="gcc-4.1.2"
+			CXX="g++-4.1.2"
+		else
+			BDEPEND+=" sys-devel/gcc:4.4.7"
+			CC="gcc-4.4.7"
+			CXX="g++-4.4.7"
+		fi
+	fi
+
+	if ! tc_version_is_at_least 4.0 ; then
+		if tc_version_is_between 3.4 4.0 ; then
+			DEPEND="${DEPEND} ${LEGACY_DEPEND}"
+			if [[ $(tc-arch) == "sh" ]] ; then
+				BDEPEND+=" sys-devel/gcc:4.1.2"
+				CC="gcc-4.1.2"
+				CXX="g++-4.1.2"
+			else
+				BDEPEND+=" sys-devel/gcc:4.4.7"
+				CC="gcc-4.4.7"
+				CXX="g++-4.4.7"
+			fi
+		elif tc_version_is_between 2.95 3.4 ; then
+			DEPEND="${DEPEND} ${LEGACY_DEPEND}"
+			BDEPEND+=" sys-devel/gcc:3.4.6"
+			CC="gcc-3.4.6"
+			CXX="g++-3.4.6"
+			if [[ $(tc-arch) == "mips" ]] ; then
+				CC="${CC} ${CFLAGS_o32}"
+				CXX="${CXX} ${CFLAGS_o32}"
+			elif [[ $(tc-arch) == "sparc" ]] && tc_version_is_between 2.95 3.1 ; then
+				CC="${CC} ${CFLAGS_sparc32}"
+				CXX="${CXX} ${CFLAGS_sparc32}"
+			elif [[ $(tc-arch) == "amd64" || $(tc-arch) == "x86" ]] && tc_version_is_between 2.95 3.1 ; then
+				CC="${CC} ${CFLAGS_x86}"
+				CXX="${CXX} ${CFLAGS_x86}"
+			fi
+		else
+			DEPEND="${DEPEND} ${LEGACY_DEPEND}"
+			BDEPEND+=" sys-devel/gcc:2.95.3"
+			CC="gcc-2.95.3"
+			CXX="g++-2.95.3"
+		fi
+	fi
+elif tc_version_is_between 2.95 11 ; then
+	BDEPEND="sys-devel/gcc:${SLOT}"
+	CC="gcc-${SLOT}"
+	CXX="g++-${SLOT}"
+fi
 
 #---->> S + SRC_URI essentials <<----
 
@@ -1020,6 +1155,10 @@ toolchain_src_configure() {
 			--infodir="${DATAPATH}/info"
 			--with-gxx-include-dir="${STDCXX_INCDIR}"
 		)
+	fi
+
+	if tc_version_is_between 2.6 2.7 ; then
+		confgcc+=( --gxx-include-dir=${INCLUDEPATH}/g++ )
 	fi
 
 	declare -A l1_cache_sizes=()
@@ -1711,19 +1850,20 @@ toolchain_src_configure() {
 	# killing the 32bit builds which want /usr/lib.
 	export ac_cv_have_x='have_x=yes ac_x_includes= ac_x_libraries='
 
-	# for testsuite
-	case $(tc-arch) in
-		loong)
-			if tc_version_is_between 8 10 ; then
-				confgcc+=( --with-as=/usr/$CHOST/binutils-bin/2.39/as --with-ld=/usr/$CHOST/binutils-bin/2.39/ld )
-			fi
-			;;
-		*)
-			if _tc_use_if_iuse test && tc_version_is_between 4 11 ; then
-				confgcc+=( --with-as=/usr/$CHOST/binutils-bin/2.38/as --with-ld=/usr/$CHOST/binutils-bin/2.38/ld )
-			fi
-			;;
-	esac
+	if ! is_crosscompile ; then
+		case $(tc-arch) in
+			loong)
+				if tc_version_is_between 8 10 ; then
+					confgcc+=( --with-as=/usr/$CHOST/binutils-bin/2.39/as --with-ld=/usr/$CHOST/binutils-bin/2.39/ld )
+				fi
+				;;
+			*)
+				if tc_version_is_between 4.0 11 ; then
+					confgcc+=( --with-as=/usr/$CHOST/binutils-bin/2.38/as --with-ld=/usr/$CHOST/binutils-bin/2.38/ld )
+				fi
+				;;
+		esac
+	fi
 
 	eval "local -a EXTRA_ECONF=(${EXTRA_ECONF})"
 	confgcc+=( "$@" "${EXTRA_ECONF[@]}" )

@@ -150,8 +150,39 @@ BDEPEND="
 	sys-devel/flex"
 tc_version_is_at_least 2.95 && BDEPEND+=" test? ( dev-util/dejagnu sys-devel/autogen )"
 DEPEND="${RDEPEND}"
-
 PDEPEND="sys-devel/gcc-config"
+
+DEPEND+=" ${CATEGORY}/binutils ${CATEGORY}/libc"
+if tc_version_is_at_least 3.4 ; then
+	BDEPEND+=" sys-devel/gcc:3.4.6"
+	if [[ -f /usr/bin/${CTARGET}-gcc-3.4.6 ]] ;then
+		CC="${CTARGET}-gcc-3.4.6"
+		CXX="${CTARGET}-g++-3.4.6"
+	else
+		STAGE1='yes'
+		CC="gcc-3.4.6 -m32"
+		CXX="g++-3.4.6 -m32"
+	fi
+elif tc_version_is_between 2.95 3.4 ; then
+	if [[ ${GCC_PV} == "2.95.3" ]] && [[ ${CATEGORY} == "dev-libc4" ]] ; then 
+		if [[ -f /usr/bin/${CTARGET}-gcc-2.95.3 ]] ; then
+			CC="${CTARGET}-gcc-2.95.3"
+			CXX="${CTARGET}-g++-2.95.3"
+		else
+			STAGE1='yes'
+			CC="gcc-2.95.3"
+			CXX="g++-2.95.3"
+		fi
+	else
+		BDEPEND+=" ${CATEGORY}/gcc:3.4.6"
+		CC="${CTARGET}-gcc-3.4.6"
+		CXX="${CTARGET}-g++-3.4.6"
+	fi
+else
+	BDEPEND+=" ${CATEGORY}/gcc:2.95.3"
+	CC="${CTARGET}-gcc-2.95.3"
+	CXX="${CTARGET}-g++-2.95.3"
+fi
 
 #---->> S + SRC_URI essentials <<----
 
@@ -369,6 +400,10 @@ toolchain-oldlibc_src_configure() {
 			--infodir="${DATAPATH}/info"
 			--with-gxx-include-dir="${STDCXX_INCDIR}"
 		)
+	fi
+
+	if tc_version_is_between 2.6 2.7 ; then
+		confgcc+=( --gxx-include-dir=${INCLUDEPATH}/g++ )
 	fi
 
 	local GCC_LANG="c"
