@@ -26,7 +26,7 @@ src_prepare() {
 	esac
 
 	[[ $(tc-arch) == "hppa" ]] && eapply "${FILESDIR}"/${PV}/03_hppa-fix-build.patch
-	[[ ${TOOL_PREFIX} != "" ]] && eapply "${FILESDIR}"/${PV}/04_workaround-for-legacy-glibc-in-non-system-dir.patch
+	! is_crosscompile && eapply "${FILESDIR}"/${PV}/04_workaround-for-legacy-glibc-in-non-system-dir.patch
 
 	use vanilla && return 0
 	eapply "${FILESDIR}"/${PV}/06_fix-werror.patch

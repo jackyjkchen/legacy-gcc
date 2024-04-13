@@ -110,7 +110,7 @@ GCCMICRO=$(ver_cut 3 ${GCC_PV})
 # Controls whether fixincludes should be used.
 GCC_RUN_FIXINCLUDES=0
 
-if [[ ${CATEGORY} != cross-* ]] && ! tc_version_is_at_least 4.0 ; then
+if ! tc_version_is_at_least 4.0 ; then
 	case $(tc-arch) in
 	amd64)
 		if tc_version_is_at_least 3.1 ; then
@@ -1415,10 +1415,6 @@ toolchain_src_configure() {
 		fi
 
 		tc_version_is_at_least 4.2 && confgcc+=(
-			# https://gcc.gnu.org/PR100289
-			# TOOD: Find a way to disable this just for stage1 cross?
-			--disable-gcov
-
 			--disable-bootstrap
 		)
 	else

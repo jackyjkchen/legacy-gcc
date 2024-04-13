@@ -12,7 +12,7 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/00_gcc-${PV}.patch
 	toolchain_src_prepare
 
-	[[ ${TOOL_PREFIX} != "" ]] && eapply "${FILESDIR}"/${PV}/01_workaround-for-legacy-glibc-in-non-system-dir.patch
+	! is_crosscompile && eapply "${FILESDIR}"/${PV}/01_workaround-for-legacy-glibc-in-non-system-dir.patch
 	case $(tc-arch) in
 		mips)
 			eapply "${FILESDIR}"/${PV}/02_support-mips64.patch
