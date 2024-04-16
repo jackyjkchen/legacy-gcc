@@ -17,10 +17,11 @@ src_prepare() {
 	[[ $(tc-arch) == "hppa" ]] && eapply "${FILESDIR}"/${PV}/04_hppa-fix-build.patch
 	[[ $(tc-arch) == "mips" && ${DEFAULT_ABI} == "n64" ]] && eapply "${FILESDIR}"/${PV}/05_mips64-default-n64-abi.patch
 	[[ $(tc-arch) == "arm" ]] && eapply "${FILESDIR}"/${PV}/06_add-.note.GNU-stack.patch
+	! is_crosscompile && eapply "${FILESDIR}"/${PV}/07_workaround-bootstrap.patch
 
 	use vanilla && return 0
-	eapply "${FILESDIR}"/${PV}/07_backport-static-libstdc++-option.patch
 	eapply "${FILESDIR}"/${PV}/08_Unset-_M_init.patch
+	eapply "${FILESDIR}"/${PV}/09_backport-static-libstdc++-option.patch
 
 	eapply "${FILESDIR}"/${PV}/postrelease/00_pr33619.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/01_pr36013.patch

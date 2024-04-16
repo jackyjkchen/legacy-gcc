@@ -352,7 +352,7 @@ if [[ ${PN} != kgcc64 && ${PN} != gcc-* ]] ; then
 	tc_version_is_between 4.0 4.1 && IUSE+=" f95"
 	tc_version_is_at_least 3.0 && IUSE+=" doc"
 	tc_version_is_at_least 3.1 && IUSE+=" multilib"
-	tc_version_is_at_least 3.4 && IUSE+=" pgo"
+	tc_version_is_at_least 4.2 && IUSE+=" pgo"
 	tc_version_is_at_least 4.0 && IUSE+=" objc-gc" TC_FEATURES+=( objc-gc )
 	tc_version_is_at_least 4.1 && IUSE+=" libssp objc++"
 	tc_version_is_at_least 4.2 && IUSE+=" +openmp"
@@ -502,15 +502,9 @@ if ! is_crosscompile ; then
 		CC="gcc-4.9.4"
 		CXX="g++-4.9.4"
 	elif tc_version_is_between 4.0 4.4 ; then
-		if [[ $(tc-arch) == "sh" ]] && tc_version_is_between 4.0 4.1 ; then
-			BDEPEND+=" sys-devel/gcc:4.1.2"
-			CC="gcc-4.1.2"
-			CXX="g++-4.1.2"
-		else
-			BDEPEND+=" sys-devel/gcc:4.4.7"
-			CC="gcc-4.4.7"
-			CXX="g++-4.4.7"
-		fi
+		BDEPEND+=" sys-devel/gcc:4.4.7"
+		CC="gcc-4.4.7"
+		CXX="g++-4.4.7"
 	elif tc_version_is_between 3.4 4.0 ; then
 		DEPEND="${DEPEND} ${LEGACY_DEPEND}"
 		if [[ $(tc-arch) == "sh" ]] ; then
@@ -1418,6 +1412,10 @@ toolchain_src_configure() {
 			--disable-bootstrap
 		)
 	else
+		# gcc-4.0 and gcc-4.1, this option default no, and libcpp/libiberty building only once when make bootstrap
+		if tc_version_is_between 4.0 4.2 ; then
+			confgcc+=( --enable-bootstrap )
+		fi
 		if tc_version_is_at_least 2.8 ; then
 			if tc-is-static-only ; then
 				confgcc+=( --disable-shared )
@@ -2121,7 +2119,7 @@ gcc_do_make() {
 			ewarn "Disabling bootstrapping. ONLY recommended for development."
 			ewarn "This is NOT a safe configuration for endusers!"
 			ewarn "This compiler may not be safe or reliable for production use!"
-		elif tc_version_is_at_least 3.3 && _tc_use_if_iuse pgo; then
+		elif tc_version_is_at_least 4.2 && _tc_use_if_iuse pgo; then
 			GCC_MAKE_TARGET=${GCC_MAKE_TARGET-profiledbootstrap}
 		elif tc_version_is_at_least 4.5 && ! _tc_use_if_iuse test ; then
 			GCC_MAKE_TARGET=${GCC_MAKE_TARGET-bootstrap-lean}
