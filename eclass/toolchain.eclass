@@ -2231,6 +2231,7 @@ gcc_do_make() {
 			LANGUAGES="${LANGUAGES}" \
 			LDFLAGS="${LDFLAGS}" \
 			STAGE1_CFLAGS="${STAGE1_CFLAGS}" \
+			BOOT_CFLAGS="${CFLAGS}" \
 			LIBPATH="${LIBPATH}" \
 			${GCC_MAKE_TARGET} \
 			|| die "emake failed with ${GCC_MAKE_TARGET}"
