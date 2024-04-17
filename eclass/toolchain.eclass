@@ -492,50 +492,88 @@ PDEPEND="sys-devel/gcc-config"
 
 if ! is_crosscompile ; then
 	if tc_version_is_between 4.9 10 ; then
-		if [[ $(tc-arch) != "loong" ]] ; then
-			BDEPEND+=" sys-devel/gcc:10"
+		BDEPEND+=" sys-devel/gcc:10"
+		if [[ -f /usr/bin/gcc-${SLOT} ]] ;then
+			CC="gcc-${SLOT}"
+			CXX="g++-${SLOT}"
+		elif [[ $(tc-arch) != "loong" ]] ; then
 			CC="gcc-10"
 			CXX="g++-10"
 		fi
 	elif tc_version_is_between 4.4 4.9 ; then
 		BDEPEND+=" sys-devel/gcc:4.9.4"
-		CC="gcc-4.9.4"
-		CXX="g++-4.9.4"
+		if [[ -f /usr/bin/gcc-${GCC_PV} ]] ;then
+			CC="gcc-${GCC_PV}"
+			CXX="g++-${GCC_PV}"
+		else
+			CC="gcc-4.9.4"
+			CXX="g++-4.9.4"
+		fi
 	elif tc_version_is_between 4.0 4.4 ; then
 		BDEPEND+=" sys-devel/gcc:4.4.7"
-		CC="gcc-4.4.7"
-		CXX="g++-4.4.7"
+		if [[ -f /usr/bin/gcc-${GCC_PV} ]] ;then
+			CC="gcc-${GCC_PV}"
+			CXX="g++-${GCC_PV}"
+		else
+			CC="gcc-4.4.7"
+			CXX="g++-4.4.7"
+		fi
 	elif tc_version_is_between 3.4 4.0 ; then
 		DEPEND="${DEPEND} ${LEGACY_DEPEND}"
 		if [[ $(tc-arch) == "sh" ]] ; then
 			BDEPEND+=" sys-devel/gcc:4.1.2"
-			CC="gcc-4.1.2"
-			CXX="g++-4.1.2"
+			if [[ -f /usr/bin/gcc-${GCC_PV} ]] ;then
+				CC="gcc-${GCC_PV}"
+				CXX="g++-${GCC_PV}"
+			else
+				CC="gcc-4.1.2"
+				CXX="g++-4.1.2"
+			fi
 		else
 			BDEPEND+=" sys-devel/gcc:4.4.7"
-			CC="gcc-4.4.7"
-			CXX="g++-4.4.7"
+			if [[ -f /usr/bin/gcc-${GCC_PV} ]] ;then
+				CC="gcc-${GCC_PV}"
+				CXX="g++-${GCC_PV}"
+			else
+				CC="gcc-4.4.7"
+				CXX="g++-4.4.7"
+			fi
 		fi
 	elif tc_version_is_between 2.95 3.4 ; then
 		DEPEND="${DEPEND} ${LEGACY_DEPEND}"
 		BDEPEND+=" sys-devel/gcc:3.4.6"
-		CC="gcc-3.4.6"
-		CXX="g++-3.4.6"
-		if [[ $(tc-arch) == "mips" ]] ; then
-			CC="${CC} ${CFLAGS_o32}"
-			CXX="${CXX} ${CFLAGS_o32}"
-		elif [[ $(tc-arch) == "sparc" ]] && tc_version_is_between 2.95 3.1 ; then
-			CC="${CC} ${CFLAGS_sparc32}"
-			CXX="${CXX} ${CFLAGS_sparc32}"
-		elif [[ $(tc-arch) == "amd64" || $(tc-arch) == "x86" ]] && tc_version_is_between 2.95 3.1 ; then
-			CC="${CC} ${CFLAGS_x86}"
-			CXX="${CXX} ${CFLAGS_x86}"
+		if [[ -f /usr/bin/gcc-${GCC_PV} ]] ;then
+			CC="gcc-${GCC_PV}"
+			CXX="g++-${GCC_PV}"
+		else
+			CC="gcc-3.4.6"
+			CXX="g++-3.4.6"
+			if [[ $(tc-arch) == "mips" ]] ; then
+				CC="${CC} ${CFLAGS_o32}"
+				CXX="${CXX} ${CFLAGS_o32}"
+			elif [[ $(tc-arch) == "sparc" ]] && tc_version_is_between 2.95 3.1 ; then
+				CC="${CC} ${CFLAGS_sparc32}"
+				CXX="${CXX} ${CFLAGS_sparc32}"
+			elif [[ $(tc-arch) == "amd64" || $(tc-arch) == "x86" ]] && tc_version_is_between 2.95 3.1 ; then
+				CC="${CC} ${CFLAGS_x86}"
+				CXX="${CXX} ${CFLAGS_x86}"
+			fi
 		fi
-	elif tc_version_is_between 1.0 2.95 ; then
+	elif tc_version_is_between 2.2 2.95 ; then
 		DEPEND="${DEPEND} ${LEGACY_DEPEND}"
 		BDEPEND+=" sys-devel/gcc:2.95.3"
-		CC="gcc-2.95.3"
-		CXX="g++-2.95.3"
+		if [[ -f /usr/bin/gcc-${GCC_PV} ]] ; then
+			CC="gcc-${GCC_PV}"
+			CXX="g++-${GCC_PV}"
+		else
+			CC="gcc-2.95.3"
+			CXX="g++-2.95.3"
+		fi
+	elif tc_version_is_between 1.0 2.2 ; then
+		DEPEND="${DEPEND} ${LEGACY_DEPEND}"
+		BDEPEND+=" sys-devel/gcc:2.2.2"
+		CC="gcc-2.2.2"
+		CXX="g++-2.2.2"
 	fi
 else
 	BDEPEND="sys-devel/gcc:${SLOT}"

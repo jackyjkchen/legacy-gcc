@@ -155,9 +155,9 @@ PDEPEND="sys-devel/gcc-config"
 DEPEND+=" ${CATEGORY}/binutils ${CATEGORY}/libc"
 if tc_version_is_at_least 3.4 ; then
 	BDEPEND+=" sys-devel/gcc:3.4.6"
-	if [[ -f /usr/bin/${CTARGET}-gcc-3.4.6 ]] ;then
-		CC="${CTARGET}-gcc-3.4.6"
-		CXX="${CTARGET}-g++-3.4.6"
+	if [[ -f /usr/bin/${CTARGET}-gcc-${GCC_PV} ]] ;then
+		CC="${CTARGET}-gcc-${GCC_PV}"
+		CXX="${CTARGET}-g++-${GCC_PV}"
 	else
 		STAGE1='yes'
 		CC="gcc-3.4.6 -m32"
@@ -165,9 +165,9 @@ if tc_version_is_at_least 3.4 ; then
 	fi
 elif tc_version_is_between 2.95 3.4 ; then
 	if [[ ${GCC_PV} == "2.95.3" ]] && [[ ${CATEGORY} == "dev-libc4" ]] ; then 
-		if [[ -f /usr/bin/${CTARGET}-gcc-2.95.3 ]] ; then
-			CC="${CTARGET}-gcc-2.95.3"
-			CXX="${CTARGET}-g++-2.95.3"
+		if [[ -f /usr/bin/${CTARGET}-gcc-${GCC_PV} ]] ; then
+			CC="${CTARGET}-gcc-${GCC_PV}"
+			CXX="${CTARGET}-g++-${GCC_PV}"
 		else
 			STAGE1='yes'
 			CC="gcc-2.95.3"
@@ -175,13 +175,27 @@ elif tc_version_is_between 2.95 3.4 ; then
 		fi
 	else
 		BDEPEND+=" ${CATEGORY}/gcc:3.4.6"
-		CC="${CTARGET}-gcc-3.4.6"
-		CXX="${CTARGET}-g++-3.4.6"
+		if [[ -f /usr/bin/${CTARGET}-gcc-${GCC_PV} ]] ;then
+			CC="${CTARGET}-gcc-${GCC_PV}"
+			CXX="${CTARGET}-g++-${GCC_PV}"
+		else
+			CC="${CTARGET}-gcc-3.4.6"
+			CXX="${CTARGET}-g++-3.4.6"
+		fi
 	fi
-else
+elif tc_version_is_between 2.2 2.95 ; then
 	BDEPEND+=" ${CATEGORY}/gcc:2.95.3"
-	CC="${CTARGET}-gcc-2.95.3"
-	CXX="${CTARGET}-g++-2.95.3"
+	if [[ -f /usr/bin/${CTARGET}-gcc-${GCC_PV} ]] ; then
+		CC="${CTARGET}-gcc-${GCC_PV}"
+		CXX="${CTARGET}-g++-${GCC_PV}"
+	else
+		CC="${CTARGET}-gcc-2.95.3"
+		CXX="${CTARGET}-g++-2.95.3"
+	fi
+elif tc_version_is_between 1.0 2.2 ; then
+	BDEPEND+=" ${CATEGORY}/gcc:2.2.2"
+	CC="${CTARGET}-gcc-2.2.2"
+	CXX="${CTARGET}-g++-2.2.2"
 fi
 
 #---->> S + SRC_URI essentials <<----
