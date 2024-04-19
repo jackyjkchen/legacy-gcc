@@ -492,7 +492,9 @@ PDEPEND="sys-devel/gcc-config"
 
 if ! is_crosscompile ; then
 	if tc_version_is_between 4.9 10 ; then
-		BDEPEND+=" sys-devel/gcc:10"
+		if [[ $(tc-arch) != "loong" ]] ; then
+			BDEPEND+=" sys-devel/gcc:10"
+		fi
 		if [[ -f /usr/bin/gcc-${SLOT} ]] ;then
 			CC="gcc-${SLOT}"
 			CXX="g++-${SLOT}"
