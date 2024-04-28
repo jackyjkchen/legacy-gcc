@@ -40,4 +40,5 @@ src_prepare() {
 	is_crosscompile || eapply "${FILESDIR}"/${PV}/postrelease/90_fix-known-test-fail.patch
 	is_crosscompile || ([[ $(tc-arch) == "arm64" ]] && eapply "${FILESDIR}"/${PV}/postrelease/91_fix-aarch64-test-fail.patch)
 	is_crosscompile || ([[ $(tc-arch) == "arm" ]] && eapply "${FILESDIR}"/${PV}/postrelease/92_fix-arm-test-fail.patch)
+	is_crosscompile || ([[ $(tc-arch) == "loong" ]] && eapply "${FILESDIR}"/${PV}/postrelease/93_fix-loong-test-fail.patch)
 }
