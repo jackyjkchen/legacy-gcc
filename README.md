@@ -69,7 +69,7 @@ USE参数可使用equery u sys-devel/gcc:${slot}查询。
 
 4.1.2以上版本支持objective-c++。
 
-2.95.3-3.4.6版本支持f77。
+2.91.66-3.4.6版本支持f77。
 
 4.0.4以上版本支持f95/fortran。
 
