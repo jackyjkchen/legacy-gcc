@@ -15,8 +15,9 @@ src_prepare() {
 	[[ $(tc-arch) == "alpha" ]] && eapply "${FILESDIR}"/${PV}/02_fix-alpha-bootstrap.patch
 
 	use vanilla && return 0
-	eapply "${FILESDIR}"/${PV}/03_fix-cpp98-break.patch
-	eapply "${FILESDIR}"/${PV}/04_fix-werror.patch
+	eapply "${FILESDIR}"/${PV}/03_remove-matrix-reorg.patch
+	eapply "${FILESDIR}"/${PV}/04_fix-cpp98-break.patch
+	eapply "${FILESDIR}"/${PV}/05_fix-werror.patch
 
 	eapply "${FILESDIR}"/${PV}/postrelease/00_pr77605-78185-78333.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/01_pr58943.patch
