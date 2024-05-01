@@ -111,6 +111,7 @@ GCCMICRO=$(ver_cut 3 ${GCC_PV})
 GCC_RUN_FIXINCLUDES=0
 
 if ! tc_version_is_at_least 4.0 ; then
+	TOOL_PREFIX=""
 	case $(tc-arch) in
 	amd64)
 		if tc_version_is_at_least 3.1 ; then
@@ -161,9 +162,6 @@ if ! tc_version_is_at_least 4.0 ; then
 		else
 			TOOL_PREFIX="sparc-legacy"
 		fi
-		;;
-	*)
-		TOOL_PREFIX=""
 		;;
 	esac
 
@@ -2592,6 +2590,50 @@ toolchain_src_install() {
 			cd "${WORKDIR}"/build || die
 			find . -name \*.sum -exec cp --parents -v {} "${ED}"/var/cache/gcc/${SLOT} \;
 		)
+	fi
+
+	if ! tc_version_is_at_least 4.0 && ! is_crosscompile && [[ ${TOOL_PREFIX} != "" ]] ; then
+		declare -A GCC_INDEX
+		local GCC_INDEX=(
+			["3.4.6"]="06"
+			["3.3.6"]="07"
+			["3.2.3"]="08"
+			["3.1.1"]="09"
+			["3.0.4"]="10"
+			["2.95.3"]="11"
+			["2.91.66"]="12"
+			["2.8.1"]="13"
+			["2.7.2"]="14"
+		)
+		mkdir -p ${ED}/etc/ld.so.conf.d/ || die
+		local ldconf="${ED}/etc/ld.so.conf.d/${GCC_INDEX[${GCC_RELEASE_VER}]}-${CHOST}-gcc-${GCC_RELEASE_VER}.conf"
+		case ${TOOL_PREFIX} in
+			x86_64-legacy|sparc64-legacy)
+				cat <<-_EOF_ > ${ldconf} || die
+${LIBPATH}
+${LIBPATH}/32
+_EOF_
+				;;
+			mips64*-legacy)
+				if tc_version_is_at_least 3.3 ; then
+					cat <<-_EOF_ > ${ldconf} || die
+${LIBPATH}
+${LIBPATH}/32
+${LIBPATH}/n32
+_EOF_
+				else
+					cat <<-_EOF_ > ${ldconf} || die
+${LIBPATH}/32
+${LIBPATH}/n32
+_EOF_
+				fi
+				;;
+			*)
+				cat <<-_EOF_ > ${ldconf} || die
+${LIBPATH}
+_EOF_
+				;;
+		esac
 	fi
 }
 

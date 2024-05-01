@@ -47,30 +47,3 @@ src_prepare() {
 
 	is_crosscompile || eapply "${FILESDIR}"/${PV}/postrelease/90_fix-known-test-fail.patch
 }
-
-src_install() {
-	toolchain_src_install
-	if [[ ${TOOL_PREFIX} != "" ]]; then
-		mkdir -p ${ED}/etc/ld.so.conf.d/ || die
-		case ${TOOL_PREFIX} in
-			x86_64-legacy|sparc64-legacy)
-				cat <<-_EOF_ > "${ED}"/etc/ld.so.conf.d/06-${CHOST}-gcc-${PV}.conf || die
-/usr/lib/gcc/${CHOST}/${PV}
-/usr/lib/gcc/${CHOST}/${PV}/32
-_EOF_
-				;;
-			mips64*-legacy)
-				cat <<-_EOF_ > "${ED}"/etc/ld.so.conf.d/06-${CHOST}-gcc-${PV}.conf || die
-/usr/lib/gcc/${CHOST}/${PV}
-/usr/lib/gcc/${CHOST}/${PV}/32
-/usr/lib/gcc/${CHOST}/${PV}/n32
-_EOF_
-				;;
-			*)
-				cat <<-_EOF_ > "${ED}"/etc/ld.so.conf.d/06-${CHOST}-gcc-${PV}.conf || die
-/usr/lib/gcc/${CHOST}/${PV}
-_EOF_
-				;;
-		esac
-	fi
-}

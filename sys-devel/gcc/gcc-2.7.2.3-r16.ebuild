@@ -14,11 +14,3 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/01_gcc-${PV}-gentoo-install-path.patch
 	eapply "${FILESDIR}"/${PV}/02_gcc-${PV}-workaround-for-new-glibc.patch
 }
-
-src_install() {
-	toolchain_src_install
-	mkdir -p ${ED}/etc/ld.so.conf.d/ || die
-	cat <<-_EOF_ > "${ED}"/etc/ld.so.conf.d/14-${CHOST}-gcc-${SLOT}.conf || die
-/usr/lib/gcc-lib/${CHOST}/${GCC_CONFIG_VER}
-_EOF_
-}

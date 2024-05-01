@@ -28,12 +28,3 @@ src_prepare() {
 	use vanilla && return 0
 	eapply "${FILESDIR}"/${PV}/postrelease/00_pr45262.patch
 }
-
-src_install() {
-	toolchain_src_install
-	rm -rf "${ED}"/usr/share/locale
-	mkdir -p ${ED}/etc/ld.so.conf.d/ || die
-	cat <<-_EOF_ > "${ED}"/etc/ld.so.conf.d/12-${CHOST}-egcs-${SLOT}.conf || die
-/usr/lib/gcc-lib/${CHOST}/2.91.66
-_EOF_
-}

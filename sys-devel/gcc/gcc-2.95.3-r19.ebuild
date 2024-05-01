@@ -24,12 +24,3 @@ src_prepare() {
 
 	is_crosscompile || eapply "${FILESDIR}"/${PV}/postrelease/90_fix-known-test-fail.patch
 }
-
-src_install() {
-	toolchain_src_install
-	rm -rf "${ED}"/usr/share/locale
-	mkdir -p ${ED}/etc/ld.so.conf.d/ || die
-	cat <<-_EOF_ > "${ED}"/etc/ld.so.conf.d/11-${CHOST}-gcc-${SLOT}.conf || die
-/usr/lib/gcc-lib/${CHOST}/${PV}
-_EOF_
-}
