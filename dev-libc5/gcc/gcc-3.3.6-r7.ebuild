@@ -21,7 +21,9 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/03_pr24969.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/04_pr25572.patch
 
-	eapply "${FILESDIR}"/${PV}/postrelease/90_fix-known-test-fail.patch
-	rm -rf libstdc++-v3/testsuite/27_io/filebuf_members.cc
+	if use test ; then
+		eapply "${FILESDIR}"/${PV}/postrelease/90_fix-known-test-fail.patch
+		rm -rf libstdc++-v3/testsuite/27_io/filebuf_members.cc
+	fi
 }
 

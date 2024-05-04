@@ -67,7 +67,9 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/46_pr82210.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/47_pr3698-86208.patch
 
-	is_crosscompile || rm -rf gcc/testsuite/gcc.c-torture/execute/vfprintf-chk-1.c gcc/testsuite/gcc.c-torture/execute/vprintf-chk-1.c gcc/testsuite/gcc.dg/format/opt-*.c
-	is_crosscompile || eapply "${FILESDIR}"/${PV}/postrelease/90_fix-known-test-fail.patch
-	is_crosscompile || ([[ $(tc-arch) == "arm" ]] && eapply "${FILESDIR}"/${PV}/postrelease/91_fix-arm-test-fail.patch)
+	if use test ; then
+		rm -rf gcc/testsuite/gcc.c-torture/execute/vfprintf-chk-1.c gcc/testsuite/gcc.c-torture/execute/vprintf-chk-1.c gcc/testsuite/gcc.dg/format/opt-*.c
+		eapply "${FILESDIR}"/${PV}/postrelease/90_fix-known-test-fail.patch
+		[[ $(tc-arch) == "arm" ]] && eapply "${FILESDIR}"/${PV}/postrelease/91_fix-arm-test-fail.patch
+	fi
 }

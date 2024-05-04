@@ -54,7 +54,9 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/31_pr3698-86208.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/32_pr31827.patch
 
-	is_crosscompile || eapply "${FILESDIR}"/${PV}/postrelease/90_fix-known-test-fail.patch
-	is_crosscompile || ([[ $(tc-arch) == "x86" || $(tc-arch) == "amd64" ]] && eapply "${FILESDIR}"/${PV}/postrelease/91_fix-known-test-fail-x86.patch)
-	is_crosscompile || ([[ $(tc-arch) == "arm" ]] && rm -rf gcc/testsuite/obj-c++.dg/try-catch-11.mm)
+	if use test ; then
+		eapply "${FILESDIR}"/${PV}/postrelease/90_fix-known-test-fail.patch
+		[[ $(tc-arch) == "x86" || $(tc-arch) == "amd64" ]] && eapply "${FILESDIR}"/${PV}/postrelease/91_fix-known-test-fail-x86.patch
+		[[ $(tc-arch) == "arm" ]] && rm -rf gcc/testsuite/obj-c++.dg/try-catch-11.mm
+	fi
 }
