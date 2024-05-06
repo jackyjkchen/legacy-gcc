@@ -1,0 +1,233 @@
+diff --git a/gcc/fortran/class.c b/gcc/fortran/class.c
+index 928a50a6c..79b9c5564 100644
+--- a/gcc/fortran/class.c
++++ b/gcc/fortran/class.c
+@@ -476,22 +476,38 @@ gfc_class_initializer (gfc_typespec *ts, gfc_expr *init_expr)
+    and module name. This is used to construct unique names for the class
+    containers and vtab symbols.  */
+ 
+-static void
+-get_unique_type_string (char *string, gfc_symbol *derived)
++static char *
++get_unique_type_string (gfc_symbol *derived)
+ {
+-  char dt_name[GFC_MAX_SYMBOL_LEN+1];
++  const char *dt_name;
++  char *string;
++  size_t len;
+   if (derived->attr.unlimited_polymorphic)
+-    strcpy (dt_name, "STAR");
++    dt_name = "STAR";
+   else
+-    strcpy (dt_name, gfc_dt_upper_string (derived->name));
++    dt_name = gfc_dt_upper_string (derived->name);
++  len = strlen (dt_name) + 2;
+   if (derived->attr.unlimited_polymorphic)
+-    sprintf (string, "_%s", dt_name);
++    {
++      string = XNEWVEC (char, len);
++      sprintf (string, "_%s", dt_name);
++    }
+   else if (derived->module)
+-    sprintf (string, "%s_%s", derived->module, dt_name);
++    {
++      string = XNEWVEC (char, strlen (derived->module) + len);
++      sprintf (string, "%s_%s", derived->module, dt_name);
++    }
+   else if (derived->ns->proc_name)
+-    sprintf (string, "%s_%s", derived->ns->proc_name->name, dt_name);
++    {
++      string = XNEWVEC (char, strlen (derived->ns->proc_name->name) + len);
++      sprintf (string, "%s_%s", derived->ns->proc_name->name, dt_name);
++    }
+   else
+-    sprintf (string, "_%s", dt_name);
++    {
++      string = XNEWVEC (char, len);
++      sprintf (string, "_%s", dt_name);
++    }
++  return string;
+ }
+ 
+ 
+@@ -502,10 +518,8 @@ static void
+ get_unique_hashed_string (char *string, gfc_symbol *derived)
+ {
+   /* Provide sufficient space to hold "symbol.symbol_symbol".  */
+-  char tmp[3*GFC_MAX_SYMBOL_LEN+3];
+-  get_unique_type_string (&tmp[0], derived);
+-  size_t len = strnlen (tmp, sizeof (tmp));
+-  gcc_assert (len < sizeof (tmp));
++  char *tmp;
++  tmp = get_unique_type_string (derived);
+   /* If string is too long, use hash value in hex representation (allow for
+      extra decoration, cf. gfc_build_class_symbol & gfc_find_derived_vtab).
+      We need space to for 15 characters "__class_" + symbol name + "_%d_%da",
+@@ -517,6 +531,7 @@ get_unique_hashed_string (char *string, gfc_symbol *derived)
+     }
+   else
+     strcpy (string, tmp);
++  free (tmp);
+ }
+ 
+ 
+@@ -527,16 +542,16 @@ gfc_hash_value (gfc_symbol *sym)
+ {
+   unsigned int hash = 0;
+   /* Provide sufficient space to hold "symbol.symbol_symbol".  */
+-  char c[3*GFC_MAX_SYMBOL_LEN+3];
++  char *c;
+   int i, len;
+ 
+-  get_unique_type_string (&c[0], sym);
+-  len = strnlen (c, sizeof (c));
+-  gcc_assert ((size_t) len < sizeof (c));
++  c = get_unique_type_string (sym);
++  len = strlen (c);
+ 
+   for (i = 0; i < len; i++)
+     hash = (hash << 6) + (hash << 16) - hash + c[i];
+ 
++  free (c);
+   /* Return the hash but take the modulus for the sake of module read,
+      even though this slightly increases the chance of collision.  */
+   return (hash % 100000000);
+diff --git a/gcc/fortran/expr.c b/gcc/fortran/expr.c
+index 35bd0bd6d..b80331144 100644
+--- a/gcc/fortran/expr.c
++++ b/gcc/fortran/expr.c
+@@ -3480,8 +3480,10 @@ gfc_check_conformance (gfc_expr *op1, gfc_expr *op2, const char *optype_msgid, .
+     return true;
+ 
+   va_start (argp, optype_msgid);
+-  vsnprintf (buffer, 240, optype_msgid, argp);
++  d = vsnprintf (buffer, sizeof (buffer), optype_msgid, argp);
+   va_end (argp);
++  if (d < 1 || d >= (int) sizeof (buffer)) /* Reject truncation.  */
++    gfc_internal_error ("optype_msgid overflow: %d", d);
+ 
+   if (op1->rank != op2->rank)
+     {
+diff --git a/gcc/fortran/iresolve.c b/gcc/fortran/iresolve.c
+index 53338dda0..2a58a6375 100644
+--- a/gcc/fortran/iresolve.c
++++ b/gcc/fortran/iresolve.c
+@@ -61,9 +61,12 @@ gfc_get_string (const char *format, ...)
+     }
+   else
+     {
++      int ret;
+       va_start (ap, format);
+-      vsnprintf (temp_name, sizeof (temp_name), format, ap);
++      ret = vsnprintf (temp_name, sizeof (temp_name), format, ap);
+       va_end (ap);
++      if (ret < 1 || ret >= (int) sizeof (temp_name)) /* Reject truncation.  */
++	gfc_internal_error ("identifier overflow: %d", ret);
+       temp_name[sizeof (temp_name) - 1] = 0;
+       str = temp_name;
+     }
+diff --git a/gcc/fortran/parse.c b/gcc/fortran/parse.c
+index 0e2f9f6c1..d74682f78 100644
+--- a/gcc/fortran/parse.c
++++ b/gcc/fortran/parse.c
+@@ -5928,8 +5928,9 @@ set_syms_host_assoc (gfc_symbol *sym)
+ {
+   gfc_component *c;
+   const char dot[2] = ".";
+-  char parent1[GFC_MAX_SYMBOL_LEN + 1];
+-  char parent2[GFC_MAX_SYMBOL_LEN + 1];
++  /* Symbols take the form module.submodule_ or module.name_. */
++  char parent1[2 * GFC_MAX_SYMBOL_LEN + 2];
++  char parent2[2 * GFC_MAX_SYMBOL_LEN + 2];
+ 
+   if (sym == NULL)
+     return;
+diff --git a/gcc/fortran/symbol.c b/gcc/fortran/symbol.c
+index 1c45330dc..95b92cf22 100644
+--- a/gcc/fortran/symbol.c
++++ b/gcc/fortran/symbol.c
+@@ -3138,25 +3138,9 @@ gfc_new_symbol (const char *name, gfc_namespace *ns)
+   gfc_clear_ts (&p->ts);
+   gfc_clear_attr (&p->attr);
+   p->ns = ns;
+-
+   p->declared_at = gfc_current_locus;
+-
+-  if (strlen (name) > GFC_MAX_SYMBOL_LEN)
+-    gfc_internal_error ("new_symbol(): Symbol name too long");
+-
+   p->name = gfc_get_string ("%s", name);
+ 
+-  /* Make sure flags for symbol being C bound are clear initially.  */
+-  p->attr.is_bind_c = 0;
+-  p->attr.is_iso_c = 0;
+-
+-  /* Clear the ptrs we may need.  */
+-  p->common_block = NULL;
+-  p->f2k_derived = NULL;
+-  p->assoc = NULL;
+-  p->dt_next = NULL;
+-  p->fn_result_spec = 0;
+-
+   return p;
+ }
+ 
+diff --git a/gcc/testsuite/gfortran.dg/pr93473.f90 b/gcc/testsuite/gfortran.dg/pr93473.f90
+new file mode 100644
+index 000000000..dda8525cf
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/pr93473.f90
+@@ -0,0 +1,28 @@
++! { dg-do compile }
++! { dg-options "-ffree-line-length-none" }
++! PR fortran/93473
++module aModestlyLongModuleName
++  
++  type :: aTypeWithASignificantlyLongNameButStillAllowedOK
++  end type aTypeWithASignificantlyLongNameButStillAllowedOK
++  
++  interface
++     module function aFunctionWithALongButStillAllowedName(parameters) result(self)
++       type(aTypeWithASignificantlyLongNameButStillAllowedOK) :: self
++     end function aFunctionWithALongButStillAllowedName
++  end interface
++  
++end module aModestlyLongModuleName
++
++submodule (aModestlyLongModuleName) aTypeWithASignificantlyLongNameButStillAllowedOK_
++
++contains
++
++  module procedure aFunctionWithALongButStillAllowedName
++     class(*), pointer :: genericObject
++  end procedure aFunctionWithALongButStillAllowedName
++
++end submodule aTypeWithASignificantlyLongNameButStillAllowedOK_
++
++submodule (aModestlyLongModuleName:aTypeWithASignificantlyLongNameButStillAllowedOK_) aSubmoduleWithASignificantlyLongButStillAllowedName__
++end submodule aSubmoduleWithASignificantlyLongButStillAllowedName__
+diff --git a/gcc/testsuite/gfortran.dg/pr95687.f90 b/gcc/testsuite/gfortran.dg/pr95687.f90
+new file mode 100644
+index 000000000..a67453317
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/pr95687.f90
+@@ -0,0 +1,19 @@
++! { dg-do compile }
++! { dg-options "-fsecond-underscore" }
++! PR fortran/95687 - ICE in get_unique_hashed_string, at fortran/class.c:508
++
++module m2345678901234567890123456789012345678901234567890123456789_123
++  interface
++     module subroutine s2345678901234567890123456789012345678901234567890123456789_123
++     end
++  end interface
++end
++submodule(m2345678901234567890123456789012345678901234567890123456789_123) &
++          n2345678901234567890123456789012345678901234567890123456789_123
++  type t2345678901234567890123456789012345678901234567890123456789_123 &
++      (a2345678901234567890123456789012345678901234567890123456789_123)
++     integer, kind :: a2345678901234567890123456789012345678901234567890123456789_123 = 4
++  end type
++  class(t2345678901234567890123456789012345678901234567890123456789_123(3)), pointer :: &
++        x2345678901234567890123456789012345678901234567890123456789_123
++end
