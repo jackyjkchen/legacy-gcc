@@ -37,6 +37,11 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/18_pr64697.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/19_pr108636.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/20_pr87103-93473-95687.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/21_pr111331.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/22_pr89925.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/23_pr101469.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/24_pr89563.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/25_pr101156.patch
 
 	if use test ; then
 		rm -rf gcc/testsuite/gcc.c-torture/execute/vfprintf-chk-1.c gcc/testsuite/gcc.c-torture/execute/vprintf-chk-1.c gcc/testsuite/c-c++-common/Warray-bounds-2.c gcc/testsuite/c-c++-common/Wrestrict-2.c gcc/testsuite/g++.dg/warn/Wstringop-truncation-1.C gcc/testsuite/gcc.dg/format/opt-*.c

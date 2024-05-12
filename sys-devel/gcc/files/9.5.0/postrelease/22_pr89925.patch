@@ -1,0 +1,90 @@
+diff --git a/gcc/fortran/trans-stmt.c b/gcc/fortran/trans-stmt.c
+index a02731c9b..c94970aa2 100644
+--- a/gcc/fortran/trans-stmt.c
++++ b/gcc/fortran/trans-stmt.c
+@@ -6266,16 +6266,13 @@ gfc_trans_allocate (gfc_code * code)
+       else
+ 	e3rhs = gfc_copy_expr (code->expr3);
+ 
+-      // We need to propagate the bounds of the expr3 for source=/mold=;
+-      // however, for nondescriptor arrays, we use internally a lower bound
+-      // of zero instead of one, which needs to be corrected for the allocate obj
+-      if (e3_is == E3_DESC)
+-	{
+-	  symbol_attribute attr = gfc_expr_attr (code->expr3);
+-	  if (code->expr3->expr_type == EXPR_ARRAY ||
+-	      (!attr.allocatable && !attr.pointer))
+-	    e3_has_nodescriptor = true;
+-	}
++      // We need to propagate the bounds of the expr3 for source=/mold=.
++      // However, for non-named arrays, the lbound has to be 1 and neither the
++      // bound used inside the called function even when returning an
++      // allocatable/pointer nor the zero used internally.
++      if (e3_is == E3_DESC
++	  && code->expr3->expr_type != EXPR_VARIABLE)
++	e3_has_nodescriptor = true;
+     }
+ 
+   /* Loop over all objects to allocate.  */
+diff --git a/gcc/testsuite/gfortran.dg/allocate_with_mold_4.f90 b/gcc/testsuite/gfortran.dg/allocate_with_mold_4.f90
+new file mode 100644
+index 000000000..d545fe124
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/allocate_with_mold_4.f90
+@@ -0,0 +1,24 @@
++program A_M
++  implicit none
++  real, parameter :: C(5:10) = 5.0
++  real, dimension (:), allocatable :: A, B
++  allocate (A(6))
++  call Init (A)
++contains
++  subroutine Init ( A )
++    real, dimension ( -1 : ), intent ( in ) :: A
++    integer, dimension ( 1 ) :: lb_B
++
++    allocate (B, mold = A)
++    if (any (lbound (B) /= lbound (A))) stop 1
++    if (any (ubound (B) /= ubound (A))) stop 2
++    if (any (shape (B) /= shape (A))) stop 3
++    if (size (B) /= size (A)) stop 4
++    deallocate (B)
++    allocate (B, mold = C)
++    if (any (lbound (B) /= lbound (C))) stop 5
++    if (any (ubound (B) /= ubound (C))) stop 6
++    if (any (shape (B) /= shape (C))) stop 7
++    if (size (B) /= size (C)) stop 8
++end
++end 
+diff --git a/gcc/testsuite/gfortran.dg/allocate_with_source_26.f90 b/gcc/testsuite/gfortran.dg/allocate_with_source_26.f90
+index 28f24fc1e..323c8a30b 100644
+--- a/gcc/testsuite/gfortran.dg/allocate_with_source_26.f90
++++ b/gcc/testsuite/gfortran.dg/allocate_with_source_26.f90
+@@ -34,23 +34,23 @@ program p
+  if (lbound(p1, 1) /= 3 .or. ubound(p1, 1) /= 4 &
+      .or. lbound(p2, 1) /= 3 .or. ubound(p2, 1) /= 4 &
+      .or. lbound(p3, 1) /= 1 .or. ubound(p3, 1) /= 2 &
+-     .or. lbound(p4, 1) /= 7 .or. ubound(p4, 1) /= 8 &
++     .or. lbound(p4, 1) /= 1 .or. ubound(p4, 1) /= 2 &
+      .or. p1(3)%i /= 43 .or. p1(4)%i /= 56 &
+      .or. p2(3)%i /= 43 .or. p2(4)%i /= 56 &
+      .or. p3(1)%i /= 43 .or. p3(2)%i /= 56 &
+-     .or. p4(7)%i /= 11 .or. p4(8)%i /= 12) then
++     .or. p4(1)%i /= 11 .or. p4(2)%i /= 12) then
+    call abort()
+  endif
+ 
+  !write(*,*) lbound(a,1), ubound(a,1) ! prints 1 3
+  !write(*,*) lbound(b,1), ubound(b,1) ! prints 1 3
+- !write(*,*) lbound(c,1), ubound(c,1) ! prints 3 5
++ !write(*,*) lbound(c,1), ubound(c,1) ! prints 1 3
+  !write(*,*) lbound(d,1), ubound(d,1) ! prints 1 5
+  !write(*,*) lbound(e,1), ubound(e,1) ! prints 1 6
+ 
+  if (lbound(a,1) /= 1 .or. ubound(a,1) /= 3 &
+      .or. lbound(b,1) /= 1 .or. ubound(b,1) /= 3 &
+-     .or. lbound(c,1) /= 3 .or. ubound(c,1) /= 5 &
++     .or. lbound(c,1) /= 1 .or. ubound(c,1) /= 3 & 
+      .or. lbound(d,1) /= 1 .or. ubound(d,1) /= 5 &
+      .or. lbound(e,1) /= 1 .or. ubound(e,1) /= 6) then
+    call abort()

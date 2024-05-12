@@ -1,0 +1,309 @@
+diff --git a/gcc/cp/call.c b/gcc/cp/call.c
+index 9f0479c33..860f7f8f9 100644
+--- a/gcc/cp/call.c
++++ b/gcc/cp/call.c
+@@ -5650,6 +5650,47 @@ prep_operand (tree operand)
+   return operand;
+ }
+ 
++/* True iff CONV represents a conversion sequence which no other can be better
++   than under [over.ics.rank]: in other words, a "conversion" to the exact same
++   type (including binding to a reference to the same type).  This is stronger
++   than the standard's "identity" category, which also includes reference
++   bindings that add cv-qualifiers or change rvalueness.  */
++
++static bool
++perfect_conversion_p (conversion *conv)
++{
++  if (CONVERSION_RANK (conv) != cr_identity)
++    return false;
++  if (!conv->rvaluedness_matches_p)
++    return false;
++  if (conv->kind == ck_ref_bind
++      && !same_type_p (TREE_TYPE (conv->type),
++		       next_conversion (conv)->type))
++    return false;
++  return true;
++}
++
++/* True if CAND represents a perfect match, i.e. all perfect conversions, so no
++   other candidate can be a better match.  Since the template/non-template
++   tiebreaker comes immediately after the conversion comparison in
++   [over.match.best], a perfect non-template candidate is better than all
++   templates.  */
++
++static bool
++perfect_candidate_p (z_candidate *cand)
++{
++  if (cand->viable < 1)
++    return false;
++  int len = cand->num_convs;
++  for (int i = 0; i < len; ++i)
++    if (!perfect_conversion_p (cand->convs[i]))
++      return false;
++  if (conversion *conv = cand->second_conv)
++    if (!perfect_conversion_p (conv))
++      return false;
++  return true;
++}
++
+ /* Add each of the viable functions in FNS (a FUNCTION_DECL or
+    OVERLOAD) to the CANDIDATES, returning an updated list of
+    CANDIDATES.  The ARGS are the arguments provided to the call;
+@@ -5717,6 +5758,18 @@ add_candidates (tree fns, tree first_arg, const vec<tree, va_gc> *args,
+     /* Delay creating the implicit this parameter until it is needed.  */
+     non_static_args = NULL;
+ 
++  /* If there's a non-template perfect match, we don't need to consider
++     templates.  So check non-templates first.  This optimization is only
++     really needed for the defaulted copy constructor of tuple and the like
++     (96926), but it seems like we might as well enable it more generally.  */
++  bool seen_perfect = false;
++  enum { templates, non_templates, either } which = either;
++  if (template_only)
++    which = templates;
++  else /*if (flags & LOOKUP_DEFAULTED)*/
++    which = non_templates;
++
++ again:
+   for (lkp_iterator iter (fns); iter; ++iter)
+     {
+       fn = *iter;
+@@ -5725,6 +5778,10 @@ add_candidates (tree fns, tree first_arg, const vec<tree, va_gc> *args,
+ 	continue;
+       if (check_list_ctor && !is_list_ctor (fn))
+ 	continue;
++      if (which == templates && TREE_CODE (fn) != TEMPLATE_DECL)
++	continue;
++      if (which == non_templates && TREE_CODE (fn) == TEMPLATE_DECL)
++	continue;
+ 
+       tree fn_first_arg = NULL_TREE;
+       const vec<tree, va_gc> *fn_args = args;
+@@ -5755,7 +5812,7 @@ add_candidates (tree fns, tree first_arg, const vec<tree, va_gc> *args,
+ 				fn,
+ 				ctype,
+ 				explicit_targs,
+-				fn_first_arg, 
++				fn_first_arg,
+ 				fn_args,
+ 				return_type,
+ 				access_path,
+@@ -5763,17 +5820,26 @@ add_candidates (tree fns, tree first_arg, const vec<tree, va_gc> *args,
+ 				flags,
+ 				strict,
+ 				complain);
+-      else if (!template_only)
+-	add_function_candidate (candidates,
+-				fn,
+-				ctype,
+-				fn_first_arg,
+-				fn_args,
+-				access_path,
+-				conversion_path,
+-				flags,
+-				NULL,
+-				complain);
++      else
++	{
++	  add_function_candidate (candidates,
++				  fn,
++				  ctype,
++				  fn_first_arg,
++				  fn_args,
++				  access_path,
++				  conversion_path,
++				  flags,
++				  NULL,
++				  complain);
++	  if (perfect_candidate_p (*candidates))
++	    seen_perfect = true;
++	}
++    }
++  if (which == non_templates && !seen_perfect)
++    {
++      which = templates;
++      goto again;
+     }
+ }
+ 
+diff --git a/gcc/testsuite/g++.dg/cpp0x/overload4.C b/gcc/testsuite/g++.dg/cpp0x/overload4.C
+new file mode 100644
+index 000000000..b2f8eb1ba
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/overload4.C
+@@ -0,0 +1,174 @@
++// PR c++/96926
++// { dg-do compile { target c++11 } }
++
++namespace std
++{
++  template<typename _Tp, _Tp __v>
++    struct integral_constant
++    {
++      static constexpr _Tp value = __v;
++      typedef integral_constant<_Tp, __v> type;
++    };
++
++  template<typename _Tp, _Tp __v>
++    constexpr _Tp integral_constant<_Tp, __v>::value;
++
++  typedef integral_constant<bool, true> true_type;
++  typedef integral_constant<bool, false> false_type;
++
++  template<bool __v>
++    using bool_constant = integral_constant<bool, __v>;
++
++  template<bool, typename, typename>
++    struct conditional;
++
++  template<typename...>
++    struct __and_;
++
++  template<>
++    struct __and_<>
++    : public true_type
++    { };
++
++  template<typename _B1>
++    struct __and_<_B1>
++    : public _B1
++    { };
++
++  template<typename _B1, typename _B2>
++    struct __and_<_B1, _B2>
++    : public conditional<_B1::value, _B2, _B1>::type
++    { };
++
++  template<typename _B1, typename _B2, typename _B3, typename... _Bn>
++    struct __and_<_B1, _B2, _B3, _Bn...>
++    : public conditional<_B1::value, __and_<_B2, _B3, _Bn...>, _B1>::type
++    { };
++
++  template<typename _Tp, typename... _Args>
++    struct is_constructible
++    : public bool_constant<__is_constructible(_Tp, _Args...)>
++    {
++    };
++
++  template<bool, typename _Tp = void>
++    struct enable_if
++    { };
++
++  template<typename _Tp>
++    struct enable_if<true, _Tp>
++    { typedef _Tp type; };
++
++  template<bool _Cond, typename _Tp = void>
++    using __enable_if_t = typename enable_if<_Cond, _Tp>::type;
++
++  template<bool _Cond, typename _Iftrue, typename _Iffalse>
++    struct conditional
++    { typedef _Iftrue type; };
++
++
++  template<typename _Iftrue, typename _Iffalse>
++    struct conditional<false, _Iftrue, _Iffalse>
++    { typedef _Iffalse type; };
++
++
++  template<bool, typename... _Types>
++    struct _TupleConstraints
++    {
++      template<typename... _UTypes>
++        static constexpr bool __is_implicitly_constructible()
++        {
++          // is_constructible is incomplete here, but only when
++          // it is also instantiated in __is_explicitly_constructible 
++          return __and_<is_constructible<_Types, _UTypes>...,
++                 true_type
++                   >::value;
++        }
++
++      template<typename... _UTypes>
++        static constexpr bool __is_explicitly_constructible()
++        {
++#if FIX
++          return false;
++#else
++          return __and_<is_constructible<_Types, _UTypes>...,
++                 false_type
++                   >::value;
++#endif
++        }
++    };
++
++  template<typename... _Elements>
++    class tuple
++    {
++      template<bool _Cond>
++        using _TCC = _TupleConstraints<_Cond, _Elements...>;
++
++      template<bool _Cond, typename... _Args>
++        using _ImplicitCtor = __enable_if_t<
++        _TCC<_Cond>::template __is_implicitly_constructible<_Args...>(),
++        bool>;
++
++      template<bool _Cond, typename... _Args>
++        using _ExplicitCtor = __enable_if_t<
++        _TCC<_Cond>::template __is_explicitly_constructible<_Args...>(),
++        bool>;
++
++    public:
++
++      template<bool _NotEmpty = true,
++        _ImplicitCtor<_NotEmpty, const _Elements&...> = true>
++          constexpr
++          tuple(const _Elements&... __elements)
++          { }
++
++      template<bool _NotEmpty = true,
++        _ExplicitCtor<_NotEmpty, const _Elements&...> = false>
++          explicit constexpr
++          tuple(const _Elements&... __elements)
++          { }
++    };
++}
++
++// first example
++
++template <typename SessionT>
++struct SomeQuery {
++    SessionT& session_;
++    SomeQuery(SessionT& session) : session_(session) {}
++};
++
++template <typename SessionT>
++struct Handler {
++    std::tuple<SomeQuery<SessionT>> queries_;
++    Handler(SessionT& session) : queries_(session) {}
++};
++
++struct Session {
++    Handler<Session> handler_;
++    Session() : handler_{*this} {}
++};
++
++int main() {
++    Session session;
++}
++static_assert(std::is_constructible<SomeQuery<Session>, const SomeQuery<Session>&>::value, "");
++
++// second example
++
++template <typename T>
++class DependsOnT
++{
++public:
++    DependsOnT(T&) {}
++};
++
++class Test
++{
++public:
++    Test() : test_{*this} {}
++
++private:
++    std::tuple<DependsOnT<Test>> test_;
++};
++static_assert(std::is_constructible<DependsOnT<Test>, const DependsOnT<Test>&>::value, "");

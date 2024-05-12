@@ -1,0 +1,42 @@
+diff --git a/gcc/testsuite/gcc.c-torture/execute/pr110914.c b/gcc/testsuite/gcc.c-torture/execute/pr110914.c
+new file mode 100644
+index 000000000..ccc04e1bd
+--- /dev/null
++++ b/gcc/testsuite/gcc.c-torture/execute/pr110914.c
+@@ -0,0 +1,22 @@
++/* PR tree-optimization/110914 */
++
++__attribute__ ((noipa)) int
++foo (const char *s, unsigned long l)
++{
++  unsigned char r = 0;
++  __builtin_memcpy (&r, s, l != 0);
++  return r;
++}
++
++int
++main ()
++{
++  const char *p = "123456";
++  int a = foo (p, __builtin_strlen (p) - 5);
++  int b = foo (p, __builtin_strlen (p) - 6);
++  if (a != '1')
++    __builtin_abort ();
++  if (b != 0)
++    __builtin_abort ();
++  return 0;
++}
+diff --git a/gcc/tree-ssa-strlen.c b/gcc/tree-ssa-strlen.c
+index cc744adb3..6253e9389 100644
+--- a/gcc/tree-ssa-strlen.c
++++ b/gcc/tree-ssa-strlen.c
+@@ -3465,7 +3465,8 @@ handle_builtin_memcpy (enum built_in_function bcode, gimple_stmt_iterator *gsi,
+       && !integer_zerop (len))
+     {
+       maybe_warn_overflow (stmt, len, rvals, olddsi, false, true);
+-      adjust_last_stmt (olddsi, stmt, false);
++      if (tree_fits_uhwi_p (len))
++	adjust_last_stmt (olddsi, stmt, false);
+     }
+ 
+   int idx = get_stridx (src);

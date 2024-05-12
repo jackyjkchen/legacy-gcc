@@ -1,0 +1,109 @@
+diff --git a/gcc/testsuite/gcc.c-torture/execute/pr111331-1.c b/gcc/testsuite/gcc.c-torture/execute/pr111331-1.c
+new file mode 100644
+index 000000000..4c7f4fdba
+--- /dev/null
++++ b/gcc/testsuite/gcc.c-torture/execute/pr111331-1.c
+@@ -0,0 +1,17 @@
++int a;
++int b;
++int c(int d, int e, int f) {
++  if (d < e)
++    return e;
++  if (d > f)
++    return f;
++  return d;
++}
++int main() {
++  int g = -1;
++  a = c(b + 30, 29, g + 29);
++  volatile t = a;
++  if (t != 28)
++    __builtin_abort();
++  return 0;
++}
+diff --git a/gcc/testsuite/gcc.c-torture/execute/pr111331-2.c b/gcc/testsuite/gcc.c-torture/execute/pr111331-2.c
+new file mode 100644
+index 000000000..5c677f2ca
+--- /dev/null
++++ b/gcc/testsuite/gcc.c-torture/execute/pr111331-2.c
+@@ -0,0 +1,19 @@
++
++int a;
++int b;
++
++int main() {
++  int d = b+30;
++  {
++        int t;
++        if (d < 29)
++          t =  29;
++        else
++          t = (d > 28) ? 28 : d;
++    a = t;
++  }
++  volatile int t = a;
++  if (a != 28)
++    __builtin_abort();
++  return 0;
++}
+diff --git a/gcc/testsuite/gcc.c-torture/execute/pr111331-3.c b/gcc/testsuite/gcc.c-torture/execute/pr111331-3.c
+new file mode 100644
+index 000000000..213d9bdd5
+--- /dev/null
++++ b/gcc/testsuite/gcc.c-torture/execute/pr111331-3.c
+@@ -0,0 +1,15 @@
++int a;
++int b;
++
++int main() {
++  int d = b+30;
++  {
++    int t;
++    t = d < 29 ? 29 : ((d > 28) ? 28 : d);
++    a = t;
++  }
++  volatile int t = a;
++  if (a != 28)
++    __builtin_abort();
++  return 0;
++}
+diff --git a/gcc/tree-ssa-phiopt.c b/gcc/tree-ssa-phiopt.c
+index 5f92ce5d2..5eec48f35 100644
+--- a/gcc/tree-ssa-phiopt.c
++++ b/gcc/tree-ssa-phiopt.c
+@@ -1235,7 +1235,7 @@ minmax_replacement (basic_block cond_bb, basic_block middle_bb,
+ 
+ 	      /* We need BOUND <= LARGER.  */
+ 	      if (!integer_nonzerop (fold_build2 (LE_EXPR, boolean_type_node,
+-						  bound, larger)))
++						  bound, arg_false)))
+ 		return false;
+ 	    }
+ 	  else if (operand_equal_for_phi_arg_p (arg_false, smaller)
+@@ -1266,7 +1266,7 @@ minmax_replacement (basic_block cond_bb, basic_block middle_bb,
+ 
+ 	      /* We need BOUND >= SMALLER.  */
+ 	      if (!integer_nonzerop (fold_build2 (GE_EXPR, boolean_type_node,
+-						  bound, smaller)))
++						  bound, arg_false)))
+ 		return false;
+ 	    }
+ 	  else
+@@ -1306,7 +1306,7 @@ minmax_replacement (basic_block cond_bb, basic_block middle_bb,
+ 
+ 	      /* We need BOUND >= LARGER.  */
+ 	      if (!integer_nonzerop (fold_build2 (GE_EXPR, boolean_type_node,
+-						  bound, larger)))
++						  bound, arg_true)))
+ 		return false;
+ 	    }
+ 	  else if (operand_equal_for_phi_arg_p (arg_true, smaller)
+@@ -1333,7 +1333,7 @@ minmax_replacement (basic_block cond_bb, basic_block middle_bb,
+ 
+ 	      /* We need BOUND <= SMALLER.  */
+ 	      if (!integer_nonzerop (fold_build2 (LE_EXPR, boolean_type_node,
+-						  bound, smaller)))
++						  bound, arg_true)))
+ 		return false;
+ 	    }
+ 	  else
