@@ -126,9 +126,7 @@ gcc的历史很久远，对可执行文件格式和CPU架构的支持发生过�
 
 该组大部分版本gcc无须太多补丁即可支持bootstrap。
 
-3.2.3-4.0.4，以及4.2.4和以上版本，只应用了gentoo官方patchset。
-
-4.1.2，针对系统的新版本mpfr库做了适配。
+3.2.3以上版本，只有gentoo官方patchset和一些架构支持、外部依赖的修复是必须的（可使用USE=vanilla禁用本项目提供的额外补丁，这些额外补丁都是上游wrong-code性质的bugfix的backports）。
 
 3.1.1有较多fix，包括：
 * libstdc++在新版本glibc下的兼容修正。
