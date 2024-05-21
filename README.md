@@ -32,7 +32,8 @@ Linux glibc本地工具链——
 * ppc：>=gcc-2.8.1
 * ppc64：>=gcc-3.1.1
 * ppc64le：>=gcc-4.8.5
-* riscv：>=gcc-7.5.0
+* riscv32：>=gcc-7.5.0
+* riscv64：>=gcc-7.5.0
 * s390x：>=gcc-3.0.4
 * sh4：>=gcc-3.3.6
 * sparc：>=gcc-2.8.1
