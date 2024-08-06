@@ -1,0 +1,116 @@
+diff --git a/gcc/Makefile.in b/gcc/Makefile.in
+index 1059fcf00..dca87c245 100644
+--- a/gcc/Makefile.in
++++ b/gcc/Makefile.in
+@@ -222,6 +222,15 @@ libgcov-merge-tool.o-warn = -Wno-error
+ gimple-match.o-warn = -Wno-unused
+ generic-match.o-warn = -Wno-unused
+ dfp.o-warn = -Wno-strict-aliasing
++arm.o-warn = -Wno-error=format-diag
++build/genhooks.o-warn = -Wno-error=unused-result
++gcc.o-warn = -Wno-error=unused-result
++ggc-common.o-warn = -Wno-error=deprecated-declarations
++lto/lto-common.o-warn = -Wno-error=unused-result
++lto-wrapper.o-warn = -Wno-error=unused-result
++m68k-common.o-warn = -Wno-error=unused-result
++objc/objc-next-runtime-abi-02.o-warn = -Wno-error=unused-result
++objcp/objc-next-runtime-abi-02.o-warn = -Wno-error=unused-result
+ 
+ # All warnings have to be shut off in stage1 if the compiler used then
+ # isn't gcc; configure determines that.  WARN_CFLAGS will be either
+diff --git a/gcc/calls.c b/gcc/calls.c
+index 7d908c6a6..0a10ba4ab 100644
+--- a/gcc/calls.c
++++ b/gcc/calls.c
+@@ -1499,7 +1499,7 @@ maybe_warn_alloc_args_overflow (tree fn, tree exp, tree args[2], int idx[2])
+ 	}
+     }
+ 
+-  if (!argrange[0])
++  if (!argrange[0][0])
+     return;
+ 
+   /* For a two-argument alloc_size, validate the product of the two
+diff --git a/gcc/lra-constraints.c b/gcc/lra-constraints.c
+index da8446691..d51bd1a9f 100644
+--- a/gcc/lra-constraints.c
++++ b/gcc/lra-constraints.c
+@@ -4840,8 +4840,9 @@ multi_block_pseudo_p (int regno)
+   unsigned int uid;
+   bitmap_iterator bi;
+ 
+-  if (regno < FIRST_PSEUDO_REGISTER)
++  if (regno < FIRST_PSEUDO_REGISTER) {
+     return false;
++  }
+ 
+   EXECUTE_IF_SET_IN_BITMAP (&lra_reg_info[regno].insn_bitmap, 0, uid, bi)
+     if (bb == NULL)
+diff --git a/gcc/sel-sched-ir.c b/gcc/sel-sched-ir.c
+index eef9d6969..beb3cdefe 100644
+--- a/gcc/sel-sched-ir.c
++++ b/gcc/sel-sched-ir.c
+@@ -701,6 +701,7 @@ merge_fences (fence_t f, insn_t insn,
+ 	  FENCE_ISSUE_MORE (f) = issue_rate;
+         }
+       else
++		{
+         if (candidate->src == BLOCK_FOR_INSN (last_scheduled_insn))
+           {
+             state_free (FENCE_STATE (f));
+@@ -721,6 +722,7 @@ merge_fences (fence_t f, insn_t insn,
+             gcc_assert (BLOCK_FOR_INSN (insn)->prev_bb
+                         != BLOCK_FOR_INSN (last_scheduled_insn));
+           }
++		}
+ 
+       /* Find edge of first predecessor (last_scheduled_insn_old->insn).  */
+       FOR_EACH_SUCC_1 (succ, si, last_scheduled_insn_old,
+diff --git a/libstdc++-v3/config/locale/gnu/ctype_members.cc b/libstdc++-v3/config/locale/gnu/ctype_members.cc
+index e7a66f1f8..979f1430e 100644
+--- a/libstdc++-v3/config/locale/gnu/ctype_members.cc
++++ b/libstdc++-v3/config/locale/gnu/ctype_members.cc
+@@ -221,7 +221,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
+   ctype<wchar_t>::
+   do_narrow(wchar_t __wc, char __dfault) const
+   {
+-    if (__wc >= 0 && __wc < 128 && _M_narrow_ok)
++    if (__wc < 128 && _M_narrow_ok)
+       return _M_narrow[__wc];
+ #if __GLIBC__ > 2 || (__GLIBC__ == 2 && __GLIBC_MINOR__ > 2)
+     __c_locale __old = __uselocale(_M_c_locale_ctype);
+@@ -244,7 +244,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
+     if (_M_narrow_ok)
+       while (__lo < __hi)
+ 	{
+-	  if (*__lo >= 0 && *__lo < 128)
++	  if (*__lo < 128)
+ 	    *__dest = _M_narrow[*__lo];
+ 	  else
+ 	    {
+diff --git a/libstdc++-v3/libsupc++/pure.cc b/libstdc++-v3/libsupc++/pure.cc
+index 2f2171cc0..7b8a9eb0e 100644
+--- a/libstdc++-v3/libsupc++/pure.cc
++++ b/libstdc++-v3/libsupc++/pure.cc
+@@ -46,13 +46,19 @@
+ extern "C" void
+ __cxxabiv1::__cxa_pure_virtual (void)
+ {
+-  writestr ("pure virtual method called\n");
++#if _GLIBCXX_HOSTED && _GLIBCXX_VERBOSE
++  auto ret = writestr ("pure virtual method called\n");
++  (void)ret;
++#endif
+   std::terminate ();
+ }
+ 
+ extern "C" void
+ __cxxabiv1::__cxa_deleted_virtual (void)
+ {
+-  writestr ("deleted virtual method called\n");
++#if _GLIBCXX_HOSTED && _GLIBCXX_VERBOSE
++  auto ret = writestr ("deleted virtual method called\n");
++  (void)ret;
++#endif
+   std::terminate ();
+ }

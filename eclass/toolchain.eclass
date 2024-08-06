@@ -212,29 +212,11 @@ is_djgpp() {
 }
 
 tc_use_major_version_only() {
-	local use_major_version_only=0
-
-	if ! tc_version_is_at_least 10 ; then
+	if tc_version_is_at_least 10 ; then
+		return 0
+	else
 		return 1
 	fi
-
-	if [[ ${GCCMAJOR} -eq 10 ]] && ver_test ${PV} -ge 10.4.1_p20220929 ; then
-		use_major_version_only=1
-	elif [[ ${GCCMAJOR} -eq 11 ]] && ver_test ${PV} -ge 11.3.1_p20220930 ; then
-		use_major_version_only=1
-	elif [[ ${GCCMAJOR} -eq 12 ]] && ver_test ${PV} -ge 12.2.1_p20221001 ; then
-		use_major_version_only=1
-	elif [[ ${GCCMAJOR} -eq 13 ]] && ver_test ${PV} -ge 13.0.0_pre20221002 ; then
-		use_major_version_only=1
-	elif [[ ${GCCMAJOR} -gt 13 ]] ; then
-		use_major_version_only=1
-	fi
-
-	if [[ ${use_major_version_only} -eq 1 ]] ; then
-		return 0
-	fi
-
-	return 1
 }
 
 # @ECLASS_VARIABLE: GCC_CONFIG_VER
@@ -690,7 +672,7 @@ get_gcc_src_uri() {
 		GCC_SRC_URI="http://gcc.gnu.org/pub/gcc/old-releases/gcc-1/gcc-${GCC_PV}.tar.bz2"
 	fi
 
-	if tc_version_is_at_least 11 ; then
+	if tc_version_is_at_least 12 ; then
 		[[ -n ${PATCH_VER} ]] && \
 			GCC_SRC_URI+=" $(gentoo_urls gcc-${PATCH_GCC_VER}-patches-${PATCH_VER}.tar.${TOOLCHAIN_PATCH_SUFFIX})"
 		[[ -n ${MUSL_VER} ]] && \
@@ -757,7 +739,7 @@ git_init_src() {
 
 toolchain_src_unpack() {
 	default_src_unpack
-	tc_version_is_at_least 11 || unpack_gcc_patchset
+	tc_version_is_at_least 12 || unpack_gcc_patchset
 	#tc_version_is_at_least 4.7 || git_init_src
 }
 
@@ -1263,14 +1245,14 @@ toolchain_src_configure() {
 	if tc_version_is_at_least 3.4 ; then
 		case $(tc-arch) in
 			amd64|x86|arm64|alpha|hppa|loong|m68k|mips|ppc|ppc64|riscv|s390|sparc)
-				tc_version_is_at_least 11 || ENABLE_WERROR="yes"
+				tc_version_is_at_least 12 || ENABLE_WERROR="yes"
 				;;
 			arm)
 				if [[ ${CTARGET} == arm*-*-linux-gnueabihf ]] ; then
-					tc_version_is_between 4.5 11 && ENABLE_WERROR="yes"
+					tc_version_is_between 4.5 12 && ENABLE_WERROR="yes"
 				fi
 				if [[ ${CTARGET} == arm*-*-linux-gnueabi ]] ; then
-					tc_version_is_at_least 11 || ENABLE_WERROR="yes"
+					tc_version_is_at_least 12 || ENABLE_WERROR="yes"
 				fi
 				;;
 			*)
