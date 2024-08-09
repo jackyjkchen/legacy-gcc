@@ -432,7 +432,7 @@ case $(tc-arch) in
 		fi
 		;;
 	*)
-		if tc_version_is_between 4.0 11 ; then
+		if tc_version_is_between 4.0 12 ; then
 			BDEPEND+=" ${CATEGORY}/binutils:2.38"
 		fi
 		;;
@@ -1868,7 +1868,7 @@ toolchain_src_configure() {
 				fi
 				;;
 			*)
-				if tc_version_is_between 4.0 11 ; then
+				if tc_version_is_between 4.0 12 ; then
 					confgcc+=( --with-as=/usr/$CHOST/binutils-bin/2.38/as --with-ld=/usr/$CHOST/binutils-bin/2.38/ld )
 				fi
 				;;

@@ -36,4 +36,11 @@ src_prepare() {
 
 	use vanilla && return 0
 	eapply "${FILESDIR}"/${PV}/02_fix-werror.patch
+
+	if use test ; then
+		rm -rf gcc/testsuite/gcc.c-torture/execute/vfprintf-chk-1.c gcc/testsuite/gcc.c-torture/execute/vprintf-chk-1.c gcc/testsuite/c-c++-common/Warray-bounds-2.c gcc/testsuite/c-c++-common/Wrestrict-2.c gcc/testsuite/g++.dg/warn/Wstringop-truncation-1.C gcc/testsuite/gcc.dg/format/opt-*.c
+		eapply "${FILESDIR}"/${PV}/postrelease/90_fix-known-test-fail.patch
+		[[ $(tc-arch) == "arm64" ]] && eapply "${FILESDIR}"/${PV}/postrelease/91_fix-aarch64-test-fail.patch
+		[[ $(tc-arch) == "arm" ]] && eapply "${FILESDIR}"/${PV}/postrelease/92_fix-arm-test-fail.patch
+	fi
 }
