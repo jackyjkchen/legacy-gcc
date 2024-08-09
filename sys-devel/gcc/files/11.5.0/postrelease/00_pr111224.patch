@@ -1,0 +1,135 @@
+diff --git a/gcc/cp/module.cc b/gcc/cp/module.cc
+index 6cb926c04..d561e41df 100644
+--- a/gcc/cp/module.cc
++++ b/gcc/cp/module.cc
+@@ -5057,7 +5057,6 @@ trees_out::start (tree t, bool code_streamed)
+       break;
+ 
+     case FIXED_CST:
+-    case POLY_INT_CST:
+       gcc_unreachable (); /* Not supported in C++.  */
+       break;
+ 
+@@ -5144,7 +5143,6 @@ trees_in::start (unsigned code)
+ 
+     case FIXED_CST:
+     case IDENTIFIER_NODE:
+-    case POLY_INT_CST:
+     case SSA_NAME:
+     case TARGET_MEM_REF:
+     case TRANSLATION_UNIT_DECL:
+@@ -5962,7 +5960,10 @@ trees_out::core_vals (tree t)
+       break;
+ 
+     case POLY_INT_CST:
+-      gcc_unreachable (); /* Not supported in C++.  */
++      if (streaming_p ())
++	for (unsigned ix = 0; ix != NUM_POLY_INT_COEFFS; ix++)
++	  WT (POLY_INT_CST_COEFF (t, ix));
++      break;
+ 
+     case REAL_CST:
+       if (streaming_p ())
+@@ -6454,8 +6455,9 @@ trees_in::core_vals (tree t)
+       break;
+ 
+     case POLY_INT_CST:
+-      /* Not suported in C++.  */
+-      return false;
++      for (unsigned ix = 0; ix != NUM_POLY_INT_COEFFS; ix++)
++	RT (POLY_INT_CST_COEFF (t, ix));
++      break;
+ 
+     case REAL_CST:
+       if (const void *bytes = buf (sizeof (real_value)))
+@@ -8831,8 +8833,8 @@ trees_out::type_node (tree type)
+       if (streaming_p ())
+ 	{
+ 	  poly_uint64 nunits = TYPE_VECTOR_SUBPARTS (type);
+-	  /* to_constant asserts that only coeff[0] is of interest.  */
+-	  wu (static_cast<unsigned HOST_WIDE_INT> (nunits.to_constant ()));
++	  for (unsigned ix = 0; ix != NUM_POLY_INT_COEFFS; ix++)
++	    wu (nunits.coeffs[ix]);
+ 	}
+       break;
+     }
+@@ -9368,9 +9370,11 @@ trees_in::tree_node (bool is_use)
+ 
+ 	  case VECTOR_TYPE:
+ 	    {
+-	      unsigned HOST_WIDE_INT nunits = wu ();
++	      poly_uint64 nunits;
++	      for (unsigned ix = 0; ix != NUM_POLY_INT_COEFFS; ix++)
++		nunits.coeffs[ix] = wu ();
+ 	      if (!get_overrun ())
+-		res = build_vector_type (res, static_cast<poly_int64> (nunits));
++		res = build_vector_type (res, nunits);
+ 	    }
+ 	    break;
+ 	  }
+@@ -19707,7 +19711,7 @@ init_modules (cpp_reader *reader)
+      some global trees are lazily created and we don't want that to
+      mess with our syndrome of fixed trees.  */
+   unsigned crc = 0;
+-  vec_alloc (fixed_trees, 200);
++  vec_alloc (fixed_trees, 250);
+ 
+   dump () && dump ("+Creating globals");
+   /* Insert the TRANSLATION_UNIT_DECL.  */
+@@ -19725,6 +19729,14 @@ init_modules (cpp_reader *reader)
+ 	  dump () && dump ("+%u", v);
+ 	}
+     }
++  /* OS- and machine-specific types are dynamically registered at
++     runtime, so cannot be part of global_tree_arys.  */
++  registered_builtin_types && dump ("") && dump ("+\tB:");
++  for (tree t = registered_builtin_types; t; t = TREE_CHAIN (t))
++    {
++      unsigned v = maybe_add_global (TREE_VALUE (t), crc);
++      dump () && dump ("+%u", v);
++    }
+   global_crc = crc32_unsigned (crc, fixed_trees->length ());
+   dump ("") && dump ("Created %u unique globals, crc=%x",
+ 		     fixed_trees->length (), global_crc);
+diff --git a/gcc/testsuite/g++.dg/modules/target-aarch64-1_a.C b/gcc/testsuite/g++.dg/modules/target-aarch64-1_a.C
+new file mode 100644
+index 000000000..6c699053c
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/modules/target-aarch64-1_a.C
+@@ -0,0 +1,17 @@
++// PR c++/111224
++// { dg-do compile { target aarch64*-*-* } }
++// { dg-require-effective-target aarch64_asm_sve_ok }
++// { dg-additional-options "-fmodules-ts -march=armv8.2-a+sve" }
++
++module;
++
++// We can't do a header unit of this right now because this
++// uses target attributes, that we don't yet support.
++// See also PR c++/108080.
++#include <arm_sve.h>
++
++export module M;
++
++export inline void foo(svbool_t x, svfloat16_t f) {
++  svabs_f16_x(x, f);
++}
+diff --git a/gcc/testsuite/g++.dg/modules/target-aarch64-1_b.C b/gcc/testsuite/g++.dg/modules/target-aarch64-1_b.C
+new file mode 100644
+index 000000000..c18691dcf
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/modules/target-aarch64-1_b.C
+@@ -0,0 +1,13 @@
++// PR c++/111224
++// { dg-module-do link { target aarch64*-*-* } }
++// { dg-require-effective-target aarch64_asm_sve_ok }
++// { dg-additional-options "-fmodules-ts -fno-module-lazy -march=armv8.2-a+sve" }
++
++#include <arm_sve.h>
++import M;
++
++int main() {
++  svbool_t x = svptrue_b8 ();
++  svfloat16_t f = svdup_n_f16(1.0);
++  foo(x, f);
++}
