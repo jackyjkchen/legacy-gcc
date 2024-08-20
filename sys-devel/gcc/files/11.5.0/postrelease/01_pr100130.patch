@@ -1,0 +1,129 @@
+diff --git a/gcc/testsuite/c-c++-common/attr-retain-10.c b/gcc/testsuite/c-c++-common/attr-retain-10.c
+new file mode 100644
+index 000000000..0bac94702
+--- /dev/null
++++ b/gcc/testsuite/c-c++-common/attr-retain-10.c
+@@ -0,0 +1,11 @@
++/* { dg-do compile { target R_flag_in_section } } */
++/* { dg-skip-if "non-ELF target" { *-*-darwin* powerpc*-*-aix* } } */
++/* { dg-options "-Wall -O2 -fno-toplevel-reorder" } */
++
++int __attribute__((used,retain,section(".data.foo"))) foo2 = 2;
++int between = 1;
++int __attribute__((section(".data.foo"))) foo1 = 1;
++/* { dg-warning "'.*' without 'retain' attribute and '.*' with 'retain' attribute are placed in a section with the same name" "" { target R_flag_in_section } .-1 } */
++
++/* { dg-final { scan-assembler ".data.foo,\"aw\"" { target R_flag_in_section } } } */
++/* { dg-final { scan-assembler ".data.foo,\"awR\"" { target R_flag_in_section } } } */
+diff --git a/gcc/testsuite/c-c++-common/attr-retain-11.c b/gcc/testsuite/c-c++-common/attr-retain-11.c
+new file mode 100644
+index 000000000..d1d3d9e8c
+--- /dev/null
++++ b/gcc/testsuite/c-c++-common/attr-retain-11.c
+@@ -0,0 +1,11 @@
++/* { dg-do compile { target R_flag_in_section } } */
++/* { dg-skip-if "non-ELF target" { *-*-darwin* powerpc*-*-aix* } } */
++/* { dg-options "-Wall -O2 -fno-toplevel-reorder" } */
++
++int __attribute__((section(".data.foo"))) foo1 = 1;
++/* { dg-warning "'.*' without 'retain' attribute and '.*' with 'retain' attribute are placed in a section with the same name" "" { target R_flag_in_section } .-1 } */
++int between = 1;
++int __attribute__((used,retain,section(".data.foo"))) foo2 = 2;
++
++/* { dg-final { scan-assembler ".data.foo,\"aw\"" { target R_flag_in_section } } } */
++/* { dg-final { scan-assembler ".data.foo,\"awR\"" { target R_flag_in_section } } } */
+diff --git a/gcc/varasm.c b/gcc/varasm.c
+index 8e4565760..098c379a2 100644
+--- a/gcc/varasm.c
++++ b/gcc/varasm.c
+@@ -1314,6 +1314,10 @@ get_block_for_decl (tree decl)
+   if (SECTION_STYLE (sect) == SECTION_NOSWITCH)
+     return NULL;
+ 
++  if (bool (lookup_attribute ("retain", DECL_ATTRIBUTES (decl)))
++      != bool (sect->common.flags & SECTION_RETAIN))
++    return NULL;
++
+   return get_block_for_section (sect);
+ }
+ 
+@@ -7770,33 +7774,33 @@ output_section_asm_op (const void *directive)
+ void
+ switch_to_section (section *new_section, tree decl)
+ {
+-  if (in_section == new_section)
++  bool retain_p;
++  if ((new_section->common.flags & SECTION_NAMED)
++      && decl != nullptr
++      && DECL_P (decl)
++      && ((retain_p = !!lookup_attribute ("retain",
++					  DECL_ATTRIBUTES (decl)))
++	  != !!(new_section->common.flags & SECTION_RETAIN)))
+     {
+-      bool retain_p;
+-      if ((new_section->common.flags & SECTION_NAMED)
+-	  && decl != nullptr
+-	  && DECL_P (decl)
+-	  && ((retain_p = !!lookup_attribute ("retain",
+-					      DECL_ATTRIBUTES (decl)))
+-	      != !!(new_section->common.flags & SECTION_RETAIN)))
+-	{
+-	  /* If the SECTION_RETAIN bit doesn't match, switch to a new
+-	     section.  */
+-	  tree used_decl, no_used_decl;
++      /* If the SECTION_RETAIN bit doesn't match, switch to a new
++	 section.  */
++      tree used_decl, no_used_decl;
+ 
+-	  if (retain_p)
+-	    {
+-	      new_section->common.flags |= SECTION_RETAIN;
+-	      used_decl = decl;
+-	      no_used_decl = new_section->named.decl;
+-	    }
+-	  else
+-	    {
+-	      new_section->common.flags &= ~(SECTION_RETAIN
+-					     | SECTION_DECLARED);
+-	      used_decl = new_section->named.decl;
+-	      no_used_decl = decl;
+-	    }
++      if (retain_p)
++	{
++	  new_section->common.flags |= SECTION_RETAIN;
++	  used_decl = decl;
++	  no_used_decl = new_section->named.decl;
++	}
++      else
++	{
++	  new_section->common.flags &= ~(SECTION_RETAIN
++					 | SECTION_DECLARED);
++	  used_decl = new_section->named.decl;
++	  no_used_decl = decl;
++	}
++      if (no_used_decl != used_decl)
++	{
+ 	  warning (OPT_Wattributes,
+ 		   "%+qD without %<retain%> attribute and %qD with "
+ 		   "%<retain%> attribute are placed in a section with "
+@@ -7804,9 +7808,9 @@ switch_to_section (section *new_section, tree decl)
+ 	  inform (DECL_SOURCE_LOCATION (used_decl),
+ 		  "%qD was declared here", used_decl);
+ 	}
+-      else
+-	return;
+     }
++  else if (in_section == new_section)
++    return;
+ 
+   if (new_section->common.flags & SECTION_FORGET)
+     in_section = NULL;
+@@ -8019,7 +8023,7 @@ output_object_block (struct object_block *block)
+       && (strcmp (block->sect->named.name, ".vtable_map_vars") == 0))
+     handle_vtv_comdat_section (block->sect, block->sect->named.decl);
+   else
+-    switch_to_section (block->sect);
++    switch_to_section (block->sect, SYMBOL_REF_DECL ((*block->objects)[0]));
+ 
+   gcc_checking_assert (!(block->sect->common.flags & SECTION_MERGE));
+   assemble_align (block->alignment);
