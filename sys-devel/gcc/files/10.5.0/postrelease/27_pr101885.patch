@@ -1,0 +1,66 @@
+diff --git a/gcc/combine.c b/gcc/combine.c
+index 3cbf0d06f..b6ee57bfe 100644
+--- a/gcc/combine.c
++++ b/gcc/combine.c
+@@ -4171,6 +4171,24 @@ try_combine (rtx_insn *i3, rtx_insn *i2, rtx_insn *i1, rtx_insn *i0,
+ 
+ 	  insn_code_number = recog_for_combine (&newpat, i3, &new_i3_notes);
+ 
++	  /* Likewise, recog_for_combine might have added clobbers to NEWPAT.
++	     Checking that the SET0's SET_DEST and SET1's SET_DEST aren't
++	     mentioned/clobbered, ensures NEWI2PAT's SET_DEST is live.  */
++	  if (insn_code_number >= 0 && GET_CODE (newpat) == PARALLEL)
++	    {
++	      for (i = XVECLEN (newpat, 0) - 1; i >= 0; i--)
++		if (GET_CODE (XVECEXP (newpat, 0, i)) == CLOBBER)
++		  {
++		    rtx reg = XEXP (XVECEXP (newpat, 0, i), 0);
++		    if (reg_overlap_mentioned_p (reg, SET_DEST (set0))
++			|| reg_overlap_mentioned_p (reg, SET_DEST (set1)))
++		      {
++			undo_all ();
++			return 0;
++		      }
++		  }
++	    }
++
+ 	  if (insn_code_number >= 0)
+ 	    split_i2i3 = 1;
+ 	}
+diff --git a/gcc/testsuite/gcc.dg/pr101885.c b/gcc/testsuite/gcc.dg/pr101885.c
+new file mode 100644
+index 000000000..05fd0ed30
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr101885.c
+@@ -0,0 +1,31 @@
++/* { dg-do run } */
++/* { dg-options "-O3" } */
++int a = 3, c;
++short b = 5, d, f;
++volatile short e;
++
++__attribute__((noipa)) void
++foo (void)
++{
++}
++
++int
++main ()
++{
++  for (f = 0; f != 2; f++)
++    {
++      int g = a;
++      if (b)
++	if (a)
++	  for (a = b = 0; b <= 3; b++)
++	    ;
++      for (c = 0; c != 16; ++c)
++	e;
++    }
++  b = d;
++  foo ();
++  if (a != 0)
++    __builtin_abort ();
++  return 0;
++}
++

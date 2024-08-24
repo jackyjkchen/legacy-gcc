@@ -1,0 +1,215 @@
+diff --git a/gcc/testsuite/gcc.dg/torture/pr100740.c b/gcc/testsuite/gcc.dg/torture/pr100740.c
+new file mode 100644
+index 000000000..a85855ebe
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/torture/pr100740.c
+@@ -0,0 +1,12 @@
++/* { dg-do run } */
++
++unsigned a, b;
++int main()
++{
++  unsigned c = 0;
++  for (a = 0; a < 2; a++)
++    for (b = 0; b < 2; b++)
++      if (++c < a)
++	__builtin_abort ();
++  return 0;
++}
+diff --git a/gcc/testsuite/gcc.dg/torture/pr101508.c b/gcc/testsuite/gcc.dg/torture/pr101508.c
+new file mode 100644
+index 000000000..e1cb2645a
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/torture/pr101508.c
+@@ -0,0 +1,13 @@
++/* { dg-do run } */
++
++int
++main ()
++{
++  unsigned i;
++  for (i = 0; i < 3; ++i)
++    {
++      if (i > i * 2)
++        __builtin_abort ();
++    }
++  return 0;
++}
+diff --git a/gcc/testsuite/gcc.dg/torture/pr101972.c b/gcc/testsuite/gcc.dg/torture/pr101972.c
+new file mode 100644
+index 000000000..3adb4828e
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/torture/pr101972.c
+@@ -0,0 +1,39 @@
++/* { dg-do run  } */
++/* { dg-require-effective-target int32plus } */
++
++int a, b, c, d, f;
++static short e = 63891;
++char g = 30;
++unsigned h(int i, int j) { return i << j; }
++int *l(int *);
++void m()
++{
++  a = 0;
++  for (; a >= 0; a--)
++    {
++      int *k = &b;
++      *k = e < 0;
++    }
++  c = b;
++  l(&c);
++}
++int *l(int *i)
++{
++  d = 2;
++  for (; d <= 6; d++)
++    {
++      if (h(d, *i) <= d)
++	;
++      else
++	continue;
++      g = 0;
++      return &f;
++    }
++  return (void *)0;
++}
++int main()
++{
++  m();
++  if (g != 30)
++    __builtin_abort ();
++}
+diff --git a/gcc/testsuite/gcc.dg/torture/pr102131-1.c b/gcc/testsuite/gcc.dg/torture/pr102131-1.c
+new file mode 100644
+index 000000000..5ff576d86
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/torture/pr102131-1.c
+@@ -0,0 +1,16 @@
++/* { dg-do run } */
++
++int a;
++int main()
++{
++  unsigned b = 0;
++  int c = 1;
++  for (; b < 3; b++)
++    {
++      while (c < b)
++	__builtin_abort ();
++      for (a = 0; a < 3; a++)
++	c++;
++    }
++  return 0;
++}
+diff --git a/gcc/testsuite/gcc.dg/torture/pr102131-2.c b/gcc/testsuite/gcc.dg/torture/pr102131-2.c
+new file mode 100644
+index 000000000..830c72c23
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/torture/pr102131-2.c
+@@ -0,0 +1,15 @@
++/* { dg-do run } */
++
++int a;
++int main()
++{
++  unsigned b = 0;
++  int c = 1;
++  for (;b < 3; b++)
++    {
++      if (c < b)
++	__builtin_abort ();
++      c+=3;
++    }
++  return 0;
++}
+diff --git a/gcc/testsuite/gcc.dg/torture/pr102131-3.c b/gcc/testsuite/gcc.dg/torture/pr102131-3.c
+new file mode 100644
+index 000000000..aed10c973
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/torture/pr102131-3.c
+@@ -0,0 +1,11 @@
++/* { dg-do run } */
++
++int a;
++int main()
++{
++  unsigned b = 0;
++  for (a = 2; a < 8; a += 2)
++    if (++b > a)
++      __builtin_abort();
++  return 0;
++}
+diff --git a/gcc/testsuite/gcc.dg/torture/pr102131-4.c b/gcc/testsuite/gcc.dg/torture/pr102131-4.c
+new file mode 100644
+index 000000000..c63c08b21
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/torture/pr102131-4.c
+@@ -0,0 +1,15 @@
++/* { dg-do run } */
++/* { dg-require-effective-target int32plus } */
++
++unsigned a;
++int main()
++{
++  unsigned b = 1;
++  for (; b < 4; b++) {
++      a = (a ^ 2000000000) * -b;
++      if (b > a)
++	__builtin_abort ();
++      a = 3000000000;
++  }
++  return 0;
++}
+diff --git a/gcc/tree-ssa-loop-niter.c b/gcc/tree-ssa-loop-niter.c
+index 7775bc727..a2c310014 100644
+--- a/gcc/tree-ssa-loop-niter.c
++++ b/gcc/tree-ssa-loop-niter.c
+@@ -1796,7 +1796,8 @@ number_of_iterations_cond (class loop *loop,
+      provided that either below condition is satisfied:
+ 
+        a) the test is NE_EXPR;
+-       b) iv0.step - iv1.step is integer and iv0/iv1 don't overflow.
++       b) iv0 and iv1 do not overflow and iv0.step - iv1.step is of
++	  the same sign and of less or equal magnitude than iv0.step
+ 
+      This rarely occurs in practice, but it is simple enough to manage.  */
+   if (!integer_zerop (iv0->step) && !integer_zerop (iv1->step))
+@@ -1805,17 +1806,28 @@ number_of_iterations_cond (class loop *loop,
+       tree step = fold_binary_to_constant (MINUS_EXPR, step_type,
+ 					   iv0->step, iv1->step);
+ 
+-      /* No need to check sign of the new step since below code takes care
+-	 of this well.  */
+-      if (code != NE_EXPR
+-	  && (TREE_CODE (step) != INTEGER_CST
+-	      || !iv0->no_overflow || !iv1->no_overflow))
+-	return false;
++      /* For code other than NE_EXPR we have to ensure moving the evolution
++	 of IV1 to that of IV0 does not introduce overflow.  */
++      if (TREE_CODE (step) != INTEGER_CST
++	  || !iv0->no_overflow || !iv1->no_overflow)
++	{
++	  if (code != NE_EXPR)
++	    return false;
++	  iv0->no_overflow = false;
++	}
++      /* If the new step of IV0 has changed sign or is of greater
++	 magnitude then we do not know whether IV0 does overflow
++	 and thus the transform is not valid for code other than NE_EXPR  */
++      else if (tree_int_cst_sign_bit (step) != tree_int_cst_sign_bit (iv0->step)
++	       || wi::gtu_p (wi::abs (wi::to_widest (step)),
++			     wi::abs (wi::to_widest (iv0->step))))
++	{
++	  if (code != NE_EXPR)
++	    return false;
++	  iv0->no_overflow = false;
++	}
+ 
+       iv0->step = step;
+-      if (!POINTER_TYPE_P (type))
+-	iv0->no_overflow = false;
+-
+       iv1->step = build_int_cst (step_type, 0);
+       iv1->no_overflow = true;
+     }

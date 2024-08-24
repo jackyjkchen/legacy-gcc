@@ -1,0 +1,45 @@
+diff --git a/gcc/config/i386/i386.c b/gcc/config/i386/i386.c
+index e2d259d56..d3b784e16 100644
+--- a/gcc/config/i386/i386.c
++++ b/gcc/config/i386/i386.c
+@@ -20552,6 +20552,7 @@ x86_output_mi_thunk (FILE *file, tree thunk_fndecl, HOST_WIDE_INT delta,
+   rtx this_reg, tmp, fnaddr;
+   unsigned int tmp_regno;
+   rtx_insn *insn;
++  int saved_flag_force_indirect_call = flag_force_indirect_call;
+ 
+   if (TARGET_64BIT)
+     tmp_regno = R10_REG;
+@@ -20564,6 +20565,9 @@ x86_output_mi_thunk (FILE *file, tree thunk_fndecl, HOST_WIDE_INT delta,
+ 	tmp_regno = DX_REG;
+       else
+ 	tmp_regno = CX_REG;
++
++      if (flag_pic)
++  flag_force_indirect_call = 0;
+     }
+ 
+   emit_note (NOTE_INSN_PROLOGUE_END);
+@@ -20731,6 +20735,8 @@ x86_output_mi_thunk (FILE *file, tree thunk_fndecl, HOST_WIDE_INT delta,
+   final (insn, file, 1);
+   final_end_function ();
+   assemble_end_function (thunk_fndecl, fnname);
++
++  flag_force_indirect_call = saved_flag_force_indirect_call;
+ }
+ 
+ static void
+diff --git a/gcc/testsuite/g++.target/i386/pr105980.C b/gcc/testsuite/g++.target/i386/pr105980.C
+new file mode 100644
+index 000000000..d8dbc332e
+--- /dev/null
++++ b/gcc/testsuite/g++.target/i386/pr105980.C
+@@ -0,0 +1,8 @@
++// { dg-do assemble { target { fpic } } }
++// { dg-options "-O0 -fpic -mforce-indirect-call" }
++
++struct A {
++  virtual ~A();
++};
++struct B : virtual A {};
++void bar() { B(); }

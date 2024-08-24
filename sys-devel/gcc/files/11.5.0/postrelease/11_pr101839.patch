@@ -1,0 +1,139 @@
+diff --git a/gcc/ipa-devirt.c b/gcc/ipa-devirt.c
+index 8cd1100ab..9bd83d132 100644
+--- a/gcc/ipa-devirt.c
++++ b/gcc/ipa-devirt.c
+@@ -284,6 +284,19 @@ type_possibly_instantiated_p (tree t)
+   return vnode && vnode->definition;
+ }
+ 
++/* Return true if T or type derived from T may have instance.  */
++
++static bool
++type_or_derived_type_possibly_instantiated_p (odr_type t)
++{
++  if (type_possibly_instantiated_p (t->type))
++    return true;
++  for (auto derived : t->derived_types)
++    if (type_or_derived_type_possibly_instantiated_p (derived))
++      return true;
++  return false;
++}
++
+ /* Hash used to unify ODR types based on their mangled name and for anonymous
+    namespace types.  */
+ 
+@@ -3171,6 +3184,7 @@ possible_polymorphic_call_targets (tree otr_type,
+     {
+       odr_type speculative_outer_type;
+       bool speculation_complete = true;
++      bool check_derived_types = false;
+ 
+       /* First insert target from type itself and check if it may have
+ 	 derived types.  */
+@@ -3189,8 +3203,12 @@ possible_polymorphic_call_targets (tree otr_type,
+ 	 to walk derivations.  */
+       if (target && DECL_FINAL_P (target))
+ 	context.speculative_maybe_derived_type = false;
+-      if (type_possibly_instantiated_p (speculative_outer_type->type))
+-	maybe_record_node (nodes, target, &inserted, can_refer, &speculation_complete);
++      if (check_derived_types
++	  ? type_or_derived_type_possibly_instantiated_p
++		 (speculative_outer_type)
++	  : type_possibly_instantiated_p (speculative_outer_type->type))
++	maybe_record_node (nodes, target, &inserted, can_refer,
++			   &speculation_complete);
+       if (binfo)
+ 	matched_vtables.add (BINFO_VTABLE (binfo));
+ 
+@@ -3211,6 +3229,7 @@ possible_polymorphic_call_targets (tree otr_type,
+ 
+   if (!speculative || !nodes.length ())
+     {
++      bool check_derived_types = false;
+       /* First see virtual method of type itself.  */
+       binfo = get_binfo_at_offset (TYPE_BINFO (outer_type->type),
+ 				   context.offset, otr_type);
+@@ -3228,16 +3247,18 @@ possible_polymorphic_call_targets (tree otr_type,
+       if (target && DECL_CXX_DESTRUCTOR_P (target))
+ 	context.maybe_in_construction = false;
+ 
+-      if (target)
++      /* In the case we get complete method, we don't need 
++	 to walk derivations.  */
++      if (target && DECL_FINAL_P (target))
+ 	{
+-	  /* In the case we get complete method, we don't need 
+-	     to walk derivations.  */
+-	  if (DECL_FINAL_P (target))
+-	    context.maybe_derived_type = false;
++	  check_derived_types = true;
++	  context.maybe_derived_type = false;
+ 	}
+ 
+       /* If OUTER_TYPE is abstract, we know we are not seeing its instance.  */
+-      if (type_possibly_instantiated_p (outer_type->type))
++      if (check_derived_types
++	  ? type_or_derived_type_possibly_instantiated_p (outer_type)
++	  : type_possibly_instantiated_p (outer_type->type))
+ 	maybe_record_node (nodes, target, &inserted, can_refer, &complete);
+       else
+ 	skipped = true;
+diff --git a/gcc/testsuite/g++.dg/tree-ssa/pr101839.C b/gcc/testsuite/g++.dg/tree-ssa/pr101839.C
+new file mode 100644
+index 000000000..bb7b61cad
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/tree-ssa/pr101839.C
+@@ -0,0 +1,53 @@
++// { dg-do run }                                                            
++// { dg-options "-O2 -fdump-tree-optimized" }                                   
++// { dg-require-effective-target c++11 }
++
++#include <string.h>
++#include <iostream>
++#include <map>
++namespace {
++  struct Buf {
++    char * buf; int a{0}; int b{0};
++    Buf(char * b) : buf(b) { }
++    void add(int v) {
++      ::memcpy(buf, &v, sizeof(v));
++      a += sizeof(v);
++      b += sizeof(v);
++    }
++  };
++  struct A {
++    virtual void fill(Buf &buf) {
++      buf.add(type());
++      buf.add(type());
++    }
++    virtual ~A() {}
++    virtual int type() = 0;
++  };
++  struct BA : A {
++    void fill(Buf &buf) {
++      A::fill(buf);
++      buf.add(type());
++      buf.add(type());
++    }
++    int type() final {
++      return 1;
++    }
++  };
++  struct CBA final : BA {
++  };
++  struct CA final : A {
++    ::std::map<int, int> m;
++    int type() final {
++      return 2;
++    }
++  };
++}
++int main(int argc, char ** ) {
++  char d[1024];
++  CBA cba;
++  Buf buf(d);
++  cba.fill(buf);
++  CA ca;
++  return 0;
++}
++// { dg-final { scan-tree-dump-not "__builtin_unreachable" "optimized" } }

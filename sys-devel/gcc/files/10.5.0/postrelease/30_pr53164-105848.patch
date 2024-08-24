@@ -1,0 +1,65 @@
+diff --git a/gcc/cp/pt.c b/gcc/cp/pt.c
+index dcfcb412a..2ef62541c 100644
+--- a/gcc/cp/pt.c
++++ b/gcc/cp/pt.c
+@@ -20170,10 +20170,22 @@ tsubst_copy_and_build (tree t,
+ 	  }
+ 
+ 	/* Remember that there was a reference to this entity.  */
+-	if (function != NULL_TREE
+-	    && DECL_P (function)
+-	    && !mark_used (function, complain) && !(complain & tf_error))
+-	  RETURN (error_mark_node);
++	if (function != NULL_TREE)
++	  {
++	    tree inner = function;
++	    if (TREE_CODE (inner) == ADDR_EXPR
++		&& TREE_CODE (TREE_OPERAND (inner, 0)) == FUNCTION_DECL)
++	      /* We should already have called mark_used when taking the
++		 address of this function, but do so again anyway to make
++		 sure it's odr-used: at worst this is a no-op, but if we
++		 obtained this FUNCTION_DECL as part of ahead-of-time overload
++		 resolution then that call to mark_used wouldn't have marked it
++		 odr-used yet (53164).  */
++	      inner = TREE_OPERAND (inner, 0);
++	    if (DECL_P (inner)
++		&& !mark_used (inner, complain) && !(complain & tf_error))
++	      RETURN (error_mark_node);
++	  }
+ 
+ 	/* Put back tf_decltype for the actual call.  */
+ 	complain |= decltype_flag;
+diff --git a/gcc/testsuite/g++.dg/template/fn-ptr3.C b/gcc/testsuite/g++.dg/template/fn-ptr3.C
+new file mode 100644
+index 000000000..4c651f124
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/template/fn-ptr3.C
+@@ -0,0 +1,28 @@
++// PR c++/53164
++// PR c++/105848
++// { dg-do link }
++
++template<class T>
++void f(T) { }
++
++template<void (*P)(int)>
++struct A {
++  static void wrap() {
++    P(0);
++  }
++};
++
++template<void (*P)(char)>
++void wrap() {
++  P(0);
++}
++
++template<int>
++void g() {
++  A<f>::wrap();
++  wrap<f>();
++}
++
++int main() {
++  g<0>();
++}

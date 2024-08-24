@@ -1,0 +1,299 @@
+diff --git a/gcc/passes.def b/gcc/passes.def
+index adc88bb29..b019c4713 100644
+--- a/gcc/passes.def
++++ b/gcc/passes.def
+@@ -73,7 +73,7 @@ along with GCC; see the file COPYING3.  If not see
+       NEXT_PASS (pass_all_early_optimizations);
+       PUSH_INSERT_PASSES_WITHIN (pass_all_early_optimizations)
+ 	  NEXT_PASS (pass_remove_cgraph_callee_edges);
+-	  NEXT_PASS (pass_object_sizes, true /* insert_min_max_p */);
++	  NEXT_PASS (pass_early_object_sizes);
+ 	  /* Don't record nonzero bits before IPA to avoid
+ 	     using too much memory.  */
+ 	  NEXT_PASS (pass_ccp, false /* nonzero_p */);
+@@ -191,14 +191,14 @@ along with GCC; see the file COPYING3.  If not see
+ 	 They ensure memory accesses are not indirect wherever possible.  */
+       NEXT_PASS (pass_strip_predict_hints, false /* early_p */);
+       NEXT_PASS (pass_ccp, true /* nonzero_p */);
+-      NEXT_PASS (pass_post_ipa_warn);
+       /* After CCP we rewrite no longer addressed locals into SSA
+ 	 form if possible.  */
++      NEXT_PASS (pass_object_sizes);
++      NEXT_PASS (pass_post_ipa_warn);
+       NEXT_PASS (pass_complete_unrolli);
+       NEXT_PASS (pass_backprop);
+       NEXT_PASS (pass_phiprop);
+       NEXT_PASS (pass_forwprop);
+-      NEXT_PASS (pass_object_sizes, false /* insert_min_max_p */);
+       /* pass_build_alias is a dummy pass that ensures that we
+ 	 execute TODO_rebuild_alias at this point.  */
+       NEXT_PASS (pass_build_alias);
+diff --git a/gcc/testsuite/gcc.dg/builtin-object-size-10.c b/gcc/testsuite/gcc.dg/builtin-object-size-10.c
+index 2a212fad1..bfcdf5cc9 100644
+--- a/gcc/testsuite/gcc.dg/builtin-object-size-10.c
++++ b/gcc/testsuite/gcc.dg/builtin-object-size-10.c
+@@ -1,5 +1,5 @@
+ /* { dg-do compile } */
+-/* { dg-options "-O2 -fdump-tree-objsz1-details" } */
++/* { dg-options "-O2 -fdump-tree-early_objsz-details" } */
+ // { dg-skip-if "packed attribute missing for drone_source_packet" { "epiphany-*-*" } }
+ 
+ typedef struct {
+@@ -22,5 +22,5 @@ foo(char *x)
+   return dpkt;
+ }
+ 
+-/* { dg-final { scan-tree-dump "maximum object size 21" "objsz1" } } */
+-/* { dg-final { scan-tree-dump "maximum subobject size 16" "objsz1" } } */
++/* { dg-final { scan-tree-dump "maximum object size 21" "early_objsz" } } */
++/* { dg-final { scan-tree-dump "maximum subobject size 16" "early_objsz" } } */
+diff --git a/gcc/testsuite/gcc.dg/pr101419.c b/gcc/testsuite/gcc.dg/pr101419.c
+new file mode 100644
+index 000000000..2cce3836b
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr101419.c
+@@ -0,0 +1,62 @@
++/* PR tree-optimization/101419 */
++/* { dg-do compile } */
++/* { dg-options "-O2" } */
++
++typedef __SIZE_TYPE__ size_t;
++void baz (int, int) __attribute__((__warning__("detected overflow")));
++
++union U {
++  int i;
++  char c;
++};
++
++static void
++foo (union U *u)
++{
++  if (__builtin_object_size (&u->c, 1) < sizeof (u->c))
++    baz (__builtin_object_size (&u->c, 1), sizeof (u->c));	/* { dg-bogus "detected overflow" } */
++  __builtin_memset (&u->c, 0, sizeof (u->c));
++
++  if (__builtin_object_size (&u->i, 1) < sizeof (u->i))
++    baz (__builtin_object_size (&u->i, 1), sizeof (u->i));	/* { dg-bogus "detected overflow" } */
++  __builtin_memset (&u->i, 0, sizeof (u->i));
++}
++
++void
++bar (union U *u)
++{
++  int i, j;
++  for (i = 0; i < 1; i++)
++    {
++      foo (u);
++      for (j = 0; j < 2; j++)
++        asm volatile ("");
++    }
++}
++
++static void
++qux (void *p, size_t q)
++{
++  if (__builtin_object_size (p, 1) < q)
++    baz (__builtin_object_size (p, 1), q);			/* { dg-bogus "detected overflow" } */
++  __builtin_memset (p, 0, q);
++}
++
++static void
++corge (union U *u)
++{
++  qux (&u->c, sizeof (u->c));
++  qux (&u->i, sizeof (u->i));
++}
++
++void
++garply (union U *u)
++{
++  int i, j;
++  for (i = 0; i < 1; i++)
++    {
++      corge (u);
++      for (j = 0; j < 2; j++)
++        asm volatile ("");
++    }
++}
+diff --git a/gcc/tree-object-size.c b/gcc/tree-object-size.c
+index 8855065f5..e83678afa 100644
+--- a/gcc/tree-object-size.c
++++ b/gcc/tree-object-size.c
+@@ -1295,45 +1295,6 @@ fini_object_sizes (void)
+     }
+ }
+ 
+-
+-/* Simple pass to optimize all __builtin_object_size () builtins.  */
+-
+-namespace {
+-
+-const pass_data pass_data_object_sizes =
+-{
+-  GIMPLE_PASS, /* type */
+-  "objsz", /* name */
+-  OPTGROUP_NONE, /* optinfo_flags */
+-  TV_NONE, /* tv_id */
+-  ( PROP_cfg | PROP_ssa ), /* properties_required */
+-  0, /* properties_provided */
+-  0, /* properties_destroyed */
+-  0, /* todo_flags_start */
+-  0, /* todo_flags_finish */
+-};
+-
+-class pass_object_sizes : public gimple_opt_pass
+-{
+-public:
+-  pass_object_sizes (gcc::context *ctxt)
+-    : gimple_opt_pass (pass_data_object_sizes, ctxt), insert_min_max_p (false)
+-  {}
+-
+-  /* opt_pass methods: */
+-  opt_pass * clone () { return new pass_object_sizes (m_ctxt); }
+-  void set_pass_param (unsigned int n, bool param)
+-    {
+-      gcc_assert (n == 0);
+-      insert_min_max_p = param;
+-    }
+-  virtual unsigned int execute (function *);
+-
+- private:
+-  /* Determines whether the pass instance creates MIN/MAX_EXPRs.  */
+-  bool insert_min_max_p;
+-}; // class pass_object_sizes
+-
+ /* Dummy valueize function.  */
+ 
+ static tree
+@@ -1342,8 +1303,8 @@ do_valueize (tree t)
+   return t;
+ }
+ 
+-unsigned int
+-pass_object_sizes::execute (function *fun)
++static unsigned int
++object_sizes_execute (function *fun, bool insert_min_max_p)
+ {
+   basic_block bb;
+   FOR_EACH_BB_FN (bb, fun)
+@@ -1444,6 +1405,38 @@ pass_object_sizes::execute (function *fun)
+   return 0;
+ }
+ 
++/* Simple pass to optimize all __builtin_object_size () builtins.  */
++
++namespace {
++
++const pass_data pass_data_object_sizes =
++{
++  GIMPLE_PASS, /* type */
++  "objsz", /* name */
++  OPTGROUP_NONE, /* optinfo_flags */
++  TV_NONE, /* tv_id */
++  ( PROP_cfg | PROP_ssa ), /* properties_required */
++  PROP_objsz, /* properties_provided */
++  0, /* properties_destroyed */
++  0, /* todo_flags_start */
++  0, /* todo_flags_finish */
++};
++
++class pass_object_sizes : public gimple_opt_pass
++{
++public:
++  pass_object_sizes (gcc::context *ctxt)
++    : gimple_opt_pass (pass_data_object_sizes, ctxt)
++  {}
++
++  /* opt_pass methods: */
++  opt_pass * clone () { return new pass_object_sizes (m_ctxt); }
++  virtual unsigned int execute (function *fun)
++  {
++    return object_sizes_execute (fun, false);
++  }
++}; // class pass_object_sizes
++
+ } // anon namespace
+ 
+ gimple_opt_pass *
+@@ -1451,3 +1444,42 @@ make_pass_object_sizes (gcc::context *ctxt)
+ {
+   return new pass_object_sizes (ctxt);
+ }
++
++/* Early version of pass to optimize all __builtin_object_size () builtins.  */
++
++namespace {
++
++const pass_data pass_data_early_object_sizes =
++{
++  GIMPLE_PASS, /* type */
++  "early_objsz", /* name */
++  OPTGROUP_NONE, /* optinfo_flags */
++  TV_NONE, /* tv_id */
++  ( PROP_cfg | PROP_ssa ), /* properties_required */
++  0, /* properties_provided */
++  0, /* properties_destroyed */
++  0, /* todo_flags_start */
++  0, /* todo_flags_finish */
++};
++
++class pass_early_object_sizes : public gimple_opt_pass
++{
++public:
++  pass_early_object_sizes (gcc::context *ctxt)
++    : gimple_opt_pass (pass_data_early_object_sizes, ctxt)
++  {}
++
++  /* opt_pass methods: */
++  virtual unsigned int execute (function *fun)
++  {
++    return object_sizes_execute (fun, true);
++  }
++}; // class pass_object_sizes
++
++} // anon namespace
++
++gimple_opt_pass *
++make_pass_early_object_sizes (gcc::context *ctxt)
++{
++  return new pass_early_object_sizes (ctxt);
++}
+diff --git a/gcc/tree-pass.h b/gcc/tree-pass.h
+index a97c7bd36..5843d76d8 100644
+--- a/gcc/tree-pass.h
++++ b/gcc/tree-pass.h
+@@ -208,6 +208,7 @@ protected:
+ #define PROP_gimple_lcf		(1 << 1)	/* lowered control flow */
+ #define PROP_gimple_leh		(1 << 2)	/* lowered eh */
+ #define PROP_cfg		(1 << 3)
++#define PROP_objsz		(1 << 4)	/* object sizes computed */
+ #define PROP_ssa		(1 << 5)
+ #define PROP_no_crit_edges      (1 << 6)
+ #define PROP_rtl		(1 << 7)
+@@ -418,6 +419,7 @@ extern gimple_opt_pass *make_pass_omp_target_link (gcc::context *ctxt);
+ extern gimple_opt_pass *make_pass_oacc_device_lower (gcc::context *ctxt);
+ extern gimple_opt_pass *make_pass_omp_device_lower (gcc::context *ctxt);
+ extern gimple_opt_pass *make_pass_object_sizes (gcc::context *ctxt);
++extern gimple_opt_pass *make_pass_early_object_sizes (gcc::context *ctxt);
+ extern gimple_opt_pass *make_pass_warn_printf (gcc::context *ctxt);
+ extern gimple_opt_pass *make_pass_strlen (gcc::context *ctxt);
+ extern gimple_opt_pass *make_pass_fold_builtins (gcc::context *ctxt);
+diff --git a/gcc/tree-ssa-sccvn.c b/gcc/tree-ssa-sccvn.c
+index 2f6f5074b..81a993283 100644
+--- a/gcc/tree-ssa-sccvn.c
++++ b/gcc/tree-ssa-sccvn.c
+@@ -876,12 +876,10 @@ copy_reference_ops_from_ref (tree ref, vec<vn_reference_op_s> *result)
+ 			 + (wi::to_offset (bit_offset) >> LOG2_BITS_PER_UNIT));
+ 		    /* Probibit value-numbering zero offset components
+ 		       of addresses the same before the pass folding
+-		       __builtin_object_size had a chance to run
+-		       (checking cfun->after_inlining does the
+-		       trick here).  */
++		       __builtin_object_size had a chance to run.  */
+ 		    if (TREE_CODE (orig) != ADDR_EXPR
+ 			|| maybe_ne (off, 0)
+-			|| cfun->after_inlining)
++			|| (cfun->curr_properties & PROP_objsz))
+ 		      off.to_shwi (&temp.off);
+ 		  }
+ 	      }

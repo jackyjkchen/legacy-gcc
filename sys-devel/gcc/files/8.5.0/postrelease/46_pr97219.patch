@@ -1,0 +1,110 @@
+diff --git a/gcc/cp/cp-tree.h b/gcc/cp/cp-tree.h
+index 3ed613168..7e8952c63 100644
+--- a/gcc/cp/cp-tree.h
++++ b/gcc/cp/cp-tree.h
+@@ -3849,6 +3849,11 @@ more_aggr_init_expr_args_p (const aggr_init_expr_arg_iterator *iter)
+    if we already emitted a warning about using it.  */
+ #define DECL_ERROR_REPORTED(NODE) DECL_LANG_FLAG_0 (VAR_DECL_CHECK (NODE))
+ 
++/* Nonzero if NODE is a FUNCTION_DECL or VARIABLE_DECL (for a decl
++   with namespace scope) declared in a local scope.  */
++#define DECL_LOCAL_DECL_P(NODE) \
++  DECL_LANG_FLAG_0 (VAR_OR_FUNCTION_DECL_CHECK (NODE))
++
+ /* Nonzero if NODE is a FUNCTION_DECL (for a function with global
+    scope) declared in a local scope.  */
+ #define DECL_LOCAL_FUNCTION_P(NODE) \
+@@ -7435,6 +7440,7 @@ extern void clear_fold_cache			(void);
+ extern void suggest_alternatives_for            (location_t, tree, bool);
+ extern bool suggest_alternative_in_explicit_scope (location_t, tree, tree);
+ extern tree strip_using_decl                    (tree);
++extern bool dependent_local_decl_p		(tree);
+ 
+ /* Tell the binding oracle what kind of binding we are looking for.  */
+ 
+diff --git a/gcc/cp/name-lookup.c b/gcc/cp/name-lookup.c
+index f61e748e7..6c1642a60 100644
+--- a/gcc/cp/name-lookup.c
++++ b/gcc/cp/name-lookup.c
+@@ -7368,4 +7368,22 @@ cp_emit_debug_info_for_using (tree t, tree context)
+     }
+ }
+ 
++/* True if D is a local declaration in dependent scope.  Assumes that it is
++   (part of) the current lookup result for its name.  */
++
++bool
++dependent_local_decl_p (tree d)
++{
++  if (!DECL_LOCAL_DECL_P (d))
++    return false;
++
++  cxx_binding *b = IDENTIFIER_BINDING (DECL_NAME (d));
++  cp_binding_level *l = b->scope;
++  while (!l->this_entity)
++    l = l->level_chain;
++  return uses_template_parms (l->this_entity);
++}
++
++
++
+ #include "gt-cp-name-lookup.h"
+diff --git a/gcc/cp/pt.c b/gcc/cp/pt.c
+index 8121568ac..fb11eb591 100644
+--- a/gcc/cp/pt.c
++++ b/gcc/cp/pt.c
+@@ -14033,7 +14033,9 @@ tsubst_arg_types (tree arg_types,
+     /* Except that we do substitute default arguments under tsubst_lambda_expr,
+        since the new op() won't have any associated template arguments for us
+        to refer to later.  */
+-    if (lambda_fn_in_template_p (in_decl))
++  	if (lambda_fn_in_template_p (in_decl)
++      || (in_decl && TREE_CODE (in_decl) == FUNCTION_DECL
++	  && DECL_LOCAL_DECL_P (in_decl)))
+       default_arg = tsubst_copy_and_build (default_arg, args, complain, in_decl,
+ 					   false/*fn*/, false/*constexpr*/);
+ 
+diff --git a/gcc/cp/semantics.c b/gcc/cp/semantics.c
+index 48f7c8dbf..649c75419 100644
+--- a/gcc/cp/semantics.c
++++ b/gcc/cp/semantics.c
+@@ -2388,13 +2388,13 @@ finish_call_expr (tree fn, vec<tree, va_gc> **args, bool disallow_virtual,
+ 
+   if (processing_template_decl)
+     {
+-      /* If FN is a local extern declaration or set thereof, look them up
+-	 again at instantiation time.  */
++      /* If FN is a local extern declaration (or set thereof) in a template,
++	 look it up again at instantiation time.  */
+       if (is_overloaded_fn (fn))
+ 	{
+ 	  tree ifn = get_first_fn (fn);
+ 	  if (TREE_CODE (ifn) == FUNCTION_DECL
+-	      && DECL_LOCAL_FUNCTION_P (ifn))
++	      && dependent_local_decl_p (ifn))
+ 	    orig_fn = DECL_NAME (ifn);
+ 	}
+ 
+diff --git a/gcc/testsuite/g++.dg/cpp1y/lambda-generic-local-fn1.C b/gcc/testsuite/g++.dg/cpp1y/lambda-generic-local-fn1.C
+new file mode 100644
+index 000000000..06919c535
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp1y/lambda-generic-local-fn1.C
+@@ -0,0 +1,17 @@
++// PR c++/97219
++// { dg-do compile { target c++14 } }
++
++struct B;
++
++template <typename T>
++auto f(T *) {
++  void q(B *, void * = static_cast<T *>(0));
++  return [](auto *p) { q(p); };
++}
++
++void q(void *) = delete;
++
++int main(void) {
++  B *bp = 0;
++  f(bp)(bp);
++}
