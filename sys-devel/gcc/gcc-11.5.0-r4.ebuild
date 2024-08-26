@@ -45,7 +45,7 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/05_pr100394.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/06_pr100061-105142.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/07_pr99531-100623.patch
-	eapply "${FILESDIR}"/${PV}/postrelease/08_pr100740-101508-101972-102131.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/08_pr51577-97279.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/09_pr101260.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/10_pr101419.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/11_pr101839.patch
@@ -54,7 +54,6 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/14_pr104996.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/15_pr105980.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/16_pr53164-105848.patch
-	eapply "${FILESDIR}"/${PV}/postrelease/17_pr51577-97279.patch
 
 	if use test ; then
 		rm -rf gcc/testsuite/gcc.c-torture/execute/vfprintf-chk-1.c gcc/testsuite/gcc.c-torture/execute/vprintf-chk-1.c gcc/testsuite/c-c++-common/Warray-bounds-2.c gcc/testsuite/c-c++-common/Wrestrict-2.c gcc/testsuite/g++.dg/warn/Wstringop-truncation-1.C gcc/testsuite/gcc.dg/format/opt-*.c

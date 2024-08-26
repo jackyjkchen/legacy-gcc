@@ -47,14 +47,13 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/20_pr100394.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/21_pr100061-105142.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/22_pr99531-100623.patch
-	eapply "${FILESDIR}"/${PV}/postrelease/23_pr100740-101508-101972-102131.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/23_pr53164-105848.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/24_pr101260.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/25_pr101419.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/26_pr101839.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/27_pr101885.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/28_pr104996.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/29_pr105980.patch
-	eapply "${FILESDIR}"/${PV}/postrelease/30_pr53164-105848.patch
 
 	if use test ; then
 		rm -rf gcc/testsuite/gcc.c-torture/execute/vfprintf-chk-1.c gcc/testsuite/gcc.c-torture/execute/vprintf-chk-1.c gcc/testsuite/c-c++-common/Warray-bounds-2.c gcc/testsuite/c-c++-common/Wrestrict-2.c gcc/testsuite/g++.dg/warn/Wstringop-truncation-1.C gcc/testsuite/gcc.dg/format/opt-*.c
