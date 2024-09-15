@@ -11,7 +11,7 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/00_gentoo-patchset.patch
 	toolchain_src_prepare
 
-	eapply "${FILESDIR}"/${PV}/01_compat-new-isl.patch
+	use graphite && eapply "${FILESDIR}"/${PV}/01_compat-new-isl.patch
 
 	use vanilla && return 0
 	eapply "${FILESDIR}"/${PV}/02_fix-werror.patch

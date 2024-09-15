@@ -495,6 +495,19 @@ index f66b861c8..485aeeab7 100644
  /* { dg-require-effective-target trampolines } */
  
  extern void abort (void);
+diff --git a/gcc/testsuite/gcc.dg/fstack-protector-strong.c b/gcc/testsuite/gcc.dg/fstack-protector-strong.c
+index 8e9d891ac..bc460fb37 100644
+--- a/gcc/testsuite/gcc.dg/fstack-protector-strong.c
++++ b/gcc/testsuite/gcc.dg/fstack-protector-strong.c
+@@ -1,7 +1,7 @@
+ /* Test that stack protection is done on chosen functions. */
+ 
+ /* { dg-do compile { target i?86-*-* x86_64-*-* rs6000-*-* s390x-*-* } } */
+-/* { dg-options "-O2 -fstack-protector-strong" } */
++/* { dg-options "-O2 -fstack-protector-strong -w" } */
+ 
+ /* This test checks the presence of __stack_chk_fail function in assembler.
+  * Compiler generates _stack_chk_fail_local (wrapper) calls instead for PIC.
 diff --git a/gcc/testsuite/gcc.dg/gomp/pr66633-1.c b/gcc/testsuite/gcc.dg/gomp/pr66633-1.c
 index 3260ac7d5..d8b05bd89 100644
 --- a/gcc/testsuite/gcc.dg/gomp/pr66633-1.c
@@ -741,6 +754,120 @@ index 551299ef5..1d992a99f 100644
  
  # Main loop.
  foreach src [lsort [glob -nocomplain $srcdir/$subdir/*.c]] {
+diff --git a/gcc/testsuite/gcc.target/i386/cleanup-1.c b/gcc/testsuite/gcc.target/i386/cleanup-1.c
+index fc82f35a0..dcfcc4edb 100644
+--- a/gcc/testsuite/gcc.target/i386/cleanup-1.c
++++ b/gcc/testsuite/gcc.target/i386/cleanup-1.c
+@@ -4,6 +4,7 @@
+ 
+ #include <unwind.h>
+ #include <stdlib.h>
++#include <stddef.h>
+ #include <string.h>
+ #include <stdio.h>
+ #include <unistd.h>
+@@ -47,6 +48,14 @@ handler (void *p __attribute__((unused)))
+   _exit (0);
+ }
+ 
++static void
++__attribute__((noinline))
++check (intptr_t p)
++{
++  if ((p & 15) != 0)
++    abort ();
++}
++
+ static int __attribute__((noinline))
+ fn5 (void)
+ {
+@@ -59,6 +68,8 @@ void
+ bar (void)
+ {
+   char dummy __attribute__((cleanup (counter)));
++  unsigned long tmp[4] __attribute__((aligned(16)));
++  check ((intptr_t) tmp);
+   fn5 ();
+ }
+ 
+@@ -133,9 +144,9 @@ foo (int x)
+ 	".type	_L_mutex_lock_%=, @function\n"
+ "_L_mutex_lock_%=:\n"
+ "1:\t"	"leaq	%1, %%rdi\n"
+-"2:\t"	"subq	$128, %%rsp\n"
++"2:\t"	"subq	$136, %%rsp\n"
+ "3:\t"	"call	bar\n"
+-"4:\t"	"addq	$128, %%rsp\n"
++"4:\t"	"addq	$136, %%rsp\n"
+ "5:\t"	"jmp	24f\n"
+ "6:\t"	".size _L_mutex_lock_%=, .-_L_mutex_lock_%=\n\t"
+ 	".previous\n\t"
+@@ -179,7 +190,7 @@ foo (int x)
+ 	".sleb128 4b-3b\n"
+ "16:\t"	".byte	0x40 + (4b-3b-1) # DW_CFA_advance_loc\n\t"
+ 	".byte	0x0e	# DW_CFA_def_cfa_offset\n\t"
+-	".uleb128 128\n\t"
++	".uleb128 136\n\t"
+ 	".byte	0x16	# DW_CFA_val_expression\n\t"
+ 	".uleb128 0x10\n\t"
+ 	".uleb128 20f-17f\n"
+diff --git a/gcc/testsuite/gcc.target/i386/cleanup-2.c b/gcc/testsuite/gcc.target/i386/cleanup-2.c
+index 36dd80da9..47c8f9e3a 100644
+--- a/gcc/testsuite/gcc.target/i386/cleanup-2.c
++++ b/gcc/testsuite/gcc.target/i386/cleanup-2.c
+@@ -4,6 +4,7 @@
+ 
+ #include <unwind.h>
+ #include <stdlib.h>
++#include <stddef.h>
+ #include <string.h>
+ #include <stdio.h>
+ #include <unistd.h>
+@@ -47,6 +48,14 @@ handler (void *p __attribute__((unused)))
+   _exit (0);
+ }
+ 
++static void
++__attribute__((noinline))
++check (intptr_t p)
++{
++  if ((p & 15) != 0)
++    abort ();
++}
++
+ static int __attribute__((noinline))
+ fn5 (void)
+ {
+@@ -59,6 +68,8 @@ void
+ bar (void)
+ {
+   char dummy __attribute__((cleanup (counter)));
++  unsigned long tmp[4] __attribute__((aligned(16)));
++  check ((intptr_t) tmp);
+   fn5 ();
+ }
+ 
+@@ -74,9 +85,9 @@ foo (int x)
+ 	".type	_L_mutex_lock_%=, @function\n"
+ "_L_mutex_lock_%=:\n"
+ "1:\t"	"leaq	%1, %%rdi\n"
+-"2:\t"	"subq	$128, %%rsp\n"
++"2:\t"	"subq	$136, %%rsp\n"
+ "3:\t"	"call	bar\n"
+-"4:\t"	"addq	$128, %%rsp\n"
++"4:\t"	"addq	$136, %%rsp\n"
+ "5:\t"	"jmp	21f\n"
+ "6:\t"	".size _L_mutex_lock_%=, .-_L_mutex_lock_%=\n\t"
+ 	".previous\n\t"
+@@ -160,7 +171,7 @@ foo (int x)
+ 	".uleb128 6b-5b-1\n"
+ "19:\t"	".byte	0x40 + (3b-1b) # DW_CFA_advance_loc\n\t"
+ 	".byte	0xe	# DW_CFA_def_cfa_offset\n\t"
+-	".uleb128 128\n\t"
++	".uleb128 136\n\t"
+ 	".byte	0x40 + (5b-3b) # DW_CFA_advance_loc\n\t"
+ 	".byte	0xe	# DW_CFA_def_cfa_offset\n\t"
+ 	".uleb128 0\n\t"
 diff --git a/gcc/testsuite/gcc.target/i386/pr67770.c b/gcc/testsuite/gcc.target/i386/pr67770.c
 index 3826aff45..2d2c30243 100644
 --- a/gcc/testsuite/gcc.target/i386/pr67770.c

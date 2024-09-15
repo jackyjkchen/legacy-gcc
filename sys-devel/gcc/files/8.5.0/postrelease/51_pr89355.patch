@@ -1,0 +1,95 @@
+diff --git a/gcc/config/i386/i386.c b/gcc/config/i386/i386.c
+index 4ca59bae5..3ff68460c 100644
+--- a/gcc/config/i386/i386.c
++++ b/gcc/config/i386/i386.c
+@@ -2568,10 +2568,7 @@ rest_of_insert_endbranch (void)
+ 	      continue;
+ 	    }
+ 
+-	  if ((LABEL_P (insn) && LABEL_PRESERVE_P (insn))
+-	      || (NOTE_P (insn)
+-		  && NOTE_KIND (insn) == NOTE_INSN_DELETED_LABEL))
+-	    /* TODO.  Check /s bit also.  */
++	  if (LABEL_P (insn) && LABEL_PRESERVE_P (insn))
+ 	    {
+ 	      cet_eb = gen_nop_endbr ();
+ 	      emit_insn_after (cet_eb, insn);
+diff --git a/gcc/testsuite/gcc.target/i386/cet-label-3.c b/gcc/testsuite/gcc.target/i386/cet-label-3.c
+new file mode 100644
+index 000000000..9f427a866
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/i386/cet-label-3.c
+@@ -0,0 +1,23 @@
++/* PR target/89355  */
++/* { dg-do compile } */
++/* { dg-options "-O2 -fcf-protection" } */
++/* { dg-final { scan-assembler-times "endbr32" 1 { target ia32 } } } */
++/* { dg-final { scan-assembler-times "endbr64" 1 { target { ! ia32 } } } } */
++int
++test (int* val)
++{
++  int status = 99;
++
++  if (!val)
++    {
++      status = 22;
++      goto end;
++    }
++
++  extern int x;
++  *val = x;
++
++  status = 0;
++end:
++  return status;
++}
+diff --git a/gcc/testsuite/gcc.target/i386/cet-label-4.c b/gcc/testsuite/gcc.target/i386/cet-label-4.c
+new file mode 100644
+index 000000000..d743d2bf2
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/i386/cet-label-4.c
+@@ -0,0 +1,12 @@
++/* PR target/89355  */
++/* { dg-do compile { target { fpic && lp64 } } } */
++/* { dg-options "-O2 -fcf-protection -fPIC -mcmodel=large" } */
++/* { dg-final { scan-assembler-times "endbr64" 1 } } */
++
++extern int val;
++
++int
++test (void)
++{
++  return val;
++}
+diff --git a/gcc/testsuite/gcc.target/i386/cet-label-5.c b/gcc/testsuite/gcc.target/i386/cet-label-5.c
+new file mode 100644
+index 000000000..862c79b05
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/i386/cet-label-5.c
+@@ -0,0 +1,13 @@
++/* PR target/89355  */
++/* { dg-do compile } */
++/* { dg-options "-O2 -fcf-protection -Wno-return-local-addr" } */
++/* { dg-final { scan-assembler-times "endbr32" 1 { target ia32 } } } */
++/* { dg-final { scan-assembler-times "endbr64" 1 { target { ! ia32 } } } } */
++
++void *
++func (void)
++{
++  return &&bar;
++bar:
++  return 0;
++}
+diff --git a/gcc/testsuite/gcc.target/i386/pr94417-2.c b/gcc/testsuite/gcc.target/i386/pr94417-2.c
+index 9e9c277e0..9eb0f5b21 100644
+--- a/gcc/testsuite/gcc.target/i386/pr94417-2.c
++++ b/gcc/testsuite/gcc.target/i386/pr94417-2.c
+@@ -2,7 +2,7 @@
+ /* { dg-require-effective-target lp64 } */
+ /* { dg-require-effective-target fpic } */
+ /* { dg-options "-O2 -fpic -mcmodel=large -fcf-protection" } */
+-/* { dg-final { scan-assembler-times {\mendbr} 4 } } */
++/* { dg-final { scan-assembler-times {\mendbr} 2 } } */
+ 
+ extern void ext (void);
+ 
