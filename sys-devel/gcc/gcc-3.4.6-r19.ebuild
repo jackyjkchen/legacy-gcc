@@ -31,6 +31,7 @@ src_prepare() {
 	use vanilla && return 0
 	eapply "${FILESDIR}"/${PV}/06_fix-werror.patch
 	eapply "${FILESDIR}"/${PV}/07_backport-static-libstdc++-option.patch
+	eapply "${FILESDIR}"/${PV}/08_workaround-x86-64-simd.patch
 
 	eapply "${FILESDIR}"/${PV}/postrelease/00_pr13685.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/01_pr22127.patch
