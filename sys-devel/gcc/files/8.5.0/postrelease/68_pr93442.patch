@@ -1,0 +1,46 @@
+diff --git a/gcc/cp/parser.c b/gcc/cp/parser.c
+index 6b8254c3e..c442c4f32 100644
+--- a/gcc/cp/parser.c
++++ b/gcc/cp/parser.c
+@@ -10182,6 +10182,10 @@ cp_parser_lambda_expression (cp_parser* parser)
+     parser->implicit_template_scope = 0;
+     parser->auto_is_implicit_function_template_parm_p = false;
+ 
++    /* The body of a lambda in a discarded statement is not discarded.  */
++    bool discarded = in_discarded_stmt;
++    in_discarded_stmt = 0;
++
+     /* By virtue of defining a local class, a lambda expression has access to
+        the private variables of enclosing classes.  */
+ 
+@@ -10212,6 +10216,8 @@ cp_parser_lambda_expression (cp_parser* parser)
+ 
+     type = finish_struct (type, /*attributes=*/NULL_TREE);
+ 
++    in_discarded_stmt = discarded;
++
+     parser->num_template_parameter_lists = saved_num_template_parameter_lists;
+     parser->in_statement = in_statement;
+     parser->in_switch_statement_p = in_switch_statement_p;
+diff --git a/gcc/testsuite/g++.dg/cpp1z/constexpr-if-lambda1.C b/gcc/testsuite/g++.dg/cpp1z/constexpr-if-lambda1.C
+new file mode 100644
+index 000000000..64c4cd27f
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp1z/constexpr-if-lambda1.C
+@@ -0,0 +1,16 @@
++// PR c++/93442
++// { dg-do compile { target c++17 } }
++
++struct bar {
++    int foo(){return 0;}
++};
++
++int foobar() {
++    if constexpr(true) {
++        return 0;
++    } else {
++        return [](){
++            return bar{};
++        }().foo();
++    }
++}

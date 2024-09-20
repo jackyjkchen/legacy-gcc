@@ -1,0 +1,34 @@
+diff --git a/gcc/cp/pt.c b/gcc/cp/pt.c
+index c2101e09a..8aa9be8db 100644
+--- a/gcc/cp/pt.c
++++ b/gcc/cp/pt.c
+@@ -29078,7 +29078,11 @@ do_class_deduction (tree ptype, tree tmpl, tree init,
+     return ptype;
+ 
+   /* Initializing one placeholder from another.  */
+-  if (init && TREE_CODE (init) == TEMPLATE_PARM_INDEX
++  if (init
++      && (TREE_CODE (init) == TEMPLATE_PARM_INDEX
++	  || (TREE_CODE (init) == EXPR_PACK_EXPANSION
++	      && (TREE_CODE (PACK_EXPANSION_PATTERN (init))
++		  == TEMPLATE_PARM_INDEX)))
+       && is_auto (TREE_TYPE (init))
+       && CLASS_PLACEHOLDER_TEMPLATE (TREE_TYPE (init)) == tmpl)
+     return cp_build_qualified_type (TREE_TYPE (init), cp_type_quals (ptype));
+diff --git a/gcc/testsuite/g++.dg/cpp2a/nontype-class43.C b/gcc/testsuite/g++.dg/cpp2a/nontype-class43.C
+new file mode 100644
+index 000000000..f51684f7a
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp2a/nontype-class43.C
+@@ -0,0 +1,11 @@
++// PR c++/97134
++// { dg-do compile { target c++20 } }
++
++template<typename T>
++struct templ {};
++
++template<templ... Vs>
++struct wrapper {};
++
++template<templ... Vs> requires true
++struct wrapper<Vs...> {};

@@ -1,0 +1,94 @@
+diff --git a/gcc/config/i386/i386.c b/gcc/config/i386/i386.c
+index 86ba82a88..0bbb06e31 100644
+--- a/gcc/config/i386/i386.c
++++ b/gcc/config/i386/i386.c
+@@ -6348,6 +6348,16 @@ ix86_function_ok_for_sibcall (tree decl, tree exp)
+ 	}
+     }
+ 
++  /* Disable sibcall if callee has indirect_return attribute and
++     caller doesn't since callee will return to the caller's caller
++     via an indirect jump.  */
++  if (((flag_cf_protection & (CF_RETURN | CF_BRANCH))
++       == (CF_RETURN | CF_BRANCH))
++      && lookup_attribute ("indirect_return", TYPE_ATTRIBUTES (type))
++      && !lookup_attribute ("indirect_return",
++			    TYPE_ATTRIBUTES (TREE_TYPE (cfun->decl))))
++    return false;
++
+   /* Otherwise okay.  That also includes certain types of indirect calls.  */
+   return true;
+ }
+diff --git a/gcc/testsuite/gcc.target/i386/pr85620-2.c b/gcc/testsuite/gcc.target/i386/pr85620-2.c
+index b2e680fa1..14ce0ffd1 100644
+--- a/gcc/testsuite/gcc.target/i386/pr85620-2.c
++++ b/gcc/testsuite/gcc.target/i386/pr85620-2.c
+@@ -1,6 +1,7 @@
+ /* { dg-do compile } */
+ /* { dg-options "-O2 -fcf-protection" } */
+-/* { dg-final { scan-assembler-times {\mendbr} 1 } } */
++/* { dg-final { scan-assembler-times {\mendbr} 2 } } */
++/* { dg-final { scan-assembler-not "jmp" } } */
+ 
+ struct ucontext;
+ 
+diff --git a/gcc/testsuite/gcc.target/i386/pr85620-5.c b/gcc/testsuite/gcc.target/i386/pr85620-5.c
+new file mode 100644
+index 000000000..04537702d
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/i386/pr85620-5.c
+@@ -0,0 +1,13 @@
++/* { dg-do compile } */
++/* { dg-options "-O2 -fcf-protection" } */
++/* { dg-final { scan-assembler-not "jmp" } } */
++
++struct ucontext;
++
++extern int (*bar) (struct ucontext *) __attribute__((__indirect_return__));
++
++int
++foo (struct ucontext *oucp)
++{
++  return bar (oucp);
++}
+diff --git a/gcc/testsuite/gcc.target/i386/pr85620-6.c b/gcc/testsuite/gcc.target/i386/pr85620-6.c
+new file mode 100644
+index 000000000..4f04ba0e4
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/i386/pr85620-6.c
+@@ -0,0 +1,15 @@
++/* { dg-do compile } */
++/* { dg-options "-O2 -fcf-protection" } */
++/* { dg-additional-options "-fno-PIE" { target ia32 } } */
++/* { dg-final { scan-assembler "jmp" } } */
++
++struct ucontext;
++
++extern int bar (struct ucontext *) __attribute__((__indirect_return__));
++
++__attribute__((__indirect_return__))
++int
++foo (struct ucontext *oucp)
++{
++  return bar (oucp);
++}
+diff --git a/gcc/testsuite/gcc.target/i386/pr85620-7.c b/gcc/testsuite/gcc.target/i386/pr85620-7.c
+new file mode 100644
+index 000000000..fa62d56de
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/i386/pr85620-7.c
+@@ -0,0 +1,14 @@
++/* { dg-do compile } */
++/* { dg-options "-O2 -fcf-protection" } */
++/* { dg-final { scan-assembler "jmp" } } */
++
++struct ucontext;
++
++extern int (*bar) (struct ucontext *) __attribute__((__indirect_return__));
++extern int foo (struct ucontext *) __attribute__((__indirect_return__));
++
++int
++foo (struct ucontext *oucp)
++{
++  return bar (oucp);
++}

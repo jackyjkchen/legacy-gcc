@@ -1,0 +1,71 @@
+diff --git a/gcc/cp/cp-tree.h b/gcc/cp/cp-tree.h
+index c70a08860..6efd3b37b 100644
+--- a/gcc/cp/cp-tree.h
++++ b/gcc/cp/cp-tree.h
+@@ -6220,6 +6220,7 @@ extern tree build_class_member_access_expr      (tree, tree, tree, bool,
+ 						 tsubst_flags_t);
+ extern tree finish_class_member_access_expr     (tree, tree, bool, 
+ 						 tsubst_flags_t);
++extern tree lookup_destructor			(tree, tree, tree, tsubst_flags_t);
+ extern tree build_x_indirect_ref		(location_t, tree,
+ 						 ref_operator, tsubst_flags_t);
+ extern tree cp_build_indirect_ref		(tree, ref_operator,
+diff --git a/gcc/cp/parser.c b/gcc/cp/parser.c
+index 76868276a..db5563f51 100644
+--- a/gcc/cp/parser.c
++++ b/gcc/cp/parser.c
+@@ -22826,6 +22826,11 @@ cp_parser_lookup_name (cp_parser *parser, tree name,
+       /* If that's not a class type, there is no destructor.  */
+       if (!type || !CLASS_TYPE_P (type))
+ 	return error_mark_node;
++      /* In a non-static member function, check implicit this->.  */
++      if (current_class_ref)
++	return lookup_destructor (current_class_ref, parser->scope, name,
++				  tf_warning_or_error);
++
+       if (CLASSTYPE_LAZY_DESTRUCTOR (type))
+ 	lazily_declare_fn (sfk_destructor, type);
+       if (!CLASSTYPE_DESTRUCTORS (type))
+diff --git a/gcc/cp/typeck.c b/gcc/cp/typeck.c
+index bb83b4732..6e94d75ad 100644
+--- a/gcc/cp/typeck.c
++++ b/gcc/cp/typeck.c
+@@ -69,7 +69,6 @@ static tree get_delta_difference (tree, tree, bool, bool, tsubst_flags_t);
+ static void casts_away_constness_r (tree *, tree *, tsubst_flags_t);
+ static bool casts_away_constness (tree, tree, tsubst_flags_t);
+ static bool maybe_warn_about_returning_address_of_local (tree);
+-static tree lookup_destructor (tree, tree, tree, tsubst_flags_t);
+ static void warn_args_num (location_t, tree, bool);
+ static int convert_arguments (tree, vec<tree, va_gc> **, tree, int,
+                               tsubst_flags_t);
+@@ -2508,7 +2507,7 @@ build_class_member_access_expr (tree object, tree member,
+ /* Return the destructor denoted by OBJECT.SCOPE::DTOR_NAME, or, if
+    SCOPE is NULL, by OBJECT.DTOR_NAME, where DTOR_NAME is ~type.  */
+ 
+-static tree
++tree
+ lookup_destructor (tree object, tree scope, tree dtor_name,
+ 		   tsubst_flags_t complain)
+ {
+diff --git a/gcc/testsuite/g++.dg/parse/dtor3.C b/gcc/testsuite/g++.dg/parse/dtor3.C
+index 3041ae4a5..6121bed7e 100644
+--- a/gcc/testsuite/g++.dg/parse/dtor3.C
++++ b/gcc/testsuite/g++.dg/parse/dtor3.C
+@@ -4,13 +4,13 @@
+ //  destructor call.
+ 
+ struct Y { 
+-  ~Y() {}      // { dg-bogus "note" "implemented DR272" { xfail *-*-* } }  
++  ~Y() {}      // { dg-bogus "note" "implemented DR272" }  
+ };
+ 
+ struct X : Y { 
+-  ~X() {}      // { dg-bogus "note" "implemented DR272" { xfail *-*-* } }  
++  ~X() {}      // { dg-bogus "note" "implemented DR272" }  
+   void f() { 
+-    X::~X();   // { dg-bogus "" "implemented DR272" { xfail *-*-* } }  
+-    Y::~Y();   // { dg-bogus "" "implemented DR272" { xfail *-*-* } }  
++    X::~X();   // { dg-bogus "" "implemented DR272" }  
++    Y::~Y();   // { dg-bogus "" "implemented DR272" }  
+   } 
+ };

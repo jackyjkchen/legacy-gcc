@@ -1,0 +1,113 @@
+diff --git a/gcc/cp/pt.c b/gcc/cp/pt.c
+index 4a7248b5d..ecfea35ac 100644
+--- a/gcc/cp/pt.c
++++ b/gcc/cp/pt.c
+@@ -8762,6 +8762,12 @@ lookup_and_finish_template_variable (tree templ, tree targs,
+   templ = lookup_template_variable (templ, targs);
+   if (!any_dependent_template_arguments_p (targs))
+     {
++      /* We may be called while doing a partial substitution, but the
++	 type of the variable template may be auto, in which case we
++	 will call do_auto_deduction in mark_used (which clears tf_partial)
++	 and the auto must be properly reduced at that time for the
++	 deduction to work.  */
++      complain &= ~tf_partial;
+       templ = finish_template_variable (templ, complain);
+       mark_used (templ);
+     }
+diff --git a/gcc/testsuite/g++.dg/cpp1y/var-templ70.C b/gcc/testsuite/g++.dg/cpp1y/var-templ70.C
+new file mode 100644
+index 000000000..1d35c38c7
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp1y/var-templ70.C
+@@ -0,0 +1,25 @@
++// PR c++/108550
++// { dg-do compile { target c++14 } }
++
++template<class T>
++struct is_pointer
++{
++  static constexpr bool value = false;
++};
++
++template<class T, T T1>
++struct integral_constant
++{
++  static constexpr T value = T1;
++};
++
++
++template <class Tp>
++constexpr auto is_pointer_v = is_pointer<Tp>::value;
++
++template <class Tp, int = 0>
++integral_constant<bool, is_pointer_v<int>> Wrap1();
++
++int main() {
++  static_assert(!decltype(Wrap1<int>())::value, "");
++}
+diff --git a/gcc/testsuite/g++.dg/cpp1y/var-templ71.C b/gcc/testsuite/g++.dg/cpp1y/var-templ71.C
+new file mode 100644
+index 000000000..e0cf55230
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp1y/var-templ71.C
+@@ -0,0 +1,26 @@
++// PR c++/108550
++// { dg-do compile { target c++14 } }
++
++template<class T, T T1>
++struct integral_constant
++{
++  static constexpr T value = T1;
++};
++
++template <typename T>
++struct S {
++  template <typename U, typename V>
++  static constexpr void foo(V) { }
++
++  constexpr bool bar () const { foo<int>(10); return false; }
++};
++
++template <class Tp>
++constexpr auto is_pointer_v = S<Tp>{}.bar();
++
++template <class Tp, int = 0>
++integral_constant<bool, is_pointer_v<int>> Wrap1();
++
++int main() {
++  static_assert(!decltype(Wrap1<int>())::value, "");
++}
+diff --git a/gcc/testsuite/g++.dg/cpp1y/var-templ72.C b/gcc/testsuite/g++.dg/cpp1y/var-templ72.C
+new file mode 100644
+index 000000000..7426bad4a
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp1y/var-templ72.C
+@@ -0,0 +1,27 @@
++// PR c++/108550
++// { dg-do compile { target c++14 } }
++
++template<class T>
++struct is_pointer
++{
++  static constexpr bool value = false;
++};
++
++template<class T, T T1>
++struct integral_constant
++{
++  static constexpr T value = T1;
++};
++
++template<typename T>
++using PTR_P = is_pointer<T>;
++
++template <class Tp>
++constexpr auto is_pointer_v = PTR_P<Tp>::value;
++
++template <class Tp, int = 0>
++integral_constant<bool, is_pointer_v<Tp>> Wrap1();
++
++int main() {
++  static_assert(!decltype(Wrap1<int>())::value, "");
++}

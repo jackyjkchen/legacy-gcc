@@ -1,0 +1,64 @@
+diff --git a/gcc/cp/pt.c b/gcc/cp/pt.c
+index e7101d3f9..060736b40 100644
+--- a/gcc/cp/pt.c
++++ b/gcc/cp/pt.c
+@@ -22556,13 +22556,6 @@ more_specialized_fn (tree pat1, tree pat2, int len)
+           len = 0;
+         }
+ 
+-      /* DR 1847: If a particular P contains no template-parameters that
+-	 participate in template argument deduction, that P is not used to
+-	 determine the ordering.  */
+-      if (!uses_deducible_template_parms (arg1)
+-	  && !uses_deducible_template_parms (arg2))
+-	goto next;
+-
+       if (TREE_CODE (arg1) == REFERENCE_TYPE)
+ 	{
+ 	  ref1 = TYPE_REF_IS_RVALUE (arg1) + 1;
+@@ -22684,8 +22677,6 @@ more_specialized_fn (tree pat1, tree pat2, int len)
+ 	   These must be unordered.  */
+ 	break;
+ 
+-    next:
+-
+       if (TREE_CODE (arg1) == TYPE_PACK_EXPANSION
+           || TREE_CODE (arg2) == TYPE_PACK_EXPANSION)
+         /* We have already processed all of the arguments in our
+diff --git a/gcc/testsuite/g++.dg/template/partial-order1.C b/gcc/testsuite/g++.dg/template/partial-order1.C
+index 0832ea535..624bb4bc0 100644
+--- a/gcc/testsuite/g++.dg/template/partial-order1.C
++++ b/gcc/testsuite/g++.dg/template/partial-order1.C
+@@ -14,5 +14,5 @@ void f(typename A<T>::size_type, T);
+ 
+ int main()
+ {
+-  f(1,2);			// { dg-error "ambiguous" }
++  f(1,2);
+ }
+diff --git a/gcc/testsuite/g++.dg/template/partial-order2.C b/gcc/testsuite/g++.dg/template/partial-order2.C
+new file mode 100644
+index 000000000..2aed6008d
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/template/partial-order2.C
+@@ -0,0 +1,20 @@
++// CWG 2235
++
++namespace X
++{
++  template<typename T> struct Const { typedef void type; };
++  template<typename T> void f(T, typename Const<T>::type*); // T1
++  template<typename T> void f(T, void *); // T2
++  void g(void *p) { f(0, p); }
++}
++
++namespace Y
++{
++  struct A { A(int); };
++  struct B { B(int); };
++
++  template<typename T> void f(T, A);
++  template<typename T> void f(T*, B);
++
++  void g(int *p) { f(p, 0); }	// { dg-error "ambiguous" }
++}

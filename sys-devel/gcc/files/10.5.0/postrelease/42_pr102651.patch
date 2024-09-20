@@ -1,0 +1,52 @@
+diff --git a/gcc/cp/rtti.c b/gcc/cp/rtti.c
+index f20941c41..71914b090 100644
+--- a/gcc/cp/rtti.c
++++ b/gcc/cp/rtti.c
+@@ -430,8 +430,6 @@ get_tinfo_decl (tree type)
+     type = build_function_type (TREE_TYPE (type),
+ 				TREE_CHAIN (TYPE_ARG_TYPES (type)));
+ 
+-  type = complete_type (type);
+-
+   /* For a class type, the variable is cached in the type node
+      itself.  */
+   if (CLASS_TYPE_P (type))
+@@ -1649,7 +1647,17 @@ emit_tinfo_decl (tree decl)
+       tree init;
+ 
+       DECL_EXTERNAL (decl) = 0;
+-      init = get_pseudo_ti_init (type, get_pseudo_ti_index (type));
++      int pseudo_ix = get_pseudo_ti_index (type);
++      const tinfo_s *ti = get_tinfo_desc (pseudo_ix);
++      if (TREE_TYPE (decl) != ti->type)
++	{
++	  /* If the class became complete since we first called get_tinfo_decl,
++	     its type_info descriptor may have switched from __class_type_info
++	     to e.g. __si_class_type_info.  */
++	  TREE_TYPE (decl) = ti->type;
++	  relayout_decl (decl);
++	}
++      init = get_pseudo_ti_init (type, pseudo_ix);
+       DECL_INITIAL (decl) = init;
+       mark_used (decl);
+       cp_finish_decl (decl, init, false, NULL_TREE, 0);
+diff --git a/gcc/testsuite/g++.dg/rtti/typeid-complete1.C b/gcc/testsuite/g++.dg/rtti/typeid-complete1.C
+new file mode 100644
+index 000000000..8d3fec468
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/rtti/typeid-complete1.C
+@@ -0,0 +1,14 @@
++// PR c++/102651
++
++#include <typeinfo>
++
++template <typename T>
++struct S : T{
++    T x;
++};
++
++const void *p;
++int main()
++{
++  p = &typeid( S<void>** );
++}

@@ -1,0 +1,153 @@
+diff --git a/gcc/cp/pt.c b/gcc/cp/pt.c
+index 060736b40..0c3bdaede 100644
+--- a/gcc/cp/pt.c
++++ b/gcc/cp/pt.c
+@@ -20580,6 +20580,22 @@ type_unification_real (tree tparms,
+ 	    if (check_non_deducible_conversion (parm, arg, strict, flags,
+ 						explain_p))
+ 	      return 1;
++
++	    if (BRACE_ENCLOSED_INITIALIZER_P (arg)
++		&& (TREE_CODE (parm) == ARRAY_TYPE || is_std_init_list (parm)))
++	      {
++		tree elt, elttype;
++		unsigned int i;
++
++		if (TREE_CODE (parm) == ARRAY_TYPE)
++		  elttype = TREE_TYPE (parm);
++		else
++		  elttype = TREE_VEC_ELT (CLASSTYPE_TI_ARGS (parm), 0);
++		FOR_EACH_CONSTRUCTOR_VALUE (CONSTRUCTOR_ELTS (arg), i, elt)
++		  if (check_non_deducible_conversion (elttype, elt, strict,
++						      flags, explain_p))
++		    return 1;
++	      }
+ 	  }
+ 
+       /* During partial ordering, we deduce dependent template args.  */
+@@ -21631,24 +21647,30 @@ unify (tree tparms, tree targs, tree parm, tree arg, int strict,
+ 	    return unify_success (explain_p);
+ 	}
+ 
+-      FOR_EACH_CONSTRUCTOR_VALUE (CONSTRUCTOR_ELTS (arg), i, elt)
+-	{
+-	  int elt_strict = strict;
++      if (strict != DEDUCE_EXACT
++	  && TYPE_P (elttype)
++	  && !uses_deducible_template_parms (elttype))
++	/* If ELTTYPE has no deducible template parms, skip deduction from
++	   the list elements.  */;
++      else
++	FOR_EACH_CONSTRUCTOR_VALUE (CONSTRUCTOR_ELTS (arg), i, elt)
++	  {
++	    int elt_strict = strict;
+ 
+-	  if (elt == error_mark_node)
+-	    return unify_invalid (explain_p);
++	    if (elt == error_mark_node)
++	      return unify_invalid (explain_p);
+ 
+-	  if (!BRACE_ENCLOSED_INITIALIZER_P (elt))
+-	    {
+-	      tree type = TREE_TYPE (elt);
+-	      if (type == error_mark_node)
+-		return unify_invalid (explain_p);
+-	      /* It should only be possible to get here for a call.  */
+-	      gcc_assert (elt_strict & UNIFY_ALLOW_OUTER_LEVEL);
+-	      elt_strict |= maybe_adjust_types_for_deduction
+-		(DEDUCE_CALL, &elttype, &type, elt);
+-	      elt = type;
+-	    }
++	    if (!BRACE_ENCLOSED_INITIALIZER_P (elt))
++	      {
++		tree type = TREE_TYPE (elt);
++		if (type == error_mark_node)
++		  return unify_invalid (explain_p);
++		/* It should only be possible to get here for a call.  */
++		gcc_assert (elt_strict & UNIFY_ALLOW_OUTER_LEVEL);
++		elt_strict |= maybe_adjust_types_for_deduction
++		  (DEDUCE_CALL, &elttype, &type, elt);
++		elt = type;
++	      }
+ 
+ 	  RECUR_AND_CHECK_FAILURE (tparms, targs, elttype, elt, elt_strict,
+ 				   explain_p);
+diff --git a/gcc/testsuite/g++.dg/cpp0x/initlist102.C b/gcc/testsuite/g++.dg/cpp0x/initlist102.C
+new file mode 100644
+index 000000000..e11486629
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/initlist102.C
+@@ -0,0 +1,39 @@
++// PR c++/85977, Incorrect handling of array reference size deduction
++// { dg-do compile { target c++11 } }
++
++template <int N>
++void fn1 (const char (&)[N]) { static_assert (N == 3, "fn1");}
++
++template <int N>
++void fn2 (const short (&)[N]) { static_assert (N == 3, "fn2");}
++
++template <int N>
++void fn3 (const int (&)[N]) { static_assert (N == 3, "fn2");}
++
++template <int N>
++void fn4 (const long (&)[N]) { static_assert (N == 3, "fn4");}
++
++template <int N>
++void fn5 (const unsigned char (&)[N]) { static_assert (N == 3, "fn5");}
++
++template <int N>
++void fn6 (const unsigned short (&)[N]) { static_assert (N == 3, "fn6");}
++
++template <int N>
++void fn7 (const unsigned int (&)[N]) { static_assert (N == 3, "fn7");}
++
++template <int N>
++void fn8 (const unsigned int (&)[N]) { static_assert (N == 3, "fn8");}
++
++void
++bar ()
++{
++  fn1 ({1, 2, 3});
++  fn2 ({1, 2, 3});
++  fn3 ({1, 2, 3});
++  fn4 ({1, 2, 3});
++  fn5 ({1, 2, 3});
++  fn6 ({1, 2, 3});
++  fn7 ({1, 2, 3});
++  fn8 ({1, 2, 3});
++}
+diff --git a/gcc/testsuite/g++.dg/cpp0x/initlist103.C b/gcc/testsuite/g++.dg/cpp0x/initlist103.C
+new file mode 100644
+index 000000000..0c1923c6a
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/initlist103.C
+@@ -0,0 +1,11 @@
++// PR c++/85977, Incorrect handling of array reference size deduction
++// { dg-do compile { target c++11 } }
++
++template <int N>
++void fn (const char (&)[N]) { }
++
++void
++bar ()
++{
++  fn ({1.2}); // { dg-error "narrowing" }
++}
+diff --git a/gcc/testsuite/g++.dg/cpp0x/initlist104.C b/gcc/testsuite/g++.dg/cpp0x/initlist104.C
+new file mode 100644
+index 000000000..99487a706
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/initlist104.C
+@@ -0,0 +1,11 @@
++// PR c++/85977, Incorrect handling of array reference size deduction
++// { dg-do compile { target c++11 } }
++
++template <typename T, int N>
++void fn (const T (&)[N]) { static_assert (N == 3, "fn"); }
++
++void
++bar ()
++{
++  fn ({1, 2, 3});
++}

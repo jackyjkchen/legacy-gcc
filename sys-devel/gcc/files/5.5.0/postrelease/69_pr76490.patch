@@ -1,0 +1,122 @@
+diff --git a/gcc/testsuite/gcc.dg/pr52904.c b/gcc/testsuite/gcc.dg/pr52904.c
+index 107d89ee7..2818c247b 100644
+--- a/gcc/testsuite/gcc.dg/pr52904.c
++++ b/gcc/testsuite/gcc.dg/pr52904.c
+@@ -14,7 +14,7 @@ wait_reading_process_output (void)
+ 	nfds++;
+     }
+ 
+-  if (nfds < 0) /* { dg-bogus "assuming signed overflow does not occur" } */
++  if (nfds < 0) /* { dg-bogus "assuming signed overflow does not occur" "" { xfail *-*-* } } */
+     return 1;
+   return 0;
+ }
+diff --git a/gcc/testsuite/gfortran.fortran-torture/compile/pr76490.f90 b/gcc/testsuite/gfortran.fortran-torture/compile/pr76490.f90
+new file mode 100644
+index 000000000..aeb071708
+--- /dev/null
++++ b/gcc/testsuite/gfortran.fortran-torture/compile/pr76490.f90
+@@ -0,0 +1,23 @@
++program membug
++call bug1()
++end program membug
++subroutine unknown(x1,y1,ibig)
++   write(*,*)x1,y1,ibig
++end subroutine unknown
++subroutine bug1()
++real arrayq(3000)
++   isize=0
++   ibig=-1
++   x2=0
++10 continue
++   isize=isize+1
++   arrayq(isize)=x2
++15 continue
++   call unknown(x1,y1,ibig)
++   if(ibig.eq.1)then
++      goto 10
++   elseif(ibig.eq.2)then
++      isize=max(1,isize-1)
++      goto 15
++   endif
++end subroutine bug1
+diff --git a/gcc/tree-vrp.c b/gcc/tree-vrp.c
+index 4ed8bb60b..d7ae43ffd 100644
+--- a/gcc/tree-vrp.c
++++ b/gcc/tree-vrp.c
+@@ -874,8 +874,20 @@ update_value_range (const_tree var, value_range_t *new_vr)
+ 	{
+ 	  value_range_d nr;
+ 	  nr.type = rtype;
+-	  nr.min = wide_int_to_tree (TREE_TYPE (var), min);
+-	  nr.max = wide_int_to_tree (TREE_TYPE (var), max);
++	  /* Range info on SSA names doesn't carry overflow information
++	     so make sure to preserve the overflow bit on the lattice.  */
++	  if (new_vr->type == VR_RANGE
++	      && is_negative_overflow_infinity (new_vr->min)
++	      && wi::eq_p (new_vr->min, min))
++	    nr.min = new_vr->min;
++	  else
++	    nr.min = wide_int_to_tree (TREE_TYPE (var), min);
++	  if (new_vr->type == VR_RANGE
++	      && is_positive_overflow_infinity (new_vr->max)
++	      && wi::eq_p (new_vr->max, max))
++	    nr.max = new_vr->max;
++	  else
++	    nr.max = wide_int_to_tree (TREE_TYPE (var), max);
+ 	  nr.equiv = NULL;
+ 	  vrp_intersect_ranges (new_vr, &nr);
+ 	}
+@@ -1305,7 +1317,10 @@ operand_less_p (tree val, tree val2)
+ {
+   /* LT is folded faster than GE and others.  Inline the common case.  */
+   if (TREE_CODE (val) == INTEGER_CST && TREE_CODE (val2) == INTEGER_CST)
+-    return tree_int_cst_lt (val, val2);
++    {
++      if (! is_positive_overflow_infinity (val2))
++	return tree_int_cst_lt (val, val2);
++    }
+   else
+     {
+       tree tcmp;
+@@ -1641,7 +1656,7 @@ static tree
+ value_range_constant_singleton (value_range_t *vr)
+ {
+   if (vr->type == VR_RANGE
+-      && operand_equal_p (vr->min, vr->max, 0)
++      && vrp_operand_equal_p (vr->min, vr->max)
+       && is_gimple_min_invariant (vr->min))
+     return vr->min;
+ 
+@@ -7132,8 +7147,7 @@ vrp_valueize (tree name)
+     {
+       value_range_t *vr = get_value_range (name);
+       if (vr->type == VR_RANGE
+-	  && (vr->min == vr->max
+-	      || operand_equal_p (vr->min, vr->max, 0)))
++	  && vrp_operand_equal_p (vr->min, vr->max))
+ 	return vr->min;
+     }
+   return name;
+@@ -8090,8 +8104,8 @@ union_ranges (enum value_range_type *vr0type,
+ 	      enum value_range_type vr1type,
+ 	      tree vr1min, tree vr1max)
+ {
+-  bool mineq = operand_equal_p (*vr0min, vr1min, 0);
+-  bool maxeq = operand_equal_p (*vr0max, vr1max, 0);
++  bool mineq = vrp_operand_equal_p (*vr0min, vr1min);
++  bool maxeq = vrp_operand_equal_p (*vr0max, vr1max);
+ 
+   /* [] is vr0, () is vr1 in the following classification comments.  */
+   if (mineq && maxeq)
+@@ -8361,8 +8375,8 @@ intersect_ranges (enum value_range_type *vr0type,
+ 		  enum value_range_type vr1type,
+ 		  tree vr1min, tree vr1max)
+ {
+-  bool mineq = operand_equal_p (*vr0min, vr1min, 0);
+-  bool maxeq = operand_equal_p (*vr0max, vr1max, 0);
++  bool mineq = vrp_operand_equal_p (*vr0min, vr1min);
++  bool maxeq = vrp_operand_equal_p (*vr0max, vr1max);
+ 
+   /* [] is vr0, () is vr1 in the following classification comments.  */
+   if (mineq && maxeq)

@@ -1,0 +1,129 @@
+diff --git a/gcc/tree-switch-conversion.c b/gcc/tree-switch-conversion.c
+index e66b128d9..74c9f031a 100644
+--- a/gcc/tree-switch-conversion.c
++++ b/gcc/tree-switch-conversion.c
+@@ -1093,7 +1093,7 @@ group_cluster::dump (FILE *f, bool details)
+   for (unsigned i = 0; i < m_cases.length (); i++)
+     {
+       simple_cluster *sc = static_cast<simple_cluster *> (m_cases[i]);
+-      comparison_count += sc->m_range_p ? 2 : 1;
++      comparison_count += sc->get_comparison_count ();
+     }
+ 
+   unsigned HOST_WIDE_INT range = get_range (get_low (), get_high ());
+@@ -1188,11 +1188,24 @@ jump_table_cluster::find_jump_tables (vec<cluster *> &clusters)
+ 
+   min.quick_push (min_cluster_item (0, 0, 0));
+ 
++  unsigned HOST_WIDE_INT max_ratio
++    = (optimize_insn_for_size_p ()
++       ? param_jump_table_max_growth_ratio_for_size
++       : param_jump_table_max_growth_ratio_for_speed);
++
+   for (unsigned i = 1; i <= l; i++)
+     {
+       /* Set minimal # of clusters with i-th item to infinite.  */
+       min.quick_push (min_cluster_item (INT_MAX, INT_MAX, INT_MAX));
+ 
++      /* Pre-calculate number of comparisons for the clusters.  */
++      HOST_WIDE_INT comparison_count = 0;
++      for (unsigned k = 0; k <= i - 1; k++)
++	{
++	  simple_cluster *sc = static_cast<simple_cluster *> (clusters[k]);
++	  comparison_count += sc->get_comparison_count ();
++	}
++
+       for (unsigned j = 0; j < i; j++)
+ 	{
+ 	  unsigned HOST_WIDE_INT s = min[j].m_non_jt_cases;
+@@ -1203,10 +1216,15 @@ jump_table_cluster::find_jump_tables (vec<cluster *> &clusters)
+ 	  if ((min[j].m_count + 1 < min[i].m_count
+ 	       || (min[j].m_count + 1 == min[i].m_count
+ 		   && s < min[i].m_non_jt_cases))
+-	      && can_be_handled (clusters, j, i - 1))
++	      && can_be_handled (clusters, j, i - 1, max_ratio,
++				 comparison_count))
+ 	    min[i] = min_cluster_item (min[j].m_count + 1, j, s);
++
++	  simple_cluster *sc = static_cast<simple_cluster *> (clusters[j]);
++	  comparison_count -= sc->get_comparison_count ();
+ 	}
+ 
++      gcc_checking_assert (comparison_count == 0);
+       gcc_checking_assert (min[i].m_count != INT_MAX);
+     }
+ 
+@@ -1244,7 +1262,9 @@ jump_table_cluster::find_jump_tables (vec<cluster *> &clusters)
+ 
+ bool
+ jump_table_cluster::can_be_handled (const vec<cluster *> &clusters,
+-				    unsigned start, unsigned end)
++				    unsigned start, unsigned end,
++				    unsigned HOST_WIDE_INT max_ratio,
++				    unsigned HOST_WIDE_INT comparison_count)
+ {
+   /* If the switch is relatively small such that the cost of one
+      indirect jump on the target are higher than the cost of a
+@@ -1263,10 +1283,6 @@ jump_table_cluster::can_be_handled (const vec<cluster *> &clusters,
+   if (start == end)
+     return true;
+ 
+-  unsigned HOST_WIDE_INT max_ratio
+-    = (optimize_insn_for_size_p ()
+-       ? param_jump_table_max_growth_ratio_for_size
+-       : param_jump_table_max_growth_ratio_for_speed);
+   unsigned HOST_WIDE_INT range = get_range (clusters[start]->get_low (),
+ 					    clusters[end]->get_high ());
+   /* Check overflow.  */
+@@ -1280,18 +1296,6 @@ jump_table_cluster::can_be_handled (const vec<cluster *> &clusters,
+   if (lhs < range)
+     return false;
+ 
+-  /* First make quick guess as each cluster
+-     can add at maximum 2 to the comparison_count.  */
+-  if (lhs > 2 * max_ratio * (end - start + 1))
+-    return false;
+-
+-  unsigned HOST_WIDE_INT comparison_count = 0;
+-  for (unsigned i = start; i <= end; i++)
+-    {
+-      simple_cluster *sc = static_cast<simple_cluster *> (clusters[i]);
+-      comparison_count += sc->m_range_p ? 2 : 1;
+-    }
+-
+   return lhs <= max_ratio * comparison_count;
+ }
+ 
+diff --git a/gcc/tree-switch-conversion.h b/gcc/tree-switch-conversion.h
+index 727d69697..e78074c91 100644
+--- a/gcc/tree-switch-conversion.h
++++ b/gcc/tree-switch-conversion.h
+@@ -174,6 +174,13 @@ public:
+     return tree_int_cst_equal (get_low (), get_high ());
+   }
+ 
++  /* Return number of comparisons needed for the case.  */
++  unsigned
++  get_comparison_count ()
++  {
++    return m_range_p ? 2 : 1;
++  }
++
+   /* Low value of the case.  */
+   tree m_low;
+ 
+@@ -257,9 +264,12 @@ public:
+   static vec<cluster *> find_jump_tables (vec<cluster *> &clusters);
+ 
+   /* Return true when cluster starting at START and ending at END (inclusive)
+-     can build a jump-table.  */
++     can build a jump-table.  COMPARISON_COUNT is number of comparison
++     operations needed if the clusters are expanded as decision tree.
++     MAX_RATIO tells about the maximum code growth (in percent).  */
+   static bool can_be_handled (const vec<cluster *> &clusters, unsigned start,
+-			      unsigned end);
++			      unsigned end, unsigned HOST_WIDE_INT max_ratio,
++			      unsigned HOST_WIDE_INT comparison_count);
+ 
+   /* Return true if cluster starting at START and ending at END (inclusive)
+      is profitable transformation.  */

@@ -1,0 +1,57 @@
+diff --git a/gcc/cp/pt.c b/gcc/cp/pt.c
+index 1fe0c6281..b7ace727e 100644
+--- a/gcc/cp/pt.c
++++ b/gcc/cp/pt.c
+@@ -9758,6 +9758,13 @@ lookup_template_class_1 (tree d1, tree arglist, tree in_decl, tree context,
+       /* From here on, we're only interested in the most general
+ 	 template.  */
+ 
++      /* Shortcut looking up the current class scope again.  */
++      if (current_class_type)
++	if (tree ti = CLASSTYPE_TEMPLATE_INFO (current_class_type))
++	  if (gen_tmpl == most_general_template (TI_TEMPLATE (ti))
++	      && comp_template_args (arglist, TI_ARGS (ti)))
++	    return current_class_type;
++
+       /* Calculate the BOUND_ARGS.  These will be the args that are
+ 	 actually tsubst'd into the definition to create the
+ 	 instantiation.  */
+diff --git a/gcc/testsuite/g++.dg/cpp1z/nontype-auto22.C b/gcc/testsuite/g++.dg/cpp1z/nontype-auto22.C
+new file mode 100644
+index 000000000..1882d2586
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp1z/nontype-auto22.C
+@@ -0,0 +1,17 @@
++// PR c++/104802
++// { dg-do compile { target c++17 } }
++
++template<auto const& ... Args>
++struct S {
++  template<typename=void>
++  void operator()() const {}
++};
++
++struct weird_ {
++  int operator&() const { return 123; }
++} const weird {};
++
++int main() {
++  S<weird> s {};
++  s();
++}
+diff --git a/gcc/testsuite/g++.dg/cpp2a/concepts-partial-spec14.C b/gcc/testsuite/g++.dg/cpp2a/concepts-partial-spec14.C
+new file mode 100644
+index 000000000..c94b40133
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp2a/concepts-partial-spec14.C
+@@ -0,0 +1,10 @@
++// PR c++/98614
++// { dg-do compile { target c++20 } }
++
++template<class T>
++struct A;
++
++template<class T> requires true
++struct A<T> {
++  A(A<T> const&) = default;
++};

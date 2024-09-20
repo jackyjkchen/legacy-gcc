@@ -1,0 +1,51 @@
+diff --git a/gcc/fortran/resolve.c b/gcc/fortran/resolve.c
+index ecdc4b99f..2adaf654f 100644
+--- a/gcc/fortran/resolve.c
++++ b/gcc/fortran/resolve.c
+@@ -1573,8 +1573,6 @@ is_illegal_recursion (gfc_symbol* sym, gfc_namespace* context)
+       || gfc_fl_struct (sym->attr.flavor))
+     return false;
+ 
+-  gcc_assert (sym->attr.flavor == FL_PROCEDURE);
+-
+   /* If we've got an ENTRY, find real procedure.  */
+   if (sym->attr.entry && sym->ns->entries)
+     proc_sym = sym->ns->entries->sym;
+diff --git a/gcc/fortran/symbol.c b/gcc/fortran/symbol.c
+index dae725368..7b2013e40 100644
+--- a/gcc/fortran/symbol.c
++++ b/gcc/fortran/symbol.c
+@@ -1637,7 +1637,8 @@ gfc_add_procedure (symbol_attribute *attr, procedure_type t,
+   if (where == NULL)
+     where = &gfc_current_locus;
+ 
+-  if (attr->proc != PROC_UNKNOWN && !attr->module_procedure)
++  if (attr->proc != PROC_UNKNOWN && !attr->module_procedure
++      && attr->access == ACCESS_UNKNOWN)
+     {
+       if (attr->proc == PROC_ST_FUNCTION && t == PROC_INTERNAL
+ 	  && !gfc_notification_std (GFC_STD_F2008))
+diff --git a/gcc/testsuite/gfortran.dg/public_private_module_10.f90 b/gcc/testsuite/gfortran.dg/public_private_module_10.f90
+new file mode 100644
+index 000000000..1877cc232
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/public_private_module_10.f90
+@@ -0,0 +1,18 @@
++! { dg-do compile }
++! PR 87734 - this used to issue spurious errors.
++
++module m_vstring
++  implicit none
++
++  public :: vstring_length
++
++contains
++
++  subroutine vstring_cast()
++    character ( len = vstring_length() ) :: char_string
++  end subroutine
++
++  pure integer function vstring_length ()
++  end function
++
++end module

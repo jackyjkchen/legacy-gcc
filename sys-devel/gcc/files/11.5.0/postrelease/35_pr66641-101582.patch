@@ -1,0 +1,250 @@
+diff --git a/gcc/cp/parser.c b/gcc/cp/parser.c
+index 4f75f19ac..098d2106f 100644
+--- a/gcc/cp/parser.c
++++ b/gcc/cp/parser.c
+@@ -2507,6 +2507,8 @@ static tree cp_parser_std_attribute_spec
+   (cp_parser *);
+ static tree cp_parser_std_attribute_spec_seq
+   (cp_parser *);
++static size_t cp_parser_skip_std_attribute_spec_seq
++  (cp_parser *, size_t);
+ static size_t cp_parser_skip_attributes_opt
+   (cp_parser *, size_t);
+ static bool cp_parser_extension_opt
+@@ -14039,6 +14041,30 @@ cp_parser_declaration (cp_parser* parser, tree prefix_attrs)
+   cp_token *token2 = (token1->type == CPP_EOF
+ 		      ? token1 : cp_lexer_peek_nth_token (parser->lexer, 2));
+ 
++  if (token1->type == CPP_SEMICOLON)
++    {
++      cp_lexer_consume_token (parser->lexer);
++      /* A declaration consisting of a single semicolon is invalid
++       * before C++11.  Allow it unless we're being pedantic.  */
++      if (cxx_dialect < cxx11)
++	pedwarn (input_location, OPT_Wpedantic, "extra %<;%>");
++      return;
++    }
++  else if (cp_lexer_nth_token_is (parser->lexer,
++				  cp_parser_skip_std_attribute_spec_seq (parser,
++									 1),
++				  CPP_SEMICOLON))
++    {
++      location_t attrs_loc = token1->location;
++      tree std_attrs = cp_parser_std_attribute_spec_seq (parser);
++      if (std_attrs != NULL_TREE)
++	warning_at (make_location (attrs_loc, attrs_loc, parser->lexer),
++		    OPT_Wattributes, "attribute ignored");
++      if (cp_lexer_next_token_is (parser->lexer, CPP_SEMICOLON))
++	cp_lexer_consume_token (parser->lexer);
++      return;
++    }
++
+   /* Get the high-water mark for the DECLARATOR_OBSTACK.  */
+   void *p = obstack_alloc (&declarator_obstack, 0);
+ 
+@@ -14189,14 +14215,6 @@ cp_parser_toplevel_declaration (cp_parser* parser)
+        cp_parser_declaration.  (A #pragma at block scope is
+        handled in cp_parser_statement.)  */
+     cp_parser_pragma (parser, pragma_external, NULL);
+-  else if (token->type == CPP_SEMICOLON)
+-    {
+-      cp_lexer_consume_token (parser->lexer);
+-      /* A declaration consisting of a single semicolon is invalid
+-       * before C++11.  Allow it unless we're being pedantic.  */
+-      if (cxx_dialect < cxx11)
+-	pedwarn (input_location, OPT_Wpedantic, "extra %<;%>");
+-    }
+   else
+     /* Parse the declaration itself.  */
+     cp_parser_declaration (parser, NULL_TREE);
+@@ -14244,6 +14262,7 @@ cp_parser_block_declaration (cp_parser *parser,
+   /* Peek at the next token to figure out which kind of declaration is
+      present.  */
+   cp_token *token1 = cp_lexer_peek_token (parser->lexer);
++  size_t attr_idx;
+ 
+   /* If the next keyword is `asm', we have an asm-definition.  */
+   if (token1->keyword == RID_ASM)
+@@ -14297,6 +14316,18 @@ cp_parser_block_declaration (cp_parser *parser,
+   /* If the next token is `static_assert' we have a static assertion.  */
+   else if (token1->keyword == RID_STATIC_ASSERT)
+     cp_parser_static_assert (parser, /*member_p=*/false);
++  /* If the next tokens after attributes is `using namespace', then we have
++     a using-directive.  */
++  else if ((attr_idx = cp_parser_skip_std_attribute_spec_seq (parser, 1)) != 1
++	   && cp_lexer_nth_token_is_keyword (parser->lexer, attr_idx,
++					     RID_USING)
++	   && cp_lexer_nth_token_is_keyword (parser->lexer, attr_idx + 1,
++					     RID_NAMESPACE))
++    {
++      if (statement_p)
++	cp_parser_commit_to_tentative_parse (parser);
++      cp_parser_using_directive (parser);
++    }
+   /* Anything else must be a simple-declaration.  */
+   else
+     cp_parser_simple_declaration (parser, !statement_p,
+@@ -20982,14 +21013,21 @@ cp_parser_alias_declaration (cp_parser* parser)
+ /* Parse a using-directive.
+ 
+    using-directive:
+-     using namespace :: [opt] nested-name-specifier [opt]
+-       namespace-name ;  */
++     attribute-specifier-seq [opt] using namespace :: [opt]
++       nested-name-specifier [opt] namespace-name ;  */
+ 
+ static void
+ cp_parser_using_directive (cp_parser* parser)
+ {
+   tree namespace_decl;
+-  tree attribs;
++  tree attribs = cp_parser_std_attribute_spec_seq (parser);
++  if (cp_lexer_next_token_is (parser->lexer, CPP_SEMICOLON))
++    {
++      /* Error during attribute parsing that resulted in skipping
++	 to next semicolon.  */
++      cp_parser_require (parser, CPP_SEMICOLON, RT_SEMICOLON);
++      return;
++    }
+ 
+   /* Look for the `using' keyword.  */
+   cp_parser_require_keyword (parser, RID_USING, RT_USING);
+@@ -21006,8 +21044,9 @@ cp_parser_using_directive (cp_parser* parser)
+   /* Get the namespace being used.  */
+   namespace_decl = cp_parser_namespace_name (parser);
+   cp_warn_deprecated_use_scopes (namespace_decl);
+-  /* And any specified attributes.  */
+-  attribs = cp_parser_attributes_opt (parser);
++  /* And any specified GNU attributes.  */
++  if (cp_next_tokens_can_be_gnu_attribute_p (parser))
++    attribs = chainon (attribs, cp_parser_gnu_attributes_opt (parser));
+ 
+   /* Update the symbol table.  */
+   finish_using_directive (namespace_decl, attribs);
+diff --git a/gcc/testsuite/g++.dg/cpp0x/gen-attrs-45.C b/gcc/testsuite/g++.dg/cpp0x/gen-attrs-45.C
+index 573a1ab6c..2bdd549ea 100644
+--- a/gcc/testsuite/g++.dg/cpp0x/gen-attrs-45.C
++++ b/gcc/testsuite/g++.dg/cpp0x/gen-attrs-45.C
+@@ -1,4 +1,4 @@
+ // PR c++/52906
+ // { dg-do compile { target c++11 } }
+ 
+-[[gnu::deprecated]]; // { dg-error "does not declare anything" }
++[[gnu::deprecated]]; // { dg-warning "attribute ignored" }
+diff --git a/gcc/testsuite/g++.dg/cpp0x/gen-attrs-58.C b/gcc/testsuite/g++.dg/cpp0x/gen-attrs-58.C
+index f760f5608..dc0172206 100644
+--- a/gcc/testsuite/g++.dg/cpp0x/gen-attrs-58.C
++++ b/gcc/testsuite/g++.dg/cpp0x/gen-attrs-58.C
+@@ -2,4 +2,4 @@
+ // { dg-do compile { target c++11 } }
+ 
+ namespace N { int i; }
+-using namespace N alignas(int); // { dg-warning "ignored" }
++alignas(int) using namespace N; // { dg-warning "ignored" }
+diff --git a/gcc/testsuite/g++.dg/cpp0x/gen-attrs-59.C b/gcc/testsuite/g++.dg/cpp0x/gen-attrs-59.C
+index c7839fefe..9776dc337 100644
+--- a/gcc/testsuite/g++.dg/cpp0x/gen-attrs-59.C
++++ b/gcc/testsuite/g++.dg/cpp0x/gen-attrs-59.C
+@@ -2,4 +2,11 @@
+ // { dg-do compile { target c++11 } }
+ 
+ namespace N {}
+-using namespace N alignas(X); // { dg-error "declared" }
++alignas(X) using namespace N; // { dg-error "declared" }
++namespace O {}
++using namespace O alignas(X); // { dg-error "expected" }
++// { dg-error "declared" "" { target *-*-* } .-1 }
++// { dg-warning "attribute ignored" "" { target *-*-* } .-2 }
++namespace P {}
++using namespace P alignas(int); // { dg-error "expected" }
++// { dg-warning "attribute ignored" "" { target *-*-* } .-1 }
+diff --git a/gcc/testsuite/g++.dg/cpp0x/gen-attrs-75.C b/gcc/testsuite/g++.dg/cpp0x/gen-attrs-75.C
+new file mode 100644
+index 000000000..bac80aa02
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/gen-attrs-75.C
+@@ -0,0 +1,35 @@
++// PR c++/101582
++// { dg-do compile }
++// { dg-options "" }
++
++;
++[[]] [[]] [[]];	// { dg-warning "attributes only available with" "" { target c++98_only } }
++[[foobar]];	// { dg-warning "attribute ignored" }
++// { dg-warning "attributes only available with" "" { target c++98_only } .-1 }
++
++extern "C" ;
++extern "C" [[]];	// { dg-warning "attributes only available with" "" { target c++98_only } }
++extern "C" extern "C" ;
++extern "C" extern "C" [[]][[]][[]];	// { dg-warning "attributes only available with" "" { target c++98_only } }
++__extension__ ;
++__extension__ [[]];			// { dg-warning "attributes only available with" "" { target c++98_only } }
++__extension__ __extension__ ;
++__extension__ __extension__ [[]][[]];	// { dg-warning "attributes only available with" "" { target c++98_only } }
++
++namespace N {
++
++;
++[[]] [[]] [[]];	// { dg-warning "attributes only available with" "" { target c++98_only } }
++[[foobar]];	// { dg-warning "attribute ignored" }
++// { dg-warning "attributes only available with" "" { target c++98_only } .-1 }
++
++extern "C" ;
++extern "C" [[]];	// { dg-warning "attributes only available with" "" { target c++98_only } }
++extern "C" extern "C" ;
++extern "C" extern "C" [[]][[]][[]];	// { dg-warning "attributes only available with" "" { target c++98_only } }
++__extension__ ;
++__extension__ [[]];			// { dg-warning "attributes only available with" "" { target c++98_only } }
++__extension__ __extension__ ;
++__extension__ __extension__ [[]][[]];	// { dg-warning "attributes only available with" "" { target c++98_only } }
++
++}
+diff --git a/gcc/testsuite/g++.dg/lookup/strong-using.C b/gcc/testsuite/g++.dg/lookup/strong-using.C
+index 9d58fddbb..2bd821ea2 100644
+--- a/gcc/testsuite/g++.dg/lookup/strong-using.C
++++ b/gcc/testsuite/g++.dg/lookup/strong-using.C
+@@ -8,3 +8,12 @@ namespace A
+ 
+   using namespace B __attribute__ ((strong)); // { dg-warning "no longer supported" "" }
+ }
++
++namespace C
++{
++  namespace D // { dg-message "inline namespace" }
++  {
++  }
++
++  [[gnu::strong]] using namespace D; // { dg-warning "no longer supported" "" }
++}
+diff --git a/gcc/testsuite/g++.dg/lookup/strong-using2.C b/gcc/testsuite/g++.dg/lookup/strong-using2.C
+index 172849496..989827cac 100644
+--- a/gcc/testsuite/g++.dg/lookup/strong-using2.C
++++ b/gcc/testsuite/g++.dg/lookup/strong-using2.C
+@@ -9,3 +9,12 @@ namespace A
+ 
+   using namespace B __attribute__ ((strong)); // { dg-bogus "no longer supported" }
+ }
++
++namespace C
++{
++  namespace D // { dg-bogus "inline namespace" }
++  {
++  }
++
++  [[gnu::strong]] using namespace D; // { dg-bogus "no longer supported" }
++}
+diff --git a/gcc/testsuite/g++.dg/modules/pr101582-1.C b/gcc/testsuite/g++.dg/modules/pr101582-1.C
+new file mode 100644
+index 000000000..1d3a3fcb6
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/modules/pr101582-1.C
+@@ -0,0 +1,9 @@
++// PR c++/101582
++// { dg-additional-options "-fmodules-ts" }
++export module pr101582;
++// { dg-module-cmi "pr101582" }
++export ;			// { dg-error "export declaration does not declare anything" "" { xfail *-*-* } }
++export [[]];			// { dg-error "export declaration does not declare anything" "" { xfail *-*-* } }
++export				// { dg-error "export declaration does not declare anything" "" { xfail *-*-* } }
++{
++}

@@ -1,0 +1,41 @@
+diff --git a/gcc/symtab.c b/gcc/symtab.c
+index 8009dc9e9..3aeefd05f 100644
+--- a/gcc/symtab.c
++++ b/gcc/symtab.c
+@@ -1933,11 +1933,11 @@ symtab_node::nonzero_address ()
+       return true;
+     }
+ 
+-  /* If target is defined and not extern, we know it will be output and thus
+-     it will bind to non-NULL.
+-     Play safe for flag_delete_null_pointer_checks where weak definition maye
++  /* If target is defined and either comdat or not extern, we know it will be
++     output and thus it will bind to non-NULL.
++     Play safe for flag_delete_null_pointer_checks where weak definition may
+      be re-defined by NULL.  */
+-  if (definition && !DECL_EXTERNAL (decl)
++  if (definition && (!DECL_EXTERNAL (decl) || DECL_COMDAT (decl))
+       && (flag_delete_null_pointer_checks || !DECL_WEAK (decl)))
+     {
+       if (!DECL_WEAK (decl))
+diff --git a/gcc/testsuite/g++.dg/expr/pmf-3.C b/gcc/testsuite/g++.dg/expr/pmf-3.C
+new file mode 100644
+index 000000000..fac42fc23
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/expr/pmf-3.C
+@@ -0,0 +1,15 @@
++// PR c++/80485
++// { dg-do compile { target c++11 } }
++
++struct dummy {
++  void nonnull() {};
++  void nonnull2();
++};
++
++typedef void (dummy::*safe_bool)();
++
++constexpr safe_bool a = &dummy::nonnull;
++constexpr safe_bool b = &dummy::nonnull2;
++
++static_assert( static_cast<bool>( a ), "" );
++static_assert( static_cast<bool>( b ), "" );

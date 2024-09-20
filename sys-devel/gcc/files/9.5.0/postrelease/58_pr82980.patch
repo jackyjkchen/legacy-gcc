@@ -1,0 +1,62 @@
+diff --git a/gcc/cp/lambda.c b/gcc/cp/lambda.c
+index 46ee390a9..8ad96c9b2 100644
+--- a/gcc/cp/lambda.c
++++ b/gcc/cp/lambda.c
+@@ -208,6 +208,24 @@ lambda_function (tree lambda)
+   return lambda;
+ }
+ 
++/* True if EXPR is an expression whose type can be used directly in lambda
++   capture.  Not to be used for 'auto'.  */
++
++static bool
++type_deducible_expression_p (tree expr)
++{
++  if (!type_dependent_expression_p (expr))
++    return true;
++  if (BRACE_ENCLOSED_INITIALIZER_P (expr)
++      || TREE_CODE (expr) == EXPR_PACK_EXPANSION)
++    return false;
++  tree t = non_reference (TREE_TYPE (expr));
++  if (!t) return false;
++  while (TREE_CODE (t) == POINTER_TYPE)
++    t = TREE_TYPE (t);
++  return currently_open_class (t);
++}
++
+ /* Returns the type to use for the FIELD_DECL corresponding to the
+    capture of EXPR.  EXPLICIT_INIT_P indicates whether this is a
+    C++14 init capture, and BY_REFERENCE_P indicates whether we're
+@@ -231,7 +249,7 @@ lambda_capture_field_type (tree expr, bool explicit_init_p,
+ 	type = build_reference_type (type);
+       type = do_auto_deduction (type, expr, auto_node);
+     }
+-  else if (!is_this && type_dependent_expression_p (expr))
++  else if (!is_this && !type_deducible_expression_p (expr))
+     {
+       type = cxx_make_type (DECLTYPE_TYPE);
+       DECLTYPE_TYPE_EXPR (type) = expr;
+diff --git a/gcc/testsuite/g++.dg/cpp0x/lambda/lambda-current-inst1.C b/gcc/testsuite/g++.dg/cpp0x/lambda/lambda-current-inst1.C
+new file mode 100644
+index 000000000..a6631c5ca
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/lambda/lambda-current-inst1.C
+@@ -0,0 +1,18 @@
++// PR c++/82980
++// { dg-do compile { target c++11 } }
++
++template <class T>
++struct Outer
++{
++  template <class U>
++  void f();
++
++  void bar(Outer outer) {
++    [outer](){ outer.f<int>(); };
++  }
++  void baz(Outer *p) {
++    [&](){ p->f<int>(); };
++  }
++};
++
++int main() { }

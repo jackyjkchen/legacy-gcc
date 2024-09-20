@@ -1,0 +1,107 @@
+diff --git a/gcc/testsuite/gcc.dg/torture/pr70288-1.c b/gcc/testsuite/gcc.dg/torture/pr70288-1.c
+new file mode 100644
+index 000000000..1fb049548
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/torture/pr70288-1.c
+@@ -0,0 +1,36 @@
++/* { dg-do compile } */
++/* { dg-require-effective-target int32plus } */
++
++int main()
++{
++  int var6 = -1267827473;
++  do {
++      ++var6;
++      double s1_115[4], s2_108[4];
++      int var8 = -161498264;
++      do {
++	  ++var8;
++	  int var12 = 1260960076;
++	  for (; var12 <= 1260960080; ++var12) {
++	      int var13 = 1960990937;
++	      do {
++		  ++var13;
++		  int var14 = 2128638723;
++		  for (; var14 <= 2128638728; ++var14) {
++		      int var22 = -1141190839;
++		      do {
++			  ++var22;
++			  if (s2_108 > s1_115) {
++			      int var23 = -890798748;
++			      do {
++				  ++var23;
++				  long long e_119[4];
++			      } while (var23 <= -890798746);
++			  }
++		      } while (var22 <= -1141190829);
++		  }
++	      } while (var13 <= 1960990946);
++	  }
++      } while (var8 <= -161498254);
++  } while (var6 <= -1267827462);
++}
+diff --git a/gcc/testsuite/gcc.dg/torture/pr70288-2.c b/gcc/testsuite/gcc.dg/torture/pr70288-2.c
+new file mode 100644
+index 000000000..ad90fd458
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/torture/pr70288-2.c
+@@ -0,0 +1,35 @@
++/* { dg-do compile } */
++/* { dg-require-effective-target int32plus } */
++
++int main()
++{
++  int var6 = -1267827473;
++  do {
++      ++var6;
++      double s1_115[4], s2_108[4];
++      int var8 = -161498264;
++      do {
++	  ++var8;
++	  int var12 = 1260960076;
++	  for (; var12 <= 1260960080; ++var12) {
++	      int var13 = 1960990937;
++	      do {
++		  ++var13;
++		  int var14 = 2128638723;
++		  for (; var14 <= 2128638728; ++var14) {
++		      int var22 = -1141190839;
++		      do {
++			  ++var22;
++			  if (s2_108 > s1_115) {
++			      int var23 = -890798748;
++			      do {
++				  long long e_119[4];
++			      } while (var23 <= -890798746);
++			  }
++		      } while (var22 <= -1141190829);
++		  }
++	      } while (var13 <= 1960990946);
++	  }
++      } while (var8 <= -161498254);
++  } while (var6 <= -1267827462);
++}
+diff --git a/gcc/tree-ssa-loop-ivcanon.c b/gcc/tree-ssa-loop-ivcanon.c
+index f97c81912..902d0fd91 100644
+--- a/gcc/tree-ssa-loop-ivcanon.c
++++ b/gcc/tree-ssa-loop-ivcanon.c
+@@ -327,11 +327,17 @@ tree_estimate_loop_size (struct loop *loop, edge exit, edge edge_to_cancel, stru
+ 	  /* Conditionals.  */
+ 	  else if ((gimple_code (stmt) == GIMPLE_COND
+ 		    && constant_after_peeling (gimple_cond_lhs (stmt), stmt, loop)
+-		    && constant_after_peeling (gimple_cond_rhs (stmt), stmt, loop))
++		    && constant_after_peeling (gimple_cond_rhs (stmt), stmt, loop)
++		    /* We don't simplify all constant compares so make sure
++		       they are not both constant already.  See PR70288.  */
++		    && (! is_gimple_min_invariant (gimple_cond_lhs (stmt))
++			|| ! is_gimple_min_invariant (gimple_cond_rhs (stmt))))
+ 		   || (gimple_code (stmt) == GIMPLE_SWITCH
+ 		       && constant_after_peeling (gimple_switch_index (
+ 						    as_a <gswitch *> (stmt)),
+-						  stmt, loop)))
++						  stmt, loop)
++		       && ! is_gimple_min_invariant (gimple_switch_index (
++						       as_a <gswitch *> (stmt)))))
+ 	    {
+ 	      if (dump_file && (dump_flags & TDF_DETAILS))
+ 	        fprintf (dump_file, "   Constant conditional.\n");

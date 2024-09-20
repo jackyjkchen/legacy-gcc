@@ -1,0 +1,69 @@
+diff --git a/gcc/c/c-decl.c b/gcc/c/c-decl.c
+index 2747464b8..eadfa5cc7 100644
+--- a/gcc/c/c-decl.c
++++ b/gcc/c/c-decl.c
+@@ -1418,6 +1418,8 @@ pop_file_scope (void)
+   if (pch_file)
+     {
+       c_common_write_pch ();
++      /* Ensure even the callers don't try to finalize the CU.  */
++      flag_syntax_only = 1;
+       return;
+     }
+ 
+diff --git a/gcc/cp/decl2.c b/gcc/cp/decl2.c
+index 2852a8d4d..6fe8af475 100644
+--- a/gcc/cp/decl2.c
++++ b/gcc/cp/decl2.c
+@@ -4583,6 +4583,8 @@ c_parse_final_cleanups (void)
+ 	  DECL_ASSEMBLER_NAME (node->decl);
+       c_common_write_pch ();
+       dump_tu ();
++      /* Ensure even the callers don't try to finalize the CU.  */
++      flag_syntax_only = 1;
+       return;
+     }
+ 
+diff --git a/gcc/gcc.c b/gcc/gcc.c
+index b4a2f3696..fd5100bd1 100644
+--- a/gcc/gcc.c
++++ b/gcc/gcc.c
+@@ -1333,7 +1333,7 @@ static const struct compiler default_compilers[] =
+ 		%(cpp_options) -o %{save-temps*:%b.i} %{!save-temps*:%g.i} \n\
+ 		    cc1 -fpreprocessed %{save-temps*:%b.i} %{!save-temps*:%g.i} \
+ 			%(cc1_options)\
+-			%{!fsyntax-only:-o %g.s \
++			%{!fsyntax-only:%{!S:-o %g.s} \
+ 			    %{!fdump-ada-spec*:%{!o*:--output-pch=%i.gch}\
+ 					       %W{o*:--output-pch=%*}}%V}}\
+ 	  %{!save-temps*:%{!traditional-cpp:%{!no-integrated-cpp:\
+diff --git a/gcc/testsuite/g++.dg/cpp1y/pr71875.C b/gcc/testsuite/g++.dg/cpp1y/pr71875.C
+new file mode 100644
+index 000000000..4d317966c
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp1y/pr71875.C
+@@ -0,0 +1,24 @@
++// PR c++/71875
++// { dg-do link { target c++14 } }
++
++template <typename T>
++constexpr bool IsMatrix = false;
++
++template<typename TElem>
++class Matrix {};
++
++template <typename TElem>
++constexpr bool IsMatrix<Matrix<TElem>> = true;
++
++template<typename TNestVec>
++class RowVecExpMatrix;
++
++template <typename TNestVec>
++constexpr bool IsMatrix<RowVecExpMatrix<TNestVec>> = true;
++
++int
++main ()
++{
++  static_assert (IsMatrix<RowVecExpMatrix<Matrix<int>>>, "Matrix check error");
++  static_assert (IsMatrix<Matrix<int>>, "Input type is not a matrix");
++}

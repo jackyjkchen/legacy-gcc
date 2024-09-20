@@ -1,0 +1,39 @@
+diff --git a/gcc/fortran/resolve.c b/gcc/fortran/resolve.c
+index bad4cd454..8a7534b9d 100644
+--- a/gcc/fortran/resolve.c
++++ b/gcc/fortran/resolve.c
+@@ -508,8 +508,11 @@ resolve_formal_arglist (gfc_symbol *proc)
+ 	{
+ 	  if (sym->as != NULL)
+ 	    {
+-	      gfc_error ("Argument %qs of statement function at %L must "
+-			 "be scalar", sym->name, &sym->declared_at);
++	      /* F03:C1263 (R1238) The function-name and each dummy-arg-name
++		 shall be specified, explicitly or implicitly, to be scalar.  */
++	      gfc_error ("Argument '%s' of statement function '%s' at %L "
++			 "must be scalar", sym->name, proc->name,
++			 &proc->declared_at);
+ 	      continue;
+ 	    }
+ 
+diff --git a/gcc/testsuite/gfortran.dg/statement_function_3.f b/gcc/testsuite/gfortran.dg/statement_function_3.f
+new file mode 100644
+index 000000000..dcfb3e2b9
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/statement_function_3.f
+@@ -0,0 +1,15 @@
++! { dg-do compile }
++! PR fortran/35299
++      subroutine phtod(e,n,i,h)
++      dimension e(n)
++      hstar(e,b)=b**.4*((1.25*fun(-e/40)+.18)) ! { dg-error "must be scalar" }
++      a = 1.
++      h = hstar(e(i-1), a)
++      end
++
++      function fun(a)
++         real a(*)
++         fun = 42
++      end
++! { dg-prune-output " Obsolescent feature" }
++

@@ -1,0 +1,81 @@
+diff --git a/libstdc++-v3/include/bits/unique_ptr.h b/libstdc++-v3/include/bits/unique_ptr.h
+index ce38c5a77..a61491f30 100644
+--- a/libstdc++-v3/include/bits/unique_ptr.h
++++ b/libstdc++-v3/include/bits/unique_ptr.h
+@@ -197,7 +197,9 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
+ 		      "rvalue deleter bound to reference"); }
+ 
+       /// Creates a unique_ptr that owns nothing.
+-      constexpr unique_ptr(nullptr_t) noexcept : unique_ptr() { }
++      constexpr unique_ptr(nullptr_t) noexcept : _M_t()
++      { static_assert(!is_pointer<deleter_type>::value,
++		      "constructed with null function pointer deleter"); }
+ 
+       // Move constructors.
+ 
+@@ -464,7 +466,9 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
+       : _M_t(__u.release(), std::forward<deleter_type>(__u.get_deleter())) { }
+ 
+       /// Creates a unique_ptr that owns nothing.
+-      constexpr unique_ptr(nullptr_t) noexcept : unique_ptr() { }
++      constexpr unique_ptr(nullptr_t) noexcept : _M_t()
++      { static_assert(!is_pointer<deleter_type>::value,
++		      "constructed with null function pointer deleter"); }
+ 
+       template<typename _Up, typename _Ep,
+ 	       typename = _Require<__safe_conversion<_Up, _Ep>,
+diff --git a/libstdc++-v3/testsuite/20_util/unique_ptr/assign/48635_neg.cc b/libstdc++-v3/testsuite/20_util/unique_ptr/assign/48635_neg.cc
+index 749177f9f..a1fb23aeb 100644
+--- a/libstdc++-v3/testsuite/20_util/unique_ptr/assign/48635_neg.cc
++++ b/libstdc++-v3/testsuite/20_util/unique_ptr/assign/48635_neg.cc
+@@ -41,10 +41,10 @@ void f()
+   std::unique_ptr<int, B&> ub(nullptr, b);
+   std::unique_ptr<int, D&> ud(nullptr, d);
+   ub = std::move(ud);
+-// { dg-error "use of deleted function" "" { target *-*-* } 272 }
++// { dg-error "use of deleted function" "" { target *-*-* } 274 }
+ 
+   std::unique_ptr<int[], B&> uba(nullptr, b);
+   std::unique_ptr<int[], D&> uda(nullptr, d);
+   uba = std::move(uda);
+-// { dg-error "use of deleted function" "" { target *-*-* } 517 }
++// { dg-error "use of deleted function" "" { target *-*-* } 521 }
+ }
+diff --git a/libstdc++-v3/testsuite/20_util/unique_ptr/cons/incomplete.cc b/libstdc++-v3/testsuite/20_util/unique_ptr/cons/incomplete.cc
+new file mode 100644
+index 000000000..1a8f28838
+--- /dev/null
++++ b/libstdc++-v3/testsuite/20_util/unique_ptr/cons/incomplete.cc
+@@ -0,0 +1,32 @@
++// Copyright (C) 2018 Free Software Foundation, Inc.
++//
++// This file is part of the GNU ISO C++ Library.  This library is free
++// software; you can redistribute it and/or modify it under the
++// terms of the GNU General Public License as published by the
++// Free Software Foundation; either version 3, or (at your option)
++// any later version.
++
++// This library is distributed in the hope that it will be useful,
++// but WITHOUT ANY WARRANTY; without even the implied warranty of
++// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++// GNU General Public License for more details.
++
++// You should have received a copy of the GNU General Public License along
++// with this library; see the file COPYING3.  If not see
++// <http://www.gnu.org/licenses/>.
++
++// { dg-do compile { target c++11 } }
++
++#include <memory>
++
++struct Incomplete;
++
++void f(void** p)
++{
++  ::new (p[0]) std::unique_ptr<Incomplete>();
++  ::new (p[1]) std::unique_ptr<Incomplete[]>();
++
++  // PR libstdc++/87704
++  ::new (p[2]) std::unique_ptr<Incomplete>(nullptr);
++  ::new (p[3]) std::unique_ptr<Incomplete[]>(nullptr);
++}

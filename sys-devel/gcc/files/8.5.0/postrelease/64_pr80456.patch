@@ -1,0 +1,35 @@
+diff --git a/gcc/cp/call.c b/gcc/cp/call.c
+index 72ac1fd38..b8162aa81 100644
+--- a/gcc/cp/call.c
++++ b/gcc/cp/call.c
+@@ -9496,7 +9496,8 @@ build_new_method_call_1 (tree instance, tree fns, vec<tree, va_gc> **args,
+ 		  tree a = instance;
+ 		  if (TREE_THIS_VOLATILE (a))
+ 		    a = build_this (a);
+-		  call = build2 (COMPOUND_EXPR, TREE_TYPE (call), a, call);
++		  if (TREE_SIDE_EFFECTS (a))
++		    call = build2 (COMPOUND_EXPR, TREE_TYPE (call), a, call);
+ 		}
+ 	      else if (call != error_mark_node
+ 		       && DECL_DESTRUCTOR_P (cand->fn)
+diff --git a/gcc/testsuite/g++.dg/cpp0x/constexpr-volatile3.C b/gcc/testsuite/g++.dg/cpp0x/constexpr-volatile3.C
+new file mode 100644
+index 000000000..5c1e865e0
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/constexpr-volatile3.C
+@@ -0,0 +1,15 @@
++// PR c++/80456
++// { dg-do compile { target c++11 } }
++
++struct A {
++  static constexpr bool test() noexcept { return true; }
++
++  void f() volatile {
++    constexpr bool b = test();
++  }
++};
++
++void g() {
++  A a;
++  a.f();
++}

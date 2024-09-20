@@ -1,0 +1,27 @@
+diff --git a/gcc/cp/constexpr.c b/gcc/cp/constexpr.c
+index 374fd22f5..2857edbc9 100644
+--- a/gcc/cp/constexpr.c
++++ b/gcc/cp/constexpr.c
+@@ -1215,7 +1215,9 @@ adjust_temp_type (tree type, tree temp)
+   if (TREE_CODE (temp) == EMPTY_CLASS_EXPR)
+     return build0 (EMPTY_CLASS_EXPR, type);
+   gcc_assert (scalarish_type_p (type));
+-  return cp_fold_convert (type, temp);
++  /* Now we know we're dealing with a scalar, and a prvalue of non-class
++     type is cv-unqualified.  */
++  return cp_fold_convert (cv_unqualified (type), temp);
+ }
+ 
+ /* Callback for walk_tree used by unshare_constructor.  */
+diff --git a/gcc/testsuite/g++.dg/cpp0x/alignof5.C b/gcc/testsuite/g++.dg/cpp0x/alignof5.C
+new file mode 100644
+index 000000000..09354d3e1
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/alignof5.C
+@@ -0,0 +1,6 @@
++// PR c++/90736 - bogus error with alignof.
++// { dg-do compile { target c++11 } }
++
++constexpr int fn(const int b) { return b; }
++constexpr int c = fn(alignof(int));
++alignas(c) char d;

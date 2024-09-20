@@ -1,0 +1,442 @@
+diff --git a/gcc/fold-const.c b/gcc/fold-const.c
+index 57a20e137..6bdebeb6d 100644
+--- a/gcc/fold-const.c
++++ b/gcc/fold-const.c
+@@ -3025,10 +3025,16 @@ operand_equal_p (const_tree arg0, const_tree arg1, unsigned int flags)
+       switch (TREE_CODE (arg0))
+ 	{
+ 	case INDIRECT_REF:
+-	  if (!(flags & OEP_ADDRESS_OF)
+-	      && (TYPE_ALIGN (TREE_TYPE (arg0))
+-		  != TYPE_ALIGN (TREE_TYPE (arg1))))
+-	    return 0;
++	  if (!(flags & OEP_ADDRESS_OF))
++	    {
++	      if (TYPE_ALIGN (TREE_TYPE (arg0))
++		  != TYPE_ALIGN (TREE_TYPE (arg1)))
++		return 0;
++	      /* Verify that the access types are compatible.  */
++	      if (TYPE_MAIN_VARIANT (TREE_TYPE (arg0))
++		  != TYPE_MAIN_VARIANT (TREE_TYPE (arg1)))
++		return 0;
++	    }
+ 	  flags &= ~OEP_ADDRESS_OF;
+ 	  return OP_SAME (0);
+ 
+diff --git a/gcc/gimple.c b/gcc/gimple.c
+index 1a22e8235..713d7cce4 100644
+--- a/gcc/gimple.c
++++ b/gcc/gimple.c
+@@ -1604,7 +1604,7 @@ gimple_assign_set_rhs_with_ops (gimple_stmt_iterator *gsi, enum tree_code code,
+       gimple *new_stmt = gimple_alloc (gimple_code (stmt), new_rhs_ops + 1);
+       memcpy (new_stmt, stmt, gimple_size (gimple_code (stmt)));
+       gimple_init_singleton (new_stmt);
+-      gsi_replace (gsi, new_stmt, true);
++      gsi_replace (gsi, new_stmt, false);
+       stmt = new_stmt;
+ 
+       /* The LHS needs to be reset as this also changes the SSA name
+diff --git a/gcc/internal-fn.c b/gcc/internal-fn.c
+index 2af0b4541..d6f1b6106 100644
+--- a/gcc/internal-fn.c
++++ b/gcc/internal-fn.c
+@@ -2330,6 +2330,56 @@ static void (*const internal_fn_expanders[]) (internal_fn, gcall *) = {
+   0
+ };
+ 
++/* Return true if IFN is some form of load from memory.  */
++
++bool
++internal_load_fn_p (internal_fn fn)
++{
++  switch (fn)
++    {
++    case IFN_MASK_LOAD:
++    case IFN_LOAD_LANES:
++      return true;
++
++    default:
++      return false;
++    }
++}
++
++/* Return true if IFN is some form of store to memory.  */
++
++bool
++internal_store_fn_p (internal_fn fn)
++{
++  switch (fn)
++    {
++    case IFN_MASK_STORE:
++    case IFN_STORE_LANES:
++      return true;
++
++    default:
++      return false;
++    }
++}
++
++/* If FN takes a vector mask argument, return the index of that argument,
++   otherwise return -1.  */
++
++int
++internal_fn_mask_index (internal_fn fn)
++{
++  switch (fn)
++    {
++    case IFN_MASK_LOAD:
++    case IFN_MASK_STORE:
++      return 2;
++
++    default:
++      return -1;
++    }
++}
++
++
+ /* Expand STMT as though it were a call to internal function FN.  */
+ 
+ void
+diff --git a/gcc/internal-fn.h b/gcc/internal-fn.h
+index bb3146558..ea1d04097 100644
+--- a/gcc/internal-fn.h
++++ b/gcc/internal-fn.h
+@@ -172,6 +172,10 @@ extern bool direct_internal_fn_supported_p (internal_fn, tree,
+ 					    optimization_type);
+ extern bool set_edom_supported_p (void);
+ 
++extern bool internal_load_fn_p (internal_fn);
++extern bool internal_store_fn_p (internal_fn);
++extern int internal_fn_mask_index (internal_fn);
++
+ extern void expand_internal_call (gcall *);
+ extern void expand_internal_call (internal_fn, gcall *);
+ 
+diff --git a/gcc/testsuite/g++.dg/torture/pr89698.C b/gcc/testsuite/g++.dg/torture/pr89698.C
+new file mode 100644
+index 000000000..fbeb7976c
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/torture/pr89698.C
+@@ -0,0 +1,28 @@
++/* { dg-do run } */
++
++extern "C" void abort (void);
++
++class A {
++    virtual void f(){};
++public:
++    int x;
++    A(int in): x(in) {};
++};
++
++class B: public A {
++public:
++    int y;
++    B(int in):A(in-1), y(in) {};
++};
++
++int test(void)
++{
++  int res;
++  B b(2);
++  A* bp = &b;
++  void* vp = dynamic_cast<void*>(bp);
++  if (((A*)vp)->x == 1 && ((B*)vp)->y == 2)
++    return 1;
++  return 0;
++}
++int main() { if (test() != 1) abort (); return 0; }
+diff --git a/gcc/testsuite/gcc.dg/gomp/pr88415.c b/gcc/testsuite/gcc.dg/gomp/pr88415.c
+new file mode 100644
+index 000000000..eeb00f046
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/gomp/pr88415.c
+@@ -0,0 +1,12 @@
++/* { dg-do compile } */
++/* { dg-options "-fexceptions -fnon-call-exceptions -fopenmp -fsignaling-nans -funsafe-math-optimizations -fno-associative-math" } */
++
++void
++lx (_Complex int *yn)
++{
++  int mj;
++
++#pragma omp for
++  for (mj = 0; mj < 1; ++mj)
++    yn[mj] += 1;
++}
+diff --git a/gcc/testsuite/gcc.dg/pr87929.c b/gcc/testsuite/gcc.dg/pr87929.c
+new file mode 100644
+index 000000000..f64f7ada4
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr87929.c
+@@ -0,0 +1,16 @@
++/* { dg-do compile } */
++/* { dg-options "-fexceptions -fnon-call-exceptions -fsignaling-nans" } */
++
++#define complex __complex__
++#define _Complex_I (1.0iF)
++
++extern void f2c_4d__( complex float *, complex float *);
++extern void abort (void);
++
++void f2c_4c__(void)
++{
++  complex float x,ret_val;
++  x = 1234 + 5678 * _Complex_I;
++  f2c_4d__(&ret_val,&x);
++  if ( x != ret_val ) abort();
++}
+diff --git a/gcc/testsuite/gcc.dg/tsan/pr88030.c b/gcc/testsuite/gcc.dg/tsan/pr88030.c
+new file mode 100644
+index 000000000..0c94c7c53
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/tsan/pr88030.c
+@@ -0,0 +1,14 @@
++/* { dg-do compile } */
++/* { dg-options "-fsanitize=thread -fnon-call-exceptions -fexceptions" } */
++
++typedef __complex__ float Value;
++typedef struct {
++  Value a[16 / sizeof (Value)];
++} A;
++
++A sum(A a,A b)
++{
++  a.a[0]+=b.a[0];
++  a.a[1]+=b.a[1];
++  return a;
++}
+diff --git a/gcc/testsuite/gcc.dg/vect/bb-slp-pr90006.c b/gcc/testsuite/gcc.dg/vect/bb-slp-pr90006.c
+new file mode 100644
+index 000000000..104d3fb89
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/vect/bb-slp-pr90006.c
+@@ -0,0 +1,31 @@
++/* { dg-do compile } */
++/* { dg-additional-options "-fno-math-errno" } */
++/* { dg-additional-options "-march=x86-64" { target x86_64-*-* i?86-*-* } } */
++
++long int lrint(double x);
++
++int a, b;
++union c {
++    int d;
++};
++
++int e()
++{
++  int f, g, h;
++  long i, j, k;
++  double l, m = b = lrint(0.3127);
++  a = b >> 16 >> 8 & 255;
++  ((union c *)e)->d = a;
++  k = m;
++  h = k >> 16 >> 8 & 255;
++  ((union c *)(e + 4))->d = h;
++  j = lrint(l);
++  g = j >> 16 >> 8 & 255;
++  ((union c *)(e + 8))->d = g;
++  i = lrint(0.292);
++  f = i >> 16 >> 8 & 255;
++  ((union c *)(e + 12))->d = f;
++  return 0;
++}
++
++/* { dg-final { scan-tree-dump "basic block vectorized" "slp2" { target { { x86_64-*-* i?86-*-* } && ilp32 } } } } */
+diff --git a/gcc/testsuite/gcc.dg/vect/pr88903-1.c b/gcc/testsuite/gcc.dg/vect/pr88903-1.c
+new file mode 100644
+index 000000000..77dbfd47c
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/vect/pr88903-1.c
+@@ -0,0 +1,26 @@
++#include "tree-vect.h"
++
++int x[1024];
++
++void __attribute__((noinline))
++foo()
++{
++  for (int i = 0; i < 512; ++i)
++    {
++      x[2*i] = x[2*i] << ((i+1) & 31);
++      x[2*i+1] = x[2*i+1] << ((i+1) & 31);
++    }
++}
++
++int
++main()
++{
++  check_vect ();
++  for (int i = 0; i < 1024; ++i)
++    x[i] = i;
++  foo ();
++  for (int i = 0; i < 1024; ++i)
++    if (x[i] != i << ((i/2+1) & 31))
++      __builtin_abort ();
++  return 0;
++}
+diff --git a/gcc/testsuite/gcc.dg/vect/pr88903-2.c b/gcc/testsuite/gcc.dg/vect/pr88903-2.c
+new file mode 100644
+index 000000000..cd88a99c6
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/vect/pr88903-2.c
+@@ -0,0 +1,28 @@
++#include "tree-vect.h"
++
++int x[1024];
++int y[1024];
++int z[1024];
++
++void __attribute__((noinline)) foo()
++{
++  for (int i = 0; i < 512; ++i)
++    {
++      x[2*i] = x[2*i] << y[2*i];
++      x[2*i+1] = x[2*i+1] << y[2*i];
++      z[2*i] = y[2*i];
++      z[2*i+1] = y[2*i+1];
++    }
++}
++
++int main()
++{
++  check_vect ();
++  for (int i = 0; i < 1024; ++i)
++    x[i] = i, y[i] = i % 8;
++  foo ();
++  for (int i = 0; i < 1024; ++i)
++    if (x[i] != i << ((i & ~1) % 8))
++      __builtin_abort ();
++  return 0;
++}
+diff --git a/gcc/tree-complex.c b/gcc/tree-complex.c
+index d781a8aa0..92d3cda8f 100644
+--- a/gcc/tree-complex.c
++++ b/gcc/tree-complex.c
+@@ -75,6 +75,9 @@ static vec<tree> complex_ssa_name_components;
+    non-SSA_NAME/non-invariant args that need to be replaced by SSA_NAMEs.  */
+ static vec<gphi *> phis_to_revisit;
+ 
++/* BBs that need EH cleanup.  */
++static bitmap need_eh_cleanup;
++
+ /* Lookup UID in the complex_variable_components hashtable and return the
+    associated tree.  */
+ static tree
+@@ -675,13 +678,12 @@ update_complex_components_on_edge (edge e, tree lhs, tree r, tree i)
+ static void
+ update_complex_assignment (gimple_stmt_iterator *gsi, tree r, tree i)
+ {
+-  gimple *stmt;
+-
++  gimple *old_stmt = gsi_stmt (*gsi);
+   gimple_assign_set_rhs_with_ops (gsi, COMPLEX_EXPR, r, i);
+-  stmt = gsi_stmt (*gsi);
++  gimple *stmt = gsi_stmt (*gsi);
+   update_stmt (stmt);
+-  if (maybe_clean_eh_stmt (stmt))
+-    gimple_purge_dead_eh_edges (gimple_bb (stmt));
++  if (maybe_clean_or_replace_eh_stmt (old_stmt, stmt))
++    bitmap_set_bit (need_eh_cleanup, gimple_bb (stmt)->index);
+ 
+   if (gimple_in_ssa_p (cfun))
+     update_complex_components (gsi, gsi_stmt (*gsi), r, i);
+@@ -1435,6 +1437,8 @@ expand_complex_comparison (gimple_stmt_iterator *gsi, tree ar, tree ai,
+     }
+ 
+   update_stmt (stmt);
++  if (maybe_clean_eh_stmt (stmt))
++    bitmap_set_bit (need_eh_cleanup, gimple_bb (stmt)->index);
+ }
+ 
+ /* Expand inline asm that sets some complex SSA_NAMEs.  */
+@@ -1652,6 +1656,8 @@ tree_lower_complex (void)
+   init_parameter_lattice_values ();
+   ssa_propagate (complex_visit_stmt, complex_visit_phi);
+ 
++  need_eh_cleanup = BITMAP_ALLOC (NULL);
++
+   complex_variable_components = new int_tree_htab_type (10);
+ 
+   complex_ssa_name_components.create (2 * num_ssa_names);
+@@ -1695,11 +1701,15 @@ tree_lower_complex (void)
+ 
+   gsi_commit_edge_inserts ();
+ 
++  unsigned todo
++    = gimple_purge_all_dead_eh_edges (need_eh_cleanup) ? TODO_cleanup_cfg : 0;
++  BITMAP_FREE (need_eh_cleanup);
++
+   delete complex_variable_components;
+   complex_variable_components = NULL;
+   complex_ssa_name_components.release ();
+   complex_lattice_values.release ();
+-  return 0;
++  return todo;
+ }
+ 
+ namespace {
+diff --git a/gcc/tree-vect-data-refs.c b/gcc/tree-vect-data-refs.c
+index d9db9f5a6..a68136ad9 100644
+--- a/gcc/tree-vect-data-refs.c
++++ b/gcc/tree-vect-data-refs.c
+@@ -49,6 +49,7 @@ along with GCC; see the file COPYING3.  If not see
+ #include "expr.h"
+ #include "builtins.h"
+ #include "params.h"
++#include "internal-fn.h"
+ 
+ /* Return true if load- or store-lanes optab OPTAB is implemented for
+    COUNT vectors of type VECTYPE.  NAME is the name of OPTAB.  */
+@@ -130,6 +131,30 @@ vect_get_smallest_scalar_type (gimple *stmt, HOST_WIDE_INT *lhs_size_unit,
+       if (rhs < lhs)
+         scalar_type = rhs_type;
+     }
++  else if (gcall *call = dyn_cast <gcall *> (stmt))
++    {
++      unsigned int i = 0;
++      if (gimple_call_internal_p (call))
++	{
++	  internal_fn ifn = gimple_call_internal_fn (call);
++	  if (internal_load_fn_p (ifn) || internal_store_fn_p (ifn))
++	    /* gimple_expr_type already picked the type of the loaded
++	       or stored data.  */
++	    i = ~0U;
++	  else if (internal_fn_mask_index (ifn) == 0)
++	    i = 1;
++	}
++      if (i < gimple_call_num_args (call))
++	{
++	  tree rhs_type = TREE_TYPE (gimple_call_arg (call, i));
++	  if (tree_fits_uhwi_p (TYPE_SIZE_UNIT (rhs_type)))
++	    {
++	      rhs = TREE_INT_CST_LOW (TYPE_SIZE_UNIT (rhs_type));
++	      if (rhs < lhs)
++		scalar_type = rhs_type;
++	    }
++	}
++    }
+ 
+   *lhs_size_unit = lhs;
+   *rhs_size_unit = rhs;
+diff --git a/gcc/tree-vect-stmts.c b/gcc/tree-vect-stmts.c
+index 49e02b22b..8c3c09f97 100644
+--- a/gcc/tree-vect-stmts.c
++++ b/gcc/tree-vect-stmts.c
+@@ -4542,6 +4542,16 @@ vectorizable_shift (gimple *stmt, gimple_stmt_iterator *gsi,
+ 	  FOR_EACH_VEC_ELT (stmts, k, slpstmt)
+ 	    if (!operand_equal_p (gimple_assign_rhs2 (slpstmt), op1, 0))
+ 	      scalar_shift_arg = false;
++
++	  /* For internal SLP defs we have to make sure we see scalar stmts
++	     for all vector elements.
++	     ???  For different vectors we could resort to a different
++	     scalar shift operand but code-generation below simply always
++	     takes the first.  */
++	  if (dt[1] == vect_internal_def
++	      && (nunits_out * SLP_TREE_NUMBER_OF_VEC_STMTS (slp_node)
++		  != stmts.length ()))
++	    scalar_shift_arg = false;
+ 	}
+ 
+       /* If the shift amount is computed by a pattern stmt we cannot

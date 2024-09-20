@@ -1,0 +1,44 @@
+diff --git a/gcc/cp/constexpr.c b/gcc/cp/constexpr.c
+index 2c7e2f5a7..8329ed31c 100644
+--- a/gcc/cp/constexpr.c
++++ b/gcc/cp/constexpr.c
+@@ -3044,6 +3044,18 @@ cxx_eval_increment_expression (const constexpr_ctx *ctx, tree t,
+ 	offset = fold_build1 (NEGATE_EXPR, TREE_TYPE (offset), offset);
+       mod = fold_build2 (POINTER_PLUS_EXPR, type, val, offset);
+     }
++  else if (c_promoting_integer_type_p (type)
++	   && !TYPE_UNSIGNED (type)
++	   && TYPE_PRECISION (type) < TYPE_PRECISION (integer_type_node))
++    {
++      offset = fold_convert (integer_type_node, offset);
++      mod = fold_convert (integer_type_node, val);
++      tree t = fold_build2 (inc ? PLUS_EXPR : MINUS_EXPR, integer_type_node,
++			    mod, offset);
++      mod = fold_convert (type, t);
++      if (TREE_OVERFLOW_P (mod) && !TREE_OVERFLOW_P (t))
++	TREE_OVERFLOW (mod) = false;
++    }
+   else
+     mod = fold_build2 (inc ? PLUS_EXPR : MINUS_EXPR, type, val, offset);
+   if (!ptr)
+diff --git a/gcc/testsuite/g++.dg/cpp1y/constexpr-105774.C b/gcc/testsuite/g++.dg/cpp1y/constexpr-105774.C
+new file mode 100644
+index 000000000..8ca6fce75
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp1y/constexpr-105774.C
+@@ -0,0 +1,15 @@
++// PR c++/105774
++// { dg-do compile { target c++14 } }
++
++constexpr signed char
++foo ()
++{
++#if __SCHAR_MAX__ < __INT_MAX__
++  signed char x = __SCHAR_MAX__;
++#else
++  signed char x = 0;
++#endif
++  return ++x;
++}
++
++constexpr auto a = foo ();

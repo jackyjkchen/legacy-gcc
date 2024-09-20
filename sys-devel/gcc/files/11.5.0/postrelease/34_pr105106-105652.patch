@@ -1,0 +1,69 @@
+diff --git a/gcc/cp/pt.c b/gcc/cp/pt.c
+index a66f243d1..1af4e7586 100644
+--- a/gcc/cp/pt.c
++++ b/gcc/cp/pt.c
+@@ -19652,11 +19652,18 @@ tsubst_lambda_expr (tree t, tree args, tsubst_flags_t complain, tree in_decl)
+     return error_mark_node;
+ 
+   if (LAMBDA_EXPR_EXTRA_SCOPE (t) == NULL_TREE)
+-    /* A lambda in a default argument outside a class gets no
+-       LAMBDA_EXPR_EXTRA_SCOPE, as specified by the ABI.  But
+-       tsubst_default_argument calls start_lambda_scope, so we need to
+-       specifically ignore it here, and use the global scope.  */
+-    record_null_lambda_scope (r);
++    {
++      /* A lambda in a default argument outside a class gets no
++	 LAMBDA_EXPR_EXTRA_SCOPE, as specified by the ABI.  But
++	 tsubst_default_argument calls start_lambda_scope, so we need to
++	 specifically ignore it here, and use the global scope.  */
++      record_null_lambda_scope (r);
++
++      /* If we're pushed into another scope (PR105652), fix it.  */
++      if (TYPE_NAMESPACE_SCOPE_P (TREE_TYPE (t)))
++	TYPE_CONTEXT (type) = DECL_CONTEXT (TYPE_NAME (type))
++	  = TYPE_CONTEXT (TREE_TYPE (t));
++    }
+   else
+     record_lambda_scope (r);
+ 
+diff --git a/gcc/testsuite/g++.dg/cpp2a/concepts-lambda20.C b/gcc/testsuite/g++.dg/cpp2a/concepts-lambda20.C
+new file mode 100644
+index 000000000..40e597317
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp2a/concepts-lambda20.C
+@@ -0,0 +1,17 @@
++// PR c++/105652
++// { dg-do compile { target c++20 } }
++// { dg-additional-options -g }
++
++template<int>
++struct I {};
++
++template<class T>
++concept C = []<int N>(I<N>) { return true; } (I<0>{});
++
++template<class T>
++struct S { };
++
++template<C T>
++struct S<T> { constexpr static bool value = true; };
++
++static_assert(S<int>::value);
+diff --git a/gcc/testsuite/g++.dg/cpp2a/pr105106.C b/gcc/testsuite/g++.dg/cpp2a/pr105106.C
+new file mode 100644
+index 000000000..f2e76b7de
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp2a/pr105106.C
+@@ -0,0 +1,12 @@
++// PR c++/105106
++// { dg-do compile { target c++20 } }
++
++template <auto l = []{}>
++auto foo() {
++    return l;
++}
++
++template <class>
++auto bar() {
++    return foo();
++}

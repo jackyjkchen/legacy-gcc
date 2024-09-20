@@ -1,0 +1,94 @@
+diff --git a/gcc/cp/parser.c b/gcc/cp/parser.c
+index 9db2a16cf..6abb46e57 100644
+--- a/gcc/cp/parser.c
++++ b/gcc/cp/parser.c
+@@ -14949,20 +14949,33 @@ cp_parser_simple_type_specifier (cp_parser* parser,
+ 	  /* The 'auto' might be the placeholder return type for a function decl
+ 	     with trailing return type.  */
+ 	  bool have_trailing_return_fn_decl = false;
+-	  if (cp_lexer_peek_nth_token (parser->lexer, 2)->type
+-	      == CPP_OPEN_PAREN)
++
++	  cp_parser_parse_tentatively (parser);
++	  cp_lexer_consume_token (parser->lexer);
++	  while (cp_lexer_next_token_is_not (parser->lexer, CPP_EQ)
++		 && cp_lexer_next_token_is_not (parser->lexer, CPP_COMMA)
++		 && cp_lexer_next_token_is_not (parser->lexer, CPP_CLOSE_PAREN)
++		 && cp_lexer_next_token_is_not (parser->lexer, CPP_EOF))
+ 	    {
+-	      cp_parser_parse_tentatively (parser);
+-	      cp_lexer_consume_token (parser->lexer);
+-	      cp_lexer_consume_token (parser->lexer);
+-	      if (cp_parser_skip_to_closing_parenthesis (parser,
++	      if (cp_lexer_next_token_is (parser->lexer, CPP_OPEN_PAREN))
++		{
++		  cp_lexer_consume_token (parser->lexer);
++		  cp_parser_skip_to_closing_parenthesis (parser,
+ 							 /*recovering*/false,
+ 							 /*or_comma*/false,
+-							 /*consume_paren*/true))
+-		have_trailing_return_fn_decl
+-		  = cp_lexer_next_token_is (parser->lexer, CPP_DEREF);
+-	      cp_parser_abort_tentative_parse (parser);
++							 /*consume_paren*/true);
++		  continue;
++		}
++
++	      if (cp_lexer_next_token_is (parser->lexer, CPP_DEREF))
++		{
++		  have_trailing_return_fn_decl = true;
++		  break;
++		}
++
++	      cp_lexer_consume_token (parser->lexer);
+ 	    }
++	  cp_parser_abort_tentative_parse (parser);
+ 
+ 	  if (have_trailing_return_fn_decl)
+ 	    {
+diff --git a/gcc/testsuite/g++.dg/cpp0x/trailing12.C b/gcc/testsuite/g++.dg/cpp0x/trailing12.C
+new file mode 100644
+index 000000000..a27d988b9
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/trailing12.C
+@@ -0,0 +1,22 @@
++// PR c++/69139
++// { dg-do compile { target c++11 } }
++
++auto get(int) -> int { return {}; }
++template <class R> int f(auto (*)(int) -> R) { return {}; }
++int i = f(get);
++
++int foo1 (auto (int) -> char);
++
++int foo2 (auto f(int) -> char);
++
++int foo2 (auto (f)(int) -> char);
++
++int foo3 (auto (*f)(int) -> char);
++
++int foo4 (auto (*const **&f)(int) -> char);
++
++int foo5 (auto (*const **&f)(int, int *) -> char);
++
++int foo6 (auto (int) const -> char); // { dg-error "const" }
++
++void foo7 (auto __attribute__ ((unused)) f (int) -> int) { }
+diff --git a/gcc/testsuite/g++.dg/cpp0x/trailing13.C b/gcc/testsuite/g++.dg/cpp0x/trailing13.C
+new file mode 100644
+index 000000000..2681bcd3f
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/trailing13.C
+@@ -0,0 +1,12 @@
++// PR c++/69139
++// { dg-do compile { target c++11 } }
++
++struct X {
++  auto get(int) const & noexcept -> int { return {}; }
++  auto get(int) && throw () -> long { return {}; }
++};
++
++template <class R> auto f(auto (X::*)(int) const & -> R) -> R {}
++
++using I = decltype(f(&X::get));
++using I = int;

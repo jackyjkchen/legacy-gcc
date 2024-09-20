@@ -1,0 +1,33 @@
+diff --git a/gcc/cp/lambda.c b/gcc/cp/lambda.c
+index fc7809d69..d1903b4ce 100644
+--- a/gcc/cp/lambda.c
++++ b/gcc/cp/lambda.c
+@@ -246,7 +246,8 @@ lambda_capture_field_type (tree expr, bool explicit_init_p,
+     {
+       type = non_reference (unlowered_expr_type (expr));
+ 
+-      if (!is_this && by_reference_p)
++      if (!is_this
++	  && (by_reference_p || TREE_CODE (type) == FUNCTION_TYPE))
+ 	type = build_reference_type (type);
+     }
+ 
+diff --git a/gcc/testsuite/g++.dg/cpp1y/pr81574.C b/gcc/testsuite/g++.dg/cpp1y/pr81574.C
+new file mode 100644
+index 000000000..f9949ab90
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp1y/pr81574.C
+@@ -0,0 +1,13 @@
++// { dg-do compile { target c++14 } }
++// PR c++/81574 references to functions are captured by reference.
++
++// 8.1.5.2/10
++// For each entity captured by copy, ... an lvalue reference to the
++// referenced function type if the entity is a reference to a function
++
++void f (void (&b)())
++{
++  [=] {  b; } ();
++  [=, b(f)] { b; } ();
++  [=, b(b)] { b; } ();
++}

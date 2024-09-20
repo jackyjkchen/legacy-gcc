@@ -1,0 +1,40 @@
+diff --git a/gcc/config/i386/i386.c b/gcc/config/i386/i386.c
+index f207b8bb3..40eaf7cd6 100644
+--- a/gcc/config/i386/i386.c
++++ b/gcc/config/i386/i386.c
+@@ -9873,7 +9873,8 @@ ix86_function_arg_advance (cumulative_args_t cum_v, machine_mode mode,
+       if (cum->caller)
+ 	cfun->machine->outgoing_args_on_stack = true;
+ 
+-      cum->bnds_in_bt = chkp_type_bounds_count (type);
++      if (flag_check_pointer_bounds)
++	cum->bnds_in_bt = chkp_type_bounds_count (type);
+     }
+ }
+ 
+diff --git a/gcc/tree-chkp.c b/gcc/tree-chkp.c
+index 23f5af98a..9b75468ac 100644
+--- a/gcc/tree-chkp.c
++++ b/gcc/tree-chkp.c
+@@ -1636,6 +1636,10 @@ chkp_find_bounds_for_elem (tree elem, tree *all_bounds,
+     }
+ }
+ 
++/* Maximum number of elements to check in an array.  */
++
++#define CHKP_ARRAY_MAX_CHECK_STEPS    4096
++
+ /* Fill HAVE_BOUND output bitmap with information about
+    bounds requred for object of type TYPE.
+ 
+@@ -1681,7 +1685,9 @@ chkp_find_bound_slots_1 (const_tree type, bitmap have_bound,
+ 	  || integer_minus_onep (maxval))
+ 	return;
+ 
+-      for (cur = 0; cur <= TREE_INT_CST_LOW (maxval); cur++)
++      for (cur = 0;
++	  cur <= MIN (CHKP_ARRAY_MAX_CHECK_STEPS, TREE_INT_CST_LOW (maxval));
++	  cur++)
+ 	chkp_find_bound_slots_1 (etype, have_bound, offs + cur * esize);
+     }
+ }

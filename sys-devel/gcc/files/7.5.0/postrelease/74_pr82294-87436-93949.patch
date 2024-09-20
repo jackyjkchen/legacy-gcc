@@ -1,0 +1,338 @@
+diff --git a/gcc/cp/init.c b/gcc/cp/init.c
+index ffc51de7c..bac8f214e 100644
+--- a/gcc/cp/init.c
++++ b/gcc/cp/init.c
+@@ -3967,7 +3967,7 @@ build_vec_init (tree base, tree maxindex, tree init,
+   tree compound_stmt;
+   int destroy_temps;
+   tree try_block = NULL_TREE;
+-  int num_initialized_elts = 0;
++  HOST_WIDE_INT num_initialized_elts = 0;
+   bool is_global;
+   tree obase = base;
+   bool xvalue = false;
+@@ -4392,10 +4392,13 @@ build_vec_init (tree base, tree maxindex, tree init,
+ 
+ 	  if (e)
+ 	    {
+-	      int max = tree_to_shwi (maxindex)+1;
+-	      for (; num_initialized_elts < max; ++num_initialized_elts)
++	      HOST_WIDE_INT last = tree_to_shwi (maxindex);
++	      if (num_initialized_elts <= last)
+ 		{
+ 		  tree field = size_int (num_initialized_elts);
++		  if (num_initialized_elts != last)
++		    field = build2 (RANGE_EXPR, sizetype, field,
++				    size_int (last));
+ 		  CONSTRUCTOR_APPEND_ELT (const_vec, field, e);
+ 		}
+ 	    }
+diff --git a/gcc/expr.c b/gcc/expr.c
+index bcba24437..e24c45625 100644
+--- a/gcc/expr.c
++++ b/gcc/expr.c
+@@ -5943,10 +5943,11 @@ count_type_elements (const_tree type, bool for_ctor_p)
+ 
+ static bool
+ categorize_ctor_elements_1 (const_tree ctor, HOST_WIDE_INT *p_nz_elts,
++			    HOST_WIDE_INT *p_unique_nz_elts,
+ 			    HOST_WIDE_INT *p_init_elts, bool *p_complete)
+ {
+   unsigned HOST_WIDE_INT idx;
+-  HOST_WIDE_INT nz_elts, init_elts, num_fields;
++  HOST_WIDE_INT nz_elts, unique_nz_elts, init_elts, num_fields;
+   tree value, purpose, elt_type;
+ 
+   /* Whether CTOR is a valid constant initializer, in accordance with what
+@@ -5956,6 +5957,7 @@ categorize_ctor_elements_1 (const_tree ctor, HOST_WIDE_INT *p_nz_elts,
+   bool const_p = const_from_elts_p ? true : TREE_STATIC (ctor);
+ 
+   nz_elts = 0;
++  unique_nz_elts = 0;
+   init_elts = 0;
+   num_fields = 0;
+   elt_type = NULL_TREE;
+@@ -5980,12 +5982,13 @@ categorize_ctor_elements_1 (const_tree ctor, HOST_WIDE_INT *p_nz_elts,
+ 	{
+ 	case CONSTRUCTOR:
+ 	  {
+-	    HOST_WIDE_INT nz = 0, ic = 0;
++	    HOST_WIDE_INT nz = 0, unz = 0, ic = 0;
+ 
+-	    bool const_elt_p = categorize_ctor_elements_1 (value, &nz, &ic,
+-							   p_complete);
++	    bool const_elt_p = categorize_ctor_elements_1 (value, &nz, &unz,
++							   &ic, p_complete);
+ 
+ 	    nz_elts += mult * nz;
++	    unique_nz_elts += unz;
+  	    init_elts += mult * ic;
+ 
+ 	    if (const_from_elts_p && const_p)
+@@ -5997,21 +6000,31 @@ categorize_ctor_elements_1 (const_tree ctor, HOST_WIDE_INT *p_nz_elts,
+ 	case REAL_CST:
+ 	case FIXED_CST:
+ 	  if (!initializer_zerop (value))
+-	    nz_elts += mult;
++	    {
++	      nz_elts += mult;
++	      unique_nz_elts++;
++	    }
+ 	  init_elts += mult;
+ 	  break;
+ 
+ 	case STRING_CST:
+ 	  nz_elts += mult * TREE_STRING_LENGTH (value);
++	  unique_nz_elts += TREE_STRING_LENGTH (value);
+ 	  init_elts += mult * TREE_STRING_LENGTH (value);
+ 	  break;
+ 
+ 	case COMPLEX_CST:
+ 	  if (!initializer_zerop (TREE_REALPART (value)))
+-	    nz_elts += mult;
++	    {
++	      nz_elts += mult;
++	      unique_nz_elts++;
++	    }
+ 	  if (!initializer_zerop (TREE_IMAGPART (value)))
+-	    nz_elts += mult;
+-	  init_elts += mult;
++	    {
++	      nz_elts += mult;
++	      unique_nz_elts++;
++	    }
++	  init_elts += 2 * mult;
+ 	  break;
+ 
+ 	case VECTOR_CST:
+@@ -6021,7 +6034,10 @@ categorize_ctor_elements_1 (const_tree ctor, HOST_WIDE_INT *p_nz_elts,
+ 	      {
+ 		tree v = VECTOR_CST_ELT (value, i);
+ 		if (!initializer_zerop (v))
+-		  nz_elts += mult;
++		  {
++		    nz_elts += mult;
++		    unique_nz_elts++;
++		  }
+ 		init_elts += mult;
+ 	      }
+ 	  }
+@@ -6031,6 +6047,7 @@ categorize_ctor_elements_1 (const_tree ctor, HOST_WIDE_INT *p_nz_elts,
+ 	  {
+ 	    HOST_WIDE_INT tc = count_type_elements (elt_type, false);
+ 	    nz_elts += mult * tc;
++	    unique_nz_elts += tc;
+ 	    init_elts += mult * tc;
+ 
+ 	    if (const_from_elts_p && const_p)
+@@ -6050,6 +6067,7 @@ categorize_ctor_elements_1 (const_tree ctor, HOST_WIDE_INT *p_nz_elts,
+     *p_complete = false;
+ 
+   *p_nz_elts += nz_elts;
++  *p_unique_nz_elts += unique_nz_elts;
+   *p_init_elts += init_elts;
+ 
+   return const_p;
+@@ -6058,6 +6076,11 @@ categorize_ctor_elements_1 (const_tree ctor, HOST_WIDE_INT *p_nz_elts,
+ /* Examine CTOR to discover:
+    * how many scalar fields are set to nonzero values,
+      and place it in *P_NZ_ELTS;
++   * the same, but counting RANGE_EXPRs as multiplier of 1 instead of
++     high - low + 1 (this can be useful for callers to determine ctors
++     that could be cheaply initialized with - perhaps nested - loops
++     compared to copied from huge read-only data),
++     and place it in *P_UNIQUE_NZ_ELTS;
+    * how many scalar fields in total are in CTOR,
+      and place it in *P_ELT_COUNT.
+    * whether the constructor is complete -- in the sense that every
+@@ -6069,13 +6092,16 @@ categorize_ctor_elements_1 (const_tree ctor, HOST_WIDE_INT *p_nz_elts,
+ 
+ bool
+ categorize_ctor_elements (const_tree ctor, HOST_WIDE_INT *p_nz_elts,
++			  HOST_WIDE_INT *p_unique_nz_elts,
+ 			  HOST_WIDE_INT *p_init_elts, bool *p_complete)
+ {
+   *p_nz_elts = 0;
++  *p_unique_nz_elts = 0;
+   *p_init_elts = 0;
+   *p_complete = true;
+ 
+-  return categorize_ctor_elements_1 (ctor, p_nz_elts, p_init_elts, p_complete);
++  return categorize_ctor_elements_1 (ctor, p_nz_elts, p_unique_nz_elts,
++				     p_init_elts, p_complete);
+ }
+ 
+ /* TYPE is initialized by a constructor with NUM_ELTS elements, the last
+@@ -6106,17 +6132,18 @@ complete_ctor_at_level_p (const_tree type, HOST_WIDE_INT num_elts,
+   return count_type_elements (type, true) == num_elts;
+ }
+ 
+-/* Return 1 if EXP contains mostly (3/4)  zeros.  */
++/* Return 1 if EXP contains mostly (3/4) zeros.  */
+ 
+ static int
+ mostly_zeros_p (const_tree exp)
+ {
+   if (TREE_CODE (exp) == CONSTRUCTOR)
+     {
+-      HOST_WIDE_INT nz_elts, init_elts;
++      HOST_WIDE_INT nz_elts, unz_elts, init_elts;
+       bool complete_p;
+ 
+-      categorize_ctor_elements (exp, &nz_elts, &init_elts, &complete_p);
++      categorize_ctor_elements (exp, &nz_elts, &unz_elts, &init_elts,
++				&complete_p);
+       return !complete_p || nz_elts < init_elts / 4;
+     }
+ 
+@@ -6130,10 +6157,11 @@ all_zeros_p (const_tree exp)
+ {
+   if (TREE_CODE (exp) == CONSTRUCTOR)
+     {
+-      HOST_WIDE_INT nz_elts, init_elts;
++      HOST_WIDE_INT nz_elts, unz_elts, init_elts;
+       bool complete_p;
+ 
+-      categorize_ctor_elements (exp, &nz_elts, &init_elts, &complete_p);
++      categorize_ctor_elements (exp, &nz_elts, &unz_elts, &init_elts,
++				&complete_p);
+       return nz_elts == 0;
+     }
+ 
+diff --git a/gcc/expr.h b/gcc/expr.h
+index 84002abb0..2b9c3aceb 100644
+--- a/gcc/expr.h
++++ b/gcc/expr.h
+@@ -304,7 +304,8 @@ extern bool can_move_by_pieces (unsigned HOST_WIDE_INT, unsigned int);
+ extern unsigned HOST_WIDE_INT highest_pow2_factor (const_tree);
+ 
+ extern bool categorize_ctor_elements (const_tree, HOST_WIDE_INT *,
+-				      HOST_WIDE_INT *, bool *);
++				      HOST_WIDE_INT *, HOST_WIDE_INT *,
++				      bool *);
+ 
+ extern void expand_operands (tree, tree, rtx, rtx*, rtx*,
+ 			     enum expand_modifier);
+diff --git a/gcc/gimplify.c b/gcc/gimplify.c
+index 043596970..b55097a15 100644
+--- a/gcc/gimplify.c
++++ b/gcc/gimplify.c
+@@ -4628,7 +4628,15 @@ gimplify_init_constructor (tree *expr_p, gimple_seq *pre_p, gimple_seq *post_p,
+       {
+ 	struct gimplify_init_ctor_preeval_data preeval_data;
+ 	HOST_WIDE_INT num_ctor_elements, num_nonzero_elements;
++	HOST_WIDE_INT num_unique_nonzero_elements;
+ 	bool cleared, complete_p, valid_const_initializer;
++	/* Use readonly data for initializers of this or smaller size
++	   regardless of the num_nonzero_elements / num_unique_nonzero_elements
++	   ratio.  */
++	const HOST_WIDE_INT min_unique_size = 64;
++	/* If num_nonzero_elements / num_unique_nonzero_elements ratio
++	   is smaller than this, use readonly data.  */
++	const int unique_nonzero_ratio = 8;
+ 
+ 	/* Aggregate types must lower constructors to initialization of
+ 	   individual elements.  The exception is that a CONSTRUCTOR node
+@@ -4645,6 +4653,7 @@ gimplify_init_constructor (tree *expr_p, gimple_seq *pre_p, gimple_seq *post_p,
+ 	   can only do so if it known to be a valid constant initializer.  */
+ 	valid_const_initializer
+ 	  = categorize_ctor_elements (ctor, &num_nonzero_elements,
++				      &num_unique_nonzero_elements,
+ 				      &num_ctor_elements, &complete_p);
+ 
+ 	/* If a const aggregate variable is being initialized, then it
+@@ -4653,7 +4662,16 @@ gimplify_init_constructor (tree *expr_p, gimple_seq *pre_p, gimple_seq *post_p,
+ 	    && num_nonzero_elements > 1
+ 	    && TREE_READONLY (object)
+ 	    && VAR_P (object)
+-	    && (flag_merge_constants >= 2 || !TREE_ADDRESSABLE (object)))
++	    && !DECL_REGISTER (object)
++	    && (flag_merge_constants >= 2 || !TREE_ADDRESSABLE (object))
++	    /* For ctors that have many repeated nonzero elements
++	       represented through RANGE_EXPRs, prefer initializing
++	       those through runtime loops over copies of large amounts
++	       of data from readonly data section.  */
++	    && (num_unique_nonzero_elements
++		> num_nonzero_elements / unique_nonzero_ratio
++		|| ((unsigned HOST_WIDE_INT) int_size_in_bytes (type)
++		    <= (unsigned HOST_WIDE_INT) min_unique_size)))
+ 	  {
+ 	    if (notify_temp_creation)
+ 	      return GS_ERROR;
+@@ -4754,6 +4772,13 @@ gimplify_init_constructor (tree *expr_p, gimple_seq *pre_p, gimple_seq *post_p,
+ 	       is so large as to make individual moves inefficient.  */
+ 	    if (size > 0
+ 		&& num_nonzero_elements > 1
++		/* For ctors that have many repeated nonzero elements
++		   represented through RANGE_EXPRs, prefer initializing
++		   those through runtime loops over copies of large amounts
++		   of data from readonly data section.  */
++		&& (num_unique_nonzero_elements
++		    > num_nonzero_elements / unique_nonzero_ratio
++		    || size <= min_unique_size)
+ 		&& (size < num_nonzero_elements
+ 		    || !can_move_by_pieces (size, align)))
+ 	      {
+diff --git a/gcc/testsuite/g++.dg/tree-ssa/pr82294.C b/gcc/testsuite/g++.dg/tree-ssa/pr82294.C
+new file mode 100644
+index 000000000..25aaba7d0
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/tree-ssa/pr82294.C
+@@ -0,0 +1,13 @@
++// PR c++/82294
++// { dg-do compile { target c++11 } }
++// { dg-options "-O2 -fdump-tree-gimple" }
++
++// Verify we don't "optimize" the ctor as copying a 1KB .rodata
++// object into the variable.  It is better to initialize it through
++// a loop.
++// { dg-final { scan-tree-dump-not "this->arr = " "gimple" } }
++
++struct S { int x; explicit constexpr S (); };
++constexpr S::S () : x{7} {}
++struct T { S arr[256]; explicit T (); };
++T::T () {}
+diff --git a/gcc/testsuite/g++.dg/tree-ssa/pr87436.C b/gcc/testsuite/g++.dg/tree-ssa/pr87436.C
+new file mode 100644
+index 000000000..6e35bf8af
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/tree-ssa/pr87436.C
+@@ -0,0 +1,25 @@
++// PR c++/87436
++// { dg-do compile { target { c++11 && size32plus } } }
++// { dg-options "-O2 -fdump-tree-gimple" }
++
++// Verify we don't "optimize" the ctor as copying a 384MB .rodata
++// object into the variable.  It is better to initialize it through
++// two nested loops.
++// { dg-final { scan-tree-dump-not "this->arr = " "gimple" } }
++
++struct S {
++  int a = -1;
++  short b = 3;
++  int x = 0;
++  int y = 1;
++  int z = 42;
++  float f = 0.123f;
++};
++
++struct T { S arr[4096][4096]; };
++
++T *
++foo ()
++{
++  return new T;
++}
+diff --git a/gcc/testsuite/gcc.c-torture/compile/pr93949.c b/gcc/testsuite/gcc.c-torture/compile/pr93949.c
+new file mode 100644
+index 000000000..bbda02098
+--- /dev/null
++++ b/gcc/testsuite/gcc.c-torture/compile/pr93949.c
+@@ -0,0 +1,7 @@
++/* PR c/93949 */
++
++void
++foo (void)
++{
++  register const double d[3] = { 0., 1., 2. };
++}

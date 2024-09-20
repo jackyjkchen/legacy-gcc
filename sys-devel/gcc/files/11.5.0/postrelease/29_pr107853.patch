@@ -1,0 +1,135 @@
+diff --git a/gcc/cp/constraint.cc b/gcc/cp/constraint.cc
+index 822bc6261..daf16157c 100644
+--- a/gcc/cp/constraint.cc
++++ b/gcc/cp/constraint.cc
+@@ -1306,11 +1306,12 @@ maybe_substitute_reqs_for (tree reqs, const_tree decl)
+   if (DECL_UNIQUE_FRIEND_P (decl) && DECL_TEMPLATE_INFO (decl))
+     {
+       tree tmpl = DECL_TI_TEMPLATE (decl);
+-      tree gargs = generic_targs_for (tmpl);
++      tree outer_args = outer_template_args (tmpl);
+       processing_template_decl_sentinel s;
+-      if (uses_template_parms (gargs))
++      if (PRIMARY_TEMPLATE_P (tmpl)
++	  || uses_template_parms (outer_args))
+ 	++processing_template_decl;
+-      reqs = tsubst_constraint (reqs, gargs,
++      reqs = tsubst_constraint (reqs, outer_args,
+ 				tf_warning_or_error, NULL_TREE);
+     }
+   return reqs;
+diff --git a/gcc/cp/cp-tree.h b/gcc/cp/cp-tree.h
+index f8e643bee..1b09decde 100644
+--- a/gcc/cp/cp-tree.h
++++ b/gcc/cp/cp-tree.h
+@@ -6858,6 +6858,7 @@ extern tree maybe_set_retval_sentinel		(void);
+ extern tree template_parms_to_args		(tree);
+ extern tree template_parms_level_to_args	(tree);
+ extern tree generic_targs_for			(tree);
++extern tree outer_template_args			(tree);
+ 
+ /* in expr.c */
+ extern tree cplus_expand_constant		(tree);
+diff --git a/gcc/cp/pt.c b/gcc/cp/pt.c
+index c4ef7ded2..1164f433e 100644
+--- a/gcc/cp/pt.c
++++ b/gcc/cp/pt.c
+@@ -4921,6 +4921,28 @@ generic_targs_for (tree tmpl)
+   return template_parms_to_args (DECL_TEMPLATE_PARMS (tmpl));
+ }
+ 
++/* Return the template arguments corresponding to the template parameters of
++   TMPL's enclosing scope.  When TMPL is a member of a partial specialization,
++   this returns the arguments for the partial specialization as opposed to those
++   for the primary template, which is the main difference between this function
++   and simply using e.g. the TYPE_TI_ARGS of TMPL's DECL_CONTEXT.  */
++
++tree
++outer_template_args (tree tmpl)
++{
++  tree ti = get_template_info (DECL_TEMPLATE_RESULT (tmpl));
++  if (!ti)
++    return NULL_TREE;
++  tree args = TI_ARGS (ti);
++  if (!PRIMARY_TEMPLATE_P (tmpl))
++    return args;
++  if (TMPL_ARGS_DEPTH (args) == 1)
++    return NULL_TREE;
++  args = copy_node (args);
++  --TREE_VEC_LENGTH (args);
++  return args;
++}
++
+ /* Update the declared TYPE by doing any lookups which were thought to be
+    dependent, but are not now that we know the SCOPE of the declarator.  */
+ 
+@@ -29423,14 +29445,8 @@ alias_ctad_tweaks (tree tmpl, tree uguides)
+ static tree
+ ctor_deduction_guides_for (tree tmpl, tsubst_flags_t complain)
+ {
+-  tree type = TREE_TYPE (tmpl);
+-  tree outer_args = NULL_TREE;
+-  if (DECL_CLASS_SCOPE_P (tmpl)
+-      && CLASSTYPE_TEMPLATE_INSTANTIATION (DECL_CONTEXT (tmpl)))
+-    {
+-      outer_args = CLASSTYPE_TI_ARGS (DECL_CONTEXT (tmpl));
+-      type = TREE_TYPE (most_general_template (tmpl));
+-    }
++  tree outer_args = outer_template_args (tmpl);
++  tree type = TREE_TYPE (most_general_template (tmpl));
+ 
+   tree cands = NULL_TREE;
+ 
+diff --git a/gcc/testsuite/g++.dg/cpp2a/concepts-friend12.C b/gcc/testsuite/g++.dg/cpp2a/concepts-friend12.C
+new file mode 100644
+index 000000000..9687be593
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp2a/concepts-friend12.C
+@@ -0,0 +1,21 @@
++// PR c++/107853
++// { dg-do compile { target c++20 } }
++
++template<class T, class U>
++concept C = __is_same(T, U);
++
++template<class... Ts>
++struct A {
++  template<class... Us>
++    requires (C<Ts, Us> && ...)
++  friend void f(A, A<Us...>) { }
++};
++
++int main() {
++  A<int> x;
++  f(x, x);
++  A<int, int> y;
++  f(y, y);
++  A<char> z;
++  f(x, z); // { dg-error "no match" }
++}
+diff --git a/gcc/testsuite/g++.dg/cpp2a/concepts-friend13.C b/gcc/testsuite/g++.dg/cpp2a/concepts-friend13.C
+new file mode 100644
+index 000000000..3cc4505a7
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp2a/concepts-friend13.C
+@@ -0,0 +1,20 @@
++// Verify we substitute the correct outer template arguments
++// when instantiating a constrained template friend declared
++// inside a partial specialization.
++// { dg-do compile { target c++20 } }
++
++template<class U>
++  requires __is_same(int*, U)
++void f() { };
++
++template<class T>
++struct A;
++
++template<class T>
++struct A<T*> {
++  template<class U>
++    requires __is_same(T, U)
++  friend void f() { } // { dg-bogus "redefinition" }
++};
++
++template struct A<int*>;

@@ -1,0 +1,159 @@
+diff --git a/libstdc++-v3/include/bits/unique_ptr.h b/libstdc++-v3/include/bits/unique_ptr.h
+index 93c579788..080d0dbff 100644
+--- a/libstdc++-v3/include/bits/unique_ptr.h
++++ b/libstdc++-v3/include/bits/unique_ptr.h
+@@ -143,14 +143,9 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
+       // unique_ptr
+       template<typename _Up, typename _Ep>
+ 	using __safe_conversion_up = __and_<
+-	        is_convertible<typename unique_ptr<_Up, _Ep>::pointer, pointer>,
+-                __not_<is_array<_Up>>,
+-                __or_<__and_<is_reference<deleter_type>,
+-                             is_same<deleter_type, _Ep>>,
+-                      __and_<__not_<is_reference<deleter_type>>,
+-                             is_convertible<_Ep, deleter_type>>
+-                >
+-              >;
++	  is_convertible<typename unique_ptr<_Up, _Ep>::pointer, pointer>,
++	  __not_<is_array<_Up>>
++        >;
+ 
+       // Constructors.
+ 
+@@ -405,16 +400,14 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
+       // helper template for detecting a safe conversion from another
+       // unique_ptr
+       template<typename _Up, typename _Ep,
+-               typename _Up_up = unique_ptr<_Up, _Ep>,
+-	       typename _Up_element_type = typename _Up_up::element_type>
++               typename _UPtr = unique_ptr<_Up, _Ep>,
++	       typename _UP_pointer = typename _UPtr::pointer,
++	       typename _UP_element_type = typename _UPtr::element_type>
+ 	using __safe_conversion_up = __and_<
+           is_array<_Up>,
+           is_same<pointer, element_type*>,
+-          is_same<typename _Up_up::pointer, _Up_element_type*>,
+-          is_convertible<_Up_element_type(*)[], element_type(*)[]>,
+-          __or_<__and_<is_reference<deleter_type>, is_same<deleter_type, _Ep>>,
+-                __and_<__not_<is_reference<deleter_type>>,
+-                       is_convertible<_Ep, deleter_type>>>
++          is_same<_UP_pointer, _UP_element_type*>,
++          is_convertible<_UP_element_type(*)[], element_type(*)[]>
+         >;
+ 
+       // helper template for detecting a safe conversion from a raw pointer
+@@ -497,8 +490,11 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
+       { static_assert(!is_pointer<deleter_type>::value,
+ 		      "constructed with null function pointer deleter"); }
+ 
+-      template<typename _Up, typename _Ep,
+-	       typename = _Require<__safe_conversion_up<_Up, _Ep>>>
++      template<typename _Up, typename _Ep, typename = _Require<
++	       __safe_conversion_up<_Up, _Ep>,
++	       typename conditional<is_reference<_Dp>::value,
++				    is_same<_Ep, _Dp>,
++				    is_convertible<_Ep, _Dp>>::type>>
+ 	unique_ptr(unique_ptr<_Up, _Ep>&& __u) noexcept
+ 	: _M_t(__u.release(), std::forward<_Ep>(__u.get_deleter()))
+ 	{ }
+diff --git a/libstdc++-v3/testsuite/20_util/unique_ptr/assign/48635_neg.cc b/libstdc++-v3/testsuite/20_util/unique_ptr/assign/48635_neg.cc
+index e64b45353..120725f8d 100644
+--- a/libstdc++-v3/testsuite/20_util/unique_ptr/assign/48635_neg.cc
++++ b/libstdc++-v3/testsuite/20_util/unique_ptr/assign/48635_neg.cc
+@@ -1,7 +1,6 @@
+-// { dg-options "-std=gnu++11" }
+-// { dg-do compile }
++// { dg-do compile { target c++11 } }
+ 
+-// Copyright (C) 2011-2016 Free Software Foundation, Inc.
++// Copyright (C) 2011-2017 Free Software Foundation, Inc.
+ //
+ // This file is part of the GNU ISO C++ Library.  This library is free
+ // software; you can redistribute it and/or modify it under the
+@@ -43,10 +42,9 @@ void f()
+   std::unique_ptr<int, D&> ud(nullptr, d);
+   ub = std::move(ud); // { dg-error "no match" }
+   ub2 = ud; // { dg-error "no match" }
+-// { dg-error "no type" "" { target *-*-* } 274 }
+ 
+   std::unique_ptr<int[], B&> uba(nullptr, b);
+   std::unique_ptr<int[], D&> uda(nullptr, d);
+   uba = std::move(uda); // { dg-error "no match" }
+-// { dg-error "no type" "" { target *-*-* } 544 }
+ }
++// { dg-prune-output "no type" }
+diff --git a/libstdc++-v3/testsuite/20_util/unique_ptr/assign/91308.cc b/libstdc++-v3/testsuite/20_util/unique_ptr/assign/91308.cc
+new file mode 100644
+index 000000000..6500ea43f
+--- /dev/null
++++ b/libstdc++-v3/testsuite/20_util/unique_ptr/assign/91308.cc
+@@ -0,0 +1,46 @@
++// Copyright (C) 2019 Free Software Foundation, Inc.
++//
++// This file is part of the GNU ISO C++ Library.  This library is free
++// software; you can redistribute it and/or modify it under the
++// terms of the GNU General Public License as published by the
++// Free Software Foundation; either version 3, or (at your option)
++// any later version.
++
++// This library is distributed in the hope that it will be useful,
++// but WITHOUT ANY WARRANTY; without even the implied warranty of
++// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++// GNU General Public License for more details.
++
++// You should have received a copy of the GNU General Public License along
++// with this library; see the file COPYING3.  If not see
++// <http://www.gnu.org/licenses/>.
++
++// { dg-do compile { target c++11 } }
++
++#include <memory>
++
++struct D1
++{
++  void operator()(int* p) const noexcept { }
++};
++
++struct D2 : D1
++{
++  D2& operator=(D1&&) noexcept { return *this; }
++};
++
++void
++test01()
++{
++  std::unique_ptr<int, D1> d1;
++  std::unique_ptr<int, D2> d2;
++  d2 = std::move(d1);
++}
++
++void
++test02()
++{
++  std::unique_ptr<int[], D1> d1;
++  std::unique_ptr<int[], D2> d2;
++  d2 = std::move(d1);
++}
+diff --git a/libstdc++-v3/testsuite/20_util/unique_ptr/cons/cv_qual_neg.cc b/libstdc++-v3/testsuite/20_util/unique_ptr/cons/cv_qual_neg.cc
+index 9b8cba45a..489ee3efd 100644
+--- a/libstdc++-v3/testsuite/20_util/unique_ptr/cons/cv_qual_neg.cc
++++ b/libstdc++-v3/testsuite/20_util/unique_ptr/cons/cv_qual_neg.cc
+@@ -1,7 +1,6 @@
+-// { dg-options "-std=gnu++11" }
+-// { dg-do compile }
++// { dg-do compile { target c++11 } }
+ 
+-// Copyright (C) 2016 Free Software Foundation, Inc.
++// Copyright (C) 2016-2017 Free Software Foundation, Inc.
+ //
+ // This file is part of the GNU ISO C++ Library.  This library is free
+ // software; you can redistribute it and/or modify it under the
+@@ -40,7 +39,7 @@ test07()
+   std::unique_ptr<const A[]> cA3(p); // { dg-error "no matching function" }
+   std::unique_ptr<volatile A[]> vA3(p); // { dg-error "no matching function" }
+   std::unique_ptr<const volatile A[]> cvA3(p); // { dg-error "no matching function" }
+-  // { dg-error "no type" "" { target *-*-* } 450 }
++  // { dg-prune-output "no type" }
+ }
+ 
+ template<typename T>

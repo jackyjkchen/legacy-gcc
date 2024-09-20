@@ -1,0 +1,123 @@
+diff --git a/gcc/cp/cp-tree.h b/gcc/cp/cp-tree.h
+index 7c3e8cd7b..e374362f7 100644
+--- a/gcc/cp/cp-tree.h
++++ b/gcc/cp/cp-tree.h
+@@ -6091,8 +6091,8 @@ extern int is_specialization_of			(tree, tree);
+ extern bool is_specialization_of_friend		(tree, tree);
+ extern tree get_pattern_parm			(tree, tree);
+ extern int comp_template_args			(tree, tree, tree * = NULL,
+-						 tree * = NULL);
+-extern int template_args_equal                  (tree, tree);
++						 tree * = NULL, bool = false);
++extern int template_args_equal                  (tree, tree, bool = false);
+ extern tree maybe_process_partial_specialization (tree);
+ extern tree most_specialized_instantiation	(tree);
+ extern void print_candidates			(tree);
+diff --git a/gcc/cp/pt.c b/gcc/cp/pt.c
+index 81b1c4d44..08f06dbba 100644
+--- a/gcc/cp/pt.c
++++ b/gcc/cp/pt.c
+@@ -7872,7 +7872,7 @@ coerce_innermost_template_parms (tree parms,
+ /* Returns 1 if template args OT and NT are equivalent.  */
+ 
+ int
+-template_args_equal (tree ot, tree nt)
++template_args_equal (tree ot, tree nt, bool partial_order /* = false */)
+ {
+   if (nt == ot)
+     return 1;
+@@ -7928,8 +7928,13 @@ template_args_equal (tree ot, tree nt)
+ 	 template argument; we need them to be distinct so that we
+ 	 substitute into the specialization arguments at instantiation
+ 	 time.  And aliases can't be equivalent without being ==, so
+-	 we don't need to look any deeper.  */
+-      if (TYPE_ALIAS_P (nt) || TYPE_ALIAS_P (ot))
++	 we don't need to look any deeper.
++
++         During partial ordering, however, we need to treat them normally so
++         that we can order uses of the same alias with different
++         cv-qualification (79960).  */
++      if (!partial_order
++	  && (TYPE_ALIAS_P (nt) || TYPE_ALIAS_P (ot)))
+ 	return false;
+       else
+ 	return same_type_p (ot, nt);
+@@ -7961,7 +7966,8 @@ template_args_equal (tree ot, tree nt)
+ 
+ int
+ comp_template_args (tree oldargs, tree newargs,
+-		    tree *oldarg_ptr, tree *newarg_ptr)
++		    tree *oldarg_ptr, tree *newarg_ptr,
++		    bool partial_order)
+ {
+   int i;
+ 
+@@ -7979,7 +7985,7 @@ comp_template_args (tree oldargs, tree newargs,
+       tree nt = TREE_VEC_ELT (newargs, i);
+       tree ot = TREE_VEC_ELT (oldargs, i);
+ 
+-      if (! template_args_equal (ot, nt))
++      if (! template_args_equal (ot, nt, partial_order))
+ 	{
+ 	  if (oldarg_ptr != NULL)
+ 	    *oldarg_ptr = ot;
+@@ -7991,6 +7997,12 @@ comp_template_args (tree oldargs, tree newargs,
+   return 1;
+ }
+ 
++inline bool
++comp_template_args_porder (tree oargs, tree nargs)
++{
++  return comp_template_args (oargs, nargs, NULL, NULL, true);
++}
++
+ static void
+ add_pending_template (tree d)
+ {
+@@ -20838,8 +20850,8 @@ get_partial_spec_bindings (tree tmpl, tree tparms, tree spec_args, tree args)
+   if (spec_args == error_mark_node
+       /* We only need to check the innermost arguments; the other
+ 	 arguments will always agree.  */
+-      || !comp_template_args (INNERMOST_TEMPLATE_ARGS (spec_args),
+-			      INNERMOST_TEMPLATE_ARGS (args)))
++      || !comp_template_args_porder (INNERMOST_TEMPLATE_ARGS (spec_args),
++				     INNERMOST_TEMPLATE_ARGS (args)))
+     return NULL_TREE;
+ 
+   /* Now that we have bindings for all of the template arguments,
+diff --git a/gcc/testsuite/g++.dg/cpp0x/alias-decl-57.C b/gcc/testsuite/g++.dg/cpp0x/alias-decl-57.C
+new file mode 100644
+index 000000000..f257e62d2
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/alias-decl-57.C
+@@ -0,0 +1,30 @@
++// PR c++/79960
++// { dg-do compile { target c++11 } }
++
++using size_t = decltype(sizeof(0));
++
++template<typename T> struct tuple_size;
++
++template<typename T, size_t U = tuple_size<T>::value>
++  using __has_tuple_size = T;
++
++template<typename T> struct tuple_size<const __has_tuple_size<T>> {
++  static constexpr size_t value = tuple_size<T>::value;
++};
++
++template<typename T> struct tuple_size<volatile __has_tuple_size<T>> {
++  static constexpr size_t value = tuple_size<T>::value;
++};
++
++template<typename T> struct tuple_size<const __has_tuple_size<volatile T>> {
++  static constexpr size_t value = tuple_size<T>::value;
++};
++
++template<typename... T> struct tuple { };
++template<typename... T> struct tuple_size<tuple<T...>> {
++  static constexpr size_t value = sizeof...(T);
++};
++
++static_assert( tuple_size<const tuple<>>::value == 0, "" );  // OK
++static_assert( tuple_size<volatile tuple<>>::value == 0, "" ); // OK
++static_assert( tuple_size<const volatile tuple<>>::value == 0, "" ); // FAIL

@@ -1,0 +1,107 @@
+diff --git a/gcc/cp/cp-tree.h b/gcc/cp/cp-tree.h
+index 8bae0acbb..f0f874fb0 100644
+--- a/gcc/cp/cp-tree.h
++++ b/gcc/cp/cp-tree.h
+@@ -6623,6 +6623,7 @@ extern tree get_type_value			(tree);
+ extern tree build_zero_init			(tree, tree, bool);
+ extern tree build_value_init			(tree, tsubst_flags_t);
+ extern tree build_value_init_noctor		(tree, tsubst_flags_t);
++extern tree maybe_instantiate_nsdmi_init	(tree, tsubst_flags_t);
+ extern tree get_nsdmi				(tree, bool, tsubst_flags_t);
+ extern tree build_offset_ref			(tree, tree, bool,
+ 						 tsubst_flags_t);
+diff --git a/gcc/cp/init.c b/gcc/cp/init.c
+index 8e60b9473..a28dbb279 100644
+--- a/gcc/cp/init.c
++++ b/gcc/cp/init.c
+@@ -546,18 +546,16 @@ perform_target_ctor (tree init)
+     }
+ }
+ 
+-/* Return the non-static data initializer for FIELD_DECL MEMBER.  */
++/* Instantiate the default member initializer of MEMBER, if needed.
++   Only get_nsdmi should use the return value of this function.  */
+ 
+ static GTY((cache)) tree_cache_map *nsdmi_inst;
+ 
+ tree
+-get_nsdmi (tree member, bool in_ctor, tsubst_flags_t complain)
++maybe_instantiate_nsdmi_init (tree member, tsubst_flags_t complain)
+ {
+-  tree init;
+-  tree save_ccp = current_class_ptr;
+-  tree save_ccr = current_class_ref;
+-  
+-  if (DECL_LANG_SPECIFIC (member) && DECL_TEMPLATE_INFO (member))
++  tree init = DECL_INITIAL (member);
++  if (init && DECL_LANG_SPECIFIC (member) && DECL_TEMPLATE_INFO (member))
+     {
+       init = DECL_INITIAL (DECL_TI_TEMPLATE (member));
+       location_t expr_loc
+@@ -629,8 +627,19 @@ get_nsdmi (tree member, bool in_ctor, tsubst_flags_t complain)
+ 	  input_location = sloc;
+ 	}
+     }
+-  else
+-    init = DECL_INITIAL (member);
++
++  return init;
++}
++
++/* Return the non-static data initializer for FIELD_DECL MEMBER.  */
++
++tree
++get_nsdmi (tree member, bool in_ctor, tsubst_flags_t complain)
++{
++  tree save_ccp = current_class_ptr;
++  tree save_ccr = current_class_ref;
++
++  tree init = maybe_instantiate_nsdmi_init (member, complain);
+ 
+   if (init && TREE_CODE (init) == DEFAULT_ARG)
+     {
+diff --git a/gcc/cp/pt.c b/gcc/cp/pt.c
+index 38172807f..f972f31fa 100644
+--- a/gcc/cp/pt.c
++++ b/gcc/cp/pt.c
+@@ -17718,6 +17718,8 @@ tsubst_expr (tree t, tree args, tsubst_flags_t complain, tree in_decl,
+ 	  /* Closures are handled by the LAMBDA_EXPR.  */
+ 	  gcc_assert (!LAMBDA_TYPE_P (TREE_TYPE (t)));
+ 	  complete_type (tmp);
++	  tree save_ccp = current_class_ptr;
++	  tree save_ccr = current_class_ref;
+ 	  for (tree fld = TYPE_FIELDS (tmp); fld; fld = DECL_CHAIN (fld))
+ 	    if ((VAR_P (fld)
+ 		 || (TREE_CODE (fld) == FUNCTION_DECL
+@@ -17725,6 +17727,10 @@ tsubst_expr (tree t, tree args, tsubst_flags_t complain, tree in_decl,
+ 		&& DECL_TEMPLATE_INSTANTIATION (fld))
+ 	      instantiate_decl (fld, /*defer_ok=*/false,
+ 				/*expl_inst_class=*/false);
++	    else if (TREE_CODE (fld) == FIELD_DECL)
++	      maybe_instantiate_nsdmi_init (fld, tf_warning_or_error);
++	  current_class_ptr = save_ccp;
++	  current_class_ref = save_ccr;
+ 	}
+       break;
+ 
+diff --git a/gcc/testsuite/g++.dg/cpp0x/constexpr-__func__3.C b/gcc/testsuite/g++.dg/cpp0x/constexpr-__func__3.C
+new file mode 100644
+index 000000000..365a4e00c
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/constexpr-__func__3.C
+@@ -0,0 +1,15 @@
++// PR c++/105809
++// { dg-do compile { target c++11 } }
++
++template<typename ss> void hh() {  ss t; }
++
++template<int>
++int f(void)
++{
++    constexpr char const* cc = __func__;
++    struct j{  char const* kk=cc; };
++    hh<j>();
++    return 0;
++}
++
++int t = f<1>();

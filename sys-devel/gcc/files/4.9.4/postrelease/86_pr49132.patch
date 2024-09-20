@@ -1,0 +1,134 @@
+diff --git a/gcc/cp/typeck2.c b/gcc/cp/typeck2.c
+index f8af0964c..2b6a1e42f 100644
+--- a/gcc/cp/typeck2.c
++++ b/gcc/cp/typeck2.c
+@@ -1341,37 +1341,32 @@ process_init_constructor_record (tree type, tree init,
+ 	  next = massage_init_elt (TREE_TYPE (field), next, complain);
+ 
+ 	  /* Warn when some struct elements are implicitly initialized.  */
+-	  warning (OPT_Wmissing_field_initializers,
+-		   "missing initializer for member %qD", field);
++	  if (complain & tf_warning)
++	    warning (OPT_Wmissing_field_initializers,
++		     "missing initializer for member %qD", field);
+ 	}
+       else
+ 	{
+-	  if (TREE_READONLY (field))
++	  if (TREE_CODE (TREE_TYPE (field)) == REFERENCE_TYPE)
+ 	    {
+ 	      if (complain & tf_error)
+-		error ("uninitialized const member %qD", field);
+-	      else
+-		return PICFLAG_ERRONEOUS;
+-	    }
+-	  else if (CLASSTYPE_READONLY_FIELDS_NEED_INIT (TREE_TYPE (field)))
+-	    {
+-	      if (complain & tf_error)
+-		error ("member %qD with uninitialized const fields", field);
++		error ("member %qD is uninitialized reference", field);
+ 	      else
+ 		return PICFLAG_ERRONEOUS;
+ 	    }
+-	  else if (TREE_CODE (TREE_TYPE (field)) == REFERENCE_TYPE)
++	  else if (CLASSTYPE_REF_FIELDS_NEED_INIT (TREE_TYPE (field)))
+ 	    {
+ 	      if (complain & tf_error)
+-		error ("member %qD is uninitialized reference", field);
++		error ("member %qD with uninitialized reference fields", field);
+ 	      else
+ 		return PICFLAG_ERRONEOUS;
+ 	    }
+ 
+ 	  /* Warn when some struct elements are implicitly initialized
+ 	     to zero.  */
+-	  warning (OPT_Wmissing_field_initializers,
+-		   "missing initializer for member %qD", field);
++	  if (complain & tf_warning)
++	    warning (OPT_Wmissing_field_initializers,
++		     "missing initializer for member %qD", field);
+ 
+ 	  if (!zero_init_p (TREE_TYPE (field)))
+ 	    next = build_zero_init (TREE_TYPE (field), /*nelts=*/NULL_TREE,
+diff --git a/gcc/testsuite/g++.dg/cpp0x/aggr1.C b/gcc/testsuite/g++.dg/cpp0x/aggr1.C
+new file mode 100644
+index 000000000..0e408e6c6
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/aggr1.C
+@@ -0,0 +1,16 @@
++// PR c++/49132
++// { dg-do compile { target c++11 } }
++
++struct A {
++  const int m;
++};
++
++A a1 = {};
++A a2{};
++
++struct B {
++  A a;
++};
++
++B b1 = {};
++B b2{};
+diff --git a/gcc/testsuite/g++.dg/cpp0x/aggr2.C b/gcc/testsuite/g++.dg/cpp0x/aggr2.C
+new file mode 100644
+index 000000000..26e9dd05b
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/aggr2.C
+@@ -0,0 +1,16 @@
++// PR c++/49132
++// { dg-do compile { target c++11 } }
++
++struct A {
++  int& m;
++};
++
++A a1 = {};  // { dg-error "uninitialized reference" }
++A a2{};     // { dg-error "uninitialized reference" }
++
++struct B {
++  A a;
++};
++
++B b1 = {};  // { dg-error "uninitialized reference" }
++B b2{};     // { dg-error "uninitialized reference" }
+diff --git a/gcc/testsuite/g++.dg/init/aggr11.C b/gcc/testsuite/g++.dg/init/aggr11.C
+new file mode 100644
+index 000000000..0da3f410a
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/init/aggr11.C
+@@ -0,0 +1,13 @@
++// PR c++/49132
++
++struct A {
++  const int m;
++};
++
++A a1 = {};
++
++struct B {
++  A a;
++};
++
++B b1 = {};
+diff --git a/gcc/testsuite/g++.dg/init/aggr12.C b/gcc/testsuite/g++.dg/init/aggr12.C
+new file mode 100644
+index 000000000..0c4bd3a20
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/init/aggr12.C
+@@ -0,0 +1,13 @@
++// PR c++/49132
++
++struct A {
++  int& m;
++};
++
++A a1 = {}; // { dg-error "uninitialized reference" }
++
++struct B {
++  A a;
++};
++
++B b1 = {}; // { dg-error "uninitialized reference" }

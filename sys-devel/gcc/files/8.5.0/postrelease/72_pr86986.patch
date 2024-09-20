@@ -1,0 +1,55 @@
+diff --git a/gcc/cp/pt.c b/gcc/cp/pt.c
+index c6f25c5a3..f4c04a618 100644
+--- a/gcc/cp/pt.c
++++ b/gcc/cp/pt.c
+@@ -5178,7 +5178,13 @@ fixed_parameter_pack_p_1 (tree parm, struct find_parameter_pack_data *ppd)
+ 
+   tree vec = INNERMOST_TEMPLATE_PARMS (DECL_TEMPLATE_PARMS (parm));
+   for (int i = 0; i < TREE_VEC_LENGTH (vec); ++i)
+-    fixed_parameter_pack_p_1 (TREE_VALUE (TREE_VEC_ELT (vec, i)), ppd);
++    {
++      tree p = TREE_VALUE (TREE_VEC_ELT (vec, i));
++      if (template_parameter_pack_p (p))
++	/* Any packs in the type are expanded by this parameter.  */;
++      else
++	fixed_parameter_pack_p_1 (p, ppd);
++    }
+ }
+ 
+ /* PARM is a template parameter pack.  Return any parameter packs used in
+@@ -7562,6 +7568,7 @@ coerce_template_template_parms (tree parm_parms,
+ 	 args and the converted args.  If that succeeds, A is at least as
+ 	 specialized as P, so they match.*/
+       tree pargs = template_parms_level_to_args (parm_parms);
++      pargs = add_outermost_template_args (outer_args, pargs);
+       ++processing_template_decl;
+       pargs = coerce_template_parms (arg_parms, pargs, NULL_TREE, tf_none,
+ 				     /*require_all*/true, /*use_default*/true);
+@@ -8189,8 +8196,9 @@ coerce_template_parameter_pack (tree parms,
+           int j, len = TREE_VEC_LENGTH (packed_parms);
+           for (j = 0; j < len; ++j)
+             {
+-              tree t = TREE_TYPE (TREE_VEC_ELT (packed_parms, j));
+-              if (invalid_nontype_parm_type_p (t, complain))
++              tree t = TREE_VEC_ELT (packed_parms, j);
++              if (TREE_CODE (t) == PARM_DECL
++		  && invalid_nontype_parm_type_p (TREE_TYPE (t), complain))
+                 return error_mark_node;
+             }
+ 	  /* We don't know how many args we have yet, just
+diff --git a/gcc/testsuite/g++.dg/cpp0x/variadic-ttp9.C b/gcc/testsuite/g++.dg/cpp0x/variadic-ttp9.C
+new file mode 100644
+index 000000000..63e3f2684
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/variadic-ttp9.C
+@@ -0,0 +1,10 @@
++// PR c++/86986
++// { dg-do compile { target c++11 } }
++
++template<class... T>
++struct X {
++    template<template<T...> class...>
++    struct Y { };
++};
++
++using type = X<int>::Y<>;

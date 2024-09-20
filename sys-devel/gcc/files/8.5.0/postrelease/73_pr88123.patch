@@ -1,0 +1,212 @@
+diff --git a/gcc/cp/decl.c b/gcc/cp/decl.c
+index c00fae5b0..2a1b4108f 100644
+--- a/gcc/cp/decl.c
++++ b/gcc/cp/decl.c
+@@ -15397,6 +15397,8 @@ start_preparsed_function (tree decl1, tree attrs, int flags)
+ 
+   store_parm_decls (current_function_parms);
+ 
++  push_operator_bindings ();
++
+   if (!processing_template_decl
+       && (flag_lifetime_dse > 1)
+       && DECL_CONSTRUCTOR_P (decl1)
+diff --git a/gcc/cp/name-lookup.c b/gcc/cp/name-lookup.c
+index 6c1642a60..ed07315b8 100644
+--- a/gcc/cp/name-lookup.c
++++ b/gcc/cp/name-lookup.c
+@@ -7386,4 +7386,103 @@ dependent_local_decl_p (tree d)
+ 
+ 
+ 
++/* Return the result of unqualified lookup for the overloaded operator
++   designated by CODE, if we are in a template and the binding we find is
++   not.  */
++
++static tree
++op_unqualified_lookup (tree fnname)
++{
++  if (cxx_binding *binding = IDENTIFIER_BINDING (fnname))
++    {
++      cp_binding_level *l = binding->scope;
++      while (l && !l->this_entity)
++	l = l->level_chain;
++      if (l && uses_template_parms (l->this_entity))
++	/* Don't preserve decls from an uninstantiated template,
++	   wait until that template is instantiated.  */
++	return NULL_TREE;
++    }
++  tree fns = lookup_name (fnname);
++  if (fns && fns == get_global_binding (fnname))
++    /* The instantiation can find these.  */
++    return NULL_TREE;
++  return fns;
++}
++
++/* E is an expression representing an operation with dependent type, so we
++   don't know yet whether it will use the built-in meaning of the operator or a
++   function.  Remember declarations of that operator in scope.  */
++
++const char *const op_bind_attrname = "operator bindings";
++
++void
++maybe_save_operator_binding (tree e)
++{
++  /* This is only useful in a generic lambda.  */
++  if (!processing_template_decl)
++    return;
++  tree cfn = current_function_decl;
++  if (!cfn)
++    return;
++
++  /* Let's only do this for generic lambdas for now, we could do it for all
++     function templates if we wanted to.  */
++  if (!current_lambda_expr())
++    return;
++
++  tree fnname = ovl_op_identifier (false, TREE_CODE (e));
++  if (!fnname)
++    return;
++
++  tree attributes = DECL_ATTRIBUTES (cfn);
++  tree attr = lookup_attribute (op_bind_attrname, attributes);
++  tree bindings = NULL_TREE;
++  tree fns = NULL_TREE;
++  if (attr)
++    {
++      bindings = TREE_VALUE (attr);
++      if (tree elt = purpose_member (fnname, bindings))
++	fns = TREE_VALUE (elt);
++    }
++
++  if (!fns && (fns = op_unqualified_lookup (fnname)))
++    {
++      bindings = tree_cons (fnname, fns, bindings);
++      if (attr)
++	TREE_VALUE (attr) = bindings;
++      else
++	DECL_ATTRIBUTES (cfn)
++	  = tree_cons (get_identifier (op_bind_attrname),
++		       bindings,
++		       attributes);
++    }
++}
++
++/* Called from cp_free_lang_data so we don't put this into LTO.  */
++
++void
++discard_operator_bindings (tree decl)
++{
++  DECL_ATTRIBUTES (decl) = remove_attribute (op_bind_attrname,
++					     DECL_ATTRIBUTES (decl));
++}
++
++/* Subroutine of start_preparsed_function: push the bindings we saved away in
++   maybe_save_op_lookup into the function parameter binding level.  */
++
++void
++push_operator_bindings ()
++{
++  tree decl1 = current_function_decl;
++  if (tree attr = lookup_attribute (op_bind_attrname,
++				    DECL_ATTRIBUTES (decl1)))
++    for (tree binds = TREE_VALUE (attr); binds; binds = TREE_CHAIN (binds))
++      {
++	tree name = TREE_PURPOSE (binds);
++	tree val = TREE_VALUE (binds);
++	push_local_binding (name, val, /*using*/true);
++      }
++}
++
+ #include "gt-cp-name-lookup.h"
+diff --git a/gcc/cp/name-lookup.h b/gcc/cp/name-lookup.h
+index 8c587d352..19f2e594a 100644
+--- a/gcc/cp/name-lookup.h
++++ b/gcc/cp/name-lookup.h
+@@ -335,5 +335,8 @@ extern void push_nested_namespace (tree);
+ extern void pop_nested_namespace (tree);
+ extern void push_to_top_level (void);
+ extern void pop_from_top_level (void);
++extern void maybe_save_operator_binding (tree);
++extern void push_operator_bindings (void);
++extern void discard_operator_bindings (tree);
+ 
+ #endif /* GCC_CP_NAME_LOOKUP_H */
+diff --git a/gcc/cp/tree.c b/gcc/cp/tree.c
+index 6ff506bbd..3c32706f4 100644
+--- a/gcc/cp/tree.c
++++ b/gcc/cp/tree.c
+@@ -5424,6 +5424,8 @@ cp_free_lang_data (tree t)
+       DECL_EXTERNAL (t) = 1;
+       TREE_STATIC (t) = 0;
+     }
++  if (TREE_CODE (t) == FUNCTION_DECL)
++    discard_operator_bindings (t);
+   if (TREE_CODE (t) == NAMESPACE_DECL)
+     /* We do not need the leftover chaining of namespaces from the
+        binding level.  */
+diff --git a/gcc/cp/typeck.c b/gcc/cp/typeck.c
+index e9dc887cc..df42b8f5c 100644
+--- a/gcc/cp/typeck.c
++++ b/gcc/cp/typeck.c
+@@ -4090,7 +4090,11 @@ build_x_binary_op (location_t loc, enum tree_code code, tree arg1,
+     {
+       if (type_dependent_expression_p (arg1)
+ 	  || type_dependent_expression_p (arg2))
+-	return build_min_nt_loc (loc, code, arg1, arg2);
++	{
++	  expr = build_min_nt_loc (loc, code, arg1, arg2);
++	  maybe_save_operator_binding (expr);
++	  return expr;
++	}
+       arg1 = build_non_dependent_expr (arg1);
+       arg2 = build_non_dependent_expr (arg2);
+     }
+@@ -5656,7 +5660,11 @@ build_x_unary_op (location_t loc, enum tree_code code, cp_expr xarg,
+   if (processing_template_decl)
+     {
+       if (type_dependent_expression_p (xarg))
+-	return build_min_nt_loc (loc, code, xarg.get_value (), NULL_TREE);
++	{
++	  tree e = build_min_nt_loc (loc, code, xarg.get_value (), NULL_TREE);
++	  maybe_save_operator_binding (e);
++	  return e;
++	}
+ 
+       xarg = build_non_dependent_expr (xarg);
+     }
+diff --git a/gcc/testsuite/g++.dg/cpp1y/lambda-generic-using1.C b/gcc/testsuite/g++.dg/cpp1y/lambda-generic-using1.C
+new file mode 100644
+index 000000000..2912a754a
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp1y/lambda-generic-using1.C
+@@ -0,0 +1,29 @@
++// PR c++/88123
++// { dg-do compile { target c++14 } }
++
++struct bar {};
++struct baz {};
++struct baq {};
++
++namespace foo
++{
++  void operator+(bar);
++} // namespace foo
++
++namespace foo2
++{
++  void operator-(baz);
++}  
++
++auto fn() {
++  using foo::operator+;
++  using namespace foo2;
++  extern void operator!(baq);
++  return [](auto x, auto y, auto z) { +x; -y; !z; };
++}
++
++int main()
++{
++  auto l = fn();
++  l(bar(),baz(),baq());
++}

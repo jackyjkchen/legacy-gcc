@@ -1,0 +1,259 @@
+diff --git a/gcc/cp/init.c b/gcc/cp/init.c
+index ee45cfcfa..5e4b392de 100644
+--- a/gcc/cp/init.c
++++ b/gcc/cp/init.c
+@@ -1157,9 +1157,7 @@ emit_mem_initializers (tree mem_inits)
+ 	}
+ 
+       /* Initialize the base.  */
+-      if (BINFO_VIRTUAL_P (subobject))
+-	construct_virtual_base (subobject, arguments);
+-      else
++      if (!BINFO_VIRTUAL_P (subobject))
+ 	{
+ 	  tree base_addr;
+ 
+@@ -1173,6 +1171,10 @@ emit_mem_initializers (tree mem_inits)
+                               tf_warning_or_error);
+ 	  expand_cleanup_for_base (subobject, NULL_TREE);
+ 	}
++      else if (!ABSTRACT_CLASS_TYPE_P (current_class_type))
++	/* C++14 DR1658 Means we do not have to construct vbases of
++	   abstract classes.  */
++	construct_virtual_base (subobject, arguments);
+     }
+   in_base_initializer = 0;
+ 
+@@ -4641,7 +4643,8 @@ push_base_cleanups (void)
+   vec<tree, va_gc> *vbases;
+ 
+   /* Run destructors for all virtual baseclasses.  */
+-  if (CLASSTYPE_VBASECLASSES (current_class_type))
++  if (!ABSTRACT_CLASS_TYPE_P (current_class_type)
++      && CLASSTYPE_VBASECLASSES (current_class_type))
+     {
+       tree cond = (condition_conversion
+ 		   (build2 (BIT_AND_EXPR, integer_type_node,
+diff --git a/gcc/cp/method.c b/gcc/cp/method.c
+index b72a14c30..926c9fad3 100644
+--- a/gcc/cp/method.c
++++ b/gcc/cp/method.c
+@@ -1309,12 +1309,12 @@ walk_field_subobs (tree fields, tree fnname, special_function_kind sfk,
+     }
+ }
+ 
+-/* The caller wants to generate an implicit declaration of SFK for CTYPE
+-   which is const if relevant and CONST_P is set.  If spec_p, trivial_p and
+-   deleted_p are non-null, set their referent appropriately.  If diag is
+-   true, we're either being called from maybe_explain_implicit_delete to
+-   give errors, or if constexpr_p is non-null, from
+-   explain_invalid_constexpr_fn.  */
++/* The caller wants to generate an implicit declaration of SFK for
++   CTYPE which is const if relevant and CONST_P is set.  If SPEC_P,
++   TRIVIAL_P, DELETED_P or CONSTEXPR_P are non-null, set their
++   referent appropriately.  If DIAG is true, we're either being called
++   from maybe_explain_implicit_delete to give errors, or if
++   CONSTEXPR_P is non-null, from explain_invalid_constexpr_fn.  */
+ 
+ static void
+ synthesized_method_walk (tree ctype, special_function_kind sfk, bool const_p,
+@@ -1523,9 +1523,13 @@ synthesized_method_walk (tree ctype, special_function_kind sfk, bool const_p,
+     }
+ 
+   vbases = CLASSTYPE_VBASECLASSES (ctype);
+-  if (vec_safe_is_empty (vbases))
++  if (assign_p)
++    /* No need to examine vbases here.  */;
++  else if (vec_safe_is_empty (vbases))
+     /* No virtual bases to worry about.  */;
+-  else if (!assign_p)
++  else if (ABSTRACT_CLASS_TYPE_P (ctype) && cxx_dialect >= cxx14)
++    /* Vbase cdtors are not relevant.  */;
++  else
+     {
+       if (constexpr_p)
+ 	*constexpr_p = false;
+diff --git a/gcc/testsuite/g++.dg/cpp0x/pr66443-cxx11-2.C b/gcc/testsuite/g++.dg/cpp0x/pr66443-cxx11-2.C
+new file mode 100644
+index 000000000..4bd641d20
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/pr66443-cxx11-2.C
+@@ -0,0 +1,23 @@
++// { dg-do compile { target c++11_only } }
++
++class C;
++
++  
++struct A {
++  A ();
++private:
++  ~A (){ }
++  friend class C;
++};
++
++struct B : virtual A {  // { dg-error "is private" }
++  B ();
++  virtual bool Ok () = 0; // abstract
++};
++
++struct C : B {  // { dg-error "use of deleted" }
++  C ();
++  virtual bool Ok ();
++};
++
++C c; // { dg-error "use of deleted" }
+diff --git a/gcc/testsuite/g++.dg/cpp0x/pr66443-cxx11.C b/gcc/testsuite/g++.dg/cpp0x/pr66443-cxx11.C
+new file mode 100644
+index 000000000..7ba00745e
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/pr66443-cxx11.C
+@@ -0,0 +1,30 @@
++// { dg-do compile { target c++11_only } }
++
++// pr c++/66443 it is still ill-formed in C++ 11 for a synthesized
++// ctor that's deleted only because of virtual base construction
++
++static bool a_made;
++
++struct A { // { dg-message "candidate" }
++  A( int ) { a_made = true; } // { dg-message "candidate" }
++};
++
++struct B: virtual A { // { dg-message "no matching function" }
++  int m;
++  virtual void Frob () = 0;
++};
++
++class C: public B {
++public:
++  C();
++  virtual void Frob ();
++};
++
++void C::Frob ()
++{
++}
++
++C::C ()
++  : A( 1 ) // { dg-error "deleted function" }
++{ }
++
+diff --git a/gcc/testsuite/g++.dg/cpp1y/pr66443-cxx14-2.C b/gcc/testsuite/g++.dg/cpp1y/pr66443-cxx14-2.C
+new file mode 100644
+index 000000000..e033f1f0b
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp1y/pr66443-cxx14-2.C
+@@ -0,0 +1,29 @@
++// { dg-do compile { target c++14 } }
++
++// pr c++/66443 a synthesized ctor of an abstract class that's deleted
++// only because of virtual base construction doesn't stop a derived
++// class using it as a base object constructor (provided it has a
++// suitable ctor invocation of the virtual base).
++
++// However we should still complain if the intermediate base is a
++// non-abstract type.
++
++static int a_made;
++
++struct A {
++  A *m_a = this;
++  A (int) { a_made++; }
++};
++
++struct B : virtual A { // { dg-error "no matching function" }
++  A *m_b = this;
++  virtual bool Ok (); // not abstract
++};
++
++bool B::Ok ()
++{
++  return false;
++}
++
++
++B b; // { dg-error "deleted" }
+diff --git a/gcc/testsuite/g++.dg/cpp1y/pr66443-cxx14-3.C b/gcc/testsuite/g++.dg/cpp1y/pr66443-cxx14-3.C
+new file mode 100644
+index 000000000..b335c4b7a
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp1y/pr66443-cxx14-3.C
+@@ -0,0 +1,25 @@
++// { dg-do compile { target c++14 } }
++
++// DR 1658, inaccessible dtor of virtual base doesn't affect an
++// abstract class
++
++int a_unmade;
++
++class C;
++
++  
++struct A {
++private:
++  ~A (){ a_unmade++; }
++  friend class C;
++};
++
++struct B : virtual A {
++  virtual bool Ok () = 0; // abstract
++};
++
++struct C : B {
++  virtual bool Ok ();
++};
++
++C c;
+diff --git a/gcc/testsuite/g++.dg/cpp1y/pr66443-cxx14.C b/gcc/testsuite/g++.dg/cpp1y/pr66443-cxx14.C
+new file mode 100644
+index 000000000..583480829
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp1y/pr66443-cxx14.C
+@@ -0,0 +1,47 @@
++// { dg-do run { target c++14 } }
++
++// pr c++/66443 a synthesized ctor of an abstract class that's deleted
++// only because of virtual base construction doesn't stop a derived
++// class using it as a base object constructor (provided it has a
++// suitable ctor invocation of the virtual base).
++
++static int a_made;
++
++struct A {
++  A *m_a = this;
++  A (int) { a_made++; }
++};
++
++struct B : virtual A {
++  A *m_b = this;
++  virtual bool Ok () = 0; // abstract
++};
++
++struct C : B {
++  // C::m_c is placed where a complete B object would put A
++  int m_c = 1729;
++public:
++  C();
++  virtual bool Ok ();
++};
++
++bool C::Ok ()
++{
++  // check everyone agreed on where A is
++  return a_made == 1 && m_a == this && m_b == this && m_c == 1729;
++}
++
++C::C ()
++  : A (1) // Explicit call of A's ctor
++{  }
++
++bool Ok (C &c)
++{
++}
++
++int main ()
++{
++  C c;
++
++  return !c.Ok ();
++}

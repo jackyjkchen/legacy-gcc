@@ -1,0 +1,30 @@
+diff --git a/gcc/cp/call.c b/gcc/cp/call.c
+index b8162aa81..07b96f810 100644
+--- a/gcc/cp/call.c
++++ b/gcc/cp/call.c
+@@ -8316,8 +8316,11 @@ build_over_call (struct z_candidate *cand, int flags, tsubst_flags_t complain)
+ 	   && DECL_OVERLOADED_OPERATOR_IS (fn, NOP_EXPR)
+ 	   && trivial_fn_p (fn))
+     {
+-      tree to = cp_stabilize_reference
+-	(cp_build_fold_indirect_ref (argarray[0]));
++      /* Don't use cp_build_fold_indirect_ref, op= returns an lvalue even if
++	 the object argument isn't one.  */
++      tree to = cp_build_indirect_ref (argarray[0],
++				       RO_ARROW, complain);
++      to = cp_stabilize_reference (to);
+       tree type = TREE_TYPE (to);
+       tree as_base = CLASSTYPE_AS_BASE (type);
+       tree arg = argarray[1];
+diff --git a/gcc/testsuite/g++.dg/init/assign2.C b/gcc/testsuite/g++.dg/init/assign2.C
+new file mode 100644
+index 000000000..72d1264f3
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/init/assign2.C
+@@ -0,0 +1,6 @@
++// PR c++/59950
++
++ struct Foo {};
++
++ int f(Foo *p);
++ int n = f(&(Foo() = Foo()));

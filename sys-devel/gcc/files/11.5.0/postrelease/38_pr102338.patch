@@ -1,0 +1,56 @@
+diff --git a/gcc/cp/parser.c b/gcc/cp/parser.c
+index e314fc180..480e6ca25 100644
+--- a/gcc/cp/parser.c
++++ b/gcc/cp/parser.c
+@@ -30668,8 +30668,13 @@ cp_parser_single_declaration (cp_parser* parser,
+       && (cp_lexer_next_token_is_not (parser->lexer, CPP_SEMICOLON)
+ 	  || decl_specifiers.type != error_mark_node))
+     {
++      int flags = CP_PARSER_FLAGS_TYPENAME_OPTIONAL;
++      /* We don't delay parsing for friends, though CWG 2510 may change
++	 that.  */
++      if (member_p && !(friend_p && *friend_p))
++	flags |= CP_PARSER_FLAGS_DELAY_NOEXCEPT;
+       decl = cp_parser_init_declarator (parser,
+-					CP_PARSER_FLAGS_TYPENAME_OPTIONAL,
++					flags,
+ 				        &decl_specifiers,
+ 				        checks,
+ 				        /*function_definition_allowed_p=*/true,
+diff --git a/gcc/testsuite/g++.dg/cpp0x/noexcept71.C b/gcc/testsuite/g++.dg/cpp0x/noexcept71.C
+new file mode 100644
+index 000000000..361d6ad7b
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/noexcept71.C
+@@ -0,0 +1,31 @@
++// PR c++/99980
++// { dg-do compile { target c++11 } }
++
++#define SA(X) static_assert(X, #X)
++
++struct S {
++  template<typename T>
++  void f(T) noexcept(B);
++
++  struct N {
++    template<typename T>
++    void f2(T) noexcept(B);
++  };
++
++  static constexpr bool B = true;
++};
++
++S s;
++SA(noexcept(s.f(10)));
++S::N n;
++SA(noexcept(n.f2(10)));
++
++struct Bad {
++  template<typename T>
++  using U = void() noexcept(B); // { dg-error "not declared" }
++
++  template<typename T>
++  friend void friendo() noexcept(B); // { dg-error "not declared" }
++
++  static constexpr bool B = true;
++};

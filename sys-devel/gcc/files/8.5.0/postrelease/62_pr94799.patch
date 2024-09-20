@@ -1,0 +1,175 @@
+diff --git a/gcc/cp/parser.c b/gcc/cp/parser.c
+index bf0f6df2e..6b8254c3e 100644
+--- a/gcc/cp/parser.c
++++ b/gcc/cp/parser.c
+@@ -7531,9 +7531,14 @@ cp_parser_postfix_dot_deref_expression (cp_parser *parser,
+     }
+ 
+   if (dependent_p)
+-    /* Tell cp_parser_lookup_name that there was an object, even though it's
+-       type-dependent.  */
+-    parser->context->object_type = unknown_type_node;
++    {
++      tree type = TREE_TYPE (postfix_expression);
++      /* If we don't have a (type-dependent) object of class type, use
++	 typeof to figure out the type of the object.  */
++      if (type == NULL_TREE)
++	type = finish_typeof (postfix_expression);
++      parser->context->object_type = type;
++    }
+ 
+   /* Assume this expression is not a pseudo-destructor access.  */
+   pseudo_destructor_p = false;
+@@ -22461,8 +22466,15 @@ cp_parser_class_name (cp_parser *parser,
+     }
+ 
+   /* PARSER->SCOPE can be cleared when parsing the template-arguments
+-     to a template-id, so we save it here.  */
+-  scope = parser->scope;
++     to a template-id, so we save it here.  Consider object scope too,
++     so that make_typename_type below can use it (cp_parser_template_name
++     considers object scope also).  This may happen with code like
++
++       p->template A<T>::a()
++
++      where we first want to look up A<T>::a in the class of the object
++      expression, as per [basic.lookup.classref].  */
++  scope = parser->scope ? parser->scope : parser->context->object_type;
+   if (scope == error_mark_node)
+     return error_mark_node;
+ 
+@@ -26417,10 +26429,6 @@ cp_parser_lookup_name (cp_parser *parser, tree name,
+ 	decl = lookup_name_real (name, prefer_type_arg (tag_type, is_template),
+ 				 /*nonclass=*/0,
+ 				 /*block_p=*/true, is_namespace, 0);
+-      if (object_type == unknown_type_node)
+-	/* The object is type-dependent, so we can't look anything up; we used
+-	   this to get the DR 141 behavior.  */
+-	object_type = NULL_TREE;
+       parser->object_scope = object_type;
+       parser->qualifying_scope = NULL_TREE;
+     }
+diff --git a/gcc/testsuite/g++.dg/lookup/this1.C b/gcc/testsuite/g++.dg/lookup/this1.C
+index 20051bf75..6b85cefcd 100644
+--- a/gcc/testsuite/g++.dg/lookup/this1.C
++++ b/gcc/testsuite/g++.dg/lookup/this1.C
+@@ -4,5 +4,5 @@
+ struct A
+ {
+     template<int> static void foo();
+-    static void bar() { this->A::foo<0>(); } // { dg-error "unavailable" }
++    static void bar() { this->A::foo<0>(); } // { dg-error "unavailable|not a class|expected" }
+ };
+diff --git a/gcc/testsuite/g++.dg/template/lookup12.C b/gcc/testsuite/g++.dg/template/lookup12.C
+new file mode 100644
+index 000000000..fc5939ab0
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/template/lookup12.C
+@@ -0,0 +1,26 @@
++// PR c++/94799 - member template function lookup fails.
++
++template<typename T> struct B {
++  void foo ();
++  int i;
++};
++
++template<typename T>
++struct D : public B<T> { };
++
++template<typename T>
++void fn (D<T> d)
++{
++  d.template B<T>::foo ();
++  d.template B<T>::i = 42;
++  D<T>().template B<T>::foo ();
++  d.template D<T>::template B<T>::foo ();
++  d.template D<T>::template B<T>::i = 10;
++}
++
++int
++main ()
++{
++  D<int> d;
++  fn(d);
++}
+diff --git a/gcc/testsuite/g++.dg/template/lookup13.C b/gcc/testsuite/g++.dg/template/lookup13.C
+new file mode 100644
+index 000000000..a8c7e18a7
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/template/lookup13.C
+@@ -0,0 +1,28 @@
++// PR c++/94799 - member template function lookup fails.
++
++template <typename T>
++struct A {
++    int a() {
++        return 42;
++    }
++
++    template<typename> struct X { typedef int type; };
++};
++
++template <typename T>
++struct B {
++    int b(A<T> *p) {
++	int i = 0;
++        i += p->a();
++        i += p->template A<T>::a();
++        i += p->template A<T>::template A<T>::a();
++	i += A<T>().template A<T>::a();
++	return i;
++    }
++};
++
++int main() {
++    A<int> a;
++    B<int> b;
++    return b.b(&a);
++}
+diff --git a/gcc/testsuite/g++.dg/template/lookup14.C b/gcc/testsuite/g++.dg/template/lookup14.C
+new file mode 100644
+index 000000000..e1c945a6d
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/template/lookup14.C
+@@ -0,0 +1,11 @@
++// PR c++/94799 - member template function lookup fails.
++
++template<typename T>
++struct A { };
++
++template<typename T>
++void fn (A<T> a)
++{
++  // Don't perform name lookup of foo when parsing this template.
++  a.template A<T>::foo ();
++}
+diff --git a/gcc/testsuite/g++.dg/template/lookup15.C b/gcc/testsuite/g++.dg/template/lookup15.C
+new file mode 100644
+index 000000000..c7f3ba015
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/template/lookup15.C
+@@ -0,0 +1,24 @@
++// PR c++/94799 - member template function lookup fails.
++
++template<typename>
++struct M { void fn() { } };
++
++M<int>* bar (int);
++M<int> bar2 (int);
++
++template<typename T>
++struct X : M<T> {
++  void xfn ()
++  {
++    this->template M<T>::fn ();
++    bar((T)1)->template M<T>::fn ();
++    bar2((T)1).template M<T>::fn ();
++  }
++};
++
++int
++main ()
++{
++  X<int> x;
++  x.xfn();
++}

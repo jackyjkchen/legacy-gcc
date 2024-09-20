@@ -1,0 +1,151 @@
+diff --git a/gcc/cp/parser.c b/gcc/cp/parser.c
+index 80b661f66..1cfa3fe4b 100644
+--- a/gcc/cp/parser.c
++++ b/gcc/cp/parser.c
+@@ -567,6 +567,8 @@ cp_debug_parser (FILE *file, cp_parser *parser)
+ 			      parser->colon_corrects_to_scope_p);
+   cp_debug_print_flag (file, "Colon doesn't start a class definition",
+ 			      parser->colon_doesnt_start_class_def_p);
++  cp_debug_print_flag (file, "Parsing an Objective-C++ message context",
++			      parser->objective_c_message_context_p);
+   if (parser->type_definition_forbidden_message)
+     fprintf (file, "Error message for forbidden type definitions: %s\n",
+ 	     parser->type_definition_forbidden_message);
+@@ -6216,7 +6218,9 @@ cp_parser_nested_name_specifier_opt (cp_parser *parser,
+ 
+ 	  if (token->type == CPP_COLON
+ 	      && parser->colon_corrects_to_scope_p
+-	      && cp_lexer_peek_nth_token (parser->lexer, 3)->type == CPP_NAME)
++	      && cp_lexer_peek_nth_token (parser->lexer, 3)->type == CPP_NAME
++	      /* name:name is a valid sequence in an Objective C message.  */
++	      && !parser->objective_c_message_context_p)
+ 	    {
+ 	      gcc_rich_location richloc (token->location);
+ 	      richloc.add_fixit_replace ("::");
+@@ -29507,6 +29511,7 @@ cp_parser_objc_message_expression (cp_parser* parser)
+ {
+   tree receiver, messageargs;
+ 
++  parser->objective_c_message_context_p = true;
+   location_t start_loc = cp_lexer_peek_token (parser->lexer)->location;
+   cp_lexer_consume_token (parser->lexer);  /* Eat '['.  */
+   receiver = cp_parser_objc_message_receiver (parser);
+@@ -29523,6 +29528,7 @@ cp_parser_objc_message_expression (cp_parser* parser)
+   location_t combined_loc = make_location (start_loc, start_loc, end_loc);
+   protected_set_expr_location (result, combined_loc);
+ 
++  parser->objective_c_message_context_p = false;
+   return result;
+ }
+ 
+diff --git a/gcc/cp/parser.h b/gcc/cp/parser.h
+index 81a23283e..910cc720e 100644
+--- a/gcc/cp/parser.h
++++ b/gcc/cp/parser.h
+@@ -346,6 +346,10 @@ struct GTY(()) cp_parser {
+      is terminated by colon.  */
+   bool colon_doesnt_start_class_def_p;
+ 
++  /* TRUE if we are parsing an objective c message, and ':' is permitted
++     to terminate an assignment-expression.  */
++  bool objective_c_message_context_p;
++
+   /* If non-NULL, then we are parsing a construct where new type
+      definitions are not permitted.  The string stored here will be
+      issued as an error message if a type is defined.  */
+diff --git a/gcc/testsuite/obj-c++.dg/pr49070.mm b/gcc/testsuite/obj-c++.dg/pr49070.mm
+new file mode 100644
+index 000000000..e946c5a40
+--- /dev/null
++++ b/gcc/testsuite/obj-c++.dg/pr49070.mm
+@@ -0,0 +1,54 @@
++/* Only needs to compile.  */
++/* { dg-additional-options "-std=c++11" } */
++
++#ifdef __cplusplus
++enum X {
++  x = 5,
++  y
++};
++#endif
++
++#if __has_attribute(__objc_root_class__)
++__attribute__((__objc_root_class__))
++#endif
++@interface A
++- (id) :(id)arg0 :(id)arg1;
++- (id) m:(id)arg0 :(id)arg1 :(id)arg2 :(id)arg3;
++#ifdef __cplusplus
++- (id) n:(X)arg0 :(X)arg1 :(id)arg2 :(id)arg3;
++#endif
++@end
++
++@implementation A
++- (id) :(id)arg0 :(id)arg1
++{
++  return arg1;
++}
++- (id) m:(id)arg0 :(id)arg1 :(id)arg2 :(id)arg3
++{
++  return arg2;
++}
++#ifdef __cplusplus
++- (id) n:(X)arg0 :(X)arg1 :(id)arg2 :(id)arg3
++{
++  return arg2;
++}
++#endif
++@end
++
++id f1 (A *x)
++{
++  return [x:x:x];
++}
++
++id f2 (A *x)
++{
++  return [x m:x:x:x:x];
++}
++
++#ifdef __cplusplus
++id f3 (A *x)
++{
++  return [x n:X::x:X::y:x:x];
++}
++#endif
+diff --git a/gcc/testsuite/objc.dg/unnamed-parms.m b/gcc/testsuite/objc.dg/unnamed-parms.m
+new file mode 100644
+index 000000000..b1c457c73
+--- /dev/null
++++ b/gcc/testsuite/objc.dg/unnamed-parms.m
+@@ -0,0 +1,30 @@
++/* Only needs to compile [see PR 49070 for C++ issue].  */
++
++#if __has_attribute(__objc_root_class__)
++__attribute__((__objc_root_class__))
++#endif
++@interface A
++- (id) :(id)arg0 :(id)arg1;
++- (id) m:(id)arg0 :(id)arg1 :(id)arg2 :(id)arg3;
++@end
++
++@implementation A
++- (id) :(id)arg0 :(id)arg1
++{
++  return arg1;
++}
++- (id) m:(id)arg0 :(id)arg1 :(id)arg2 :(id)arg3
++{
++  return arg2;
++}
++@end
++
++id f1 (A *x)
++{
++  return [x:x:x];
++}
++
++id f2 (A *x)
++{
++  return [x m:x:x:x:x];
++}

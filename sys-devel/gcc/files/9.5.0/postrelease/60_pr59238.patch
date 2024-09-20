@@ -1,0 +1,68 @@
+diff --git a/gcc/cp/init.c b/gcc/cp/init.c
+index a28dbb279..23784f25a 100644
+--- a/gcc/cp/init.c
++++ b/gcc/cp/init.c
+@@ -1930,7 +1930,7 @@ expand_default_init (tree binfo, tree true_exp, tree exp, tree init, int flags,
+ 	   in an exception region.  */;
+       else
+ 	init = ocp_convert (type, init, CONV_IMPLICIT|CONV_FORCE_TEMP,
+-			    flags, complain);
++			    flags, complain | tf_no_cleanup);
+ 
+       if (TREE_CODE (init) == MUST_NOT_THROW_EXPR)
+ 	/* We need to protect the initialization of a catch parm with a
+diff --git a/gcc/cp/typeck.c b/gcc/cp/typeck.c
+index b8eaeadd3..20b40e536 100644
+--- a/gcc/cp/typeck.c
++++ b/gcc/cp/typeck.c
+@@ -8442,7 +8442,7 @@ cp_build_modify_expr (location_t loc, tree lhs, enum tree_code modifycode,
+        LOOKUP_ONLYCONVERTING.  */
+     newrhs = convert_for_initialization (lhs, olhstype, newrhs, LOOKUP_NORMAL,
+ 					 ICR_INIT, NULL_TREE, 0,
+-                                         complain);
++					 complain | tf_no_cleanup);
+   else
+     newrhs = convert_for_assignment (olhstype, newrhs, ICR_ASSIGN,
+ 				     NULL_TREE, 0, complain, LOOKUP_IMPLICIT);
+diff --git a/gcc/testsuite/g++.dg/cpp0x/new4.C b/gcc/testsuite/g++.dg/cpp0x/new4.C
+new file mode 100644
+index 000000000..728ef4ee7
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/new4.C
+@@ -0,0 +1,36 @@
++// PR c++/59238
++// { dg-do compile { target c++11 } }
++
++struct A { ~A () = delete; };
++A *pa{new A{}};
++A *pa2{new A[2]{}};
++
++class B { ~B () = default; };
++B *pb{new B{}};
++
++struct E {
++  ~E () = delete;
++private:
++  int x;
++};
++E *pe{new E{}};
++
++class C { ~C (); };
++C *pc{new C{}};
++
++class D { ~D () {} };
++D *pd{new D{}};
++
++struct F {
++  F () = default;
++  ~F () = delete;
++};
++F *pf{new F{}};
++
++struct G {
++  G () = default;
++  ~G () = delete;
++private:
++  int x;
++};
++G *pg{new G{}};

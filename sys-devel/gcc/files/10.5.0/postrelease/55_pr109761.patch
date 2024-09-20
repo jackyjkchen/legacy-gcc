@@ -1,0 +1,63 @@
+diff --git a/gcc/cp/parser.c b/gcc/cp/parser.c
+index 0e51366e0..cdedf0afb 100644
+--- a/gcc/cp/parser.c
++++ b/gcc/cp/parser.c
+@@ -248,7 +248,7 @@ static cp_token_cache *cp_token_cache_new
+ static tree cp_parser_late_noexcept_specifier
+   (cp_parser *, tree, tree);
+ static void noexcept_override_late_checks
+-  (tree, tree);
++  (tree);
+ 
+ static void cp_parser_initial_pragma
+   (cp_token *);
+@@ -24161,7 +24161,7 @@ cp_parser_class_specifier_1 (cp_parser* parser)
+ 	  /* The finish_struct call above performed various override checking,
+ 	     but it skipped unparsed noexcept-specifier operands.  Now that we
+ 	     have resolved them, check again.  */
+-	  noexcept_override_late_checks (type, decl);
++	  noexcept_override_late_checks (decl);
+ 
+ 	  /* Remove any member-function parameters from the symbol table.  */
+ 	  pop_injected_parms ();
+@@ -25839,14 +25839,13 @@ cp_parser_late_noexcept_specifier (cp_parser *parser, tree default_arg,
+ }
+ 
+ /* Perform late checking of overriding function with respect to their
+-   noexcept-specifiers.  TYPE is the class and FNDECL is the function
+-   that potentially overrides some virtual function with the same
+-   signature.  */
++   noexcept-specifiers.  FNDECL is the member function that potentially
++   overrides some virtual function with the same signature.  */
+ 
+ static void
+-noexcept_override_late_checks (tree type, tree fndecl)
++noexcept_override_late_checks (tree fndecl)
+ {
+-  tree binfo = TYPE_BINFO (type);
++  tree binfo = TYPE_BINFO (DECL_CONTEXT (fndecl));
+   tree base_binfo;
+ 
+   if (DECL_STATIC_FUNCTION_P (fndecl))
+diff --git a/gcc/testsuite/g++.dg/cpp0x/noexcept78.C b/gcc/testsuite/g++.dg/cpp0x/noexcept78.C
+new file mode 100644
+index 000000000..e8156eb7c
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/noexcept78.C
+@@ -0,0 +1,16 @@
++// PR c++/109761
++// { dg-do compile { target c++11 } }
++
++struct base {
++  virtual void foo() noexcept { }
++  virtual ~base() { }
++};
++
++struct outer : base {
++  struct nested {
++    void foo() noexcept(noexcept(g())); // { dg-bogus "looser" }
++    ~nested() noexcept(noexcept(g()));  // { dg-bogus "looser" }
++  };
++  static void g();
++};
++

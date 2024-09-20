@@ -1,0 +1,42 @@
+diff --git a/gcc/cp/name-lookup.c b/gcc/cp/name-lookup.c
+index b76cf0808..9d65b4d17 100644
+--- a/gcc/cp/name-lookup.c
++++ b/gcc/cp/name-lookup.c
+@@ -3450,7 +3450,12 @@ set_namespace_binding_1 (tree name, tree scope, tree val)
+   if (scope == NULL_TREE)
+     scope = global_namespace;
+   b = binding_for_name (NAMESPACE_LEVEL (scope), name);
+-  if (!b->value || TREE_CODE (val) == OVERLOAD || val == error_mark_node)
++  if (!b->value
++      /* For templates and using we create a single element OVERLOAD.
++	 Look for the chain to know whether this is really augmenting
++	 an existing overload.  */
++      || (TREE_CODE (val) == OVERLOAD && OVL_CHAIN (val))
++      || val == error_mark_node)
+     b->value = val;
+   else
+     supplement_binding (b, val);
+diff --git a/gcc/testsuite/g++.dg/pr77812.C b/gcc/testsuite/g++.dg/pr77812.C
+new file mode 100644
+index 000000000..94f17402a
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/pr77812.C
+@@ -0,0 +1,18 @@
++// PR77812
++// struct-stat hack failure when first overload is a template
++
++enum f {};
++
++template <typename>
++void f ()
++{
++}
++enum f F;
++
++struct g {};
++
++template <typename>
++void g ()
++{
++}
++struct g G;

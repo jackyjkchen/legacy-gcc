@@ -1,0 +1,31 @@
+diff --git a/gcc/cp/constexpr.c b/gcc/cp/constexpr.c
+index b886082d1..ee5170692 100644
+--- a/gcc/cp/constexpr.c
++++ b/gcc/cp/constexpr.c
+@@ -2666,7 +2666,9 @@ cxx_eval_array_reference (const constexpr_ctx *ctx, tree t,
+      initializer, it's initialized from {}.  But use build_value_init
+      directly for non-aggregates to avoid creating a garbage CONSTRUCTOR.  */
+   tree val;
+-  if (CP_AGGREGATE_TYPE_P (elem_type))
++  if (is_really_empty_class (elem_type, /*ignore_vptr*/false))
++    return build_constructor (elem_type, NULL);
++  else if (CP_AGGREGATE_TYPE_P (elem_type))
+     {
+       tree empty_ctor = build_constructor (init_list_type_node, NULL);
+       val = digest_init (elem_type, empty_ctor, tf_warning_or_error);
+diff --git a/gcc/testsuite/g++.dg/cpp0x/constexpr-empty16.C b/gcc/testsuite/g++.dg/cpp0x/constexpr-empty16.C
+new file mode 100644
+index 000000000..79be244a1
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/constexpr-empty16.C
+@@ -0,0 +1,10 @@
++// PR c++/101194
++// { dg-do compile { target c++11 } }
++
++struct nodefault {
++  constexpr nodefault(int) { }
++};
++
++constexpr nodefault x[1] = { nodefault{0} };
++
++constexpr nodefault y = x[0];

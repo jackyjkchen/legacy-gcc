@@ -1,0 +1,78 @@
+diff --git a/gcc/cp/decl.c b/gcc/cp/decl.c
+index e031dac54..dd71a26d0 100644
+--- a/gcc/cp/decl.c
++++ b/gcc/cp/decl.c
+@@ -11285,7 +11285,8 @@ grokdeclarator (const cp_declarator *declarator,
+ 		      return error_mark_node;
+ 		  }
+ 
+-		decl = do_friend (ctype, unqualified_id, decl,
++		tree scope = ctype ? ctype : in_namespace;
++		decl = do_friend (scope, unqualified_id, decl,
+ 				  *attrlist, flags,
+ 				  funcdef_flag);
+ 		return decl;
+diff --git a/gcc/cp/friend.c b/gcc/cp/friend.c
+index 5e4b2d18b..c85263584 100644
+--- a/gcc/cp/friend.c
++++ b/gcc/cp/friend.c
+@@ -420,19 +420,32 @@ make_friend_class (tree type, tree friend_type, bool complain)
+ }
+ 
+ /* Record DECL (a FUNCTION_DECL) as a friend of the
+-   CURRENT_CLASS_TYPE.  If DECL is a member function, CTYPE is the
++   CURRENT_CLASS_TYPE.  If DECL is a member function, SCOPE is the
+    class of which it is a member, as named in the friend declaration.
++   If the friend declaration was explicitly namespace-qualified, SCOPE
++   is that namespace.
+    DECLARATOR is the name of the friend.  FUNCDEF_FLAG is true if the
+    friend declaration is a definition of the function.  FLAGS is as
+    for grokclass fn.  */
+ 
+ tree
+-do_friend (tree ctype, tree declarator, tree decl,
++do_friend (tree scope, tree declarator, tree decl,
+ 	   tree attrlist, enum overload_flags flags,
+ 	   bool funcdef_flag)
+ {
+   gcc_assert (TREE_CODE (decl) == FUNCTION_DECL);
+-  gcc_assert (!ctype || MAYBE_CLASS_TYPE_P (ctype));
++
++  tree ctype = NULL_TREE;
++  tree in_namespace = NULL_TREE;
++  if (!scope)
++    ;
++  else if (MAYBE_CLASS_TYPE_P (scope))
++    ctype = scope;
++  else
++    {
++      gcc_checking_assert (TREE_CODE (scope) == NAMESPACE_DECL);
++      in_namespace = scope;
++    }
+ 
+   /* Every decl that gets here is a friend of something.  */
+   DECL_FRIEND_P (decl) = 1;
+@@ -565,7 +578,7 @@ do_friend (tree ctype, tree declarator, tree decl,
+ 	       parameters.  Instead, we call pushdecl when the class
+ 	       is instantiated.  */
+ 	    decl = push_template_decl_real (decl, /*is_friend=*/true);
+-	  else if (current_function_decl)
++	  else if (current_function_decl && !in_namespace)
+ 	    {
+ 	      /* This must be a local class.  11.5p11:
+ 
+diff --git a/gcc/testsuite/g++.dg/lookup/friend24.C b/gcc/testsuite/g++.dg/lookup/friend24.C
+new file mode 100644
+index 000000000..9a45410d2
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/lookup/friend24.C
+@@ -0,0 +1,9 @@
++// PR c++/69410
++
++void a();
++void f() {
++    class A {
++        friend void ::a();
++        friend class Z;
++    };
++}

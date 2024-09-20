@@ -1,0 +1,131 @@
+diff --git a/gcc/cp/cp-gimplify.c b/gcc/cp/cp-gimplify.c
+index 80e7c321c..a5620b6d0 100644
+--- a/gcc/cp/cp-gimplify.c
++++ b/gcc/cp/cp-gimplify.c
+@@ -2077,6 +2077,28 @@ cp_fold (tree x)
+       goto unary;
+ 
+     case ADDR_EXPR:
++      loc = EXPR_LOCATION (x);
++      op0 = cp_fold_maybe_rvalue (TREE_OPERAND (x, 0), false);
++
++      /* Cope with user tricks that amount to offsetof.  */
++      if (op0 != error_mark_node
++	  && TREE_CODE (TREE_TYPE (op0)) != FUNCTION_TYPE
++	  && TREE_CODE (TREE_TYPE (op0)) != METHOD_TYPE)
++	{
++	  tree val = get_base_address (op0);
++	  if (val
++	      && INDIRECT_REF_P (val)
++	      && COMPLETE_TYPE_P (TREE_TYPE (val))
++	      && TREE_CONSTANT (TREE_OPERAND (val, 0)))
++	    {
++	      val = TREE_OPERAND (val, 0);
++	      STRIP_NOPS (val);
++	      if (TREE_CODE (val) == INTEGER_CST)
++		return fold_convert (TREE_TYPE (x), fold_offsetof_1 (op0));
++	    }
++	}
++      goto finish_unary;
++
+     case REALPART_EXPR:
+     case IMAGPART_EXPR:
+       rval_ops = false;
+@@ -2093,6 +2115,7 @@ cp_fold (tree x)
+       loc = EXPR_LOCATION (x);
+       op0 = cp_fold_maybe_rvalue (TREE_OPERAND (x, 0), rval_ops);
+ 
++    finish_unary:
+       if (op0 != TREE_OPERAND (x, 0))
+ 	{
+ 	  if (op0 == error_mark_node)
+diff --git a/gcc/cp/typeck.c b/gcc/cp/typeck.c
+index ae0c50154..ac99387a6 100644
+--- a/gcc/cp/typeck.c
++++ b/gcc/cp/typeck.c
+@@ -5671,19 +5671,6 @@ cp_build_addr_expr_1 (tree arg, bool strict_lvalue, tsubst_flags_t complain)
+       return arg;
+     }
+ 
+-  /* ??? Cope with user tricks that amount to offsetof.  */
+-  if (TREE_CODE (argtype) != FUNCTION_TYPE
+-      && TREE_CODE (argtype) != METHOD_TYPE
+-      && argtype != unknown_type_node
+-      && (val = get_base_address (arg))
+-      && COMPLETE_TYPE_P (TREE_TYPE (val))
+-      && INDIRECT_REF_P (val)
+-      && TREE_CONSTANT (TREE_OPERAND (val, 0)))
+-    {
+-      tree type = build_pointer_type (argtype);
+-      return fold_convert (type, fold_offsetof_1 (arg));
+-    }
+-
+   /* Handle complex lvalues (when permitted)
+      by reduction to simpler cases.  */
+   val = unary_complex_lvalue (ADDR_EXPR, arg);
+diff --git a/gcc/testsuite/g++.dg/cpp0x/constexpr-84463.C b/gcc/testsuite/g++.dg/cpp0x/constexpr-84463.C
+new file mode 100644
+index 000000000..0743059be
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/constexpr-84463.C
+@@ -0,0 +1,22 @@
++// PR c++/84463
++// { dg-do compile { target c++11 } }
++
++struct S { int r; const unsigned char s[5]; };
++static constexpr S a[] = { { 0, "abcd" } };
++struct T { const unsigned char s[5]; };
++static constexpr T b[] = { { "abcd" } };
++
++constexpr int
++foo (const unsigned char *x)
++{
++  return x[0];
++}
++
++constexpr static const S *j = &a[0];
++constexpr static const int k = j->s[0];
++constexpr static int l = foo (a[0].s);
++constexpr static int m = foo (j->s);
++constexpr static const T *n = &b[0];
++constexpr static const int o = n->s[0];
++constexpr static int p = foo (b[0].s);
++constexpr static int q = foo (n->s);
+diff --git a/gcc/testsuite/g++.dg/cpp0x/constexpr-nullptr-1.C b/gcc/testsuite/g++.dg/cpp0x/constexpr-nullptr-1.C
+index 420a04b77..ed53fcd69 100644
+--- a/gcc/testsuite/g++.dg/cpp0x/constexpr-nullptr-1.C
++++ b/gcc/testsuite/g++.dg/cpp0x/constexpr-nullptr-1.C
+@@ -6,7 +6,7 @@
+ // c++/67376 on gcc-patches for additional background.
+ 
+ // { dg-do compile { target c++11 } }
+-// { dg-options "-fdump-tree-optimized" }
++// { dg-options "-O1 -fdelete-null-pointer-checks -fdump-tree-optimized" }
+ 
+ // Runtime assert.  Used for potentially invalid expressions.
+ #define RA(e)  ((e) ? (void)0 : __builtin_abort ())
+diff --git a/gcc/testsuite/g++.dg/init/struct2.C b/gcc/testsuite/g++.dg/init/struct2.C
+index 85aacc6fa..4396febdc 100644
+--- a/gcc/testsuite/g++.dg/init/struct2.C
++++ b/gcc/testsuite/g++.dg/init/struct2.C
+@@ -15,7 +15,7 @@ void saveOrLoad() {
+     };    
+ 
+     SaveLoadEntry trackEntries = {
+-	((long) (__SIZE_TYPE__) (&((Track *) 42)->soundName[0])) - 42,
++	((int) (__SIZE_TYPE__) (&((Track *) 42)->soundName[0])) - 42,
+         0, 1
+     };
+     saveLoadEntries(&trackEntries);
+diff --git a/gcc/testsuite/g++.dg/parse/array-size2.C b/gcc/testsuite/g++.dg/parse/array-size2.C
+index 3c833472d..d0bc47fe7 100644
+--- a/gcc/testsuite/g++.dg/parse/array-size2.C
++++ b/gcc/testsuite/g++.dg/parse/array-size2.C
+@@ -15,6 +15,6 @@ void
+ foo (void)
+ {
+   char g[(char *) &((struct S *) 0)->b - (char *) 0]; // { dg-error "constant" }
+-  char h[(__SIZE_TYPE__) &((struct S *) 8)->b];	      // { dg-error "constant" "" { xfail *-*-* } }
++  char h[(__SIZE_TYPE__) &((struct S *) 8)->b];	      // { dg-error "constant" }
+   bar (g, h);
+ }

@@ -1,0 +1,75 @@
+diff --git a/gcc/cp/cvt.c b/gcc/cp/cvt.c
+index 43fcff985..028f32156 100644
+--- a/gcc/cp/cvt.c
++++ b/gcc/cp/cvt.c
+@@ -1722,12 +1722,27 @@ type_promotes_to (tree type)
+ 	   || type == char32_type_node
+ 	   || type == wchar_type_node)
+     {
++      tree prom = type;
++
++      if (TREE_CODE (type) == ENUMERAL_TYPE)
++	{
++	  prom = ENUM_UNDERLYING_TYPE (prom);
++	  if (!ENUM_IS_SCOPED (type)
++	      && ENUM_FIXED_UNDERLYING_TYPE_P (type))
++	    {
++	      /* ISO C++17, 7.6/4.  A prvalue of an unscoped enumeration type
++		 whose underlying type is fixed (10.2) can be converted to a
++		 prvalue of its underlying type. Moreover, if integral promotion
++		 can be applied to its underlying type, a prvalue of an unscoped
++		 enumeration type whose underlying type is fixed can also be 
++		 converted to a prvalue of the promoted underlying type.  */
++	      return type_promotes_to (prom);
++	    }
++	}
++
+       int precision = MAX (TYPE_PRECISION (type),
+ 			   TYPE_PRECISION (integer_type_node));
+       tree totype = c_common_type_for_size (precision, 0);
+-      tree prom = type;
+-      if (TREE_CODE (prom) == ENUMERAL_TYPE)
+-	prom = ENUM_UNDERLYING_TYPE (prom);
+       if (TYPE_UNSIGNED (prom)
+ 	  && ! int_fits_type_p (TYPE_MAX_VALUE (prom), totype))
+ 	prom = c_common_type_for_size (precision, 1);
+diff --git a/gcc/testsuite/g++.dg/cpp0x/enum35.C b/gcc/testsuite/g++.dg/cpp0x/enum35.C
+new file mode 100644
+index 000000000..bcc1b26b3
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/enum35.C
+@@ -0,0 +1,14 @@
++// PR c++/82307
++// { dg-do run { target c++11 } }
++
++#include <cassert>
++
++enum : unsigned long long { VAL };
++
++bool foo (unsigned long long) { return true; }
++bool foo (int) { return false; }
++
++int main()
++{
++  assert (foo(VAL));
++}
+diff --git a/gcc/testsuite/g++.dg/cpp0x/enum36.C b/gcc/testsuite/g++.dg/cpp0x/enum36.C
+new file mode 100644
+index 000000000..485967030
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/enum36.C
+@@ -0,0 +1,14 @@
++// PR c++/82307
++// { dg-do run { target c++11 } }
++
++#include <cassert>
++
++enum : short { VAL };
++
++bool foo (int) { return true; }
++bool foo (unsigned long long) { return false; }
++
++int main()
++{
++  assert (foo (VAL));
++}
