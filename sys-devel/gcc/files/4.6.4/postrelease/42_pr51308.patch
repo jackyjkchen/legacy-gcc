@@ -1,0 +1,65 @@
+diff --git a/gcc/fortran/symbol.c b/gcc/fortran/symbol.c
+index 5b73f6a71..57ca786d2 100644
+--- a/gcc/fortran/symbol.c
++++ b/gcc/fortran/symbol.c
+@@ -740,9 +740,10 @@ check_conflict (symbol_attribute *attr, const char *name, locus *where)
+       conf2 (asynchronous);
+       conf2 (threadprivate);
+       conf2 (value);
+-      conf2 (is_bind_c);
+       conf2 (codimension);
+       conf2 (result);
++      if (!attr->is_iso_c)
++	conf2 (is_bind_c);
+       break;
+ 
+     default:
+@@ -3704,13 +3705,11 @@ gen_special_c_interop_ptr (int ptr_id, const char *ptr_name,
+                           "create symbol for %s", ptr_name);
+     }
+ 
+-  /* Set up the symbol's important fields.  Save attr required so we can
+-     initialize the ptr to NULL.  */
+-  tmp_sym->attr.save = SAVE_EXPLICIT;
+   tmp_sym->ts.is_c_interop = 1;
+   tmp_sym->attr.is_c_interop = 1;
+   tmp_sym->ts.is_iso_c = 1;
+   tmp_sym->ts.type = BT_DERIVED;
++  tmp_sym->attr.flavor = FL_PARAMETER;
+ 
+   /* The c_ptr and c_funptr derived types will provide the
+      definition for c_null_ptr and c_null_funptr, respectively.  */
+@@ -3758,9 +3757,6 @@ gen_special_c_interop_ptr (int ptr_id, const char *ptr_name,
+   c->expr = gfc_get_expr ();
+   c->expr->expr_type = EXPR_NULL;
+   c->expr->ts.is_iso_c = 1;
+-  /* Must declare c_null_ptr and c_null_funptr as having the
+-     PARAMETER attribute so they can be used in init expressions.  */
+-  tmp_sym->attr.flavor = FL_PARAMETER;
+ 
+   return SUCCESS;
+ }
+diff --git a/gcc/testsuite/gfortran.dg/iso_c_binding_compiler_4.f90 b/gcc/testsuite/gfortran.dg/iso_c_binding_compiler_4.f90
+new file mode 100644
+index 000000000..8a87fe5f5
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/iso_c_binding_compiler_4.f90
+@@ -0,0 +1,18 @@
++! { dg-do compile }
++!
++! PR fortran/51308
++!
++! Contributed by Matthias Moeller
++!
++
++module mymod
++  use iso_c_binding
++  implicit none
++
++  private
++  public :: c_ptr
++  public :: c_null_ptr
++
++end module mymod
++
++! { dg-final { cleanup-modules "mymod" } }

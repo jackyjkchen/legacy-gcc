@@ -1,0 +1,41 @@
+diff --git a/gcc/fortran/primary.c b/gcc/fortran/primary.c
+index 113729fb0..9d673669f 100644
+--- a/gcc/fortran/primary.c
++++ b/gcc/fortran/primary.c
+@@ -2270,6 +2270,12 @@ gfc_match_structure_constructor (gfc_symbol *sym, gfc_expr **result,
+ 	{
+ 	  gfc_component *this_comp = NULL;
+ 
++	  if (comp == sym->components && sym->attr.extension
++	      && comp->ts.type == BT_DERIVED
++	      && comp->ts.u.derived->attr.zero_comp)
++	    /* Skip empty parents.  */ 
++	    comp = comp->next;
++
+ 	  if (!comp_head)
+ 	    comp_tail = comp_head = gfc_get_structure_ctor_component ();
+ 	  else
+diff --git a/gcc/testsuite/gfortran.dg/derived_constructor_comps_4.f90 b/gcc/testsuite/gfortran.dg/derived_constructor_comps_4.f90
+new file mode 100644
+index 000000000..e70551838
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/derived_constructor_comps_4.f90
+@@ -0,0 +1,18 @@
++! { dg-do run }
++!
++! PR 47789: [F03] Structure constructor of type extending DT with no components
++!
++! Contributed by eddyg_61-bugzilla@yahoo.it
++
++type:: one
++end type
++
++type, extends(one) :: two
++  integer :: a
++end type
++
++type(two) :: wo = two(6)
++
++if (wo%a /= 6) call abort()
++
++end

@@ -1,0 +1,90 @@
+diff --git a/libstdc++-v3/include/bits/valarray_before.h b/libstdc++-v3/include/bits/valarray_before.h
+index b35731a40..eed684530 100644
+--- a/libstdc++-v3/include/bits/valarray_before.h
++++ b/libstdc++-v3/include/bits/valarray_before.h
+@@ -331,14 +331,24 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
+       { return pow(__x, __y); }
+   };
+ 
++  template<typename _Tp, bool _IsValidValarrayValue = !__is_abstract(_Tp)>
++    struct __fun_with_valarray
++    {
++      typedef _Tp result_type;
++    };
++
++  template<typename _Tp>
++    struct __fun_with_valarray<_Tp, false>
++    {
++      // No result type defined for invalid value types.
++    };
+ 
+   // We need these bits in order to recover the return type of
+   // some functions/operators now that we're no longer using
+   // function templates.
+   template<typename, typename _Tp>
+-    struct __fun
++    struct __fun : __fun_with_valarray<_Tp>
+     {
+-      typedef _Tp result_type;
+     };
+ 
+   // several specializations for relational operators.
+diff --git a/libstdc++-v3/testsuite/26_numerics/valarray/69116.cc b/libstdc++-v3/testsuite/26_numerics/valarray/69116.cc
+new file mode 100644
+index 000000000..ef9826778
+--- /dev/null
++++ b/libstdc++-v3/testsuite/26_numerics/valarray/69116.cc
+@@ -0,0 +1,53 @@
++// Copyright (C) 2016 Free Software Foundation, Inc.
++//
++// This file is part of the GNU ISO C++ Library.  This library is free
++// software; you can redistribute it and/or modify it under the
++// terms of the GNU General Public License as published by the
++// Free Software Foundation; either version 3, or (at your option)
++// any later version.
++
++// This library is distributed in the hope that it will be useful,
++// but WITHOUT ANY WARRANTY; without even the implied warranty of
++// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++// GNU General Public License for more details.
++
++// You should have received a copy of the GNU General Public License along
++// with this library; see the file COPYING3.  If not see
++// <http://www.gnu.org/licenses/>.
++
++// { dg-do compile }
++// { dg-options "-std=gnu++98" }
++
++// libstdc++/69116
++
++#include <exception>
++#include <valarray>
++
++template<typename T>
++  void foo(const T&) { }
++
++struct X : std::exception // makes namespace std an associated namespace
++{
++  virtual void pure() = 0;
++
++  typedef void(*func_type)(const X&);
++
++  void operator+(func_type) const;
++  void operator-(func_type) const;
++  void operator*(func_type) const;
++  void operator/(func_type) const;
++  void operator%(func_type) const;
++  void operator<<(func_type) const;
++  void operator>>(func_type) const;
++};
++
++void foo(X& x)
++{
++  x + foo;
++  x - foo;
++  x * foo;
++  x / foo;
++  x % foo;
++  x << foo;
++  x >> foo;
++}

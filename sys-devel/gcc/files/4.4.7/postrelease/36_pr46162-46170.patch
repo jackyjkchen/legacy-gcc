@@ -1,0 +1,151 @@
+diff --git a/gcc/cp/pt.c b/gcc/cp/pt.c
+index af94617d8..1eb2e4ab4 100644
+--- a/gcc/cp/pt.c
++++ b/gcc/cp/pt.c
+@@ -122,7 +122,7 @@ static int  type_unification_real (tree, tree, tree, tree,
+ 				   int, unification_kind_t, int);
+ static void note_template_header (int);
+ static tree convert_nontype_argument_function (tree, tree);
+-static tree convert_nontype_argument (tree, tree);
++static tree convert_nontype_argument (tree, tree, tsubst_flags_t);
+ static tree convert_template_argument (tree, tree, tree,
+ 				       tsubst_flags_t, int, tree);
+ static int for_each_template_parm (tree, tree_fn_t, void*,
+@@ -4329,14 +4329,18 @@ convert_nontype_argument_function (tree type, tree expr)
+    Emit an error otherwise.  */
+ 
+ static bool
+-check_valid_ptrmem_cst_expr (tree type, tree expr)
++check_valid_ptrmem_cst_expr (tree type, tree expr,
++			     tsubst_flags_t complain)
+ {
+   STRIP_NOPS (expr);
+   if (expr && (null_ptr_cst_p (expr) || TREE_CODE (expr) == PTRMEM_CST))
+     return true;
+-  error ("%qE is not a valid template argument for type %qT",
+-	 expr, type);
+-  error ("it must be a pointer-to-member of the form `&X::Y'");
++  if (complain & tf_error)
++    {
++      error ("%qE is not a valid template argument for type %qT",
++	     expr, type);
++      error ("it must be a pointer-to-member of the form `&X::Y'");
++    }
+   return false;
+ }
+ 
+@@ -4391,7 +4395,7 @@ has_value_dependent_address (tree op)
+    hacks can go away after we fix the double coercion problem.  */
+ 
+ static tree
+-convert_nontype_argument (tree type, tree expr)
++convert_nontype_argument (tree type, tree expr, tsubst_flags_t complain)
+ {
+   tree expr_type;
+ 
+@@ -4680,7 +4684,7 @@ convert_nontype_argument (tree type, tree expr)
+ 
+       /* [temp.arg.nontype] bullet 1 says the pointer to member
+          expression must be a pointer-to-member constant.  */
+-      if (!check_valid_ptrmem_cst_expr (type, expr))
++      if (!check_valid_ptrmem_cst_expr (type, expr, complain))
+ 	return error_mark_node;
+ 
+       /* There is no way to disable standard conversions in
+@@ -4711,7 +4715,7 @@ convert_nontype_argument (tree type, tree expr)
+     {
+       /* [temp.arg.nontype] bullet 1 says the pointer to member
+          expression must be a pointer-to-member constant.  */
+-      if (!check_valid_ptrmem_cst_expr (type, expr))
++      if (!check_valid_ptrmem_cst_expr (type, expr, complain))
+ 	return error_mark_node;
+ 
+       expr = perform_qualification_conversions (type, expr);
+@@ -5179,7 +5183,7 @@ convert_template_argument (tree parm,
+ 	   conversions can occur is part of determining which
+ 	   function template to call, or whether a given explicit
+ 	   argument specification is valid.  */
+-	val = convert_nontype_argument (t, orig_arg);
++	val = convert_nontype_argument (t, orig_arg, complain);
+       else
+ 	val = orig_arg;
+ 
+diff --git a/gcc/testsuite/g++.dg/template/sfinae26.C b/gcc/testsuite/g++.dg/template/sfinae26.C
+new file mode 100644
+index 000000000..41673fb48
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/template/sfinae26.C
+@@ -0,0 +1,34 @@
++// Origin: PR c++/46170
++// { dg-do "compile" }
++
++namespace util {
++  struct option_value {
++  };
++  template <class T> struct options_map_impl {
++    typedef T options_struct_type;
++    typedef bool (*opt_func)(const option_value&, options_struct_type&);
++    template <class V, V K>  static  bool  set_member_constant(const option_value&,
++							       options_struct_type&, V options_struct_type::*);
++    template <class V, V options_struct_type::*mem, V K>  static  bool 
++    set_member_constant(const option_value& opt, options_struct_type& t) {
++      return set_member_constant<V,K>(opt, t, mem);
++    }
++  };
++}
++struct cflat_options {
++  bool show_precharges;
++};
++typedef util::options_map_impl<cflat_options> options_map_impl_type;
++class register_options_modifier {
++  typedef options_map_impl_type::opt_func modifier_type;
++public:  register_options_modifier();
++  register_options_modifier(const char* Mode,    const modifier_type COM,   
++			    const char* h);
++};
++static const register_options_modifier
++cflat_opt_mod_show_precharges("precharges",
++			      &options_map_impl_type::set_member_constant<bool,
++									  &cflat_options::show_precharges, true>, "show precharge expressions"),
++  cflat_opt_mod_no_show_precharges("no-" "precharges",
++				   &options_map_impl_type::set_member_constant<bool,
++									       &cflat_options::show_precharges, false>, "hide precharge expressions");
+diff --git a/gcc/testsuite/g++.dg/template/sfinae27.C b/gcc/testsuite/g++.dg/template/sfinae27.C
+new file mode 100644
+index 000000000..0ecd1700d
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/template/sfinae27.C
+@@ -0,0 +1,33 @@
++// Origin: PR c++/46162
++
++struct small_type { char dummy; };
++struct large_type { char dummy[2]; };
++
++template<class T>
++struct has_foo_member_variable
++{
++  template<int T::*> struct tester;
++  template<class U> static small_type has_foo(tester<&U::foo> *);
++  template<class U> static large_type has_foo(...);
++  static const bool value = (sizeof(has_foo<T>(0)) == sizeof(small_type));
++};
++
++struct A
++{
++  static int foo()
++  {
++    return 0;
++  }
++};
++
++struct B
++{
++  static int foo;
++};
++
++void
++bar()
++{
++  bool b = has_foo_member_variable<A>::value;
++}
++

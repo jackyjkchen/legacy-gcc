@@ -51,10 +51,26 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/31_pr82210.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/32_pr3698-86208.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/33_pr31827.patch
-	eapply "${FILESDIR}"/${PV}/postrelease/34_pr56564.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/34_pr38313.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/35_pr69410.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/36_pr52625.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/37_pr80176.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/38_pr66686.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/39_pr61420.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/40_pr66957.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/41_pr65879.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/42_pr51308.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/43_pr60361.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/44_pr90107.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/45_pr51825.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/46_pr53841.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/47_pr45012.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/48_pr36435.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/49_pr60019.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/50_pr35255.patch
 
 	if use test ; then
-		eapply "${FILESDIR}"/${PV}/postrelease/90_fix-known-test-fail.patch
-		[[ $(tc-arch) == "arm" ]] && eapply "${FILESDIR}"/${PV}/postrelease/91_fix-arm-test-fail.patch
+		eapply "${FILESDIR}"/${PV}/postrelease/fix-known-test-fail.patch
+		[[ $(tc-arch) == "arm" ]] && eapply "${FILESDIR}"/${PV}/postrelease/fix-arm-test-fail.patch
 	fi
 }

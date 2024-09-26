@@ -66,11 +66,33 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/45_pr110044.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/46_pr82210.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/47_pr3698-86208.patch
-	eapply "${FILESDIR}"/${PV}/postrelease/48_pr56564.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/48_pr38313.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/49_pr66686.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/50_pr69410.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/51_pr52625.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/52_pr80176.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/53_pr77812.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/54_pr61420.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/55_pr66957.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/56_pr60894.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/57_pr65879.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/58_pr63149.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/59_pr64970.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/60_pr61683.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/61_pr49132.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/62_pr60361.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/63_pr90107.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/64_pr60019.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/65_pr56609.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/66_pr53017-59211.patch
+	#eapply "${FILESDIR}"/${PV}/postrelease/
+	#eapply "${FILESDIR}"/${PV}/postrelease/
+	eapply "${FILESDIR}"/${PV}/postrelease/69_pr55972.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/70_pr53648.patch
 
 	if use test ; then
 		rm -rf gcc/testsuite/gcc.c-torture/execute/vfprintf-chk-1.c gcc/testsuite/gcc.c-torture/execute/vprintf-chk-1.c gcc/testsuite/gcc.dg/format/opt-*.c
-		eapply "${FILESDIR}"/${PV}/postrelease/90_fix-known-test-fail.patch
-		[[ $(tc-arch) == "arm" ]] && eapply "${FILESDIR}"/${PV}/postrelease/91_fix-arm-test-fail.patch
+		eapply "${FILESDIR}"/${PV}/postrelease/fix-known-test-fail.patch
+		[[ $(tc-arch) == "arm" ]] && eapply "${FILESDIR}"/${PV}/postrelease/fix-arm-test-fail.patch
 	fi
 }

@@ -1,0 +1,48 @@
+diff --git a/gcc/cp/pt.c b/gcc/cp/pt.c
+index fd89f4556..7baec8b19 100644
+--- a/gcc/cp/pt.c
++++ b/gcc/cp/pt.c
+@@ -6512,11 +6512,16 @@ lookup_template_class (tree d1,
+ 	       i > 0 && t != NULL_TREE;
+ 	       --i, t = TREE_CHAIN (t))
+ 	    {
+-	      tree a = coerce_template_parms (TREE_VALUE (t),
+-					      arglist, gen_tmpl,
+-					      complain,
+-					      /*require_all_args=*/true,
+-					      /*use_default_args=*/true);
++	      tree a;
++	      if (i == saved_depth)
++		a = coerce_template_parms (TREE_VALUE (t),
++					   arglist, gen_tmpl,
++					   complain,
++					   /*require_all_args=*/true,
++					   /*use_default_args=*/true);
++	      else
++		/* Outer levels should have already been coerced.  */
++		a = TMPL_ARGS_LEVEL (arglist, i);
+ 
+ 	      /* Don't process further if one of the levels fails.  */
+ 	      if (a == error_mark_node)
+diff --git a/gcc/testsuite/g++.dg/cpp0x/variadic-104.C b/gcc/testsuite/g++.dg/cpp0x/variadic-104.C
+new file mode 100644
+index 000000000..c693b33f9
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/variadic-104.C
+@@ -0,0 +1,16 @@
++// PR c++/45236
++// { dg-options -std=c++0x }
++
++template <class T, class S> class foo;
++
++template<template<int...> class C, int... II, class S>
++struct foo<C<II...>,S>
++{
++    template <class U>
++    struct bar { typedef int type; };
++};
++
++template <int... I>
++struct A {};
++
++foo<A<3>, float>::bar<int> x;

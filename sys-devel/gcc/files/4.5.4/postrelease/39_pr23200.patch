@@ -1,0 +1,152 @@
+diff --git a/gcc/expr.c b/gcc/expr.c
+index 65a1c6066..cc2e149be 100644
+--- a/gcc/expr.c
++++ b/gcc/expr.c
+@@ -8547,6 +8547,13 @@ expand_expr_real_1 (tree exp, rtx target, enum machine_mode tmode,
+ 	return expand_expr_real_1 (SSA_NAME_VAR (exp), target, tmode, modifier, NULL);
+       {
+ 	gimple g = get_gimple_for_ssa_name (exp);
++      /* For EXPAND_INITIALIZER try harder to get something simpler.  */
++      if (g == NULL
++	  && modifier == EXPAND_INITIALIZER
++	  && !SSA_NAME_IS_DEFAULT_DEF (exp)
++	  && (optimize || DECL_IGNORED_P (SSA_NAME_VAR (exp)))
++	  && stmt_is_replaceable_p (SSA_NAME_DEF_STMT (exp)))
++	g = SSA_NAME_DEF_STMT (exp);
+ 	if (g)
+ 	  return expand_expr_real (gimple_assign_rhs_to_tree (g), target,
+ 				   tmode, modifier, NULL);
+diff --git a/gcc/testsuite/gcc.dg/pr23200.c b/gcc/testsuite/gcc.dg/pr23200.c
+new file mode 100644
+index 000000000..56bf59c86
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr23200.c
+@@ -0,0 +1,22 @@
++/* PR inline-asm/23200 */
++/* { dg-do compile { target nonpic } } */
++/* { dg-options "-O0" } */
++
++static char var;
++
++void
++foo (void)
++{
++  asm volatile ("" :: "i" (&var + 1));
++}
++
++typedef int T[];
++typedef T *P;
++
++int var2;
++
++void
++bar (void)
++{
++  asm volatile ("" :: "i"(&(*(P)&var2)[1]));
++}
+diff --git a/gcc/tree-flow.h b/gcc/tree-flow.h
+index dfbdce19b..ec8699fa5 100644
+--- a/gcc/tree-flow.h
++++ b/gcc/tree-flow.h
+@@ -1,5 +1,5 @@
+ /* Data and Control Flow Analysis for Trees.
+-   Copyright (C) 2001, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010
++   Copyright (C) 2001, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011
+    Free Software Foundation, Inc.
+    Contributed by Diego Novillo <dnovillo@redhat.com>
+ 
+@@ -874,6 +874,9 @@ tree maybe_fold_tmr (tree);
+ unsigned int execute_free_datastructures (void);
+ unsigned int execute_fixup_cfg (void);
+ 
++/* In tree-ssa-ter.c  */
++bool stmt_is_replaceable_p (gimple);
++
+ #include "tree-flow-inline.h"
+ 
+ void swap_tree_operands (gimple, tree *, tree *);
+diff --git a/gcc/tree-ssa-ter.c b/gcc/tree-ssa-ter.c
+index 8c25748a9..0d6af23b1 100644
+--- a/gcc/tree-ssa-ter.c
++++ b/gcc/tree-ssa-ter.c
+@@ -357,10 +357,17 @@ add_dependence (temp_expr_table_p tab, int version, tree var)
+ }
+ 
+ 
+-/* Return TRUE if expression STMT is suitable for replacement.  */
++/* Return TRUE if expression STMT is suitable for replacement.
++   TER is true if is_replaceable_p is called from within TER, false
++   when used from within stmt_is_replaceable_p, i.e. EXPAND_INITIALIZER
++   expansion.  The differences are that with !TER some tests are skipped
++   to make it more aggressive (doesn't require the same bb, or for -O0
++   same locus and same BLOCK), on the other side never considers memory
++   loads as replaceable, because those don't ever lead into constant
++   expressions.  */
+ 
+ static inline bool
+-is_replaceable_p (gimple stmt)
++is_replaceable_p (gimple stmt, bool ter)
+ {
+   use_operand_p use_p;
+   tree def;
+@@ -386,7 +393,7 @@ is_replaceable_p (gimple stmt)
+     return false;
+ 
+   /* If the use isn't in this block, it wont be replaced either.  */
+-  if (gimple_bb (use_stmt) != gimple_bb (stmt))
++  if (ter && gimple_bb (use_stmt) != gimple_bb (stmt))
+     return false;
+ 
+   locus1 = gimple_location (stmt);
+@@ -404,6 +411,7 @@ is_replaceable_p (gimple stmt)
+     }
+ 
+   if (!optimize
++      && ter
+       && ((locus1 && locus1 != locus2) || (block1 && block1 != block2)))
+     return false;
+ 
+@@ -416,7 +424,7 @@ is_replaceable_p (gimple stmt)
+     return false;
+ 
+   /* Without alias info we can't move around loads.  */
+-  if (!optimize
++  if ((!optimize || !ter)
+       && gimple_assign_single_p (stmt)
+       && !is_gimple_val (gimple_assign_rhs1 (stmt)))
+     return false;
+@@ -444,6 +452,16 @@ is_replaceable_p (gimple stmt)
+ }
+ 
+ 
++/* Variant of is_replaceable_p test for use in EXPAND_INITIALIZER
++   expansion.  */
++
++bool
++stmt_is_replaceable_p (gimple stmt)
++{
++  return is_replaceable_p (stmt, false);
++}
++
++
+ /* This function will remove the expression for VERSION from replacement
+    consideration in table TAB.  If FREE_EXPR is true, then remove the
+    expression from consideration as well by freeing the decl uid bitmap.  */
+@@ -478,7 +496,7 @@ process_replaceable (temp_expr_table_p tab, gimple stmt)
+   bitmap def_vars, use_vars;
+ 
+ #ifdef ENABLE_CHECKING
+-  gcc_assert (is_replaceable_p (stmt));
++  gcc_assert (is_replaceable_p (stmt, true));
+ #endif
+ 
+   def = SINGLE_SSA_TREE_OPERAND (stmt, SSA_OP_DEF);
+@@ -590,7 +608,7 @@ find_replaceable_in_bb (temp_expr_table_p tab, basic_block bb)
+       if (is_gimple_debug (stmt))
+ 	continue;
+ 
+-      stmt_replaceable = is_replaceable_p (stmt);
++      stmt_replaceable = is_replaceable_p (stmt, true);
+ 
+       /* Determine if this stmt finishes an existing expression.  */
+       FOR_EACH_SSA_TREE_OPERAND (use, stmt, iter, SSA_OP_USE)

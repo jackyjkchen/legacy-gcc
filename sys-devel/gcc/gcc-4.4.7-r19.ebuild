@@ -52,9 +52,19 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/28_pr82210.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/29_pr3698-86208.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/30_pr31827.patch
-	eapply "${FILESDIR}"/${PV}/postrelease/31_pr34999.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/31_pr36435.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/32_pr54208.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/33_pr66686.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/34_pr66957.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/35_pr35255.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/36_pr46162-46170.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/37_pr45012.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/38_pr40629.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/39_pr45236.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/40_pr45401.patch
 
 	if use test ; then
-		eapply "${FILESDIR}"/${PV}/postrelease/90_fix-known-test-fail.patch
+		eapply "${FILESDIR}"/${PV}/postrelease/fix-known-test-fail.patch
+		[[ $(tc-arch) == "amd64" ]] && eapply "${FILESDIR}"/${PV}/postrelease/workaround-pr34999.patch
 	fi
 }

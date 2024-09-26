@@ -1,0 +1,49 @@
+diff --git a/gcc/cp/call.c b/gcc/cp/call.c
+index fce96b0ea..b34cede06 100644
+--- a/gcc/cp/call.c
++++ b/gcc/cp/call.c
+@@ -2840,6 +2840,7 @@ build_user_type_conversion_1 (tree totype, tree expr, int flags)
+   tree conv_fns = NULL_TREE;
+   conversion *conv = NULL;
+   tree first_arg = NULL_TREE;
++  tree convtype = NULL_TREE;
+   VEC(tree,gc) *args = NULL;
+   bool any_viable_p;
+   int convflags;
+@@ -3043,11 +3044,19 @@ build_user_type_conversion_1 (tree totype, tree expr, int flags)
+       return cand;
+     }
+ 
++  if (!DECL_CONSTRUCTOR_P (cand->fn))
++    convtype = non_reference (TREE_TYPE (TREE_TYPE (cand->fn)));
++  else if (cand->second_conv->kind == ck_rvalue)
++    /* DR 5: [in the first step of copy-initialization]...if the function
++       is a constructor, the call initializes a temporary of the
++       cv-unqualified version of the destination type. */
++    convtype = cv_unqualified (totype);
++  else
++    convtype = totype;
+   /* Build the user conversion sequence.  */
+   conv = build_conv
+     (ck_user,
+-     (DECL_CONSTRUCTOR_P (cand->fn)
+-      ? totype : non_reference (TREE_TYPE (TREE_TYPE (cand->fn)))),
++     convtype,
+      build_identity_conv (TREE_TYPE (expr), expr));
+   conv->cand = cand;
+ 
+diff --git a/gcc/testsuite/g++.dg/init/copy8.C b/gcc/testsuite/g++.dg/init/copy8.C
+new file mode 100644
+index 000000000..655fae21e
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/init/copy8.C
+@@ -0,0 +1,9 @@
++// CWG 5
++
++struct C { };
++C c;
++struct A {
++  A(const A&);
++  A(const C&);
++};
++const volatile A a = c;    // Okay

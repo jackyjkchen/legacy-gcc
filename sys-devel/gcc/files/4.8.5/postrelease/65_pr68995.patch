@@ -1,0 +1,72 @@
+diff --git a/libstdc++-v3/include/std/functional b/libstdc++-v3/include/std/functional
+index bc24a4029..867811dc6 100644
+--- a/libstdc++-v3/include/std/functional
++++ b/libstdc++-v3/include/std/functional
+@@ -2083,7 +2083,7 @@ _GLIBCXX_HAS_NESTED_TYPE(result_type)
+       static _Res
+       _M_invoke(const _Any_data& __functor, _ArgTypes... __args)
+       {
+-	return __callable_functor(**_Base::_M_get_pointer(__functor))(
++	return std::__callable_functor(**_Base::_M_get_pointer(__functor))(
+ 	      std::forward<_ArgTypes>(__args)...);
+       }
+     };
+@@ -2098,7 +2098,7 @@ _GLIBCXX_HAS_NESTED_TYPE(result_type)
+       static void
+       _M_invoke(const _Any_data& __functor, _ArgTypes... __args)
+       {
+-	__callable_functor(**_Base::_M_get_pointer(__functor))(
++	std::__callable_functor(**_Base::_M_get_pointer(__functor))(
+ 	    std::forward<_ArgTypes>(__args)...);
+       }
+     };
+@@ -2178,8 +2178,9 @@ _GLIBCXX_HAS_NESTED_TYPE(result_type)
+       typedef _Res _Signature_type(_ArgTypes...);
+ 
+       template<typename _Functor>
+-	using _Invoke = decltype(__callable_functor(std::declval<_Functor&>())
+-				 (std::declval<_ArgTypes>()...) );
++	using _Invoke
++	  = decltype(std::__callable_functor(std::declval<_Functor&>())
++		     (std::declval<_ArgTypes>()...) );
+ 
+       // Used so the return type convertibility checks aren't done when
+       // performing overload resolution for copy construction/assignment.
+diff --git a/libstdc++-v3/testsuite/20_util/function/68995.cc b/libstdc++-v3/testsuite/20_util/function/68995.cc
+new file mode 100644
+index 000000000..75dafb477
+--- /dev/null
++++ b/libstdc++-v3/testsuite/20_util/function/68995.cc
+@@ -0,0 +1,32 @@
++// Copyright (C) 2015 Free Software Foundation, Inc.
++//
++// This file is part of the GNU ISO C++ Library.  This library is free
++// software; you can redistribute it and/or modify it under the
++// terms of the GNU General Public License as published by the
++// Free Software Foundation; either version 3, or (at your option)
++// any later version.
++
++// This library is distributed in the hope that it will be useful,
++// but WITHOUT ANY WARRANTY; without even the implied warranty of
++// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++// GNU General Public License for more details.
++
++// You should have received a copy of the GNU General Public License along
++// with this library; see the file COPYING3.  If not see
++// <http://www.gnu.org/licenses/>.
++
++// { dg-options "-std=gnu++11" }
++// { dg-do compile }
++
++#include <tr1/memory>
++#include <functional>
++#include <tr1/functional>
++
++std::tr1::shared_ptr<int> test() { return {}; }
++
++std::function<std::tr1::shared_ptr<int>()> func = test;
++std::function<std::tr1::shared_ptr<int>()> funcr = std::ref(test);
++
++void test2(std::tr1::shared_ptr<int>) { }
++
++std::function<void(std::tr1::shared_ptr<int>)> func2 = std::ref(test2);

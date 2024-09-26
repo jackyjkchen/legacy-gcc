@@ -1,0 +1,133 @@
+diff --git a/gcc/testsuite/gfortran.dg/namelist_77.f90 b/gcc/testsuite/gfortran.dg/namelist_77.f90
+new file mode 100644
+index 000000000..5cbfe3aad
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/namelist_77.f90
+@@ -0,0 +1,49 @@
++! { dg-do run }
++!
++! PR libfortran/51825 - Fortran runtime error: Cannot match namelist object name
++! Test case derived from PR.
++
++module local_mod
++
++    type mytype1
++        integer :: int1
++    end type
++
++    type mytype2
++        integer :: n_x       
++        integer :: n_px        
++    end type
++
++    type beam_init_struct
++        character(16) :: chars(1) = ''                                  
++        type (mytype1) dummy
++        type (mytype2) grid(1)      
++    end type
++
++end module
++
++program error_namelist
++
++    use local_mod
++
++    implicit none
++
++    type (beam_init_struct) beam_init
++
++    namelist / error_params / beam_init
++
++    open (10, status='scratch')
++    write (10, '(a)') "&error_params"
++    write (10, '(a)') "  beam_init%chars(1)='JUNK'"
++    write (10, '(a)') "  beam_init%grid(1)%n_x=3"
++    write (10, '(a)') "  beam_init%grid(1)%n_px=2"
++    write (10, '(a)') "/"
++    rewind(10)
++    read(10, nml=error_params)
++    close (10)
++
++    if (beam_init%chars(1) /= 'JUNK') call abort
++    if (beam_init%grid(1)%n_x /= 3) call abort
++    if (beam_init%grid(1)%n_px /= 2) call abort
++
++end program
+diff --git a/gcc/testsuite/gfortran.dg/namelist_78.f90 b/gcc/testsuite/gfortran.dg/namelist_78.f90
+new file mode 100644
+index 000000000..d4e29ab82
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/namelist_78.f90
+@@ -0,0 +1,34 @@
++! { dg-do run }
++!
++! PR libfortran/51825
++! Test case regarding namelist problems with derived types
++
++program namelist
++
++    type d1
++        integer :: j = 0
++    end type d1
++
++    type d2
++        type(d1) k
++    end type d2
++
++    type d3
++        type(d2) d(2)
++    end type d3
++
++    type(d3) der
++    namelist /nmlst/ der
++
++    open (10, status='scratch')
++    write (10, '(a)') "&NMLST"
++    write (10, '(a)') " DER%D(1)%K%J = 1,"
++    write (10, '(a)') " DER%D(2)%K%J = 2,"
++    write (10, '(a)') "/"
++    rewind(10)
++    read(10, nml=nmlst)
++    close (10)
++
++    if (der%d(1)%k%j /= 1) call abort
++    if (der%d(2)%k%j /= 2) call abort
++end program namelist
+diff --git a/libgfortran/io/list_read.c b/libgfortran/io/list_read.c
+index 9c8042503..097a19974 100644
+--- a/libgfortran/io/list_read.c
++++ b/libgfortran/io/list_read.c
+@@ -2531,17 +2531,17 @@ nml_read_obj (st_parameter_dt *dtp, namelist_info * nl, index_type offset,
+ 	       since a single object can have multiple reads.  */
+ 	    dtp->u.p.expanded_read = 0;
+ 
+-	    /* Now loop over the components. Update the component pointer
+-	       with the return value from nml_write_obj.  This loop jumps
+-	       past nested derived types by testing if the potential
+-	       component name contains '%'.  */
++	    /* Now loop over the components.  */
+ 
+ 	    for (cmp = nl->next;
+ 		 cmp &&
+-		   !strncmp (cmp->var_name, obj_name, obj_name_len) &&
+-		   !strchr (cmp->var_name + obj_name_len, '%');
++		   !strncmp (cmp->var_name, obj_name, obj_name_len);
+ 		 cmp = cmp->next)
+ 	      {
++		/* Jump over nested derived type by testing if the potential
++		   component name contains '%'.  */
++		if (strchr (cmp->var_name + obj_name_len, '%'))
++		    continue;
+ 
+ 		if (nml_read_obj (dtp, cmp, (index_type)(pdata - nl->mem_pos),
+ 				  pprev_nl, nml_err_msg, nml_err_msg_size,
+@@ -2851,7 +2851,8 @@ get_name:
+ 	  goto nml_err_ret;
+ 	}
+ 
+-      if (*pprev_nl == NULL || !component_flag)
++      /* Don't move first_nl further in the list if a qualifier was found.  */
++      if ((*pprev_nl == NULL && !qualifier_flag) || !component_flag)
+ 	first_nl = nl;
+ 
+       root_nl = nl;

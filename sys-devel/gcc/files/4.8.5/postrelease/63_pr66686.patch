@@ -1,0 +1,44 @@
+diff --git a/gcc/cp/pt.c b/gcc/cp/pt.c
+index 91c6f7bb4..20eef527b 100644
+--- a/gcc/cp/pt.c
++++ b/gcc/cp/pt.c
+@@ -5949,11 +5949,13 @@ coerce_template_template_parm (tree parm,
+ 	   D<int, C> d;
+ 
+ 	 i.e. the parameter list of TT depends on earlier parameters.  */
+-      if (!uses_template_parms (TREE_TYPE (arg))
+-	  && !same_type_p
+-	        (tsubst (TREE_TYPE (parm), outer_args, complain, in_decl),
+-		 TREE_TYPE (arg)))
+-	return 0;
++      if (!uses_template_parms (TREE_TYPE (arg)))
++	{
++	  tree t = tsubst (TREE_TYPE (parm), outer_args, complain, in_decl);
++	  if (!uses_template_parms (t)
++	      && !same_type_p (t, TREE_TYPE (arg)))
++	    return 0;
++	}
+       
+       if (TEMPLATE_PARM_PARAMETER_PACK (DECL_INITIAL (arg))
+ 	  && !TEMPLATE_PARM_PARAMETER_PACK (DECL_INITIAL (parm)))
+diff --git a/gcc/testsuite/g++.dg/template/pr66686.C b/gcc/testsuite/g++.dg/template/pr66686.C
+new file mode 100644
+index 000000000..d8aea625d
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/template/pr66686.C
+@@ -0,0 +1,15 @@
++// PR c++/66686
++
++template <int>
++struct Y { };
++
++template <class B, template <template <B> class Z> class C>
++struct X
++{
++  C<Y> a;  // { dg-bogus "mismatch" }
++};
++
++template <template <int> class>
++struct A { };
++
++X<int, A> a;

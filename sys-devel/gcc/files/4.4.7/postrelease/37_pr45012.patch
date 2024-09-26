@@ -1,0 +1,44 @@
+diff --git a/gcc/cp/pt.c b/gcc/cp/pt.c
+index 1eb2e4ab4..bb30254bc 100644
+--- a/gcc/cp/pt.c
++++ b/gcc/cp/pt.c
+@@ -11988,7 +11988,7 @@ tsubst_copy_and_build (tree t,
+       t = tsubst_copy (t, args, complain, in_decl);
+       /* As in finish_id_expression, we resolve enumeration constants
+ 	 to their underlying values.  */
+-      if (TREE_CODE (t) == CONST_DECL)
++      if (TREE_CODE (t) == CONST_DECL && !processing_template_decl)
+ 	{
+ 	  used_types_insert (TREE_TYPE (t));
+ 	  return DECL_INITIAL (t);
+diff --git a/gcc/testsuite/g++.dg/template/partial13.C b/gcc/testsuite/g++.dg/template/partial13.C
+new file mode 100644
+index 000000000..bfbe2e028
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/template/partial13.C
+@@ -0,0 +1,25 @@
++// PR c++/45012
++
++template <bool B, class T=void> struct enable_if;
++
++template <class T>
++struct enable_if<true,T>
++{
++  typedef T type;
++};
++
++enum { RUNTIME = 0 };
++// it compiles with the previous line commented out and the next commented in
++// static const int RUNTIME=0;
++
++template <class T, class U, class EN=void> struct foo;
++
++template <template<int> class V, int M>
++struct foo<V<M>,V<M>, typename enable_if<M==RUNTIME||M==2>::type> {};
++
++template <template<int> class V1, template<int> class V2, int M>
++struct foo<V1<M>,V2<M>, typename enable_if<M==RUNTIME||M==2>::type> {};
++
++template <int M> struct bar {};
++
++foo<bar<2>,bar<2> > x;

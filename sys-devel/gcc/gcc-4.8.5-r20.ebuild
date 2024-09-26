@@ -77,12 +77,36 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/58_pr110044.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/59_pr82210.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/60_pr3698-86208.patch
-	eapply "${FILESDIR}"/${PV}/postrelease/61_pr56564.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/61_pr38313.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/62_pr54223-84276.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/63_pr66686.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/64_pr69410.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/65_pr68995.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/66_pr98016.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/67_pr69116.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/68_pr52625.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/69_pr66575.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/70_pr61683.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/71_pr80176.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/72_pr67054.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/73_pr57063.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/74_pr61420.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/75_pr66957.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/76_pr60894.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/77_pr65879.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/78_pr62255.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/79_pr63149.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/80_pr64970.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/81_pr77812.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/82_pr49132.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/83_pr90107.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/84_pr53017-59211.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/85_pr60019.patch
 
 	if use test ; then
 		rm -rf gcc/testsuite/gcc.c-torture/execute/vfprintf-chk-1.c gcc/testsuite/gcc.c-torture/execute/vprintf-chk-1.c gcc/testsuite/gcc.dg/format/opt-*.c
-		eapply "${FILESDIR}"/${PV}/postrelease/90_fix-known-test-fail.patch
-		[[ $(tc-arch) == "arm" ]] && eapply "${FILESDIR}"/${PV}/postrelease/91_fix-arm-test-fail.patch
+		eapply "${FILESDIR}"/${PV}/postrelease/fix-known-test-fail.patch
+		[[ $(tc-arch) == "arm" ]] && eapply "${FILESDIR}"/${PV}/postrelease/fix-arm-test-fail.patch
 		# gcc-4.8.5 on aarch64, pch case random build crash
 		[[ $(tc-arch) == "arm64" ]] && rm -rf gcc/testsuite/gcc.dg/pch gcc/testsuite/g++.dg/pch gcc/testsuite/objc.dg/pch
 	fi

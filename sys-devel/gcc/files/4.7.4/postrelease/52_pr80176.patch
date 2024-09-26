@@ -1,0 +1,43 @@
+diff --git a/gcc/cp/tree.c b/gcc/cp/tree.c
+index 8c14c0fbe..6b1f814dd 100644
+--- a/gcc/cp/tree.c
++++ b/gcc/cp/tree.c
+@@ -98,6 +98,17 @@ lvalue_kind (const_tree ref)
+       return lvalue_kind (TREE_OPERAND (ref, 0));
+ 
+     case COMPONENT_REF:
++      if (BASELINK_P (TREE_OPERAND (ref, 1)))
++	{
++	  tree fn = BASELINK_FUNCTIONS (TREE_OPERAND (ref, 1));
++
++	  /* For static member function recurse on the BASELINK, we can get
++	     here e.g. from reference_binding.  If BASELINK_FUNCTIONS is
++	     OVERLOAD, the overload is resolved first if possible through
++	     resolve_address_of_overloaded_function.  */
++	  if (TREE_CODE (fn) == FUNCTION_DECL && DECL_STATIC_FUNCTION_P (fn))
++	    return lvalue_kind (TREE_OPERAND (ref, 1));
++	}
+       op1_lvalue_kind = lvalue_kind (TREE_OPERAND (ref, 0));
+       /* Look at the member designator.  */
+       if (!op1_lvalue_kind)
+diff --git a/gcc/testsuite/g++.dg/init/ref23.C b/gcc/testsuite/g++.dg/init/ref23.C
+new file mode 100644
+index 000000000..12b8851f2
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/init/ref23.C
+@@ -0,0 +1,15 @@
++// PR c++/80176
++// { dg-do compile }
++
++struct X { static void foo(); static void baz(int); static int baz(double); } x;
++struct Y { void o(unsigned char); static void o(int); void o(double); } y;
++void X::foo() {}
++static void bar() {}
++void (&r1)() = x.foo;
++void (&r2)() = X::foo;
++void (&r3)() = bar;
++void (&r4)(int) = x.baz;
++int (&r5)(double) = x.baz;
++void (&r6)(int) = X::baz;
++int (&r7)(double) = X::baz;
++void (&r8)(int) = y.o;

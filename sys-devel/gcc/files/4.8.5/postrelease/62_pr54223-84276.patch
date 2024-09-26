@@ -1,0 +1,149 @@
+diff --git a/gcc/fortran/interface.c b/gcc/fortran/interface.c
+index 2d739426e..47c5c1f2a 100644
+--- a/gcc/fortran/interface.c
++++ b/gcc/fortran/interface.c
+@@ -2396,7 +2396,8 @@ gfc_has_vector_subscript (gfc_expr *e)
+ 
+ static int
+ compare_actual_formal (gfc_actual_arglist **ap, gfc_formal_arglist *formal,
+-	 	       int ranks_must_agree, int is_elemental, locus *where)
++	 	       int ranks_must_agree, int is_elemental,
++		       bool in_statement_function, locus *where)
+ {
+   gfc_actual_arglist **new_arg, *a, *actual, temp;
+   gfc_formal_arglist *f;
+@@ -2737,8 +2738,9 @@ compare_actual_formal (gfc_actual_arglist **ap, gfc_formal_arglist *formal,
+ 	}
+ 
+       /* Check intent = OUT/INOUT for definable actual argument.  */
+-      if ((f->sym->attr.intent == INTENT_OUT
+-	  || f->sym->attr.intent == INTENT_INOUT))
++      if (!in_statement_function
++	  && (f->sym->attr.intent == INTENT_OUT
++	      || f->sym->attr.intent == INTENT_INOUT))
+ 	{
+ 	  const char* context = (where
+ 				 ? _("actual argument to INTENT = OUT/INOUT")
+@@ -2838,7 +2840,8 @@ compare_actual_formal (gfc_actual_arglist **ap, gfc_formal_arglist *formal,
+ 		       "at %L", where);
+ 	  return 0;
+ 	}
+-      if (!f->sym->attr.optional)
++      if (!f->sym->attr.optional
++	  || (in_statement_function && f->sym->attr.optional))
+ 	{
+ 	  if (where)
+ 	    gfc_error ("Missing actual argument for argument '%s' at %L",
+@@ -3119,6 +3122,7 @@ check_intents (gfc_formal_arglist *f, gfc_actual_arglist *a)
+ gfc_try
+ gfc_procedure_use (gfc_symbol *sym, gfc_actual_arglist **ap, locus *where)
+ {
++  gfc_actual_arglist *a;
+   gfc_formal_arglist *dummy_args;
+ 
+   /* Warn about calls with an implicit interface.  Special case
+@@ -3138,8 +3142,6 @@ gfc_procedure_use (gfc_symbol *sym, gfc_actual_arglist **ap, locus *where)
+ 
+   if (sym->attr.if_source == IFSRC_UNKNOWN)
+     {
+-      gfc_actual_arglist *a;
+-
+       if (sym->attr.pointer)
+ 	{
+ 	  gfc_error("The pointer object '%s' at %L must have an explicit "
+@@ -3218,7 +3220,10 @@ gfc_procedure_use (gfc_symbol *sym, gfc_actual_arglist **ap, locus *where)
+ 
+   dummy_args = gfc_sym_get_dummy_args (sym);
+ 
+-  if (!compare_actual_formal (ap, dummy_args, 0, sym->attr.elemental, where))
++  /* For a statement function, check that types and type parameters of actual
++     arguments and dummy arguments match.  */
++  if (!compare_actual_formal (ap, dummy_args, 0, sym->attr.elemental,
++			      sym->attr.proc == PROC_ST_FUNCTION, where))
+     return FAILURE;
+ 
+   if (check_intents (dummy_args, *ap) == FAILURE)
+@@ -3266,7 +3271,7 @@ gfc_ppc_use (gfc_component *comp, gfc_actual_arglist **ap, locus *where)
+     }
+ 
+   if (!compare_actual_formal (ap, comp->ts.interface->formal, 0,
+-			      comp->attr.elemental, where))
++			      comp->attr.elemental, false, where))
+     return;
+ 
+   check_intents (comp->ts.interface->formal, *ap);
+@@ -3290,7 +3295,7 @@ gfc_arglist_matches_symbol (gfc_actual_arglist** args, gfc_symbol* sym)
+   dummy_args = gfc_sym_get_dummy_args (sym);
+ 
+   r = !sym->attr.elemental;
+-  if (compare_actual_formal (args, dummy_args, r, !r, NULL))
++  if (compare_actual_formal (args, dummy_args, r, !r, false, NULL))
+     {
+       check_intents (dummy_args, *args);
+       if (gfc_option.warn_aliasing)
+diff --git a/gcc/testsuite/gfortran.dg/statement_function_1.f90 b/gcc/testsuite/gfortran.dg/statement_function_1.f90
+new file mode 100644
+index 000000000..f26f25c87
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/statement_function_1.f90
+@@ -0,0 +1,28 @@
++! { dg-do compile }
++! PR fortran/84276
++      subroutine stepns(hh, h, s, w)
++      real, intent(inout) :: h, hh, s
++      real, intent(out) :: w
++      real :: qofs
++      integer i
++      qofs(s) = s
++      w = qofs(hh + h)
++      i = 42
++      w = qofs(i)       ! { dg-error "Type mismatch in argument" }
++      end subroutine stepns
++
++      subroutine step(hh, h, s, w)
++      real, intent(inout) :: h, hh, s
++      real, intent(out) :: w
++      real :: qofs
++      integer i
++      qofs(s, i) = i * s
++      i = 42
++      w = qofs(hh, i)
++!
++! The following line should cause an error, because keywords are not
++! allowed in a function with an implicit interface.
++!
++      w = qofs(i = i, s = hh)
++      end subroutine step
++! { dg-prune-output " Obsolescent feature" }
+diff --git a/gcc/testsuite/gfortran.dg/statement_function_2.f90 b/gcc/testsuite/gfortran.dg/statement_function_2.f90
+new file mode 100644
+index 000000000..703ca1716
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/statement_function_2.f90
+@@ -0,0 +1,26 @@
++! { dg-do compile }
++! PR fortran/54223
++subroutine r(d)
++    implicit none
++    integer, optional :: d
++    integer :: h, q
++    q(d) = d + 1     ! statement function statement
++    h = q(d)
++end subroutine r
++
++subroutine s(x)
++    implicit none
++    integer, optional :: x
++    integer :: g, z
++    g(x) = x + 1     ! statement function statement
++    z = g()          ! { dg-error "Missing actual argument" }
++end subroutine s
++
++subroutine t(a)
++    implicit none
++    integer :: a
++    integer :: f, y
++    f(a) = a + 1     ! statement function statement
++    y = f()          ! { dg-error "Missing actual argument" }
++end subroutine t
++! { dg-prune-output " Obsolescent feature" }
