@@ -102,6 +102,9 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/83_pr90107.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/84_pr53017-59211.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/85_pr60019.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/86_pr88754.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/87_pr16333-41426-59878-66895.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/88_pr22556.patch
 
 	if use test ; then
 		rm -rf gcc/testsuite/gcc.c-torture/execute/vfprintf-chk-1.c gcc/testsuite/gcc.c-torture/execute/vprintf-chk-1.c gcc/testsuite/gcc.dg/format/opt-*.c

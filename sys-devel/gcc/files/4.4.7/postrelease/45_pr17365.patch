@@ -1,0 +1,155 @@
+diff --git a/gcc/cp/name-lookup.c b/gcc/cp/name-lookup.c
+index 502de2658..6ab5b30cc 100644
+--- a/gcc/cp/name-lookup.c
++++ b/gcc/cp/name-lookup.c
+@@ -4480,26 +4480,15 @@ add_function (struct arg_lookup *k, tree fn)
+      total number of functions being compared, which should usually be the
+      case.  */
+ 
+-  /* We must find only functions, or exactly one non-function.  */
+-  if (!k->functions)
++  if (!is_overloaded_fn (fn))
++    /* All names except those of (possibly overloaded) functions and
++       function templates are ignored.  */;
++  else if (!k->functions)
+     k->functions = fn;
+   else if (fn == k->functions)
+     ;
+-  else if (is_overloaded_fn (k->functions) && is_overloaded_fn (fn))
+-    k->functions = build_overload (fn, k->functions);
+   else
+-    {
+-      tree f1 = OVL_CURRENT (k->functions);
+-      tree f2 = fn;
+-      if (is_overloaded_fn (f1))
+-	{
+-	  fn = f1; f1 = f2; f2 = fn;
+-	}
+-      error ("%q+D is not a function,", f1);
+-      error ("  conflict with %q+D", f2);
+-      error ("  in call to %qD", k->name);
+-      return true;
+-    }
++    k->functions = build_overload (fn, k->functions);
+ 
+   return false;
+ }
+diff --git a/gcc/testsuite/g++.dg/lookup/koenig5.C b/gcc/testsuite/g++.dg/lookup/koenig5.C
+index 139e3b866..6ecc25daa 100644
+--- a/gcc/testsuite/g++.dg/lookup/koenig5.C
++++ b/gcc/testsuite/g++.dg/lookup/koenig5.C
+@@ -8,39 +8,39 @@
+ namespace N
+ {
+   struct A {};
+-  void One (...);  // { dg-error "conflict with" "" }
+-  void (*Two) (...);  // { dg-error "not a function" "" }
+-  namespace Three {} // { dg-error "lookup finds|not a function" "" }
++  void One (...);
++  void (*Two) (...);
++  namespace Three {}
+ }
+ 
+ namespace M
+ {
+   struct B {};
+-  struct One {};  // { dg-error "lookup finds|not a function" "" }
+-  void (*Two) (...);  // { dg-error "conflict with" "" }
+-  void Three (...);  // { dg-error "conflict with" "" }
++  struct One {};
++  void (*Two) (...);
++  void Three (...);
+ }
+ 
+ namespace O 
+ {
+   struct C {};
+-  void Two (...); // { dg-error "conflict with" "" }
++  void Two (...);
+ }
+   
+ void g (N::A *a, M::B *b, O::C *c)
+ {
+   One (a); // ok
+-  One (b); // { dg-error "in call to" "" }
+-  One (a, b); // { dg-error "in call to" "" }
++  One (a, b); // ok
++  One (b); // { dg-error "not declared" }
+ 
+-  Two (a); // ok
+-  Two (a, a); // ok
+-  Two (b); // ok
+   Two (c); // ok
+-  Two (a, b); // { dg-error "in call to" "" }
+-  Two (a, c); // { dg-error "in call to" "" }
++  Two (a, c); // ok
++  Two (a); // { dg-error "not declared" }
++  Two (a, a); // error masked by earlier error
++  Two (b); // error masked by earlier error
++  Two (a, b); // error masked by earlier error
+   
+-  Three (a); // { dg-error "in call to" "" }
+   Three (b); // ok
+-  Three (a, b); // { dg-error "in call to" "" }
++  Three (a, b); // ok
++  Three (a); // { dg-error "not declared" }
+ }
+diff --git a/gcc/testsuite/g++.dg/lookup/koenig6.C b/gcc/testsuite/g++.dg/lookup/koenig6.C
+new file mode 100644
+index 000000000..9fdf771e0
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/lookup/koenig6.C
+@@ -0,0 +1,18 @@
++// PR c++/17365
++// ADL should not find B::N.
++
++namespace A
++{
++  namespace B
++  {
++    template <typename T> struct N {int n_;};
++  }
++  template <typename T> int N( T p ) { return p->n_; }
++  template <typename T> void f( T p ) { N(p); }  // #1
++}
++int main()
++{
++  A::B::N<int> n;
++  A::f(&n);
++  return 0;
++}
+diff --git a/gcc/testsuite/g++.dg/template/crash56.C b/gcc/testsuite/g++.dg/template/crash56.C
+index 1efa3500d..03bddf42a 100644
+--- a/gcc/testsuite/g++.dg/template/crash56.C
++++ b/gcc/testsuite/g++.dg/template/crash56.C
+@@ -7,10 +7,10 @@
+ 
+ namespace N
+ {
+-  struct A { A (A*); }; // { dg-error "lookup finds" "" }
++  struct A { A (A*); };
+ }
+ 
+ template<typename T> void g (N::A *p)
+ {
+-  (void) A (p); // { dg-error "in call" "" }
++  (void) A (p); // { dg-message "" "" }
+ }
+diff --git a/gcc/testsuite/g++.old-deja/g++.ns/koenig5.C b/gcc/testsuite/g++.old-deja/g++.ns/koenig5.C
+index d84fc8dbf..33061ad0b 100644
+--- a/gcc/testsuite/g++.old-deja/g++.ns/koenig5.C
++++ b/gcc/testsuite/g++.old-deja/g++.ns/koenig5.C
+@@ -1,5 +1,5 @@
+ // { dg-do assemble  }
+-// To find function pointers in Koenig lookup is ok as long as we only find one.
++// Function pointers are ignored in Koenig lookup. (DR 218)
+ namespace A{
+   void foo();             
+   struct X{};
+@@ -14,5 +14,5 @@ void g()
+   foo(new X);            // ok -- DR 218 says that we find the global
+ 			 // foo variable first, and therefore do not
+ 			 // perform argument-dependent lookup.
+-  bar(new X);            // ok
++  bar(new X);            // { dg-error "not declared" }
+ }

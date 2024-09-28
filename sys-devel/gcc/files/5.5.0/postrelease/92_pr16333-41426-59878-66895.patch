@@ -1,0 +1,142 @@
+diff --git a/gcc/cp/typeck.c b/gcc/cp/typeck.c
+index 6e94d75ad..0dc15899b 100644
+--- a/gcc/cp/typeck.c
++++ b/gcc/cp/typeck.c
+@@ -8323,13 +8323,15 @@ convert_for_initialization (tree exp, tree type, tree rhs, int flags,
+       || (TREE_CODE (rhs) == TREE_LIST && TREE_VALUE (rhs) == error_mark_node))
+     return error_mark_node;
+ 
+-  if ((TREE_CODE (TREE_TYPE (rhs)) == ARRAY_TYPE
+-       && TREE_CODE (type) != ARRAY_TYPE
+-       && (TREE_CODE (type) != REFERENCE_TYPE
+-	   || TREE_CODE (TREE_TYPE (type)) != ARRAY_TYPE))
+-      || (TREE_CODE (TREE_TYPE (rhs)) == FUNCTION_TYPE
+-	  && !TYPE_REFFN_P (type))
+-      || TREE_CODE (TREE_TYPE (rhs)) == METHOD_TYPE)
++  if (MAYBE_CLASS_TYPE_P (non_reference (type)))
++    ;
++  else if ((TREE_CODE (TREE_TYPE (rhs)) == ARRAY_TYPE
++	    && TREE_CODE (type) != ARRAY_TYPE
++	    && (TREE_CODE (type) != REFERENCE_TYPE
++		|| TREE_CODE (TREE_TYPE (type)) != ARRAY_TYPE))
++	   || (TREE_CODE (TREE_TYPE (rhs)) == FUNCTION_TYPE
++	       && !TYPE_REFFN_P (type))
++	   || TREE_CODE (TREE_TYPE (rhs)) == METHOD_TYPE)
+     rhs = decay_conversion (rhs, complain);
+ 
+   rhstype = TREE_TYPE (rhs);
+diff --git a/gcc/testsuite/g++.dg/conversion/pr16333.C b/gcc/testsuite/g++.dg/conversion/pr16333.C
+new file mode 100644
+index 000000000..810c12a9a
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/conversion/pr16333.C
+@@ -0,0 +1,10 @@
++// PR c++/16333
++
++struct X {
++   X (const int (&)[3]);
++};
++
++int a[3];
++X foo1 () { return a; }
++const X &foo2 () { return a; } // { dg-warning "returning reference to temporary" }
++X &foo3 () { return a; } // { dg-error "invalid initialization" }
+diff --git a/gcc/testsuite/g++.dg/conversion/pr41426.C b/gcc/testsuite/g++.dg/conversion/pr41426.C
+new file mode 100644
+index 000000000..78ec5fbdf
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/conversion/pr41426.C
+@@ -0,0 +1,40 @@
++// PR c++/41426
++
++template <typename _T>
++struct A
++{
++   template <int _N>
++       A(_T (&V)[_N]);
++   A();
++};
++
++A<float> g1()
++{
++   float f[] = {1.1f, 2.3f};
++   return f;
++}
++
++const A<float> &g3()
++{
++   float f[] = {1.1f, 2.3f};
++   return f; // { dg-warning "returning reference to temporary" }
++}
++
++A<float> &g4()
++{
++   float f[] = {1.1f, 2.3f};
++   return f; // { dg-error "invalid initialization" }
++}
++
++struct B
++{
++   B (int (&v)[10]);
++   B();
++};
++
++B g2()
++{
++   int c[10];
++   return c;
++}
++
+diff --git a/gcc/testsuite/g++.dg/conversion/pr59878.C b/gcc/testsuite/g++.dg/conversion/pr59878.C
+new file mode 100644
+index 000000000..ed567fe6f
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/conversion/pr59878.C
+@@ -0,0 +1,25 @@
++// PR c++/59878
++
++struct Test {
++ template <int N>
++ Test(const char (&array)[N]) {}
++};
++
++Test test() {
++ return "test1";
++}
++
++void test2(Test arg = "test12") {}
++
++template <typename T>
++void test3(T arg = "test123") {}
++
++template <typename T>
++void test4(const T &arg = "test123") {}
++
++int main() {
++ test();
++ test2();
++ test3<Test>();
++ test4<Test>();
++}
+diff --git a/gcc/testsuite/g++.dg/conversion/pr66895.C b/gcc/testsuite/g++.dg/conversion/pr66895.C
+new file mode 100644
+index 000000000..14203bdab
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/conversion/pr66895.C
+@@ -0,0 +1,16 @@
++// PR c++/66895
++// { dg-do compile { target c++11 } }
++
++#include <cstddef>
++#include <initializer_list>
++
++struct S {
++    template<std::size_t N> S(char const (&)[N]);
++};
++struct T1 { S s; };
++void f1(std::initializer_list<T1>);
++void g1() { f1({{""}}); }
++
++struct T2 { const S& s; };
++void f2(std::initializer_list<T2>);
++void g2() { f2({{""}}); }
