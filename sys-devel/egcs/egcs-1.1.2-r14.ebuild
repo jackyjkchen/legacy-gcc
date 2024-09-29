@@ -26,5 +26,7 @@ src_prepare() {
 	touch -r gcc/README gcc/configure.in || die
 
 	use vanilla && return 0
+	eapply "${FILESDIR}"/${PV}/03_add-gxxdg-exp.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/00_pr45262.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/01_pr42466.patch
 }

@@ -8,17 +8,16 @@ inherit toolchain-oldlibc
 KEYWORDS="amd64 x86"
 
 src_prepare() {
-	eapply "${FILESDIR}"/${PV}/00_gcc-${PV}.patch
+	eapply "${FILESDIR}"/${PV}/00_egcs-${PV}.patch
 	toolchain-oldlibc_src_prepare
 
-	eapply "${FILESDIR}"/${PV}/01_workaround-for-legacy-glibc-in-non-system-dir.patch
+	eapply "${FILESDIR}"/${PV}/01_workaround-for-new-glibc.patch
+	eapply "${FILESDIR}"/${PV}/02_sjlj-exception-default.patch
 	eapply "${FILESDIR}"/${PV}/10_fix-for-libc5.patch
 
 	use vanilla && return 0
+	eapply "${FILESDIR}"/${PV}/03_add-gxxdg-exp.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/00_pr45262.patch
-
-	if use test ; then
-		eapply "${FILESDIR}"/${PV}/postrelease/fix-known-test-fail.patch
-	fi
+	eapply "${FILESDIR}"/${PV}/postrelease/01_pr42466.patch
 }
 

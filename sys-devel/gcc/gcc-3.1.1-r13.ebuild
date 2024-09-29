@@ -5,6 +5,7 @@ EAPI=8
 
 inherit toolchain
 
+# ia64 - broken static handling; USE=static emerge busybox
 KEYWORDS="alpha amd64 hppa m68k mips ppc ppc64 s390 sparc x86"
 
 src_prepare() {
@@ -24,12 +25,13 @@ src_prepare() {
 	esac
 
 	use vanilla && return 0
-	eapply "${FILESDIR}"/${PV}/postrelease/00_pr13685.patch
-	eapply "${FILESDIR}"/${PV}/postrelease/01_pr45262.patch
-	eapply "${FILESDIR}"/${PV}/postrelease/02_pr25572.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/00_pr45262.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/01_pr18681.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/02_pr24449.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/03_pr42466.patch
 
 	if use test ; then
 		eapply "${FILESDIR}"/${PV}/postrelease/fix-known-test-fail.patch
-		rm -rf libstdc++-v3/testsuite/27_io/{filebuf_members.cc,filebuf_virtuals.cc,ostream_inserter_arith.cc,streambuf_members.cc,stringbuf_virtuals.cc}
+		rm -rf libstdc++-v3/testsuite/27_io/{ostream_inserter_arith.cc,stringbuf_virtuals.cc}
 	fi
 }

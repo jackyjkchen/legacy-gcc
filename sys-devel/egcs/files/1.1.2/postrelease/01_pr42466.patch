@@ -1,0 +1,56 @@
+diff --git a/gcc/cp/cp-tree.h b/gcc/cp/cp-tree.h
+index ef1cf8b..21c32e2 100644
+--- a/gcc/cp/cp-tree.h
++++ b/gcc/cp/cp-tree.h
+@@ -2041,6 +2041,12 @@ extern int current_function_parms_stored;
+     && DECL_NAME (NODE) != NULL_TREE			\
+     && MAIN_NAME_P (DECL_NAME (NODE)))
+ 
++#define COMPARE_STRICT        0 /* Just check if the types are the
++/* Returns nonzero iff TYPE1 and TYPE2 are the same type, in the usual
++   sense of `same'.  */
++#define same_type_p(type1, type2) \
++  comptypes ((type1), (type2), COMPARE_STRICT)
++
+ 
+ /* Define the sets of attributes that member functions and baseclasses
+    can have.  These are sensible combinations of {public,private,protected}
+diff --git a/gcc/cp/pt.c b/gcc/cp/pt.c
+index 556b761..211662e 100644
+--- a/gcc/cp/pt.c
++++ b/gcc/cp/pt.c
+@@ -1368,7 +1368,8 @@ reduce_template_parm_level (index, type, levels)
+ {
+   if (TEMPLATE_PARM_DESCENDANTS (index) == NULL_TREE
+       || (TEMPLATE_PARM_LEVEL (TEMPLATE_PARM_DESCENDANTS (index))
+-	  != TEMPLATE_PARM_LEVEL (index) - levels))
++	  != TEMPLATE_PARM_LEVEL (index) - levels)
++      || !same_type_p (type, TREE_TYPE (TEMPLATE_PARM_DESCENDANTS (index))))
+     {
+       tree decl 
+ 	= build_decl (TREE_CODE (TEMPLATE_PARM_DECL (index)),
+diff --git a/gcc/testsuite/g++.dg/nontype19.C b/gcc/testsuite/g++.dg/nontype19.C
+new file mode 100644
+index 0000000..1df78b3
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/nontype19.C
+@@ -0,0 +1,19 @@
++// PR c++/42466
++
++template<class IntT, IntT X>
++struct A
++{
++  A();
++
++  template<IntT X2>
++  A(const A<IntT, X2>& other);
++};
++
++int main(int argc, char** argv)
++{
++    A<int, 42> a;
++    A<int, 100> b = a;
++
++    A<unsigned, 42u> c;
++    A<unsigned, 100u> d = c;
++}

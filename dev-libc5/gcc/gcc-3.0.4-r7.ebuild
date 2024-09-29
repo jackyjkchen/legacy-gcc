@@ -16,5 +16,12 @@ src_prepare() {
 
 	use vanilla && return 0
 	eapply "${FILESDIR}"/${PV}/postrelease/00_pr45262.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/01_pr18681.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/02_pr24449.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/03_pr42466.patch
+
+	if use test ; then
+		eapply "${FILESDIR}"/${PV}/postrelease/fix-known-test-fail.patch
+	fi
 }
 

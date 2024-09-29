@@ -15,8 +15,9 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/10_fix-for-libc5.patch
 
 	use vanilla && return 0
-	eapply "${FILESDIR}"/${PV}/postrelease/00_pr13685.patch
-	eapply "${FILESDIR}"/${PV}/postrelease/01_pr45262.patch
-	eapply "${FILESDIR}"/${PV}/postrelease/02_pr25572.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/00_pr45262.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/01_pr18681.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/02_pr24449.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/03_pr42466.patch
 }
 
