@@ -1,0 +1,69 @@
+diff --git a/gcc/c-decl.c b/gcc/c-decl.c
+index 7cd79206..46dcfe6e 100644
+--- a/gcc/c-decl.c
++++ b/gcc/c-decl.c
+@@ -4305,12 +4305,20 @@ grokdeclarator (const struct c_declarator *declarator,
+ 	      }
+ 	    else if (decl_context == FIELD)
+ 	      {
+-		if (pedantic && !flag_isoc99 && !in_system_header)
++		bool flexible_array_member = false;
++		const struct c_declarator *t = declarator;
++		while (t->kind == cdk_attrs)
++		  t = t->declarator;
++		flexible_array_member = (t->kind == cdk_id);
++		if (flexible_array_member
++		    && pedantic && !flag_isoc99 && !in_system_header)
+ 		  pedwarn ("ISO C90 does not support flexible array members");
+ 
+ 		/* ISO C99 Flexible array members are effectively
+ 		   identical to GCC's zero-length array extension.  */
+-		itype = build_range_type (sizetype, size_zero_node, NULL_TREE);
++		if (flexible_array_member || array_parm_vla_unspec_p)
++		  itype = build_range_type (sizetype, size_zero_node,
++					    NULL_TREE);
+ 	      }
+ 	    else if (decl_context == PARM)
+ 	      {
+diff --git a/gcc/testsuite/gcc.dg/c90-flex-array-2.c b/gcc/testsuite/gcc.dg/c90-flex-array-2.c
+new file mode 100644
+index 00000000..425ce846
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/c90-flex-array-2.c
+@@ -0,0 +1,15 @@
++/* [] does not indicate a flexible array member unless it is the field
++   itself being declared as an incomplete array type rather than a
++   pointer or other type derived from such a type.  PR 36432.  */
++/* { dg-do compile } */
++/* { dg-options "-std=iso9899:1990 -pedantic-errors" } */
++
++void
++f (void)
++{
++  int a[3];
++  int (*p)[];
++  struct { int (*p)[]; } s;
++  p = &a;
++  s.p = &a;
++}
+diff --git a/gcc/testsuite/gcc.dg/c99-flex-array-6.c b/gcc/testsuite/gcc.dg/c99-flex-array-6.c
+new file mode 100644
+index 00000000..468c4b3c
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/c99-flex-array-6.c
+@@ -0,0 +1,15 @@
++/* [] does not indicate a flexible array member unless it is the field
++   itself being declared as an incomplete array type rather than a
++   pointer or other type derived from such a type.  PR 36432.  */
++/* { dg-do compile } */
++/* { dg-options "-std=iso9899:1999 -pedantic-errors" } */
++
++void
++f (void)
++{
++  int a[3];
++  int (*p)[];
++  struct { int (*p)[]; } s;
++  p = &a;
++  s.p = &a;
++}

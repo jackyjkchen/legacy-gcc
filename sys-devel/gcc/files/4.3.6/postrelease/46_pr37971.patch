@@ -1,0 +1,186 @@
+diff --git a/gcc/cp/call.c b/gcc/cp/call.c
+index 2e8a3848..f4e1f846 100644
+--- a/gcc/cp/call.c
++++ b/gcc/cp/call.c
+@@ -624,7 +624,10 @@ standard_conversion (tree to, tree from, tree expr, bool c_cast_p,
+   if ((TYPE_PTRFN_P (to) || TYPE_PTRMEMFUNC_P (to))
+       && expr && type_unknown_p (expr))
+     {
+-      expr = instantiate_type (to, expr, tf_conv);
++      tsubst_flags_t tflags = tf_conv;
++      if (!(flags & LOOKUP_PROTECT))
++	tflags |= tf_no_access_control;
++      expr = instantiate_type (to, expr, tflags);
+       if (expr == error_mark_node)
+ 	return NULL;
+       from = TREE_TYPE (expr);
+@@ -1273,9 +1276,8 @@ reference_binding (tree rto, tree rfrom, tree expr, bool c_cast_p, int flags)
+ 
+ /* Returns the implicit conversion sequence (see [over.ics]) from type
+    FROM to type TO.  The optional expression EXPR may affect the
+-   conversion.  FLAGS are the usual overloading flags.  Only
+-   LOOKUP_NO_CONVERSION is significant.  If C_CAST_P is true, this
+-   conversion is coming from a C-style cast.  */
++   conversion.  FLAGS are the usual overloading flags.  If C_CAST_P is
++   true, this conversion is coming from a C-style cast.  */
+ 
+ static conversion *
+ implicit_conversion (tree to, tree from, tree expr, bool c_cast_p,
+@@ -4736,8 +4738,17 @@ convert_default_arg (tree type, tree arg, tree fn, int parmnum)
+   if (fn && DECL_TEMPLATE_INFO (fn))
+     arg = tsubst_default_argument (fn, type, arg);
+ 
+-  arg = break_out_target_exprs (arg);
++  /* Due to:
++
++       [dcl.fct.default]
+ 
++       The names in the expression are bound, and the semantic
++       constraints are checked, at the point where the default
++       expressions appears.
++
++     we must not perform access checks here.  */
++  push_deferring_access_checks (dk_no_check);
++  arg = break_out_target_exprs (arg);
+   if (TREE_CODE (arg) == CONSTRUCTOR)
+     {
+       arg = digest_init (type, arg);
+@@ -4758,6 +4769,7 @@ convert_default_arg (tree type, tree arg, tree fn, int parmnum)
+ 					"default argument", fn, parmnum);
+       arg = convert_for_arg_passing (type, arg);
+     }
++  pop_deferring_access_checks();
+ 
+   VEC_pop (tree, default_arg_context);
+ 
+diff --git a/gcc/cp/class.c b/gcc/cp/class.c
+index fe722f4e..1dd67230 100644
+--- a/gcc/cp/class.c
++++ b/gcc/cp/class.c
+@@ -5830,9 +5830,13 @@ pop_lang_context (void)
+    control of FLAGS.  Permit pointers to member function if FLAGS
+    permits.  If TEMPLATE_ONLY, the name of the overloaded function was
+    a template-id, and EXPLICIT_TARGS are the explicitly provided
+-   template arguments.  If OVERLOAD is for one or more member
+-   functions, then ACCESS_PATH is the base path used to reference
+-   those member functions.  */
++   template arguments.  
++
++   If OVERLOAD is for one or more member functions, then ACCESS_PATH
++   is the base path used to reference those member functions.  If
++   TF_NO_ACCESS_CONTROL is not set in FLAGS, and the address is
++   resolved to a member function, access checks will be performed and
++   errors issued if appropriate.  */
+ 
+ static tree
+ resolve_address_of_overloaded_function (tree target_type,
+@@ -6093,14 +6097,16 @@ resolve_address_of_overloaded_function (tree target_type,
+   if (!(flags & tf_conv))
+     {
+       mark_used (fn);
+-      /* We could not check access when this expression was originally
+-	 created since we did not know at that time to which function
+-	 the expression referred.  */
+-      if (DECL_FUNCTION_MEMBER_P (fn))
+-	{
+-	  gcc_assert (access_path);
+-	  perform_or_defer_access_check (access_path, fn, fn);
+-	}
++    }
++
++  /* We could not check access to member functions when this
++     expression was originally created since we did not know at that
++     time to which function the expression referred.  */
++  if (!(flags & tf_no_access_control) 
++      && DECL_FUNCTION_MEMBER_P (fn))
++    {
++      gcc_assert (access_path);
++      perform_or_defer_access_check (access_path, fn, fn);
+     }
+ 
+   if (TYPE_PTRFN_P (target_type) || TYPE_PTRMEMFUNC_P (target_type))
+diff --git a/gcc/cp/cp-tree.h b/gcc/cp/cp-tree.h
+index bf117cc4..ddb59441 100644
+--- a/gcc/cp/cp-tree.h
++++ b/gcc/cp/cp-tree.h
+@@ -3476,20 +3476,22 @@ typedef enum linkage_kind {
+ 
+ /* Bitmask flags to control type substitution.  */
+ typedef enum tsubst_flags_t {
+-  tf_none = 0,			/* nothing special */
+-  tf_error = 1 << 0,		/* give error messages  */
+-  tf_warning = 1 << 1,		/* give warnings too  */
+-  tf_ignore_bad_quals = 1 << 2,	/* ignore bad cvr qualifiers */
+-  tf_keep_type_decl = 1 << 3,	/* retain typedef type decls
+-				   (make_typename_type use) */
+-  tf_ptrmem_ok = 1 << 4,	/* pointers to member ok (internal
+-				   instantiate_type use) */
+-  tf_user = 1 << 5,		/* found template must be a user template
+-				   (lookup_template_class use) */
+-  tf_conv = 1 << 6,		/* We are determining what kind of
+-				   conversion might be permissible,
+-				   not actually performing the
+-				   conversion.  */
++  tf_none = 0,			 /* nothing special */
++  tf_error = 1 << 0,		 /* give error messages  */
++  tf_warning = 1 << 1,	 	 /* give warnings too  */
++  tf_ignore_bad_quals = 1 << 2,	 /* ignore bad cvr qualifiers */
++  tf_keep_type_decl = 1 << 3,	 /* retain typedef type decls
++				    (make_typename_type use) */
++  tf_ptrmem_ok = 1 << 4,	 /* pointers to member ok (internal
++				    instantiate_type use) */
++  tf_user = 1 << 5,		 /* found template must be a user template
++				    (lookup_template_class use) */
++  tf_conv = 1 << 6,		 /* We are determining what kind of
++				    conversion might be permissible,
++				    not actually performing the
++				    conversion.  */
++  tf_no_access_control = 1 << 7, /* Do not perform access checks, even
++				    when issuing other errors.   */
+   /* Convenient substitution flags combinations.  */
+   tf_warning_or_error = tf_warning | tf_error
+ } tsubst_flags_t;
+diff --git a/gcc/testsuite/g++.dg/overload/defarg2.C b/gcc/testsuite/g++.dg/overload/defarg2.C
+new file mode 100644
+index 00000000..6b1a423d
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/overload/defarg2.C
+@@ -0,0 +1,17 @@
++// PR c++/37391
++// { dg-do compile }
++
++class C {
++private:
++  static int f(int);
++  static int f(char);
++
++public:  
++  static void g(int (*)(int) = f);
++};
++
++void h() {
++  /* Although C::f is inaccessible here, it is accessible in the
++     context of C::g, so there is no error.  */
++  C::g();
++}
+diff --git a/gcc/testsuite/g++.dg/overload/defarg3.C b/gcc/testsuite/g++.dg/overload/defarg3.C
+new file mode 100644
+index 00000000..83ee111f
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/overload/defarg3.C
+@@ -0,0 +1,15 @@
++// PR c++/37391
++// { dg-do compile }
++
++class C {
++private:
++  static int f(int); // { dg-error "private" }
++  static int f(char);
++};
++
++class D {
++public:
++  /* C::f is inaccessible, so this is an error, even if this function
++     is never called.  */
++  static void g(int (*)(int) = C::f); // { dg-error "context" }
++};

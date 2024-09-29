@@ -1,0 +1,106 @@
+diff --git a/gcc/fortran/decl.c b/gcc/fortran/decl.c
+index d593a075..ad4f14c6 100644
+--- a/gcc/fortran/decl.c
++++ b/gcc/fortran/decl.c
+@@ -1524,7 +1524,7 @@ no_match:
+ static match
+ match_char_spec (gfc_typespec * ts)
+ {
+-  int i, kind, seen_length;
++  int kind, seen_length;
+   gfc_charlen *cl;
+   gfc_expr *len;
+   match m;
+@@ -1655,15 +1655,7 @@ done:
+   if (seen_length == 0)
+     cl->length = gfc_int_expr (1);
+   else
+-    {
+-      if (len == NULL || gfc_extract_int (len, &i) != NULL || i >= 0)
+-	cl->length = len;
+-      else
+-	{
+-	  gfc_free_expr (len);
+-	  cl->length = gfc_int_expr (0);
+-	}
+-    }
++    cl->length = len;
+ 
+   ts->cl = cl;
+   ts->kind = kind;
+diff --git a/gcc/fortran/resolve.c b/gcc/fortran/resolve.c
+index dbcd811e..6b5a0e71 100644
+--- a/gcc/fortran/resolve.c
++++ b/gcc/fortran/resolve.c
+@@ -5385,6 +5385,8 @@ resolve_index_expr (gfc_expr * e)
+ static try
+ resolve_charlen (gfc_charlen *cl)
+ {
++  int i;
++
+   if (cl->resolved)
+     return SUCCESS;
+ 
+@@ -5398,6 +5400,15 @@ resolve_charlen (gfc_charlen *cl)
+       return FAILURE;
+     }
+ 
++  /* "If the character length parameter value evaluates to a negative
++     value, the length of character entities declared is zero."  */
++  if (cl->length && !gfc_extract_int (cl->length, &i) && i <= 0)
++    {
++      gfc_warning_now ("CHARACTER variable has zero length at %L",
++		       &cl->length->where);
++      gfc_replace_expr (cl->length, gfc_int_expr (0));
++    }
++
+   return SUCCESS;
+ }
+ 
+@@ -7248,6 +7259,9 @@ resolve_types (gfc_namespace * ns)
+ 
+   resolve_contained_functions (ns);
+ 
++  for (cl = ns->cl_list; cl; cl = cl->next)
++    resolve_charlen (cl);
++
+   gfc_traverse_ns (ns, resolve_symbol);
+ 
+   resolve_fntype (ns);
+@@ -7265,9 +7279,6 @@ resolve_types (gfc_namespace * ns)
+   forall_flag = 0;
+   gfc_check_interfaces (ns);
+ 
+-  for (cl = ns->cl_list; cl; cl = cl->next)
+-    resolve_charlen (cl);
+-
+   gfc_traverse_ns (ns, resolve_values);
+ 
+   if (ns->save_all)
+diff --git a/gcc/testsuite/gfortran.dg/char_length_2.f90 b/gcc/testsuite/gfortran.dg/char_length_2.f90
+new file mode 100644
+index 00000000..dc2efb94
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/char_length_2.f90
+@@ -0,0 +1,21 @@
++! { dg-do link }
++! Tests the fix for PR 31250
++! CHARACTER lengths weren't reduced early enough for all checks of
++! them to be meaningful.  Furthermore negative string lengths weren't
++! dealt with correctly.
++CHARACTER(len=0) :: c1  ! { dg-warning "CHARACTER variable has zero length" }
++CHARACTER(len=-1) :: c2  ! { dg-warning "CHARACTER variable has zero length" }
++PARAMETER(I=-100)
++CHARACTER(len=I) :: c3   ! { dg-warning "CHARACTER variable has zero length" }
++CHARACTER(len=min(I,500)) :: c4  ! { dg-warning "CHARACTER variable has zero length" }
++CHARACTER(len=max(I,500)) :: d1  ! no warning
++CHARACTER(len=5) :: d2   ! no warning
++
++if (len(c1) .ne. 0) call link_error ()
++if (len(c2) .ne. len(c1)) call link_error ()
++if (len(c3) .ne. len(c2)) call link_error ()
++if (len(c4) .ne. len(c3)) call link_error ()
++
++if (len(d1) .ne. 500) call link_error ()
++if (len(d2) .ne. 5) call link_error ()
++END

@@ -1,0 +1,65 @@
+diff --git a/gcc/cp/semantics.c b/gcc/cp/semantics.c
+index f0911292..40359349 100644
+--- a/gcc/cp/semantics.c
++++ b/gcc/cp/semantics.c
+@@ -1407,6 +1407,14 @@ finish_non_static_data_member (tree decl, tree object, tree qualifying_scope)
+ 
+       return build_min (COMPONENT_REF, type, object, decl, NULL_TREE);
+     }
++  /* If PROCESSING_TEMPLATE_DECL is nonzero here, then
++     QUALIFYING_SCOPE is also non-null.  Wrap this in a SCOPE_REF
++     for now.  */
++  else if (processing_template_decl)
++    return build_qualified_name (TREE_TYPE (decl),
++				 qualifying_scope,
++				 DECL_NAME (decl),
++				 /*template_p=*/false);
+   else
+     {
+       tree access_type = TREE_TYPE (object);
+@@ -1426,15 +1434,6 @@ finish_non_static_data_member (tree decl, tree object, tree qualifying_scope)
+ 	    }
+ 	}
+ 
+-      /* If PROCESSING_TEMPLATE_DECL is nonzero here, then
+-	 QUALIFYING_SCOPE is also non-null.  Wrap this in a SCOPE_REF
+-	 for now.  */
+-      if (processing_template_decl)
+-	return build_qualified_name (TREE_TYPE (decl),
+-				     qualifying_scope,
+-				     DECL_NAME (decl),
+-				     /*template_p=*/false);
+-
+       perform_or_defer_access_check (TYPE_BINFO (access_type), decl,
+ 				     decl);
+ 
+diff --git a/gcc/testsuite/g++.dg/lookup/scoped8.C b/gcc/testsuite/g++.dg/lookup/scoped8.C
+index 1c303045..2ba28a69 100644
+--- a/gcc/testsuite/g++.dg/lookup/scoped8.C
++++ b/gcc/testsuite/g++.dg/lookup/scoped8.C
+@@ -14,3 +14,5 @@ template <int> struct B
+ {
+     int foo() { return A::i; }	// { dg-error "this location" }
+ };
++
++template struct B<0>;
+diff --git a/gcc/testsuite/g++.dg/template/inherit4.C b/gcc/testsuite/g++.dg/template/inherit4.C
+new file mode 100644
+index 00000000..511c9e60
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/template/inherit4.C
+@@ -0,0 +1,14 @@
++// PR c++/21008, DR 515
++
++struct A {
++  int foo_;
++};
++template <typename T> struct B: public A { };
++template <typename T> struct C: B<T> {
++  int foo() {
++    return A::foo_;  // #1
++  }
++};
++int f(C<int>* p) {
++  return p->foo();
++}

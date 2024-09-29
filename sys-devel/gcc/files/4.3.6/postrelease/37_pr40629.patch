@@ -1,0 +1,62 @@
+diff --git a/gcc/fortran/resolve.c b/gcc/fortran/resolve.c
+index cbf867a4..ad110d58 100644
+--- a/gcc/fortran/resolve.c
++++ b/gcc/fortran/resolve.c
+@@ -4233,12 +4233,13 @@ check_host_association (gfc_expr *e)
+ 	      gfc_free (e->shape);
+ 	    }
+ 
+-	  /* Give the symbol a symtree in the right place!  */
+-	  gfc_get_sym_tree (sym->name, gfc_current_ns, &st);
+-	  st->n.sym = sym;
++	  /* Give the expression the right symtree!  */
++	  gfc_find_sym_tree (e->symtree->name, NULL, 1, &st);
++	  gcc_assert (st != NULL);
+ 
+-	  if (old_sym->attr.flavor == FL_PROCEDURE)
+-	    {
++	  if (old_sym->attr.flavor == FL_PROCEDURE
++		|| e->expr_type == EXPR_FUNCTION)
++  	    {
+ 	      /* Original was function so point to the new symbol, since
+ 		 the actual argument list is already attached to the
+ 		 expression. */
+diff --git a/gcc/testsuite/gfortran.dg/host_assoc_function_9.f90 b/gcc/testsuite/gfortran.dg/host_assoc_function_9.f90
+new file mode 100644
+index 00000000..58cae435
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/host_assoc_function_9.f90
+@@ -0,0 +1,33 @@
++! { dg-do run }
++! Tests the fix for the bug PR40629, in which the reference to 'x'
++! in 'upper' wrongly host-associated with the symbol 'x' at module
++! leve rather than the function.
++!
++! Contributed by Philippe Marguinaud  <philippe.marguinaud@meteo.fr>
++!
++MODULE m
++  REAL :: x = 0
++CONTAINS
++  subroutine s
++    call upper
++    call lower
++  CONTAINS
++    SUBROUTINE upper
++     y = x(3,1)
++     if (int(y) .ne. 3) call abort
++    END SUBROUTINE
++    FUNCTION x(n, m)
++       x = m*n
++    END FUNCTION
++    SUBROUTINE lower
++     y = x(2,1)
++     if (int(y) .ne. 2) call abort
++    END SUBROUTINE
++  END SUBROUTINE
++END MODULE
++
++  use m
++  call s
++end
++! { dg-final { cleanup-modules "m" } }
++

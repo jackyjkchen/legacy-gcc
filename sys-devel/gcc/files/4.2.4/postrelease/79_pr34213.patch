@@ -1,0 +1,65 @@
+diff --git a/gcc/cp/tree.c b/gcc/cp/tree.c
+index a2e807d3..f387cf21 100644
+--- a/gcc/cp/tree.c
++++ b/gcc/cp/tree.c
+@@ -2233,10 +2233,18 @@ decl_linkage (tree decl)
+   /* Members of the anonymous namespace also have TREE_PUBLIC unset, but
+      are considered to have external linkage for language purposes.  DECLs
+      really meant to have internal linkage have DECL_THIS_STATIC set.  */
+-  if (TREE_CODE (decl) == TYPE_DECL
+-      || ((TREE_CODE (decl) == VAR_DECL || TREE_CODE (decl) == FUNCTION_DECL)
+-	  && !DECL_THIS_STATIC (decl)))
++  if (TREE_CODE (decl) == TYPE_DECL)
+     return lk_external;
++  if (TREE_CODE (decl) == VAR_DECL || TREE_CODE (decl) == FUNCTION_DECL)
++    {
++      if (!DECL_THIS_STATIC (decl))
++	return lk_external;
++
++      /* Static data members and static member functions from classes
++	 in anonymous namespace also don't have TREE_PUBLIC set.  */
++      if (DECL_CLASS_CONTEXT (decl))
++	return lk_external;
++    }
+ 
+   /* Everything else has internal linkage.  */
+   return lk_internal;
+diff --git a/gcc/testsuite/g++.dg/ext/visibility/anon8.C b/gcc/testsuite/g++.dg/ext/visibility/anon8.C
+new file mode 100644
+index 00000000..827cc221
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/ext/visibility/anon8.C
+@@ -0,0 +1,33 @@
++// PR c++/34213
++// { dg-do compile }
++
++template <void (*fn) ()>
++void call ()
++{
++  fn ();
++}
++
++namespace
++{
++  struct B1
++  {
++    static void fn1 () {}
++    static void fn4 ();
++  };
++  void fn3 () {}
++  void B1::fn4 () {}
++  static void fn5 () {}
++}
++
++int main ()
++{
++  struct B2
++  {
++    static void fn2 () {}
++  };
++  call<&B1::fn1> ();
++  call<&B2::fn2> ();	// { dg-error "not external linkage|no matching" }
++  call<&fn3> ();
++  call<&B1::fn4> ();
++  call<&fn5> ();	// { dg-error "not external linkage|no matching" }
++}

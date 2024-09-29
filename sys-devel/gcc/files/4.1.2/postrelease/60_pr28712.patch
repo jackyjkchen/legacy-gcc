@@ -1,0 +1,127 @@
+diff --git a/gcc/c-typeck.c b/gcc/c-typeck.c
+index 1eec94bb..0e3b628c 100644
+--- a/gcc/c-typeck.c
++++ b/gcc/c-typeck.c
+@@ -343,6 +343,19 @@ composite_type (tree t1, tree t2)
+ 	return build_type_attribute_variant (t1, attributes);
+       }
+ 
++    case ENUMERAL_TYPE:
++    case RECORD_TYPE:
++    case UNION_TYPE:
++      if (attributes != NULL)
++	{
++	  /* Try harder not to create a new aggregate type.  */
++	  if (attribute_list_equal (TYPE_ATTRIBUTES (t1), attributes))
++	    return t1;
++	  if (attribute_list_equal (TYPE_ATTRIBUTES (t2), attributes))
++	    return t2;
++	}
++      return build_type_attribute_variant (t1, attributes);
++
+     case FUNCTION_TYPE:
+       /* Function types: prefer the one that specified arg types.
+ 	 If both do, merge the arg types.  Also merge the return types.  */
+@@ -823,6 +836,13 @@ comptypes_internal (tree type1, tree type2)
+     case UNION_TYPE:
+       if (val != 1 && !same_translation_unit_p (t1, t2))
+         {
++	  tree a1 = TYPE_ATTRIBUTES (t1);
++	  tree a2 = TYPE_ATTRIBUTES (t2);
++
++	  if (! attribute_list_contained (a1, a2)
++	      && ! attribute_list_contained (a2, a1))
++	    break;
++
+ 	  if (attrval != 2)
+ 	    return tagged_types_tu_compatible_p (t1, t2);
+ 	  val = tagged_types_tu_compatible_p (t1, t2);
+diff --git a/gcc/testsuite/gcc.dg/pr28706.c b/gcc/testsuite/gcc.dg/pr28706.c
+new file mode 100644
+index 00000000..4c185af4
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr28706.c
+@@ -0,0 +1,12 @@
++/* PR c/28706 */
++/* { dg-do compile } */
++/* { dg-options "--combine" } */
++/* { dg-additional-sources "pr28706.c" } */
++
++struct A
++{
++  int i;
++} __attribute__((aligned (sizeof (long int))));
++
++extern void foo (struct A *);
++extern void foo (struct A *);
+diff --git a/gcc/testsuite/gcc.dg/pr28712.c b/gcc/testsuite/gcc.dg/pr28712.c
+new file mode 100644
+index 00000000..0bbb4531
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr28712.c
+@@ -0,0 +1,16 @@
++/* PR c/28712 */
++/* { dg-do compile } */
++/* { dg-options "--combine" } */
++/* { dg-additional-sources "pr28712.c pr28712.c" } */
++
++struct A;
++
++extern struct A *a;
++
++struct A { } __attribute__((packed));
++
++struct B __attribute__((aligned (sizeof (int))));
++
++extern struct B *b;
++
++struct B { int i; } __attribute__((packed));
+diff --git a/gcc/tree.c b/gcc/tree.c
+index c43a3447..9fbea57a 100644
+--- a/gcc/tree.c
++++ b/gcc/tree.c
+@@ -3453,7 +3453,17 @@ merge_attributes (tree a1, tree a2)
+ 		   a = lookup_attribute (IDENTIFIER_POINTER (TREE_PURPOSE (a2)),
+ 					 TREE_CHAIN (a)))
+ 		{
+-		  if (simple_cst_equal (TREE_VALUE (a), TREE_VALUE (a2)) == 1)
++		  if (TREE_VALUE (a) != NULL
++		      && TREE_CODE (TREE_VALUE (a)) == TREE_LIST
++		      && TREE_VALUE (a2) != NULL
++		      && TREE_CODE (TREE_VALUE (a2)) == TREE_LIST)
++		    {
++		      if (simple_cst_list_equal (TREE_VALUE (a),
++						 TREE_VALUE (a2)) == 1)
++			break;
++		    }
++		  else if (simple_cst_equal (TREE_VALUE (a),
++					     TREE_VALUE (a2)) == 1)
+ 		    break;
+ 		}
+ 	      if (a == NULL_TREE)
+@@ -4265,15 +4275,21 @@ attribute_list_contained (tree l1, tree l2)
+ 	   attr = lookup_attribute (IDENTIFIER_POINTER (TREE_PURPOSE (t2)),
+ 				    TREE_CHAIN (attr)))
+ 	{
+-	  if (simple_cst_equal (TREE_VALUE (t2), TREE_VALUE (attr)) == 1)
++	  if (TREE_VALUE (t2) != NULL
++	      && TREE_CODE (TREE_VALUE (t2)) == TREE_LIST
++	      && TREE_VALUE (attr) != NULL
++	      && TREE_CODE (TREE_VALUE (attr)) == TREE_LIST)
++	    {
++	      if (simple_cst_list_equal (TREE_VALUE (t2),
++					 TREE_VALUE (attr)) == 1)
++		break;
++	    }
++	  else if (simple_cst_equal (TREE_VALUE (t2), TREE_VALUE (attr)) == 1)
+ 	    break;
+ 	}
+ 
+       if (attr == 0)
+ 	return 0;
+-
+-      if (simple_cst_equal (TREE_VALUE (t2), TREE_VALUE (attr)) != 1)
+-	return 0;
+     }
+ 
+   return 1;

@@ -1,0 +1,56 @@
+diff --git a/gcc/cp/rtti.c b/gcc/cp/rtti.c
+index cd23c1d5..45614548 100644
+--- a/gcc/cp/rtti.c
++++ b/gcc/cp/rtti.c
+@@ -430,7 +430,7 @@ static tree
+ build_dynamic_cast_1 (tree type, tree expr)
+ {
+   enum tree_code tc = TREE_CODE (type);
+-  tree exprtype = TREE_TYPE (expr);
++  tree exprtype;
+   tree dcast_fn;
+   tree old_expr = expr;
+   const char *errstr = NULL;
+@@ -463,6 +463,9 @@ build_dynamic_cast_1 (tree type, tree expr)
+ 
+   if (tc == POINTER_TYPE)
+     {
++      expr = decay_conversion (expr);
++      exprtype = TREE_TYPE (expr);
++
+       /* If T is a pointer type, v shall be an rvalue of a pointer to
+ 	 complete class type, and the result is an rvalue of type T.  */
+ 
+@@ -484,7 +487,7 @@ build_dynamic_cast_1 (tree type, tree expr)
+     }
+   else
+     {
+-      exprtype = build_reference_type (exprtype);
++      exprtype = build_reference_type (TREE_TYPE (expr));
+ 
+       /* T is a reference type, v shall be an lvalue of a complete class
+ 	 type, and the result is an lvalue of the type referred to by T.  */
+@@ -660,7 +663,7 @@ build_dynamic_cast_1 (tree type, tree expr)
+ 
+  fail:
+   error ("cannot dynamic_cast %qE (of type %q#T) to type %q#T (%s)",
+-         expr, exprtype, type, errstr);
++     old_expr, TREE_TYPE (old_expr), type, errstr);
+   return error_mark_node;
+ }
+ 
+diff --git a/gcc/testsuite/g++.dg/rtti/dyncast5.C b/gcc/testsuite/g++.dg/rtti/dyncast5.C
+new file mode 100644
+index 00000000..d0d58d00
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/rtti/dyncast5.C
+@@ -0,0 +1,9 @@
++// PR c++/29273
++
++struct A { virtual ~A () { } };
++struct B: A { } b [1];
++
++void foo ()
++{
++  dynamic_cast<B*>(b);
++}

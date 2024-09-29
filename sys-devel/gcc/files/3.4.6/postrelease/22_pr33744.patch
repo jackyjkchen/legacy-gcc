@@ -1,0 +1,64 @@
+diff --git a/gcc/cp/parser.c b/gcc/cp/parser.c
+index 2aaf2273..14f72790 100644
+--- a/gcc/cp/parser.c
++++ b/gcc/cp/parser.c
+@@ -4038,6 +4038,7 @@ cp_parser_parenthesized_expression_list (cp_parser* parser,
+ {
+   tree expression_list = NULL_TREE;
+   tree identifier = NULL_TREE;
++  bool saved_greater_than_is_operator_p;
+ 
+   /* Assume all the expressions will be constant.  */
+   if (non_constant_p)
+@@ -4046,6 +4047,12 @@ cp_parser_parenthesized_expression_list (cp_parser* parser,
+   if (!cp_parser_require (parser, CPP_OPEN_PAREN, "`('"))
+     return error_mark_node;
+   
++  /* Within a parenthesized expression, a `>' token is always
++     the greater-than operator.  */
++  saved_greater_than_is_operator_p
++    = parser->greater_than_is_operator_p;
++  parser->greater_than_is_operator_p = true;
++
+   /* Consume expressions until there are no more.  */
+   if (cp_lexer_next_token_is_not (parser->lexer, CPP_CLOSE_PAREN))
+     while (true)
+@@ -4116,9 +4123,16 @@ cp_parser_parenthesized_expression_list (cp_parser* parser,
+       if (ending < 0)
+ 	goto get_comma;
+       if (!ending)
+-	return error_mark_node;
++	{
++	  parser->greater_than_is_operator_p
++	    = saved_greater_than_is_operator_p;
++	  return error_mark_node;
++	}
+     }
+ 
++  parser->greater_than_is_operator_p
++    = saved_greater_than_is_operator_p;
++
+   /* We built up the list in reverse order so we must reverse it now.  */
+   expression_list = nreverse (expression_list);
+   if (identifier)
+diff --git a/gcc/testsuite/g++.dg/template/arg6.C b/gcc/testsuite/g++.dg/template/arg6.C
+new file mode 100644
+index 00000000..ef05abae
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/template/arg6.C
+@@ -0,0 +1,15 @@
++// PR c++/33744
++// { dg-do run }
++
++template <bool B> struct A { bool b; A() : b(B) {}; };
++A<bool(1)> a;
++A<bool(1<2)> b;
++A<(bool)(2>1)> c;
++A<bool((2>1))> d;
++A<bool(2>1)> e;
++
++int
++main ()
++{
++  return (a.b && b.b && c.b && d.b && e.b) ? 0 : 1;
++}

@@ -1,0 +1,52 @@
+diff --git a/gcc/cp/pt.c b/gcc/cp/pt.c
+index 31c42ffb..9c15d9d9 100644
+--- a/gcc/cp/pt.c
++++ b/gcc/cp/pt.c
+@@ -7626,6 +7626,7 @@ tsubst_baselink (tree baselink, tree object_type,
+     tree name;
+     tree qualifying_scope;
+     tree fns;
++    tree optype;
+     tree template_args = 0;
+     bool template_id_p = false;
+ 
+@@ -7639,6 +7640,7 @@ tsubst_baselink (tree baselink, tree object_type,
+        ambiguous now.  Therefore, we perform the lookup again.  */
+     qualifying_scope = BINFO_TYPE (BASELINK_ACCESS_BINFO (baselink));
+     fns = BASELINK_FUNCTIONS (baselink);
++    optype = BASELINK_OPTYPE (baselink);
+     if (TREE_CODE (fns) == TEMPLATE_ID_EXPR)
+       {
+ 	template_id_p = true;
+@@ -7666,6 +7668,9 @@ tsubst_baselink (tree baselink, tree object_type,
+ 	= build_nt (TEMPLATE_ID_EXPR,
+ 		    BASELINK_FUNCTIONS (baselink),
+ 		    template_args);
++    /* Update the conversion operator type.  */
++    BASELINK_OPTYPE (baselink) 
++      = tsubst (optype, args, complain, in_decl);
+ 
+     if (!object_type)
+       object_type = current_class_type;
+diff --git a/gcc/testsuite/g++.dg/template/conv9.C b/gcc/testsuite/g++.dg/template/conv9.C
+new file mode 100644
+index 00000000..269e338a
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/template/conv9.C
+@@ -0,0 +1,16 @@
++// PR c++/28557
++
++struct A
++{
++  template<typename T> operator T() { return T(); }
++};
++
++template<int> void foo()
++{
++  A().operator int();
++}
++
++void bar()
++{
++  foo<0>();
++}

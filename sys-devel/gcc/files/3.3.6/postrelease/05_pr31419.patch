@@ -1,0 +1,39 @@
+diff --git a/gcc/cp/call.c b/gcc/cp/call.c
+index 2cb233c..cbd3e61 100644
+--- a/gcc/cp/call.c
++++ b/gcc/cp/call.c
+@@ -1248,7 +1248,12 @@ reference_binding (tree rto, tree rfrom, tree expr, int flags)
+ 	NEED_TEMPORARY_P (conv) = 1;
+       return conv;
+     }
+-  else if (CLASS_TYPE_P (from) && !(flags & LOOKUP_NO_CONVERSION))
++  /* [class.conv.fct] A conversion function is never used to convert a
++     (possibly cv-qualified) object to the (possibly cv-qualified) same
++     object type (or a reference to it), to a (possibly cv-qualified) base
++     class of that type (or a reference to it).... */
++  else if (CLASS_TYPE_P (from) && !related_p
++	   && !(flags & LOOKUP_NO_CONVERSION))
+     {
+       /* [dcl.init.ref]
+ 
+diff --git a/gcc/testsuite/g++.dg/conversion/self1.C b/gcc/testsuite/g++.dg/conversion/self1.C
+new file mode 100644
+index 0000000..f36500a
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/conversion/self1.C
+@@ -0,0 +1,15 @@
++// PR c++/31419
++
++struct B
++{
++  template<typename T>
++  operator T const& () const
++  {
++    return 42;
++  }
++};
++
++B f()
++{
++  return B();
++}

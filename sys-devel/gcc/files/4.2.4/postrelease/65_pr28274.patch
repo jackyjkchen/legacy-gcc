@@ -1,0 +1,55 @@
+diff --git a/gcc/cp/name-lookup.c b/gcc/cp/name-lookup.c
+index f990a3bd..32f32a2d 100644
+--- a/gcc/cp/name-lookup.c
++++ b/gcc/cp/name-lookup.c
+@@ -748,9 +748,6 @@ pushdecl_maybe_friend (tree x, bool is_friend)
+ 	    }
+ 	}
+ 
+-      if (TREE_CODE (x) == FUNCTION_DECL || DECL_FUNCTION_TEMPLATE_P (x))
+-	check_default_args (x);
+-
+       check_template_shadow (x);
+ 
+       /* If this is a function conjured up by the backend, massage it
+@@ -761,11 +758,10 @@ pushdecl_maybe_friend (tree x, bool is_friend)
+ 	  SET_DECL_LANGUAGE (x, lang_c);
+ 	}
+ 
++      t = x;
+       if (DECL_NON_THUNK_FUNCTION_P (x) && ! DECL_FUNCTION_MEMBER_P (x))
+ 	{
+ 	  t = push_overloaded_decl (x, PUSH_LOCAL, is_friend);
+-	  if (t != x)
+-	    POP_TIMEVAR_AND_RETURN (TV_NAME_LOOKUP, t);
+ 	  if (!namespace_bindings_p ())
+ 	    /* We do not need to create a binding for this name;
+ 	       push_overloaded_decl will have already done so if
+@@ -777,9 +773,14 @@ pushdecl_maybe_friend (tree x, bool is_friend)
+ 	  t = push_overloaded_decl (x, PUSH_GLOBAL, is_friend);
+ 	  if (t == x)
+ 	    add_decl_to_level (x, NAMESPACE_LEVEL (CP_DECL_CONTEXT (t)));
+-	  POP_TIMEVAR_AND_RETURN (TV_NAME_LOOKUP, t);
+ 	}
+ 
++      if (TREE_CODE (x) == FUNCTION_DECL || DECL_FUNCTION_TEMPLATE_P (x))
++	check_default_args (x);
++
++      if (t != x || DECL_FUNCTION_TEMPLATE_P (t))
++	POP_TIMEVAR_AND_RETURN (TV_NAME_LOOKUP, t);
++
+       /* If declaring a type as a typedef, copy the type (unless we're
+ 	 at line 0), and install this TYPE_DECL as the new type's typedef
+ 	 name.  See the extensive comment in ../c-decl.c (pushdecl).  */
+diff --git a/gcc/testsuite/g++.dg/parse/defarg14.C b/gcc/testsuite/g++.dg/parse/defarg14.C
+new file mode 100644
+index 00000000..0930b45e
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/parse/defarg14.C
+@@ -0,0 +1,6 @@
++// PR c++/28274
++
++extern "C" {
++void foo (int i, int j = 6);
++void foo (int i = 4, int j);
++}

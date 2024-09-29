@@ -1,0 +1,131 @@
+diff --git a/gcc/fortran/io.c b/gcc/fortran/io.c
+index 2a679991..dc6be24b 100644
+--- a/gcc/fortran/io.c
++++ b/gcc/fortran/io.c
+@@ -152,6 +152,20 @@ unget_char (void)
+   use_last_char = 1;
+ }
+ 
++/* Eat up the spaces and return a character. */
++
++static char
++next_char_not_space(void)
++{
++  char c;
++  do
++    {
++      c = next_char (0);
++    }
++  while (gfc_is_whitespace (c));
++  return c;
++}
++
+ static int value = 0;
+ 
+ /* Simple lexical analyzer for getting the next token in a FORMAT
+@@ -172,19 +186,15 @@ format_lex (void)
+       return token;
+     }
+ 
+-  do
+-    {
+-      c = next_char (0);
+-    }
+-  while (gfc_is_whitespace (c));
+-
++  c = next_char_not_space ();
++  
+   negative_flag = 0;
+   switch (c)
+     {
+     case '-':
+       negative_flag = 1;
+     case '+':
+-      c = next_char (0);
++      c = next_char_not_space ();
+       if (!ISDIGIT (c))
+ 	{
+ 	  token = FMT_UNKNOWN;
+@@ -195,11 +205,11 @@ format_lex (void)
+ 
+       do
+ 	{
+-	  c = next_char (0);
++	  c = next_char_not_space ();
+           if(ISDIGIT (c))
+             value = 10 * value + c - '0';
+ 	}
+-      while (ISDIGIT (c));
++      while (ISDIGIT (c) || gfc_is_whitespace(c));
+ 
+       unget_char ();
+ 
+@@ -225,7 +235,7 @@ format_lex (void)
+ 
+       do
+ 	{
+-	  c = next_char (0);
++	  c = next_char_not_space ();
+ 	  if (c != '0')
+ 	    zflag = 0;
+           if (ISDIGIT (c))
+@@ -258,7 +268,7 @@ format_lex (void)
+       break;
+ 
+     case 'T':
+-      c = next_char (0);
++      c = next_char_not_space ();
+       if (c != 'L' && c != 'R')
+ 	unget_char ();
+ 
+@@ -278,7 +288,7 @@ format_lex (void)
+       break;
+ 
+     case 'S':
+-      c = next_char (0);
++      c = next_char_not_space ();
+       if (c != 'P' && c != 'S')
+ 	unget_char ();
+ 
+@@ -286,7 +296,7 @@ format_lex (void)
+       break;
+ 
+     case 'B':
+-      c = next_char (0);
++      c = next_char_not_space ();
+       if (c == 'N' || c == 'Z')
+ 	token = FMT_BLANK;
+       else
+@@ -348,7 +358,7 @@ format_lex (void)
+       break;
+ 
+     case 'E':
+-      c = next_char (0);
++      c = next_char_not_space ();
+       if (c == 'N' || c == 'S')
+ 	token = FMT_EXT;
+       else
+diff --git a/gcc/testsuite/gfortran.dg/fmt_white.f b/gcc/testsuite/gfortran.dg/fmt_white.f
+new file mode 100644
+index 00000000..bcd056f7
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/fmt_white.f
+@@ -0,0 +1,18 @@
++! { dg-do run }
++! PR24268 Test case derived from example given by Iwan Kawrakow
++! Embedded spaces in format strings should be ignored.
++! Prepared by Jerry DeLisle  <jvdelisle@gcc.gnu.org>
++      program pr24268
++      real x
++      character*13 line
++      line = "12.34"
++      read(line,*) x
++      write(line,10) x
++ 10                                                            format(g1
++     *      1.4)
++      if (line.ne."  12.34") call abort()
++      line = ""
++      write(line,20) x
++ 20   format(t r 2 , g 1 1 . 4)
++      if (line.ne."    12.34") call abort()
++      end

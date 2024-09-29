@@ -1,0 +1,169 @@
+diff --git a/gcc/cp/cp-tree.h b/gcc/cp/cp-tree.h
+index 680790a1..c40da438 100644
+--- a/gcc/cp/cp-tree.h
++++ b/gcc/cp/cp-tree.h
+@@ -4073,9 +4073,9 @@ extern void finish_try_block                    (tree);
+ extern tree begin_eh_spec_block			(void);
+ extern void finish_eh_spec_block		(tree, tree);
+ extern void finish_handler_sequence             (tree);
+-extern tree begin_function_try_block            (void);
++extern tree begin_function_try_block            (tree *);
+ extern void finish_function_try_block           (tree);
+-extern void finish_function_handler_sequence    (tree);
++extern void finish_function_handler_sequence    (tree, tree);
+ extern void finish_cleanup_try_block            (tree);
+ extern tree begin_handler                       (void);
+ extern void finish_handler_parms                (tree, tree);
+diff --git a/gcc/cp/parser.c b/gcc/cp/parser.c
+index 4c926027..2aaf2273 100644
+--- a/gcc/cp/parser.c
++++ b/gcc/cp/parser.c
+@@ -13195,6 +13195,7 @@ cp_parser_try_block (cp_parser* parser)
+ static bool
+ cp_parser_function_try_block (cp_parser* parser)
+ {
++  tree compound_stmt;
+   tree try_block;
+   bool ctor_initializer_p;
+ 
+@@ -13202,7 +13203,7 @@ cp_parser_function_try_block (cp_parser* parser)
+   if (!cp_parser_require_keyword (parser, RID_TRY, "`try'"))
+     return false;
+   /* Let the rest of the front-end know where we are.  */
+-  try_block = begin_function_try_block ();
++  try_block = begin_function_try_block (&compound_stmt);
+   /* Parse the function-body.  */
+   ctor_initializer_p 
+     = cp_parser_ctor_initializer_opt_and_function_body (parser);
+@@ -13211,7 +13212,7 @@ cp_parser_function_try_block (cp_parser* parser)
+   /* Parse the handlers.  */
+   cp_parser_handler_seq (parser);
+   /* We're done with the handlers.  */
+-  finish_function_handler_sequence (try_block);
++  finish_function_handler_sequence (try_block, compound_stmt);
+ 
+   return ctor_initializer_p;
+ }
+diff --git a/gcc/cp/pt.c b/gcc/cp/pt.c
+index 4ffcafa0..38f5804f 100644
+--- a/gcc/cp/pt.c
++++ b/gcc/cp/pt.c
+@@ -8144,8 +8144,10 @@ tsubst_expr (tree t, tree args, tsubst_flags_t complain, tree in_decl)
+ 	}
+       else
+ 	{
++	  tree compound_stmt = NULL_TREE;
++
+ 	  if (FN_TRY_BLOCK_P (t))
+-	    stmt = begin_function_try_block ();
++	    stmt = begin_function_try_block (&compound_stmt);
+ 	  else
+ 	    stmt = begin_try_block ();
+ 
+@@ -8158,7 +8160,7 @@ tsubst_expr (tree t, tree args, tsubst_flags_t complain, tree in_decl)
+ 
+ 	  tsubst_expr (TRY_HANDLERS (t), args, complain, in_decl);
+ 	  if (FN_TRY_BLOCK_P (t))
+-	    finish_function_handler_sequence (stmt);
++	    finish_function_handler_sequence (stmt, compound_stmt);
+ 	  else
+ 	    finish_handler_sequence (stmt);
+ 	}
+diff --git a/gcc/cp/semantics.c b/gcc/cp/semantics.c
+index 943e7a1a..53d86c79 100644
+--- a/gcc/cp/semantics.c
++++ b/gcc/cp/semantics.c
+@@ -849,14 +849,19 @@ begin_try_block (void)
+   return r;
+ }
+ 
+-/* Likewise, for a function-try-block.  */
++/* Likewise, for a function-try-block.  The block returned in
++   *COMPOUND_STMT is an artificial outer scope, containing the
++   function-try-block.  */
+ 
+ tree
+-begin_function_try_block (void)
++begin_function_try_block (tree *compound_stmt)
+ {
+-  tree r = build_stmt (TRY_BLOCK, NULL_TREE, NULL_TREE);
++  tree r;
++  /* This outer scope does not exist in the C++ standard, but we need
++     a place to put __FUNCTION__ and similar variables.  */
++  *compound_stmt = begin_compound_stmt (0);
++  r = begin_try_block ();
+   FN_TRY_BLOCK_P (r) = 1;
+-  add_stmt (r);
+   return r;
+ }
+ 
+@@ -915,14 +920,16 @@ finish_handler_sequence (tree try_block)
+   check_handlers (TRY_HANDLERS (try_block));
+ }
+ 
+-/* Likewise, for a function-try-block.  */
++/* Finish the handler-seq for a function-try-block, given by
++   TRY_BLOCK.  COMPOUND_STMT is the outer block created by
++   begin_function_try_block.  */
+ 
+ void
+-finish_function_handler_sequence (tree try_block)
++finish_function_handler_sequence (tree try_block, tree compound_stmt)
+ {
+   in_function_try_handler = 0;
+-  RECHAIN_STMTS (try_block, TRY_HANDLERS (try_block));
+-  check_handlers (TRY_HANDLERS (try_block));
++  finish_handler_sequence (try_block);
++  finish_compound_stmt (compound_stmt);
+ }
+ 
+ /* Generate the RTL for T, which is a HANDLER.  */
+diff --git a/gcc/testsuite/g++.dg/template/fntry1.C b/gcc/testsuite/g++.dg/template/fntry1.C
+new file mode 100644
+index 00000000..494be5ab
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/template/fntry1.C
+@@ -0,0 +1,43 @@
++// PR c++/26433
++// { dg-do link }
++
++int get_int()
++{
++  throw 1;
++
++  return 0;
++}
++
++template <class _T> class Test
++{
++public:
++  Test()
++        try
++	: i(get_int())
++  {
++    i++;
++  }
++  catch(...)
++  {
++    // Syntax error caused by undefined __FUNCTION__.
++    const char* ptr = __FUNCTION__;
++  }
++
++private:
++  int i;
++  _T t;
++};
++
++int main()
++{
++    try
++      {
++        Test<int> test;
++      }
++    catch(...)
++      {
++        return 1;
++      }
++
++    return 0;
++}

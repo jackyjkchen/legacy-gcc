@@ -1,0 +1,47 @@
+diff --git a/gcc/cp/parser.c b/gcc/cp/parser.c
+index 27370c97..5d3d30d4 100644
+--- a/gcc/cp/parser.c
++++ b/gcc/cp/parser.c
+@@ -15176,6 +15176,13 @@ cp_parser_lookup_name (cp_parser *parser, tree name,
+ 	  decl = lookup_qualified_name (parser->scope, name,
+ 					tag_type != none_type,
+ 					/*complain=*/true);
++
++	  /* If we have a single function from a using decl, pull it out.  */
++	  if (decl
++	      && TREE_CODE (decl) == OVERLOAD
++	      && !really_overloaded_fn (decl))
++	    decl = OVL_FUNCTION (decl);
++
+ 	  if (pushed_scope)
+ 	    pop_scope (pushed_scope);
+ 	}
+diff --git a/gcc/testsuite/g++.dg/init/ref17.C b/gcc/testsuite/g++.dg/init/ref17.C
+new file mode 100644
+index 00000000..2c8c22b8
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/init/ref17.C
+@@ -0,0 +1,23 @@
++// PR c++/35650
++// { dg-do compile }
++
++void f1 ();
++
++namespace N
++{
++  using::f1;
++  void f2 ();
++  void f3 ();
++}
++
++using N::f3;
++
++void
++test ()
++{
++  void (&a) () = f1;
++  void (&b) () = N::f1;
++  void (&c) () = N::f2;
++  void (&d) () = f3;
++  void (&e) () = ::f3;
++}

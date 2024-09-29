@@ -1,0 +1,90 @@
+diff --git a/gcc/cp/decl.c b/gcc/cp/decl.c
+index dbb8c079..7afa47e3 100644
+--- a/gcc/cp/decl.c
++++ b/gcc/cp/decl.c
+@@ -949,7 +949,13 @@ decls_match (tree newdecl, tree olddecl)
+       /* Need to check scope for variable declaration (VAR_DECL).
+ 	 For typedef (TYPE_DECL), scope is ignored.  */
+       if (TREE_CODE (newdecl) == VAR_DECL
+-	  && CP_DECL_CONTEXT (newdecl) != CP_DECL_CONTEXT (olddecl))
++	  && CP_DECL_CONTEXT (newdecl) != CP_DECL_CONTEXT (olddecl)
++	  /* [dcl.link]
++	     Two declarations for an object with C language linkage
++	     with the same name (ignoring the namespace that qualify
++	     it) that appear in different namespace scopes refer to
++	     the same object.  */
++	  && !(DECL_EXTERN_C_P (olddecl) && DECL_EXTERN_C_P (newdecl)))
+ 	return 0;
+ 
+       if (TREE_TYPE (newdecl) == error_mark_node)
+@@ -1364,14 +1370,42 @@ duplicate_decls (tree newdecl, tree olddecl)
+ 	  cp_warning_at ("prototype for %q#D", newdecl);
+ 	  warning ("%Jfollows non-prototype definition here", olddecl);
+ 	}
+-      else if (TREE_CODE (olddecl) == FUNCTION_DECL
++      else if ((TREE_CODE (olddecl) == FUNCTION_DECL
++		|| TREE_CODE (olddecl) == VAR_DECL)
+ 	       && DECL_LANGUAGE (newdecl) != DECL_LANGUAGE (olddecl))
+ 	{
+-	  /* extern "C" int foo ();
+-	     int foo () { bar (); }
+-	     is OK.  */
++	  /* [dcl.link]
++	     If two declarations of the same function or object
++	     specify different linkage-specifications ..., the program
++	     is ill-formed.... Except for functions with C++ linkage,
++	     a function declaration without a linkage specification
++	     shall not precede the first linkage specification for
++	     that function.  A function can be declared without a
++	     linkage specification after an explicit linkage
++	     specification has been seen; the linkage explicitly
++	     specified in the earlier declaration is not affected by
++	     such a function declaration.
++
++	     DR 563 raises the question why the restrictions on
++	     functions should not also apply to objects.  Older
++	     versions of G++ silently ignore the linkage-specification
++	     for this example:
++
++	       namespace N { 
++                 extern int i;
++   	         extern "C" int i;
++               }
++
++             which is clearly wrong.  Therefore, we now treat objects
++	     like functions.  */
+ 	  if (current_lang_depth () == 0)
+-	    SET_DECL_LANGUAGE (newdecl, DECL_LANGUAGE (olddecl));
++	    {
++	      /* There is no explicit linkage-specification, so we use
++		 the linkage from the previous declaration.  */
++	      if (!DECL_LANG_SPECIFIC (newdecl))
++		retrofit_lang_decl (newdecl);
++	      SET_DECL_LANGUAGE (newdecl, DECL_LANGUAGE (olddecl));
++	    }
+ 	  else
+ 	    {
+ 	      cp_error_at ("previous declaration of %q#D with %qL linkage",
+diff --git a/gcc/testsuite/g++.dg/lookup/linkage1.C b/gcc/testsuite/g++.dg/lookup/linkage1.C
+new file mode 100644
+index 00000000..6f6bdfde
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/lookup/linkage1.C
+@@ -0,0 +1,4 @@
++// DR 563
++
++extern int i; // { dg-error "linkage" }
++extern "C" int i; // { dg-error "linkage" }
+diff --git a/gcc/testsuite/g++.dg/lookup/linkage2.C b/gcc/testsuite/g++.dg/lookup/linkage2.C
+new file mode 100644
+index 00000000..994264d3
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/lookup/linkage2.C
+@@ -0,0 +1,7 @@
++// PR c++/27227
++
++namespace x {
++  extern "C" const int y;
++}
++using x::y;
++extern "C" int const y=0;

@@ -1,0 +1,238 @@
+diff --git a/gcc/cp/parser.c b/gcc/cp/parser.c
+index c2d6c7df..0b0660ff 100644
+--- a/gcc/cp/parser.c
++++ b/gcc/cp/parser.c
+@@ -4587,8 +4587,10 @@ cp_parser_postfix_dot_deref_expression (cp_parser *parser,
+   pseudo_destructor_p = false;
+ 
+   /* If the SCOPE is a scalar type, then, if this is a valid program,
+-     we must be looking at a pseudo-destructor-name.  */
+-  if (scope && SCALAR_TYPE_P (scope))
++     we must be looking at a pseudo-destructor-name.  If POSTFIX_EXPRESSION
++     is type dependent, it can be pseudo-destructor-name or something else.
++     Try to parse it as pseudo-destructor-name first.  */
++  if ((scope && SCALAR_TYPE_P (scope)) || dependent_p)
+     {
+       tree s;
+       tree type;
+@@ -4597,7 +4599,12 @@ cp_parser_postfix_dot_deref_expression (cp_parser *parser,
+       /* Parse the pseudo-destructor-name.  */
+       s = NULL_TREE;
+       cp_parser_pseudo_destructor_name (parser, &s, &type);
+-      if (cp_parser_parse_definitely (parser))
++      if (dependent_p
++	  && (cp_parser_error_occurred (parser)
++	      || TREE_CODE (type) != TYPE_DECL
++	      || !SCALAR_TYPE_P (TREE_TYPE (type))))
++	cp_parser_abort_tentative_parse (parser);
++      else if (cp_parser_parse_definitely (parser))
+ 	{
+ 	  pseudo_destructor_p = true;
+ 	  postfix_expression
+diff --git a/gcc/testsuite/g++.dg/template/pseudodtor1.C b/gcc/testsuite/g++.dg/template/pseudodtor1.C
+new file mode 100644
+index 00000000..cf7c254d
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/template/pseudodtor1.C
+@@ -0,0 +1,44 @@
++// PR c++/32384
++// { dg-do compile }
++
++struct A
++{
++  typedef int T;
++  T foo ();
++
++  A () { foo ().~T (); }
++};
++
++template<typename> struct B
++{
++  typedef int T;
++  T foo ();
++
++  B () { foo ().~T (); }
++};
++
++template<typename T> struct C
++{
++  T t;
++  C () { t.~T (); }
++};
++
++template<typename S> struct D
++{
++  typedef int T;
++  S foo ();
++
++  D () { foo ().~T(); }
++};
++
++struct Z
++{
++  Z () {}
++  ~Z () {}
++};
++
++A a;
++B<int> b;
++C<int> c1;
++C<Z> c2;
++D<int> d;
+diff --git a/gcc/testsuite/g++.dg/template/pseudodtor2.C b/gcc/testsuite/g++.dg/template/pseudodtor2.C
+new file mode 100644
+index 00000000..796aff07
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/template/pseudodtor2.C
+@@ -0,0 +1,18 @@
++// PR c++/32384
++// { dg-do compile }
++
++template<typename S> struct D
++{
++  typedef int T;
++  S foo ();
++
++  D () { foo ().~T(); }		// { dg-error "is not of type" }
++};
++
++struct Z
++{
++  Z () {}
++  ~Z () {}
++};
++
++D<Z> d;
+diff --git a/gcc/testsuite/gcc.dg/cpp/trad/macroargs.c b/gcc/testsuite/gcc.dg/cpp/trad/macroargs.c
+index ce28cccf..c5f91d9f 100644
+--- a/gcc/testsuite/gcc.dg/cpp/trad/macroargs.c
++++ b/gcc/testsuite/gcc.dg/cpp/trad/macroargs.c
+@@ -8,6 +8,17 @@
+ 
+ extern void abort (void);
+ 
++void testquoting ()
++{
++  const char *str1 = f("a", "\"a\"");
++  const char *str2 = f( \t, " \t");
++
++  if (strcmp (str1, "\"a\"  \"\\\"a\\\"\""))
++    abort ();
++  if (strcmp (str2, " \t  \" \\t\""))
++    abort ();
++}
++
+ int main ()
+ {
+   const char *str1 = f( foo ,bar);
+@@ -26,5 +37,7 @@ foo
+ , 2"), "1 , 2"))	
+     abort ();
+ 
++  testquoting ();
++
+   return 0;
+ }
+diff --git a/libcpp/traditional.c b/libcpp/traditional.c
+index a543348d..ec0989e9 100644
+--- a/libcpp/traditional.c
++++ b/libcpp/traditional.c
+@@ -827,8 +827,11 @@ replace_args_and_push (cpp_reader *pfile, struct fun_macro *fmacro)
+       uchar *p;
+       _cpp_buff *buff;
+       size_t len = 0;
++      int cxtquote = 0;
+ 
+-      /* Calculate the length of the argument-replaced text.  */
++      /* Get an estimate of the length of the argument-replaced text.
++	 This is a worst case estimate, assuming that every replacement
++	 text character needs quoting.  */
+       for (exp = macro->exp.text;;)
+ 	{
+ 	  struct block *b = (struct block *) exp;
+@@ -836,8 +839,8 @@ replace_args_and_push (cpp_reader *pfile, struct fun_macro *fmacro)
+ 	  len += b->text_len;
+ 	  if (b->arg_index == 0)
+ 	    break;
+-	  len += (fmacro->args[b->arg_index]
+-		  - fmacro->args[b->arg_index - 1] - 1);
++	  len += 2 * (fmacro->args[b->arg_index]
++		      - fmacro->args[b->arg_index - 1] - 1);
+ 	  exp += BLOCK_LEN (b->text_len);
+ 	}
+ 
+@@ -845,21 +848,69 @@ replace_args_and_push (cpp_reader *pfile, struct fun_macro *fmacro)
+       buff = _cpp_get_buff (pfile, len + 1);
+ 
+       /* Copy the expansion and replace arguments.  */
++      /* Accumulate actual length, including quoting as necessary */
+       p = BUFF_FRONT (buff);
++      len = 0;
+       for (exp = macro->exp.text;;)
+ 	{
+ 	  struct block *b = (struct block *) exp;
+ 	  size_t arglen;
++	  int argquote;
++	  uchar *base;
++	  uchar *in;
+ 
+-	  memcpy (p, b->text, b->text_len);
+-	  p += b->text_len;
++	  len += b->text_len;
++	  /* Copy the non-argument text literally, keeping
++	     track of whether matching quotes have been seen. */
++	  for (arglen = b->text_len, in = b->text; arglen > 0; arglen--)
++	    {
++	      if (*in == '"')
++		cxtquote = ! cxtquote;
++	      *p++ = *in++;
++	    }
++	  /* Done if no more arguments */
+ 	  if (b->arg_index == 0)
+ 	    break;
+ 	  arglen = (fmacro->args[b->arg_index]
+ 		    - fmacro->args[b->arg_index - 1] - 1);
+-	  memcpy (p, pfile->out.base + fmacro->args[b->arg_index - 1],
+-		  arglen);
+-	  p += arglen;
++	  base = pfile->out.base + fmacro->args[b->arg_index - 1];
++	  in = base;
++#if 0
++	  /* Skip leading whitespace in the text for the argument to
++	     be substituted. To be compatible with gcc 2.95, we would
++	     also need to trim trailing whitespace. Gcc 2.95 trims
++	     leading and trailing whitespace, which may be a bug.  The
++	     current gcc testsuite explicitly checks that this leading
++	     and trailing whitespace in actual arguments is
++	     preserved. */
++	  while (arglen > 0 && is_space (*in))
++	    {
++	      in++;
++	      arglen--;
++	    }
++#endif
++	  for (argquote = 0; arglen > 0; arglen--)
++	    {
++	      if (cxtquote && *in == '"')
++		{
++		  if (in > base && *(in-1) != '\\')
++		    argquote = ! argquote;
++		  /* Always add backslash before double quote if argument
++		     is expanded in a quoted context */
++		  *p++ = '\\';
++		  len++;
++		}
++	      else if (cxtquote && argquote && *in == '\\')
++		{
++		  /* Always add backslash before a backslash in an argument
++		     that is expanded in a quoted context and also in the
++		     range of a quoted context in the argument itself. */
++		  *p++ = '\\';
++		  len++;
++		}
++	      *p++ = *in++;
++	      len++;
++	    }
+ 	  exp += BLOCK_LEN (b->text_len);
+ 	}
+ 

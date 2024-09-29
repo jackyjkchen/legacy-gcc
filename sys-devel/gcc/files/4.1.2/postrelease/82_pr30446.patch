@@ -1,0 +1,127 @@
+diff --git a/gcc/fortran/options.c b/gcc/fortran/options.c
+index 38933e89..69e6fffd 100644
+--- a/gcc/fortran/options.c
++++ b/gcc/fortran/options.c
+@@ -325,6 +325,8 @@ gfc_handle_module_path_options (const char *arg)
+   gfc_option.module_dir = (char *) gfc_getmem (strlen (arg) + 2);
+   strcpy (gfc_option.module_dir, arg);
+   strcat (gfc_option.module_dir, "/");
++
++  gfc_add_include_path (gfc_option.module_dir);
+ }
+ 
+ static void
+diff --git a/libgfortran/acinclude.m4 b/libgfortran/acinclude.m4
+index 3fe4e73a..5d022825 100644
+--- a/libgfortran/acinclude.m4
++++ b/libgfortran/acinclude.m4
+@@ -1,6 +1,22 @@
+ m4_include(../config/acx.m4)
+ m4_include(../config/no-executables.m4)
+ 
++dnl Check that we have a working GNU Fortran compiler
++AC_DEFUN([LIBGFOR_WORKING_GFORTRAN], [
++AC_MSG_CHECKING([whether the GNU Fortran compiler is working])
++AC_LANG_PUSH([Fortran])
++AC_COMPILE_IFELSE([[
++      program foo
++      real, parameter :: bar = sin (12.34 / 2.5)
++      end program foo]],
++    [AC_MSG_RESULT([yes])],
++    [AC_MSG_RESULT([no])
++     AC_MSG_ERROR([GNU Fortran is not working; the most common reason for that is that you might have linked it to shared GMP and/or MPFR libraries, and not set LD_LIBRARY_PATH accordingly. If you suspect any other reason, please report a bug in http://gcc.gnu.org/bugzilla, attaching $PWD/config.log])
++    ])
++AC_LANG_POP([Fortran])
++])
++
++
+ dnl Check:
+ dnl * If we have gettimeofday;
+ dnl * If we have struct timezone for use in calling it;
+diff --git a/libgfortran/configure b/libgfortran/configure
+index 36493b7b..9411911b 100755
+--- a/libgfortran/configure
++++ b/libgfortran/configure
+@@ -4695,6 +4695,67 @@ case "${host}" in
+ esac
+ 
+ 
++# We need a working compiler at that point, otherwise give a clear
++# error message and bail out.
++
++
++echo "$as_me:$LINENO: checking whether the GNU Fortran compiler is working" >&5
++echo $ECHO_N "checking whether the GNU Fortran compiler is working... $ECHO_C" >&6
++ac_ext=${FC_SRCEXT-f}
++ac_compile='$FC -c $FCFLAGS $FCFLAGS_SRCEXT conftest.$ac_ext >&5'
++ac_link='$FC -o conftest$ac_exeext $FCFLAGS $LDFLAGS $FCFLAGS_SRCEXT conftest.$ac_ext $LIBS >&5'
++ac_compiler_gnu=$ac_cv_fc_compiler_gnu
++
++cat >conftest.$ac_ext <<_ACEOF
++
++      program foo
++      real, parameter :: bar = sin (12.34 / 2.5)
++      end program foo
++_ACEOF
++rm -f conftest.$ac_objext
++if { (eval echo "$as_me:$LINENO: \"$ac_compile\"") >&5
++  (eval $ac_compile) 2>conftest.er1
++  ac_status=$?
++  grep -v '^ *+' conftest.er1 >conftest.err
++  rm -f conftest.er1
++  cat conftest.err >&5
++  echo "$as_me:$LINENO: \$? = $ac_status" >&5
++  (exit $ac_status); } &&
++	 { ac_try='test -z "$ac_fc_werror_flag"
++			 || test ! -s conftest.err'
++  { (eval echo "$as_me:$LINENO: \"$ac_try\"") >&5
++  (eval $ac_try) 2>&5
++  ac_status=$?
++  echo "$as_me:$LINENO: \$? = $ac_status" >&5
++  (exit $ac_status); }; } &&
++	 { ac_try='test -s conftest.$ac_objext'
++  { (eval echo "$as_me:$LINENO: \"$ac_try\"") >&5
++  (eval $ac_try) 2>&5
++  ac_status=$?
++  echo "$as_me:$LINENO: \$? = $ac_status" >&5
++  (exit $ac_status); }; }; then
++  echo "$as_me:$LINENO: result: yes" >&5
++echo "${ECHO_T}yes" >&6
++else
++  echo "$as_me: failed program was:" >&5
++sed 's/^/| /' conftest.$ac_ext >&5
++
++echo "$as_me:$LINENO: result: no" >&5
++echo "${ECHO_T}no" >&6
++     { { echo "$as_me:$LINENO: error: GNU Fortran is not working; the most common reason for that is that you might have linked it to shared GMP and/or MPFR libraries, and not set LD_LIBRARY_PATH accordingly. If you suspect any other reason, please report a bug in http://gcc.gnu.org/bugzilla, attaching $PWD/config.log" >&5
++echo "$as_me: error: GNU Fortran is not working; the most common reason for that is that you might have linked it to shared GMP and/or MPFR libraries, and not set LD_LIBRARY_PATH accordingly. If you suspect any other reason, please report a bug in http://gcc.gnu.org/bugzilla, attaching $PWD/config.log" >&2;}
++   { (exit 1); exit 1; }; }
++
++fi
++rm -f conftest.err conftest.$ac_objext conftest.$ac_ext
++ac_ext=c
++ac_cpp='$CPP $CPPFLAGS'
++ac_compile='$CC -c $CFLAGS $CPPFLAGS conftest.$ac_ext >&5'
++ac_link='$CC -o conftest$ac_exeext $CFLAGS $CPPFLAGS $LDFLAGS conftest.$ac_ext $LIBS >&5'
++ac_compiler_gnu=$ac_cv_c_compiler_gnu
++
++
++
+ # Check whether --enable-largefile or --disable-largefile was given.
+ if test "${enable_largefile+set}" = set; then
+   enableval="$enable_largefile"
+diff --git a/libgfortran/configure.ac b/libgfortran/configure.ac
+index 36c6ed06..0f5543e8 100644
+--- a/libgfortran/configure.ac
++++ b/libgfortran/configure.ac
+@@ -152,6 +152,10 @@ case "${host}" in
+ esac
+ AC_SUBST(extra_ldflags_libgfortran)
+ 
++# We need a working compiler at that point, otherwise give a clear
++# error message and bail out.
++LIBGFOR_WORKING_GFORTRAN
++
+ AC_SYS_LARGEFILE
+ AC_FUNC_MMAP
+ AC_TYPE_OFF_T

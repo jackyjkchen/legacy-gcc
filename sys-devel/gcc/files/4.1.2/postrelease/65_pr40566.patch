@@ -1,0 +1,40 @@
+diff --git a/gcc/convert.c b/gcc/convert.c
+index 4739a61d..e915df74 100644
+--- a/gcc/convert.c
++++ b/gcc/convert.c
+@@ -680,10 +680,16 @@ convert_to_integer (tree type, tree expr)
+ 
+ 	case COND_EXPR:
+ 	  /* It is sometimes worthwhile to push the narrowing down through
+-	     the conditional and never loses.  */
++	     the conditional and never loses.  A COND_EXPR may have a throw
++	     as one operand, which then has void type.  Just leave void
++	     operands as they are.  */
+ 	  return fold_build3 (COND_EXPR, type, TREE_OPERAND (expr, 0),
+-			      convert (type, TREE_OPERAND (expr, 1)),
+-			      convert (type, TREE_OPERAND (expr, 2)));
++			      VOID_TYPE_P (TREE_TYPE (TREE_OPERAND (expr, 1)))
++			      ? TREE_OPERAND (expr, 1)
++			      : convert (type, TREE_OPERAND (expr, 1)),
++			      VOID_TYPE_P (TREE_TYPE (TREE_OPERAND (expr, 2)))
++			      ? TREE_OPERAND (expr, 2)
++			      : convert (type, TREE_OPERAND (expr, 2)));
+ 
+ 	default:
+ 	  break;
+diff --git a/gcc/testsuite/g++.dg/parse/cond5.C b/gcc/testsuite/g++.dg/parse/cond5.C
+new file mode 100644
+index 00000000..7ed9fbe8
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/parse/cond5.C
+@@ -0,0 +1,10 @@
++// PR c++/40566
++
++void
++f (int x, int y)
++{
++  int c = x ? 23 : throw "bla";
++  short d = y ? throw "bla" : 23;
++  char e = x ? 23 : throw "bla";
++  long f = x ? 23 : throw "bla";
++}

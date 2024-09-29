@@ -1,0 +1,59 @@
+diff --git a/gcc/fortran/trans-decl.c b/gcc/fortran/trans-decl.c
+index 32a9b427..5fca1735 100644
+--- a/gcc/fortran/trans-decl.c
++++ b/gcc/fortran/trans-decl.c
+@@ -291,7 +291,7 @@ gfc_sym_mangled_identifier (gfc_symbol * sym)
+     return gfc_sym_identifier (sym);
+   else
+     {
+-      snprintf (name, sizeof name, "__%s__%s", sym->module, sym->name);
++      snprintf (name, sizeof name, "__%s_MOD_%s", sym->module, sym->name);
+       return get_identifier (name);
+     }
+ }
+@@ -326,7 +326,7 @@ gfc_sym_mangled_function_id (gfc_symbol * sym)
+     }
+   else
+     {
+-      snprintf (name, sizeof name, "__%s__%s", sym->module, sym->name);
++      snprintf (name, sizeof name, "__%s_MOD_%s", sym->module, sym->name);
+       return get_identifier (name);
+     }
+ }
+diff --git a/gcc/testsuite/gfortran.dg/module_naming_1.f90 b/gcc/testsuite/gfortran.dg/module_naming_1.f90
+new file mode 100644
+index 00000000..2a2d00b1
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/module_naming_1.f90
+@@ -0,0 +1,31 @@
++! { dg-do assemble }
++! PR 31144
++! Makes sure that our name mangling scheme can't be outwitted
++
++! old scheme
++module m1
++contains
++  subroutine m2__m3()
++  end subroutine m2__m3
++end module m1
++
++module m1__m2
++contains
++  subroutine m3()
++  end subroutine m3
++end module m1__m2
++
++! New scheme, relies on capitalization
++module m2
++contains
++  subroutine m2_MOD_m3()
++    ! mangled to __m2_MOD_m2_mod_m3
++  end subroutine m2_MOD_m3
++end module m2
++
++module m2_MOD_m2
++contains
++  subroutine m3()
++    ! mangled to __m2_mod_m2_MOD_m3
++  end subroutine m3
++end module m2_MOD_m2

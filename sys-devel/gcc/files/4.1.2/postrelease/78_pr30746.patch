@@ -1,0 +1,171 @@
+diff --git a/gcc/fortran/gfortran.h b/gcc/fortran/gfortran.h
+index ee30d9d1..3e250bc6 100644
+--- a/gcc/fortran/gfortran.h
++++ b/gcc/fortran/gfortran.h
+@@ -1993,6 +1993,7 @@ bool gfc_check_access (gfc_access, gfc_access);
+ /* primary.c */
+ symbol_attribute gfc_variable_attr (gfc_expr *, gfc_typespec *);
+ symbol_attribute gfc_expr_attr (gfc_expr *);
++match gfc_match_rvalue (gfc_expr **);
+ 
+ /* trans.c */
+ void gfc_generate_code (gfc_namespace *);
+diff --git a/gcc/fortran/match.h b/gcc/fortran/match.h
+index 1c5115e0..d9e5eaf5 100644
+--- a/gcc/fortran/match.h
++++ b/gcc/fortran/match.h
+@@ -127,7 +127,6 @@ match gfc_match_target (void);
+ 
+ /* primary.c */
+ match gfc_match_structure_constructor (gfc_symbol *, gfc_expr **);
+-match gfc_match_rvalue (gfc_expr **);
+ match gfc_match_variable (gfc_expr **, int);
+ match gfc_match_equiv_variable (gfc_expr **);
+ match gfc_match_actual_arglist (int, gfc_actual_arglist **);
+diff --git a/gcc/fortran/resolve.c b/gcc/fortran/resolve.c
+index 49cfac1e..ec7bbee2 100644
+--- a/gcc/fortran/resolve.c
++++ b/gcc/fortran/resolve.c
+@@ -2967,6 +2967,70 @@ resolve_variable (gfc_expr * e)
+ }
+ 
+ 
++/* Checks to see that the correct symbol has been host associated.
++   The only situation where this arises is that in which a twice
++   contained function is parsed after the host association is made.
++   Therefore, on detecting this, the line is rematched, having got
++   rid of the existing references and actual_arg_list.  */
++static bool
++check_host_association (gfc_expr *e)
++{
++  gfc_symbol *sym, *old_sym;
++  locus temp_locus;
++  gfc_expr *expr;
++  int n;
++
++  if (e->symtree == NULL || e->symtree->n.sym == NULL)
++    return e->expr_type == EXPR_FUNCTION;
++
++  old_sym = e->symtree->n.sym;
++  if (gfc_current_ns->parent
++	&& gfc_current_ns->parent->parent
++	&& old_sym->ns != gfc_current_ns)
++    {
++      gfc_find_symbol (old_sym->name, gfc_current_ns->parent, 1, &sym);
++      if (sym && old_sym != sym && sym->attr.flavor == FL_PROCEDURE)
++	{
++	  temp_locus = gfc_current_locus;
++	  gfc_current_locus = e->where;
++
++	  gfc_buffer_error (1);
++
++	  gfc_free_ref_list (e->ref);
++	  e->ref = NULL;
++
++	  if (e->expr_type == EXPR_FUNCTION)
++	    {
++	      gfc_free_actual_arglist (e->value.function.actual);
++	      e->value.function.actual = NULL;
++	    }
++
++	  if (e->shape != NULL)
++	    {
++	      for (n = 0; n < e->rank; n++)
++		mpz_clear (e->shape[n]);
++
++	      gfc_free (e->shape);
++	    }
++
++	  gfc_match_rvalue (&expr);
++	  gfc_clear_error ();
++	  gfc_buffer_error (0);
++
++	  gcc_assert (expr && sym == expr->symtree->n.sym);
++
++	  *e = *expr;
++	  gfc_free (expr);
++	  sym->refs++;
++
++	  gfc_current_locus = temp_locus;
++	}
++    }
++
++  return e->expr_type == EXPR_FUNCTION;
++}
++
++
+ /* Resolve an expression.  That is, make sure that types of operands agree
+    with their operators, intrinsic operators are converted to function calls
+    for overloaded types and unresolved function references are resolved.  */
+@@ -2986,13 +3050,16 @@ gfc_resolve_expr (gfc_expr * e)
+       break;
+ 
+     case EXPR_FUNCTION:
+-      t = resolve_function (e);
+-      break;
+-
+     case EXPR_VARIABLE:
+-      t = resolve_variable (e);
+-      if (t == SUCCESS)
+-	expression_rank (e);
++
++      if (check_host_association (e))
++	t = resolve_function (e);
++      else
++	{
++	  t = resolve_variable (e);
++	  if (t == SUCCESS)
++	    expression_rank (e);
++	}
+       break;
+ 
+     case EXPR_SUBSTRING:
+diff --git a/gcc/testsuite/gfortran.dg/host_assoc_function_1.f90 b/gcc/testsuite/gfortran.dg/host_assoc_function_1.f90
+new file mode 100644
+index 00000000..019fc617
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/host_assoc_function_1.f90
+@@ -0,0 +1,43 @@
++! { dg-do run }
++! Tests the fix for the bug PR30746, in which the reference to 'x'
++! in 'inner' wrongly host-associated with the variable 'x' rather
++! than the function.
++!
++! Testcase is due to Malcolm Cohen, NAG.
++!
++real function z (i)
++  integer :: i
++  z = real (i)**i
++end function
++
++MODULE m
++  REAL :: x(3) = (/ 1.5, 2.5, 3.5 /)
++  interface
++    real function z (i)
++      integer :: i
++    end function
++  end interface
++CONTAINS
++  SUBROUTINE s
++    if (x(2) .ne. 2.5) call abort ()
++    if (z(3) .ne. real (3)**3) call abort ()
++    CALL inner
++  CONTAINS
++    SUBROUTINE inner
++      i = 7
++      if (x(i, 7) .ne. real (7)**7) call abort ()
++      if (z(i, 7) .ne. real (7)**7) call abort ()
++    END SUBROUTINE
++    FUNCTION x(n, m)
++      x = REAL(n)**m
++    END FUNCTION
++    FUNCTION z(n, m)
++      z = REAL(n)**m
++    END FUNCTION
++
++  END SUBROUTINE
++END MODULE
++  use m
++  call s()
++end
++! { dg-final { cleanup-modules "m" } }
