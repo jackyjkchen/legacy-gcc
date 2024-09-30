@@ -291,8 +291,6 @@ if tc_version_is_at_least 2.9 ; then
 	IUSE+="test"
 	RESTRICT+="!test? ( test )"
 fi
-tc_version_is_at_least 2.8 && IUSE+=" vanilla"
-tc_version_is_at_least 2.9 && IUSE+=" +nls"
 
 is_crosscompile && RESTRICT+=" strip" # cross-compilers need controlled stripping
 
@@ -302,83 +300,83 @@ tc_has_feature() {
 	has "$1" "${TC_FEATURES[@]}"
 }
 
-if [[ ${PN} != kgcc64 && ${PN} != gcc-* ]] ; then
-	IUSE+=" debug"
-	case $(tc-arch) in
-		alpha)
-			tc_version_is_at_least 2.8 && IUSE+=" +cxx"
-			tc_version_is_at_least 2.9 && IUSE+=" objc"
-			;;
-		ppc64)
-			tc_version_is_at_least 3.2 && IUSE+=" +cxx"
-			tc_version_is_at_least 3.1 && IUSE+=" objc"
-			;;
-		sparc)
-			tc_version_is_at_least 2.9 && IUSE+=" +cxx"
-			tc_version_is_at_least 2.8 && IUSE+=" objc"
-			;;
-		m68k)
-			tc_version_is_at_least 2.1 && IUSE+=" +cxx"
-			tc_version_is_at_least 2.4 && IUSE+=" objc"
-			;;
-		*)
-			tc_version_is_at_least 2.1 && IUSE+=" +cxx"
-			tc_version_is_at_least 2.1 && IUSE+=" objc"
-			;;
-	esac
-	tc_version_is_between 2.9 4.0 && IUSE+=" f77"
-	# fortran support appeared in 4.1, but 4.1 needs outdated mpfr
-	tc_version_is_at_least 4.1 && IUSE+=" +fortran" TC_FEATURES+=( fortran )
-	tc_version_is_between 4.0 4.1 && IUSE+=" f95"
-	tc_version_is_at_least 3.0 && IUSE+=" doc"
-	tc_version_is_at_least 3.1 && IUSE+=" multilib"
-	tc_version_is_at_least 4.2 && IUSE+=" pgo"
-	tc_version_is_at_least 4.0 && IUSE+=" objc-gc" TC_FEATURES+=( objc-gc )
-	tc_version_is_at_least 4.1 && IUSE+=" libssp objc++"
-	tc_version_is_at_least 4.2 && IUSE+=" +openmp"
+tc_version_is_at_least 2.8 && IUSE+=" vanilla"
+tc_version_is_at_least 2.9 && IUSE+=" +nls"
+tc_version_is_at_least 2.9 && IUSE+=" debug"
+case $(tc-arch) in
+	alpha)
+		tc_version_is_at_least 2.8 && IUSE+=" +cxx"
+		tc_version_is_at_least 2.9 && IUSE+=" objc"
+		;;
+	ppc64)
+		tc_version_is_at_least 3.2 && IUSE+=" +cxx"
+		tc_version_is_at_least 3.1 && IUSE+=" objc"
+		;;
+	sparc)
+		tc_version_is_at_least 2.9 && IUSE+=" +cxx"
+		tc_version_is_at_least 2.8 && IUSE+=" objc"
+		;;
+	m68k)
+		tc_version_is_at_least 2.1 && IUSE+=" +cxx"
+		tc_version_is_at_least 2.4 && IUSE+=" objc"
+		;;
+	*)
+		tc_version_is_at_least 2.1 && IUSE+=" +cxx"
+		tc_version_is_at_least 2.1 && IUSE+=" objc"
+		;;
+esac
+tc_version_is_between 2.9 4.0 && IUSE+=" f77"
+# fortran support appeared in 4.1, but 4.1 needs outdated mpfr
+tc_version_is_at_least 4.1 && IUSE+=" +fortran" TC_FEATURES+=( fortran )
+tc_version_is_between 4.0 4.1 && IUSE+=" f95"
+tc_version_is_at_least 3.0 && IUSE+=" doc"
+tc_version_is_at_least 3.1 && IUSE+=" multilib"
+tc_version_is_at_least 4.2 && IUSE+=" pgo"
+tc_version_is_at_least 4.0 && IUSE+=" objc-gc" TC_FEATURES+=( objc-gc )
+tc_version_is_at_least 4.1 && IUSE+=" libssp objc++"
+tc_version_is_at_least 4.2 && IUSE+=" +openmp"
 
-	tc_version_is_at_least 4.3 && IUSE+=" fixed-point"
-	tc_version_is_at_least 4.7 && IUSE+=" go"
+tc_version_is_at_least 4.3 && IUSE+=" fixed-point"
+tc_version_is_at_least 4.7 && IUSE+=" go"
 
-	# sanitizer support appeared in gcc-4.8, but <gcc-5 does not
-	# support modern glibc.
-	# update: only >=gcc-8 support sanitizer in >=glibc-2.36
-	tc_version_is_at_least 8 && IUSE+=" +sanitize"  TC_FEATURES+=( sanitize )
+# sanitizer support appeared in gcc-4.8, but <gcc-5 does not
+# support modern glibc.
+# update: only >=gcc-8 support sanitizer in >=glibc-2.36
+tc_version_is_at_least 8 && IUSE+=" +sanitize"  TC_FEATURES+=( sanitize )
 
-	# Note:
-	#   <gcc-4.8 supported graphite, it required forked ppl
-	#     versions which we dropped.  Since graphite was also experimental in
-	#     the older versions, we don't want to bother supporting it.  #448024
-	#   <gcc-5 supported graphite, it required cloog
-	#   <gcc-6.5 supported graphite, it required old incompatible isl
-	tc_version_is_at_least 6.5 && IUSE+=" graphite" TC_FEATURES+=( graphite )
+# Note:
+#   <gcc-4.8 supported graphite, it required forked ppl
+#     versions which we dropped.  Since graphite was also experimental in
+#     the older versions, we don't want to bother supporting it.  #448024
+#   <gcc-5 supported graphite, it required cloog
+#   <gcc-6.5 supported graphite, it required old incompatible isl
+tc_version_is_at_least 6.5 && IUSE+=" graphite" TC_FEATURES+=( graphite )
 
-	tc_version_is_at_least 4.9 && IUSE+=" ada"
-	tc_version_is_at_least 4.9 && IUSE+=" vtv"
-	tc_version_is_at_least 5.0 && IUSE+=" jit"
-	tc_version_is_at_least 6.0 && IUSE+=" +pie +ssp hardened"
-	tc_version_is_at_least 3.4 && IUSE+=" pch"
+tc_version_is_at_least 4.9 && IUSE+=" ada"
+tc_version_is_at_least 4.9 && IUSE+=" vtv"
+tc_version_is_at_least 5.0 && IUSE+=" jit"
+tc_version_is_at_least 6.0 && IUSE+=" +pie +ssp hardened"
+tc_version_is_at_least 3.4 && IUSE+=" pch"
 
-	# systemtap is a gentoo-specific switch: bug #654748
-	tc_version_is_at_least 8.0 && IUSE+=" systemtap" TC_FEATURES+=( systemtap )
+# systemtap is a gentoo-specific switch: bug #654748
+tc_version_is_at_least 8.0 && IUSE+=" systemtap" TC_FEATURES+=( systemtap )
 
-	tc_version_is_at_least 9.0 && IUSE+=" d" TC_FEATURES+=( d )
-	case $(tc-arch) in
-		amd64)
-			tc_version_is_at_least 4.6 && IUSE+=" lto"
-			;;
-		x86)
-			tc_version_is_at_least 4.7 && IUSE+=" lto"
-			;;
-		*)
-			tc_version_is_at_least 9.1 && IUSE+=" lto"
-			;;
-	esac
-	tc_version_is_at_least 10 && IUSE+=" cet"
-	tc_version_is_at_least 10 && IUSE+=" zstd" TC_FEATURES+=( zstd )
-	tc_version_is_at_least 11 && IUSE+=" valgrind" TC_FEATURES+=( valgrind )
-	tc_version_is_at_least 11 && IUSE+=" custom-cflags"
-fi
+tc_version_is_at_least 9.0 && IUSE+=" d" TC_FEATURES+=( d )
+case $(tc-arch) in
+	amd64)
+		tc_version_is_at_least 4.6 && IUSE+=" lto"
+		;;
+	x86)
+		tc_version_is_at_least 4.7 && IUSE+=" lto"
+		;;
+	*)
+		tc_version_is_at_least 9.1 && IUSE+=" lto"
+		;;
+esac
+tc_version_is_at_least 10 && IUSE+=" cet"
+tc_version_is_at_least 10 && IUSE+=" zstd" TC_FEATURES+=( zstd )
+tc_version_is_at_least 11 && IUSE+=" valgrind" TC_FEATURES+=( valgrind )
+tc_version_is_at_least 11 && IUSE+=" custom-cflags"
 
 if tc_version_is_at_least 10; then
 	# Note: currently we pull in releases, snapshots and
@@ -1283,12 +1281,18 @@ toolchain_src_configure() {
 		confgcc+=( --disable-libunwind-exceptions )
 	fi
 
-	# Use the default ("release") checking because upstream usually neglects
-	# to test "disabled" so it has a history of breaking. bug #317217
-	if tc_version_is_at_least 3.4 && in_iuse debug ; then
-		# The "release" keyword is new to 4.0. bug #551636
-		local off=$(tc_version_is_at_least 4.0 && echo release || echo no)
-		confgcc+=( --enable-checking="${GCC_CHECKS_LIST:-$(usex debug yes ${off})}" )
+	if in_iuse debug ; then
+		if tc_version_is_at_least 7 ; then
+			confgcc+=( --enable-checking="${GCC_CHECKS_LIST:-$(usex debug yes,extra,rtl release)}" )
+		elif tc_version_is_at_least 4.0 ; then
+			confgcc+=( --enable-checking="${GCC_CHECKS_LIST:-$(usex debug yes,rtl release)}" )
+		elif tc_version_is_at_least 3.3 ; then
+			confgcc+=( --enable-checking="${GCC_CHECKS_LIST:-$(usex debug misc,tree,rtlflag,gc,rtl yes)}" )
+		elif tc_version_is_at_least 3.0 ; then
+			confgcc+=( --enable-checking="${GCC_CHECKS_LIST:-$(usex debug misc,tree,gc yes)}" )
+		else
+			confgcc+=( --enable-checking="${GCC_CHECKS_LIST:-$(usex debug yes no)}" )
+		fi
 	fi
 
 	# Branding
@@ -2378,7 +2382,7 @@ toolchain_src_install() {
 	find "${ED}" -name install-tools -prune -type d -exec rm -rf "{}" \;
 	# This one comes with binutils
 	find "${ED}" -name libiberty.a -delete
-	tc_version_is_between 3.3 4.3 && find "${ED}" -name libstdc++_pic.a -delete
+	tc_version_is_between 4.0 4.3 && find "${ED}" -name libstdc++_pic.a -delete
 
 	# Move the libraries to the proper location
 	gcc_movelibs

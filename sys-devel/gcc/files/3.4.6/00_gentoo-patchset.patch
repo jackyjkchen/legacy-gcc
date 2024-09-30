@@ -1,5 +1,5 @@
 diff --git a/boehm-gc/configure b/boehm-gc/configure
-index 3ff5861..930ca89 100755
+index 3ff5861b..930ca892 100755
 --- a/boehm-gc/configure
 +++ b/boehm-gc/configure
 @@ -1937,14 +1937,7 @@ irix5* | irix6*)
@@ -20,7 +20,7 @@ index 3ff5861..930ca89 100755
  netbsd*)
 diff --git a/boehm-gc/ia64_save_regs_in_stack.S b/boehm-gc/ia64_save_regs_in_stack.S
 new file mode 100644
-index 0000000..632913d
+index 00000000..632913db
 --- /dev/null
 +++ b/boehm-gc/ia64_save_regs_in_stack.S
 @@ -0,0 +1,15 @@
@@ -40,7 +40,7 @@ index 0000000..632913d
 +	.section .note.GNU-stack,"",@progbits
 +#endif
 diff --git a/boehm-gc/ia64_save_regs_in_stack.s b/boehm-gc/ia64_save_regs_in_stack.s
-index 3b18c08..e69de29 100644
+index 3b18c084..e69de29b 100644
 --- a/boehm-gc/ia64_save_regs_in_stack.s
 +++ b/boehm-gc/ia64_save_regs_in_stack.s
 @@ -1,12 +0,0 @@
@@ -57,7 +57,7 @@ index 3b18c08..e69de29 100644
 -        .endp GC_save_regs_in_stack
 -
 diff --git a/contrib/gcc_update b/contrib/gcc_update
-index b89a9af..3eaa3e4 100755
+index b89a9af6..3eaa3e4d 100755
 --- a/contrib/gcc_update
 +++ b/contrib/gcc_update
 @@ -123,7 +123,16 @@ touch_files () {
@@ -79,7 +79,7 @@ index b89a9af..3eaa3e4 100755
      done 2>&1
      rm -f Makefile.$$
 diff --git a/gcc/Makefile.in b/gcc/Makefile.in
-index 30815af..7bd2600 100644
+index 30815af4..7bd26009 100644
 --- a/gcc/Makefile.in
 +++ b/gcc/Makefile.in
 @@ -1185,6 +1185,7 @@ libgcc.mk: config.status Makefile mklibgcc $(LIB2ADD) $(LIB2ADD_ST) $(LIB2ADD_SH
@@ -128,100 +128,11 @@ index 30815af..7bd2600 100644
  	  rm -f $(DESTDIR)$(libsubdir)/specs; \
  	  $(INSTALL_DATA) $(SPECS) $(DESTDIR)$(libsubdir)/specs; \
  	  chmod a-x $(DESTDIR)$(libsubdir)/specs; \
-diff --git a/gcc/c-common.c b/gcc/c-common.c
-index 30f869a..edc3030 100644
---- a/gcc/c-common.c
-+++ b/gcc/c-common.c
-@@ -832,7 +832,7 @@ const struct attribute_spec c_common_attribute_table[] =
- 			      handle_deprecated_attribute },
-   { "vector_size",	      1, 1, false, true, false,
- 			      handle_vector_size_attribute },
--  { "visibility",	      1, 1, true,  false, false,
-+  { "visibility",	      1, 1, false, false, false,
- 			      handle_visibility_attribute },
-   { "tls_model",	      1, 1, true,  false, false,
- 			      handle_tls_model_attribute },
-@@ -4937,7 +4937,16 @@ handle_visibility_attribute (tree *node, tree name, tree args,
- 
-   *no_add_attrs = true;
- 
--  if (decl_function_context (decl) != 0 || ! TREE_PUBLIC (decl))
-+  if (TYPE_P (*node))
-+    {
-+      if (TREE_CODE (*node) != RECORD_TYPE && TREE_CODE (*node) != UNION_TYPE)
-+       {
-+         warning ("`%s' attribute ignored on non-class types",
-+                  IDENTIFIER_POINTER (name));
-+         return NULL_TREE;
-+       }
-+    }
-+  else if (decl_function_context (decl) != 0 || ! TREE_PUBLIC (decl))
-     {
-       warning ("`%s' attribute ignored", IDENTIFIER_POINTER (name));
-       return NULL_TREE;
-@@ -4948,6 +4957,14 @@ handle_visibility_attribute (tree *node, tree name, tree args,
-       error ("visibility arg not a string");
-       return NULL_TREE;
-     }
-+  
-+  /*  If this is a type, set the visibility on the type decl.  */
-+  if (TYPE_P (decl))
-+    {
-+      decl = TYPE_NAME (decl);
-+      if (! decl)
-+        return NULL_TREE;
-+    }
- 
-   if (strcmp (TREE_STRING_POINTER (id), "default") == 0)
-     DECL_VISIBILITY (decl) = VISIBILITY_DEFAULT;
-@@ -4959,6 +4976,14 @@ handle_visibility_attribute (tree *node, tree name, tree args,
-     DECL_VISIBILITY (decl) = VISIBILITY_PROTECTED;
-   else
-     error ("visibility arg must be one of \"default\", \"hidden\", \"protected\" or \"internal\"");
-+  DECL_VISIBILITY_SPECIFIED (decl) = 1;
-+
-+  /* For decls only, go ahead and attach the attribute to the node as well.
-+     This is needed so we can determine whether we have VISIBILITY_DEFAULT
-+     because the visibility was not specified, or because it was explicitly
-+     overridden from the class visibility.  */
-+  if (DECL_P (*node))
-+    *no_add_attrs = false;
- 
-   return NULL_TREE;
- }
 diff --git a/gcc/c-decl.c b/gcc/c-decl.c
-index 66e0fd7..9737791 100644
+index 66e0fd7d..c8c6e3c6 100644
 --- a/gcc/c-decl.c
 +++ b/gcc/c-decl.c
-@@ -1173,9 +1173,8 @@ diagnose_mismatched_decls (tree newdecl, tree olddecl,
-     }
- 
-   /* warnings */
--  /* All decls must agree on a non-default visibility.  */
--  if (DECL_VISIBILITY (newdecl) != VISIBILITY_DEFAULT
--      && DECL_VISIBILITY (olddecl) != VISIBILITY_DEFAULT
-+  /* All decls must agree on a visibility.  */
-+  if (DECL_VISIBILITY_SPECIFIED (newdecl) && DECL_VISIBILITY_SPECIFIED (olddecl)
-       && DECL_VISIBILITY (newdecl) != DECL_VISIBILITY (olddecl))
-     {
-       warning ("%Jredeclaration of '%D' with different visibility "
-@@ -1378,9 +1377,12 @@ merge_decls (tree newdecl, tree olddecl, tree newtype, tree oldtype)
-      Currently, it can only be defined in the prototype.  */
-   COPY_DECL_ASSEMBLER_NAME (olddecl, newdecl);
- 
--  /* If either declaration has a nondefault visibility, use it.  */
--  if (DECL_VISIBILITY (olddecl) != VISIBILITY_DEFAULT)
--    DECL_VISIBILITY (newdecl) = DECL_VISIBILITY (olddecl);
-+  /* Use visibility of whichever declaration had it specified */
-+  if (DECL_VISIBILITY_SPECIFIED (olddecl))
-+    {
-+      DECL_VISIBILITY (newdecl) = DECL_VISIBILITY (olddecl);
-+      DECL_VISIBILITY_SPECIFIED (newdecl) = 1;
-+    }
- 
-   if (TREE_CODE (newdecl) == FUNCTION_DECL)
-     {
-@@ -2820,7 +2822,7 @@ finish_decl (tree decl, tree init, tree asmspec_tree)
+@@ -2820,7 +2820,7 @@ finish_decl (tree decl, tree init, tree asmspec_tree)
  	{
  	  tree builtin = built_in_decls [DECL_FUNCTION_CODE (decl)];
  	  SET_DECL_RTL (builtin, NULL_RTX);
@@ -230,23 +141,8 @@ index 66e0fd7..9737791 100644
  #ifdef TARGET_MEM_FUNCTIONS
  	  if (DECL_FUNCTION_CODE (decl) == BUILT_IN_MEMCPY)
  	    init_block_move_fn (starred);
-diff --git a/gcc/c-opts.c b/gcc/c-opts.c
-index 2a61744..acb55c5 100644
---- a/gcc/c-opts.c
-+++ b/gcc/c-opts.c
-@@ -920,6 +920,10 @@ c_common_handle_option (size_t scode, const char *arg, int value)
-     case OPT_fuse_cxa_atexit:
-       flag_use_cxa_atexit = value;
-       break;
-+      
-+    case OPT_fvisibility_inlines_hidden:
-+      visibility_options.inlines_hidden = value;
-+      break;
- 
-     case OPT_fweak:
-       flag_weak = value;
 diff --git a/gcc/c-parse.in b/gcc/c-parse.in
-index 66d27ac..8d35972 100644
+index 66d27ac0..8d359725 100644
 --- a/gcc/c-parse.in
 +++ b/gcc/c-parse.in
 @@ -57,6 +57,11 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
@@ -294,140 +190,8 @@ index 66d27ac..8d35972 100644
  	  enumlist maybecomma_warn '}' maybe_attribute
  		{ $$ = finish_enum ($<ttype>3, nreverse ($4),
  				    chainon ($1, $7)); }
-diff --git a/gcc/c-pragma.c b/gcc/c-pragma.c
-index 10c8cae..e68ebf2 100644
---- a/gcc/c-pragma.c
-+++ b/gcc/c-pragma.c
-@@ -481,6 +481,86 @@ maybe_apply_renaming_pragma (tree decl, tree asmname)
-   return asmname;
- }
- 
-+
-+#ifdef HANDLE_PRAGMA_VISIBILITY
-+static void handle_pragma_visibility (cpp_reader *);
-+
-+/* Sets the default visibility for symbols to something other than that
-+   specified on the command line.  */
-+static void
-+handle_pragma_visibility (cpp_reader *dummy ATTRIBUTE_UNUSED)
-+{ /* Form is #pragma GCC visibility push(hidden)|pop */
-+  static int visstack [16], visidx;
-+  tree x;
-+  enum cpp_ttype token;
-+  enum { bad, push, pop } action = bad;
-+ 
-+  token = c_lex (&x);
-+  if (token == CPP_NAME)
-+    {
-+      const char *op = IDENTIFIER_POINTER (x);
-+      if (!strcmp (op, "push"))
-+        action = push;
-+      else if (!strcmp (op, "pop"))
-+        action = pop;
-+    }
-+  if (bad == action)
-+    GCC_BAD ("#pragma GCC visibility must be followed by push or pop");
-+  else
-+    {
-+      if (pop == action)
-+        {
-+          if (!visidx)
-+            {
-+              GCC_BAD ("No matching push for '#pragma GCC visibility pop'");
-+            }
-+          else
-+            {
-+              default_visibility = visstack[--visidx];
-+              visibility_options.inpragma = (visidx>0);
-+            }
-+        }
-+      else
-+        {
-+          if (c_lex (&x) != CPP_OPEN_PAREN)
-+            GCC_BAD ("missing '(' after '#pragma GCC visibility push' - ignored");
-+          token = c_lex (&x);
-+          if (token != CPP_NAME)
-+            {
-+              GCC_BAD ("malformed #pragma GCC visibility push");
-+            }
-+          else if (visidx >= 16)
-+            {
-+              GCC_BAD ("No more than sixteen #pragma GCC visibility pushes allowed at once");
-+            }
-+          else
-+            {
-+              const char *str = IDENTIFIER_POINTER (x);
-+              visstack[visidx++] = default_visibility;
-+              if (!strcmp (str, "default"))
-+                default_visibility = VISIBILITY_DEFAULT;
-+              else if (!strcmp (str, "internal"))
-+                default_visibility = VISIBILITY_INTERNAL;
-+              else if (!strcmp (str, "hidden"))
-+                default_visibility = VISIBILITY_HIDDEN;  
-+              else if (!strcmp (str, "protected"))
-+                default_visibility = VISIBILITY_PROTECTED;
-+              else
-+                {
-+                  GCC_BAD ("#pragma GCC visibility push() must specify default, internal, hidden or protected");
-+                }
-+              visibility_options.inpragma = 1;
-+            }
-+          if (c_lex (&x) != CPP_CLOSE_PAREN)
-+            GCC_BAD ("missing '(' after '#pragma GCC visibility push' - ignored");
-+        }
-+    }
-+  if (c_lex (&x) != CPP_EOF)
-+    warning ("junk at end of '#pragma GCC visibility'");
-+}
-+
-+#endif
-+
- /* Front-end wrapper for pragma registration to avoid dragging
-    cpplib.h in almost everywhere.  */
- void
-@@ -506,6 +586,9 @@ init_pragma (void)
- #ifdef HANDLE_PRAGMA_EXTERN_PREFIX
-   c_register_pragma (0, "extern_prefix", handle_pragma_extern_prefix);
- #endif
-+#ifdef HANDLE_PRAGMA_VISIBILITY
-+  c_register_pragma ("GCC", "visibility", handle_pragma_visibility);
-+#endif
- 
- #ifdef REGISTER_TARGET_PRAGMAS
-   REGISTER_TARGET_PRAGMAS ();
-diff --git a/gcc/c-pragma.h b/gcc/c-pragma.h
-index a1469db..240a59d 100644
---- a/gcc/c-pragma.h
-+++ b/gcc/c-pragma.h
-@@ -44,6 +44,11 @@ extern struct cpp_reader* parse_in;
- #define HANDLE_PRAGMA_PACK 1
- #endif /* HANDLE_PRAGMA_PACK_PUSH_POP */
- 
-+/* It's safe to always leave visibility pragma enabled as if
-+   visibility is not supported on the host OS platform the
-+   statements are ignored.  */
-+#define HANDLE_PRAGMA_VISIBILITY 1
-+
- extern void init_pragma (void);
- 
- /* Front-end wrapper for pragma registration to avoid dragging
-diff --git a/gcc/c.opt b/gcc/c.opt
-index 7160dab..36a4056 100644
---- a/gcc/c.opt
-+++ b/gcc/c.opt
-@@ -656,6 +656,10 @@ fuse-cxa-atexit
- C++ ObjC++
- Use __cxa_atexit to register destructors
- 
-+fvisibility-inlines-hidden
-+C++
-+Marks all inlined methods as having hidden visibility
-+
- fvtable-gc
- C++ ObjC++
- Discard unused virtual functions
 diff --git a/gcc/collect2.c b/gcc/collect2.c
-index 33206f5..2d2d34e 100644
+index 33206f5c..2d2d34ec 100644
 --- a/gcc/collect2.c
 +++ b/gcc/collect2.c
 @@ -34,6 +34,12 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
@@ -482,24 +246,8 @@ index 33206f5..2d2d34e 100644
      notice ("[Leaving %s]\n", file);
  }
  
-diff --git a/gcc/common.opt b/gcc/common.opt
-index 20d1b75..56ac1ef 100644
---- a/gcc/common.opt
-+++ b/gcc/common.opt
-@@ -718,6 +718,11 @@ fverbose-asm
- Common
- Add extra commentary to assembler output
- 
-+fvisibility=
-+Common Joined RejectNegative
-+-fvisibility=[default|internal|hidden|protected]	Set the default symbol visibility
-+
-+
- fvpt
- Common
- Use expression value profiles in optimizations
 diff --git a/gcc/config.gcc b/gcc/config.gcc
-index d22f34b..a14e18c 100644
+index d22f34bc..a14e18c3 100644
 --- a/gcc/config.gcc
 +++ b/gcc/config.gcc
 @@ -321,7 +321,7 @@ s390*-*-*)
@@ -571,7 +319,7 @@ index d22f34b..a14e18c 100644
  	tmake_file="t-libc-ok t-openbsd sparc/t-openbsd"
  	# we need collect2 until our bug is fixed...
 diff --git a/gcc/config/alpha/alpha.h b/gcc/config/alpha/alpha.h
-index ae3a349..bcaeda6 100644
+index ae3a349f..bcaeda69 100644
 --- a/gcc/config/alpha/alpha.h
 +++ b/gcc/config/alpha/alpha.h
 @@ -96,7 +96,7 @@ Boston, MA 02111-1307, USA.  */
@@ -593,7 +341,7 @@ index ae3a349..bcaeda6 100644
       N_("Emit IEEE-conformant code, with inexact exceptions")},		\
      {"build-constants", MASK_BUILD_CONSTANTS,				\
 diff --git a/gcc/config/alpha/linux.h b/gcc/config/alpha/linux.h
-index a4bc3d3..9e99114 100644
+index a4bc3d3e..9e991140 100644
 --- a/gcc/config/alpha/linux.h
 +++ b/gcc/config/alpha/linux.h
 @@ -73,6 +73,7 @@ Boston, MA 02111-1307, USA.  */
@@ -621,7 +369,7 @@ index a4bc3d3..9e99114 100644
    } while (0)
 +#endif /* inhibit_libc */
 diff --git a/gcc/config/arm/arm.c b/gcc/config/arm/arm.c
-index 2f0eaed..9a2c479 100644
+index 2f0eaedb..9a2c4791 100644
 --- a/gcc/config/arm/arm.c
 +++ b/gcc/config/arm/arm.c
 @@ -4572,6 +4572,10 @@ minmax_code (rtx x)
@@ -795,7 +543,7 @@ index 2f0eaed..9a2c479 100644
     If 'reg_containing_return_addr' is -1, then the return address is
     actually on the stack, at the stack pointer.  */
 diff --git a/gcc/config/arm/arm.md b/gcc/config/arm/arm.md
-index 0a5e647..730248d 100644
+index 0a5e647a..730248d9 100644
 --- a/gcc/config/arm/arm.md
 +++ b/gcc/config/arm/arm.md
 @@ -8811,13 +8811,16 @@
@@ -826,7 +574,7 @@ index 0a5e647..730248d 100644
  	ldm[0] = ops[0] = operands[4];
  	ops[1] = XEXP (XEXP (operands[2], 0), 0);
 diff --git a/gcc/config/arm/linux-elf.h b/gcc/config/arm/linux-elf.h
-index 9f291c0..9958d40 100644
+index 9f291c0b..9958d40e 100644
 --- a/gcc/config/arm/linux-elf.h
 +++ b/gcc/config/arm/linux-elf.h
 @@ -30,17 +30,34 @@
@@ -877,7 +625,7 @@ index 9f291c0..9958d40 100644
  
  #define TARGET_OS_CPP_BUILTINS() LINUX_TARGET_OS_CPP_BUILTINS()
 diff --git a/gcc/config/avr/avr.c b/gcc/config/avr/avr.c
-index e65a98b..e29a487 100644
+index e65a98b4..e29a4877 100644
 --- a/gcc/config/avr/avr.c
 +++ b/gcc/config/avr/avr.c
 @@ -175,6 +175,18 @@ static const struct mcu_type_s avr_mcu_types[] = {
@@ -945,7 +693,7 @@ index e65a98b..e29a487 100644
      /* Assembler only.  */
    { "avr1",      1, NULL },
 diff --git a/gcc/config/avr/avr.h b/gcc/config/avr/avr.h
-index 4a2db2c..8ba77c5 100644
+index 4a2db2c2..8ba77c51 100644
 --- a/gcc/config/avr/avr.h
 +++ b/gcc/config/avr/avr.h
 @@ -2351,12 +2351,12 @@ extern int avr_case_values_threshold;
@@ -1046,7 +794,7 @@ index 4a2db2c..8ba77c5 100644
  
  #define EXTRA_SPECS {"crt_binutils", CRT_BINUTILS_SPECS},
 diff --git a/gcc/config/avr/t-avr b/gcc/config/avr/t-avr
-index bb2733e..9d308cf 100644
+index bb2733eb..9d308cfa 100644
 --- a/gcc/config/avr/t-avr
 +++ b/gcc/config/avr/t-avr
 @@ -46,13 +46,25 @@ MULTILIB_MATCHES = \
@@ -1080,7 +828,7 @@ index bb2733e..9d308cf 100644
  MULTILIB_EXCEPTIONS =
  
 diff --git a/gcc/config/freebsd-spec.h b/gcc/config/freebsd-spec.h
-index 8acf0ca..2012815 100644
+index 8acf0cad..20128156 100644
 --- a/gcc/config/freebsd-spec.h
 +++ b/gcc/config/freebsd-spec.h
 @@ -154,8 +154,4 @@ is built with the --enable-threads configure-time option.}		\
@@ -1093,7 +841,7 @@ index 8acf0ca..2012815 100644
  #define FBSD_DYNAMIC_LINKER "/libexec/ld-elf.so.1"
 -#endif
 diff --git a/gcc/config/i386/i386.c b/gcc/config/i386/i386.c
-index e6f71b4..a5339cf 100644
+index e6f71b46..a5339cf4 100644
 --- a/gcc/config/i386/i386.c
 +++ b/gcc/config/i386/i386.c
 @@ -2026,11 +2026,11 @@ classify_argument (enum machine_mode mode, tree type,
@@ -1158,7 +906,7 @@ index e6f71b4..a5339cf 100644
  	}
        if (target == 0
 diff --git a/gcc/config/i386/i386.h b/gcc/config/i386/i386.h
-index 8a912d5..35a881a 100644
+index 8a912d5f..35a881af 100644
 --- a/gcc/config/i386/i386.h
 +++ b/gcc/config/i386/i386.h
 @@ -2944,6 +2944,8 @@ do {						\
@@ -1171,7 +919,7 @@ index 8a912d5..35a881a 100644
    {"mmx_reg_operand", {REG}},						\
    {"reg_no_sp_operand", {SUBREG, REG}},					\
 diff --git a/gcc/config/i386/i386.md b/gcc/config/i386/i386.md
-index 0fbe00b..ee93326 100644
+index 0fbe00b6..ee933267 100644
 --- a/gcc/config/i386/i386.md
 +++ b/gcc/config/i386/i386.md
 @@ -20440,14 +20440,31 @@
@@ -1252,7 +1000,7 @@ index 0fbe00b..ee93326 100644
     (set_attr "mode" "TI")])
  
 diff --git a/gcc/config/i386/linux.h b/gcc/config/i386/linux.h
-index e7d19ec..d5bdb1e 100644
+index e7d19ec1..d5bdb1ef 100644
 --- a/gcc/config/i386/linux.h
 +++ b/gcc/config/i386/linux.h
 @@ -208,6 +208,7 @@ Boston, MA 02111-1307, USA.  */
@@ -1283,7 +1031,7 @@ index e7d19ec..d5bdb1e 100644
  #endif /* IN_LIBGCC2 */
 +#endif /* inhibit_libc */
 diff --git a/gcc/config/i386/linux64.h b/gcc/config/i386/linux64.h
-index 98536c1..59d9ffa 100644
+index 98536c19..59d9ffa0 100644
 --- a/gcc/config/i386/linux64.h
 +++ b/gcc/config/i386/linux64.h
 @@ -90,7 +90,7 @@ Boston, MA 02111-1307, USA.  */
@@ -1311,7 +1059,7 @@ index 98536c1..59d9ffa 100644
        }									\
 diff --git a/gcc/config/i386/openbsdelf.h b/gcc/config/i386/openbsdelf.h
 new file mode 100644
-index 0000000..25d6a3e
+index 00000000..25d6a3ef
 --- /dev/null
 +++ b/gcc/config/i386/openbsdelf.h
 @@ -0,0 +1,135 @@
@@ -1452,7 +1200,7 @@ index 0000000..25d6a3e
 +#include <sys/mman.h>
 diff --git a/gcc/config/ia64/change-symver.c b/gcc/config/ia64/change-symver.c
 new file mode 100644
-index 0000000..fc19595
+index 00000000..fc195950
 --- /dev/null
 +++ b/gcc/config/ia64/change-symver.c
 @@ -0,0 +1,211 @@
@@ -1668,7 +1416,7 @@ index 0000000..fc19595
 +  return 0;
 +}
 diff --git a/gcc/config/ia64/crtbegin.asm b/gcc/config/ia64/crtbegin.asm
-index 494def7..1878b19 100644
+index 494def7f..1878b193 100644
 --- a/gcc/config/ia64/crtbegin.asm
 +++ b/gcc/config/ia64/crtbegin.asm
 @@ -246,3 +246,7 @@ __do_jv_register_classes:
@@ -1680,7 +1428,7 @@ index 494def7..1878b19 100644
 +.section .note.GNU-stack; .previous
 +#endif
 diff --git a/gcc/config/ia64/crtend.asm b/gcc/config/ia64/crtend.asm
-index 8984d88..b6cdd7b 100644
+index 8984d88f..b6cdd7bd 100644
 --- a/gcc/config/ia64/crtend.asm
 +++ b/gcc/config/ia64/crtend.asm
 @@ -113,3 +113,7 @@ __do_global_ctors_aux:
@@ -1692,7 +1440,7 @@ index 8984d88..b6cdd7b 100644
 +.section .note.GNU-stack; .previous
 +#endif
 diff --git a/gcc/config/ia64/crti.asm b/gcc/config/ia64/crti.asm
-index 4b48e3d..b0f1ca7 100644
+index 4b48e3d4..b0f1ca77 100644
 --- a/gcc/config/ia64/crti.asm
 +++ b/gcc/config/ia64/crti.asm
 @@ -64,3 +64,7 @@ _fini:
@@ -1704,7 +1452,7 @@ index 4b48e3d..b0f1ca7 100644
 +.section .note.GNU-stack; .previous
 +#endif
 diff --git a/gcc/config/ia64/crtn.asm b/gcc/config/ia64/crtn.asm
-index 48a9a03..9edda91 100644
+index 48a9a03f..9edda910 100644
 --- a/gcc/config/ia64/crtn.asm
 +++ b/gcc/config/ia64/crtn.asm
 @@ -54,3 +54,7 @@
@@ -1716,7 +1464,7 @@ index 48a9a03..9edda91 100644
 +.section .note.GNU-stack; .previous
 +#endif
 diff --git a/gcc/config/ia64/ia64.h b/gcc/config/ia64/ia64.h
-index 9f7dd05..886ff72 100644
+index 9f7dd055..886ff72b 100644
 --- a/gcc/config/ia64/ia64.h
 +++ b/gcc/config/ia64/ia64.h
 @@ -173,6 +173,8 @@ extern int ia64_tls_size;
@@ -1729,7 +1477,7 @@ index 9f7dd05..886ff72 100644
        N_("Generate big endian code") },					\
    { "little-endian",	-MASK_BIG_ENDIAN,				\
 diff --git a/gcc/config/ia64/lib1funcs.asm b/gcc/config/ia64/lib1funcs.asm
-index e3d348b..fdd66b9 100644
+index e3d348ba..fdd66b96 100644
 --- a/gcc/config/ia64/lib1funcs.asm
 +++ b/gcc/config/ia64/lib1funcs.asm
 @@ -741,3 +741,7 @@ __floattitf:
@@ -1742,7 +1490,7 @@ index e3d348b..fdd66b9 100644
 +#endif
 diff --git a/gcc/config/ia64/libgcc-ia64-no-libunwind.ver b/gcc/config/ia64/libgcc-ia64-no-libunwind.ver
 new file mode 100644
-index 0000000..750b08f
+index 00000000..750b08f6
 --- /dev/null
 +++ b/gcc/config/ia64/libgcc-ia64-no-libunwind.ver
 @@ -0,0 +1,17 @@
@@ -1764,7 +1512,7 @@ index 0000000..750b08f
 +  _Unwind_GetBSP
 +}
 diff --git a/gcc/config/ia64/linux.h b/gcc/config/ia64/linux.h
-index 5c73b0c..0e6190d 100644
+index 5c73b0c2..0e6190d5 100644
 --- a/gcc/config/ia64/linux.h
 +++ b/gcc/config/ia64/linux.h
 @@ -5,6 +5,8 @@
@@ -1805,7 +1553,7 @@ index 5c73b0c..0e6190d 100644
        struct sigcontext *sc_ = frame_->sc;				\
 diff --git a/gcc/config/ia64/mkmap-symver-multi.awk b/gcc/config/ia64/mkmap-symver-multi.awk
 new file mode 100644
-index 0000000..5ee18e0
+index 00000000..5ee18e07
 --- /dev/null
 +++ b/gcc/config/ia64/mkmap-symver-multi.awk
 @@ -0,0 +1,133 @@
@@ -1943,7 +1691,7 @@ index 0000000..5ee18e0
 +    printf ("\n  local:\n\t*;\n};\n");
 +}
 diff --git a/gcc/config/ia64/t-glibc b/gcc/config/ia64/t-glibc
-index df4fe9c..b224282 100644
+index df4fe9c4..b224282f 100644
 --- a/gcc/config/ia64/t-glibc
 +++ b/gcc/config/ia64/t-glibc
 @@ -1,3 +1,8 @@
@@ -1957,7 +1705,7 @@ index df4fe9c..b224282 100644
    $(srcdir)/unwind-compat.c
 diff --git a/gcc/config/ia64/t-glibc-no-libunwind b/gcc/config/ia64/t-glibc-no-libunwind
 new file mode 100644
-index 0000000..c965877
+index 00000000..c9658776
 --- /dev/null
 +++ b/gcc/config/ia64/t-glibc-no-libunwind
 @@ -0,0 +1,32 @@
@@ -1994,7 +1742,7 @@ index 0000000..c965877
 +
 +TARGET_LIBGCC2_CFLAGS += -DUSE_SYMVER_GLOBAL
 diff --git a/gcc/config/ia64/unwind-ia64.c b/gcc/config/ia64/unwind-ia64.c
-index a49652e..dd7bd61 100644
+index a49652e9..dd7bd612 100644
 --- a/gcc/config/ia64/unwind-ia64.c
 +++ b/gcc/config/ia64/unwind-ia64.c
 @@ -51,6 +51,51 @@
@@ -2096,14 +1844,14 @@ index a49652e..dd7bd61 100644
  #endif
 diff --git a/gcc/config/ia64/unwind-shared-ia64.c b/gcc/config/ia64/unwind-shared-ia64.c
 new file mode 100644
-index 0000000..b1d9fd1
+index 00000000..b1d9fd15
 --- /dev/null
 +++ b/gcc/config/ia64/unwind-shared-ia64.c
 @@ -0,0 +1,2 @@
 +#define SHARED
 +#include "unwind-ia64.c"
 diff --git a/gcc/config/m68k/m68k.md b/gcc/config/m68k/m68k.md
-index 68ea933..a65618c 100644
+index 68ea9330..a65618c6 100644
 --- a/gcc/config/m68k/m68k.md
 +++ b/gcc/config/m68k/m68k.md
 @@ -1454,11 +1454,20 @@
@@ -2270,7 +2018,7 @@ index 68ea933..a65618c 100644
  {
    if (operands[1] == const1_rtx
 diff --git a/gcc/config/mips/linux.h b/gcc/config/mips/linux.h
-index eee298f..ec48292 100644
+index eee298f8..ec48292b 100644
 --- a/gcc/config/mips/linux.h
 +++ b/gcc/config/mips/linux.h
 @@ -228,7 +228,7 @@ typedef struct _sig_ucontext {
@@ -2283,7 +2031,7 @@ index eee298f..ec48292 100644
          } *rt_ = (CONTEXT)->ra;                                      \
          sc_ = &rt_->uc.uc_mcontext;                                  \
 diff --git a/gcc/config/mips/mips.c b/gcc/config/mips/mips.c
-index 0aa24f6..b907b48 100644
+index 0aa24f6a..b907b483 100644
 --- a/gcc/config/mips/mips.c
 +++ b/gcc/config/mips/mips.c
 @@ -707,6 +707,7 @@ const struct mips_cpu_info mips_cpu_info_table[] = {
@@ -2305,7 +2053,7 @@ index 0aa24f6..b907b48 100644
      case PROCESSOR_R5500:
      case PROCESSOR_R7000:
 diff --git a/gcc/config/mips/mips.h b/gcc/config/mips/mips.h
-index d087ed2..87562cb 100644
+index d087ed25..87562cba 100644
 --- a/gcc/config/mips/mips.h
 +++ b/gcc/config/mips/mips.h
 @@ -66,6 +66,7 @@ enum processor_type {
@@ -2317,7 +2065,7 @@ index d087ed2..87562cb 100644
    PROCESSOR_SR71000
  };
 diff --git a/gcc/config/mips/mips.md b/gcc/config/mips/mips.md
-index 5054542..32b3ba7 100644
+index 50545423..32b3ba75 100644
 --- a/gcc/config/mips/mips.md
 +++ b/gcc/config/mips/mips.md
 @@ -103,6 +103,7 @@
@@ -2746,7 +2494,7 @@ index 5054542..32b3ba7 100644
     (set_attr_alternative "length"
  		[(const_int 4)
 diff --git a/gcc/config/netbsd-elf.h b/gcc/config/netbsd-elf.h
-index a87699c..0cbdb92 100644
+index a87699c3..0cbdb923 100644
 --- a/gcc/config/netbsd-elf.h
 +++ b/gcc/config/netbsd-elf.h
 @@ -83,6 +83,7 @@ Boston, MA 02111-1307, USA.  */
@@ -2758,7 +2506,7 @@ index a87699c..0cbdb92 100644
       -dc -dp \
       %{!nostdlib: \
 diff --git a/gcc/config/openbsd.h b/gcc/config/openbsd.h
-index 670a0a0..0e3b4ec 100644
+index 670a0a08..0e3b4ecc 100644
 --- a/gcc/config/openbsd.h
 +++ b/gcc/config/openbsd.h
 @@ -52,15 +52,14 @@ Boston, MA 02111-1307, USA.  */
@@ -2836,7 +2584,7 @@ index 670a0a0..0e3b4ec 100644
  #ifndef OBSD_HAS_CORRECT_SPECS
  
 diff --git a/gcc/config/rs6000/ppc-asm.h b/gcc/config/rs6000/ppc-asm.h
-index 74e1483..47547f6 100644
+index 74e14836..47547f6a 100644
 --- a/gcc/config/rs6000/ppc-asm.h
 +++ b/gcc/config/rs6000/ppc-asm.h
 @@ -158,7 +158,7 @@ GLUE(.L,name): \
@@ -2849,7 +2597,7 @@ index 74e1483..47547f6 100644
  	.previous
  #endif
 diff --git a/gcc/config/rs6000/rs6000.c b/gcc/config/rs6000/rs6000.c
-index ea35843..6909cef 100644
+index ea358433..6909ceff 100644
 --- a/gcc/config/rs6000/rs6000.c
 +++ b/gcc/config/rs6000/rs6000.c
 @@ -1177,6 +1177,12 @@ rs6000_file_start (void)
@@ -2888,7 +2636,7 @@ index ea35843..6909cef 100644
      private_data_section ();
    text_section ();
 diff --git a/gcc/config/rs6000/t-linux64 b/gcc/config/rs6000/t-linux64
-index 6d1e6f4..84b99a8 100644
+index 6d1e6f46..84b99a83 100644
 --- a/gcc/config/rs6000/t-linux64
 +++ b/gcc/config/rs6000/t-linux64
 @@ -9,13 +9,13 @@ TARGET_LIBGCC2_CFLAGS = -mno-minimal-toc -fPIC -specs=bispecs
@@ -2912,7 +2660,7 @@ index 6d1e6f4..84b99a8 100644
  # We want fine grained libraries, so use the new code to build the
  # floating point emulation libraries.
 diff --git a/gcc/config/sh/lib1funcs.asm b/gcc/config/sh/lib1funcs.asm
-index eebce2e..1d58d09 100644
+index eebce2ec..1d58d099 100644
 --- a/gcc/config/sh/lib1funcs.asm
 +++ b/gcc/config/sh/lib1funcs.asm
 @@ -37,9 +37,19 @@ Boston, MA 02111-1307, USA.  */
@@ -2937,7 +2685,7 @@ index eebce2e..1d58d09 100644
  #define ENDFUNC(X)	ENDFUNC0(X)
  #else
 diff --git a/gcc/config/sh/linux.h b/gcc/config/sh/linux.h
-index b2ad064..94c2293 100644
+index b2ad064f..94c22934 100644
 --- a/gcc/config/sh/linux.h
 +++ b/gcc/config/sh/linux.h
 @@ -145,6 +145,7 @@ do { \
@@ -2968,7 +2716,7 @@ index b2ad064..94c2293 100644
  /* For SH3 and SH4, we use a slot of the unwind frame which correspond
     to a fake register number 16 as a placeholder for the return address
 diff --git a/gcc/config/sh/sh.c b/gcc/config/sh/sh.c
-index 403c274..847309a 100644
+index 403c274a..847309a4 100644
 --- a/gcc/config/sh/sh.c
 +++ b/gcc/config/sh/sh.c
 @@ -8999,6 +8999,9 @@ sh_register_move_cost (enum machine_mode mode,
@@ -3023,7 +2771,7 @@ index 403c274..847309a 100644
    sibcall = emit_call_insn (gen_sibcall (funexp, const0_rtx, NULL_RTX));
    SIBLING_CALL_P (sibcall) = 1;
 diff --git a/gcc/config/sh/sh.h b/gcc/config/sh/sh.h
-index bfba34a..5828974 100644
+index bfba34aa..58289742 100644
 --- a/gcc/config/sh/sh.h
 +++ b/gcc/config/sh/sh.h
 @@ -422,6 +422,10 @@ extern int target_flags;
@@ -3038,7 +2786,7 @@ index bfba34a..5828974 100644
      target_flags |= SPACE_BIT;						\
    if (TARGET_SHMEDIA && LEVEL > 1)					\
 diff --git a/gcc/config/sparc/openbsd.h b/gcc/config/sparc/openbsd.h
-index e36f51e..2c35c95 100644
+index e36f51eb..2c35c957 100644
 --- a/gcc/config/sparc/openbsd.h
 +++ b/gcc/config/sparc/openbsd.h
 @@ -22,10 +22,7 @@ Boston, MA 02111-1307, USA.  */
@@ -3078,7 +2826,7 @@ index e36f51e..2c35c95 100644
  
  /* This is BSD, so it wants DBX format.  */
 diff --git a/gcc/configure.ac b/gcc/configure.ac
-index d9151dd..1526221 100644
+index d9151ddd..15262212 100644
 --- a/gcc/configure.ac
 +++ b/gcc/configure.ac
 @@ -2218,7 +2218,7 @@ foo:	.long	25
@@ -3091,62 +2839,22 @@ index d9151dd..1526221 100644
  	.section ".tdata","awT",@progbits
  foo:	.long	25
 diff --git a/gcc/cp/class.c b/gcc/cp/class.c
-index c14313c..6d01476 100644
+index c14313c8..c9b96dcf 100644
 --- a/gcc/cp/class.c
 +++ b/gcc/cp/class.c
-@@ -6803,14 +6803,8 @@ initialize_vtable (tree binfo, tree inits)
- static void
- initialize_array (tree decl, tree inits)
- {
--  tree context;
--
--  context = DECL_CONTEXT (decl);
--  DECL_CONTEXT (decl) = NULL_TREE;
+@@ -6808,7 +6808,6 @@ initialize_array (tree decl, tree inits)
+   context = DECL_CONTEXT (decl);
+   DECL_CONTEXT (decl) = NULL_TREE;
    DECL_INITIAL (decl) = build_constructor (NULL_TREE, inits);
 -  TREE_HAS_CONSTRUCTOR (DECL_INITIAL (decl)) = 1;
    cp_finish_decl (decl, DECL_INITIAL (decl), NULL_TREE, 0);
--  DECL_CONTEXT (decl) = context;
+   DECL_CONTEXT (decl) = context;
  }
- 
- /* Build the VTT (virtual table table) for T.
 diff --git a/gcc/cp/cp-tree.h b/gcc/cp/cp-tree.h
-index cc1f937..680790a 100644
+index cc1f937e..aa98d86e 100644
 --- a/gcc/cp/cp-tree.h
 +++ b/gcc/cp/cp-tree.h
-@@ -75,6 +75,7 @@ struct diagnostic_context;
-           or FIELD_DECL).
-       NEED_TEMPORARY_P (in REF_BIND, BASE_CONV)
-       IDENTIFIER_TYPENAME_P (in IDENTIFIER_NODE)
-+      DECL_TINFO_P (in VAR_DECL)
-    5: C_IS_RESERVED_WORD (in IDENTIFIER_NODE)
-       DECL_VTABLE_OR_VTT_P (in VAR_DECL)
-    6: For future expansion
-@@ -1008,7 +1009,12 @@ enum languages { lang_c, lang_cplusplus, lang_java };
- #define PUBLICLY_UNIQUELY_DERIVED_P(PARENT, TYPE) \
-   (lookup_base ((TYPE), (PARENT),  ba_not_special | ba_quiet, NULL) \
-    != NULL_TREE)
--
-+
-+/* Gives the visibility specification for a class type.  */
-+#define CLASSTYPE_VISIBILITY(TYPE)		DECL_VISIBILITY (TYPE_NAME (TYPE))
-+#define CLASSTYPE_VISIBILITY_SPECIFIED(TYPE)	DECL_VISIBILITY_SPECIFIED (TYPE_NAME (TYPE))
-+
-+
- /* This is a few header flags for 'struct lang_type'.  Actually,
-    all but the first are used only for lang_type_class; they
-    are put in this structure to save space.  */
-@@ -2064,6 +2070,10 @@ struct lang_decl GTY(())
-   (DECL_CONTEXT (NODE) \
-    && TREE_CODE (DECL_CONTEXT (NODE)) == FUNCTION_DECL)
- 
-+/* 1 iff VAR_DECL node NODE is a type-info decl.  This flag is set for
-+   both the primary typeinfo object and the associated NTBS name.  */
-+#define DECL_TINFO_P(NODE) TREE_LANG_FLAG_4 (VAR_DECL_CHECK (NODE))
-+
- /* 1 iff VAR_DECL node NODE is virtual table or VTT.  */
- #define DECL_VTABLE_OR_VTT_P(NODE) TREE_LANG_FLAG_5 (VAR_DECL_CHECK (NODE))
- 
-@@ -2440,13 +2450,17 @@ struct lang_decl GTY(())
+@@ -2440,13 +2440,17 @@ struct lang_decl GTY(())
     When appearing in a SAVE_EXPR, it means that underneath
     is a call to a constructor.
  
@@ -3166,108 +2874,11 @@ index cc1f937..680790a 100644
  #define EMPTY_CONSTRUCTOR_P(NODE) (TREE_CODE (NODE) == CONSTRUCTOR	   \
  				   && CONSTRUCTOR_ELTS (NODE) == NULL_TREE \
  				   && ! TREE_HAS_CONSTRUCTOR (NODE))
-@@ -3669,7 +3683,7 @@ extern int init_type_desc			(void);
- extern tree check_tag_decl			(tree);
- extern tree shadow_tag				(tree);
- extern tree groktypename			(tree);
--extern tree start_decl				(tree, tree, int, tree, tree);
-+extern tree start_decl				(tree, tree, int, tree, tree, bool *);
- extern void start_decl_1			(tree);
- extern void cp_finish_decl			(tree, tree, tree, int);
- extern void finish_decl				(tree, tree, tree);
-@@ -3754,6 +3768,7 @@ extern tree finish_table (tree, tree, tree, int);
- extern tree coerce_new_type (tree);
- extern tree coerce_delete_type (tree);
- extern void comdat_linkage (tree);
-+extern void determine_visibility (tree);
- extern void import_export_vtable (tree, tree, int);
- extern void import_export_decl (tree);
- extern void import_export_tinfo	(tree, tree, bool);
 diff --git a/gcc/cp/decl.c b/gcc/cp/decl.c
-index 451993e..20f1fc6 100644
+index 451993eb..e52c81ac 100644
 --- a/gcc/cp/decl.c
 +++ b/gcc/cp/decl.c
-@@ -1886,17 +1886,20 @@ duplicate_decls (tree newdecl, tree olddecl)
-   DECL_COMMON (newdecl) = DECL_COMMON (olddecl);
-   COPY_DECL_ASSEMBLER_NAME (olddecl, newdecl);
- 
--  /* If either declaration has a nondefault visibility, use it.  */
--  if (DECL_VISIBILITY (olddecl) != VISIBILITY_DEFAULT)
-+  /* Warn about conflicting visibility specifications.  */
-+  if (DECL_VISIBILITY_SPECIFIED (olddecl) 
-+      && DECL_VISIBILITY_SPECIFIED (newdecl)
-+      && DECL_VISIBILITY (newdecl) != DECL_VISIBILITY (olddecl))
-+    {
-+      warning ("%J'%D': visibility attribute ignored because it",
-+	       newdecl, newdecl);
-+      warning ("%Jconflicts with previous declaration here", olddecl);
-+    }
-+  /* Choose the declaration which specified visibility.  */
-+  if (DECL_VISIBILITY_SPECIFIED (olddecl))
-     {
--      if (DECL_VISIBILITY (newdecl) != VISIBILITY_DEFAULT
--	  && DECL_VISIBILITY (newdecl) != DECL_VISIBILITY (olddecl))
--	{
--	  warning ("%J'%D': visibility attribute ignored because it",
--		   newdecl, newdecl);
--	  warning ("%Jconflicts with previous declaration here", olddecl);
--	}
-       DECL_VISIBILITY (newdecl) = DECL_VISIBILITY (olddecl);
-+      DECL_VISIBILITY_SPECIFIED (newdecl) = 1;
-     }
- 
-   if (TREE_CODE (newdecl) == FUNCTION_DECL)
-@@ -3309,6 +3312,10 @@ build_library_fn_1 (tree name, enum tree_code operator_code, tree type)
-   TREE_NOTHROW (fn) = 1;
-   SET_OVERLOADED_OPERATOR_CODE (fn, operator_code);
-   SET_DECL_LANGUAGE (fn, lang_c);
-+  /* Runtime library routines are, by definition, available in an
-+     external shared object.  */
-+  DECL_VISIBILITY (fn) = VISIBILITY_DEFAULT;
-+  DECL_VISIBILITY_SPECIFIED (fn) = 1;
-   return fn;
- }
- 
-@@ -3672,7 +3679,8 @@ start_decl (tree declarator,
-             tree declspecs, 
-             int initialized, 
-             tree attributes, 
--            tree prefix_attributes)
-+            tree prefix_attributes,
-+            bool *pop_scope_p)
- {
-   tree decl;
-   tree type, tem;
-@@ -3708,14 +3716,11 @@ start_decl (tree declarator,
- 
-   context = DECL_CONTEXT (decl);
- 
--  if (initialized && context && TREE_CODE (context) == NAMESPACE_DECL
--      && context != current_namespace && TREE_CODE (decl) == VAR_DECL)
--    {
--      /* When parsing the initializer, lookup should use the object's
--	 namespace.  */
--      push_decl_namespace (context);
--    }
--
-+  if (context)
-+    *pop_scope_p = push_scope (context);
-+  else
-+    *pop_scope_p = false;
-+  
-   /* We are only interested in class contexts, later.  */
-   if (context && TREE_CODE (context) == NAMESPACE_DECL)
-     context = NULL_TREE;
-@@ -3771,8 +3776,6 @@ start_decl (tree declarator,
- 
-   if (context && COMPLETE_TYPE_P (complete_type (context)))
-     {
--      push_nested_class (context);
--
-       if (TREE_CODE (decl) == VAR_DECL)
- 	{
- 	  tree field = lookup_field (context, DECL_NAME (decl), 0, false);
-@@ -4283,8 +4286,7 @@ reshape_init (tree type, tree *initp)
+@@ -4283,8 +4283,7 @@ reshape_init (tree type, tree *initp)
       enclosed elements.  Advance past the brace-enclosed initializer
       now.  */
    if (TREE_CODE (old_init_value) == CONSTRUCTOR
@@ -3277,7 +2888,7 @@ index 451993e..20f1fc6 100644
      {
        *initp = TREE_CHAIN (old_init);
        TREE_CHAIN (old_init) = NULL_TREE;
-@@ -4356,8 +4358,7 @@ reshape_init (tree type, tree *initp)
+@@ -4356,8 +4355,7 @@ reshape_init (tree type, tree *initp)
    else
      {
        /* Build a CONSTRUCTOR to hold the contents of the aggregate.  */  
@@ -3287,7 +2898,7 @@ index 451993e..20f1fc6 100644
  
        if (CLASS_TYPE_P (type))
  	{
-@@ -4417,7 +4418,8 @@ reshape_init (tree type, tree *initp)
+@@ -4417,7 +4415,8 @@ reshape_init (tree type, tree *initp)
  		}
  	    }
  	}
@@ -3297,7 +2908,7 @@ index 451993e..20f1fc6 100644
  	{
  	  tree max_index;
  
-@@ -4515,7 +4517,8 @@ check_initializer (tree decl, tree init, int flags, tree *cleanup)
+@@ -4515,7 +4514,8 @@ check_initializer (tree decl, tree init, int flags, tree *cleanup)
      init = grok_reference_init (decl, type, init, cleanup);
    else if (init)
      {
@@ -3307,7 +2918,7 @@ index 451993e..20f1fc6 100644
  	{
  	  /* [dcl.init] paragraph 13,
  	     If T is a scalar type, then a declaration of the form
-@@ -4540,15 +4543,13 @@ check_initializer (tree decl, tree init, int flags, tree *cleanup)
+@@ -4540,15 +4540,13 @@ check_initializer (tree decl, tree init, int flags, tree *cleanup)
  	 array size from the initializer.  */
        maybe_deduce_size_from_array_init (decl, init);
        type = TREE_TYPE (decl);
@@ -3324,154 +2935,8 @@ index 451993e..20f1fc6 100644
  	    {
  	      if (TYPE_NON_AGGREGATE_CLASS (type))
  		{
-@@ -4808,20 +4809,10 @@ cp_finish_decl (tree decl, tree init, tree asmspec_tree, int flags)
-       && (DECL_INITIAL (decl) || init))
-     DECL_INITIALIZED_IN_CLASS_P (decl) = 1;
- 
--  if (TREE_CODE (decl) == VAR_DECL
--      && DECL_CONTEXT (decl)
--      && TREE_CODE (DECL_CONTEXT (decl)) == NAMESPACE_DECL
--      && DECL_CONTEXT (decl) != current_namespace
--      && init)
--    {
--      /* Leave the namespace of the object.  */
--      pop_decl_namespace ();
--    }
--
-   type = TREE_TYPE (decl);
- 
-   if (type == error_mark_node)
--    goto finish_end0;
-+    goto finish_end;
- 
-   if (TYPE_HAS_MUTABLE_P (type))
-     TREE_READONLY (decl) = 0;
-@@ -4838,7 +4829,7 @@ cp_finish_decl (tree decl, tree init, tree asmspec_tree, int flags)
- 	  && !DECL_PRETTY_FUNCTION_P (decl)
- 	  && !dependent_type_p (TREE_TYPE (decl)))
- 	maybe_deduce_size_from_array_init (decl, init);
--      goto finish_end0;
-+      goto finish_end;
-     }
- 
-   /* Parameters are handled by store_parm_decls, not cp_finish_decl.  */
-@@ -4941,6 +4932,9 @@ cp_finish_decl (tree decl, tree init, tree asmspec_tree, int flags)
- 	     the class specifier.  */
- 	  if (!DECL_EXTERNAL (decl))
- 	    var_definition_p = true;
-+	  /* The variable is being defined, so determine its
-+	     visibility.  */
-+	  determine_visibility (decl);
- 	}
-       /* If the variable has an array type, lay out the type, even if
- 	 there is no initializer.  It is valid to index through the
-@@ -5026,26 +5020,6 @@ cp_finish_decl (tree decl, tree init, tree asmspec_tree, int flags)
- 	  if (var_definition_p && TREE_STATIC (decl))
- 	    expand_static_init (decl, init); 
- 	}
--    finish_end0:
--
--      /* Undo call to `pushclass' that was done in `start_decl'
--	 due to initialization of qualified member variable.
--	 I.e., Foo::x = 10;  */
--      {
--	tree context = CP_DECL_CONTEXT (decl);
--	if (context
--	    && TYPE_P (context)
--	    && (TREE_CODE (decl) == VAR_DECL
--		/* We also have a pushclass done that we need to undo here
--		   if we're at top level and declare a method.  */
--		|| TREE_CODE (decl) == FUNCTION_DECL)
--	    /* If size hasn't been set, we're still defining it,
--	       and therefore inside the class body; don't pop
--	       the binding level..  */
--	    && COMPLETE_TYPE_P (context)
--	    && context == current_class_type)
--	  pop_nested_class ();
--      }
-     }
- 
-   /* If a CLEANUP_STMT was created to destroy a temporary bound to a
-@@ -10260,6 +10234,9 @@ start_function (tree declspecs, tree declarator, tree attrs, int flags)
-       && lookup_attribute ("noinline", attrs))
-     warning ("%Jinline function '%D' given attribute noinline", decl1, decl1);
- 
-+  /* Determine the ELF visibility attribute for the function.  */
-+  determine_visibility (decl1);
-+
-   if (DECL_MAYBE_IN_CHARGE_CONSTRUCTOR_P (decl1))
-     /* This is a constructor, we must ensure that any default args
-        introduced by this definition are propagated to the clones
-diff --git a/gcc/cp/decl2.c b/gcc/cp/decl2.c
-index abd86f7..9caecdd 100644
---- a/gcc/cp/decl2.c
-+++ b/gcc/cp/decl2.c
-@@ -1656,6 +1656,63 @@ maybe_emit_vtables (tree ctype)
-   return true;
- }
- 
-+/* Determine the ELF symbol visibility for DECL.  */
-+
-+void
-+determine_visibility (tree decl)
-+{
-+  tree class_type;
-+
-+  /* Cloned constructors and destructors get the same visibility as
-+     the underlying function.  That should be set up in
-+     maybe_clone_body.  */
-+  if (DECL_CLONED_FUNCTION_P (decl))
-+    return;
-+
-+  if (DECL_CLASS_SCOPE_P (decl))
-+    class_type = DECL_CONTEXT (decl);
-+  else if (TREE_CODE (decl) == VAR_DECL
-+	   && DECL_TINFO_P (decl)
-+	   && CLASS_TYPE_P (TREE_TYPE (DECL_NAME (decl))))
-+    class_type = TREE_TYPE (DECL_NAME (decl));
-+  else
-+    {
-+      /* Virtual tables have DECL_CONTEXT set to their associated class,
-+	 so they are automatically handled above.  */
-+      my_friendly_assert (!(TREE_CODE (decl) == VAR_DECL
-+			    && DECL_VTABLE_OR_VTT_P (decl)), 20040803);
-+      /* Entities not associated with any class just get the
-+	 visibility specified by their attributes.  */
-+      return;
-+    }
-+
-+  /* By default, static data members and function members receive
-+     the visibility of their containing class.  */
-+  if (class_type
-+      && (TREE_CODE (decl) == VAR_DECL 
-+	  || TREE_CODE (decl) == FUNCTION_DECL)
-+      && !lookup_attribute ("visibility", DECL_ATTRIBUTES (decl)))
-+    {
-+      if (TREE_CODE (decl) == FUNCTION_DECL
-+	  && DECL_DECLARED_INLINE_P (decl)
-+	  && visibility_options.inlines_hidden)
-+	{
-+	  /* Don't change it if it has been set explicitly by user.  */
-+	  if (!DECL_VISIBILITY_SPECIFIED (decl))
-+	    {
-+	      DECL_VISIBILITY (decl) = VISIBILITY_HIDDEN;
-+	      DECL_VISIBILITY_SPECIFIED (decl) = 1;
-+	    }
-+	}
-+      else
-+	{
-+	  DECL_VISIBILITY (decl) = CLASSTYPE_VISIBILITY (class_type);
-+	  DECL_VISIBILITY_SPECIFIED (decl)
-+	    = CLASSTYPE_VISIBILITY_SPECIFIED (class_type);
-+	}
-+    }
-+}
-+
- /* Determines the proper settings of TREE_PUBLIC and DECL_EXTERNAL for an
-    inline function or template instantiation at end-of-file.  */
- 
 diff --git a/gcc/cp/init.c b/gcc/cp/init.c
-index 4e3cd4b..618d618 100644
+index 4e3cd4be..618d6184 100644
 --- a/gcc/cp/init.c
 +++ b/gcc/cp/init.c
 @@ -341,8 +341,7 @@ perform_member_init (tree member, tree init)
@@ -3539,130 +3004,11 @@ index 4e3cd4b..618d618 100644
  	{
  	  /* A brace-enclosed initializer for an aggregate.  */
  	  my_friendly_assert (CP_AGGREGATE_TYPE_P (type), 20021016);
-diff --git a/gcc/cp/method.c b/gcc/cp/method.c
-index 9f3e72e..174b731 100644
---- a/gcc/cp/method.c
-+++ b/gcc/cp/method.c
-@@ -398,6 +398,8 @@ use_thunk (tree thunk_fndecl, bool emit_p)
-      rewrite.  */
-   TREE_PUBLIC (thunk_fndecl) = TREE_PUBLIC (function);
-   DECL_VISIBILITY (thunk_fndecl) = DECL_VISIBILITY (function);
-+  DECL_VISIBILITY_SPECIFIED (thunk_fndecl)
-+    = DECL_VISIBILITY_SPECIFIED (function);
- 
-   if (flag_syntax_only)
-     {
-diff --git a/gcc/cp/optimize.c b/gcc/cp/optimize.c
-index 5ada131..387fcb4 100644
---- a/gcc/cp/optimize.c
-+++ b/gcc/cp/optimize.c
-@@ -155,6 +155,7 @@ maybe_clone_body (tree fn)
-       DECL_NOT_REALLY_EXTERN (clone) = DECL_NOT_REALLY_EXTERN (fn);
-       TREE_PUBLIC (clone) = TREE_PUBLIC (fn);
-       DECL_VISIBILITY (clone) = DECL_VISIBILITY (fn);
-+      DECL_VISIBILITY_SPECIFIED (clone) = DECL_VISIBILITY_SPECIFIED (fn);
- 
-       /* Adjust the parameter names and locations.  */
-       parm = DECL_ARGUMENTS (fn);
 diff --git a/gcc/cp/parser.c b/gcc/cp/parser.c
-index 032cbd7..0eb4bf7 100644
+index 032cbd7e..98bef32d 100644
 --- a/gcc/cp/parser.c
 +++ b/gcc/cp/parser.c
-@@ -5855,10 +5855,13 @@ cp_parser_condition (cp_parser* parser)
- 	 for sure.  */
-       if (cp_parser_parse_definitely (parser))
- 	{
-+	  bool pop_p;
-+
- 	  /* Create the declaration.  */
- 	  decl = start_decl (declarator, type_specifiers, 
- 			     /*initialized_p=*/true,
--			     attributes, /*prefix_attributes=*/NULL_TREE);
-+			     attributes, /*prefix_attributes=*/NULL_TREE,
-+			     &pop_p);
- 	  /* Parse the assignment-expression.  */
- 	  initializer = cp_parser_assignment_expression (parser);
- 	  
-@@ -5867,7 +5870,9 @@ cp_parser_condition (cp_parser* parser)
- 			  initializer, 
- 			  asm_specification, 
- 			  LOOKUP_ONLYCONVERTING);
--	  
-+	  if (pop_p)
-+	    pop_scope (DECL_CONTEXT (decl));
-+
- 	  return convert_from_reference (decl);
- 	}
-     }
-@@ -10105,12 +10110,12 @@ cp_parser_init_declarator (cp_parser* parser,
- 	  have_extern_spec = false;
- 	}
-       decl = start_decl (declarator, decl_specifiers,
--			 is_initialized, attributes, prefix_attributes);
-+			 is_initialized, attributes, prefix_attributes,
-+			 &pop_p);
-     }
--
--  /* Enter the SCOPE.  That way unqualified names appearing in the
--     initializer will be looked up in SCOPE.  */
--  if (scope)
-+  else if (scope)
-+    /* Enter the SCOPE.  That way unqualified names appearing in the
-+       initializer will be looked up in SCOPE.  */
-     pop_p = push_scope (scope);
- 
-   /* Perform deferred access control checks, now that we know in which
-@@ -10157,17 +10162,13 @@ cp_parser_init_declarator (cp_parser* parser,
-     if (cp_parser_attributes_opt (parser))
-       warning ("attributes after parenthesized initializer ignored");
- 
--  /* Leave the SCOPE, now that we have processed the initializer.  It
--     is important to do this before calling cp_finish_decl because it
--     makes decisions about whether to create DECL_STMTs or not based
--     on the current scope.  */
--  if (pop_p)
--    pop_scope (scope);
--
-   /* For an in-class declaration, use `grokfield' to create the
-      declaration.  */
-   if (member_p)
-     {
-+      if (pop_p)
-+	pop_scope (scope);
-+
-       decl = grokfield (declarator, decl_specifiers,
- 			initializer, /*asmspec=*/NULL_TREE,
- 			/*attributes=*/NULL_TREE);
-@@ -10178,15 +10179,19 @@ cp_parser_init_declarator (cp_parser* parser,
-   /* Finish processing the declaration.  But, skip friend
-      declarations.  */
-   if (!friend_p && decl)
--    cp_finish_decl (decl, 
--		    initializer, 
--		    asm_specification,
--		    /* If the initializer is in parentheses, then this is
--		       a direct-initialization, which means that an
--		       `explicit' constructor is OK.  Otherwise, an
--		       `explicit' constructor cannot be used.  */
--		    ((is_parenthesized_init || !is_initialized)
--		     ? 0 : LOOKUP_ONLYCONVERTING));
-+    {
-+      cp_finish_decl (decl, 
-+		      initializer, 
-+		      asm_specification,
-+		      /* If the initializer is in parentheses, then this is
-+			 a direct-initialization, which means that an
-+			 `explicit' constructor is OK.  Otherwise, an
-+			 `explicit' constructor cannot be used.  */
-+		      ((is_parenthesized_init || !is_initialized)
-+		       ? 0 : LOOKUP_ONLYCONVERTING));
-+      if (pop_p)
-+	pop_scope (DECL_CONTEXT (decl));
-+    }
- 
-   /* Remember whether or not variables were initialized by
-      constant-expressions.  */
-@@ -11610,10 +11615,6 @@ cp_parser_initializer_clause (cp_parser* parser, bool* non_constant_p)
+@@ -11610,10 +11610,6 @@ cp_parser_initializer_clause (cp_parser* parser, bool* non_constant_p)
        cp_lexer_consume_token (parser->lexer);
        /* Create a CONSTRUCTOR to represent the braced-initializer.  */
        initializer = make_node (CONSTRUCTOR);
@@ -3673,85 +3019,10 @@ index 032cbd7..0eb4bf7 100644
        /* If it's not a `}', then there is a non-trivial initializer.  */
        if (cp_lexer_next_token_is_not (parser->lexer, CPP_CLOSE_BRACE))
  	{
-diff --git a/gcc/cp/pt.c b/gcc/cp/pt.c
-index 0ae2d23..fe56691 100644
---- a/gcc/cp/pt.c
-+++ b/gcc/cp/pt.c
-@@ -11297,20 +11297,13 @@ instantiate_decl (tree d, int defer_ok)
- 	}
-       else
- 	{
--	  /* This is done in analogous to `start_decl'.  It is
--	     required for correct access checking.  */
-+	  /* Enter the scope of D so that access-checking works correctly.  */
- 	  push_nested_class (DECL_CONTEXT (d));
- 	  cp_finish_decl (d, 
- 			  (!DECL_INITIALIZED_IN_CLASS_P (d) 
- 			   ? DECL_INITIAL (d) : NULL_TREE),
- 			  NULL_TREE, 0);
--	  /* Normally, pop_nested_class is called by cp_finish_decl
--	     above.  But when instantiate_decl is triggered during
--	     instantiate_class_template processing, its DECL_CONTEXT
--	     is still not completed yet, and pop_nested_class isn't
--	     called.  */
--	  if (!COMPLETE_TYPE_P (DECL_CONTEXT (d)))
--	    pop_nested_class ();
-+	  pop_nested_class ();
- 	}
-       /* We're not deferring instantiation any more.  */
-       TI_PENDING_TEMPLATE_FLAG (DECL_TEMPLATE_INFO (d)) = 0;
 diff --git a/gcc/cp/rtti.c b/gcc/cp/rtti.c
-index e9c0616..1f903f5 100644
+index e9c06160..337c6be9 100644
 --- a/gcc/cp/rtti.c
 +++ b/gcc/cp/rtti.c
-@@ -354,17 +354,16 @@ get_tinfo_decl (tree type)
-       TREE_READONLY (d) = 1;
-       TREE_STATIC (d) = 1;
-       DECL_EXTERNAL (d) = 1;
-+      DECL_TINFO_P (d) = 1;
-       DECL_COMDAT (d) = 1;
-       TREE_PUBLIC (d) = 1;
-       SET_DECL_ASSEMBLER_NAME (d, name);
--
--      pushdecl_top_level_and_finish (d, NULL_TREE);
--
-+      /* Remember the type it is for.  */
-+      TREE_TYPE (name) = type;
-       if (CLASS_TYPE_P (type))
- 	CLASSTYPE_TYPEINFO_VAR (TYPE_MAIN_VARIANT (type)) = d;
- 
--      /* Remember the type it is for.  */
--      TREE_TYPE (name) = type;
-+      pushdecl_top_level_and_finish (d, NULL_TREE);
- 
-       /* Add decl to the global array of tinfo decls.  */
-       my_friendly_assert (unemitted_tinfo_decls != 0, 20030312);
-@@ -751,19 +750,20 @@ tinfo_base_init (tree desc, tree target)
-                      NULL_TREE);
-     tree name_string = tinfo_name (target);
- 
-+    /* Determine the name of the variable -- and remember with which
-+       type it is associated.  */
-     name_name = mangle_typeinfo_string_for_type (target);
-+    TREE_TYPE (name_name) = target;
-+
-     name_decl = build_lang_decl (VAR_DECL, name_name, name_type);
--    
-+    SET_DECL_ASSEMBLER_NAME (name_decl, name_name);
-     DECL_ARTIFICIAL (name_decl) = 1;
-     TREE_READONLY (name_decl) = 1;
-     TREE_STATIC (name_decl) = 1;
-     DECL_EXTERNAL (name_decl) = 0;
-+    DECL_TINFO_P (name_decl) = 1;
-     TREE_PUBLIC (name_decl) = 1;
-     import_export_tinfo (name_decl, target, typeinfo_in_lib_p (target));
--    /* External name of the string containing the type's name has a
--       special name.  */
--    SET_DECL_ASSEMBLER_NAME (name_decl,
--			     mangle_typeinfo_string_for_type (target));
-     DECL_INITIAL (name_decl) = name_string;
-     mark_used (name_decl);
-     pushdecl_top_level_and_finish (name_decl, name_string);
 @@ -807,7 +807,7 @@ tinfo_base_init (tree desc, tree target)
    init = tree_cons (NULL_TREE, decay_conversion (name_decl), init);
    
@@ -3810,7 +3081,7 @@ index e9c0616..1f903f5 100644
  	  /* Prepend the number of bases.  */
  	  base_inits = tree_cons (NULL_TREE,
 diff --git a/gcc/cp/typeck.c b/gcc/cp/typeck.c
-index b13fb85..f93322a 100644
+index b13fb857..f93322a3 100644
 --- a/gcc/cp/typeck.c
 +++ b/gcc/cp/typeck.c
 @@ -1948,12 +1948,6 @@ finish_class_member_access_expr (tree object, tree name)
@@ -3838,7 +3109,7 @@ index b13fb85..f93322a 100644
  	  access_path = lookup_base (object_type, scope, ba_check, NULL);
  	  if (access_path == error_mark_node)
 diff --git a/gcc/cp/typeck2.c b/gcc/cp/typeck2.c
-index 780c3e7..e305782 100644
+index 780c3e7a..e305782b 100644
 --- a/gcc/cp/typeck2.c
 +++ b/gcc/cp/typeck2.c
 @@ -479,8 +479,6 @@ digest_init (tree type, tree init, tree* tail)
@@ -3923,7 +3194,7 @@ index 780c3e7..e305782 100644
  
  	      if (! zero_init_p (TREE_TYPE (field)))
 diff --git a/gcc/diagnostic.c b/gcc/diagnostic.c
-index c29867a..ac553e3 100644
+index c29867a6..ac553e39 100644
 --- a/gcc/diagnostic.c
 +++ b/gcc/diagnostic.c
 @@ -272,14 +272,14 @@ diagnostic_action_after_output (diagnostic_context *context,
@@ -3952,108 +3223,8 @@ index c29867a..ac553e3 100644
  }
  
  /* Report an internal compiler error in a friendly manner.  This is
-diff --git a/gcc/doc/invoke.texi b/gcc/doc/invoke.texi
-index e683d0c..fb9273f 100644
---- a/gcc/doc/invoke.texi
-+++ b/gcc/doc/invoke.texi
-@@ -183,7 +183,8 @@ in the following sections.
- -fno-optional-diags  -fpermissive @gol
- -frepo  -fno-rtti  -fstats  -ftemplate-depth-@var{n} @gol
- -fuse-cxa-atexit  -fno-weak  -nostdinc++ @gol
---fno-default-inline  -Wabi  -Wctor-dtor-privacy @gol
-+-fno-default-inline  -fvisibility-inlines-hidden @gol
-+-Wabi  -Wctor-dtor-privacy @gol
- -Wnon-virtual-dtor  -Wreorder @gol
- -Weffc++  -Wno-deprecated @gol
- -Wno-non-template-friend  -Wold-style-cast @gol
-@@ -678,7 +679,8 @@ in the following sections.
- -fargument-alias  -fargument-noalias @gol
- -fargument-noalias-global  -fleading-underscore @gol
- -ftls-model=@var{model} @gol
---ftrapv  -fwrapv  -fbounds-check}
-+-ftrapv  -fwrapv  -fbounds-check @gol
-+-fvisibility}
- @end table
- 
- @menu
-@@ -1437,6 +1439,20 @@ This option is required for fully standards-compliant handling of static
- destructors, but will only work if your C library supports
- @code{__cxa_atexit}.
- 
-+@item -fvisibility-inlines-hidden
-+@opindex fvisibility-inlines-hidden
-+Causes all inlined methods to be marked with
-+@code{__attribute__ ((visibility ("hidden")))} so that they do not
-+appear in the export table of a DSO and do not require a PLT indirection
-+when used within the DSO. Enabling this option can have a dramatic effect
-+on load and link times of a DSO as it massively reduces the size of the
-+dynamic export table when the library makes heavy use of templates. While
-+it can cause bloating through duplication of code within each DSO where
-+it is used, often the wastage is less than the considerable space occupied
-+by a long symbol name in the export table which is typical when using
-+templates and namespaces. For even more savings, combine with the
-+@code{-fvisibility=hidden} switch.
-+
- @item -fno-weak
- @opindex fno-weak
- Do not use weak symbol support, even if it is provided by the linker.
-@@ -11273,6 +11289,54 @@ The @var{model} argument should be one of @code{global-dynamic},
- 
- The default without @option{-fpic} is @code{initial-exec}; with
- @option{-fpic} the default is @code{global-dynamic}.
-+
-+@item -fvisibility=@var{default|internal|hidden|protected}
-+@opindex fvisibility
-+Set the default ELF image symbol visibility to the specified option - all
-+symbols will be marked with this unless overrided within the code.
-+Using this feature can very substantially improve linking and
-+load times of shared object libraries, produce more optimised
-+code, provide near-perfect API export and prevent symbol clashes.
-+It is @strong{strongly} recommended that you use this in any shared objects
-+you distribute.
-+     
-+Despite the nomenclature, @code{default} always means public ie;
-+available to be linked against from outside the shared object.
-+@code{protected} and @code{internal} are pretty useless in real-world
-+usage so the only other commonly used option will be @code{hidden}.
-+The default if -fvisibility isn't specified is @code{default} ie; make every
-+symbol public - this causes the same behaviour as previous versions of
-+GCC.
-+     
-+A good explanation of the benefits offered by ensuring ELF
-+symbols have the correct visibility is given by ``How To Write
-+Shared Libraries'' by Ulrich Drepper (which can be found at
-+@w{@uref{http://people.redhat.com/~drepper/}}) - however a superior
-+solution made possible by this option to marking things hidden when
-+the default is public is to make the default hidden and mark things
-+public. This is the norm with DLL's on Windows and with @option{-fvisibility=hidden}
-+and @code{__attribute__ ((visibility("default")))} instead of
-+@code{__declspec(dllexport)} you get almost identical semantics with
-+identical syntax. This is a great boon to those working with
-+cross-platform projects.
-+
-+For those adding visibility support to existing code, you may find
-+@samp{#pragma GCC visibility} of use. This works by you enclosing
-+the declarations you wish to set visibility for with (for example)
-+@samp{#pragma GCC visibility push(hidden)} and
-+@samp{#pragma GCC visibility pop}. These can be nested up to sixteen
-+times. Bear in mind that symbol visibility should be viewed @strong{as
-+part of the API interface contract} and thus all new code should
-+always specify visibility when it is not the default ie; declarations
-+only for use within the local DSO should @strong{always} be marked explicitly
-+as hidden as so to avoid PLT indirection overheads - making this
-+abundantly clear also aids readability and self-documentation of the code.
-+Note that due to ISO C++ specification requirements, operator new and
-+operator delete must always be of default visibility.
-+
-+An overview of these techniques, their benefits and how to use them
-+is at @w{@uref{http://www.nedprod.com/programs/gccvisibility.html}}.
-+
- @end table
- 
- @c man end
 diff --git a/gcc/final.c b/gcc/final.c
-index dd5b64e..3ab428b 100644
+index dd5b64ec..3ab428b2 100644
 --- a/gcc/final.c
 +++ b/gcc/final.c
 @@ -1881,7 +1881,7 @@ final_scan_insn (rtx insn, FILE *file, int optimize ATTRIBUTE_UNUSED,
@@ -4065,43 +3236,8 @@ index dd5b64e..3ab428b 100644
  
  #ifdef ADDR_VEC_ALIGN
  		  log_align = ADDR_VEC_ALIGN (NEXT_INSN (insn));
-diff --git a/gcc/flags.h b/gcc/flags.h
-index e947f2a..eed69a4 100644
---- a/gcc/flags.h
-+++ b/gcc/flags.h
-@@ -60,6 +60,30 @@ extern bool use_gnu_debug_info_extensions;
- /* Nonzero means emit debugging information only for symbols which are used.  */
- extern int flag_debug_only_used_symbols;
- 
-+/* Enumerate visibility settings.  */
-+#ifndef SYMBOL_VISIBILITY_DEFINED
-+#define SYMBOL_VISIBILITY_DEFINED
-+enum symbol_visibility
-+{
-+  VISIBILITY_DEFAULT,
-+  VISIBILITY_INTERNAL,
-+  VISIBILITY_HIDDEN,
-+  VISIBILITY_PROTECTED
-+};
-+#endif
-+
-+/* The default visibility for all symbols (unless overridden).  */
-+extern enum symbol_visibility default_visibility;
-+
-+struct visibility_flags
-+{
-+  unsigned inpragma : 1;	/* True when in #pragma GCC visibility.  */
-+  unsigned inlines_hidden : 1;	/* True when -finlineshidden in effect.  */
-+};
-+
-+/* Global visibility options.  */
-+extern struct visibility_flags visibility_options;
-+
- /* Nonzero means do optimizations.  -opt.  */
- 
- extern int optimize;
 diff --git a/gcc/flow.c b/gcc/flow.c
-index 9f1e1b7..a1b445e 100644
+index 9f1e1b79..a1b445e9 100644
 --- a/gcc/flow.c
 +++ b/gcc/flow.c
 @@ -1884,6 +1884,7 @@ init_propagate_block_info (basic_block bb, regset live, regset local_set,
@@ -4129,7 +3265,7 @@ index 9f1e1b7..a1b445e 100644
  				  XEXP (cond_true, 1));
  	      if (GET_CODE (XEXP (set_src, 1)) == PC)
 diff --git a/gcc/gcc.c b/gcc/gcc.c
-index ee380ed..997c37c 100644
+index ee380ed9..997c37c3 100644
 --- a/gcc/gcc.c
 +++ b/gcc/gcc.c
 @@ -354,6 +354,9 @@ static void init_gcc_specs (struct obstack *, const char *, const char *,
@@ -4407,7 +3543,7 @@ index ee380ed..997c37c 100644
     user's -B prefix and some standard ones.
     Return the absolute file name found.  If nothing is found, return NAME.  */
 diff --git a/gcc/genpeep.c b/gcc/genpeep.c
-index 4c6e64b..0bce155 100644
+index 4c6e64b7..0bce1558 100644
 --- a/gcc/genpeep.c
 +++ b/gcc/genpeep.c
 @@ -381,6 +381,7 @@ from the machine description file `md'.  */\n\n");
@@ -4419,7 +3555,7 @@ index 4c6e64b..0bce155 100644
    printf ("#ifdef HAVE_peephole\n");
    printf ("extern rtx peep_operand[];\n\n");
 diff --git a/gcc/java/keyword.gperf b/gcc/java/keyword.gperf
-index 4127588..1316243 100644
+index 4127588f..13162435 100644
 --- a/gcc/java/keyword.gperf
 +++ b/gcc/java/keyword.gperf
 @@ -34,7 +34,7 @@ static unsigned int hash (const char *, unsigned int);
@@ -4432,7 +3568,7 @@ index 4127588..1316243 100644
  abstract, ABSTRACT_TK
  default, DEFAULT_TK
 diff --git a/gcc/java/keyword.h b/gcc/java/keyword.h
-index 49eda19..6236605 100644
+index 49eda19f..6236605e 100644
 --- a/gcc/java/keyword.h
 +++ b/gcc/java/keyword.h
 @@ -34,7 +34,7 @@ static unsigned int hash (const char *, unsigned int);
@@ -4445,7 +3581,7 @@ index 49eda19..6236605 100644
  #define TOTAL_KEYWORDS 52
  #define MIN_WORD_LENGTH 2
 diff --git a/gcc/mklibgcc.in b/gcc/mklibgcc.in
-index 8fafce4..7ac15d8 100644
+index 8fafce4b..7ac15d8c 100644
 --- a/gcc/mklibgcc.in
 +++ b/gcc/mklibgcc.in
 @@ -41,6 +41,7 @@
@@ -4478,47 +3614,8 @@ index 8fafce4..7ac15d8 100644
  	if [ "$dir" != . ]; then
  	  shlib_dir="$dir"/
  	fi
-diff --git a/gcc/opts.c b/gcc/opts.c
-index ff50ad1..03c2381 100644
---- a/gcc/opts.c
-+++ b/gcc/opts.c
-@@ -142,6 +142,12 @@ enum debug_info_level debug_info_level = DINFO_LEVEL_NONE;
-    write_symbols is set to DBX_DEBUG, XCOFF_DEBUG, or DWARF_DEBUG.  */
- bool use_gnu_debug_info_extensions;
- 
-+/* The default visibility for all symbols (unless overridden) */
-+enum symbol_visibility default_visibility = VISIBILITY_DEFAULT;
-+
-+/* Global visibility options.  */
-+struct visibility_flags visibility_options;
-+
- /* Columns of --help display.  */
- static unsigned int columns = 80;
- 
-@@ -1214,6 +1220,21 @@ common_handle_option (size_t scode, const char *arg,
-       flag_profile_values = value;
-       break;
- 
-+    case OPT_fvisibility_:
-+      {
-+        if (!strcmp(arg, "default"))
-+          default_visibility = VISIBILITY_DEFAULT;
-+        else if (!strcmp(arg, "internal"))
-+          default_visibility = VISIBILITY_INTERNAL;
-+        else if (!strcmp(arg, "hidden"))
-+          default_visibility = VISIBILITY_HIDDEN;
-+        else if (!strcmp(arg, "protected"))
-+          default_visibility = VISIBILITY_PROTECTED;
-+        else
-+          error ("unrecognised visibility value \"%s\"", arg);
-+      }
-+      break;
-+
-     case OPT_fvpt:
-       flag_value_profile_transformations_set = value;
-       flag_value_profile_transformations = value;
 diff --git a/gcc/output.h b/gcc/output.h
-index 05a3743..20d70c3 100644
+index 05a37437..20d70c31 100644
 --- a/gcc/output.h
 +++ b/gcc/output.h
 @@ -213,6 +213,10 @@ extern void named_section (tree, const char *, int);
@@ -4533,7 +3630,7 @@ index 05a3743..20d70c3 100644
  extern void mergeable_string_section (tree, unsigned HOST_WIDE_INT,
  				      unsigned int);
 diff --git a/gcc/po/ca.po b/gcc/po/ca.po
-index e077d02..17622e2 100644
+index e077d02f..17622e23 100644
 --- a/gcc/po/ca.po
 +++ b/gcc/po/ca.po
 @@ -17340,7 +17340,7 @@ msgstr "passant el valor negatiu `%E' per a %s %P de \"%D\""
@@ -4546,7 +3643,7 @@ index e077d02..17622e2 100644
  #: cp/typeck.c:5772
  msgid "cannot convert `%T' to `%T' for argument `%P' to `%D'"
 diff --git a/gcc/po/es.po b/gcc/po/es.po
-index 4887014..523052e 100644
+index 4887014a..523052ef 100644
 --- a/gcc/po/es.po
 +++ b/gcc/po/es.po
 @@ -1882,7 +1882,7 @@ msgstr "precisi
@@ -4607,7 +3704,7 @@ index 4887014..523052e 100644
  #: c-format.c:2195
  msgid "operand number specified with suppressed assignment"
 diff --git a/gcc/system.h b/gcc/system.h
-index e19de3f..d0a2818 100644
+index e19de3f8..d0a28186 100644
 --- a/gcc/system.h
 +++ b/gcc/system.h
 @@ -154,6 +154,10 @@ extern int errno;
@@ -4623,375 +3720,13 @@ index e19de3f..d0a2818 100644
  #endif
 diff --git a/gcc/testsuite/g++.dg/ext/visibility/assign1.C b/gcc/testsuite/g++.dg/ext/visibility/assign1.C
 new file mode 100644
-index 0000000..cbd909e
---- /dev/null
-+++ b/gcc/testsuite/g++.dg/ext/visibility/assign1.C
-@@ -0,0 +1,17 @@
-+/* { dg-do compile } */
-+/* { dg-require-visibility "" } */
-+/* { dg-final { scan-hidden "_ZN1DaSERKS_" } } */
-+
-+struct B {
-+  B& operator=(const B&);
-+};
-+
-+struct D : public B {
-+  // The implicit assignment operator should be hidden.
-+} __attribute__((visibility("hidden")));
-+
-+D d1, d2;
-+
-+void f() {
-+  d1 = d2;
-+}
-diff --git a/gcc/testsuite/g++.dg/ext/visibility/fvisibility-inlines-hidden.C b/gcc/testsuite/g++.dg/ext/visibility/fvisibility-inlines-hidden.C
-new file mode 100644
-index 0000000..2ee8f07
---- /dev/null
-+++ b/gcc/testsuite/g++.dg/ext/visibility/fvisibility-inlines-hidden.C
-@@ -0,0 +1,18 @@
-+/* Test that -fvisibility-inlines-hidden affects class members. */
-+/* { dg-do compile } */
-+/* { dg-require-visibility "" } */
-+/* { dg-options "-fvisibility-inlines-hidden" } */
-+/* { dg-final { scan-hidden "_ZN3Foo6methodEv" } } */
-+
-+class Foo
-+{
-+public:
-+  void method() { }
-+};
-+
-+int main(void)
-+{
-+  Foo f;
-+  f.method();
-+  return 0;
-+}
-diff --git a/gcc/testsuite/g++.dg/ext/visibility/fvisibility-override1.C b/gcc/testsuite/g++.dg/ext/visibility/fvisibility-override1.C
-new file mode 100644
-index 0000000..67d5ef0
---- /dev/null
-+++ b/gcc/testsuite/g++.dg/ext/visibility/fvisibility-override1.C
-@@ -0,0 +1,12 @@
-+/* Test that -fvisibility does not override class member specific settings. */
-+/* { dg-do compile } */
-+/* { dg-require-visibility "" } */
-+/* { dg-options "-fvisibility=hidden" } */
-+/* { dg-final { scan-assembler "\\.internal.*Foo.methodEv" } } */
-+
-+class __attribute__ ((visibility ("internal"))) Foo
-+{
-+  void method();
-+};
-+
-+void Foo::method() { }
-diff --git a/gcc/testsuite/g++.dg/ext/visibility/fvisibility-override2.C b/gcc/testsuite/g++.dg/ext/visibility/fvisibility-override2.C
-new file mode 100644
-index 0000000..a0a2df5
---- /dev/null
-+++ b/gcc/testsuite/g++.dg/ext/visibility/fvisibility-override2.C
-@@ -0,0 +1,12 @@
-+/* Test that -fvisibility does not override class member specific settings. */
-+/* { dg-do compile } */
-+/* { dg-require-visibility "" } */
-+/* { dg-options "-fvisibility=hidden" } */
-+/* { dg-final { scan-assembler "\\.internal.*Foo.methodEv" } } */
-+
-+class Foo
-+{
-+  __attribute__ ((visibility ("internal"))) void method();
-+};
-+
-+void Foo::method() { }
-diff --git a/gcc/testsuite/g++.dg/ext/visibility/fvisibility.C b/gcc/testsuite/g++.dg/ext/visibility/fvisibility.C
-new file mode 100644
-index 0000000..4358d25
---- /dev/null
-+++ b/gcc/testsuite/g++.dg/ext/visibility/fvisibility.C
-@@ -0,0 +1,12 @@
-+/* Test that -fvisibility affects class members. */
-+/* { dg-do compile } */
-+/* { dg-require-visibility "" } */
-+/* { dg-options "-fvisibility=hidden" } */
-+/* { dg-final { scan-hidden "_ZN3Foo6methodEv" } } */
-+
-+class Foo
-+{
-+  void method();
-+};
-+
-+void Foo::method() { }
-diff --git a/gcc/testsuite/g++.dg/ext/visibility/memfuncts.C b/gcc/testsuite/g++.dg/ext/visibility/memfuncts.C
-new file mode 100644
-index 0000000..45eb641
---- /dev/null
-+++ b/gcc/testsuite/g++.dg/ext/visibility/memfuncts.C
-@@ -0,0 +1,11 @@
-+/* Test that setting visibility for class member functions works. */
-+/* { dg-do compile } */
-+/* { dg-require-visibility "" } */
-+/* { dg-final { scan-hidden "_ZN3Foo6methodEv" } } */
-+
-+class __attribute__ ((visibility ("hidden"))) Foo
-+{
-+  void method();
-+};
-+
-+void Foo::method() { }
+index 00000000..e69de29b
 diff --git a/gcc/testsuite/g++.dg/ext/visibility/new1.C b/gcc/testsuite/g++.dg/ext/visibility/new1.C
 new file mode 100644
-index 0000000..ec201cb
---- /dev/null
-+++ b/gcc/testsuite/g++.dg/ext/visibility/new1.C
-@@ -0,0 +1,13 @@
-+// { dg-require-visibility "" }
-+// { dg-options "-fvisibility=hidden" }
-+// { dg-final { scan-not-hidden "_Znwj" } }
-+
-+void f() {
-+  new int;
-+}
-+
-+void *g();
-+
-+void *operator new(__SIZE_TYPE__) {
-+  return g();
-+}
-diff --git a/gcc/testsuite/g++.dg/ext/visibility/noPLT.C b/gcc/testsuite/g++.dg/ext/visibility/noPLT.C
-new file mode 100644
-index 0000000..0ad981f
---- /dev/null
-+++ b/gcc/testsuite/g++.dg/ext/visibility/noPLT.C
-@@ -0,0 +1,20 @@
-+/* Test that -fvisibility=hidden prevents PLT. */
-+/* { dg-do compile } */
-+/* { dg-require-visibility "" } */
-+/* { dg-options "-fPIC -fvisibility=hidden" } */
-+/* { dg-final { scan-assembler-not "methodEv@PLT" } } */
-+
-+class Foo
-+{
-+public:
-+  void method();
-+};
-+
-+void Foo::method() { }
-+
-+int main(void)
-+{
-+  Foo f;
-+  f.method();
-+  return 0;
-+}
-diff --git a/gcc/testsuite/g++.dg/ext/visibility/pragma-override1.C b/gcc/testsuite/g++.dg/ext/visibility/pragma-override1.C
-new file mode 100644
-index 0000000..a2c93eb
---- /dev/null
-+++ b/gcc/testsuite/g++.dg/ext/visibility/pragma-override1.C
-@@ -0,0 +1,13 @@
-+/* Test that #pragma GCC visibility does not override class member specific settings. */
-+/* { dg-do compile } */
-+/* { dg-require-visibility "" } */
-+/* { dg-final { scan-assembler "\\.internal.*Foo.methodEv" } } */
-+
-+#pragma GCC visibility push(hidden)
-+class __attribute__ ((visibility ("internal"))) Foo
-+{
-+  void method();
-+};
-+#pragma GCC visibility pop
-+
-+void Foo::method() { }
-diff --git a/gcc/testsuite/g++.dg/ext/visibility/pragma-override2.C b/gcc/testsuite/g++.dg/ext/visibility/pragma-override2.C
-new file mode 100644
-index 0000000..a4bb42c
---- /dev/null
-+++ b/gcc/testsuite/g++.dg/ext/visibility/pragma-override2.C
-@@ -0,0 +1,13 @@
-+/* Test that #pragma GCC visibility does not override class member specific settings. */
-+/* { dg-do compile } */
-+/* { dg-require-visibility "" } */
-+/* { dg-final { scan-assembler "\\.internal.*Foo.methodEv" } } */
-+
-+#pragma GCC visibility push(hidden)
-+class Foo
-+{
-+  __attribute__ ((visibility ("internal"))) void method();
-+};
-+#pragma GCC visibility pop
-+
-+void Foo::method() { }
-diff --git a/gcc/testsuite/g++.dg/ext/visibility/pragma.C b/gcc/testsuite/g++.dg/ext/visibility/pragma.C
-new file mode 100644
-index 0000000..98384c9
---- /dev/null
-+++ b/gcc/testsuite/g++.dg/ext/visibility/pragma.C
-@@ -0,0 +1,13 @@
-+/* Test that #pragma GCC visibility affects class members. */
-+/* { dg-do compile } */
-+/* { dg-require-visibility "" } */
-+/* { dg-final { scan-hidden "_ZN3Foo6methodEv" } } */
-+
-+#pragma GCC visibility push(hidden)
-+class Foo
-+{
-+  void method();
-+};
-+#pragma GCC visibility pop
-+
-+void Foo::method() { }
-diff --git a/gcc/testsuite/g++.dg/ext/visibility/staticmemfuncts.C b/gcc/testsuite/g++.dg/ext/visibility/staticmemfuncts.C
-new file mode 100644
-index 0000000..e745caa
---- /dev/null
-+++ b/gcc/testsuite/g++.dg/ext/visibility/staticmemfuncts.C
-@@ -0,0 +1,11 @@
-+/* Test that setting visibility for static class member functions works. */
-+/* { dg-do compile } */
-+/* { dg-require-visibility "" } */
-+/* { dg-final { scan-hidden "_ZN3Foo6methodEv" } } */
-+
-+class __attribute__ ((visibility ("hidden"))) Foo
-+{
-+  static void method();
-+};
-+
-+void Foo::method() { }
-diff --git a/gcc/testsuite/g++.dg/ext/visibility/virtual.C b/gcc/testsuite/g++.dg/ext/visibility/virtual.C
-new file mode 100644
-index 0000000..746c489
---- /dev/null
-+++ b/gcc/testsuite/g++.dg/ext/visibility/virtual.C
-@@ -0,0 +1,11 @@
-+/* Test that setting visibility for class affects virtual table. */
-+/* { dg-do compile } */
-+/* { dg-require-visibility "" } */
-+/* { dg-final { scan-hidden "ZTV3Foo" } } */
-+
-+class __attribute__ ((visibility ("hidden"))) Foo
-+{
-+  virtual void method();
-+};
-+
-+void Foo::method() { }
-diff --git a/gcc/testsuite/g++.dg/ext/visibility-1.C b/gcc/testsuite/g++.dg/ext/visibility/visibility-1.C
-similarity index 50%
-rename from gcc/testsuite/g++.dg/ext/visibility-1.C
-rename to gcc/testsuite/g++.dg/ext/visibility/visibility-1.C
-index d579eb2..8ea270b 100644
---- a/gcc/testsuite/g++.dg/ext/visibility-1.C
-+++ b/gcc/testsuite/g++.dg/ext/visibility/visibility-1.C
-@@ -1,6 +1,6 @@
- /* Test visibility attribute on function definition. */
--/* { dg-do compile { target *86-*-linux* } } */
--/* { dg-final { scan-assembler "\\.hidden.*_Z3foov" } } */
-+/* { dg-require-visibility "" }
-+/* { dg-final { scan-hidden "_Z3foov" } } */
- 
- void
- __attribute__((visibility ("hidden")))
-diff --git a/gcc/testsuite/g++.dg/ext/visibility-2.C b/gcc/testsuite/g++.dg/ext/visibility/visibility-2.C
-similarity index 57%
-rename from gcc/testsuite/g++.dg/ext/visibility-2.C
-rename to gcc/testsuite/g++.dg/ext/visibility/visibility-2.C
-index 89e853c..26272ab 100644
---- a/gcc/testsuite/g++.dg/ext/visibility-2.C
-+++ b/gcc/testsuite/g++.dg/ext/visibility/visibility-2.C
-@@ -1,6 +1,6 @@
- /* Test that visibility attribute on declaration extends to definition. */
--/* { dg-do compile { target *86-*-linux* } } */
--/* { dg-final { scan-assembler "\\.hidden.*_Z3foov" } } */
-+/* { dg-require-visibility "" }
-+/* { dg-final { scan-hidden "_Z3foov" } } */
- 
- void __attribute__((visibility ("hidden"))) foo();
- 
-diff --git a/gcc/testsuite/g++.dg/ext/visibility-3.C b/gcc/testsuite/g++.dg/ext/visibility/visibility-3.C
-similarity index 55%
-rename from gcc/testsuite/g++.dg/ext/visibility-3.C
-rename to gcc/testsuite/g++.dg/ext/visibility/visibility-3.C
-index d0cc891..e4f499f 100644
---- a/gcc/testsuite/g++.dg/ext/visibility-3.C
-+++ b/gcc/testsuite/g++.dg/ext/visibility/visibility-3.C
-@@ -1,6 +1,6 @@
- /* Test visibility attribute on forward declaration of global variable */
--/* { dg-do compile { target *86-*-linux* } } */
--/* { dg-final { scan-assembler "\\.hidden.*xyzzy" } } */
-+/* { dg-require-visibility "" }
-+/* { dg-final { scan-hidden "xyzzy" } } */
- 
- int
- __attribute__((visibility ("hidden")))
-diff --git a/gcc/testsuite/g++.dg/ext/visibility-4.C b/gcc/testsuite/g++.dg/ext/visibility/visibility-4.C
-similarity index 58%
-rename from gcc/testsuite/g++.dg/ext/visibility-4.C
-rename to gcc/testsuite/g++.dg/ext/visibility/visibility-4.C
-index d217bc9..f676595 100644
---- a/gcc/testsuite/g++.dg/ext/visibility-4.C
-+++ b/gcc/testsuite/g++.dg/ext/visibility/visibility-4.C
-@@ -1,6 +1,6 @@
- /* Test visibility attribute on forward declaration of global variable */
--/* { dg-do compile { target *86-*-linux* } } */
--/* { dg-final { scan-assembler "\\.hidden.*xyzzy" } } */
-+/* { dg-require-visibility "" }
-+/* { dg-final { scan-hidden "xyzzy" } } */
- 
- extern int __attribute__ ((visibility ("hidden")))
- xyzzy;
-diff --git a/gcc/testsuite/g++.dg/ext/visibility-5.C b/gcc/testsuite/g++.dg/ext/visibility/visibility-5.C
-similarity index 62%
-rename from gcc/testsuite/g++.dg/ext/visibility-5.C
-rename to gcc/testsuite/g++.dg/ext/visibility/visibility-5.C
-index 9cdc802..592529e 100644
---- a/gcc/testsuite/g++.dg/ext/visibility-5.C
-+++ b/gcc/testsuite/g++.dg/ext/visibility/visibility-5.C
-@@ -1,7 +1,7 @@
- /* Test visibility attribute on definition of a function that has
-    already had a forward declaration. */
--/* { dg-do compile { target *86-*-linux* } } */
--/* { dg-final { scan-assembler "\\.hidden.*_Z3foov" } } */
-+/* { dg-require-visibility "" }
-+/* { dg-final { scan-hidden "_Z3foov" } } */
- 
- void foo();
- 
-diff --git a/gcc/testsuite/g++.dg/ext/visibility-6.C b/gcc/testsuite/g++.dg/ext/visibility/visibility-6.C
-similarity index 64%
-rename from gcc/testsuite/g++.dg/ext/visibility-6.C
-rename to gcc/testsuite/g++.dg/ext/visibility/visibility-6.C
-index 6e8f0ce..0fecf6b 100644
---- a/gcc/testsuite/g++.dg/ext/visibility-6.C
-+++ b/gcc/testsuite/g++.dg/ext/visibility/visibility-6.C
-@@ -1,7 +1,7 @@
- /* Test visibility attribute on definition of global variable that has
-    already had a forward declaration. */
--/* { dg-do compile { target *86-*-linux* } } */
--/* { dg-final { scan-assembler "\\.hidden.*xyzzy" } } */
-+/* { dg-require-visibility "" }
-+/* { dg-final { scan-hidden "xyzzy" } } */
- 
- extern int xyzzy;
- 
-diff --git a/gcc/testsuite/g++.dg/ext/visibility-7.C b/gcc/testsuite/g++.dg/ext/visibility/visibility-7.C
-similarity index 73%
-rename from gcc/testsuite/g++.dg/ext/visibility-7.C
-rename to gcc/testsuite/g++.dg/ext/visibility/visibility-7.C
-index 40acb72..dbd7010 100644
---- a/gcc/testsuite/g++.dg/ext/visibility-7.C
-+++ b/gcc/testsuite/g++.dg/ext/visibility/visibility-7.C
-@@ -1,6 +1,6 @@
- /* Test warning from conflicting visibility specifications. */
--/* { dg-do compile { target *86-*-linux* } } */
--/* { dg-final { scan-assembler "\\.hidden.*xyzzy" } } */
-+/* { dg-require-visibility "" } */
-+/* { dg-final { scan-hidden "xyzzy" } } */
- 
- extern int 
- __attribute__((visibility ("hidden")))
+index 00000000..e69de29b
 diff --git a/gcc/testsuite/g++.old-deja/g++.other/comdat4-aux.cc b/gcc/testsuite/g++.old-deja/g++.other/comdat4-aux.cc
 new file mode 100644
-index 0000000..e0556a5
+index 00000000..e0556a52
 --- /dev/null
 +++ b/gcc/testsuite/g++.old-deja/g++.other/comdat4-aux.cc
 @@ -0,0 +1,40 @@
@@ -5037,7 +3772,7 @@ index 0000000..e0556a5
 +void *fooaddr2 = (void *) foo;
 diff --git a/gcc/testsuite/g++.old-deja/g++.other/comdat4.C b/gcc/testsuite/g++.old-deja/g++.other/comdat4.C
 new file mode 100644
-index 0000000..28b26a1
+index 00000000..28b26a1d
 --- /dev/null
 +++ b/gcc/testsuite/g++.old-deja/g++.other/comdat4.C
 @@ -0,0 +1,57 @@
@@ -5100,7 +3835,7 @@ index 0000000..28b26a1
 +}
 diff --git a/gcc/testsuite/gcc.dg/ppc64-toc.c b/gcc/testsuite/gcc.dg/ppc64-toc.c
 new file mode 100644
-index 0000000..747f137
+index 00000000..747f137e
 --- /dev/null
 +++ b/gcc/testsuite/gcc.dg/ppc64-toc.c
 @@ -0,0 +1,22 @@
@@ -5126,631 +3861,47 @@ index 0000000..747f137
 +{
 +  return 0;
 +}
-diff --git a/gcc/testsuite/gcc.dg/visibility-9.c b/gcc/testsuite/gcc.dg/visibility-9.c
-new file mode 100644
-index 0000000..ac6493e
---- /dev/null
-+++ b/gcc/testsuite/gcc.dg/visibility-9.c
-@@ -0,0 +1,9 @@
-+/* Test that -fvisibility works. */
-+/* { dg-do compile } */
-+/* { dg-require-visibility "" } */
-+/* { dg-options "-fvisibility=hidden" } */
-+/* { dg-final { scan-assembler "\\.hidden.*foo" } } */
-+
-+void foo();
-+
-+void foo() { }
-diff --git a/gcc/testsuite/gcc.dg/visibility-a.c b/gcc/testsuite/gcc.dg/visibility-a.c
-new file mode 100644
-index 0000000..1749234
---- /dev/null
-+++ b/gcc/testsuite/gcc.dg/visibility-a.c
-@@ -0,0 +1,10 @@
-+/* Test that #pragma GCC visibility works. */
-+/* { dg-do compile } */
-+/* { dg-require-visibility "" } */
-+/* { dg-final { scan-assembler "\\.hidden.*foo" } } */
-+
-+#pragma GCC visibility push(hidden)
-+void foo();
-+#pragma GCC visibility pop
-+
-+void foo() { }
 diff --git a/gcc/testsuite/gcc/testsuite/g++.special/inline-hidden-1.cc b/gcc/testsuite/gcc/testsuite/g++.special/inline-hidden-1.cc
 new file mode 100644
-index 0000000..ec33811
---- /dev/null
-+++ b/gcc/testsuite/gcc/testsuite/g++.special/inline-hidden-1.cc
-@@ -0,0 +1,16 @@
-+#pragma GCC visibility push(default)
-+template<typename CharT>
-+struct VisTest
-+{
-+  inline VisTest ();
-+};
-+template<typename CharT>
-+inline VisTest<CharT>::VisTest()
-+{}
-+extern template class VisTest<char>;
-+#pragma GCC visibility pop
-+int some_function( int do_something )
-+{
-+  VisTest<char> a;
-+  return 0;
-+}
+index 00000000..e69de29b
 diff --git a/gcc/testsuite/gcc/testsuite/g++.special/inline-hidden-1.x b/gcc/testsuite/gcc/testsuite/g++.special/inline-hidden-1.x
 new file mode 100644
-index 0000000..cdbe925
---- /dev/null
-+++ b/gcc/testsuite/gcc/testsuite/g++.special/inline-hidden-1.x
-@@ -0,0 +1,9 @@
-+if ![is-shared-library-supported] {
-+    return
-+}
-+
-+#
-+# build shared libray
-+#
-+gcc-special-compile $srcdir/$subdir/inline-hidden-1.cc \
-+	"-shared -fPIC -fvisibility-inlines-hidden" "" "no"
+index 00000000..e69de29b
 diff --git a/gcc/testsuite/gcc/testsuite/g++.special/inline-hidden-2.cc b/gcc/testsuite/gcc/testsuite/g++.special/inline-hidden-2.cc
 new file mode 100644
-index 0000000..8de3bab
---- /dev/null
-+++ b/gcc/testsuite/gcc/testsuite/g++.special/inline-hidden-2.cc
-@@ -0,0 +1,14 @@
-+template<typename CharT>
-+struct VisTest
-+{
-+  inline VisTest ();
-+};
-+template<typename CharT>
-+inline VisTest<CharT>::VisTest()
-+{}
-+extern template class VisTest<char>;
-+int some_function( int do_something )
-+{
-+  VisTest<char> a;
-+  return 0;
-+}
+index 00000000..e69de29b
 diff --git a/gcc/testsuite/gcc/testsuite/g++.special/inline-hidden-2.x b/gcc/testsuite/gcc/testsuite/g++.special/inline-hidden-2.x
 new file mode 100644
-index 0000000..cd53921
---- /dev/null
-+++ b/gcc/testsuite/gcc/testsuite/g++.special/inline-hidden-2.x
-@@ -0,0 +1,9 @@
-+if ![is-shared-library-supported] {
-+    return
-+}
-+
-+#
-+# build shared libray
-+#
-+gcc-special-compile $srcdir/$subdir/inline-hidden-2.cc \
-+	"-shared -fPIC -fvisibility-inlines-hidden" "" "yes"
+index 00000000..e69de29b
 diff --git a/gcc/testsuite/gcc/testsuite/g++.special/inline-hidden-3.x b/gcc/testsuite/gcc/testsuite/g++.special/inline-hidden-3.x
 new file mode 100644
-index 0000000..6306ab4
---- /dev/null
-+++ b/gcc/testsuite/gcc/testsuite/g++.special/inline-hidden-3.x
-@@ -0,0 +1,11 @@
-+if ![is-shared-library-supported] {
-+    return
-+}
-+
-+#
-+# build shared libray
-+#
-+set obj [gcc-special-compile "$srcdir/$subdir/inline-hidden-3a.cc" \
-+	 "-fPIC -fvisibility-inlines-hidden" "" "no"]
-+gcc-special-compile $srcdir/$subdir/inline-hidden-3b.cc \
-+	"-shared -fPIC" "$obj" "no"
+index 00000000..e69de29b
 diff --git a/gcc/testsuite/gcc/testsuite/g++.special/inline-hidden-3a.cc b/gcc/testsuite/gcc/testsuite/g++.special/inline-hidden-3a.cc
 new file mode 100644
-index 0000000..8de3bab
---- /dev/null
-+++ b/gcc/testsuite/gcc/testsuite/g++.special/inline-hidden-3a.cc
-@@ -0,0 +1,14 @@
-+template<typename CharT>
-+struct VisTest
-+{
-+  inline VisTest ();
-+};
-+template<typename CharT>
-+inline VisTest<CharT>::VisTest()
-+{}
-+extern template class VisTest<char>;
-+int some_function( int do_something )
-+{
-+  VisTest<char> a;
-+  return 0;
-+}
+index 00000000..e69de29b
 diff --git a/gcc/testsuite/gcc/testsuite/g++.special/inline-hidden-3b.cc b/gcc/testsuite/gcc/testsuite/g++.special/inline-hidden-3b.cc
 new file mode 100644
-index 0000000..d12aa28
---- /dev/null
-+++ b/gcc/testsuite/gcc/testsuite/g++.special/inline-hidden-3b.cc
-@@ -0,0 +1,9 @@
-+template<typename CharT>
-+struct VisTest
-+{
-+  inline VisTest ();
-+};
-+template<typename CharT>
-+inline VisTest<CharT>::VisTest()
-+{}
-+template class VisTest<char>;
+index 00000000..e69de29b
 diff --git a/gcc/testsuite/gcc/testsuite/g++.special/special.exp b/gcc/testsuite/gcc/testsuite/g++.special/special.exp
 new file mode 100644
-index 0000000..f8f31fe
---- /dev/null
-+++ b/gcc/testsuite/gcc/testsuite/g++.special/special.exp
-@@ -0,0 +1,30 @@
-+# Copyright (C) 2005 Free Software Foundation, Inc.
-+
-+# This program is free software; you can redistribute it and/or modify
-+# it under the terms of the GNU General Public License as published by
-+# the Free Software Foundation; either version 2 of the License, or
-+# (at your option) any later version.
-+# 
-+# This program is distributed in the hope that it will be useful,
-+# but WITHOUT ANY WARRANTY; without even the implied warranty of
-+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-+# GNU General Public License for more details.
-+# 
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software
-+# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA. 
-+
-+if $tracelevel then {
-+    strace $tracelevel
-+}
-+
-+# load support procs
-+load_lib gcc-special.exp
-+
-+#
-+# run special tests 
-+#
-+
-+foreach src [lsort [glob -nocomplain $srcdir/$subdir/*.x]] {
-+    source $src
-+}
+index 00000000..e69de29b
 diff --git a/gcc/testsuite/gcc/testsuite/gcc.special/protfunc-1-dso.c b/gcc/testsuite/gcc/testsuite/gcc.special/protfunc-1-dso.c
 new file mode 100644
-index 0000000..743a926
---- /dev/null
-+++ b/gcc/testsuite/gcc/testsuite/gcc.special/protfunc-1-dso.c
-@@ -0,0 +1,13 @@
-+void
-+__attribute__ ((visibility ("protected")))
-+foo ()
-+{
-+}
-+
-+void (*foo_p) () = foo;
-+
-+void *
-+bar (void)
-+{
-+  return foo;
-+}
+index 00000000..e69de29b
 diff --git a/gcc/testsuite/gcc/testsuite/gcc.special/protfunc-1-main.c b/gcc/testsuite/gcc/testsuite/gcc.special/protfunc-1-main.c
 new file mode 100644
-index 0000000..c154032
---- /dev/null
-+++ b/gcc/testsuite/gcc/testsuite/gcc.special/protfunc-1-main.c
-@@ -0,0 +1,14 @@
-+extern void (*foo_p) (void);
-+extern void foo (void);
-+extern void* bar (void);
-+
-+int
-+main ()
-+{
-+  void *p;
-+  p = bar ();
-+  if (p == foo && p == foo_p)
-+    return 0;
-+  else
-+    return 1;
-+}
+index 00000000..e69de29b
 diff --git a/gcc/testsuite/gcc/testsuite/gcc.special/protfunc-1.x b/gcc/testsuite/gcc/testsuite/gcc.special/protfunc-1.x
 new file mode 100644
-index 0000000..5cc886b
---- /dev/null
-+++ b/gcc/testsuite/gcc/testsuite/gcc.special/protfunc-1.x
-@@ -0,0 +1,14 @@
-+if ![is-shared-library-supported] {
-+    return
-+}
-+
-+#
-+# build shared libray
-+#
-+set dso [gcc-special-compile $srcdir/$subdir/protfunc-1-dso.c \
-+	 "-fPIC -shared -O" "" "no"]
-+
-+#
-+# build and run executable
-+#
-+gcc-special-execute $srcdir/$subdir/protfunc-1-main.c $dso "-O"
+index 00000000..e69de29b
 diff --git a/gcc/testsuite/gcc/testsuite/gcc.special/special.exp b/gcc/testsuite/gcc/testsuite/gcc.special/special.exp
 new file mode 100644
-index 0000000..f8f31fe
---- /dev/null
-+++ b/gcc/testsuite/gcc/testsuite/gcc.special/special.exp
-@@ -0,0 +1,30 @@
-+# Copyright (C) 2005 Free Software Foundation, Inc.
-+
-+# This program is free software; you can redistribute it and/or modify
-+# it under the terms of the GNU General Public License as published by
-+# the Free Software Foundation; either version 2 of the License, or
-+# (at your option) any later version.
-+# 
-+# This program is distributed in the hope that it will be useful,
-+# but WITHOUT ANY WARRANTY; without even the implied warranty of
-+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-+# GNU General Public License for more details.
-+# 
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software
-+# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA. 
-+
-+if $tracelevel then {
-+    strace $tracelevel
-+}
-+
-+# load support procs
-+load_lib gcc-special.exp
-+
-+#
-+# run special tests 
-+#
-+
-+foreach src [lsort [glob -nocomplain $srcdir/$subdir/*.x]] {
-+    source $src
-+}
+index 00000000..e69de29b
 diff --git a/gcc/testsuite/gcc/testsuite/lib/gcc-special.exp b/gcc/testsuite/gcc/testsuite/lib/gcc-special.exp
 new file mode 100644
-index 0000000..7ac24cc
---- /dev/null
-+++ b/gcc/testsuite/gcc/testsuite/lib/gcc-special.exp
-@@ -0,0 +1,177 @@
-+# Copyright (C) 2005 Free Software Foundation, Inc.
-+
-+# This program is free software; you can redistribute it and/or modify
-+# it under the terms of the GNU General Public License as published by
-+# the Free Software Foundation; either version 2 of the License, or
-+# (at your option) any later version.
-+#
-+# This program is distributed in the hope that it will be useful,
-+# but WITHOUT ANY WARRANTY; without even the implied warranty of
-+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-+# GNU General Public License for more details.
-+#
-+# You should have received a copy of the GNU General Public License
-+# along with this program; if not, write to the Free Software
-+# Foundation, 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
-+
-+# Based on c-torture.exp.
-+
-+load_lib file-format.exp
-+load_lib target-supports.exp
-+
-+#
-+# gcc-special-compile -- compile source file or build shared library.
-+#
-+# SRC is the full pathname of the testcase.
-+# OPTIONS is the specific compiler flag we're testing (eg: -O2).
-+# OBJ is the additional object.
-+# XFAIL is to indicate if it should fail.
-+#
-+proc gcc-special-compile { src options obj xfail } {
-+    global tool
-+    global output
-+    global srcdir tmpdir
-+    global host_triplet
-+
-+    if [string match "yes" $xfail] {
-+	setup_xfail "*-*-*"
-+    }
-+
-+    set shared "no"
-+    set option ""
-+    foreach opt $options {
-+	if [string match "-shared" $opt] {
-+	    lappend option [get-build-shared-library-option]
-+	    set shared "yes"
-+	} elseif [string match "-fPIC" $opt] {
-+	    lappend option [get-compile-shared-library-option]
-+	} else {
-+	    lappend option "$opt"
-+	}
-+    }
-+
-+    if [string match "yes" $shared] {
-+	set type "executable"
-+	set output "$tmpdir/[file tail [file rootname $src]].so"
-+    } else {
-+	set type "object"
-+	set output "$tmpdir/[file tail [file rootname $src]].o"
-+    }
-+
-+    regsub "^$srcdir/?" $src "" testcase
-+    # If we couldn't rip $srcdir out of `src' then just do the best we can.
-+    # The point is to reduce the unnecessary noise in the logs.  Don't strip
-+    # out too much because different testcases with the same name can confuse
-+    # `test-tool'.
-+    if [string match "/*" $testcase] {
-+	set testcase "[file tail [file dirname $src]]/[file tail $src]"
-+    }
-+
-+    verbose "Testing $testcase, $option" 1
-+
-+    # Run the compiler and analyze the results.
-+    set options ""
-+    lappend options "additional_flags=-w $option $obj"
-+
-+    set comp_output [${tool}_target_compile "$src" "$output" $type $options];
-+    if [${tool}_check_compile $testcase $option $output $comp_output] {
-+	if [string match "yes" $xfail] {
-+	    fail "$testcase, $option"
-+	} else {
-+	    foreach file "$obj" {
-+		remote_file build delete $file
-+	    }
-+	}
-+    } elseif [string match "yes" $xfail] {
-+	foreach file "$obj" {
-+	    remote_file build delete $file
-+	}
-+    }
-+    return $output
-+}
-+
-+#
-+# gcc-special-execute -- utility to compile and execute a testcase
-+#
-+# SOURCES is a list of full pathnames to the test source files.
-+# The first filename in this list forms the "testcase".
-+#
-+# If the testcase has an associated .x file, we source that to run the
-+# test instead.  We use .x so that we don't lengthen the existing filename
-+# to more than 14 chars.
-+#
-+proc gcc-special-execute { sources shlib additional_flags } {
-+    global tmpdir tool srcdir output compiler_conditional_xfail_data
-+
-+    # Use the first source filename given as the filename under test.
-+    set src [lindex $sources 0]
-+
-+    set option ""
-+
-+    # Check for alternate driver.
-+    if [file exists [file rootname $src].x] {
-+	verbose "Using alternate driver [file rootname [file tail $src]].x" 2
-+	set done_p 0
-+	catch "set done_p \[source [file rootname $src].x\]"
-+	if { $done_p } {
-+	    return
-+	}
-+    }
-+
-+    set executable $tmpdir/[file tail [file rootname $src].x]
-+
-+    regsub "^$srcdir/?" $src "" testcase
-+    # If we couldn't rip $srcdir out of `src' then just do the best we can.
-+    # The point is to reduce the unnecessary noise in the logs.  Don't strip
-+    # out too much because different testcases with the same name can confuse
-+    # `test-tool'.
-+    if [string match "/*" $testcase] {
-+	set testcase "[file tail [file dirname $src]]/[file tail $src]"
-+    }
-+
-+    # torture_{compile,execute}_xfail are set by the .x script
-+    # (if present)
-+    if [info exists torture_compile_xfail] {
-+	setup_xfail $torture_compile_xfail
-+    }
-+
-+    # torture_execute_before_{compile,execute} can be set by the .x script
-+    # (if present)
-+    if [info exists torture_eval_before_compile] {
-+	set ignore_me [eval $torture_eval_before_compile]
-+    }
-+
-+    verbose "Testing $testcase, $option" 1
-+
-+    set options ""
-+    lappend options "additional_flags=-w $option $shlib"
-+    if { $additional_flags != "" } {
-+	lappend options "additional_flags=$additional_flags";
-+    }
-+
-+    set comp_output [${tool}_target_compile "$sources" "${executable}" executable $options];
-+
-+    if ![${tool}_check_compile "$testcase compilation" $option $executable $comp_output] {
-+	unresolved "$testcase execution, $option"
-+	remote_file build delete $executable
-+	return
-+    }
-+
-+    if [info exists torture_execute_xfail] {
-+	setup_xfail $torture_execute_xfail
-+    }
-+
-+    if [info exists torture_eval_before_execute] {
-+	set ignore_me [eval $torture_eval_before_execute]
-+    }
-+
-+    set result [${tool}_load "$executable" "" ""]
-+    set status [lindex $result 0];
-+    set output [lindex $result 1];
-+    $status "$testcase execution, $option"
-+    if { $status == "pass" } {
-+	foreach file "$executable $shlib" {
-+	    remote_file build delete $file
-+	}
-+    }
-+}
-diff --git a/gcc/testsuite/lib/scanasm.exp b/gcc/testsuite/lib/scanasm.exp
-index 79d93cb..9116afc 100644
---- a/gcc/testsuite/lib/scanasm.exp
-+++ b/gcc/testsuite/lib/scanasm.exp
-@@ -79,6 +79,32 @@ proc scan-assembler-not { args } {
-     dg-scan "scan-assembler-not" 0 $testcase $output_file $args
- }
- 
-+# Check that a symbol is defined as a hidden symbol in the .s file
-+# produced by the compiler.
-+
-+proc scan-hidden { args } {
-+    upvar 2 name testcase
-+    set output_file "[file rootname [file tail $testcase]].s"
-+
-+    set symbol [lindex $args 0]
-+    set args [lreplace $args 0 0 "hidden\[ \t_\]*$symbol"]
-+
-+    dg-scan "scan-hidden" 1 $testcase $output_file $args
-+}
-+
-+# Check that a symbol is not defined as a hidden symbol in the .s file
-+# produced by the compiler.
-+
-+proc scan-not-hidden { args } {
-+    upvar 2 name testcase
-+    set output_file "[file rootname [file tail $testcase]].s"
-+
-+    set symbol [lindex $args 0]
-+    set args [lreplace $args 0 0 "hidden\[ \t_\]*$symbol"]
-+
-+    dg-scan "scan-not-hidden" 0 $testcase $output_file $args
-+}
-+
- # Look for a pattern in OUTPUT_FILE.  See dg-scan for details.
- 
- proc scan-file { output_file args } {
-diff --git a/gcc/testsuite/lib/target-supports.exp b/gcc/testsuite/lib/target-supports.exp
-index a2dde90..b211d6b 100644
---- a/gcc/testsuite/lib/target-supports.exp
-+++ b/gcc/testsuite/lib/target-supports.exp
-@@ -488,3 +488,53 @@ proc is-effective-target-keyword { arg } {
- 	}
-     }
- }
-+
-+# Return 1 if the target support shared library.
-+
-+proc is-shared-library-supported { } {
-+    # Shared library is only supported on a couple of ELF platforms.
-+    if { ![istarget hppa*64*-*-hpux*] \
-+	 && ![istarget hppa*-*-linux*] \
-+	 && ![istarget i?86-*-sysv4*] \
-+	 && ![istarget i?86-*-unixware] \
-+	 && ![istarget i?86-*-elf*] \
-+	 && ![istarget i?86-*-linux*] \
-+	 && ![istarget ia64-*-elf*] \
-+	 && ![istarget ia64-*-linux*] \
-+	 && ![istarget m68k-*-linux*] \
-+	 && ![istarget mips*-*-irix5*] \
-+	 && ![istarget mips*-*-linux*] \
-+	 && ![istarget powerpc-*-elf*] \
-+	 && ![istarget powerpc-*-linux*] \
-+	 && ![istarget powerpc-*-sysv4*] \
-+	 && ![istarget sparc*-*-elf] \
-+	 && ![istarget sparc*-*-solaris2*] \
-+	 && ![istarget sparc*-*-linux*] \
-+	 && ![istarget arm*-*-linux*] \
-+	 && ![istarget alpha*-*-linux*] \
-+	 && ![istarget s390*-*-linux*] \
-+	 && ![istarget x86_64-*-linux*] } {
-+	return 0
-+    }
-+
-+    if { [istarget *-*-linux*aout*] \
-+	 || [istarget *-*-linux*oldld*] } {
-+	return 0
-+    }
-+
-+    return 1
-+}
-+
-+# Return gcc option to compile .o file for shared library.
-+
-+proc get-compile-shared-library-option { } {
-+    set picflag "-fPIC"
-+    return $picflag
-+}
-+
-+# Return gcc option to build shared library.
-+
-+proc get-build-shared-library-option { } {
-+    set ldflag "-shared"
-+    return $ldflag
-+}
-diff --git a/gcc/tree.c b/gcc/tree.c
-index a9b6d1a..0b25837 100644
---- a/gcc/tree.c
-+++ b/gcc/tree.c
-@@ -2563,6 +2563,11 @@ build_decl (enum tree_code code, tree name, tree type)
-     layout_decl (t, 0);
-   else if (code == FUNCTION_DECL)
-     DECL_MODE (t) = FUNCTION_MODE;
-+    
-+  /* Set default visibility to whatever the user supplied with
-+     visibility_specified depending on #pragma GCC visibility.  */
-+  DECL_VISIBILITY (t) = default_visibility;
-+  DECL_VISIBILITY_SPECIFIED (t) = visibility_options.inpragma;
- 
-   return t;
- }
-diff --git a/gcc/tree.h b/gcc/tree.h
-index 7a3ec26..68ae6d4 100644
---- a/gcc/tree.h
-+++ b/gcc/tree.h
-@@ -1499,6 +1499,10 @@ struct tree_type GTY(())
- /* Value of the decls's visibility attribute */
- #define DECL_VISIBILITY(NODE) (DECL_CHECK (NODE)->decl.visibility)
- 
-+/* Nonzero means that the decl had its visibility specified rather than
-+   being inferred.  */
-+#define DECL_VISIBILITY_SPECIFIED(NODE) (DECL_CHECK (NODE)->decl.visibility_specified)
-+
- /* In a FUNCTION_DECL, nonzero if the function cannot be inlined.  */
- #define DECL_UNINLINABLE(NODE) (FUNCTION_DECL_CHECK (NODE)->decl.uninlinable)
- 
-@@ -1633,7 +1637,8 @@ struct tree_type GTY(())
-    || TREE_CODE (DECL_CONTEXT (EXP)) == TRANSLATION_UNIT_DECL)
- 
- /* Enumerate visibility settings.  */
--
-+#ifndef SYMBOL_VISIBILITY_DEFINED
-+#define SYMBOL_VISIBILITY_DEFINED
- enum symbol_visibility
- {
-   VISIBILITY_DEFAULT,
-@@ -1641,6 +1646,7 @@ enum symbol_visibility
-   VISIBILITY_HIDDEN,
-   VISIBILITY_PROTECTED
- };
-+#endif
- 
- struct function;
- 
-@@ -1684,8 +1690,7 @@ struct tree_decl GTY(())
-   unsigned thread_local_flag : 1;
-   unsigned declared_inline_flag : 1;
-   ENUM_BITFIELD(symbol_visibility) visibility : 2;
--  unsigned unused : 1;
--  /* one unused bit.  */
-+  unsigned visibility_specified : 1;
- 
-   unsigned lang_flag_0 : 1;
-   unsigned lang_flag_1 : 1;
+index 00000000..e69de29b
 diff --git a/gcc/varasm.c b/gcc/varasm.c
-index 33307e5..3dc2866 100644
+index 33307e52..56cc5a74 100644
 --- a/gcc/varasm.c
 +++ b/gcc/varasm.c
 @@ -535,6 +535,45 @@ function_section (tree decl)
@@ -5860,29 +4011,8 @@ index 33307e5..3dc2866 100644
  
    return (desc ? desc->rtl : NULL_RTX);
  }
-@@ -5211,8 +5261,8 @@ default_binds_local_p_1 (tree exp, int shlib)
-   /* Static variables are always local.  */
-   else if (! TREE_PUBLIC (exp))
-     local_p = true;
--  /* A variable is local if the user tells us so.  */
--  else if (DECL_VISIBILITY (exp) != VISIBILITY_DEFAULT)
-+  /* A variable is local if the user explicitly tells us so.  */
-+  else if (DECL_VISIBILITY_SPECIFIED (exp) && DECL_VISIBILITY (exp) != VISIBILITY_DEFAULT)
-     local_p = true;
-   /* Otherwise, variables defined outside this object may not be local.  */
-   else if (DECL_EXTERNAL (exp))
-@@ -5220,6 +5270,9 @@ default_binds_local_p_1 (tree exp, int shlib)
-   /* Linkonce and weak data are never local.  */
-   else if (DECL_ONE_ONLY (exp) || DECL_WEAK (exp))
-     local_p = false;
-+  /* If none of the above and visibility is not default, make local.  */
-+  else if (DECL_VISIBILITY (exp) != VISIBILITY_DEFAULT)
-+    local_p = true;
-   /* If PIC, then assume that any global name can be overridden by
-      symbols resolved from other modules.  */
-   else if (shlib)
 diff --git a/libf2c/libI77/fio.h b/libf2c/libI77/fio.h
-index 7734f0c..4515bbe 100644
+index 7734f0c2..4515bbee 100644
 --- a/libf2c/libI77/fio.h
 +++ b/libf2c/libI77/fio.h
 @@ -86,7 +86,7 @@ extern unit f__units[];
@@ -5895,7 +4025,7 @@ index 7734f0c..4515bbe 100644
  extern int f__recpos;		/*position in current record */
  extern int f__cursor;		/* offset to move to */
 diff --git a/libffi/configure b/libffi/configure
-index 698ae01..851859f 100755
+index 698ae01b..851859fc 100755
 --- a/libffi/configure
 +++ b/libffi/configure
 @@ -1322,14 +1322,7 @@ irix5* | irix6*)
@@ -5915,7 +4045,7 @@ index 698ae01..851859f 100755
  
  netbsd*)
 diff --git a/libffi/src/alpha/osf.S b/libffi/src/alpha/osf.S
-index 2f03d62..36052b3 100644
+index 2f03d627..36052b3d 100644
 --- a/libffi/src/alpha/osf.S
 +++ b/libffi/src/alpha/osf.S
 @@ -356,4 +356,8 @@ $LASFDE3:
@@ -5928,7 +4058,7 @@ index 2f03d62..36052b3 100644
 +#endif
  #endif
 diff --git a/libffi/src/arm/sysv.S b/libffi/src/arm/sysv.S
-index 0e41861..cf37b69 100644
+index 0e418611..cf37b690 100644
 --- a/libffi/src/arm/sysv.S
 +++ b/libffi/src/arm/sysv.S
 @@ -125,3 +125,6 @@ epilogue:
@@ -5939,7 +4069,7 @@ index 0e41861..cf37b69 100644
 +	.section	.note.GNU-stack,"",%progbits
 +#endif
 diff --git a/libffi/src/ia64/ffi.c b/libffi/src/ia64/ffi.c
-index c846f6e..8a7b8e0 100644
+index c846f6e1..8a7b8e0e 100644
 --- a/libffi/src/ia64/ffi.c
 +++ b/libffi/src/ia64/ffi.c
 @@ -547,7 +547,7 @@ ffi_prep_incoming_args_UNIX(struct ia64_args *args, void **rvalue,
@@ -5982,7 +4112,7 @@ index c846f6e..8a7b8e0 100644
  		if (nelements + fp_reg_num >= 8) {
  		  /* hard case NYI.	*/
 diff --git a/libffi/src/ia64/unix.S b/libffi/src/ia64/unix.S
-index be267f6..52851ed 100644
+index be267f60..52851ed1 100644
 --- a/libffi/src/ia64/unix.S
 +++ b/libffi/src/ia64/unix.S
 @@ -325,3 +325,7 @@ ffi_closure_UNIX:
@@ -5994,7 +4124,7 @@ index be267f6..52851ed 100644
 +	.section	.note.GNU-stack,"",@progbits
 +#endif
 diff --git a/libffi/src/m68k/sysv.S b/libffi/src/m68k/sysv.S
-index d019a37..24bb081 100644
+index d019a377..24bb081b 100644
 --- a/libffi/src/m68k/sysv.S
 +++ b/libffi/src/m68k/sysv.S
 @@ -95,3 +95,7 @@ epilogue:
@@ -6006,7 +4136,7 @@ index d019a37..24bb081 100644
 +	.section	.note.GNU-stack,"",@progbits
 +#endif
 diff --git a/libffi/src/powerpc/linux64.S b/libffi/src/powerpc/linux64.S
-index 11cf926..b78d319 100644
+index 11cf926b..b78d3199 100644
 --- a/libffi/src/powerpc/linux64.S
 +++ b/libffi/src/powerpc/linux64.S
 @@ -174,3 +174,7 @@ ffi_call_LINUX64:
@@ -6018,7 +4148,7 @@ index 11cf926..b78d319 100644
 +	.section	.note.GNU-stack,"",@progbits
 +#endif
 diff --git a/libffi/src/powerpc/linux64_closure.S b/libffi/src/powerpc/linux64_closure.S
-index fa331db..5fb2f36 100644
+index fa331dbe..5fb2f364 100644
 --- a/libffi/src/powerpc/linux64_closure.S
 +++ b/libffi/src/powerpc/linux64_closure.S
 @@ -203,3 +203,7 @@ ffi_closure_LINUX64:
@@ -6030,7 +4160,7 @@ index fa331db..5fb2f36 100644
 +	.section	.note.GNU-stack,"",@progbits
 +#endif
 diff --git a/libffi/src/powerpc/ppc_closure.S b/libffi/src/powerpc/ppc_closure.S
-index dce9dab..dda63a4 100644
+index dce9daba..dda63a4e 100644
 --- a/libffi/src/powerpc/ppc_closure.S
 +++ b/libffi/src/powerpc/ppc_closure.S
 @@ -248,3 +248,7 @@ END(ffi_closure_SYSV)
@@ -6042,7 +4172,7 @@ index dce9dab..dda63a4 100644
 +	.section	.note.GNU-stack,"",@progbits
 +#endif
 diff --git a/libffi/src/powerpc/sysv.S b/libffi/src/powerpc/sysv.S
-index a7aaa3f..b4b2ffd 100644
+index a7aaa3f8..b4b2ffdb 100644
 --- a/libffi/src/powerpc/sysv.S
 +++ b/libffi/src/powerpc/sysv.S
 @@ -189,3 +189,7 @@ END(ffi_call_SYSV)
@@ -6054,7 +4184,7 @@ index a7aaa3f..b4b2ffd 100644
 +	.section	.note.GNU-stack,"",@progbits
 +#endif
 diff --git a/libffi/src/s390/sysv.S b/libffi/src/s390/sysv.S
-index e9cbed9..09cdec1 100644
+index e9cbed97..09cdec14 100644
 --- a/libffi/src/s390/sysv.S
 +++ b/libffi/src/s390/sysv.S
 @@ -427,3 +427,6 @@ ffi_closure_SYSV:
@@ -6065,7 +4195,7 @@ index e9cbed9..09cdec1 100644
 +	.section	.note.GNU-stack,"",@progbits
 +#endif
 diff --git a/libffi/src/sparc/v8.S b/libffi/src/sparc/v8.S
-index aaa7be7..b278306 100644
+index aaa7be7b..b2783062 100644
 --- a/libffi/src/sparc/v8.S
 +++ b/libffi/src/sparc/v8.S
 @@ -255,3 +255,7 @@ done2:
@@ -6077,7 +4207,7 @@ index aaa7be7..b278306 100644
 +	.section	.note.GNU-stack,"",@progbits
 +#endif
 diff --git a/libffi/src/sparc/v9.S b/libffi/src/sparc/v9.S
-index d640e02..a8e8bf9 100644
+index d640e023..a8e8bf98 100644
 --- a/libffi/src/sparc/v9.S
 +++ b/libffi/src/sparc/v9.S
 @@ -300,3 +300,7 @@ longdouble1:
@@ -6089,7 +4219,7 @@ index d640e02..a8e8bf9 100644
 +	.section	.note.GNU-stack,"",@progbits
 +#endif
 diff --git a/libffi/src/x86/sysv.S b/libffi/src/x86/sysv.S
-index 53a4c2b..37e1e29 100644
+index 53a4c2b7..37e1e295 100644
 --- a/libffi/src/x86/sysv.S
 +++ b/libffi/src/x86/sysv.S
 @@ -182,3 +182,7 @@ epilogue:
@@ -6101,7 +4231,7 @@ index 53a4c2b..37e1e29 100644
 +	.section	.note.GNU-stack,"",@progbits
 +#endif
 diff --git a/libffi/src/x86/unix64.S b/libffi/src/x86/unix64.S
-index 310fed7..9d75e7f 100644
+index 310fed71..9d75e7fa 100644
 --- a/libffi/src/x86/unix64.S
 +++ b/libffi/src/x86/unix64.S
 @@ -301,3 +301,7 @@ ffi_closure_UNIX64:
@@ -6113,7 +4243,7 @@ index 310fed7..9d75e7f 100644
 +	.section	.note.GNU-stack,"",@progbits
 +#endif
 diff --git a/libiberty/Makefile.in b/libiberty/Makefile.in
-index fc86feb..416948a 100644
+index fc86feb4..416948af 100644
 --- a/libiberty/Makefile.in
 +++ b/libiberty/Makefile.in
 @@ -224,6 +224,7 @@ $(TARGETLIB): $(REQUIRED_OFILES) $(EXTRA_OFILES) $(LIBOBJS)
@@ -6125,7 +4255,7 @@ index fc86feb..416948a 100644
  	else true; fi
  
 diff --git a/libiberty/splay-tree.c b/libiberty/splay-tree.c
-index fc98db1..b1410aa 100644
+index fc98db16..b1410aa3 100644
 --- a/libiberty/splay-tree.c
 +++ b/libiberty/splay-tree.c
 @@ -59,18 +59,59 @@ splay_tree_delete_helper (sp, node)
@@ -6196,7 +4326,7 @@ index fc98db1..b1410aa 100644
  
  /* Help splay SP around KEY.  PARENT and GRANDPARENT are the parent
 diff --git a/libjava/configure b/libjava/configure
-index 969bd91..5b72290 100755
+index 969bd910..5b72290e 100755
 --- a/libjava/configure
 +++ b/libjava/configure
 @@ -2033,14 +2033,7 @@ irix5* | irix6*)
@@ -6226,7 +4356,7 @@ index 969bd91..5b72290 100755
  for peer in $peerlibs ; do
    case $peer in
 diff --git a/libjava/configure.in b/libjava/configure.in
-index 26f39cc..cbfc0b0 100644
+index 26f39cc3..cbfc0b0d 100644
 --- a/libjava/configure.in
 +++ b/libjava/configure.in
 @@ -367,6 +367,10 @@ use_gtk_awt=""
@@ -6241,7 +4371,7 @@ index 26f39cc..cbfc0b0 100644
    case $peer in
      xlib)
 diff --git a/libjava/include/x86_64-signal.h b/libjava/include/x86_64-signal.h
-index f9c8e23..23f4011 100644
+index f9c8e239..23f40119 100644
 --- a/libjava/include/x86_64-signal.h
 +++ b/libjava/include/x86_64-signal.h
 @@ -40,7 +40,7 @@ do									     \
@@ -6254,7 +4384,7 @@ index f9c8e23..23f4011 100644
    _sc->rip += 2;							     \
  }									     \
 diff --git a/libobjc/configure b/libobjc/configure
-index 55eb9ce..5b09e27 100755
+index 55eb9ce8..5b09e271 100755
 --- a/libobjc/configure
 +++ b/libobjc/configure
 @@ -1612,14 +1612,7 @@ irix5* | irix6*)
@@ -6274,7 +4404,7 @@ index 55eb9ce..5b09e27 100755
  
  netbsd*)
 diff --git a/libstdc++-v3/acinclude.m4 b/libstdc++-v3/acinclude.m4
-index cf541ed..44c7559 100644
+index cf541ed0..44c75591 100644
 --- a/libstdc++-v3/acinclude.m4
 +++ b/libstdc++-v3/acinclude.m4
 @@ -274,7 +274,7 @@ AC_DEFUN([GLIBCXX_CHECK_LINKER_FEATURES], [
@@ -6287,7 +4417,7 @@ index cf541ed..44c7559 100644
    glibcxx_gnu_ld_version=`echo $ldver | \
           $AWK -F. '{ if (NF<3) [$]3=0; print ([$]1*100+[$]2)*100+[$]3 }'`
 diff --git a/libstdc++-v3/configure b/libstdc++-v3/configure
-index 4bb1ed3..b18c300 100755
+index 4bb1ed39..b18c3003 100755
 --- a/libstdc++-v3/configure
 +++ b/libstdc++-v3/configure
 @@ -4002,14 +4002,7 @@ irix5* | irix6*)
@@ -6388,7 +4518,7 @@ index 4bb1ed3..b18c300 100755
    glibcxx_gnu_ld_version=`echo $ldver | \
           $AWK -F. '{ if (NF<3) $3=0; print ($1*100+$2)*100+$3 }'`
 diff --git a/libstdc++-v3/docs/doxygen/filter b/libstdc++-v3/docs/doxygen/filter
-index 4ea2d41..9ef4e6c 100755
+index 4ea2d41b..9ef4e6c9 100755
 --- a/libstdc++-v3/docs/doxygen/filter
 +++ b/libstdc++-v3/docs/doxygen/filter
 @@ -1,5 +1,7 @@
@@ -6399,162 +4529,8 @@ index 4ea2d41..9ef4e6c 100755
  script=$1
  file=$2
  
-diff --git a/libstdc++-v3/include/bits/allocator.h b/libstdc++-v3/include/bits/allocator.h
-index c9200ec..c23b544 100644
---- a/libstdc++-v3/include/bits/allocator.h
-+++ b/libstdc++-v3/include/bits/allocator.h
-@@ -51,6 +51,8 @@
- // Define the base class to std::allocator.
- #include <bits/c++allocator.h>
- 
-+#pragma GCC visibility push(default)
-+
- namespace std
- {
-   template<typename _Tp>
-@@ -127,4 +129,6 @@ namespace std
- #undef ___glibcxx_base_allocator
- } // namespace std
- 
-+#pragma GCC visibility pop
-+
- #endif
-diff --git a/libstdc++-v3/include/bits/basic_string.h b/libstdc++-v3/include/bits/basic_string.h
-index 04e1500..3d33265 100644
---- a/libstdc++-v3/include/bits/basic_string.h
-+++ b/libstdc++-v3/include/bits/basic_string.h
-@@ -45,6 +45,8 @@
- #include <bits/atomicity.h>
- #include <debug/debug.h>
- 
-+#pragma GCC visibility push(default)
-+
- namespace std
- {
-   /**
-@@ -2362,4 +2364,6 @@ namespace std
- 	    basic_string<_CharT, _Traits, _Alloc>& __str);
- } // namespace std
- 
-+#pragma GCC visibility pop
-+
- #endif /* _BASIC_STRING_H */
-diff --git a/libstdc++-v3/include/std/std_fstream.h b/libstdc++-v3/include/std/std_fstream.h
-index 3dec366..ca02160 100644
---- a/libstdc++-v3/include/std/std_fstream.h
-+++ b/libstdc++-v3/include/std/std_fstream.h
-@@ -49,6 +49,8 @@
- #include <bits/basic_file.h>
- #include <bits/gthr.h>
- 
-+#pragma GCC visibility push(default)
-+
- namespace std
- {
-   // [27.8.1.1] template class basic_filebuf
-@@ -840,4 +842,6 @@ namespace std
- # include <bits/fstream.tcc>
- #endif
- 
-+#pragma GCC visibility pop
-+
- #endif /* _GLIBCXX_FSTREAM */
-diff --git a/libstdc++-v3/include/std/std_istream.h b/libstdc++-v3/include/std/std_istream.h
-index a3a53ba..5822ad7 100644
---- a/libstdc++-v3/include/std/std_istream.h
-+++ b/libstdc++-v3/include/std/std_istream.h
-@@ -45,6 +45,8 @@
- #include <ios>
- #include <limits> // For numeric_limits
- 
-+#pragma GCC visibility push(default)
-+
- namespace std
- {
-   // [27.6.1.1] Template class basic_istream
-@@ -771,4 +773,6 @@ namespace std
- # include <bits/istream.tcc>
- #endif
- 
-+#pragma GCC visibility pop
-+
- #endif	/* _GLIBCXX_ISTREAM */
-diff --git a/libstdc++-v3/include/std/std_ostream.h b/libstdc++-v3/include/std/std_ostream.h
-index e3590f2..c8b9e0f 100644
---- a/libstdc++-v3/include/std/std_ostream.h
-+++ b/libstdc++-v3/include/std/std_ostream.h
-@@ -44,6 +44,8 @@
- 
- #include <ios>
- 
-+#pragma GCC visibility push(default)
-+
- namespace std
- {
-   // [27.6.2.1] Template class basic_ostream
-@@ -545,4 +547,6 @@ namespace std
- # include <bits/ostream.tcc>
- #endif
- 
-+#pragma GCC visibility pop
-+
- #endif	/* _GLIBCXX_OSTREAM */
-diff --git a/libstdc++-v3/src/Makefile.am b/libstdc++-v3/src/Makefile.am
-index ed4c710..80534b2 100644
---- a/libstdc++-v3/src/Makefile.am
-+++ b/libstdc++-v3/src/Makefile.am
-@@ -210,6 +210,13 @@ CXXLINK = $(LIBTOOL) --tag CXX --mode=link $(CXX) \
- 	  $(OPT_LDFLAGS) $(SECTION_LDFLAGS) $(AM_CXXFLAGS) $(LDFLAGS) -o $@
- 
- 
-+install-exec-local:
-+	pic_objs=`sed -n "s:'::g;s:^pic_object=::p" *.lo | grep -v '^none$$'`; \
-+	if [ x"$$pic_objs" != x ]; then \
-+		$(AR) cru libstdc++_pic.a $$pic_objs $(top_builddir)/libsupc++/*.o || exit 1; \
-+		$(INSTALL_DATA) libstdc++_pic.a $(DESTDIR)$(toolexeclibdir) || exit 1; \
-+	fi
-+
- # Added bits to build debug library.
- if GLIBCXX_BUILD_DEBUG
- all-local: build_debug
-diff --git a/libstdc++-v3/src/Makefile.in b/libstdc++-v3/src/Makefile.in
-index 1fae145..88970eb 100644
---- a/libstdc++-v3/src/Makefile.in
-+++ b/libstdc++-v3/src/Makefile.in
-@@ -592,7 +592,7 @@ info-am:
- 
- install-data-am: install-data-local
- 
--install-exec-am: install-toolexeclibLTLIBRARIES
-+install-exec-am: install-toolexeclibLTLIBRARIES install-exec-local
- 
- install-info: install-info-am
- 
-@@ -625,6 +625,7 @@ uninstall-am: uninstall-info-am uninstall-toolexeclibLTLIBRARIES
- 	distclean-tags distdir dvi dvi-am info info-am install \
- 	install-am install-data install-data-am install-data-local \
- 	install-exec install-exec-am install-info install-info-am \
-+	install-exec-local \
- 	install-man install-strip install-toolexeclibLTLIBRARIES \
- 	installcheck installcheck-am installdirs maintainer-clean \
- 	maintainer-clean-generic mostlyclean mostlyclean-compile \
-@@ -709,6 +710,14 @@ build_debug: stamp-debug
- install_debug:
- 	(cd ${debugdir} && $(MAKE) \
- 	toolexeclibdir=$(glibcxx_toolexeclibdir)/debug install)
-+
-+install-exec-local:
-+	pic_objs=`sed -n "s:'::g;s:^pic_object=::p" *.lo | grep -v '^none$$'`; \
-+	if [ x"$$pic_objs" != x ]; then \
-+		$(AR) cru libstdc++_pic.a $$pic_objs $(top_builddir)/libsupc++/*.o || exit 1; \
-+		$(INSTALL_DATA) libstdc++_pic.a $(DESTDIR)$(toolexeclibdir) || exit 1; \
-+	fi
-+
- # Tell versions [3.59,3.63) of GNU make to not export all variables.
- # Otherwise a system limit (for SysV at least) may be exceeded.
- .NOEXPORT:
 diff --git a/libtool.m4 b/libtool.m4
-index 5afbd02..cfd02b4 100644
+index 5afbd026..cfd02b46 100644
 --- a/libtool.m4
 +++ b/libtool.m4
 @@ -679,14 +679,7 @@ irix5* | irix6*)
@@ -6574,7 +4550,7 @@ index 5afbd02..cfd02b4 100644
  
  netbsd*)
 diff --git a/zlib/configure b/zlib/configure
-index 1f87a53..06b517e 100755
+index 1f87a53f..06b517ef 100755
 --- a/zlib/configure
 +++ b/zlib/configure
 @@ -1579,14 +1579,7 @@ irix5* | irix6*)

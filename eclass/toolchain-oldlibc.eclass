@@ -133,6 +133,7 @@ tc_has_feature() {
 	has "$1" "${TC_FEATURES[@]}"
 }
 
+tc_version_is_at_least 2.9 && IUSE+=" debug"
 tc_version_is_at_least 2.1 && IUSE+=" +cxx"
 tc_version_is_at_least 2.1 && IUSE+=" objc"
 tc_version_is_between 2.9 4.0 && IUSE+=" f77"
@@ -440,6 +441,16 @@ toolchain-oldlibc_src_configure() {
 	tc_version_is_at_least 3.4 && confgcc+=( --disable-werror --disable-libstdcxx-pch )
 
 	tc_version_is_at_least 3.0 && confgcc+=( --enable-clocale=generic --disable-libgcj )
+
+	if in_iuse debug ; then
+		if tc_version_is_at_least 3.3 ; then
+			confgcc+=( --enable-checking="${GCC_CHECKS_LIST:-$(usex debug misc,tree,rtlflag,gc,rtl yes)}" )
+		elif tc_version_is_at_least 3.0 ; then
+			confgcc+=( --enable-checking="${GCC_CHECKS_LIST:-$(usex debug misc,tree,gc yes)}" )
+		else
+			confgcc+=( --enable-checking="${GCC_CHECKS_LIST:-$(usex debug yes no)}" )
+		fi
+	fi
 
 	### arch options
 
