@@ -1,0 +1,663 @@
+diff --git a/gcc/doc/invoke.texi b/gcc/doc/invoke.texi
+index 57458b3e1..194de02d8 100644
+--- a/gcc/doc/invoke.texi
++++ b/gcc/doc/invoke.texi
+@@ -161,7 +161,7 @@ in the following sections.
+ @table @emph
+ @item Overall Options
+ @xref{Overall Options,,Options Controlling the Kind of Output}.
+-@gccoptlist{-c  -S  -E  -o @var{file}  -combine  -no-canonical-prefixes  @gol
++@gccoptlist{-c  -S  -E  -o @var{file}  -no-canonical-prefixes  @gol
+ -pipe  -pass-exit-codes  @gol
+ -x @var{language}  -v  -###  --help@r{[}=@var{class}@r{[},@dots{}@r{]]}  --target-help  @gol
+ --version -wrapper@@@var{file} -fplugin=@var{file} -fplugin-arg-@var{name}=@var{arg}}
+@@ -1187,23 +1187,6 @@ various stages of compilation.  This fails to work on some systems where
+ the assembler is unable to read from a pipe; but the GNU assembler has
+ no trouble.
+ 
+-@item -combine
+-@opindex combine
+-If you are compiling multiple source files, this option tells the driver
+-to pass all the source files to the compiler at once (for those
+-languages for which the compiler can handle this).  This will allow
+-intermodule analysis (IMA) to be performed by the compiler.  Currently the only
+-language for which this is supported is C@.  If you pass source files for
+-multiple languages to the driver, using this option, the driver will invoke
+-the compiler(s) that support IMA once each, passing each compiler all the
+-source files appropriate for it.  For those languages that do not support
+-IMA this option will be ignored, and the compiler will be invoked once for
+-each source file in that language.  If you use this option in conjunction
+-with @option{-save-temps}, the compiler will generate multiple
+-pre-processed files
+-(one for each source file), but only one (combined) @file{.o} or
+-@file{.s} file.
+-
+ @item --help
+ @opindex help
+ Print (on the standard output) a description of the command line options
+@@ -6542,7 +6525,7 @@ effective for programs containing arrays of structures.  Available in two
+ compilation modes: profile-based (enabled with @option{-fprofile-generate})
+ or static (which uses built-in heuristics).  Require @option{-fipa-type-escape}
+ to provide the safety of this transformation.  It works only in whole program
+-mode, so it requires @option{-fwhole-program} and @option{-combine} to be
++mode, so it requires @option{-fwhole-program} to be
+ enabled.  Structures considered @samp{cold} by this transformation are not
+ affected (see @option{--param struct-reorg-cold-struct-ratio=@var{value}}).
+ 
+@@ -7174,7 +7157,7 @@ and those merged by attribute @code{externally_visible} become static functions
+ and in effect are optimized more aggressively by interprocedural optimizers.
+ While this option is equivalent to proper use of the @code{static} keyword for
+ programs consisting of a single file, in combination with option
+-@option{-combine}, @option{-flto} or @option{-fwhopr} this flag can be used to
++@option{-flto} or @option{-fwhopr} this flag can be used to
+ compile many smaller scale programs since the functions and variables become
+ local for the whole combined compilation unit, not for the single source file
+ itself.
+diff --git a/gcc/gcc.c b/gcc/gcc.c
+index e7ee3820e..24d923ff8 100644
+--- a/gcc/gcc.c
++++ b/gcc/gcc.c
+@@ -251,8 +251,6 @@ static size_t save_temps_length = 0;
+ 
+ /* Nonzero means pass multiple source files to the compiler at one time.  */
+ 
+-static int combine_flag = 0;
+-
+ /* Nonzero means use pipes to communicate between subprocesses.
+    Overridden by either of the above two flags.  */
+ 
+@@ -1063,7 +1061,7 @@ static const struct compiler default_compilers[] =
+   {".java", "#Java", 0, 0, 0}, {".class", "#Java", 0, 0, 0},
+   {".zip", "#Java", 0, 0, 0}, {".jar", "#Java", 0, 0, 0},
+   /* Next come the entries for C.  */
+-  {".c", "@c", 0, 1, 1},
++  {".c", "@c", 0, 0, 1},
+   {"@c",
+    /* cc1 has an integrated ISO C preprocessor.  We should invoke the
+       external preprocessor if -save-temps is given.  */
+@@ -1071,20 +1069,13 @@ static const struct compiler default_compilers[] =
+       %{!E:%{!M:%{!MM:\
+           %{traditional|ftraditional:\
+ %eGNU C no longer supports -traditional without -E}\
+-       %{!combine:\
+-	  %{save-temps*|traditional-cpp|no-integrated-cpp:%(trad_capable_cpp) \
+-		%(cpp_options) -o %{save-temps*:%b.i} %{!save-temps*:%g.i} \n\
+-		    cc1 -fpreprocessed %{save-temps*:%b.i} %{!save-temps*:%g.i} \
+-			%(cc1_options)}\
+-	  %{!save-temps*:%{!traditional-cpp:%{!no-integrated-cpp:\
+-		cc1 %(cpp_unique_options) %(cc1_options)}}}\
+-          %{!fsyntax-only:%(invoke_as)}} \
+-      %{combine:\
+-	  %{save-temps*|traditional-cpp|no-integrated-cpp:%(trad_capable_cpp) \
+-		%(cpp_options) -o %{save-temps*:%b.i} %{!save-temps*:%g.i}}\
+-	  %{!save-temps*:%{!traditional-cpp:%{!no-integrated-cpp:\
+-		cc1 %(cpp_unique_options) %(cc1_options)}}\
+-                %{!fsyntax-only:%(invoke_as)}}}}}}", 0, 1, 1},
++      %{save-temps*|traditional-cpp|no-integrated-cpp:%(trad_capable_cpp) \
++	  %(cpp_options) -o %{save-temps*:%b.i} %{!save-temps*:%g.i} \n\
++	    cc1 -fpreprocessed %{save-temps*:%b.i} %{!save-temps*:%g.i} \
++	  %(cc1_options)}\
++      %{!save-temps*:%{!traditional-cpp:%{!no-integrated-cpp:\
++	  cc1 %(cpp_unique_options) %(cc1_options)}}}\
++      %{!fsyntax-only:%(invoke_as)}}}}", 0, 0, 1},
+   {"-",
+    "%{!E:%e-E or -x required when input is from standard input}\
+     %(trad_capable_cpp) %(cpp_options) %(cpp_debug_options)", 0, 0, 0},
+@@ -1104,7 +1095,7 @@ static const struct compiler default_compilers[] =
+ 		cc1 %(cpp_unique_options) %(cc1_options)\
+                     -o %g.s %{!o*:--output-pch=%i.gch}\
+                     %W{o*:--output-pch=%*}%V}}}}}}", 0, 0, 0},
+-  {".i", "@cpp-output", 0, 1, 0},
++  {".i", "@cpp-output", 0, 0, 0},
+   {"@cpp-output",
+    "%{!M:%{!MM:%{!E:cc1 -fpreprocessed %i %(cc1_options) %{!fsyntax-only:%(invoke_as)}}}}", 0, 1, 0},
+   {".s", "@assembler", 0, 1, 0},
+@@ -1182,7 +1173,6 @@ static const struct option_map option_map[] =
+    {"--classpath", "-fclasspath=", "aj"},
+    {"--bootclasspath", "-fbootclasspath=", "aj"},
+    {"--CLASSPATH", "-fclasspath=", "aj"},
+-   {"--combine", "-combine", 0},
+    {"--comments", "-C", 0},
+    {"--comments-in-macros", "-CC", 0},
+    {"--compile", "-c", 0},
+@@ -3406,7 +3396,6 @@ display_help (void)
+   fputs (_("  -Xassembler <arg>        Pass <arg> on to the assembler\n"), stdout);
+   fputs (_("  -Xpreprocessor <arg>     Pass <arg> on to the preprocessor\n"), stdout);
+   fputs (_("  -Xlinker <arg>           Pass <arg> on to the linker\n"), stdout);
+-  fputs (_("  -combine                 Pass multiple source files to compiler at once\n"), stdout);
+   fputs (_("  -save-temps              Do not delete intermediate files\n"), stdout);
+   fputs (_("  -save-temps=<arg>        Do not delete intermediate files\n"), stdout);
+   fputs (_("\
+@@ -4023,7 +4012,6 @@ process_command (int argc, const char **argv)
+ 	;
+       else if (strcmp (argv[i], "-combine") == 0)
+ 	{
+-	  combine_flag = 1;
+ 	  n_switches++;
+ 	}
+       else if (strcmp (argv[i], "-specs") == 0)
+@@ -7317,10 +7305,7 @@ warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n\n"
+ 
+   explicit_link_files = XCNEWVEC (char, n_infiles);
+ 
+-  if (combine_flag)
+-    combine_inputs = true;
+-  else
+-    combine_inputs = false;
++  combine_inputs = have_o || flag_wpa;
+ 
+   for (i = 0; (int) i < n_infiles; i++)
+     {
+@@ -7355,61 +7340,6 @@ warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n\n"
+   if (!combine_inputs && have_c && have_o && lang_n_infiles > 1)
+    fatal ("cannot specify -o with -c, -S or -E with multiple files");
+ 
+-  if (combine_flag && save_temps_flag)
+-    {
+-      bool save_combine_inputs = combine_inputs;
+-      /* Must do a separate pre-processing pass for C & Objective-C files, to
+-	 obtain individual .i files.  */
+-
+-      combine_inputs = false;
+-      for (i = 0; (int) i < n_infiles; i++)
+-	{
+-	  int this_file_error = 0;
+-
+-	  input_file_number = i;
+-	  set_input (infiles[i].name);
+-	  if (infiles[i].incompiler
+-	      && (infiles[i].incompiler)->needs_preprocessing)
+-	    input_file_compiler = infiles[i].incompiler;
+-	  else
+-	    continue;
+-
+-	  if (input_file_compiler)
+-	    {
+-	      if (input_file_compiler->spec[0] == '#')
+-		{
+-		  error ("%s: %s compiler not installed on this system",
+-			 input_filename, &input_file_compiler->spec[1]);
+-		  this_file_error = 1;
+-		}
+-	      else
+-		{
+-		  value = do_spec (input_file_compiler->spec);
+-		  infiles[i].preprocessed = true;
+-		  if (!have_o_argbuf_index)
+-		    fatal ("spec '%s' is invalid", input_file_compiler->spec);
+-		  infiles[i].name = argbuf[have_o_argbuf_index];
+-		  infiles[i].incompiler
+-		    = lookup_compiler (infiles[i].name,
+-				       strlen (infiles[i].name),
+-				       infiles[i].language);
+-
+-		  if (value < 0)
+-		    this_file_error = 1;
+-		}
+-	    }
+-
+-	  if (this_file_error)
+-	    {
+-	      delete_failure_queue ();
+-	      error_count++;
+-	      break;
+-	    }
+-	  clear_failure_queue ();
+-	}
+-      combine_inputs = save_combine_inputs;
+-    }
+-
+   for (i = 0; (int) i < n_infiles; i++)
+     {
+       int this_file_error = 0;
+@@ -7428,12 +7358,9 @@ warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n\n"
+ 
+       /* Figure out which compiler from the file's suffix.  */
+ 
+-      if (! combine_inputs)
+-	input_file_compiler
+-	  = lookup_compiler (infiles[i].name, input_filename_length,
+-			     infiles[i].language);
+-      else
+-	input_file_compiler = infiles[i].incompiler;
++      input_file_compiler
++	= lookup_compiler (infiles[i].name, input_filename_length,
++			   infiles[i].language);
+ 
+       if (input_file_compiler)
+ 	{
+diff --git a/gcc/lto-wrapper.c b/gcc/lto-wrapper.c
+index ec0a96ea2..71165115e 100644
+--- a/gcc/lto-wrapper.c
++++ b/gcc/lto-wrapper.c
+@@ -264,7 +264,6 @@ run_gcc (unsigned argc, char *argv[])
+   argv_ptr = new_argv;
+ 
+   *argv_ptr++ = argv[0];
+-  *argv_ptr++ = "-combine";
+   *argv_ptr++ = "-x";
+   *argv_ptr++ = "lto";
+   *argv_ptr++ = "-c";
+diff --git a/gcc/lto/lang.opt b/gcc/lto/lang.opt
+index a8b791663..73b1fbfea 100644
+--- a/gcc/lto/lang.opt
++++ b/gcc/lto/lang.opt
+@@ -33,7 +33,7 @@ LTO Joined Var(ltrans_output_list)
+ Specify a file to which a list of files output by LTRANS is written.
+ 
+ fwpa
+-LTO Report Var(flag_wpa) Optimization
++LTO Driver Report Var(flag_wpa) Optimization
+ Run the link-time optimizer in whole program analysis (WPA) mode.
+ 
+ fresolution
+diff --git a/gcc/testsuite/gcc.dg/debug/pr41893-1.c b/gcc/testsuite/gcc.dg/debug/pr41893-1.c
+deleted file mode 100644
+index 54a31fb6f..000000000
+--- a/gcc/testsuite/gcc.dg/debug/pr41893-1.c
++++ /dev/null
+@@ -1,13 +0,0 @@
+-/* PR debug/41893 */
+-/* { dg-do compile } */
+-/* { dg-options "-combine -fwhole-program -O" } */
+-/* { dg-additional-sources "pr41893-2.c" } */
+-
+-struct S { int v; };
+-struct S s;
+-
+-void __attribute__((externally_visible))
+-func1 (void)
+-{
+-  struct S *p = &s;
+-}
+diff --git a/gcc/testsuite/gcc.dg/matrix/matrix-3.c b/gcc/testsuite/gcc.dg/matrix/matrix-3.c
+index 5990abf48..28a5a16b7 100644
+--- a/gcc/testsuite/gcc.dg/matrix/matrix-3.c
++++ b/gcc/testsuite/gcc.dg/matrix/matrix-3.c
+@@ -1,6 +1,4 @@
+ /* { dg-do compile } */
+-/* { dg-options "-O3 -fipa-matrix-reorg -fdump-ipa-matrix-reorg -c -fwhole-program -combine"  } */
+-
+ 
+ #include <stdio.h>
+ #include <stdlib.h>
+diff --git a/gcc/testsuite/gcc.dg/matrix/matrix-4.c b/gcc/testsuite/gcc.dg/matrix/matrix-4.c
+index 7ca79ec4b..d741b46e4 100644
+--- a/gcc/testsuite/gcc.dg/matrix/matrix-4.c
++++ b/gcc/testsuite/gcc.dg/matrix/matrix-4.c
+@@ -1,6 +1,4 @@
+ /* { dg-do compile } */
+-/* { dg-options "-O3 -fipa-matrix-reorg -fdump-ipa-matrix-reorg -c -fwhole-program -combine"  } */
+-
+ 
+ #include <stdio.h>
+ #include <stdlib.h>
+diff --git a/gcc/testsuite/gcc.dg/matrix/matrix.exp b/gcc/testsuite/gcc.dg/matrix/matrix.exp
+index b2f4ede94..fc1eb4138 100644
+--- a/gcc/testsuite/gcc.dg/matrix/matrix.exp
++++ b/gcc/testsuite/gcc.dg/matrix/matrix.exp
+@@ -19,7 +19,7 @@
+ load_lib gcc-dg.exp
+ load_lib target-supports.exp
+ 
+-set DEFAULT_MATCFLAGS "-O3 -fipa-matrix-reorg -fdump-ipa-matrix-reorg -fwhole-program -combine"
++set DEFAULT_MATCFLAGS "-O3 -fipa-matrix-reorg -fdump-ipa-matrix-reorg -fwhole-program"
+ 
+ # Initialize `dg'.
+ dg-init
+@@ -52,7 +52,7 @@ load_lib profopt.exp
+ # needed to generate profile data, the second is options to use the
+ # profile data.
+ set profile_option "-fprofile-generate -O3"
+-set feedback_option "-fprofile-use -fipa-matrix-reorg -fdump-ipa-matrix-reorg -O3 -fwhole-program -combine"
++set feedback_option "-fprofile-use -fipa-matrix-reorg -fdump-ipa-matrix-reorg -O3 -fwhole-program"
+ 
+ foreach src [lsort [glob -nocomplain $srcdir/$subdir/transpose-*.c]] {
+     # If we're only testing specific files and this isn't one of them, skip it.
+diff --git a/gcc/testsuite/gcc.dg/pr27898.c b/gcc/testsuite/gcc.dg/pr27898.c
+deleted file mode 100644
+index bb7cce175..000000000
+--- a/gcc/testsuite/gcc.dg/pr27898.c
++++ /dev/null
+@@ -1,8 +0,0 @@
+-/* PR c/27898 */
+-/* { dg-do compile } */
+-/* { dg-options "--combine" } */
+-/* { dg-additional-sources "pr27898.c" } */
+-
+-union u { struct { int i; }; };
+-
+-extern int foo (union u *);
+diff --git a/gcc/testsuite/gcc.dg/pr28706.c b/gcc/testsuite/gcc.dg/pr28706.c
+deleted file mode 100644
+index 4c185af41..000000000
+--- a/gcc/testsuite/gcc.dg/pr28706.c
++++ /dev/null
+@@ -1,12 +0,0 @@
+-/* PR c/28706 */
+-/* { dg-do compile } */
+-/* { dg-options "--combine" } */
+-/* { dg-additional-sources "pr28706.c" } */
+-
+-struct A
+-{
+-  int i;
+-} __attribute__((aligned (sizeof (long int))));
+-
+-extern void foo (struct A *);
+-extern void foo (struct A *);
+diff --git a/gcc/testsuite/gcc.dg/pr28712.c b/gcc/testsuite/gcc.dg/pr28712.c
+deleted file mode 100644
+index 0bbb45314..000000000
+--- a/gcc/testsuite/gcc.dg/pr28712.c
++++ /dev/null
+@@ -1,16 +0,0 @@
+-/* PR c/28712 */
+-/* { dg-do compile } */
+-/* { dg-options "--combine" } */
+-/* { dg-additional-sources "pr28712.c pr28712.c" } */
+-
+-struct A;
+-
+-extern struct A *a;
+-
+-struct A { } __attribute__((packed));
+-
+-struct B __attribute__((aligned (sizeof (int))));
+-
+-extern struct B *b;
+-
+-struct B { int i; } __attribute__((packed));
+diff --git a/gcc/testsuite/gcc.dg/pr30762-1.c b/gcc/testsuite/gcc.dg/pr30762-1.c
+deleted file mode 100644
+index 97dca8c02..000000000
+--- a/gcc/testsuite/gcc.dg/pr30762-1.c
++++ /dev/null
+@@ -1,15 +0,0 @@
+-/* PR c/30762 */
+-/* { dg-do compile } */
+-/* { dg-options "--combine -O3" } */
+-/* { dg-additional-sources pr30762-2.c } */
+-
+-typedef struct { int i; } D;
+-extern void foo (D);
+-
+-void
+-bar (void)
+-{
+-  D d;
+-  d.i = 1;
+-  foo (d);
+-}
+diff --git a/gcc/testsuite/gcc.dg/pr31529-1.c b/gcc/testsuite/gcc.dg/pr31529-1.c
+deleted file mode 100644
+index 20703ed25..000000000
+--- a/gcc/testsuite/gcc.dg/pr31529-1.c
++++ /dev/null
+@@ -1,7 +0,0 @@
+-/* { dg-do compile } */
+-/* { dg-options "-combine" } */
+-/* { dg-additional-sources "pr31529-2.c" } */
+-
+-getline ()
+-{
+-}
+diff --git a/gcc/testsuite/gcc.dg/pr34457-1.c b/gcc/testsuite/gcc.dg/pr34457-1.c
+deleted file mode 100644
+index ccd937c6b..000000000
+--- a/gcc/testsuite/gcc.dg/pr34457-1.c
++++ /dev/null
+@@ -1,24 +0,0 @@
+-/* PR c/34457 */
+-/* { dg-do compile } */
+-/* { dg-require-effective-target trampolines } */
+-/* { dg-options "--combine -O2" } */
+-/* { dg-additional-sources "pr34457-2.c" } */
+-   
+-
+-typedef __SIZE_TYPE__ size_t;
+-extern int printf (const char *, ...);
+-extern void *memset (void *, int, size_t);
+-
+-int bar (int (*)(), int, void *);
+-
+-int
+-main(int argc, char **argv)
+-{
+-  struct s { int a; char b[argc]; };
+-  int nested (struct s x) { return x.a + sizeof(x); }
+-  struct s t;
+-  memset (&t, 0, sizeof(t));
+-  t.a = 123;
+-  printf("%d\n", bar (nested, argc, &t));
+-  return 0;
+-}
+diff --git a/gcc/testsuite/gcc.dg/pr34668-1.c b/gcc/testsuite/gcc.dg/pr34668-1.c
+deleted file mode 100644
+index 5763bb610..000000000
+--- a/gcc/testsuite/gcc.dg/pr34668-1.c
++++ /dev/null
+@@ -1,19 +0,0 @@
+-/* PR c/34668 */
+-/* { dg-do compile } */
+-/* { dg-options "--combine -O2" } */
+-/* { dg-additional-sources "pr34668-2.c" } */
+-
+-struct optab { unsigned code; };
+-extern struct optab optab_table[1];
+-
+-void
+-init_optab (struct optab *op)
+-{
+-  op->code = 0xdead;
+-}
+-
+-void
+-set_conv_libfunc (void)
+-{
+-  init_optab (&optab_table[0]);
+-}
+diff --git a/gcc/testsuite/gcc.dg/pr34989-1.c b/gcc/testsuite/gcc.dg/pr34989-1.c
+deleted file mode 100644
+index 88e8d64c6..000000000
+--- a/gcc/testsuite/gcc.dg/pr34989-1.c
++++ /dev/null
+@@ -1,10 +0,0 @@
+-/* { dg-do compile } */
+-/* { dg-options "--combine -O2" } */
+-/* { dg-additional-sources "pr34989-2.c" } */
+-
+-extern struct globals *const ptr_to_globals;
+-struct globals { };
+-int syslogd_main(int argc, char **argv)
+-{
+- (*(struct globals**)&ptr_to_globals) = 0;
+-}
+diff --git a/gcc/testsuite/gcc.dg/pr43557-1.c b/gcc/testsuite/gcc.dg/pr43557-1.c
+deleted file mode 100644
+index 8c7d0b417..000000000
+--- a/gcc/testsuite/gcc.dg/pr43557-1.c
++++ /dev/null
+@@ -1,16 +0,0 @@
+-/* PR debug/43557 */
+-/* { dg-do compile } */
+-/* { dg-options "--combine -g -O2" } */
+-/* { dg-additional-sources "pr43557-2.c" } */
+-
+-struct S
+-{
+-  int v;
+-} g;
+-
+-void
+-f1 (void)
+-{
+-  struct S *s = &g;
+-  s->v = 0;
+-}
+diff --git a/gcc/testsuite/gcc.dg/struct/struct-reorg.exp b/gcc/testsuite/gcc.dg/struct/struct-reorg.exp
+index 9a1797f3c..e40fcbeda 100644
+--- a/gcc/testsuite/gcc.dg/struct/struct-reorg.exp
++++ b/gcc/testsuite/gcc.dg/struct/struct-reorg.exp
+@@ -20,7 +20,7 @@
+ load_lib gcc-dg.exp
+ load_lib target-supports.exp
+ 
+-set STRUCT_REORG_CFLAGS "-O3 -fipa-struct-reorg -fdump-ipa-all -fwhole-program -combine -fipa-type-escape"
++set STRUCT_REORG_CFLAGS "-O3 -fipa-struct-reorg -fdump-ipa-all -fwhole-program -fipa-type-escape"
+ 
+ # Initialize `dg'.
+ dg-init
+@@ -51,7 +51,7 @@ load_lib profopt.exp
+ # These are globals used by profopt-execute.  The first is options
+ # needed to generate profile data, the second is options to use the
+ # profile data.
+-set common "-O3 -fwhole-program -combine -fipa-type-escape"
++set common "-O3 -fwhole-program -fipa-type-escape"
+ set profile_option [concat $common " -fprofile-generate"]
+ set feedback_option [concat $common " -fprofile-use -fipa-struct-reorg -fdump-ipa-all"]
+ 
+diff --git a/gcc/testsuite/gcc.dg/struct/wo_prof_empty_str.c b/gcc/testsuite/gcc.dg/struct/wo_prof_empty_str.c
+deleted file mode 100644
+index 8f9751d22..000000000
+--- a/gcc/testsuite/gcc.dg/struct/wo_prof_empty_str.c
++++ /dev/null
+@@ -1,47 +0,0 @@
+-/* { dg-options "-O3 -fno-inline -fipa-type-escape -fdump-ipa-all -fipa-struct-reorg -fwhole-program -combine" } */
+-/* { dg-do compile } */
+-/* { dg-do run } */
+-
+-#include <stdlib.h>
+-
+-struct S { int a; struct V *b; };
+-typedef struct { int c; } T;
+-typedef struct { int d; int e; } U;
+-
+-void * 
+-fn (void *x) 
+-{
+-  return x;
+-}
+-
+-int
+-foo (struct S *s)
+-{
+-  T x;
+-  
+-  T y = *(T *)fn (&x);
+-  return y.c;
+-}
+-
+-int
+-bar (struct S *s)
+-{
+-  U x;
+-  
+-  U y = *(U *)fn (&x);
+-  return y.d + s->a;
+-}
+-
+-int 
+-main ()
+-{
+-  struct S s;
+-
+-  foo(&s) + bar (&s);
+-
+-  return 0;
+-}
+-
+-/*--------------------------------------------------------------------------*/
+-/* { dg-final { scan-ipa-dump "No structures to transform" "ipa_struct_reorg" { xfail { "avr-*-*" } } } } */
+-/* { dg-final { cleanup-ipa-dump "*" } } */
+diff --git a/gcc/testsuite/gcc.dg/struct/wo_prof_escape_arg_to_local.c b/gcc/testsuite/gcc.dg/struct/wo_prof_escape_arg_to_local.c
+deleted file mode 100644
+index 29630252e..000000000
+--- a/gcc/testsuite/gcc.dg/struct/wo_prof_escape_arg_to_local.c
++++ /dev/null
+@@ -1,46 +0,0 @@
+-/* { dg-options "-O3 -fno-inline -fno-ipa-sra -fipa-type-escape -fdump-ipa-all -fipa-struct-reorg -fwhole-program -combine" } */
+-/* { dg-do compile } */
+-/* { dg-do run } */
+-
+-#include <stdlib.h>
+-struct str
+-{
+-  int a;
+-  float b;
+-};
+-
+-#ifdef STACK_SIZE
+-#if STACK_SIZE > 8000
+-#define N 1000
+-#else
+-#define N (STACK_SIZE/8)
+-#endif
+-#else
+-#define N 1000
+-#endif
+-
+-int
+-foo (struct str * p_str)
+-{
+-  static int sum = 0;
+-
+-  sum = sum + p_str->a;
+-  return sum;
+-}
+-
+-int
+-main ()
+-{
+-  int i, sum;
+-  struct str * p = malloc (N * sizeof (struct str));
+-  if (p == NULL)
+-    return 0;
+-  for (i = 0; i < N; i++)
+-    sum = foo (p+i);
+-
+-  return 0;
+-}
+-
+-/*--------------------------------------------------------------------------*/
+-/* { dg-final { scan-ipa-dump "is passed to local function...Excluded." "ipa_struct_reorg" } } */
+-/* { dg-final { cleanup-ipa-dump "*" } } */
+diff --git a/gcc/testsuite/gcc.dg/struct/wo_prof_escape_return.c b/gcc/testsuite/gcc.dg/struct/wo_prof_escape_return.c
+deleted file mode 100644
+index 26944fe10..000000000
+--- a/gcc/testsuite/gcc.dg/struct/wo_prof_escape_return.c
++++ /dev/null
+@@ -1,33 +0,0 @@
+-/* { dg-options "-O3 -fno-inline -fipa-type-escape -fdump-ipa-all -fipa-struct-reorg -fwhole-program -combine" } */
+-/* { dg-do compile } */
+-/* { dg-do run } */
+-
+-#include <stdlib.h>
+-
+-struct A {
+-  int d;
+-};
+-
+-struct A a;
+-
+-struct A foo ()
+-{
+-  a.d = 5;
+-  return a;
+-}
+-
+-int
+-main ()
+-{
+-  a.d = 0;
+-  foo ();
+-
+-  if (a.d != 5)
+-    abort ();
+-
+-  return 0;
+-}
+-
+-/*--------------------------------------------------------------------------*/
+-/* { dg-final { scan-ipa-dump "is return type of function...Excluded" "ipa_struct_reorg" } } */
+-/* { dg-final { cleanup-ipa-dump "*" } } */
