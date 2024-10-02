@@ -1284,10 +1284,26 @@ toolchain_src_configure() {
 	if in_iuse debug ; then
 		if tc_version_is_at_least 7 ; then
 			confgcc+=( --enable-checking="${GCC_CHECKS_LIST:-$(usex debug yes,extra,rtl release)}" )
-		elif tc_version_is_at_least 4.0 ; then
+		elif tc_version_is_at_least 5 ; then
 			confgcc+=( --enable-checking="${GCC_CHECKS_LIST:-$(usex debug yes,rtl release)}" )
+		elif tc_version_is_at_least 4.0 ; then
+			case $(tc-arch) in
+				amd64|x86|aarch64)
+					confgcc+=( --enable-checking="${GCC_CHECKS_LIST:-$(usex debug yes,rtl release)}" )
+					;;
+				*)
+					confgcc+=( --enable-checking="${GCC_CHECKS_LIST:-$(usex debug yes release)}" )
+					;;
+			esac
 		elif tc_version_is_at_least 3.3 ; then
-			confgcc+=( --enable-checking="${GCC_CHECKS_LIST:-$(usex debug misc,tree,rtlflag,gc,rtl yes)}" )
+			case $(tc-arch) in
+				amd64|x86)
+					confgcc+=( --enable-checking="${GCC_CHECKS_LIST:-$(usex debug misc,tree,rtlflag,gc,rtl yes)}" )
+					;;
+				*)
+					confgcc+=( --enable-checking="${GCC_CHECKS_LIST:-$(usex debug misc,tree,rtlflag,gc yes)}" )
+					;;
+			esac
 		elif tc_version_is_at_least 3.0 ; then
 			confgcc+=( --enable-checking="${GCC_CHECKS_LIST:-$(usex debug misc,tree,gc yes)}" )
 		else

@@ -47,18 +47,9 @@ index 3233a788d..1f812a79b 100644
  
  TARGET_FLAGS_TO_PASS = $(BASE_FLAGS_TO_PASS) $(EXTRA_TARGET_FLAGS)
 diff --git a/gcc/Makefile.in b/gcc/Makefile.in
-index 2a4475b75..2be1931b7 100644
+index 2a4475b75..29ac7c8f1 100644
 --- a/gcc/Makefile.in
 +++ b/gcc/Makefile.in
-@@ -1021,7 +1021,7 @@ BUILD_LIBDEPS= $(BUILD_LIBIBERTY)
- # and the system's installed libraries.
- LIBS = @LIBS@ libcommon.a $(CPPLIB) $(LIBINTL) $(LIBICONV) $(LIBBACKTRACE) \
- 	$(LIBIBERTY) $(LIBDECNUMBER) $(HOST_LIBS)
--BACKENDLIBS = $(CLOOGLIBS) $(GMPLIBS) $(PLUGINLIBS) $(HOST_LIBS) \
-+BACKENDLIBS = $(if $(CLOOGLIBS),@DL_LIB@) $(GMPLIBS) $(PLUGINLIBS) $(HOST_LIBS) \
- 	$(ZLIB)
- # Any system libraries needed just for GNAT.
- SYSLIBS = @GNAT_LIBEXC@
 @@ -1477,7 +1477,8 @@ ALL_HOST_FRONTEND_OBJS = $(foreach v,$(CONFIG_LANGUAGES),$($(v)_OBJS))
  
  ALL_HOST_BACKEND_OBJS = $(GCC_OBJS) $(OBJS) $(OBJS-libcommon) \
@@ -78,23 +69,7 @@ index 2a4475b75..2be1931b7 100644
  
  CFLAGS-prefix.o += -DPREFIX=\"$(prefix)\" -DBASEVER=$(BASEVER_s)
  prefix.o: prefix.c $(CONFIG_H) $(SYSTEM_H) coretypes.h prefix.h \
-@@ -3444,6 +3445,15 @@ $(common_out_object_file): $(common_out_file) $(CONFIG_H) $(SYSTEM_H) \
-     $(DIAGNOSTIC_CORE_H) $(FLAGS_H) $(OPTS_H) $(TM_H) $(TM_P_H) $(MACHMODE_H)
- 	$(COMPILER) -c $(ALL_COMPILERFLAGS) $(ALL_CPPFLAGS) \
- 	  $< $(OUTPUT_OPTION)
-+
-+graphite%.o : \
-+  ALL_CFLAGS := -O $(filter-out -fkeep-inline-functions, $(ALL_CFLAGS))
-+graphite.o : \
-+  ALL_CFLAGS := -O $(filter-out -fkeep-inline-functions, $(ALL_CFLAGS))
-+graphite%.o : \
-+  ALL_CXXFLAGS := -O $(filter-out -fkeep-inline-functions, $(ALL_CXXFLAGS))
-+graphite.o : \
-+  ALL_CXXFLAGS := -O $(filter-out -fkeep-inline-functions, $(ALL_CXXFLAGS))
- #
- # Generate header and source files from the machine description,
- # and compile them.
-@@ -3806,11 +3816,6 @@ generated_files = config.h tm.h $(TM_P_H) $(TM_H) multilib.h \
+@@ -3806,11 +3807,6 @@ generated_files = config.h tm.h $(TM_P_H) $(TM_H) multilib.h \
         tree-check.h genrtl.h insn-modes.h tm-preds.h tm-constrs.h \
         $(ALL_GTFILES_H) gtype-desc.c gtype-desc.h gcov-iov.h
  
@@ -106,7 +81,7 @@ index 2a4475b75..2be1931b7 100644
  #
  # How to compile object files to run on the build machine.
  
-@@ -3902,31 +3907,32 @@ build/gengenrtl.o : gengenrtl.c $(BCONFIG_H) $(SYSTEM_H) rtl.def
+@@ -3902,31 +3898,32 @@ build/gengenrtl.o : gengenrtl.c $(BCONFIG_H) $(SYSTEM_H) rtl.def
  # on BCONFIG_H.  For the build objects, add -DGENERATOR_FILE manually,
  # the build-%: rule doesn't apply to them.
  
@@ -147,7 +122,7 @@ index 2a4475b75..2be1931b7 100644
  build/genmddeps.o: genmddeps.c $(BCONFIG_H) $(SYSTEM_H) coretypes.h	\
    errors.h $(READ_MD_H)
  build/genmodes.o : genmodes.c $(BCONFIG_H) $(SYSTEM_H) errors.h		\
-@@ -3988,11 +3994,7 @@ $(genprog:%=build/gen%$(build_exeext)): build/gen%$(build_exeext): build/gen%.o
+@@ -3988,11 +3985,7 @@ $(genprog:%=build/gen%$(build_exeext)): build/gen%$(build_exeext): build/gen%.o
  # bconfig.h because AIX requires _LARGE_FILES to be defined before
  # any system header is included.
  gengtype-lex.c : gengtype-lex.l
@@ -160,7 +135,7 @@ index 2a4475b75..2be1931b7 100644
  
  #
  # Remake internationalization support.
-@@ -5300,3 +5302,8 @@ po/gcc.pot: force
+@@ -5300,3 +5293,8 @@ po/gcc.pot: force
  	$(MAKE) srcextra
  	AWK=$(AWK) $(SHELL) $(srcdir)/po/exgettext \
  		$(XGETTEXT) gcc $(srcdir)
@@ -243,7 +218,7 @@ index b09a763d5..bcf7036d9 100644
  		sh-superh-*)	sh_multilibs=m4,m4-single,m4-single-only,m4-nofpu ;;
  		sh*-*-linux*)	sh_multilibs=m1,m2,m2a,m3e,m4 ;;
 diff --git a/gcc/config.in b/gcc/config.in
-index 8e8976265..82d62304c 100644
+index 8e8976265..88e8b9404 100644
 --- a/gcc/config.in
 +++ b/gcc/config.in
 @@ -138,6 +138,12 @@
@@ -259,19 +234,6 @@ index 8e8976265..82d62304c 100644
  /* Define if you want all operations on RTL (the basic data structure of the
     optimizer and back end) to be checked for dynamic type safety at runtime.
     This is quite expensive. */
-@@ -1175,6 +1181,12 @@
- #endif
- 
- 
-+/* Define if isl_options_set_schedule_serialize_sccs exists. */
-+#ifndef USED_FOR_TARGET
-+#undef HAVE_ISL_OPTIONS_SET_SCHEDULE_SERIALIZE_SCCS
-+#endif
-+
-+
- /* Define if isl_schedule_constraints_compute_schedule exists. */
- #ifndef USED_FOR_TARGET
- #undef HAVE_ISL_SCHED_CONSTRAINTS_COMPUTE_SCHEDULE
 diff --git a/gcc/config/alpha/alpha.h b/gcc/config/alpha/alpha.h
 index 2e7c0789d..93cb115b3 100644
 --- a/gcc/config/alpha/alpha.h
@@ -480,18 +442,10 @@ index 8108efd07..3c5622aee 100644
  	.previous
  #endif
 diff --git a/gcc/configure b/gcc/configure
-index f247c8a35..90cdbbf98 100755
+index f247c8a35..cf663a020 100755
 --- a/gcc/configure
 +++ b/gcc/configure
-@@ -602,6 +602,7 @@ ac_subst_vars='LTLIBOBJS
- LIBOBJS
- enable_plugin
- pluginlibs
-+DL_LIB
- CLOOGINC
- CLOOGLIBS
- ISLINC
-@@ -918,6 +919,7 @@ with_gc
+@@ -918,6 +918,7 @@ with_gc
  with_system_zlib
  enable_maintainer_mode
  enable_version_specific_runtime_libs
@@ -499,7 +453,7 @@ index f247c8a35..90cdbbf98 100755
  enable_plugin
  enable_libquadmath_support
  with_linker_hash_style
-@@ -1639,6 +1641,8 @@ Optional Features:
+@@ -1639,6 +1640,8 @@ Optional Features:
    --enable-version-specific-runtime-libs
                            specify that runtime libraries should be installed
                            in a compiler-specific directory
@@ -508,7 +462,7 @@ index f247c8a35..90cdbbf98 100755
    --enable-plugin         enable plugin support
    --disable-libquadmath-support
                            disable libquadmath support for Fortran
-@@ -23397,7 +23401,7 @@ foo:	.long	25
+@@ -23397,7 +23400,7 @@ foo:	.long	25
  	tls_first_minor=14
  	tls_as_opt="-m64 -Aesame --fatal-warnings"
  	;;
@@ -517,7 +471,7 @@ index f247c8a35..90cdbbf98 100755
      conftest_s='
  	.section ".tdata","awT",@progbits
  foo:	.long	25
-@@ -27219,6 +27223,19 @@ if test "${enable_version_specific_runtime_libs+set}" = set; then :
+@@ -27219,6 +27222,19 @@ if test "${enable_version_specific_runtime_libs+set}" = set; then :
  fi
  
  
@@ -537,80 +491,8 @@ index f247c8a35..90cdbbf98 100755
  # Substitute configuration variables
  
  
-@@ -27315,6 +27332,8 @@ $as_echo "#define HAVE_cloog 1" >>confdefs.h
- 
-   # Check whether isl_schedule_constraints_compute_schedule is available;
-   # it's new in ISL-0.13.
-+# Check whether isl_options_set_schedule_serialize_sccs is available;
-+# it's new in ISL-0.15.
-   saved_CFLAGS="$CFLAGS"
-   CFLAGS="$CFLAGS $ISLINC"
-   saved_LIBS="$LIBS"
-@@ -27343,6 +27362,29 @@ rm -f core conftest.err conftest.$ac_objext \
-   { $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_has_isl_schedule_constraints_compute_schedule" >&5
- $as_echo "$ac_has_isl_schedule_constraints_compute_schedule" >&6; }
- 
-+  { $as_echo "$as_me:${as_lineno-$LINENO}: checking Checking for isl_options_set_schedule_serialize_sccs" >&5
-+$as_echo_n "checking Checking for isl_options_set_schedule_serialize_sccs... " >&6; }
-+  cat confdefs.h - <<_ACEOF >conftest.$ac_ext
-+/* end confdefs.h.  */
-+#include <isl/schedule.h>
-+int
-+main ()
-+{
-+isl_options_set_schedule_serialize_sccs (NULL, 0);
-+  ;
-+  return 0;
-+}
-+_ACEOF
-+if ac_fn_cxx_try_link "$LINENO"; then :
-+  ac_has_isl_options_set_schedule_serialize_sccs=yes
-+else
-+  ac_has_isl_options_set_schedule_serialize_sccs=no
-+fi
-+rm -f core conftest.err conftest.$ac_objext \
-+    conftest$ac_exeext conftest.$ac_ext
-+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_has_isl_options_set_schedule_serialize_sccs" >&5
-+$as_echo "$ac_has_isl_options_set_schedule_serialize_sccs" >&6; }
-+
-   LIBS="$saved_LIBS"
-   CFLAGS="$saved_CFLAGS"
- 
-@@ -27351,6 +27393,12 @@ $as_echo "$ac_has_isl_schedule_constraints_compute_schedule" >&6; }
- $as_echo "#define HAVE_ISL_SCHED_CONSTRAINTS_COMPUTE_SCHEDULE 1" >>confdefs.h
- 
-   fi
-+
-+  if test x"$ac_has_isl_options_set_schedule_serialize_sccs" = x"yes"; then
-+
-+$as_echo "#define HAVE_ISL_OPTIONS_SET_SCHEDULE_SERIALIZE_SCCS 1" >>confdefs.h
-+
-+  fi
- fi
- 
- 
-@@ -27419,6 +27467,7 @@ $as_echo "unable to check" >&6; }
-   fi
- 
-   # Check -ldl
-+  DL_LIB=
-   saved_LIBS="$LIBS"
-   { $as_echo "$as_me:${as_lineno-$LINENO}: checking for library containing dlopen" >&5
- $as_echo_n "checking for library containing dlopen... " >&6; }
-@@ -27478,9 +27527,11 @@ fi
- 
-   if test x"$ac_cv_search_dlopen" = x"-ldl"; then
-     pluginlibs="$pluginlibs -ldl"
-+	DL_LIB=$ac_cv_search_dlopen
-   fi
-   LIBS="$saved_LIBS"
- 
-+
-   # Check that we can build shared objects with -fPIC -shared
-   saved_LDFLAGS="$LDFLAGS"
-   saved_CFLAGS="$CFLAGS"
 diff --git a/gcc/configure.ac b/gcc/configure.ac
-index 2c4f3461e..4ebaee10d 100644
+index 2c4f3461e..353295685 100644
 --- a/gcc/configure.ac
 +++ b/gcc/configure.ac
 @@ -3145,7 +3145,7 @@ foo:	.long	25
@@ -639,57 +521,6 @@ index 2c4f3461e..4ebaee10d 100644
  # Substitute configuration variables
  AC_SUBST(subdirs)
  AC_SUBST(srcdir)
-@@ -5214,6 +5224,8 @@ if test "x${CLOOGLIBS}" != "x" ; then
- 
-   # Check whether isl_schedule_constraints_compute_schedule is available;
-   # it's new in ISL-0.13.
-+  # Check whether isl_options_set_schedule_serialize_sccs is available;
-+  # it's new in ISL-0.15.
-   saved_CFLAGS="$CFLAGS"
-   CFLAGS="$CFLAGS $ISLINC"
-   saved_LIBS="$LIBS"
-@@ -5226,6 +5238,13 @@ if test "x${CLOOGLIBS}" != "x" ; then
-               [ac_has_isl_schedule_constraints_compute_schedule=no])
-   AC_MSG_RESULT($ac_has_isl_schedule_constraints_compute_schedule)
- 
-+  AC_MSG_CHECKING([Checking for isl_options_set_schedule_serialize_sccs])
-+  AC_TRY_LINK([#include <isl/schedule.h>],
-+              [isl_options_set_schedule_serialize_sccs (NULL, 0);],
-+              [ac_has_isl_options_set_schedule_serialize_sccs=yes],
-+              [ac_has_isl_options_set_schedule_serialize_sccs=no])
-+  AC_MSG_RESULT($ac_has_isl_options_set_schedule_serialize_sccs)
-+
-   LIBS="$saved_LIBS"
-   CFLAGS="$saved_CFLAGS"
- 
-@@ -5233,6 +5252,11 @@ if test "x${CLOOGLIBS}" != "x" ; then
-      AC_DEFINE(HAVE_ISL_SCHED_CONSTRAINTS_COMPUTE_SCHEDULE, 1,
-                [Define if isl_schedule_constraints_compute_schedule exists.])
-   fi
-+
-+  if test x"$ac_has_isl_options_set_schedule_serialize_sccs" = x"yes"; then
-+     AC_DEFINE(HAVE_ISL_OPTIONS_SET_SCHEDULE_SERIALIZE_SCCS, 1,
-+               [Define if isl_options_set_schedule_serialize_sccs exists.])
-+  fi
- fi
- 
- 
-@@ -5292,12 +5316,15 @@ if test x"$enable_plugin" = x"yes"; then
-   fi
- 
-   # Check -ldl
-+  DL_LIB=
-   saved_LIBS="$LIBS"
-   AC_SEARCH_LIBS([dlopen], [dl])
-   if test x"$ac_cv_search_dlopen" = x"-ldl"; then
-     pluginlibs="$pluginlibs -ldl"
-+	DL_LIB=$ac_cv_search_dlopen
-   fi
-   LIBS="$saved_LIBS"
-+  AC_SUBST(DL_LIB)
- 
-   # Check that we can build shared objects with -fPIC -shared
-   saved_LDFLAGS="$LDFLAGS"
 diff --git a/gcc/cp/cfns.gperf b/gcc/cp/cfns.gperf
 index c4c4e2af7..a1b62907a 100644
 --- a/gcc/cp/cfns.gperf
@@ -987,594 +818,6 @@ index a2eebf272..c588eedbf 100644
  #endif
  #include "system.h"
  #include "errors.h"		/* for fatal */
-diff --git a/gcc/graphite-clast-to-gimple.c b/gcc/graphite-clast-to-gimple.c
-index 30d42c4b7..087cbb5e2 100644
---- a/gcc/graphite-clast-to-gimple.c
-+++ b/gcc/graphite-clast-to-gimple.c
-@@ -915,7 +915,7 @@ compute_bounds_for_loop (struct clast_for *loop, mpz_t low, mpz_t up)
-    from STMT_FOR.  */
- 
- static tree
--type_for_clast_for (struct clast_for *stmt_for, ivs_params_p ip)
-+type_for_clast_for (struct clast_for *stmt_fora, ivs_params_p ip)
- {
-   mpz_t bound_one, bound_two;
-   tree lb_type, ub_type;
-@@ -923,8 +923,8 @@ type_for_clast_for (struct clast_for *stmt_for, ivs_params_p ip)
-   mpz_init (bound_one);
-   mpz_init (bound_two);
- 
--  lb_type = type_for_clast_expr (stmt_for->LB, ip, bound_one, bound_two);
--  ub_type = type_for_clast_expr (stmt_for->UB, ip, bound_one, bound_two);
-+  lb_type = type_for_clast_expr (stmt_fora->LB, ip, bound_one, bound_two);
-+  ub_type = type_for_clast_expr (stmt_fora->UB, ip, bound_one, bound_two);
- 
-   mpz_clear (bound_one);
-   mpz_clear (bound_two);
-diff --git a/gcc/graphite-dependences.c b/gcc/graphite-dependences.c
-index 2f65c46d4..d909a98d3 100644
---- a/gcc/graphite-dependences.c
-+++ b/gcc/graphite-dependences.c
-@@ -174,7 +174,7 @@ scop_get_transformed_schedule (scop_p scop, vec<poly_bb_p> pbbs)
- /* Helper function used on each MAP of a isl_union_map.  Computes the
-    maximal output dimension.  */
- 
--static int
-+static isl_stat
- max_number_of_out_dimensions (__isl_take isl_map *map, void *user)
- {
-   int global_max = *((int *) user);
-@@ -186,7 +186,7 @@ max_number_of_out_dimensions (__isl_take isl_map *map, void *user)
- 
-   isl_map_free (map);
-   isl_space_free (space);
--  return 0;
-+  return isl_stat_ok;
- }
- 
- /* Extends the output dimension of MAP to MAX dimensions.  */
-@@ -210,12 +210,12 @@ struct extend_schedule_str {
- 
- /* Helper function for extend_schedule.  */
- 
--static int
-+static isl_stat
- extend_schedule_1 (__isl_take isl_map *map, void *user)
- {
-   struct extend_schedule_str *str = (struct extend_schedule_str *) user;
-   str->umap = isl_union_map_add_map (str->umap, extend_map (map, str->max));
--  return 0;
-+  return isl_stat_ok;
- }
- 
- /* Return a relation that has uniform output dimensions.  */
-@@ -224,16 +224,16 @@ __isl_give isl_union_map *
- extend_schedule (__isl_take isl_union_map *x)
- {
-   int max = 0;
--  int res;
-+  isl_stat res;
-   struct extend_schedule_str str;
- 
-   res = isl_union_map_foreach_map (x, max_number_of_out_dimensions, (void *) &max);
--  gcc_assert (res == 0);
-+  gcc_assert (res == isl_stat_ok);
- 
-   str.max = max;
-   str.umap = isl_union_map_empty (isl_union_map_get_space (x));
-   res = isl_union_map_foreach_map (x, extend_schedule_1, (void *) &str);
--  gcc_assert (res == 0);
-+  gcc_assert (res == isl_stat_ok);
- 
-   isl_union_map_free (x);
-   return str.umap;
-diff --git a/gcc/graphite-optimize-isl.c b/gcc/graphite-optimize-isl.c
-index 6a94cbdf8..f1267b03a 100644
---- a/gcc/graphite-optimize-isl.c
-+++ b/gcc/graphite-optimize-isl.c
-@@ -407,13 +407,13 @@ getScheduleMap(isl_schedule *Schedule)
-   return ScheduleMap;
- }
- 
--static int
-+static isl_stat
- getSingleMap(__isl_take isl_map *map, void *user)
- {
-   isl_map **singleMap = (isl_map **) user;
-   *singleMap = map;
- 
--  return 0;
-+  return isl_stat_ok;
- }
- 
- static void
-@@ -460,7 +460,11 @@ optimize_isl (scop_p scop)
- 
-   isl_options_set_schedule_max_constant_term(scop->ctx, CONSTANT_BOUND);
-   isl_options_set_schedule_maximize_band_depth(scop->ctx, 1);
-+#ifdef HAVE_ISL_OPTIONS_SET_SCHEDULE_SERIALIZE_SCCS
-+  isl_options_set_schedule_serialize_sccs(scop->ctx, 1);
-+#else
-   isl_options_set_schedule_fuse(scop->ctx, ISL_SCHEDULE_FUSE_MIN);
-+#endif
-   isl_options_set_on_error(scop->ctx, ISL_ON_ERROR_CONTINUE);
-   schedule = isl_union_set_compute_schedule (domain, validity, proximity);
-   isl_options_set_on_error(scop->ctx, ISL_ON_ERROR_ABORT);
-diff --git a/gcc/graphite-poly.h b/gcc/graphite-poly.h
-index 6bf0b0e19..0d5b78c3e 100644
---- a/gcc/graphite-poly.h
-+++ b/gcc/graphite-poly.h
-@@ -22,6 +22,415 @@ along with GCC; see the file COPYING3.  If not see
- #ifndef GCC_GRAPHITE_POLY_H
- #define GCC_GRAPHITE_POLY_H
- 
-+#include <isl/aff.h>
-+#include <isl/constraint.h>
-+#include <isl/union_set.h>
-+#include <isl/schedule.h>
-+#include <isl/ilp.h>
-+#include <isl/flow.h>
-+#include <isl/options.h>
-+#include <isl/ast.h>
-+#include <isl/ast_build.h>
-+#include <isl/val_gmp.h>
-+#include <cloog/isl/cloog.h>
-+#include <dlfcn.h>
-+#ifdef HAVE_ISL_SCHED_CONSTRAINTS_COMPUTE_SCHEDULE
-+#include <isl/deprecated/aff_int.h>
-+#include <isl/deprecated/ilp_int.h>
-+#include <isl/deprecated/constraint_int.h>
-+#define DYNSYM_ZERO_DISTANCE DYNSYM (isl_band_member_is_coincident)
-+#define NEW_DYNSYMS \
-+  DYNSYM (isl_schedule_constraints_compute_schedule); \
-+  DYNSYM (isl_schedule_constraints_on_domain); \
-+  DYNSYM (isl_schedule_constraints_set_coincidence); \
-+  DYNSYM (isl_schedule_constraints_set_proximity); \
-+  DYNSYM (isl_schedule_constraints_set_validity);
-+#else
-+#define DYNSYM_ZERO_DISTANCE DYNSYM (isl_band_member_is_zero_distance)
-+#define NEW_DYNSYMS
-+#endif
-+#ifdef HAVE_ISL_OPTIONS_SET_SCHEDULE_SERIALIZE_SCCS
-+#define DYNSYM_FUSE DYNSYM (isl_options_set_schedule_serialize_sccs)
-+#else
-+#define DYNSYM_FUSE DYNSYM (isl_options_set_schedule_fuse)
-+#endif
-+#define DYNSYMS \
-+  DYNSYM (clast_pprint); \
-+  DYNSYM (cloog_clast_create_from_input); \
-+  DYNSYM (cloog_clast_free); \
-+  DYNSYM (cloog_domain_from_isl_set); \
-+  DYNSYM (cloog_input_alloc); \
-+  DYNSYM (cloog_isl_state_malloc); \
-+  DYNSYM (cloog_options_free); \
-+  DYNSYM (cloog_options_malloc); \
-+  DYNSYM (cloog_scattering_from_isl_map); \
-+  DYNSYM (cloog_state_free); \
-+  DYNSYM (cloog_union_domain_add_domain); \
-+  DYNSYM (cloog_union_domain_alloc); \
-+  DYNSYM (cloog_union_domain_set_name); \
-+  DYNSYM (isl_aff_add_coefficient_si); \
-+  DYNSYM (isl_aff_add_constant); \
-+  DYNSYM (isl_aff_free); \
-+  DYNSYM (isl_aff_get_coefficient); \
-+  DYNSYM (isl_aff_get_space); \
-+  DYNSYM (isl_aff_mod); \
-+  DYNSYM (isl_aff_set_coefficient_si); \
-+  DYNSYM (isl_aff_set_constant_si); \
-+  DYNSYM (isl_aff_zero_on_domain); \
-+  DYNSYM (isl_band_free); \
-+  DYNSYM (isl_band_get_children); \
-+  DYNSYM (isl_band_get_partial_schedule); \
-+  DYNSYM (isl_band_has_children); \
-+  DYNSYM (isl_band_list_free); \
-+  DYNSYM (isl_band_list_get_band); \
-+  DYNSYM (isl_band_list_get_ctx); \
-+  DYNSYM (isl_band_list_n_band); \
-+  DYNSYM_ZERO_DISTANCE; \
-+  DYNSYM (isl_band_n_member); \
-+  DYNSYM (isl_basic_map_add_constraint); \
-+  DYNSYM (isl_basic_map_project_out); \
-+  DYNSYM (isl_basic_map_universe); \
-+  DYNSYM (isl_constraint_set_coefficient); \
-+  DYNSYM (isl_constraint_set_coefficient_si); \
-+  DYNSYM (isl_constraint_set_constant); \
-+  DYNSYM (isl_constraint_set_constant_si); \
-+  DYNSYM (isl_ctx_alloc); \
-+  DYNSYM (isl_ctx_free); \
-+  DYNSYM (isl_equality_alloc); \
-+  DYNSYM (isl_id_alloc); \
-+  DYNSYM (isl_id_copy); \
-+  DYNSYM (isl_id_free); \
-+  DYNSYM (isl_inequality_alloc); \
-+  DYNSYM (isl_local_space_copy); \
-+  DYNSYM (isl_local_space_free); \
-+  DYNSYM (isl_local_space_from_space); \
-+  DYNSYM (isl_local_space_range); \
-+  DYNSYM (isl_map_add_constraint); \
-+  DYNSYM (isl_map_add_dims); \
-+  DYNSYM (isl_map_align_params); \
-+  DYNSYM (isl_map_apply_range); \
-+  DYNSYM (isl_map_copy); \
-+  DYNSYM (isl_map_dim); \
-+  DYNSYM (isl_map_dump); \
-+  DYNSYM (isl_map_equate); \
-+  DYNSYM (isl_map_fix_si); \
-+  DYNSYM (isl_map_flat_product); \
-+  DYNSYM (isl_map_flat_range_product); \
-+  DYNSYM (isl_map_free); \
-+  DYNSYM (isl_map_from_basic_map); \
-+  DYNSYM (isl_map_from_pw_aff); \
-+  DYNSYM (isl_map_from_union_map); \
-+  DYNSYM (isl_map_get_ctx); \
-+  DYNSYM (isl_map_get_space); \
-+  DYNSYM (isl_map_get_tuple_id); \
-+  DYNSYM (isl_map_insert_dims); \
-+  DYNSYM (isl_map_intersect); \
-+  DYNSYM (isl_map_intersect_domain); \
-+  DYNSYM (isl_map_intersect_range); \
-+  DYNSYM (isl_map_is_empty); \
-+  DYNSYM (isl_map_lex_ge); \
-+  DYNSYM (isl_map_lex_le); \
-+  DYNSYM (isl_map_n_out); \
-+  DYNSYM (isl_map_range); \
-+  DYNSYM (isl_map_set_tuple_id); \
-+  DYNSYM (isl_map_universe); \
-+  DYNSYM (isl_options_set_on_error); \
-+  DYNSYM_FUSE; \
-+  DYNSYM (isl_options_set_schedule_max_constant_term); \
-+  DYNSYM (isl_options_set_schedule_maximize_band_depth); \
-+  DYNSYM (isl_printer_free); \
-+  DYNSYM (isl_printer_print_aff); \
-+  DYNSYM (isl_printer_print_constraint); \
-+  DYNSYM (isl_printer_print_map); \
-+  DYNSYM (isl_printer_print_set); \
-+  DYNSYM (isl_printer_to_file); \
-+  DYNSYM (isl_pw_aff_add); \
-+  DYNSYM (isl_pw_aff_alloc); \
-+  DYNSYM (isl_pw_aff_copy); \
-+  DYNSYM (isl_pw_aff_eq_set); \
-+  DYNSYM (isl_pw_aff_free); \
-+  DYNSYM (isl_pw_aff_from_aff); \
-+  DYNSYM (isl_pw_aff_ge_set); \
-+  DYNSYM (isl_pw_aff_gt_set); \
-+  DYNSYM (isl_pw_aff_is_cst); \
-+  DYNSYM (isl_pw_aff_le_set); \
-+  DYNSYM (isl_pw_aff_lt_set); \
-+  DYNSYM (isl_pw_aff_mod); \
-+  DYNSYM (isl_pw_aff_mul); \
-+  DYNSYM (isl_pw_aff_ne_set); \
-+  DYNSYM (isl_pw_aff_nonneg_set); \
-+  DYNSYM (isl_pw_aff_set_tuple_id); \
-+  DYNSYM (isl_pw_aff_sub); \
-+  DYNSYM (isl_pw_aff_zero_set); \
-+  DYNSYM (isl_schedule_free); \
-+  DYNSYM (isl_schedule_get_band_forest); \
-+  DYNSYM (isl_set_add_constraint); \
-+  DYNSYM (isl_set_add_dims); \
-+  DYNSYM (isl_set_apply); \
-+  DYNSYM (isl_set_coalesce); \
-+  DYNSYM (isl_set_copy); \
-+  DYNSYM (isl_set_dim); \
-+  DYNSYM (isl_set_fix_si); \
-+  DYNSYM (isl_set_free); \
-+  DYNSYM (isl_set_from_cloog_domain); \
-+  DYNSYM (isl_set_get_space); \
-+  DYNSYM (isl_set_get_tuple_id); \
-+  DYNSYM (isl_set_intersect); \
-+  DYNSYM (isl_set_is_empty); \
-+  DYNSYM (isl_set_max); \
-+  DYNSYM (isl_set_min); \
-+  DYNSYM (isl_set_n_dim); \
-+  DYNSYM (isl_set_nat_universe); \
-+  DYNSYM (isl_set_project_out); \
-+  DYNSYM (isl_set_set_tuple_id); \
-+  DYNSYM (isl_set_universe); \
-+  DYNSYM (isl_space_add_dims); \
-+  DYNSYM (isl_space_alloc); \
-+  DYNSYM (isl_space_copy); \
-+  DYNSYM (isl_space_dim); \
-+  DYNSYM (isl_space_domain); \
-+  DYNSYM (isl_space_find_dim_by_id); \
-+  DYNSYM (isl_space_free); \
-+  DYNSYM (isl_space_from_domain); \
-+  DYNSYM (isl_space_get_tuple_id); \
-+  DYNSYM (isl_space_params_alloc); \
-+  DYNSYM (isl_space_range); \
-+  DYNSYM (isl_space_set_alloc); \
-+  DYNSYM (isl_space_set_dim_id); \
-+  DYNSYM (isl_space_set_tuple_id); \
-+  DYNSYM (isl_union_map_add_map); \
-+  DYNSYM (isl_union_map_align_params); \
-+  DYNSYM (isl_union_map_apply_domain); \
-+  DYNSYM (isl_union_map_apply_range); \
-+  DYNSYM (isl_union_map_compute_flow); \
-+  DYNSYM (isl_union_map_copy); \
-+  DYNSYM (isl_union_map_empty); \
-+  DYNSYM (isl_union_map_flat_range_product); \
-+  DYNSYM (isl_union_map_foreach_map); \
-+  DYNSYM (isl_union_map_free); \
-+  DYNSYM (isl_union_map_from_map); \
-+  DYNSYM (isl_union_map_get_ctx); \
-+  DYNSYM (isl_union_map_get_space); \
-+  DYNSYM (isl_union_map_gist_domain); \
-+  DYNSYM (isl_union_map_gist_range); \
-+  DYNSYM (isl_union_map_intersect_domain); \
-+  DYNSYM (isl_union_map_is_empty); \
-+  DYNSYM (isl_union_map_subtract); \
-+  DYNSYM (isl_union_map_union); \
-+  DYNSYM (isl_union_set_add_set); \
-+  DYNSYM (isl_union_set_compute_schedule); \
-+  DYNSYM (isl_union_set_copy); \
-+  DYNSYM (isl_union_set_empty); \
-+  DYNSYM (isl_union_set_from_set); \
-+  DYNSYM (stmt_ass); \
-+  DYNSYM (stmt_block); \
-+  DYNSYM (stmt_for); \
-+  DYNSYM (stmt_guard); \
-+  DYNSYM (stmt_root); \
-+  DYNSYM (stmt_user);
-+extern struct cloog_pointers_s__
-+{
-+  bool inited;
-+  void *h;
-+#define DYNSYM(x) __typeof (x) *p_##x
-+  DYNSYMS
-+  NEW_DYNSYMS
-+#undef DYNSYM
-+} cloog_pointers__;
-+
-+#define cloog_block_alloc (*cloog_pointers__.p_cloog_block_alloc)
-+#define clast_pprint (*cloog_pointers__.p_clast_pprint)
-+#define cloog_clast_create_from_input (*cloog_pointers__.p_cloog_clast_create_from_input)
-+#define cloog_clast_free (*cloog_pointers__.p_cloog_clast_free)
-+#define cloog_domain_from_isl_set (*cloog_pointers__.p_cloog_domain_from_isl_set)
-+#define cloog_input_alloc (*cloog_pointers__.p_cloog_input_alloc)
-+#define cloog_isl_state_malloc (*cloog_pointers__.p_cloog_isl_state_malloc)
-+#define cloog_options_free (*cloog_pointers__.p_cloog_options_free)
-+#define cloog_options_malloc (*cloog_pointers__.p_cloog_options_malloc)
-+#define cloog_scattering_from_isl_map (*cloog_pointers__.p_cloog_scattering_from_isl_map)
-+#define cloog_state_free (*cloog_pointers__.p_cloog_state_free)
-+#define cloog_union_domain_add_domain (*cloog_pointers__.p_cloog_union_domain_add_domain)
-+#define cloog_union_domain_alloc (*cloog_pointers__.p_cloog_union_domain_alloc)
-+#define cloog_union_domain_set_name (*cloog_pointers__.p_cloog_union_domain_set_name)
-+#define isl_aff_add_coefficient_si (*cloog_pointers__.p_isl_aff_add_coefficient_si)
-+#define isl_aff_add_constant (*cloog_pointers__.p_isl_aff_add_constant)
-+#define isl_aff_free (*cloog_pointers__.p_isl_aff_free)
-+#define isl_aff_get_coefficient (*cloog_pointers__.p_isl_aff_get_coefficient)
-+#define isl_aff_get_space (*cloog_pointers__.p_isl_aff_get_space)
-+#define isl_aff_mod (*cloog_pointers__.p_isl_aff_mod)
-+#define isl_aff_set_coefficient_si (*cloog_pointers__.p_isl_aff_set_coefficient_si)
-+#define isl_aff_set_constant_si (*cloog_pointers__.p_isl_aff_set_constant_si)
-+#define isl_aff_zero_on_domain (*cloog_pointers__.p_isl_aff_zero_on_domain)
-+#define isl_band_free (*cloog_pointers__.p_isl_band_free)
-+#define isl_band_get_children (*cloog_pointers__.p_isl_band_get_children)
-+#define isl_band_get_partial_schedule (*cloog_pointers__.p_isl_band_get_partial_schedule)
-+#define isl_band_has_children (*cloog_pointers__.p_isl_band_has_children)
-+#define isl_band_list_free (*cloog_pointers__.p_isl_band_list_free)
-+#define isl_band_list_get_band (*cloog_pointers__.p_isl_band_list_get_band)
-+#define isl_band_list_get_ctx (*cloog_pointers__.p_isl_band_list_get_ctx)
-+#define isl_band_list_n_band (*cloog_pointers__.p_isl_band_list_n_band)
-+#ifdef HAVE_ISL_SCHED_CONSTRAINTS_COMPUTE_SCHEDULE
-+#define isl_band_member_is_coincident (*cloog_pointers__.p_isl_band_member_is_coincident)
-+#else
-+#define isl_band_member_is_zero_distance (*cloog_pointers__.p_isl_band_member_is_zero_distance)
-+#endif
-+#define isl_band_n_member (*cloog_pointers__.p_isl_band_n_member)
-+#define isl_basic_map_add_constraint (*cloog_pointers__.p_isl_basic_map_add_constraint)
-+#define isl_basic_map_project_out (*cloog_pointers__.p_isl_basic_map_project_out)
-+#define isl_basic_map_universe (*cloog_pointers__.p_isl_basic_map_universe)
-+#define isl_constraint_set_coefficient (*cloog_pointers__.p_isl_constraint_set_coefficient)
-+#define isl_constraint_set_coefficient_si (*cloog_pointers__.p_isl_constraint_set_coefficient_si)
-+#define isl_constraint_set_constant (*cloog_pointers__.p_isl_constraint_set_constant)
-+#define isl_constraint_set_constant_si (*cloog_pointers__.p_isl_constraint_set_constant_si)
-+#define isl_ctx_alloc (*cloog_pointers__.p_isl_ctx_alloc)
-+#define isl_ctx_free (*cloog_pointers__.p_isl_ctx_free)
-+#define isl_equality_alloc (*cloog_pointers__.p_isl_equality_alloc)
-+#define isl_id_alloc (*cloog_pointers__.p_isl_id_alloc)
-+#define isl_id_copy (*cloog_pointers__.p_isl_id_copy)
-+#define isl_id_free (*cloog_pointers__.p_isl_id_free)
-+#define isl_inequality_alloc (*cloog_pointers__.p_isl_inequality_alloc)
-+#define isl_local_space_copy (*cloog_pointers__.p_isl_local_space_copy)
-+#define isl_local_space_free (*cloog_pointers__.p_isl_local_space_free)
-+#define isl_local_space_from_space (*cloog_pointers__.p_isl_local_space_from_space)
-+#define isl_local_space_range (*cloog_pointers__.p_isl_local_space_range)
-+#define isl_map_add_constraint (*cloog_pointers__.p_isl_map_add_constraint)
-+#define isl_map_add_dims (*cloog_pointers__.p_isl_map_add_dims)
-+#define isl_map_align_params (*cloog_pointers__.p_isl_map_align_params)
-+#define isl_map_apply_range (*cloog_pointers__.p_isl_map_apply_range)
-+#define isl_map_copy (*cloog_pointers__.p_isl_map_copy)
-+#define isl_map_dim (*cloog_pointers__.p_isl_map_dim)
-+#define isl_map_dump (*cloog_pointers__.p_isl_map_dump)
-+#define isl_map_equate (*cloog_pointers__.p_isl_map_equate)
-+#define isl_map_fix_si (*cloog_pointers__.p_isl_map_fix_si)
-+#define isl_map_flat_product (*cloog_pointers__.p_isl_map_flat_product)
-+#define isl_map_flat_range_product (*cloog_pointers__.p_isl_map_flat_range_product)
-+#define isl_map_free (*cloog_pointers__.p_isl_map_free)
-+#define isl_map_from_basic_map (*cloog_pointers__.p_isl_map_from_basic_map)
-+#define isl_map_from_pw_aff (*cloog_pointers__.p_isl_map_from_pw_aff)
-+#define isl_map_from_union_map (*cloog_pointers__.p_isl_map_from_union_map)
-+#define isl_map_get_ctx (*cloog_pointers__.p_isl_map_get_ctx)
-+#define isl_map_get_space (*cloog_pointers__.p_isl_map_get_space)
-+#define isl_map_get_tuple_id (*cloog_pointers__.p_isl_map_get_tuple_id)
-+#define isl_map_insert_dims (*cloog_pointers__.p_isl_map_insert_dims)
-+#define isl_map_intersect (*cloog_pointers__.p_isl_map_intersect)
-+#define isl_map_intersect_domain (*cloog_pointers__.p_isl_map_intersect_domain)
-+#define isl_map_intersect_range (*cloog_pointers__.p_isl_map_intersect_range)
-+#define isl_map_is_empty (*cloog_pointers__.p_isl_map_is_empty)
-+#define isl_map_lex_ge (*cloog_pointers__.p_isl_map_lex_ge)
-+#define isl_map_lex_le (*cloog_pointers__.p_isl_map_lex_le)
-+#define isl_map_n_out (*cloog_pointers__.p_isl_map_n_out)
-+#define isl_map_range (*cloog_pointers__.p_isl_map_range)
-+#define isl_map_set_tuple_id (*cloog_pointers__.p_isl_map_set_tuple_id)
-+#define isl_map_universe (*cloog_pointers__.p_isl_map_universe)
-+#define isl_options_set_on_error (*cloog_pointers__.p_isl_options_set_on_error)
-+#ifdef HAVE_ISL_OPTIONS_SET_SCHEDULE_SERIALIZE_SCCS
-+#define isl_options_set_schedule_serialize_sccs (*cloog_pointers__.p_isl_options_set_schedule_serialize_sccs)
-+#else
-+#define isl_options_set_schedule_fuse (*cloog_pointers__.p_isl_options_set_schedule_fuse)
-+#endif
-+#define isl_options_set_schedule_max_constant_term (*cloog_pointers__.p_isl_options_set_schedule_max_constant_term)
-+#define isl_options_set_schedule_maximize_band_depth (*cloog_pointers__.p_isl_options_set_schedule_maximize_band_depth)
-+#define isl_printer_free (*cloog_pointers__.p_isl_printer_free)
-+#define isl_printer_print_aff (*cloog_pointers__.p_isl_printer_print_aff)
-+#define isl_printer_print_constraint (*cloog_pointers__.p_isl_printer_print_constraint)
-+#define isl_printer_print_map (*cloog_pointers__.p_isl_printer_print_map)
-+#define isl_printer_print_set (*cloog_pointers__.p_isl_printer_print_set)
-+#define isl_printer_to_file (*cloog_pointers__.p_isl_printer_to_file)
-+#define isl_pw_aff_add (*cloog_pointers__.p_isl_pw_aff_add)
-+#define isl_pw_aff_alloc (*cloog_pointers__.p_isl_pw_aff_alloc)
-+#define isl_pw_aff_copy (*cloog_pointers__.p_isl_pw_aff_copy)
-+#define isl_pw_aff_eq_set (*cloog_pointers__.p_isl_pw_aff_eq_set)
-+#define isl_pw_aff_free (*cloog_pointers__.p_isl_pw_aff_free)
-+#define isl_pw_aff_from_aff (*cloog_pointers__.p_isl_pw_aff_from_aff)
-+#define isl_pw_aff_ge_set (*cloog_pointers__.p_isl_pw_aff_ge_set)
-+#define isl_pw_aff_gt_set (*cloog_pointers__.p_isl_pw_aff_gt_set)
-+#define isl_pw_aff_is_cst (*cloog_pointers__.p_isl_pw_aff_is_cst)
-+#define isl_pw_aff_le_set (*cloog_pointers__.p_isl_pw_aff_le_set)
-+#define isl_pw_aff_lt_set (*cloog_pointers__.p_isl_pw_aff_lt_set)
-+#define isl_pw_aff_mod (*cloog_pointers__.p_isl_pw_aff_mod)
-+#define isl_pw_aff_mul (*cloog_pointers__.p_isl_pw_aff_mul)
-+#define isl_pw_aff_ne_set (*cloog_pointers__.p_isl_pw_aff_ne_set)
-+#define isl_pw_aff_nonneg_set (*cloog_pointers__.p_isl_pw_aff_nonneg_set)
-+#define isl_pw_aff_set_tuple_id (*cloog_pointers__.p_isl_pw_aff_set_tuple_id)
-+#define isl_pw_aff_sub (*cloog_pointers__.p_isl_pw_aff_sub)
-+#define isl_pw_aff_zero_set (*cloog_pointers__.p_isl_pw_aff_zero_set)
-+#define isl_schedule_constraints_compute_schedule (*cloog_pointers__.p_isl_schedule_constraints_compute_schedule)
-+#define isl_schedule_constraints_on_domain (*cloog_pointers__.p_isl_schedule_constraints_on_domain)
-+#define isl_schedule_constraints_set_coincidence (*cloog_pointers__.p_isl_schedule_constraints_set_coincidence)
-+#define isl_schedule_constraints_set_proximity (*cloog_pointers__.p_isl_schedule_constraints_set_proximity)
-+#define isl_schedule_constraints_set_validity (*cloog_pointers__.p_isl_schedule_constraints_set_validity)
-+#define isl_schedule_free (*cloog_pointers__.p_isl_schedule_free)
-+#define isl_schedule_get_band_forest (*cloog_pointers__.p_isl_schedule_get_band_forest)
-+#define isl_set_add_constraint (*cloog_pointers__.p_isl_set_add_constraint)
-+#define isl_set_add_dims (*cloog_pointers__.p_isl_set_add_dims)
-+#define isl_set_apply (*cloog_pointers__.p_isl_set_apply)
-+#define isl_set_coalesce (*cloog_pointers__.p_isl_set_coalesce)
-+#define isl_set_copy (*cloog_pointers__.p_isl_set_copy)
-+#define isl_set_dim (*cloog_pointers__.p_isl_set_dim)
-+#define isl_set_fix_si (*cloog_pointers__.p_isl_set_fix_si)
-+#define isl_set_free (*cloog_pointers__.p_isl_set_free)
-+#define isl_set_from_cloog_domain (*cloog_pointers__.p_isl_set_from_cloog_domain)
-+#define isl_set_get_space (*cloog_pointers__.p_isl_set_get_space)
-+#define isl_set_get_tuple_id (*cloog_pointers__.p_isl_set_get_tuple_id)
-+#define isl_set_intersect (*cloog_pointers__.p_isl_set_intersect)
-+#define isl_set_is_empty (*cloog_pointers__.p_isl_set_is_empty)
-+#define isl_set_max (*cloog_pointers__.p_isl_set_max)
-+#define isl_set_min (*cloog_pointers__.p_isl_set_min)
-+#define isl_set_n_dim (*cloog_pointers__.p_isl_set_n_dim)
-+#define isl_set_nat_universe (*cloog_pointers__.p_isl_set_nat_universe)
-+#define isl_set_project_out (*cloog_pointers__.p_isl_set_project_out)
-+#define isl_set_set_tuple_id (*cloog_pointers__.p_isl_set_set_tuple_id)
-+#define isl_set_universe (*cloog_pointers__.p_isl_set_universe)
-+#define isl_space_add_dims (*cloog_pointers__.p_isl_space_add_dims)
-+#define isl_space_alloc (*cloog_pointers__.p_isl_space_alloc)
-+#define isl_space_copy (*cloog_pointers__.p_isl_space_copy)
-+#define isl_space_dim (*cloog_pointers__.p_isl_space_dim)
-+#define isl_space_domain (*cloog_pointers__.p_isl_space_domain)
-+#define isl_space_find_dim_by_id (*cloog_pointers__.p_isl_space_find_dim_by_id)
-+#define isl_space_free (*cloog_pointers__.p_isl_space_free)
-+#define isl_space_from_domain (*cloog_pointers__.p_isl_space_from_domain)
-+#define isl_space_get_tuple_id (*cloog_pointers__.p_isl_space_get_tuple_id)
-+#define isl_space_params_alloc (*cloog_pointers__.p_isl_space_params_alloc)
-+#define isl_space_range (*cloog_pointers__.p_isl_space_range)
-+#define isl_space_set_alloc (*cloog_pointers__.p_isl_space_set_alloc)
-+#define isl_space_set_dim_id (*cloog_pointers__.p_isl_space_set_dim_id)
-+#define isl_space_set_tuple_id (*cloog_pointers__.p_isl_space_set_tuple_id)
-+#define isl_union_map_add_map (*cloog_pointers__.p_isl_union_map_add_map)
-+#define isl_union_map_align_params (*cloog_pointers__.p_isl_union_map_align_params)
-+#define isl_union_map_apply_domain (*cloog_pointers__.p_isl_union_map_apply_domain)
-+#define isl_union_map_apply_range (*cloog_pointers__.p_isl_union_map_apply_range)
-+#define isl_union_map_compute_flow (*cloog_pointers__.p_isl_union_map_compute_flow)
-+#define isl_union_map_copy (*cloog_pointers__.p_isl_union_map_copy)
-+#define isl_union_map_empty (*cloog_pointers__.p_isl_union_map_empty)
-+#define isl_union_map_flat_range_product (*cloog_pointers__.p_isl_union_map_flat_range_product)
-+#define isl_union_map_foreach_map (*cloog_pointers__.p_isl_union_map_foreach_map)
-+#define isl_union_map_free (*cloog_pointers__.p_isl_union_map_free)
-+#define isl_union_map_from_map (*cloog_pointers__.p_isl_union_map_from_map)
-+#define isl_union_map_get_ctx (*cloog_pointers__.p_isl_union_map_get_ctx)
-+#define isl_union_map_get_space (*cloog_pointers__.p_isl_union_map_get_space)
-+#define isl_union_map_gist_domain (*cloog_pointers__.p_isl_union_map_gist_domain)
-+#define isl_union_map_gist_range (*cloog_pointers__.p_isl_union_map_gist_range)
-+#define isl_union_map_intersect_domain (*cloog_pointers__.p_isl_union_map_intersect_domain)
-+#define isl_union_map_is_empty (*cloog_pointers__.p_isl_union_map_is_empty)
-+#define isl_union_map_subtract (*cloog_pointers__.p_isl_union_map_subtract)
-+#define isl_union_map_union (*cloog_pointers__.p_isl_union_map_union)
-+#define isl_union_set_add_set (*cloog_pointers__.p_isl_union_set_add_set)
-+#define isl_union_set_compute_schedule (*cloog_pointers__.p_isl_union_set_compute_schedule)
-+#define isl_union_set_copy (*cloog_pointers__.p_isl_union_set_copy)
-+#define isl_union_set_empty (*cloog_pointers__.p_isl_union_set_empty)
-+#define isl_union_set_from_set (*cloog_pointers__.p_isl_union_set_from_set)
-+#define stmt_ass (*cloog_pointers__.p_stmt_ass)
-+#define stmt_block (*cloog_pointers__.p_stmt_block)
-+#define stmt_for (*cloog_pointers__.p_stmt_for)
-+#define stmt_guard (*cloog_pointers__.p_stmt_guard)
-+#define stmt_root (*cloog_pointers__.p_stmt_root)
-+#define stmt_user (*cloog_pointers__.p_stmt_user)
-+
-+#ifndef HAVE_ISL_OPTIONS_SET_SCHEDULE_SERIALIZE_SCCS
-+# define isl_stat int
-+# define isl_stat_ok 0
-+#endif
-+
- typedef struct poly_dr *poly_dr_p;
- 
- typedef struct poly_bb *poly_bb_p;
-diff --git a/gcc/graphite.c b/gcc/graphite.c
-index 7511527de..5c6564025 100644
---- a/gcc/graphite.c
-+++ b/gcc/graphite.c
-@@ -65,6 +65,34 @@ along with GCC; see the file COPYING3.  If not see
- 
- CloogState *cloog_state;
- 
-+__typeof (cloog_pointers__) cloog_pointers__;
-+
-+static bool
-+init_cloog_pointers (void)
-+{
-+  void *h;
-+
-+  if (cloog_pointers__.inited)
-+    return cloog_pointers__.h != NULL;
-+  h = dlopen ("libcloog-isl.so.4", RTLD_LAZY);
-+  cloog_pointers__.h = h;
-+  if (h == NULL)
-+    return false;
-+#define DYNSYM(x) \
-+  do \
-+    { \
-+      union { __typeof (cloog_pointers__.p_##x) p; void *q; } u; \
-+      u.q = dlsym (h, #x); \
-+      if (u.q == NULL) \
-+	return false; \
-+      cloog_pointers__.p_##x = u.p; \
-+    } \
-+  while (0)
-+  DYNSYMS
-+#undef DYNSYM
-+  return true;
-+}
-+
- /* Print global statistics to FILE.  */
- 
- static void
-@@ -263,6 +291,15 @@ graphite_transform_loops (void)
-   if (parallelized_function_p (cfun->decl))
-     return;
- 
-+  if (number_of_loops () <= 1)
-+    return;
-+
-+  if (!init_cloog_pointers ())
-+    {
-+      sorry ("Graphite loop optimizations cannot be used; rebuild gcc to fix");
-+      return;
-+    }
-+
-   ctx = isl_ctx_alloc ();
-   isl_options_set_on_error(ctx, ISL_ON_ERROR_ABORT);
-   if (!graphite_initialize (ctx))
 diff --git a/gcc/incpath.c b/gcc/incpath.c
 index 018da982c..eac4a9249 100644
 --- a/gcc/incpath.c
