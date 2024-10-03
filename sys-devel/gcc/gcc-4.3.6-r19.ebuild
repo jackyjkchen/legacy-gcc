@@ -70,6 +70,8 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/47_pr42466.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/48_pr24449.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/49_pr23716.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/50_pr49134.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/51_pr29197.patch
 
 	if use test ; then
 		eapply "${FILESDIR}"/${PV}/postrelease/fix-known-test-fail.patch
