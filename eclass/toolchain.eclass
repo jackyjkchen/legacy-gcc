@@ -363,11 +363,8 @@ tc_version_is_at_least 8.0 && IUSE+=" systemtap" TC_FEATURES+=( systemtap )
 
 tc_version_is_at_least 9.0 && IUSE+=" d" TC_FEATURES+=( d )
 case $(tc-arch) in
-	amd64)
-		tc_version_is_at_least 4.6 && IUSE+=" lto"
-		;;
-	x86)
-		tc_version_is_at_least 4.7 && IUSE+=" lto"
+	amd64|x86)
+		tc_version_is_at_least 4.9 && IUSE+=" lto"
 		;;
 	*)
 		tc_version_is_at_least 9.1 && IUSE+=" lto"
@@ -1329,7 +1326,7 @@ toolchain_src_configure() {
 	fi
 
 	# Build compiler itself using LTO
-	if tc_version_is_at_least 4.6 && _tc_use_if_iuse lto ; then
+	if tc_version_is_at_least 4.9 && _tc_use_if_iuse lto ; then
 		build_config_targets+=( bootstrap-lto )
 	fi
 
@@ -1786,9 +1783,8 @@ toolchain_src_configure() {
 
 	# This only controls whether the compiler *supports* LTO, not whether
 	# it's *built using* LTO. Hence we do it without a USE flag.
-	if is_djgpp ; then
-		tc_version_is_at_least 4.8 && confgcc+=( --enable-lto )
-	elif tc_version_is_at_least 4.6 ; then
+	# lto supported ftom 4.5, bug unstable util gcc-4.9.
+	if tc_version_is_at_least 4.9 ; then
 		confgcc+=( --enable-lto )
 	elif tc_version_is_at_least 4.5 ; then
 		confgcc+=( --disable-lto )
