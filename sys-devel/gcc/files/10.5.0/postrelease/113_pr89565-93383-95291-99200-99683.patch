@@ -1,0 +1,87 @@
+diff --git a/gcc/cp/pt.c b/gcc/cp/pt.c
+index 72d40c79c..95474acc8 100644
+--- a/gcc/cp/pt.c
++++ b/gcc/cp/pt.c
+@@ -29104,6 +29104,10 @@ do_class_deduction (tree ptype, tree tmpl, tree init,
+ 		 "with %<-std=c++2a%> or %<-std=gnu++2a%>");
+     }
+ 
++  /* Wait until the initializer is non-dependent.  */
++  if (type_dependent_expression_p (init))
++    return ptype;
++
+   tree type = TREE_TYPE (tmpl);
+ 
+   bool try_list_ctor = false;
+diff --git a/gcc/testsuite/g++.dg/cpp2a/nontype-class45.C b/gcc/testsuite/g++.dg/cpp2a/nontype-class45.C
+new file mode 100644
+index 000000000..e7addf5f2
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp2a/nontype-class45.C
+@@ -0,0 +1,32 @@
++// PR c++/99200
++// { dg-do compile { target c++20 } }
++
++template <int N>
++struct A
++{
++  constexpr A (const char (&s)[N]) { for (int i = 0; i < N; i++) v[i] = s[i]; v[N] = 0; }
++  char v[N + 1];
++};
++
++template <A s>
++struct B
++{
++  constexpr operator const char *() { return s.v; }
++};
++
++template <typename T>
++const char *
++foo ()
++{ 
++  return B<__PRETTY_FUNCTION__>{};
++}
++
++template <typename T>
++const char *
++bar ()
++{ 
++  return B<__FUNCTION__>{};
++}
++
++auto a = foo <int> ();
++auto b = bar <double> ();
+diff --git a/gcc/testsuite/g++.dg/cpp2a/nontype-class46.C b/gcc/testsuite/g++.dg/cpp2a/nontype-class46.C
+new file mode 100644
+index 000000000..d91e80042
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp2a/nontype-class46.C
+@@ -0,0 +1,11 @@
++// PR c++/93383
++// { dg-do compile { target c++20 } }
++
++template <int> struct A {};
++
++template <A a> struct B {
++  void foo(B<+a>);
++  void bar(B<a.x>);
++  template <class T> using type = B<T{}>;
++  template <class> static inline auto y = A{0}; // { dg-error "deduction|no match" }
++};
+diff --git a/gcc/testsuite/g++.dg/cpp2a/nontype-class47.C b/gcc/testsuite/g++.dg/cpp2a/nontype-class47.C
+new file mode 100644
+index 000000000..1f31b9bd5
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp2a/nontype-class47.C
+@@ -0,0 +1,11 @@
++// PR c++/95291
++// { dg-do compile { target c++20 } }
++
++template <typename T = int>
++class xy { };
++
++template <xy _size>
++struct window_root { };
++
++template <typename minion>
++struct flip_horizontally : window_root<minion::size> { };

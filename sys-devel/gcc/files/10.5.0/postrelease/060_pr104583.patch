@@ -1,0 +1,65 @@
+diff --git a/gcc/cp/init.c b/gcc/cp/init.c
+index b3f6c4a08..50a3cdf55 100644
+--- a/gcc/cp/init.c
++++ b/gcc/cp/init.c
+@@ -672,10 +672,10 @@ get_nsdmi (tree member, bool in_ctor, tsubst_flags_t complain)
+   if (simple_target)
+     init = TARGET_EXPR_INITIAL (init);
+   init = break_out_target_exprs (init, /*loc*/true);
+-  if (in_ctor && init && TREE_CODE (init) == TARGET_EXPR)
+-    /* This expresses the full initialization, prevent perform_member_init from
+-       calling another constructor (58162).  */
+-    TARGET_EXPR_DIRECT_INIT_P (init) = true;
++  if (init && TREE_CODE (init) == TARGET_EXPR)
++    /* In a constructor, this expresses the full initialization, prevent
++       perform_member_init from calling another constructor (58162).  */
++    TARGET_EXPR_DIRECT_INIT_P (init) = in_ctor;
+   if (simple_target && TREE_CODE (init) != CONSTRUCTOR)
+     /* Now put it back so C++17 copy elision works.  */
+     init = get_target_expr (init);
+diff --git a/gcc/testsuite/g++.dg/cpp0x/nsdmi-list7.C b/gcc/testsuite/g++.dg/cpp0x/nsdmi-list7.C
+new file mode 100644
+index 000000000..62b07429b
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/nsdmi-list7.C
+@@ -0,0 +1,17 @@
++// PR c++/93280
++// { dg-do compile { target c++11 } }
++
++struct A {
++  template <typename T> A(T);
++  int c;
++};
++
++struct D {
++  A a{0};
++};
++
++void g()
++{
++  D d;
++  d = {};
++}
+diff --git a/gcc/testsuite/g++.dg/cpp0x/nsdmi-list8.C b/gcc/testsuite/g++.dg/cpp0x/nsdmi-list8.C
+new file mode 100644
+index 000000000..fe73da8f9
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/nsdmi-list8.C
+@@ -0,0 +1,17 @@
++// PR c++/104583
++// { dg-do compile { target c++11 } }
++
++struct A {
++  A();
++  int c;
++};
++
++struct D {
++  A a{};
++};
++
++void g()
++{
++  D d;
++  d = {};
++}

@@ -1,0 +1,48 @@
+diff --git a/gcc/cp/error.c b/gcc/cp/error.c
+index 4cdc2e4d8..a84b6641b 100644
+--- a/gcc/cp/error.c
++++ b/gcc/cp/error.c
+@@ -2103,6 +2103,7 @@ dump_expr (cxx_pretty_printer *pp, tree t, int flags)
+     case WILDCARD_DECL:
+     case OVERLOAD:
+     case TYPE_DECL:
++    case USING_DECL:
+     case IDENTIFIER_NODE:
+       dump_decl (pp, t, ((flags & ~(TFF_DECL_SPECIFIERS|TFF_RETURN_TYPE
+                                     |TFF_TEMPLATE_HEADER))
+@@ -2507,6 +2508,13 @@ dump_expr (cxx_pretty_printer *pp, tree t, int flags)
+     case VIEW_CONVERT_EXPR:
+       {
+ 	tree op = TREE_OPERAND (t, 0);
++
++	if (location_wrapper_p (t))
++	  {
++	    dump_expr (pp, op, flags);
++	    break;
++	  }
++
+ 	tree ttype = TREE_TYPE (t);
+ 	tree optype = TREE_TYPE (op);
+ 
+diff --git a/gcc/testsuite/g++.dg/diagnostic/using1.C b/gcc/testsuite/g++.dg/diagnostic/using1.C
+new file mode 100644
+index 000000000..eb4f18d1d
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/diagnostic/using1.C
+@@ -0,0 +1,16 @@
++// PR c++/102987
++// { dg-do compile { target c++11 } }
++
++struct a {
++  bool b();
++};
++template <typename c> struct d : c {
++  using c::e;
++  using f = d;
++  constexpr int g(decltype(e.b())) { return buh; } // { dg-error "buh" }
++};
++struct h {
++  a e;
++};
++using i = d<h>;
++auto j = i{}.g(1);

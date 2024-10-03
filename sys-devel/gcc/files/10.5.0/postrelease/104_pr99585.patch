@@ -1,0 +1,84 @@
+diff --git a/gcc/fortran/trans-expr.c b/gcc/fortran/trans-expr.c
+index 68e321d97..afa842011 100644
+--- a/gcc/fortran/trans-expr.c
++++ b/gcc/fortran/trans-expr.c
+@@ -2732,9 +2732,9 @@ conv_parent_component_references (gfc_se * se, gfc_ref * ref)
+   dt = ref->u.c.sym;
+   c = ref->u.c.component;
+ 
+-  /* Return if the component is in the parent type.  */
++  /* Return if the component is in this type, i.e. not in the parent type.  */
+   for (cmp = dt->components; cmp; cmp = cmp->next)
+-    if (strcmp (c->name, cmp->name) == 0)
++    if (c == cmp)
+       return;
+ 
+   /* Build a gfc_ref to recursively call gfc_conv_component_ref.  */
+@@ -2794,6 +2794,9 @@ tree
+ gfc_maybe_dereference_var (gfc_symbol *sym, tree var, bool descriptor_only_p,
+ 			   bool is_classarray)
+ {
++  if (!POINTER_TYPE_P (TREE_TYPE (var)))
++    return var;
++
+   /* Characters are entirely different from other types, they are treated
+      separately.  */
+   if (sym->ts.type == BT_CHARACTER)
+diff --git a/gcc/testsuite/gfortran.dg/class_result_10.f90 b/gcc/testsuite/gfortran.dg/class_result_10.f90
+new file mode 100644
+index 000000000..a4d29ab9c
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/class_result_10.f90
+@@ -0,0 +1,52 @@
++! { dg-do run}
++
++
++! PR fortran/99585
++
++module m2
++  type t
++     class(*), pointer :: bar(:)
++  end type
++  type t2
++     class(t), allocatable :: my(:)
++  end type t2
++contains
++  function f (x, y) result(z)
++    class(t) :: x(:)
++    class(t) :: y(size(x(1)%bar))
++    type(t)  :: z(size(x(1)%bar))
++  end
++  function g (x) result(z)
++    class(t) :: x(:)
++    type(t)  :: z(size(x(1)%bar))
++  end
++  subroutine s ()
++    class(t2), allocatable :: a(:), b(:), c(:), d(:)
++    class(t2), pointer     :: p(:)
++    c(1)%my = f (a(1)%my, b(1)%my)
++    d(1)%my = g (p(1)%my)
++  end
++end
++
++! Contributed by  G. Steinmetz:
++! PR fortran/104430
++
++module m
++   type t
++      integer :: a
++   end type
++contains
++   function f(x) result(z)
++      class(t) :: x(:)
++      type(t) :: z(size(x%a))
++      z%a = 42
++   end
++end
++program p
++   use m
++   class(t), allocatable :: y(:), z(:)
++   allocate (y(32))
++   z = f(y)
++   if (size(z) /= 32) stop 1
++   if (any (z%a /= 42)) stop 2
++end

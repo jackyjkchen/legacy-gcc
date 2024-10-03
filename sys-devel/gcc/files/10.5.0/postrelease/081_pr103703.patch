@@ -1,0 +1,51 @@
+diff --git a/gcc/cp/parser.c b/gcc/cp/parser.c
+index 4d637dbef..ba39b0952 100644
+--- a/gcc/cp/parser.c
++++ b/gcc/cp/parser.c
+@@ -31399,7 +31399,7 @@ class_decl_loc_t::diag_mismatched_tags (tree type_decl)
+   class_decl_loc_t *cdlguide = this;
+ 
+   tree type = TREE_TYPE (type_decl);
+-  if (CLASSTYPE_IMPLICIT_INSTANTIATION (type))
++  if (CLASS_TYPE_P (type) && CLASSTYPE_IMPLICIT_INSTANTIATION (type))
+     {
+       /* For implicit instantiations of a primary template look up
+ 	 the primary or partial specialization and use it as
+diff --git a/gcc/testsuite/g++.dg/warn/Wmismatched-tags-9.C b/gcc/testsuite/g++.dg/warn/Wmismatched-tags-9.C
+new file mode 100644
+index 000000000..2712c4de1
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/warn/Wmismatched-tags-9.C
+@@ -0,0 +1,32 @@
++/* PR c++/103703 - ICE with -Wmismatched-tags with friends and templates
++   { dg-do compile }
++   { dg-options "-Wall -Wmismatched-tags" } */
++
++template <typename T>
++struct A
++{
++  struct B { };
++};
++
++template <typename T>
++struct C
++{
++  friend class A<C>::B;       // { dg-warning "-Wmismatched-tags" "pr102036" { xfail *-*-* } }
++};
++
++template struct C<int>;
++
++
++template <typename T>
++struct D
++{
++  friend class A<D>::B;       // okay, specialized as class below
++};
++
++template <>
++struct A<long>
++{
++  class B { };
++};
++
++template struct D<long>;

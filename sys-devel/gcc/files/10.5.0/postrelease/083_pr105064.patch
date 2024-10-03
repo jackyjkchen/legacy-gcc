@@ -1,0 +1,63 @@
+diff --git a/gcc/cp/constraint.cc b/gcc/cp/constraint.cc
+index f28239a35..bc4f87cee 100644
+--- a/gcc/cp/constraint.cc
++++ b/gcc/cp/constraint.cc
+@@ -1214,15 +1214,14 @@ remove_constraints (tree t)
+    for declaration matching.  */
+ 
+ tree
+-maybe_substitute_reqs_for (tree reqs, const_tree decl_)
++maybe_substitute_reqs_for (tree reqs, const_tree decl)
+ {
+   if (reqs == NULL_TREE)
+     return NULL_TREE;
+-  tree decl = CONST_CAST_TREE (decl_);
+-  tree result = STRIP_TEMPLATE (decl);
+-  if (DECL_FRIEND_P (result))
++  decl = STRIP_TEMPLATE (decl);
++  if (DECL_UNIQUE_FRIEND_P (decl) && DECL_TEMPLATE_INFO (decl))
+     {
+-      tree tmpl = decl == result ? DECL_TI_TEMPLATE (result) : decl;
++      tree tmpl = DECL_TI_TEMPLATE (decl);
+       tree gargs = generic_targs_for (tmpl);
+       processing_template_decl_sentinel s;
+       if (uses_template_parms (gargs))
+diff --git a/gcc/cp/cp-tree.h b/gcc/cp/cp-tree.h
+index b955c6adf..7d0538a91 100644
+--- a/gcc/cp/cp-tree.h
++++ b/gcc/cp/cp-tree.h
+@@ -3102,6 +3102,16 @@ struct GTY(()) lang_decl {
+   (DECL_LANG_SPECIFIC (TYPE_FUNCTION_OR_TEMPLATE_DECL_CHECK (NODE)) \
+    ->u.base.friend_or_tls)
+ 
++/* Nonzero for FUNCTION_DECL means that this is a friend that is
++   either not pushed into a namespace/looked up in a class (because it
++   is a dependent type, in an uninstantiated template), or it has
++   /only/ been subject to hidden friend injection from one or more
++   befriending classes.  Once another decl matches, the flag is
++   cleared.  There are requirements on its default parms.  */
++#define DECL_UNIQUE_FRIEND_P(NODE) \
++  (DECL_LANG_SPECIFIC (FUNCTION_DECL_CHECK (NODE)) \
++   ->u.base.friend_or_tls)
++
+ /* Nonzero if the thread-local variable was declared with __thread as
+    opposed to thread_local.  */
+ #define DECL_GNU_TLS_P(NODE)				\
+diff --git a/gcc/testsuite/g++.dg/cpp2a/concepts-friend9.C b/gcc/testsuite/g++.dg/cpp2a/concepts-friend9.C
+new file mode 100644
+index 000000000..09054d23d
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp2a/concepts-friend9.C
+@@ -0,0 +1,12 @@
++// PR c++/105064
++// { dg-do compile { target c++20 } }
++
++struct A {
++  template<class T>
++  friend void f(T) requires true;
++};
++
++struct B {
++  template<class T>
++  friend void f(T) requires true;
++};

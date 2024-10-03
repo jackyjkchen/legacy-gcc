@@ -1,0 +1,46 @@
+diff --git a/gcc/cp/mangle.c b/gcc/cp/mangle.c
+index bab9fdadf..a8ca6cb9f 100644
+--- a/gcc/cp/mangle.c
++++ b/gcc/cp/mangle.c
+@@ -1589,6 +1589,7 @@ write_literal_operator_name (tree identifier)
+ static void
+ write_compact_number (int num)
+ {
++  gcc_checking_assert (num >= 0);
+   if (num > 0)
+     write_unsigned_number (num - 1);
+   write_char ('_');
+@@ -1988,15 +1989,7 @@ write_local_name (tree function, const tree local_entity,
+   /* For this purpose, parameters are numbered from right-to-left.  */
+   if (parm)
+     {
+-      tree t;
+-      int i = 0;
+-      for (t = DECL_ARGUMENTS (function); t; t = DECL_CHAIN (t))
+-	{
+-	  if (t == parm)
+-	    i = 1;
+-	  else if (i)
+-	    ++i;
+-	}
++      int i = list_length (parm);
+       write_char ('d');
+       write_compact_number (i - 1);
+     }
+diff --git a/gcc/testsuite/g++.dg/abi/lambda-defarg1.C b/gcc/testsuite/g++.dg/abi/lambda-defarg1.C
+new file mode 100644
+index 000000000..8c5385812
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/abi/lambda-defarg1.C
+@@ -0,0 +1,11 @@
++// PR c++/91241
++// { dg-do compile { target c++11 } }
++
++struct A {
++  int *b(const int & = []() -> int { return 0; }(),
++	 const int & = []() -> int { return 0; }());
++};
++int *A::b(const int &, const int &) { b(); return 0; }
++// { dg-final { scan-assembler "_ZN1A1bERKiS1_" } }
++// { dg-final { scan-assembler "_ZZN1A1bERKiS1_Ed_NKUlvE_clEv" } }
++// { dg-final { scan-assembler "_ZZN1A1bERKiS1_Ed0_NKUlvE_clEv" } }

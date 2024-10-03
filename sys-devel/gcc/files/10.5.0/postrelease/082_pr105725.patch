@@ -1,0 +1,39 @@
+diff --git a/gcc/cp/parser.c b/gcc/cp/parser.c
+index 8742776d0..4d637dbef 100644
+--- a/gcc/cp/parser.c
++++ b/gcc/cp/parser.c
+@@ -31257,7 +31257,8 @@ class_decl_loc_t::add (cp_parser *parser, location_t key_loc,
+   bool key_redundant = (!def_p && !decl_p
+ 			&& (decl == type_decl
+ 			    || TREE_CODE (decl) == TEMPLATE_DECL
+-			    || TYPE_BEING_DEFINED (type)));
++			    || (CLASS_TYPE_P (type)
++				&& TYPE_BEING_DEFINED (type))));
+ 
+   if (key_redundant
+       && class_key != class_type
+@@ -31295,7 +31296,7 @@ class_decl_loc_t::add (cp_parser *parser, location_t key_loc,
+ 	}
+       else
+ 	{
+-	  /* TYPE was previously defined in some unknown precompiled hdeader.
++	  /* TYPE was previously defined in some unknown precompiled header.
+ 	     Simply add a record of its definition at an unknown location and
+ 	     proceed below to add a reference to it at the current location.
+ 	     (Declarations in precompiled headers that are not definitions
+diff --git a/gcc/testsuite/g++.dg/warn/Wmismatched-tags-10.C b/gcc/testsuite/g++.dg/warn/Wmismatched-tags-10.C
+new file mode 100644
+index 000000000..d7e10743b
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/warn/Wmismatched-tags-10.C
+@@ -0,0 +1,10 @@
++// PR c++/105725
++// { dg-do compile { target c++14 } }
++// { dg-options "-Wall -Wmismatched-tags" }
++
++template <bool> struct enable_if;
++template <bool Cond> using enable_if_t = typename enable_if<Cond>::type;
++template <typename> bool is_class_v;
++template <class, class> bool B;
++template <class T>
++bool B<T, enable_if_t<is_class_v<class T::foo>>>;

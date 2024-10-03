@@ -1,0 +1,95 @@
+diff --git a/gcc/testsuite/g++.dg/plugin/location-overflow-test-pr100796.c b/gcc/testsuite/g++.dg/plugin/location-overflow-test-pr100796.c
+new file mode 100644
+index 000000000..7fa964c07
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/plugin/location-overflow-test-pr100796.c
+@@ -0,0 +1,25 @@
++// PR c++/100796
++// { dg-additional-options "-Wsuggest-override -fplugin-arg-location_overflow_plugin-value=0x60000001" }
++// Passing LINE_MAP_MAX_LOCATION_WITH_COLS meant we stopped distinguishing between lines in a macro.
++
++#define DO_PRAGMA(text)           _Pragma(#text)
++#define WARNING_PUSH              DO_PRAGMA(GCC diagnostic push)
++#define WARNING_POP               DO_PRAGMA(GCC diagnostic pop)
++#define WARNING_DISABLE(text)     DO_PRAGMA(GCC diagnostic ignored text)
++#define NO_OVERRIDE_WARNING       WARNING_DISABLE("-Wsuggest-override")
++
++#define BOILERPLATE				\
++  WARNING_PUSH					\
++  NO_OVERRIDE_WARNING				\
++  void f();					\
++  WARNING_POP
++
++struct B
++{
++  virtual void f();
++};
++
++struct D: B
++{
++  BOILERPLATE
++};
+diff --git a/gcc/testsuite/g++.dg/plugin/location-overflow-test-pr96391.c b/gcc/testsuite/g++.dg/plugin/location-overflow-test-pr96391.c
+new file mode 100644
+index 000000000..18169617c
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/plugin/location-overflow-test-pr96391.c
+@@ -0,0 +1,12 @@
++/* { dg-options "-fplugin-arg-location_overflow_plugin-value=0x60000001" } */
++
++/* We use location_overflow_plugin.c, which injects the case that location_t
++   values have exceeded LINE_MAP_MAX_LOCATION_WITH_COLS, and hence no column
++   numbers are available.  */
++
++/* Verify that we're in column-less mode.  */
++extern unknown_type test; /* { dg-error "-:'unknown_type' does not name a type" } */
++
++#define CONST const
++#define VOID void
++typedef CONST VOID *PCVOID;
+diff --git a/gcc/testsuite/g++.dg/plugin/plugin.exp b/gcc/testsuite/g++.dg/plugin/plugin.exp
+index 5d8dde07f..82bb9b5d7 100644
+--- a/gcc/testsuite/g++.dg/plugin/plugin.exp
++++ b/gcc/testsuite/g++.dg/plugin/plugin.exp
+@@ -72,6 +72,9 @@ set plugin_test_list [list \
+ 	  ../../gcc.dg/plugin/diagnostic-test-string-literals-2.c \
+ 	  ../../gcc.dg/plugin/diagnostic-test-string-literals-3.c \
+ 	  ../../gcc.dg/plugin/diagnostic-test-string-literals-4.c } \
++    { ../../gcc.dg/plugin/location_overflow_plugin.c \
++	  location-overflow-test-pr96391.c \
++          location-overflow-test-pr100796.c } \
+     { show_template_tree_color_plugin.c \
+     	  show-template-tree-color.C \
+     	  show-template-tree-color-labels.C \
+diff --git a/libcpp/line-map.c b/libcpp/line-map.c
+index b57f8dc27..402c532d3 100644
+--- a/libcpp/line-map.c
++++ b/libcpp/line-map.c
+@@ -1350,17 +1350,20 @@ linemap_compare_locations (line_maps *set,
+       /* So pre and post represent two tokens that are present in a
+ 	 same macro expansion.  Let's see if the token for pre was
+ 	 before the token for post in that expansion.  */
+-      unsigned i0, i1;
+       const struct line_map *map =
+ 	first_map_in_common (set, pre, post, &l0, &l1);
+ 
+       if (map == NULL)
+-	/* This should not be possible.  */
+-	abort ();
+-
+-      i0 = l0 - MAP_START_LOCATION (map);
+-      i1 = l1 - MAP_START_LOCATION (map);
+-      return i1 - i0;
++	/* This should not be possible while we have column information, but if
++	   we don't, the tokens could be from separate macro expansions on the
++	   same line.  */
++	gcc_assert (l0 > LINE_MAP_MAX_LOCATION_WITH_COLS);
++      else
++	{
++	  unsigned i0 = l0 - MAP_START_LOCATION (map);
++	  unsigned i1 = l1 - MAP_START_LOCATION (map);
++	  return i1 - i0;
++	}
+     }
+ 
+   if (IS_ADHOC_LOC (l0))

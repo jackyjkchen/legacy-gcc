@@ -1,0 +1,46 @@
+diff --git a/gcc/lra-constraints.c b/gcc/lra-constraints.c
+index e0f785399..6c707a74e 100644
+--- a/gcc/lra-constraints.c
++++ b/gcc/lra-constraints.c
+@@ -6000,12 +6000,17 @@ split_reg (bool before_p, int original_regno, rtx_insn *insn,
+ 			 before_p ? NULL : save,
+ 			 call_save_p
+ 			 ?  "Add save<-reg" : "Add split<-reg");
+-  if (nregs > 1)
++  if (nregs > 1 || original_regno < FIRST_PSEUDO_REGISTER)
+     /* If we are trying to split multi-register.  We should check
+        conflicts on the next assignment sub-pass.  IRA can allocate on
+        sub-register levels, LRA do this on pseudos level right now and
+        this discrepancy may create allocation conflicts after
+-       splitting.  */
++       splitting.
++
++       If we are trying to split hard register we should also check conflicts
++       as such splitting can create artificial conflict of the hard register
++       with another pseudo because of simplified conflict calculation in
++       LRA.  */
+     check_and_force_assignment_correctness_p = true;
+   if (lra_dump_file != NULL)
+     fprintf (lra_dump_file,
+diff --git a/gcc/testsuite/gcc.target/i386/pr103074.c b/gcc/testsuite/gcc.target/i386/pr103074.c
+new file mode 100644
+index 000000000..276ad82a1
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/i386/pr103074.c
+@@ -0,0 +1,16 @@
++/* { dg-do compile } */
++/* { dg-options "-march=bonnell -Os -fPIC -fschedule-insns -w" } */
++
++void
++serialize_collection (char *ptr, int a, int need_owner)
++{
++  if (need_owner)
++    __builtin_sprintf(ptr, "%d:%d", 0, a);
++  else
++    {
++      static char buff[32];
++
++      __builtin_sprintf(buff, "%d:%d", a >> 32, a);
++      __builtin_sprintf(ptr, "%d:%d:\"%s\"", 0, 0, buff);
++    }
++}

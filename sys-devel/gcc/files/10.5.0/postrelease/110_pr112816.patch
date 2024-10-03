@@ -1,0 +1,38 @@
+diff --git a/gcc/config/i386/sse.md b/gcc/config/i386/sse.md
+index 90b6bf605..3df41a43c 100644
+--- a/gcc/config/i386/sse.md
++++ b/gcc/config/i386/sse.md
+@@ -3611,7 +3611,10 @@
+ 	    (match_operand:VF1_AVX2 1 "register_operand") 0)
+ 	  (match_dup 2)))]
+   "TARGET_SSE2"
+-  "operands[2] = GEN_INT (GET_MODE_UNIT_BITSIZE (<MODE>mode)-1);")
++{
++  operands[1] = force_reg (<MODE>mode, operands[1]);
++  operands[2] = GEN_INT (GET_MODE_UNIT_BITSIZE (<MODE>mode)-1);
++})
+ 
+ ;; Also define scalar versions.  These are used for abs, neg, and
+ ;; conditional move.  Using subregs into vector modes causes register
+diff --git a/gcc/testsuite/gcc.target/i386/sse2-pr112816.c b/gcc/testsuite/gcc.target/i386/sse2-pr112816.c
+new file mode 100644
+index 000000000..0701f3cdf
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/i386/sse2-pr112816.c
+@@ -0,0 +1,16 @@
++/* PR target/112816 */
++/* { dg-do compile } */
++/* { dg-options "-O2 -msse2" } */
++
++#define N 4
++struct S { float x[N]; };
++struct T { int x[N]; };
++
++struct T
++foo (struct S x)
++{
++  struct T res;
++  for (int i = 0; i < N; ++i)
++    res.x[i] = __builtin_signbit (x.x[i]) ? -1 : 0;
++  return res;
++}

@@ -1,0 +1,50 @@
+diff --git a/gcc/gimplify.c b/gcc/gimplify.c
+index d6c395007..b5bdb796f 100644
+--- a/gcc/gimplify.c
++++ b/gcc/gimplify.c
+@@ -6585,7 +6585,12 @@ gimplify_asm_expr (tree *expr_p, gimple_seq *pre_p, gimple_seq *post_p)
+       stmt = gimple_build_asm_vec (TREE_STRING_POINTER (ASM_STRING (expr)),
+ 				   inputs, outputs, clobbers, labels);
+ 
+-      gimple_asm_set_volatile (stmt, ASM_VOLATILE_P (expr) || noutputs == 0);
++      /* asm is volatile if it was marked by the user as volatile or
++	 there are no outputs or this is an asm goto.  */
++      gimple_asm_set_volatile (stmt,
++			       ASM_VOLATILE_P (expr)
++			       || noutputs == 0
++			       || labels);
+       gimple_asm_set_input (stmt, ASM_INPUT_P (expr));
+       gimple_asm_set_inline (stmt, ASM_INLINE_P (expr));
+ 
+diff --git a/gcc/testsuite/gcc.c-torture/compile/asmgoto-6.c b/gcc/testsuite/gcc.c-torture/compile/asmgoto-6.c
+new file mode 100644
+index 000000000..0652bd4e4
+--- /dev/null
++++ b/gcc/testsuite/gcc.c-torture/compile/asmgoto-6.c
+@@ -0,0 +1,26 @@
++
++/* { dg-do compile } */
++/* PR middle-end/110420 */
++/* PR middle-end/103979 */
++/* PR middle-end/98619 */
++/* Test that the middle-end does not remove the asm goto
++   with an output. */
++
++static int t;
++void g(void);
++
++void f(void)
++{
++  int  __gu_val;
++  asm goto("#my asm "
++     : "=&r"(__gu_val)
++     :
++     :
++     : Efault);
++  t = __gu_val;
++  g();
++Efault:
++}
++
++/* Make sure "my asm " is still in the assembly. */
++/* { dg-final { scan-assembler "my asm " } } */

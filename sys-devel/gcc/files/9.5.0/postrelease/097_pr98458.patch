@@ -1,0 +1,78 @@
+diff --git a/gcc/fortran/simplify.c b/gcc/fortran/simplify.c
+index 7b3a71865..34828f66f 100644
+--- a/gcc/fortran/simplify.c
++++ b/gcc/fortran/simplify.c
+@@ -240,6 +240,8 @@ static bool
+ is_constant_array_expr (gfc_expr *e)
+ {
+   gfc_constructor *c;
++  bool array_OK = true;
++  mpz_t size;
+ 
+   if (e == NULL)
+     return true;
+@@ -251,13 +253,43 @@ is_constant_array_expr (gfc_expr *e)
+   if (e->expr_type != EXPR_ARRAY || !gfc_is_constant_expr (e))
+     return false;
+ 
++  for (c = gfc_constructor_first (e->value.constructor);
++       c; c = gfc_constructor_next (c))
++    if (c->expr->expr_type != EXPR_CONSTANT
++	  && c->expr->expr_type != EXPR_STRUCTURE)
++      {
++	array_OK = false;
++	break;
++      }
++
++  /* Check and expand the constructor.  */
++  if (!array_OK && gfc_init_expr_flag && e->rank == 1)
++    {
++      array_OK = gfc_reduce_init_expr (e);
++      /* gfc_reduce_init_expr resets the flag.  */
++      gfc_init_expr_flag = true;
++    }
++  else
++    return array_OK;
++
++  /* Recheck to make sure that any EXPR_ARRAYs have gone.  */
+   for (c = gfc_constructor_first (e->value.constructor);
+        c; c = gfc_constructor_next (c))
+     if (c->expr->expr_type != EXPR_CONSTANT
+ 	  && c->expr->expr_type != EXPR_STRUCTURE)
+       return false;
+ 
+-  return true;
++  /* Make sure that the array has a valid shape.  */
++  if (e->shape == NULL && e->rank == 1)
++    {
++      if (!gfc_array_size(e, &size))
++	return false;
++      e->shape = gfc_get_shape (1);
++      mpz_init_set (e->shape[0], size);
++      mpz_clear (size);
++    }
++
++  return array_OK;
+ }
+ 
+ /* Test for a size zero array.  */
+diff --git a/gcc/testsuite/gfortran.dg/implied_do_3.f90 b/gcc/testsuite/gfortran.dg/implied_do_3.f90
+new file mode 100644
+index 000000000..8206332e8
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/implied_do_3.f90
+@@ -0,0 +1,14 @@
++! { dg-do compile }
++!
++! Test the fix for PR98458 in which array expressions within the implied-do
++! array constructor caused an ICE in trans-array.c(gfc_conv_array_initializer).
++!
++! Contributed by Xiao Liu  <xiao.liu@compiler-dev.com>
++!
++program test
++  implicit none
++  integer :: i
++  integer, parameter :: t(6) = [1,2,3,4,5,6]
++  integer, parameter :: tmp(3,2) = reshape([(t(i:i+1),i=1,3)],[3,2])
++  print *, tmp  ! Used to ICE
++end

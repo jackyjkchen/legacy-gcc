@@ -1,0 +1,52 @@
+diff --git a/gcc/cp/pt.c b/gcc/cp/pt.c
+index f03822581..53497b7b9 100644
+--- a/gcc/cp/pt.c
++++ b/gcc/cp/pt.c
+@@ -26764,9 +26764,7 @@ value_dependent_expression_p (tree expression)
+     case VAR_DECL:
+        /* A constant with literal type and is initialized
+ 	  with an expression that is value-dependent.  */
+-      if (DECL_DEPENDENT_INIT_P (expression)
+-	  /* FIXME cp_finish_decl doesn't fold reference initializers.  */
+-	  || TYPE_REF_P (TREE_TYPE (expression)))
++      if (DECL_DEPENDENT_INIT_P (expression))
+ 	return true;
+       if (DECL_HAS_VALUE_EXPR_P (expression))
+ 	{
+@@ -26781,6 +26779,9 @@ value_dependent_expression_p (tree expression)
+ 		  && value_expr == error_mark_node))
+ 	    return true;
+ 	}
++      else if (TYPE_REF_P (TREE_TYPE (expression)))
++	/* FIXME cp_finish_decl doesn't fold reference initializers.  */
++	return true;
+       return false;
+ 
+     case DYNAMIC_CAST_EXPR:
+diff --git a/gcc/testsuite/g++.dg/cpp0x/lambda/lambda-const11a.C b/gcc/testsuite/g++.dg/cpp0x/lambda/lambda-const11a.C
+new file mode 100644
+index 000000000..7fc3d48a8
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/lambda/lambda-const11a.C
+@@ -0,0 +1,21 @@
++// PR c++/108975
++// A version of lambda-const11.C using a generic lambda.
++// { dg-do compile { target c++14 } }
++
++template<int> void g();
++template<int> struct A { };
++
++template<class T>
++void f() {
++  constexpr int dim = 1;
++  auto l = [&](auto) {
++    int n[dim * 1];
++    using ty1 = decltype(g<dim * 2>());
++    using ty2 = A<dim * 3>;
++  };
++  l(0);
++  // In f<int>, we shouldn't actually capture dim.
++  static_assert (sizeof(l) == 1, "");
++}
++
++template void f<int>();

@@ -1,0 +1,61 @@
+diff --git a/gcc/c/c-decl.c b/gcc/c/c-decl.c
+index 2b567ce7c..7a9811d6c 100644
+--- a/gcc/c/c-decl.c
++++ b/gcc/c/c-decl.c
+@@ -5839,6 +5839,12 @@ get_parm_array_spec (const struct c_parm *parm, tree attrs)
+       if (pd->u.array.static_p)
+ 	spec += 's';
+ 
++      if (!INTEGRAL_TYPE_P (TREE_TYPE (nelts)))
++	/* Avoid invalid NELTS.  */
++	return attrs;
++
++      STRIP_NOPS (nelts);
++      nelts = c_fully_fold (nelts, false, nullptr);
+       if (TREE_CODE (nelts) == INTEGER_CST)
+ 	{
+ 	  /* Skip all constant bounds except the most significant one.
+@@ -5856,13 +5862,9 @@ get_parm_array_spec (const struct c_parm *parm, tree attrs)
+ 	  spec += buf;
+ 	  break;
+ 	}
+-      else if (!INTEGRAL_TYPE_P (TREE_TYPE (nelts)))
+-	/* Avoid invalid NELTS.  */
+-	return attrs;
+ 
+       /* Each variable VLA bound is represented by a dollar sign.  */
+       spec += "$";
+-      STRIP_NOPS (nelts);
+       vbchain = tree_cons (NULL_TREE, nelts, vbchain);
+     }
+ 
+diff --git a/gcc/testsuite/gcc.dg/Warray-parameter-11.c b/gcc/testsuite/gcc.dg/Warray-parameter-11.c
+new file mode 100644
+index 000000000..8ca1b55bd
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/Warray-parameter-11.c
+@@ -0,0 +1,24 @@
++/* PR c/101702 - ICE on invalid function redeclaration
++   { dg-do compile }
++   { dg-options "-Wall" } */
++
++typedef __INTPTR_TYPE__ intptr_t;
++
++#define copysign(x, y) __builtin_copysign (x, y)
++
++void f0 (double[!copysign (~2, 3)]);
++
++void f1 (double[!copysign (~2, 3)]);
++void f1 (double[1]);                    // { dg-warning "-Warray-parameter" }
++
++void f2 (int[(int)+1.0]);
++void f2 (int[(int)+1.1]);
++
++/* Also verify that equivalent expressions don't needlessly cause false
++   positives or negatives.  */
++struct S { int a[1]; };
++extern struct S *sp;
++
++void f3 (int[(intptr_t)((char*)sp->a - (char*)sp)]);
++void f3 (int[(intptr_t)((char*)&sp->a[0] - (char*)sp)]);
++void f3 (int[(intptr_t)((char*)&sp->a[1] - (char*)sp)]);   // { dg-warning "-Warray-parameter" }

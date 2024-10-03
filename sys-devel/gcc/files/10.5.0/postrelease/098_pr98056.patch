@@ -1,0 +1,40 @@
+diff --git a/gcc/cp/typeck.c b/gcc/cp/typeck.c
+index 3ebb24aab..d6e050da0 100644
+--- a/gcc/cp/typeck.c
++++ b/gcc/cp/typeck.c
+@@ -8735,6 +8735,8 @@ cp_build_modify_expr (location_t loc, tree lhs, enum tree_code modifycode,
+ 	}
+ 
+       /* Allow array assignment in compiler-generated code.  */
++      else if (DECL_P (lhs) && DECL_ARTIFICIAL (lhs))
++	/* OK, used by coroutines (co-await-initlist1.C).  */;
+       else if (!current_function_decl
+ 	       || !DECL_DEFAULTED_FN (current_function_decl))
+ 	{
+diff --git a/gcc/testsuite/g++.dg/coroutines/co-await-initlist1.C b/gcc/testsuite/g++.dg/coroutines/co-await-initlist1.C
+new file mode 100644
+index 000000000..b8e8923a9
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/coroutines/co-await-initlist1.C
+@@ -0,0 +1,21 @@
++// PR c++/103871
++// { dg-do compile { target c++20 } }
++
++#include <coroutine>
++#include <initializer_list>
++
++struct my_coro {
++  struct promise_type {
++    my_coro get_return_object();
++    std::suspend_never initial_suspend();
++    std::suspend_never final_suspend() noexcept;
++    void unhandled_exception();
++  };
++};
++
++std::suspend_never inner(std::initializer_list<int>);
++
++my_coro doesnt_work()
++{
++  co_await inner({ 1,2,3 });
++}

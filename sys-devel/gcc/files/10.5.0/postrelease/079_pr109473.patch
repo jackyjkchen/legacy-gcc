@@ -1,0 +1,58 @@
+diff --git a/gcc/testsuite/gcc.dg/vect/pr109473.c b/gcc/testsuite/gcc.dg/vect/pr109473.c
+new file mode 100644
+index 000000000..9dee5515d
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/vect/pr109473.c
+@@ -0,0 +1,16 @@
++/* { dg-do compile } */
++/* { dg-additional-options "-O" } */
++
++struct spa_buffer {
++  __UINT32_TYPE__ *metas;
++};
++void do_port_use_buffers(struct spa_buffer **buffers, void *endptr, void *mem)
++{
++  for (int i = 0; i < 128; i++)
++    {
++      for (int j = 0; j < 128; j++)
++	endptr = (void *)((__UINTPTR_TYPE__)endptr + buffers[i]->metas[j]);
++      if (endptr > mem)
++	return;
++    }
++}
+diff --git a/gcc/tree-vect-loop.c b/gcc/tree-vect-loop.c
+index d0d28fd2e..d14283b1a 100644
+--- a/gcc/tree-vect-loop.c
++++ b/gcc/tree-vect-loop.c
+@@ -4257,10 +4257,14 @@ get_initial_def_for_reduction (stmt_vec_info stmt_vinfo,
+         else
+           def_for_init = build_int_cst (scalar_type, int_init_val);
+ 
+-	if (adjustment_def || operand_equal_p (def_for_init, init_val, 0))
++	bool same_p = operand_equal_p (def_for_init, init_val, 0);
++	init_val = gimple_convert (&stmts, TREE_TYPE (vectype), init_val);
++	def_for_init = gimple_convert (&stmts, TREE_TYPE (vectype), def_for_init);
++
++	if (adjustment_def || same_p)
+ 	  {
+ 	    /* Option1: the first element is '0' or '1' as well.  */
+-	    if (!operand_equal_p (def_for_init, init_val, 0))
++	    if (!same_p)
+ 	      *adjustment_def = init_val;
+ 	    init_def = gimple_build_vector_from_val (&stmts, vectype,
+ 						     def_for_init);
+@@ -5490,9 +5494,12 @@ vect_create_epilog_for_reduction (stmt_vec_info stmt_info,
+ 	{
+           new_temp = scalar_results[0];
+ 	  gcc_assert (TREE_CODE (TREE_TYPE (adjustment_def)) != VECTOR_TYPE);
+-	  adjustment_def = gimple_convert (&stmts, scalar_type, adjustment_def);
+-	  new_temp = gimple_build (&stmts, code, scalar_type,
++	  adjustment_def = gimple_convert (&stmts, TREE_TYPE (vectype),
++					   adjustment_def);
++	  new_temp = gimple_convert (&stmts, TREE_TYPE (vectype), new_temp);
++	  new_temp = gimple_build (&stmts, code, TREE_TYPE (vectype),
+ 				   new_temp, adjustment_def);
++	  new_temp = gimple_convert (&stmts, scalar_type, new_temp);
+ 	}
+ 
+       epilog_stmt = gimple_seq_last_stmt (stmts);

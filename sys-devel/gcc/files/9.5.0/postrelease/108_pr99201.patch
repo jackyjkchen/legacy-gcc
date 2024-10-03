@@ -1,0 +1,69 @@
+diff --git a/gcc/cp/pt.c b/gcc/cp/pt.c
+index f0b657cfb..d8f852edd 100644
+--- a/gcc/cp/pt.c
++++ b/gcc/cp/pt.c
+@@ -12117,7 +12117,11 @@ tsubst_binary_right_fold (tree t, tree args, tsubst_flags_t complain,
+ 
+ struct el_data
+ {
++  /* Set of variables declared within the pattern.  */
+   hash_set<tree> internal;
++  /* Set of AST nodes that have been visited by the traversal.  */
++  hash_set<tree> visited;
++  /* List of local_specializations used within the pattern.  */
+   tree extra;
+   tsubst_flags_t complain;
+ 
+@@ -12157,6 +12161,15 @@ extract_locals_r (tree *tp, int */*walk_subtrees*/, void *data_)
+ 	    }
+ 	}
+     }
++  else if (TREE_CODE (*tp) == LAMBDA_EXPR)
++    {
++      /* Since we defer implicit capture, look in the parms and body.  */
++      tree fn = lambda_function (*tp);
++      cp_walk_tree (&TREE_TYPE (fn), &extract_locals_r, &data,
++		    &data.visited);
++      cp_walk_tree (&DECL_SAVED_TREE (fn), &extract_locals_r, &data,
++		    &data.visited);
++    }
+   else if (tree spec = retrieve_local_specialization (*tp))
+     {
+       if (data.internal.contains (*tp))
+@@ -12213,7 +12226,7 @@ static tree
+ extract_local_specs (tree pattern, tsubst_flags_t complain)
+ {
+   el_data data (complain);
+-  cp_walk_tree_without_duplicates (&pattern, extract_locals_r, &data);
++  cp_walk_tree (&pattern, extract_locals_r, &data, &data.visited);
+   return data.extra;
+ }
+ 
+diff --git a/gcc/testsuite/g++.dg/cpp1z/constexpr-if-lambda4.C b/gcc/testsuite/g++.dg/cpp1z/constexpr-if-lambda4.C
+new file mode 100644
+index 000000000..994080256
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp1z/constexpr-if-lambda4.C
+@@ -0,0 +1,22 @@
++// PR c++/99201
++// { dg-do compile { target c++17 } }
++
++template <typename RefF>
++  auto
++  make_tester(const RefF& reffun)
++  {
++    return [=](auto in) {
++      auto&& expected = [&](const auto&... vs) {
++        if constexpr (sizeof(in) > 0)
++          return [&](int i) { return reffun(vs[i]...); }(0);
++        else
++          return [&](int i) { return reffun(vs[i]...); }(0);
++      };
++    };
++  }
++
++int main()
++{
++  make_tester([](int x) { return x; })(0);
++  return 0;
++}

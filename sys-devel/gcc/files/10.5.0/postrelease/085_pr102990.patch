@@ -1,0 +1,62 @@
+diff --git a/gcc/cp/typeck2.c b/gcc/cp/typeck2.c
+index 0a37f58a1..a0a023cda 100644
+--- a/gcc/cp/typeck2.c
++++ b/gcc/cp/typeck2.c
+@@ -1456,10 +1456,15 @@ massage_init_elt (tree type, tree init, int nested, int flags,
+     new_flags |= LOOKUP_AGGREGATE_PAREN_INIT;
+   init = digest_init_r (type, init, nested ? 2 : 1, new_flags, complain);
+   /* When we defer constant folding within a statement, we may want to
+-     defer this folding as well.  */
+-  tree t = fold_non_dependent_init (init, complain);
+-  if (TREE_CONSTANT (t))
+-    init = t;
++     defer this folding as well.  Don't call this on CONSTRUCTORs because
++     their elements have already been folded, and we must avoid folding
++     the result of get_nsdmi.  */
++  if (TREE_CODE (init) != CONSTRUCTOR)
++    {
++      tree t = fold_non_dependent_init (init, complain);
++      if (TREE_CONSTANT (t))
++	init = t;
++    }
+   return init;
+ }
+ 
+diff --git a/gcc/testsuite/g++.dg/cpp0x/nsdmi-template22.C b/gcc/testsuite/g++.dg/cpp0x/nsdmi-template22.C
+new file mode 100644
+index 000000000..4ed250103
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/nsdmi-template22.C
+@@ -0,0 +1,13 @@
++// PR c++/102990
++// { dg-do compile { target c++11 } }
++
++struct knob_t {
++  /* Let's create a FIX_TRUNC_EXPR.  */
++  int value = 1.0;
++};
++
++struct Helpers {
++  knob_t inputs;
++};
++
++template<class> void f(decltype(Helpers{}));
+diff --git a/gcc/testsuite/g++.dg/cpp0x/nsdmi-template23.C b/gcc/testsuite/g++.dg/cpp0x/nsdmi-template23.C
+new file mode 100644
+index 000000000..240cab434
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/nsdmi-template23.C
+@@ -0,0 +1,13 @@
++// PR c++/102990
++// { dg-do compile { target c++11 } }
++
++struct knob_t {
++  /* Let's create a FLOAT_EXPR.  */
++  double value = 1UL;
++};
++
++struct Helpers {
++  knob_t inputs;
++};
++
++template<class> void f(decltype(Helpers{}));

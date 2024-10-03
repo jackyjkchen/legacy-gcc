@@ -1,0 +1,113 @@
+diff --git a/gcc/testsuite/gcc.c-torture/compile/pr115143-1.c b/gcc/testsuite/gcc.c-torture/compile/pr115143-1.c
+new file mode 100644
+index 000000000..5cb119ea4
+--- /dev/null
++++ b/gcc/testsuite/gcc.c-torture/compile/pr115143-1.c
+@@ -0,0 +1,21 @@
++/* PR tree-optimization/115143 */
++/* This used to ICE.
++   minmax part of phiopt would transform,
++   would transform `a!=0?min(a, b) : 0` into `min(a,b)`
++   which was correct except b was defined by a phi in the inner
++   bb which was not handled. */
++short a, d;
++char b;
++long c;
++unsigned long e, f;
++void g(unsigned long h) {
++  if (c ? e : b)
++    if (e)
++      if (d) {
++        a = f ? ({
++          unsigned long i = d ? f : 0, j = e ? h : 0;
++          i < j ? i : j;
++        }) : 0;
++      }
++}
++
+diff --git a/gcc/testsuite/gcc.c-torture/compile/pr115143-2.c b/gcc/testsuite/gcc.c-torture/compile/pr115143-2.c
+new file mode 100644
+index 000000000..05c3bbe97
+--- /dev/null
++++ b/gcc/testsuite/gcc.c-torture/compile/pr115143-2.c
+@@ -0,0 +1,30 @@
++/* { dg-options "-fgimple" } */
++/* PR tree-optimization/115143 */
++/* This used to ICE.
++   minmax part of phiopt would transform,
++   would transform `a!=0?min(a, b) : 0` into `min(a,b)`
++   which was correct except b was defined by a phi in the inner
++   bb which was not handled. */
++unsigned __GIMPLE (ssa,startwith("phiopt"))
++foo (unsigned a, unsigned b)
++{
++  unsigned j;
++  unsigned _23;
++  unsigned _12;
++
++  __BB(2):
++  if (a_6(D) != 0u)
++    goto __BB3;
++  else
++    goto __BB4;
++
++  __BB(3):
++  j_10 = __PHI (__BB2: b_11(D));
++  _23 = __MIN (a_6(D), j_10);
++  goto __BB4;
++
++  __BB(4):
++  _12 = __PHI (__BB3: _23, __BB2: 0u);
++  return _12;
++
++}
+diff --git a/gcc/testsuite/gcc.c-torture/compile/pr115143-3.c b/gcc/testsuite/gcc.c-torture/compile/pr115143-3.c
+new file mode 100644
+index 000000000..53c5fb558
+--- /dev/null
++++ b/gcc/testsuite/gcc.c-torture/compile/pr115143-3.c
+@@ -0,0 +1,29 @@
++/* { dg-options "-fgimple" } */
++/* PR tree-optimization/115143 */
++/* This used to ICE.
++   minmax part of phiopt would transform,
++   would transform `a!=0?min(a, b) : 0` into `min(a,b)`
++   which was correct except b was defined by a phi in the inner
++   bb which was not handled. */
++unsigned __GIMPLE (ssa,startwith("phiopt"))
++foo (unsigned a, unsigned b)
++{
++  unsigned j;
++  unsigned _23;
++  unsigned _12;
++
++  __BB(2):
++  if (a_6(D) > 0u)
++    goto __BB3;
++  else
++    goto __BB4;
++
++  __BB(3):
++  j_10 = __PHI (__BB2: b_7(D));
++  _23 = __MIN (a_6(D), j_10);
++  goto __BB4;
++
++  __BB(4):
++  _12 = __PHI (__BB3: _23, __BB2: 0u);
++  return _12;
++}
+diff --git a/gcc/tree-ssa-phiopt.c b/gcc/tree-ssa-phiopt.c
+index 0f221a42f..80ac24968 100644
+--- a/gcc/tree-ssa-phiopt.c
++++ b/gcc/tree-ssa-phiopt.c
+@@ -1543,6 +1543,10 @@ minmax_replacement (basic_block cond_bb, basic_block middle_bb,
+ 	  || gimple_code (assign) != GIMPLE_ASSIGN)
+ 	return false;
+ 
++      /* There cannot be any phi nodes in the middle bb. */
++      if (!gimple_seq_empty_p (phi_nodes (middle_bb)))
++	return false;
++
+       lhs = gimple_assign_lhs (assign);
+       ass_code = gimple_assign_rhs_code (assign);
+       if (ass_code != MAX_EXPR && ass_code != MIN_EXPR)

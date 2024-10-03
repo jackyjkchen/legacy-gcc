@@ -1,0 +1,41 @@
+diff --git a/gcc/cp/semantics.c b/gcc/cp/semantics.c
+index 2165e0fab..83fa9c328 100644
+--- a/gcc/cp/semantics.c
++++ b/gcc/cp/semantics.c
+@@ -3393,8 +3393,10 @@ baselink_for_fns (tree fns)
+   cl = currently_open_derived_class (scope);
+   if (!cl)
+     cl = scope;
+-  cl = TYPE_BINFO (cl);
+-  return build_baselink (cl, cl, fns, /*optype=*/NULL_TREE);
++  tree access_path = TYPE_BINFO (cl);
++  tree conv_path = (cl == scope ? access_path
++		    : lookup_base (cl, scope, ba_any, NULL, tf_none));
++  return build_baselink (conv_path, access_path, fns, /*optype=*/NULL_TREE);
+ }
+ 
+ /* Returns true iff DECL is a variable from a function outside
+diff --git a/gcc/testsuite/g++.dg/template/lookup17.C b/gcc/testsuite/g++.dg/template/lookup17.C
+new file mode 100644
+index 000000000..b8571b9f1
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/template/lookup17.C
+@@ -0,0 +1,18 @@
++// PR c++/91706
++// { dg-do compile { target c++11 } }
++// { dg-additional-options -g }
++
++template <bool> struct A;
++
++struct B { static constexpr bool g = false; };
++
++struct C {
++  template <typename> static B c ();
++};
++
++template <class T> struct D : C {
++  using c = decltype (c<T>());
++  using E = A<c::g>;
++};
++
++D<int> g;

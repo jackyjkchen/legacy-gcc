@@ -1,0 +1,86 @@
+diff --git a/gcc/cp/lambda.c b/gcc/cp/lambda.c
+index 8ad96c9b2..e03956846 100644
+--- a/gcc/cp/lambda.c
++++ b/gcc/cp/lambda.c
+@@ -1526,6 +1526,9 @@ prune_lambda_captures (tree body)
+   if (LAMBDA_EXPR_DEFAULT_CAPTURE_MODE (lam) == CPLD_NONE)
+     /* No default captures, and we don't prune explicit captures.  */
+     return;
++  /* Don't bother pruning in a template, we'll prune at instantiation time.  */
++  if (dependent_type_p (TREE_TYPE (lam)))
++    return;
+ 
+   hash_map<tree,tree*> const_vars;
+ 
+diff --git a/gcc/cp/pt.c b/gcc/cp/pt.c
+index cbd8ccb8c..600157639 100644
+--- a/gcc/cp/pt.c
++++ b/gcc/cp/pt.c
+@@ -25907,9 +25907,7 @@ value_dependent_expression_p (tree expression)
+     case VAR_DECL:
+        /* A constant with literal type and is initialized
+ 	  with an expression that is value-dependent.  */
+-      if (DECL_DEPENDENT_INIT_P (expression)
+-	  /* FIXME cp_finish_decl doesn't fold reference initializers.  */
+-	  || TYPE_REF_P (TREE_TYPE (expression)))
++      if (DECL_DEPENDENT_INIT_P (expression))
+ 	return true;
+       if (DECL_HAS_VALUE_EXPR_P (expression))
+ 	{
+@@ -25924,6 +25922,9 @@ value_dependent_expression_p (tree expression)
+ 		  && value_expr == error_mark_node))
+ 	    return true;
+ 	}
++      else if (TYPE_REF_P (TREE_TYPE (expression)))
++	/* FIXME cp_finish_decl doesn't fold reference initializers.  */
++	return true;
+       return false;
+ 
+     case DYNAMIC_CAST_EXPR:
+diff --git a/gcc/testsuite/g++.dg/cpp0x/lambda/lambda-const11.C b/gcc/testsuite/g++.dg/cpp0x/lambda/lambda-const11.C
+new file mode 100644
+index 000000000..26af75bf1
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/lambda/lambda-const11.C
+@@ -0,0 +1,14 @@
++// PR c++/108975
++// { dg-do compile { target c++11 } }
++
++template<class T>
++void f() {
++  constexpr int dim = 1;
++  auto l = [&] {
++    int n[dim * 1];
++  };
++  // In f<int>, we shouldn't actually capture dim.
++  static_assert (sizeof(l) == 1, "");
++}
++
++template void f<int>();
+diff --git a/gcc/testsuite/g++.dg/cpp0x/lambda/lambda-const11a.C b/gcc/testsuite/g++.dg/cpp0x/lambda/lambda-const11a.C
+new file mode 100644
+index 000000000..7fc3d48a8
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/lambda/lambda-const11a.C
+@@ -0,0 +1,21 @@
++// PR c++/108975
++// A version of lambda-const11.C using a generic lambda.
++// { dg-do compile { target c++14 } }
++
++template<int> void g();
++template<int> struct A { };
++
++template<class T>
++void f() {
++  constexpr int dim = 1;
++  auto l = [&](auto) {
++    int n[dim * 1];
++    using ty1 = decltype(g<dim * 2>());
++    using ty2 = A<dim * 3>;
++  };
++  l(0);
++  // In f<int>, we shouldn't actually capture dim.
++  static_assert (sizeof(l) == 1, "");
++}
++
++template void f<int>();

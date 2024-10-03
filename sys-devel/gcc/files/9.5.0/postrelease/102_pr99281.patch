@@ -1,0 +1,56 @@
+diff --git a/gcc/expr.c b/gcc/expr.c
+index 90df028fa..17623270f 100644
+--- a/gcc/expr.c
++++ b/gcc/expr.c
+@@ -6984,7 +6984,13 @@ store_field (rtx target, poly_int64 bitsize, poly_int64 bitpos,
+ 	      || !multiple_p (bitpos, BITS_PER_UNIT)
+ 	      || !poly_int_tree_p (DECL_SIZE (TREE_OPERAND (exp, 1)),
+ 				   &decl_bitsize)
+-	      || maybe_ne (decl_bitsize, bitsize)))
++	      || maybe_ne (decl_bitsize, bitsize))
++	  /* A call with an addressable return type and return-slot
++	     optimization must not need bitfield operations but we must
++	     pass down the original target.  */
++	  && (TREE_CODE (exp) != CALL_EXPR
++	      || !TREE_ADDRESSABLE (TREE_TYPE (exp))
++	      || !CALL_EXPR_RETURN_SLOT_OPT (exp)))
+       /* If we are expanding a MEM_REF of a non-BLKmode non-addressable
+          decl we must use bitfield operations.  */
+       || (known_size_p (bitsize)
+diff --git a/gcc/testsuite/g++.dg/pr99218.C b/gcc/testsuite/g++.dg/pr99218.C
+new file mode 100644
+index 000000000..477a6a2b1
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/pr99218.C
+@@ -0,0 +1,31 @@
++// { dg-do compile }
++// { dg-require-effective-target c++17 }
++
++struct Data
++{
++  Data() {}
++  ~Data() {}
++
++  long long i;
++};
++
++struct X
++{
++  Data a;
++  int b;
++};
++
++template<class T>
++X get(T const&)
++{
++  return X{};
++}
++
++template<class... Ts>
++struct pack_type : Ts...
++{};
++
++int main()
++{
++  pack_type<X>{get(1)};
++}

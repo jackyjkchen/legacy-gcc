@@ -1,0 +1,65 @@
+diff --git a/gcc/simplify-rtx.c b/gcc/simplify-rtx.c
+index b9f4f7928..cb784ced3 100644
+--- a/gcc/simplify-rtx.c
++++ b/gcc/simplify-rtx.c
+@@ -4877,6 +4877,15 @@ simplify_const_binary_operation (enum rtx_code code, machine_mode mode,
+ 	case ASHIFTRT:
+ 	case ASHIFT:
+ 	  {
++	    /* The shift count might be in SImode while int_mode might
++	       be narrower.  On IA-64 it is even DImode.  If the shift
++	       count is too large and doesn't fit into int_mode, we'd
++	       ICE.  So, if int_mode is narrower than word, use
++	       word_mode for the shift count.  */
++	    if (GET_MODE (op1) == VOIDmode
++		&& GET_MODE_PRECISION (int_mode) < BITS_PER_WORD)
++	      pop1 = rtx_mode_t (op1, word_mode);
++
+ 	    wide_int wop1 = pop1;
+ 	    if (SHIFT_COUNT_TRUNCATED)
+ 	      wop1 = wi::umod_trunc (wop1, GET_MODE_PRECISION (int_mode));
+@@ -4905,6 +4914,15 @@ simplify_const_binary_operation (enum rtx_code code, machine_mode mode,
+ 	case ROTATE:
+ 	case ROTATERT:
+ 	  {
++	    /* The rotate count might be in SImode while int_mode might
++	       be narrower.  On IA-64 it is even DImode.  If the shift
++	       count is too large and doesn't fit into int_mode, we'd
++	       ICE.  So, if int_mode is narrower than word, use
++	       word_mode for the shift count.  */
++	    if (GET_MODE (op1) == VOIDmode
++		&& GET_MODE_PRECISION (int_mode) < BITS_PER_WORD)
++	      pop1 = rtx_mode_t (op1, word_mode);
++
+ 	    if (wi::neg_p (pop1))
+ 	      return NULL_RTX;
+ 
+@@ -4956,7 +4974,11 @@ simplify_const_binary_operation (enum rtx_code code, machine_mode mode,
+ 	case ASHIFT:
+ 	  if (CONST_SCALAR_INT_P (op1))
+ 	    {
+-	      wide_int shift = rtx_mode_t (op1, mode);
++	      wide_int shift
++		= rtx_mode_t (op1,
++			      GET_MODE (op1) == VOIDmode
++			      && GET_MODE_PRECISION (int_mode) < BITS_PER_WORD
++			      ? word_mode : mode);
+ 	      if (SHIFT_COUNT_TRUNCATED)
+ 		shift = wi::umod_trunc (shift, GET_MODE_PRECISION (int_mode));
+ 	      else if (wi::geu_p (shift, GET_MODE_PRECISION (int_mode)))
+diff --git a/gcc/testsuite/gcc.c-torture/compile/pr105247.c b/gcc/testsuite/gcc.c-torture/compile/pr105247.c
+new file mode 100644
+index 000000000..88892d984
+--- /dev/null
++++ b/gcc/testsuite/gcc.c-torture/compile/pr105247.c
+@@ -0,0 +1,10 @@
++/* PR target/105247 */
++
++int a;
++
++void
++foo (void)
++{
++  int y = -8;
++  a = 1 << y;
++}

@@ -1,0 +1,90 @@
+diff --git a/gcc/c/c-decl.c b/gcc/c/c-decl.c
+index e1e765e29..eda3cdd59 100644
+--- a/gcc/c/c-decl.c
++++ b/gcc/c/c-decl.c
+@@ -8162,6 +8162,17 @@ finish_incomplete_vars (tree incomplete_vars, bool toplevel)
+     }
+ }
+ 
++/* TYPE is a struct or union that we're applying may_alias to after the body is
++   parsed.  Fixup any POINTER_TO types.  */
++
++static void
++c_fixup_may_alias (tree type)
++{
++  for (tree t = TYPE_POINTER_TO (type); t; t = TYPE_NEXT_PTR_TO (t))
++    for (tree v = TYPE_MAIN_VARIANT (t); v; v = TYPE_NEXT_VARIANT (v))
++      TYPE_REF_CAN_ALIAS_ALL (v) = true;
++}
++
+ /* Fill in the fields of a RECORD_TYPE or UNION_TYPE node, T.
+    LOC is the location of the RECORD_TYPE or UNION_TYPE's definition.
+    FIELDLIST is a chain of FIELD_DECL nodes for the fields.
+@@ -8420,6 +8431,10 @@ finish_struct (location_t loc, tree t, tree fieldlist, tree attributes,
+       warning_at (loc, 0, "union cannot be made transparent");
+     }
+ 
++  if (lookup_attribute ("may_alias", TYPE_ATTRIBUTES (t)))
++    for (x = TYPE_MAIN_VARIANT (t); x; x = TYPE_NEXT_VARIANT (x))
++      c_fixup_may_alias (x);
++
+   tree incomplete_vars = C_TYPE_INCOMPLETE_VARS (TYPE_MAIN_VARIANT (t));
+   for (x = TYPE_MAIN_VARIANT (t); x; x = TYPE_NEXT_VARIANT (x))
+     {
+diff --git a/gcc/testsuite/gcc.dg/pr114493-1.c b/gcc/testsuite/gcc.dg/pr114493-1.c
+new file mode 100644
+index 000000000..446f33eac
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr114493-1.c
+@@ -0,0 +1,19 @@
++/* PR c/114493 */
++/* { dg-do compile { target lto } } */
++/* { dg-options "-O2 -flto" } */
++
++void foo (void);
++struct S;
++struct S bar (struct S **);
++struct S qux (const struct S **);
++
++struct __attribute__((__may_alias__)) S {
++  int s;
++};
++
++struct S
++baz (void)
++{
++  foo ();
++  return (struct S) {};
++}
+diff --git a/gcc/testsuite/gcc.dg/pr114493-2.c b/gcc/testsuite/gcc.dg/pr114493-2.c
+new file mode 100644
+index 000000000..93e3d6e5b
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr114493-2.c
+@@ -0,0 +1,26 @@
++/* PR c/114493 */
++/* { dg-do compile { target lto } } */
++/* { dg-options "-O2 -flto -std=c2x" } */
++
++void foo (void);
++struct S;
++struct S bar (struct S **);
++struct S qux (const struct S **);
++
++void
++corge (void)
++{
++  struct S { int s; } s;
++  s.s = 0;
++}
++
++struct __attribute__((__may_alias__)) S {
++  int s;
++};
++
++struct S
++baz (void)
++{
++  foo ();
++  return (struct S) {};
++}

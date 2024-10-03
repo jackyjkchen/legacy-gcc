@@ -1,0 +1,39 @@
+diff --git a/gcc/calls.c b/gcc/calls.c
+index 2ee22b0ad..5bb6bfa76 100644
+--- a/gcc/calls.c
++++ b/gcc/calls.c
+@@ -6150,6 +6150,13 @@ store_one_arg (struct arg_data *arg, rtx argblock, int flags,
+ 			ARGS_SIZE_RTX (arg->locate.offset),
+ 			reg_parm_stack_space,
+ 			ARGS_SIZE_RTX (arg->locate.alignment_pad), false);
++      /* If we bypass emit_push_insn because it is a zero sized argument,
++	 we still might need to adjust stack if such argument requires
++	 extra alignment.  See PR104558.  */
++      else if ((arg->locate.alignment_pad.var
++		|| maybe_ne (arg->locate.alignment_pad.constant, 0))
++	       && !argblock)
++	anti_adjust_stack (ARGS_SIZE_RTX (arg->locate.alignment_pad));
+ 
+       /* Unless this is a partially-in-register argument, the argument is now
+ 	 in the stack.
+diff --git a/gcc/testsuite/gcc.dg/pr104558.c b/gcc/testsuite/gcc.dg/pr104558.c
+new file mode 100644
+index 000000000..382fe5732
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr104558.c
+@@ -0,0 +1,15 @@
++/* PR middle-end/104558 */
++/* { dg-do compile } */
++/* { dg-options "-fabi-version=9" } */
++
++struct __attribute__ ((aligned)) A {};
++
++struct A a;
++
++void bar (int, int, int, int, int, int, int, struct A);
++
++void
++foo (void)
++{
++  bar (0, 1, 2, 3, 4, 5, 6, a);
++}
