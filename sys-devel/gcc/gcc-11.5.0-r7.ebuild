@@ -86,7 +86,7 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/046_pr111497.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/047_pr103676.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/048_pr108566.patch
-	eapply "${FILESDIR}"/${PV}/postrelease/049_pr105150.patch
+	#eapply "${FILESDIR}"/${PV}/postrelease/
 	eapply "${FILESDIR}"/${PV}/postrelease/050_pr106982.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/051_pr102987.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/052_pr105247.patch
@@ -100,7 +100,7 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/060_pr108597.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/061_pr109160.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/063_pr102600.patch
-	eapply "${FILESDIR}"/${PV}/postrelease/064_pr102941.patch
+	#eapply "${FILESDIR}"/${PV}/postrelease/
 	eapply "${FILESDIR}"/${PV}/postrelease/065_pr110106.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/066_pr107938.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/067_pr100127.patch
@@ -115,6 +115,6 @@ src_prepare() {
 		rm -rf gcc/testsuite/gcc.c-torture/execute/vfprintf-chk-1.c gcc/testsuite/gcc.c-torture/execute/vprintf-chk-1.c gcc/testsuite/c-c++-common/Warray-bounds-2.c gcc/testsuite/c-c++-common/Wrestrict-2.c gcc/testsuite/g++.dg/warn/Wstringop-truncation-1.C gcc/testsuite/gcc.dg/format/opt-*.c
 		eapply "${FILESDIR}"/${PV}/postrelease/900_fix-known-test-fail.patch
 		[[ $(tc-arch) == "arm64" ]] && eapply "${FILESDIR}"/${PV}/postrelease/901_fix-aarch64-test-fail.patch
-		[[ $(tc-arch) == "arm" ]] && eapply "${FILESDIR}"/${PV}/postrelease/901_fix-arm-test-fail.patch
+		[[ $(tc-arch) == "arm" ]] && eapply "${FILESDIR}"/${PV}/postrelease/902_fix-arm-test-fail.patch
 	fi
 }
