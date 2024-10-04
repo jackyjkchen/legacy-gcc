@@ -1,0 +1,72 @@
+diff --git a/gcc/cp/tree.c b/gcc/cp/tree.c
+index d75d4e0f4..41ad03194 100644
+--- a/gcc/cp/tree.c
++++ b/gcc/cp/tree.c
+@@ -3238,7 +3238,7 @@ replace_placeholders (tree exp, tree obj, bool *seen_p)
+ 
+   /* If the object isn't a (member of a) class, do nothing.  */
+   tree op0 = obj;
+-  while (TREE_CODE (op0) == COMPONENT_REF)
++  while (handled_component_p (op0))
+     op0 = TREE_OPERAND (op0, 0);
+   if (!CLASS_TYPE_P (strip_array_types (TREE_TYPE (op0))))
+     return exp;
+diff --git a/gcc/cp/typeck2.c b/gcc/cp/typeck2.c
+index cbc98ecc2..cd5d1e945 100644
+--- a/gcc/cp/typeck2.c
++++ b/gcc/cp/typeck2.c
+@@ -1345,6 +1345,17 @@ process_init_constructor_array (tree type, tree init, int nested,
+       ce->value
+ 	= massage_init_elt (TREE_TYPE (type), ce->value, nested, complain);
+ 
++      if (TREE_CODE (ce->value) == CONSTRUCTOR
++	  && CONSTRUCTOR_PLACEHOLDER_BOUNDARY (ce->value))
++	{
++	  /* Shift CONSTRUCTOR_PLACEHOLDER_BOUNDARY from the element initializer
++	     up to the array initializer, so that the call to
++	     replace_placeholders from store_init_value can resolve any
++	     PLACEHOLDER_EXPRs inside this element initializer.  */
++	  CONSTRUCTOR_PLACEHOLDER_BOUNDARY (ce->value) = 0;
++	  CONSTRUCTOR_PLACEHOLDER_BOUNDARY (init) = 1;
++	}
++
+       gcc_checking_assert
+ 	(ce->value == error_mark_node
+ 	 || (same_type_ignoring_top_level_qualifiers_p
+@@ -1372,6 +1383,13 @@ process_init_constructor_array (tree type, tree init, int nested,
+ 	      /* The default zero-initialization is fine for us; don't
+ 		 add anything to the CONSTRUCTOR.  */
+ 	      next = NULL_TREE;
++	    else if (TREE_CODE (next) == CONSTRUCTOR
++		     && CONSTRUCTOR_PLACEHOLDER_BOUNDARY (next))
++	      {
++		/* As above.  */
++		CONSTRUCTOR_PLACEHOLDER_BOUNDARY (next) = 0;
++		CONSTRUCTOR_PLACEHOLDER_BOUNDARY (init) = 1;
++	      }
+ 	  }
+ 	else if (!zero_init_p (TREE_TYPE (type)))
+ 	  next = build_zero_init (TREE_TYPE (type),
+diff --git a/gcc/testsuite/g++.dg/cpp1y/pr90996.C b/gcc/testsuite/g++.dg/cpp1y/pr90996.C
+new file mode 100644
+index 000000000..780cbb4e3
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp1y/pr90996.C
+@@ -0,0 +1,17 @@
++// PR c++/90996
++// { dg-do compile { target c++14 } }
++
++struct S
++{
++  int &&a = 2;
++  int b[1] {a};
++};
++
++S c[2][2] {{{5}}};
++
++struct T
++{
++  S c[2][2] {{{7}}};
++};
++
++T d {};

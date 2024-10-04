@@ -1,0 +1,150 @@
+diff --git a/gcc/cp/cp-tree.h b/gcc/cp/cp-tree.h
+index 3cfde81bc..12f7cf3b6 100644
+--- a/gcc/cp/cp-tree.h
++++ b/gcc/cp/cp-tree.h
+@@ -5196,7 +5196,7 @@ enum unification_kind_t {
+ // An RAII class used to create a new pointer map for local
+ // specializations. When the stack goes out of scope, the
+ // previous pointer map is restored.
+-enum lss_policy { lss_blank, lss_copy };
++enum lss_policy { lss_blank, lss_copy, lss_nop };
+ struct local_specialization_stack
+ {
+   local_specialization_stack (lss_policy = lss_blank);
+diff --git a/gcc/cp/pt.c b/gcc/cp/pt.c
+index 2ffa67727..6ac818b78 100644
+--- a/gcc/cp/pt.c
++++ b/gcc/cp/pt.c
+@@ -82,7 +82,9 @@ static tree cur_stmt_expr;
+ local_specialization_stack::local_specialization_stack (lss_policy policy)
+   : saved (local_specializations)
+ {
+-  if (policy == lss_blank || !saved)
++  if (policy == lss_nop)
++    ;
++  else if (policy == lss_blank || !saved)
+     local_specializations = new hash_map<tree, tree>;
+   else
+     local_specializations = new hash_map<tree, tree>(*saved);
+@@ -90,8 +92,11 @@ local_specialization_stack::local_specialization_stack (lss_policy policy)
+ 
+ local_specialization_stack::~local_specialization_stack ()
+ {
+-  delete local_specializations;
+-  local_specializations = saved;
++  if (local_specializations != saved)
++    {
++      delete local_specializations;
++      local_specializations = saved;
++    }
+ }
+ 
+ /* True if we've recursed into fn_type_unification too many times.  */
+@@ -12178,7 +12183,6 @@ tsubst_pack_expansion (tree t, tree args, tsubst_flags_t complain,
+   bool unsubstituted_fn_pack = false;
+   int i, len = -1;
+   tree result;
+-  hash_map<tree, tree> *saved_local_specializations = NULL;
+   bool need_local_specializations = false;
+   int levels;
+ 
+@@ -12369,7 +12373,15 @@ tsubst_pack_expansion (tree t, tree args, tsubst_flags_t complain,
+ 	= build_extra_args (pattern, args, complain);
+       return t;
+     }
+-  else if (unsubstituted_packs)
++
++  /* If NEED_LOCAL_SPECIALIZATIONS then we're in a late-specified return
++     type, so create our own local specializations map; the current map is
++     either NULL or (in the case of recursive unification) might have
++     bindings that we don't want to use or alter.  */
++  local_specialization_stack lss (need_local_specializations
++				  ? lss_blank : lss_nop);
++
++  if (unsubstituted_packs)
+     {
+       /* There were no real arguments, we're just replacing a parameter
+ 	 pack with another version of itself. Substitute into the
+@@ -12386,16 +12398,6 @@ tsubst_pack_expansion (tree t, tree args, tsubst_flags_t complain,
+ 
+   gcc_assert (len >= 0);
+ 
+-  if (need_local_specializations)
+-    {
+-      /* We're in a late-specified return type, so create our own local
+-	 specializations map; the current map is either NULL or (in the
+-	 case of recursive unification) might have bindings that we don't
+-	 want to use or alter.  */
+-      saved_local_specializations = local_specializations;
+-      local_specializations = new hash_map<tree, tree>;
+-    }
+-
+   /* For each argument in each argument pack, substitute into the
+      pattern.  */
+   result = make_tree_vec (len);
+@@ -12442,12 +12444,6 @@ tsubst_pack_expansion (tree t, tree args, tsubst_flags_t complain,
+         }
+     }
+ 
+-  if (need_local_specializations)
+-    {
+-      delete local_specializations;
+-      local_specializations = saved_local_specializations;
+-    }
+-  
+   /* If the dependent pack arguments were such that we end up with only a
+      single pack expansion again, there's no need to keep it in a TREE_VEC.  */
+   if (len == 1 && TREE_CODE (result) == TREE_VEC
+diff --git a/gcc/testsuite/g++.dg/cpp0x/variadic179.C b/gcc/testsuite/g++.dg/cpp0x/variadic179.C
+new file mode 100644
+index 000000000..f04d3f753
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/variadic179.C
+@@ -0,0 +1,16 @@
++// PR c++/94628
++// { dg-do compile { target c++11 } }
++
++int f(int, int);
++int f(int);
++
++template<class...Args>
++auto select(Args... args) -> decltype(f(args...))
++{
++  if (sizeof...(Args) > 1)
++    return select<char>(7);
++  else
++    return 0;
++}
++
++int a = select(0, 1);
+diff --git a/gcc/testsuite/g++.dg/cpp0x/variadic180.C b/gcc/testsuite/g++.dg/cpp0x/variadic180.C
+new file mode 100644
+index 000000000..0dd0f88d6
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/variadic180.C
+@@ -0,0 +1,25 @@
++// PR c++/94628
++// A variant of variadic101.C where the recursive call to deref
++// has its first template argument explicitly provided.
++// { dg-do compile { target c++11 } }
++
++template<class T>
++struct Container
++{ T f() const; };
++
++template<class T>
++T deref(const T& t)
++{ return t; }
++
++
++template <class T, class... Args>
++auto
++deref(const T& u, int r, Args... args)
++-> decltype(deref(u.f(), args...))
++{ return deref<decltype(u.f())>(u.f(), args...); }
++
++int main(void)
++{
++    Container<Container<int>> v;
++    deref(v,1,2);
++}

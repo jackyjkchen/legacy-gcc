@@ -1,0 +1,82 @@
+diff --git a/gcc/config/rs6000/rs6000.c b/gcc/config/rs6000/rs6000.c
+index cb96b030a..95e60ba25 100644
+--- a/gcc/config/rs6000/rs6000.c
++++ b/gcc/config/rs6000/rs6000.c
+@@ -16199,7 +16199,7 @@ rs6000_gimple_fold_builtin (gimple_stmt_iterator *gsi)
+ 	tree lhs_type = TREE_TYPE (lhs);
+ 	/* In GIMPLE the type of the MEM_REF specifies the alignment.  The
+ 	  required alignment (power) is 4 bytes regardless of data type.  */
+-	tree align_ltype = build_aligned_type (lhs_type, 4);
++	tree align_ltype = build_aligned_type (lhs_type, 32);
+ 	/* POINTER_PLUS_EXPR wants the offset to be of type 'sizetype'.  Create
+ 	   the tree using the value from arg0.  The resulting type will match
+ 	   the type of arg1.  */
+@@ -16243,7 +16243,7 @@ rs6000_gimple_fold_builtin (gimple_stmt_iterator *gsi)
+ 	tree arg2_type = ptr_type_node;
+ 	/* In GIMPLE the type of the MEM_REF specifies the alignment.  The
+ 	   required alignment (power) is 4 bytes regardless of data type.  */
+-	tree align_stype = build_aligned_type (arg0_type, 4);
++	tree align_stype = build_aligned_type (arg0_type, 32);
+ 	/* POINTER_PLUS_EXPR wants the offset to be of type 'sizetype'.  Create
+ 	   the tree using the value from arg1.  */
+ 	gimple_seq stmts = NULL;
+diff --git a/gcc/testsuite/gcc.target/powerpc/pr88309.c b/gcc/testsuite/gcc.target/powerpc/pr88309.c
+new file mode 100644
+index 000000000..c0078cf2b
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/powerpc/pr88309.c
+@@ -0,0 +1,27 @@
++/* { dg-require-effective-target powerpc_vsx_ok } */
++/* { dg-options "-mvsx -O2 -fprefetch-loop-arrays" } */
++
++/* Verify there is no ICE or hanging.  */
++
++#include <altivec.h>
++
++void b(float *c, vector float a, vector float, vector float)
++{
++  vector float d;
++  vector char ahbc;
++  vec_xst(vec_perm(a, d, ahbc), 0, c);
++}
++
++vector float e(vector unsigned);
++
++void f() {
++  float *dst;
++  int g = 0;
++  for (;; g += 16) {
++    vector unsigned m, i;
++    vector unsigned n, j;
++    vector unsigned k, l;
++    b(dst + g * 3, e(m), e(n), e(k));
++    b(dst + (g + 4) * 3, e(i), e(j), e(l));
++  }
++}
+diff --git a/gcc/tree-ssa-loop-prefetch.c b/gcc/tree-ssa-loop-prefetch.c
+index 7afd85f07..e9080c158 100644
+--- a/gcc/tree-ssa-loop-prefetch.c
++++ b/gcc/tree-ssa-loop-prefetch.c
+@@ -740,6 +740,8 @@ is_miss_rate_acceptable (unsigned HOST_WIDE_INT cache_line_size,
+   if (delta >= (HOST_WIDE_INT) cache_line_size)
+     return false;
+ 
++  gcc_assert (align_unit > 0);
++
+   miss_positions = 0;
+   total_positions = (cache_line_size / align_unit) * distinct_iters;
+   max_allowed_miss_positions = (ACCEPTABLE_MISS_RATE * total_positions) / 1000;
+diff --git a/gcc/tree.c b/gcc/tree.c
+index 7a2c16d94..70f0069b0 100644
+--- a/gcc/tree.c
++++ b/gcc/tree.c
+@@ -6556,7 +6556,8 @@ build_qualified_type (tree type, int type_quals MEM_STAT_DECL)
+   return t;
+ }
+ 
+-/* Create a variant of type T with alignment ALIGN.  */
++/* Create a variant of type T with alignment ALIGN which
++   is measured in bits.  */
+ 
+ tree
+ build_aligned_type (tree type, unsigned int align)

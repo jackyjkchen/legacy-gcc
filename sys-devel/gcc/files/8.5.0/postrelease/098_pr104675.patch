@@ -1,0 +1,133 @@
+diff --git a/gcc/match.pd b/gcc/match.pd
+index 936b15a01..05bafe70b 100644
+--- a/gcc/match.pd
++++ b/gcc/match.pd
+@@ -492,7 +492,7 @@ DEFINE_INT_AND_FLOAT_ROUND_FN (RINT)
+ /* Simplify (unsigned t * 2)/2 -> unsigned t & 0x7FFFFFFF.  */
+ (simplify
+  (trunc_div (mult @0 integer_pow2p@1) @1)
+- (if (TYPE_UNSIGNED (TREE_TYPE (@0)))
++ (if (INTEGRAL_TYPE_P (TREE_TYPE (@0)) && TYPE_UNSIGNED (TREE_TYPE (@0)))
+   (bit_and @0 { wide_int_to_tree
+ 		(type, wi::mask (TYPE_PRECISION (type)
+ 				 - wi::exact_log2 (wi::to_wide (@1)),
+@@ -501,7 +501,7 @@ DEFINE_INT_AND_FLOAT_ROUND_FN (RINT)
+ /* Simplify (unsigned t / 2) * 2 -> unsigned t & ~1.  */
+ (simplify
+  (mult (trunc_div @0 integer_pow2p@1) @1)
+- (if (TYPE_UNSIGNED (TREE_TYPE (@0)))
++ (if (INTEGRAL_TYPE_P (TREE_TYPE (@0)) && TYPE_UNSIGNED (TREE_TYPE (@0)))
+   (bit_and @0 (negate @1))))
+ 
+ /* Simplify (t * 2) / 2) -> t.  */
+@@ -1801,13 +1801,15 @@ DEFINE_INT_AND_FLOAT_ROUND_FN (RINT)
+   (simplify
+    (minus (convert? (negate @0)) integer_each_onep)
+    (if (!TYPE_OVERFLOW_TRAPS (type)
++	&& TREE_CODE (type) != COMPLEX_TYPE
+ 	&& tree_nop_conversion_p (type, TREE_TYPE (@0)))
+     (bit_not (convert @0))))
+ 
+   /* -1 - A -> ~A */
+   (simplify
+    (minus integer_all_onesp @0)
+-   (bit_not @0))
++   (if (TREE_CODE (type) != COMPLEX_TYPE)
++    (bit_not @0)))
+ 
+   /* (T)(P + A) - (T)P -> (T) A */
+   (simplify
+diff --git a/gcc/testsuite/gcc.dg/pr104675-1.c b/gcc/testsuite/gcc.dg/pr104675-1.c
+new file mode 100644
+index 000000000..af0b4390c
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr104675-1.c
+@@ -0,0 +1,29 @@
++/* PR tree-optimization/104675 */
++/* { dg-do compile } */
++/* { dg-options "-O2" } */
++
++_Complex int
++foo (_Complex int a)
++{
++  return (-1 + -1i) - a;
++}
++
++_Complex int
++bar (_Complex int a)
++{
++  return -a - (1 + 1i);
++}
++
++_Complex int
++baz (_Complex int a)
++{
++  _Complex int b = -1 + -1i;
++  return b - a;
++}
++
++_Complex int
++qux (_Complex int a)
++{
++  _Complex int b = 1 + 1i;
++  return -a - b;
++}
+diff --git a/gcc/testsuite/gcc.dg/pr104675-2.c b/gcc/testsuite/gcc.dg/pr104675-2.c
+new file mode 100644
+index 000000000..037d0c4f1
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr104675-2.c
+@@ -0,0 +1,18 @@
++/* PR tree-optimization/104675 */
++/* { dg-do compile } */
++/* { dg-options "-O2" } */
++
++void baz (int i);
++
++void
++bar (_Complex int c, short s)
++{
++  c -= s;
++  baz (__real__ c + __imag__ c);
++}
++
++void
++foo (void)
++{
++  bar (-1 - 1i, 0);
++}
+diff --git a/gcc/testsuite/gcc.dg/pr104675-3.c b/gcc/testsuite/gcc.dg/pr104675-3.c
+new file mode 100644
+index 000000000..3b2eb6494
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr104675-3.c
+@@ -0,0 +1,29 @@
++/* PR tree-optimization/104675 */
++/* { dg-do compile } */
++/* { dg-options "-O2" } */
++
++_Complex unsigned int
++foo (_Complex unsigned int x)
++{
++  return (x / 2) * 2;
++}
++
++_Complex unsigned int
++bar (_Complex unsigned int x)
++{
++  return (x * 2) / 2;
++}
++
++_Complex unsigned int
++baz (_Complex unsigned int x)
++{
++  _Complex unsigned int y = x / 2;
++  return y * 2;
++}
++
++_Complex unsigned int
++qux (_Complex unsigned int x)
++{
++  _Complex unsigned int y = x * 2;
++  return y / 2;
++}

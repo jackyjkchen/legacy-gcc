@@ -1,0 +1,129 @@
+diff --git a/gcc/cp/constexpr.c b/gcc/cp/constexpr.c
+index ca5549378..7cbef0d5c 100644
+--- a/gcc/cp/constexpr.c
++++ b/gcc/cp/constexpr.c
+@@ -4214,9 +4214,9 @@ cxx_eval_constant_expression (const constexpr_ctx *ctx, tree t,
+ 	  TREE_CONSTANT (r) = true;
+ 	}
+       else if (ctx->strict)
+-	r = decl_really_constant_value (t);
++	r = decl_really_constant_value (t, /*unshare_p=*/false);
+       else
+-	r = decl_constant_value (t);
++	r = decl_constant_value (t, /*unshare_p=*/false);
+       if (TREE_CODE (r) == TARGET_EXPR
+ 	  && TREE_CODE (TARGET_EXPR_INITIAL (r)) == CONSTRUCTOR)
+ 	r = TARGET_EXPR_INITIAL (r);
+diff --git a/gcc/cp/cp-tree.h b/gcc/cp/cp-tree.h
+index 04759c656..3cfde81bc 100644
+--- a/gcc/cp/cp-tree.h
++++ b/gcc/cp/cp-tree.h
+@@ -6512,7 +6512,8 @@ extern tree build_vec_delete			(tree, tree,
+ extern tree create_temporary_var		(tree);
+ extern void initialize_vtbl_ptrs		(tree);
+ extern tree scalar_constant_value		(tree);
+-extern tree decl_really_constant_value		(tree);
++extern tree decl_constant_value			(tree, bool);
++extern tree decl_really_constant_value		(tree, bool = true);
+ extern int diagnose_uninitialized_cst_or_ref_member (tree, bool, bool);
+ extern tree build_vtbl_address                  (tree);
+ extern bool maybe_reject_flexarray_init		(tree, tree);
+diff --git a/gcc/cp/init.c b/gcc/cp/init.c
+index a973e522e..0242d6037 100644
+--- a/gcc/cp/init.c
++++ b/gcc/cp/init.c
+@@ -2231,10 +2231,12 @@ build_offset_ref (tree type, tree member, bool address_p,
+    recursively); otherwise, return DECL.  If STRICT_P, the
+    initializer is only returned if DECL is a
+    constant-expression.  If RETURN_AGGREGATE_CST_OK_P, it is ok to
+-   return an aggregate constant.  */
++   return an aggregate constant.  If UNSHARE_P, return an unshared
++   copy of the initializer.  */
+ 
+ static tree
+-constant_value_1 (tree decl, bool strict_p, bool return_aggregate_cst_ok_p)
++constant_value_1 (tree decl, bool strict_p, bool return_aggregate_cst_ok_p,
++		  bool unshare_p)
+ {
+   while (TREE_CODE (decl) == CONST_DECL
+ 	 || decl_constant_var_p (decl)
+@@ -2302,9 +2304,9 @@ constant_value_1 (tree decl, bool strict_p, bool return_aggregate_cst_ok_p)
+ 	  && !DECL_INITIALIZED_BY_CONSTANT_EXPRESSION_P (decl)
+ 	  && DECL_NONTRIVIALLY_INITIALIZED_P (decl))
+ 	break;
+-      decl = unshare_expr (init);
++      decl = init;
+     }
+-  return decl;
++  return unshare_p ? unshare_expr (decl) : decl;
+ }
+ 
+ /* If DECL is a CONST_DECL, or a constant VAR_DECL initialized by constant
+@@ -2316,26 +2318,36 @@ tree
+ scalar_constant_value (tree decl)
+ {
+   return constant_value_1 (decl, /*strict_p=*/true,
+-			   /*return_aggregate_cst_ok_p=*/false);
++			   /*return_aggregate_cst_ok_p=*/false,
++			   /*unshare_p=*/true);
+ }
+ 
+-/* Like scalar_constant_value, but can also return aggregate initializers.  */
++/* Like scalar_constant_value, but can also return aggregate initializers.
++   If UNSHARE_P, return an unshared copy of the initializer.  */
+ 
+ tree
+-decl_really_constant_value (tree decl)
++decl_really_constant_value (tree decl, bool unshare_p /*= true*/)
+ {
+   return constant_value_1 (decl, /*strict_p=*/true,
+-			   /*return_aggregate_cst_ok_p=*/true);
++			   /*return_aggregate_cst_ok_p=*/true,
++			   /*unshare_p=*/unshare_p);
+ }
+ 
+-/* A more relaxed version of scalar_constant_value, used by the
++/* A more relaxed version of decl_really_constant_value, used by the
+    common C/C++ code.  */
+ 
+ tree
+-decl_constant_value (tree decl)
++decl_constant_value (tree decl, bool unshare_p)
+ {
+   return constant_value_1 (decl, /*strict_p=*/processing_template_decl,
+-			   /*return_aggregate_cst_ok_p=*/true);
++			   /*return_aggregate_cst_ok_p=*/true,
++			   /*unshare_p=*/unshare_p);
++}
++
++tree
++decl_constant_value (tree decl)
++{
++  return decl_constant_value (decl, /*unshare_p=*/true);
+ }
+ 
+ /* Common subroutines of build_new and build_vec_delete.  */
+diff --git a/gcc/testsuite/g++.dg/cpp1y/constexpr-array8.C b/gcc/testsuite/g++.dg/cpp1y/constexpr-array8.C
+new file mode 100644
+index 000000000..339abb690
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp1y/constexpr-array8.C
+@@ -0,0 +1,18 @@
++// PR c++/96197
++// { dg-do compile { target c++14 } }
++
++struct S {
++  S* p = this;
++};
++
++constexpr S ary[5000] = {};
++
++constexpr int foo() {
++  int count = 0;
++  for (int i = 0; i < 5000; i++)
++    if (ary[i].p != nullptr)
++      count++;
++  return count;
++}
++
++constexpr int bar = foo();

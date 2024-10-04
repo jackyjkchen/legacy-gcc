@@ -1,0 +1,40 @@
+diff --git a/gcc/tree-parloops.c b/gcc/tree-parloops.c
+index 3a788ccf1..a376af68b 100644
+--- a/gcc/tree-parloops.c
++++ b/gcc/tree-parloops.c
+@@ -3041,11 +3041,11 @@ oacc_entry_exit_ok_1 (bitmap in_loop_bbs, vec<basic_block> region_bbs,
+ 		{
+ 		  use_operand_p use_p;
+ 		  gimple *use_stmt;
++		  struct reduction_info *red;
+ 		  single_imm_use (lhs, &use_p, &use_stmt);
+-		  if (gimple_code (use_stmt) == GIMPLE_PHI)
++		  if (gimple_code (use_stmt) == GIMPLE_PHI
++		      && (red = reduction_phi (reduction_list, use_stmt)))
+ 		    {
+-		      struct reduction_info *red;
+-		      red = reduction_phi (reduction_list, use_stmt);
+ 		      tree val = PHI_RESULT (red->keep_res);
+ 		      if (has_single_use (val))
+ 			{
+diff --git a/libgomp/testsuite/libgomp.oacc-c-c++-common/pr89376.c b/libgomp/testsuite/libgomp.oacc-c-c++-common/pr89376.c
+new file mode 100644
+index 000000000..7f6c83254
+--- /dev/null
++++ b/libgomp/testsuite/libgomp.oacc-c-c++-common/pr89376.c
+@@ -0,0 +1,15 @@
++/* { dg-do run } */
++/* { dg-additional-options "-fno-tree-ch -fno-tree-dce -fno-tree-vrp" } */
++
++int
++main (void)
++{
++  int fa;
++
++  #pragma acc kernels
++  for (int rw = 0; rw < 1; ++rw)
++    fa = 0;
++
++  return 0;
++}
++

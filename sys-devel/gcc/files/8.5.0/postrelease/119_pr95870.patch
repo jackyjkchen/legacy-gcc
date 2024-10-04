@@ -1,0 +1,42 @@
+diff --git a/gcc/cp/pt.c b/gcc/cp/pt.c
+index 9483a68df..069f4e9d1 100644
+--- a/gcc/cp/pt.c
++++ b/gcc/cp/pt.c
+@@ -13408,6 +13408,19 @@ enclosing_instantiation_of (tree otctx)
+   for (; tctx && lambda_fn_in_template_p (tctx);
+        tctx = decl_function_context (tctx))
+     ++lambda_count;
++
++  if (!tctx)
++    {
++      /* Match using DECL_SOURCE_LOCATION, which is unique for all lambdas.
++
++	 For GCC 11 the above condition limits this to the previously failing
++	 case where all enclosing functions are lambdas (95870).  FIXME.  */
++      for (tree ofn = fn; ofn; ofn = decl_function_context (ofn))
++	if (DECL_SOURCE_LOCATION (ofn) == DECL_SOURCE_LOCATION (otctx))
++	  return ofn;
++      gcc_unreachable ();
++    }
++
+   for (; fn; fn = decl_function_context (fn))
+     {
+       tree ofn = fn;
+diff --git a/gcc/testsuite/g++.dg/cpp0x/lambda/lambda-nsdmi10.C b/gcc/testsuite/g++.dg/cpp0x/lambda/lambda-nsdmi10.C
+new file mode 100644
+index 000000000..810ed5387
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/lambda/lambda-nsdmi10.C
+@@ -0,0 +1,12 @@
++// PR c++/95870
++// { dg-do compile { target c++11 } }
++
++template <typename> struct S {
++  S();
++  int b = []() -> int { enum E {}; return 1; }();
++};
++struct C : S<int> {
++  C();
++};
++template <typename T> S<T>::S() = default;
++C::C() {}

@@ -1,0 +1,74 @@
+diff --git a/gcc/cp/constexpr.c b/gcc/cp/constexpr.c
+index 7cbef0d5c..f644d346e 100644
+--- a/gcc/cp/constexpr.c
++++ b/gcc/cp/constexpr.c
+@@ -2975,6 +2975,18 @@ cxx_eval_vec_init_1 (const constexpr_ctx *ctx, tree atype, tree init,
+       pre_init = true;
+     }
+ 
++  bool zeroed_out = false;
++  if (!CONSTRUCTOR_NO_CLEARING (ctx->ctor))
++    {
++      /* We're initializing an array object that had been zero-initialized
++	 earlier.  Truncate ctx->ctor, and propagate its zeroed state by
++	 clearing CONSTRUCTOR_NO_CLEARING on each of the aggregate element
++	 initializers we append to it.  */
++      gcc_checking_assert (initializer_zerop (ctx->ctor));
++      zeroed_out = true;
++      vec_safe_truncate (*p, 0);
++    }
++
+   tree nelts = get_array_or_vector_nelts (ctx, atype, non_constant_p,
+ 					  overflow_p);
+   unsigned HOST_WIDE_INT max = tree_to_uhwi (nelts);
+@@ -2986,7 +2998,11 @@ cxx_eval_vec_init_1 (const constexpr_ctx *ctx, tree atype, tree init,
+       constexpr_ctx new_ctx;
+       init_subob_ctx (ctx, new_ctx, idx, pre_init ? init : elttype);
+       if (new_ctx.ctor != ctx->ctor)
+-	CONSTRUCTOR_APPEND_ELT (*p, idx, new_ctx.ctor);
++	{
++	  if (zeroed_out)
++	    CONSTRUCTOR_NO_CLEARING (new_ctx.ctor) = false;
++	  CONSTRUCTOR_APPEND_ELT (*p, idx, new_ctx.ctor);
++	}
+       if (TREE_CODE (elttype) == ARRAY_TYPE)
+ 	{
+ 	  /* A multidimensional array; recurse.  */
+diff --git a/gcc/testsuite/g++.dg/cpp0x/constexpr-array26.C b/gcc/testsuite/g++.dg/cpp0x/constexpr-array26.C
+new file mode 100644
+index 000000000..274f55a88
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/constexpr-array26.C
+@@ -0,0 +1,13 @@
++// PR c++/96282
++// { dg-do compile { target c++11 } }
++
++struct e { bool v = true; };
++
++template<int N>
++struct b { e m[N]; };
++
++template<int N>
++struct t : b<N> { constexpr t() : b<N>() {} };
++
++constexpr t<1> h1;
++constexpr t<42> h2;
+diff --git a/gcc/testsuite/g++.dg/cpp0x/constexpr-array27.C b/gcc/testsuite/g++.dg/cpp0x/constexpr-array27.C
+new file mode 100644
+index 000000000..1234caef3
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/constexpr-array27.C
+@@ -0,0 +1,13 @@
++// PR c++/96282
++// { dg-do compile { target c++11 } }
++
++struct e { bool v = true; e *p = this; };
++
++template<int N>
++struct b { e m[N][N]; };
++
++template<int N>
++struct t : b<N> { constexpr t() : b<N>() {} };
++
++constexpr t<1> h1;
++constexpr t<42> h2;

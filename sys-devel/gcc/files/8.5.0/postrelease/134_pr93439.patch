@@ -1,0 +1,69 @@
+diff --git a/gcc/testsuite/gfortran.dg/graphite/pr93439.f90 b/gcc/testsuite/gfortran.dg/graphite/pr93439.f90
+new file mode 100644
+index 000000000..e815ab929
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/graphite/pr93439.f90
+@@ -0,0 +1,21 @@
++! { dg-additional-options "-O2 -floop-parallelize-all -floop-unroll-and-jam -ftree-parallelize-loops=2" }
++
++module ai
++  integer, parameter :: dp = 8
++contains
++  subroutine qu(ja, nq, en, p5)
++    real(kind = dp) :: nq(ja), en(ja), p5(ja)
++    call tl(ja, nq, en, p5)
++  end subroutine qu
++
++  subroutine tl(ja, nq, en, p5)
++    real(kind = dp) :: nq(9), en(9 * ja), p5(3 * ja)
++    do mc = 1, ja
++       do mb = 1, 9
++          do ma = 1, 3
++             p5((mc - 1) * 3 + ma) = p5((mc - 1) * 3 + ma) - 1
++          end do
++       end do
++    end do
++  end subroutine tl
++end module ai
+diff --git a/gcc/tree-cfg.c b/gcc/tree-cfg.c
+index 84e58e666..4bb8aafe3 100644
+--- a/gcc/tree-cfg.c
++++ b/gcc/tree-cfg.c
+@@ -3551,6 +3551,13 @@ verify_types_in_gimple_reference (tree expr, bool require_lvalue)
+ 	  debug_generic_stmt (expr);
+ 	  return true;
+ 	}
++      if (MR_DEPENDENCE_CLIQUE (expr) != 0
++	  && MR_DEPENDENCE_CLIQUE (expr) > cfun->last_clique)
++	{
++	  error ("invalid clique in MEM_REF");
++	  debug_generic_stmt (expr);
++	  return true;
++	}
+     }
+   else if (TREE_CODE (expr) == TARGET_MEM_REF)
+     {
+@@ -3568,6 +3575,13 @@ verify_types_in_gimple_reference (tree expr, bool require_lvalue)
+ 	  debug_generic_stmt (expr);
+ 	  return true;
+ 	}
++      if (MR_DEPENDENCE_CLIQUE (expr) != 0
++	  && MR_DEPENDENCE_CLIQUE (expr) > cfun->last_clique)
++	{
++	  error ("invalid clique in TARGET_MEM_REF");
++	  debug_generic_stmt (expr);
++	  return true;
++	}
+     }
+ 
+   return ((require_lvalue || !is_gimple_min_invariant (expr))
+@@ -7911,6 +7925,9 @@ move_sese_region_to_fn (struct function *dest_cfun, basic_block entry_bb,
+       after = bb;
+     }
+ 
++  /* Adjust the maximum clique used.  */
++  dest_cfun->last_clique = saved_cfun->last_clique;
++
+   loop->aux = NULL;
+   loop0->aux = NULL;
+   /* Loop sizes are no longer correct, fix them up.  */

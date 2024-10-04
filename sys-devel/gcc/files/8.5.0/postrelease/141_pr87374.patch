@@ -1,0 +1,182 @@
+diff --git a/gcc/config/arm/arm.c b/gcc/config/arm/arm.c
+index 55e54c9c3..39132bed2 100644
+--- a/gcc/config/arm/arm.c
++++ b/gcc/config/arm/arm.c
+@@ -2896,17 +2896,22 @@ arm_option_check_internal (struct gcc_options *opts)
+       flag_pic = 0;
+     }
+ 
+-  /* We only support -mpure-code and -mslow-flash-data on M-profile targets
+-     with MOVT.  */
+-  if ((target_pure_code || target_slow_flash_data)
+-      && (!TARGET_HAVE_MOVT || arm_arch_notm || flag_pic || TARGET_NEON))
++  if (target_pure_code || target_slow_flash_data)
+     {
+       const char *flag = (target_pure_code ? "-mpure-code" :
+ 					     "-mslow-flash-data");
+-      error ("%s only supports non-pic code on M-profile targets with the "
+-	     "MOVT instruction", flag);
+-    }
+ 
++      /* We only support -mpure-code and -mslow-flash-data on M-profile targets
++	 with MOVT.  */
++      if (!TARGET_HAVE_MOVT || arm_arch_notm || flag_pic || TARGET_NEON)
++	error ("%s only supports non-pic code on M-profile targets with the "
++	       "MOVT instruction", flag);
++
++      /* Cannot load addresses: -mslow-flash-data forbids literal pool and
++	 -mword-relocations forbids relocation of MOVT/MOVW.  */
++      if (target_word_relocations)
++	error ("%s incompatible with -mword-relocations", flag);
++    }
+ }
+ 
+ /* Recompute the global settings depending on target attribute options.  */
+@@ -3501,6 +3506,9 @@ arm_option_override (void)
+ 	arm_pic_register = pic_register;
+     }
+ 
++  if (flag_pic)
++    target_word_relocations = 1;
++
+   /* Enable -mfix-cortex-m3-ldrd by default for Cortex-M3 cores.  */
+   if (fix_cm3_ldrd == 2)
+     {
+diff --git a/gcc/config/arm/arm.md b/gcc/config/arm/arm.md
+index e43061256..9021adb8b 100644
+--- a/gcc/config/arm/arm.md
++++ b/gcc/config/arm/arm.md
+@@ -6156,7 +6156,7 @@
+   [(set (match_operand:SI 0 "arm_general_register_operand" "")
+        (match_operand:SI 1 "general_operand" ""))]
+   "TARGET_USE_MOVT && GET_CODE (operands[1]) == SYMBOL_REF
+-   && !flag_pic && !target_word_relocations
++   && !target_word_relocations
+    && !arm_tls_referenced_p (operands[1])"
+   [(clobber (const_int 0))]
+ {
+diff --git a/gcc/doc/invoke.texi b/gcc/doc/invoke.texi
+index 78ca7738d..626f11478 100644
+--- a/gcc/doc/invoke.texi
++++ b/gcc/doc/invoke.texi
+@@ -16669,7 +16669,7 @@ this option and always use the original scheme.
+ Only generate absolute relocations on word-sized values (i.e. R_ARM_ABS32).
+ This is enabled by default on targets (uClinux, SymbianOS) where the runtime
+ loader imposes this restriction, and when @option{-fpic} or @option{-fPIC}
+-is specified.
++is specified. This option conflicts with @option{-mslow-flash-data}.
+ 
+ @item -mfix-cortex-m3-ldrd
+ @opindex mfix-cortex-m3-ldrd
+@@ -16706,7 +16706,7 @@ to Neon is high.
+ Assume loading data from flash is slower than fetching instruction.
+ Therefore literal load is minimized for better performance.
+ This option is only supported when compiling for ARMv7 M-profile and
+-off by default.
++off by default. It conflicts with @option{-mword-relocations}.
+ 
+ @item -masm-syntax-unified
+ @opindex masm-syntax-unified
+diff --git a/gcc/testsuite/gcc.target/arm/movdi_movt.c b/gcc/testsuite/gcc.target/arm/movdi_movt.c
+index e2a28ccbd..a01ffa0dc 100644
+--- a/gcc/testsuite/gcc.target/arm/movdi_movt.c
++++ b/gcc/testsuite/gcc.target/arm/movdi_movt.c
+@@ -1,4 +1,5 @@
+ /* { dg-do compile { target { arm_cortex_m && { arm_thumb2_ok || arm_thumb1_movt_ok } } } } */
++/* { dg-skip-if "-mslow-flash-data and -mword-relocations incompatible" { *-*-* } { "-mword-relocations" } } */
+ /* { dg-options "-O2 -mslow-flash-data" } */
+ 
+ unsigned long long
+diff --git a/gcc/testsuite/gcc.target/arm/movsi_movt.c b/gcc/testsuite/gcc.target/arm/movsi_movt.c
+index 3cf46e2fd..19d202ecd 100644
+--- a/gcc/testsuite/gcc.target/arm/movsi_movt.c
++++ b/gcc/testsuite/gcc.target/arm/movsi_movt.c
+@@ -1,4 +1,5 @@
+ /* { dg-do compile { target { arm_cortex_m && { arm_thumb2_ok || arm_thumb1_movt_ok } } } } */
++/* { dg-skip-if "-mslow-flash-data and -mword-relocations incompatible" { *-*-* } { "-mword-relocations" } } */
+ /* { dg-options "-O2 -mslow-flash-data" } */
+ 
+ unsigned
+diff --git a/gcc/testsuite/gcc.target/arm/pr81863.c b/gcc/testsuite/gcc.target/arm/pr81863.c
+index 63b1ed66b..225a0c5cc 100644
+--- a/gcc/testsuite/gcc.target/arm/pr81863.c
++++ b/gcc/testsuite/gcc.target/arm/pr81863.c
+@@ -1,5 +1,6 @@
+ /* testsuite/gcc.target/arm/pr48183.c */
+ /* { dg-do compile } */
++/* { dg-skip-if "-mslow-flash-data and -mword-relocations incompatible" { *-*-* } { "-mslow-flash-data" } } */
+ /* { dg-options "-O2 -mword-relocations -march=armv7-a -marm" } */
+ /* { dg-final { scan-assembler-not "\[\\t \]+movw" } } */
+ 
+diff --git a/gcc/testsuite/gcc.target/arm/thumb2-slow-flash-data-1.c b/gcc/testsuite/gcc.target/arm/thumb2-slow-flash-data-1.c
+index 089a72b67..d10391a69 100644
+--- a/gcc/testsuite/gcc.target/arm/thumb2-slow-flash-data-1.c
++++ b/gcc/testsuite/gcc.target/arm/thumb2-slow-flash-data-1.c
+@@ -6,6 +6,7 @@
+ /* { dg-do compile } */
+ /* { dg-require-effective-target arm_cortex_m } */
+ /* { dg-require-effective-target arm_thumb2_ok } */
++/* { dg-skip-if "-mslow-flash-data and -mword-relocations incompatible" { *-*-* } { "-mword-relocations" } } */
+ /* { dg-options "-O2 -mthumb -mslow-flash-data" } */
+ 
+ float sf;
+diff --git a/gcc/testsuite/gcc.target/arm/thumb2-slow-flash-data-2.c b/gcc/testsuite/gcc.target/arm/thumb2-slow-flash-data-2.c
+index c87e05063..90bd44e27 100644
+--- a/gcc/testsuite/gcc.target/arm/thumb2-slow-flash-data-2.c
++++ b/gcc/testsuite/gcc.target/arm/thumb2-slow-flash-data-2.c
+@@ -3,6 +3,7 @@
+ /* { dg-require-effective-target arm_thumb2_ok } */
+ /* { dg-skip-if "avoid conflicts with multilib options" { *-*-* } { "-mcpu=*" } { "-mcpu=cortex-m4" "-mcpu=cortex-m7" } } */
+ /* { dg-skip-if "do not override -mfloat-abi" { *-*-* } { "-mfloat-abi=*" } { "-mfloat-abi=hard" } } */
++/* { dg-skip-if "-mslow-flash-data and -mword-relocations incompatible" { *-*-* } { "-mword-relocations" } } */
+ /* { dg-options "-march=armv7e-m+fp -mfloat-abi=hard -O2 -mthumb -mslow-flash-data" } */
+ 
+ float f (float);
+diff --git a/gcc/testsuite/gcc.target/arm/thumb2-slow-flash-data-3.c b/gcc/testsuite/gcc.target/arm/thumb2-slow-flash-data-3.c
+index 8c6210ee6..5d9cd9c4d 100644
+--- a/gcc/testsuite/gcc.target/arm/thumb2-slow-flash-data-3.c
++++ b/gcc/testsuite/gcc.target/arm/thumb2-slow-flash-data-3.c
+@@ -3,6 +3,7 @@
+ /* { dg-require-effective-target arm_thumb2_ok } */
+ /* { dg-skip-if "avoid conflicts with multilib options" { *-*-* } { "-mcpu=*" } { "-mcpu=cortex-m4" "-mcpu=cortex-m7" } } */
+ /* { dg-skip-if "do not override -mfloat-abi" { *-*-* } { "-mfloat-abi=*" } { "-mfloat-abi=hard" } } */
++/* { dg-skip-if "-mslow-flash-data and -mword-relocations incompatible" { *-*-* } { "-mword-relocations" } } */
+ /* { dg-options "-march=armv7e-m+fp -mfloat-abi=hard -mthumb -mslow-flash-data" } */
+ 
+ /* From PR71607 */
+diff --git a/gcc/testsuite/gcc.target/arm/thumb2-slow-flash-data-4.c b/gcc/testsuite/gcc.target/arm/thumb2-slow-flash-data-4.c
+index 1bcb6924e..0eeddd5e6 100644
+--- a/gcc/testsuite/gcc.target/arm/thumb2-slow-flash-data-4.c
++++ b/gcc/testsuite/gcc.target/arm/thumb2-slow-flash-data-4.c
+@@ -3,6 +3,7 @@
+ /* { dg-require-effective-target arm_thumb2_ok } */
+ /* { dg-skip-if "avoid conflicts with multilib options" { *-*-* } { "-mcpu=*" } { "-mcpu=cortex-m4" "-mcpu=cortex-m7" } } */
+ /* { dg-skip-if "do not override -mfloat-abi" { *-*-* } { "-mfloat-abi=*" } { "-mfloat-abi=hard" } } */
++/* { dg-skip-if "-mslow-flash-data and -mword-relocations incompatible" { *-*-* } { "-mword-relocations" } } */
+ /* { dg-options "-march=armv7e-m+fp -mfloat-abi=hard -O2 -mthumb -mslow-flash-data" } */
+ 
+ double __attribute__ ((target ("fpu=fpv5-d16")))
+diff --git a/gcc/testsuite/gcc.target/arm/thumb2-slow-flash-data-5.c b/gcc/testsuite/gcc.target/arm/thumb2-slow-flash-data-5.c
+index 808fff05f..7d52f3801 100644
+--- a/gcc/testsuite/gcc.target/arm/thumb2-slow-flash-data-5.c
++++ b/gcc/testsuite/gcc.target/arm/thumb2-slow-flash-data-5.c
+@@ -3,6 +3,7 @@
+ /* { dg-require-effective-target arm_thumb2_ok } */
+ /* { dg-skip-if "avoid conflicts with multilib options" { *-*-* } { "-mcpu=*" } { "-mcpu=cortex-m4" "-mcpu=cortex-m7" } } */
+ /* { dg-skip-if "do not override -mfloat-abi" { *-*-* } { "-mfloat-abi=*" } { "-mfloat-abi=hard" } } */
++/* { dg-skip-if "-mslow-flash-data and -mword-relocations incompatible" { *-*-* } { "-mword-relocations" } } */
+ /* { dg-options "-march=armv7e-m+fp -mfloat-abi=hard -O2 -mthumb -mslow-flash-data" } */
+ 
+ double __attribute__ ((target ("fpu=fpv5-sp-d16")))
+diff --git a/gcc/testsuite/gcc.target/arm/tls-disable-literal-pool.c b/gcc/testsuite/gcc.target/arm/tls-disable-literal-pool.c
+index 283201fdd..834eaf6db 100644
+--- a/gcc/testsuite/gcc.target/arm/tls-disable-literal-pool.c
++++ b/gcc/testsuite/gcc.target/arm/tls-disable-literal-pool.c
+@@ -2,6 +2,7 @@
+ /* { dg-require-effective-target tls_native } */
+ /* { dg-require-effective-target arm_cortex_m } */
+ /* { dg-require-effective-target arm_thumb2_ok } */
++/* { dg-skip-if "-mslow-flash-data and -mword-relocations incompatible" { *-*-* } { "-mword-relocations" } } */
+ /* { dg-options "-mslow-flash-data" } */
+ 
+ __thread int x = 0;

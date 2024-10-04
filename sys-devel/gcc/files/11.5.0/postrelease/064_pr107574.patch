@@ -1,0 +1,41 @@
+diff --git a/gcc/cp/constexpr.c b/gcc/cp/constexpr.c
+index 5b64efca3..7393239ca 100644
+--- a/gcc/cp/constexpr.c
++++ b/gcc/cp/constexpr.c
+@@ -6893,7 +6893,18 @@ cxx_eval_constant_expression (const constexpr_ctx *ctx, tree t,
+ 	  }
+ 
+ 	if (TREE_CODE (op) == PTRMEM_CST && !TYPE_PTRMEM_P (type))
+-	  op = cplus_expand_constant (op);
++	  {
++	    op = cplus_expand_constant (op);
++	    if (TREE_CODE (op) == PTRMEM_CST)
++	      {
++		if (!ctx->quiet)
++		  error_at (loc, "%qE is not a constant expression when the "
++			    "class %qT is still incomplete", op,
++			    PTRMEM_CST_CLASS (op));
++		*non_constant_p = true;
++		return t;
++	      }
++	  }
+ 
+ 	if (TREE_CODE (op) == PTRMEM_CST && tcode == NOP_EXPR)
+ 	  {
+diff --git a/gcc/testsuite/g++.dg/cpp0x/ptrmem-cst1.C b/gcc/testsuite/g++.dg/cpp0x/ptrmem-cst1.C
+new file mode 100644
+index 000000000..0d6a6b644
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/ptrmem-cst1.C
+@@ -0,0 +1,11 @@
++// PR c++/107574
++// { dg-do compile { target c++11 } }
++
++struct A { int i; };
++struct B:A { int j; };
++struct C:B {
++  int k;
++  static_assert((int B::*) &C::k, ""); // { dg-error "non-constant|still incomplete" }
++};
++
++static_assert((int B::*) &C::k, "");

@@ -1,0 +1,175 @@
+diff --git a/gcc/testsuite/gcc.dg/torture/pr103596.c b/gcc/testsuite/gcc.dg/torture/pr103596.c
+new file mode 100644
+index 000000000..4f65c36d1
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/torture/pr103596.c
+@@ -0,0 +1,36 @@
++/* { dg-do compile } */
++/* { dg-additional-options "--param case-values-threshold=1" } */
++
++int n;
++
++void
++qux (int a)
++{
++}
++
++int
++baz (void)
++{
++  return -1;
++}
++
++__attribute__ ((returns_twice)) int
++bar (int b)
++{
++  if (n != 0)
++    {
++      if (b != 2)
++        if (b != 0)
++          return n + b;
++
++      if (n == 2)
++        return 0;
++    }
++}
++
++void
++foo (void)
++{
++  qux (n);
++  bar (baz ());
++}
+diff --git a/gcc/tree-ssa-propagate.c b/gcc/tree-ssa-propagate.c
+index b1bfdd5c0..740c73865 100644
+--- a/gcc/tree-ssa-propagate.c
++++ b/gcc/tree-ssa-propagate.c
+@@ -1235,10 +1235,12 @@ substitute_and_fold_engine::substitute_and_fold (void)
+ }
+ 
+ 
+-/* Return true if we may propagate ORIG into DEST, false otherwise.  */
++/* Return true if we may propagate ORIG into DEST, false otherwise.
++   If DEST_NOT_PHI_ARG_P is true then assume the propagation does
++   not happen into a PHI argument which relaxes some constraints.  */
+ 
+ bool
+-may_propagate_copy (tree dest, tree orig)
++may_propagate_copy (tree dest, tree orig, bool dest_not_phi_arg_p)
+ {
+   tree type_d = TREE_TYPE (dest);
+   tree type_o = TREE_TYPE (orig);
+@@ -1258,8 +1260,10 @@ may_propagate_copy (tree dest, tree orig)
+ 	   && SSA_NAME_OCCURS_IN_ABNORMAL_PHI (orig))
+     return false;
+   /* Similarly if DEST flows in from an abnormal edge then the copy cannot be
+-     propagated.  */
+-  else if (TREE_CODE (dest) == SSA_NAME
++     propagated.  If we know we do not propagate into a PHI argument this
++     does not apply.  */
++  else if (!dest_not_phi_arg_p
++	   && TREE_CODE (dest) == SSA_NAME
+ 	   && SSA_NAME_OCCURS_IN_ABNORMAL_PHI (dest))
+     return false;
+ 
+@@ -1293,9 +1297,9 @@ may_propagate_copy_into_stmt (gimple *dest, tree orig)
+      for the expression, so we delegate to may_propagate_copy.  */
+ 
+   if (gimple_assign_single_p (dest))
+-    return may_propagate_copy (gimple_assign_rhs1 (dest), orig);
++    return may_propagate_copy (gimple_assign_rhs1 (dest), orig, true);
+   else if (gswitch *dest_swtch = dyn_cast <gswitch *> (dest))
+-    return may_propagate_copy (gimple_switch_index (dest_swtch), orig);
++    return may_propagate_copy (gimple_switch_index (dest_swtch), orig, true);
+ 
+   /* In other cases, the expression is not materialized, so there
+      is no destination to pass to may_propagate_copy.  On the other
+@@ -1333,25 +1337,19 @@ may_propagate_copy_into_asm (tree dest ATTRIBUTE_UNUSED)
+ }
+ 
+ 
+-/* Common code for propagate_value and replace_exp.
++/* Replace *OP_P with value VAL (assumed to be a constant or another SSA_NAME).
+ 
+-   Replace use operand OP_P with VAL.  FOR_PROPAGATION indicates if the
+-   replacement is done to propagate a value or not.  */
++   Use this version when not const/copy propagating values.  For example,
++   PRE uses this version when building expressions as they would appear
++   in specific blocks taking into account actions of PHI nodes.
+ 
+-static void
+-replace_exp_1 (use_operand_p op_p, tree val,
+-    	       bool for_propagation ATTRIBUTE_UNUSED)
+-{
+-  if (flag_checking)
+-    {
+-      tree op = USE_FROM_PTR (op_p);
+-      gcc_assert (!(for_propagation
+-		  && TREE_CODE (op) == SSA_NAME
+-		  && TREE_CODE (val) == SSA_NAME
+-		  && !may_propagate_copy (op, val)));
+-    }
++   The statement in which an expression has been replaced should be
++   folded using fold_stmt_inplace.  */
+ 
+-  if (TREE_CODE (val) == SSA_NAME)
++void
++replace_exp (use_operand_p op_p, tree val)
++{
++  if (TREE_CODE (val) == SSA_NAME || CONSTANT_CLASS_P (val))
+     SET_USE (op_p, val);
+   else
+     SET_USE (op_p, unshare_expr (val));
+@@ -1367,22 +1365,10 @@ replace_exp_1 (use_operand_p op_p, tree val,
+ void
+ propagate_value (use_operand_p op_p, tree val)
+ {
+-  replace_exp_1 (op_p, val, true);
+-}
+-
+-/* Replace *OP_P with value VAL (assumed to be a constant or another SSA_NAME).
+-
+-   Use this version when not const/copy propagating values.  For example,
+-   PRE uses this version when building expressions as they would appear
+-   in specific blocks taking into account actions of PHI nodes.
+-
+-   The statement in which an expression has been replaced should be
+-   folded using fold_stmt_inplace.  */
+-
+-void
+-replace_exp (use_operand_p op_p, tree val)
+-{
+-  replace_exp_1 (op_p, val, false);
++  if (flag_checking)
++    gcc_assert (may_propagate_copy (USE_FROM_PTR (op_p), val,
++				    !is_a <gphi *> (USE_STMT (op_p))));
++  replace_exp (op_p, val);
+ }
+ 
+ 
+diff --git a/gcc/tree-ssa-propagate.h b/gcc/tree-ssa-propagate.h
+index 56e1b1c13..f07025ca9 100644
+--- a/gcc/tree-ssa-propagate.h
++++ b/gcc/tree-ssa-propagate.h
+@@ -66,7 +66,7 @@ extern void move_ssa_defining_stmt_for_defs (gimple *, gimple *);
+ extern bool update_gimple_call (gimple_stmt_iterator *, tree, int, ...);
+ extern bool update_call_from_tree (gimple_stmt_iterator *, tree);
+ extern bool stmt_makes_single_store (gimple *);
+-extern bool may_propagate_copy (tree, tree);
++extern bool may_propagate_copy (tree, tree, bool = false);
+ extern bool may_propagate_copy_into_stmt (gimple *, tree);
+ extern bool may_propagate_copy_into_asm (tree);
+ extern void propagate_value (use_operand_p, tree);
+diff --git a/gcc/tree-ssa-sccvn.c b/gcc/tree-ssa-sccvn.c
+index 81799eeab..cce67487a 100644
+--- a/gcc/tree-ssa-sccvn.c
++++ b/gcc/tree-ssa-sccvn.c
+@@ -5763,7 +5763,7 @@ eliminate_dom_walker::before_dom_children (basic_block b)
+ 	    continue;
+ 	  tree sprime = eliminate_avail (use);
+ 	  if (sprime && sprime != use
+-	      && may_propagate_copy (use, sprime)
++	  && may_propagate_copy (use, sprime, true)
+ 	      /* We substitute into debug stmts to avoid excessive
+ 	         debug temporaries created by removed stmts, but we need
+ 		 to avoid doing so for inserted sprimes as we never want

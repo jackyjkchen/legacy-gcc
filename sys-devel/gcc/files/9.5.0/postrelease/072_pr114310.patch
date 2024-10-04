@@ -1,0 +1,39 @@
+diff --git a/gcc/config/aarch64/aarch64.c b/gcc/config/aarch64/aarch64.c
+index 4d2283349..23bc18feb 100644
+--- a/gcc/config/aarch64/aarch64.c
++++ b/gcc/config/aarch64/aarch64.c
+@@ -15887,6 +15887,8 @@ aarch64_expand_compare_and_swap (rtx operands[])
+         rval = copy_to_mode_reg (r_mode, oldval);
+       else
+ 	emit_move_insn (rval, gen_lowpart (r_mode, oldval));
++      if (mode == TImode)
++	newval = force_reg (mode, newval);
+ 
+       emit_insn (gen_aarch64_compare_and_swap_lse (mode, rval, mem,
+ 						   newval, mod_s));
+diff --git a/gcc/testsuite/gcc.dg/pr114310.c b/gcc/testsuite/gcc.dg/pr114310.c
+new file mode 100644
+index 000000000..55edd800e
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr114310.c
+@@ -0,0 +1,20 @@
++/* PR target/114310 */
++/* { dg-do run { target int128 } } */
++
++volatile __attribute__((aligned (sizeof (__int128_t)))) __int128_t v = 10;
++
++int
++main ()
++{
++#if __GCC_HAVE_SYNC_COMPARE_AND_SWAP_16
++  if (__sync_val_compare_and_swap (&v, (__int128_t) 10, (__int128_t) 0) != 10)
++    __builtin_abort ();
++  if (__sync_val_compare_and_swap (&v, (__int128_t) 10, (__int128_t) 15) != 0)
++    __builtin_abort ();
++  if (__sync_val_compare_and_swap (&v, (__int128_t) 0, (__int128_t) 42) != 0)
++    __builtin_abort ();
++  if (__sync_val_compare_and_swap (&v, (__int128_t) 31, (__int128_t) 35) != 42)
++    __builtin_abort ();
++#endif
++  return 0;
++}
