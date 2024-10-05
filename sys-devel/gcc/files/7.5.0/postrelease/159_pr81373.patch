@@ -1,0 +1,78 @@
+diff --git a/gcc/graphite-scop-detection.c b/gcc/graphite-scop-detection.c
+index 6824d0cad..a4d4daf13 100644
+--- a/gcc/graphite-scop-detection.c
++++ b/gcc/graphite-scop-detection.c
+@@ -1736,17 +1736,20 @@ build_cross_bb_scalars_def (scop_p scop, tree def, basic_block def_bb,
+   if (!def || !is_gimple_reg (def))
+     return;
+ 
+-  /* Do not gather scalar variables that can be analyzed by SCEV as they can be
+-     generated out of the induction variables.  */
+-  if (scev_analyzable_p (def, scop->scop_info->region))
+-    return;
++  bool scev_analyzable = scev_analyzable_p (def, scop->scop_info->region);
+ 
+   gimple *use_stmt;
+   imm_use_iterator imm_iter;
+   FOR_EACH_IMM_USE_STMT (use_stmt, imm_iter, def)
+-    if ((def_bb != gimple_bb (use_stmt) && !is_gimple_debug (use_stmt))
+-	/* PHIs have their effect at "BBs" on the edges.  See PR79622.  */
+-	|| gimple_code (SSA_NAME_DEF_STMT (def)) == GIMPLE_PHI)
++    /* Do not gather scalar variables that can be analyzed by SCEV as they can
++       be generated out of the induction variables.  */
++    if ((! scev_analyzable
++	 /* But gather SESE liveouts as we otherwise fail to rewrite their
++	    exit PHIs.  */
++	 || ! bb_in_sese_p (gimple_bb (use_stmt), scop->scop_info->region))
++	&& ((def_bb != gimple_bb (use_stmt) && !is_gimple_debug (use_stmt))
++	    /* PHIs have their effect at "BBs" on the edges.  See PR79622.  */
++	    || gimple_code (SSA_NAME_DEF_STMT (def)) == GIMPLE_PHI))
+       {
+ 	writes->safe_push (def);
+ 	DEBUG_PRINT (dp << "Adding scalar write: ";
+diff --git a/gcc/testsuite/gcc.dg/graphite/pr81373.c b/gcc/testsuite/gcc.dg/graphite/pr81373.c
+new file mode 100644
+index 000000000..588b9d007
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/graphite/pr81373.c
+@@ -0,0 +1,40 @@
++/* { dg-options "-fno-tree-scev-cprop -fgraphite-identity -O -fdump-tree-graphite-all" } */
++
++void bar (void);
++
++int toto()
++{
++  int i, j, k;
++  int a[101][100];
++  int b[100];
++
++  for (i = 1; i < 100; i++)
++    {
++      for (j = 1; j < 100; j++)
++	for (k = 1; k < 100; k++)
++	  a[j][k] = a[j+1][i-1] + 2;
++
++      b[i] = b[i-1] + 2;
++
++      bar ();
++
++      for (j = 1; j < 100; j++)
++	a[j][i] = a[j+1][i-1] + 2;
++
++      b[i] = b[i-1] + 2;
++
++      bar ();
++
++      for (j = 1; j < 100; j++)
++	a[j][i] = a[j+1][i-1] + 2;
++
++      b[i] = a[i-1][i] + 2;
++
++      for (j = 1; j < 100; j++)
++	a[j][i] = a[j+1][i-1] + 2;
++    }
++
++  return a[3][5] + b[1];
++}
++
++/* { dg-final { scan-tree-dump-times "number of SCoPs: 2" 1 "graphite"} } */

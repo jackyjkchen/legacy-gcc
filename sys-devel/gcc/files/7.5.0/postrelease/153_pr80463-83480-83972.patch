@@ -1,0 +1,170 @@
+diff --git a/gcc/sel-sched-ir.c b/gcc/sel-sched-ir.c
+index 63adace7a..d5a918644 100644
+--- a/gcc/sel-sched-ir.c
++++ b/gcc/sel-sched-ir.c
+@@ -3297,11 +3297,22 @@ has_dependence_note_mem_dep (rtx mem ATTRIBUTE_UNUSED,
+ 
+ /* Note a dependence.  */
+ static void
+-has_dependence_note_dep (insn_t pro ATTRIBUTE_UNUSED,
+-			 ds_t ds ATTRIBUTE_UNUSED)
+-{
+-  if (!sched_insns_conditions_mutex_p (has_dependence_data.pro,
+-				       VINSN_INSN_RTX (has_dependence_data.con)))
++has_dependence_note_dep (insn_t pro, ds_t ds ATTRIBUTE_UNUSED)
++{
++  insn_t real_pro = has_dependence_data.pro;
++  insn_t real_con = VINSN_INSN_RTX (has_dependence_data.con);
++
++  /* We do not allow for debug insns to move through others unless they
++     are at the start of bb.  This movement may create bookkeeping copies
++     that later would not be able to move up, violating the invariant
++     that a bookkeeping copy should be movable as the original insn.
++     Detect that here and allow that movement if we allowed it before
++     in the first place.  */
++  if (DEBUG_INSN_P (real_con)
++      && INSN_UID (NEXT_INSN (pro)) == INSN_UID (real_con))
++    return;
++
++  if (!sched_insns_conditions_mutex_p (real_pro, real_con))
+     {
+       ds_t *dsp = &has_dependence_data.has_dep_p[has_dependence_data.where];
+ 
+@@ -3894,6 +3905,19 @@ tidy_control_flow (basic_block xbb, bool full_tidying)
+ 
+       gcc_assert (EDGE_SUCC (xbb->prev_bb, 0)->flags & EDGE_FALLTHRU);
+ 
++      /* We could have skipped some debug insns which did not get removed with the block,
++         and the seqnos could become incorrect.  Fix them up here.  */
++      if (MAY_HAVE_DEBUG_INSNS && (sel_bb_head (xbb) != first || sel_bb_end (xbb) != last))
++       {
++         if (!sel_bb_empty_p (xbb->prev_bb))
++           {
++             int prev_seqno = INSN_SEQNO (sel_bb_end (xbb->prev_bb));
++             if (prev_seqno > INSN_SEQNO (sel_bb_head (xbb)))
++               for (insn_t insn = sel_bb_head (xbb); insn != first; insn = NEXT_INSN (insn))
++                 INSN_SEQNO (insn) = prev_seqno + 1;
++           }
++       }
++
+       /* It can turn out that after removing unused jump, basic block
+          that contained that jump, becomes empty too.  In such case
+          remove it too.  */
+diff --git a/gcc/testsuite/g++.dg/pr80463.C b/gcc/testsuite/g++.dg/pr80463.C
+new file mode 100644
+index 000000000..417eeaa5d
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/pr80463.C
+@@ -0,0 +1,20 @@
++/* { dg-do compile { target powerpc*-*-* ia64-*-* i?86-*-* x86_64-*-* } } */
++/* { dg-options "-g -fselective-scheduling2 -O2 -fvar-tracking-assignments -w" } */
++
++int *a;
++int b, c;
++void
++d ()
++{
++  for (int e; c; e++)
++    switch (e)
++      {
++      case 0:
++       a[e] = 1;
++      case 1:
++       b = 2;
++       break;
++      default:
++       a[e] = 3;
++      }
++}
+diff --git a/gcc/testsuite/gcc.dg/pr80463.c b/gcc/testsuite/gcc.dg/pr80463.c
+new file mode 100644
+index 000000000..cebf2fef1
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr80463.c
+@@ -0,0 +1,54 @@
++/* { dg-do compile { target powerpc*-*-* ia64-*-* i?86-*-* x86_64-*-* } } */
++/* { dg-options "-g -O2 -fvar-tracking-assignments -fselective-scheduling2 -ftree-loop-vectorize -fnon-call-exceptions -fno-tree-vrp -fno-gcse-lm -fno-tree-loop-im -fno-reorder-blocks-and-partition -fno-reorder-blocks -fno-move-loop-invariants -w" } */
++
++short int t2;
++int cd, aa, ft;
++
++void
++dh (void)
++{
++  int qs = 0;
++
++  if (t2 < 1)
++    {
++      int bq = 0;
++
++      while (bq < 1)
++        {
++        }
++
++      while (t2 < 1)
++        {
++          if (t2 == 0)
++            {
++              bq = 0;
++              cd = !!cd;
++            }
++          else
++            {
++              bq = 1;
++              cd = bq > qs;
++            }
++
++          t2 += cd;
++          bq = (t2 / qs) == bq;
++
++          if (aa != ft)
++            {
++              qs %= 0;
++              while (bq != 0)
++                {
++ ro:
++                  ;
++                }
++            }
++
++          ++t2;
++        }
++
++ ia:
++      goto ro;
++    }
++
++  goto ia;
++}
+diff --git a/gcc/testsuite/gcc.dg/pr83972.c b/gcc/testsuite/gcc.dg/pr83972.c
+new file mode 100644
+index 000000000..b8de42cef
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr83972.c
+@@ -0,0 +1,26 @@
++/* { dg-do compile { target powerpc*-*-* ia64-*-* i?86-*-* x86_64-*-* } } */
++/* { dg-options "-O1 -fschedule-insns -fselective-scheduling -fsel-sched-pipelining -fvar-tracking-assignments -funroll-loops -fno-tree-dominator-opts -w" } */
++
++int s7, p0;
++
++void
++i0 (int ke)
++{
++  while (ke < 1)
++    {
++      if (s7 == 0)
++        p0 = 0;
++      else
++        {
++          if (p0 == 0)
++            s7 = 0;
++
++          if (!!s7 || !!p0)
++            s7 = 0;
++          else
++            p0 = 0;
++        }
++
++      ++ke;
++    }
++}

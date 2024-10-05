@@ -1,0 +1,58 @@
+diff --git a/gcc/cp/decl.c b/gcc/cp/decl.c
+index 784267d17..6c975aa7f 100644
+--- a/gcc/cp/decl.c
++++ b/gcc/cp/decl.c
+@@ -6001,7 +6001,7 @@ reshape_init_r (tree type, reshape_iter *d, bool first_initializer_p,
+      non-empty subaggregate, brace elision is assumed and the
+      initializer is considered for the initialization of the first
+      member of the subaggregate.  */
+-  if (TREE_CODE (init) != CONSTRUCTOR
++  if ((TREE_CODE (init) != CONSTRUCTOR || COMPOUND_LITERAL_P (init))
+       /* But don't try this for the first initializer, since that would be
+ 	 looking through the outermost braces; A a2 = { a1 }; is not a
+ 	 valid aggregate initialization.  */
+diff --git a/gcc/testsuite/g++.dg/cpp0x/initlist123.C b/gcc/testsuite/g++.dg/cpp0x/initlist123.C
+new file mode 100644
+index 000000000..29f037f07
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/initlist123.C
+@@ -0,0 +1,39 @@
++// PR c++/95164
++// { dg-do compile { target c++11 } }
++// { dg-options "-Wmissing-braces" }
++
++struct H {
++  int a;
++};
++
++struct X : H { };
++
++struct I {
++  int c;
++  H b;
++};
++struct E { I d; };
++void foo(E);
++
++template<int N>
++void fn ()
++{
++  int a = 42;
++  int &k = a;
++
++  foo({1, {H{k}}}); // { dg-warning "missing braces around initializer for .I." }
++  foo({1, {X{k}}}); // { dg-warning "missing braces around initializer for .I." }
++
++  foo({{1, {k}}});
++  foo({{1, {N}}});
++
++  foo({{1, H{k}}});
++  foo({{1, H{N}}});
++  foo({{1, X{k}}});
++  foo({{1, X{N}}});
++
++  foo({{1, {H{k}}}});
++  foo({{1, {H{N}}}});
++  foo({{1, {X{k}}}});
++  foo({{1, {X{N}}}});
++}

@@ -1,0 +1,46 @@
+diff --git a/gcc/testsuite/gcc.dg/pr96579.c b/gcc/testsuite/gcc.dg/pr96579.c
+new file mode 100644
+index 000000000..982f8ac17
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr96579.c
+@@ -0,0 +1,4 @@
++/* { dg-do compile { target dfp } } */
++/* { dg-options "-O -fno-tree-forwprop -ffast-math -fno-tree-vrp" } */
++
++#include "pr96370.c"
+diff --git a/gcc/tree-ssa-reassoc.c b/gcc/tree-ssa-reassoc.c
+index 7d1dc0e6a..f86b75e65 100644
+--- a/gcc/tree-ssa-reassoc.c
++++ b/gcc/tree-ssa-reassoc.c
+@@ -4944,13 +4944,20 @@ linearize_expr_tree (vec<operand_entry *> *ops, gimple *stmt,
+ 
+       if (!binrhsisreassoc)
+ 	{
+-	  if (!try_special_add_to_ops (ops, rhscode, binrhs, binrhsdef))
++	  bool swap = false;
++	  if (try_special_add_to_ops (ops, rhscode, binrhs, binrhsdef))
++	    /* If we add ops for the rhs we expect to be able to recurse
++	       to it via the lhs during expression rewrite so swap
++	       operands.  */
++	    swap = true;
++	  else
+ 	    add_to_ops_vec (ops, binrhs);
+ 
+ 	  if (!try_special_add_to_ops (ops, rhscode, binlhs, binlhsdef))
+ 	    add_to_ops_vec (ops, binlhs);
+ 
+-	  return;
++	  if (!swap)
++	    return;
+ 	}
+ 
+       if (dump_file && (dump_flags & TDF_DETAILS))
+@@ -4969,6 +4976,8 @@ linearize_expr_tree (vec<operand_entry *> *ops, gimple *stmt,
+ 	  fprintf (dump_file, " is now ");
+ 	  print_gimple_stmt (dump_file, stmt, 0, 0);
+ 	}
++      if (!binrhsisreassoc)
++	return;
+ 
+       /* We want to make it so the lhs is always the reassociative op,
+ 	 so swap.  */

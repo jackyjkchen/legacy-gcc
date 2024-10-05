@@ -1,0 +1,93 @@
+diff --git a/gcc/cp/decl2.c b/gcc/cp/decl2.c
+index 5da577463..12563cad5 100644
+--- a/gcc/cp/decl2.c
++++ b/gcc/cp/decl2.c
+@@ -4771,6 +4771,8 @@ c_parse_final_cleanups (void)
+ 	  if (!DECL_SAVED_TREE (decl))
+ 	    continue;
+ 
++	  cgraph_node *node = cgraph_node::get_create (decl);
++
+ 	  /* We lie to the back end, pretending that some functions
+ 	     are not defined when they really are.  This keeps these
+ 	     functions from being put out unnecessarily.  But, we must
+@@ -4791,9 +4793,6 @@ c_parse_final_cleanups (void)
+ 	      && DECL_INITIAL (decl)
+ 	      && decl_needed_p (decl))
+ 	    {
+-	      struct cgraph_node *node, *next;
+-
+-	      node = cgraph_node::get (decl);
+ 	      if (node->cpp_implicit_alias)
+ 		node = node->get_alias_target ();
+ 
+@@ -4803,7 +4802,8 @@ c_parse_final_cleanups (void)
+ 		 group, we need to mark all symbols in the same comdat group
+ 		 that way.  */
+ 	      if (node->same_comdat_group)
+-		for (next = dyn_cast<cgraph_node *> (node->same_comdat_group);
++		for (cgraph_node *next
++		       = dyn_cast<cgraph_node *> (node->same_comdat_group);
+ 		     next != node;
+ 		     next = dyn_cast<cgraph_node *> (next->same_comdat_group))
+ 		  next->call_for_symbol_thunks_and_aliases (clear_decl_external,
+@@ -4817,7 +4817,7 @@ c_parse_final_cleanups (void)
+ 	  if (!DECL_EXTERNAL (decl)
+ 	      && decl_needed_p (decl)
+ 	      && !TREE_ASM_WRITTEN (decl)
+-	      && !cgraph_node::get (decl)->definition)
++	      && !node->definition)
+ 	    {
+ 	      /* We will output the function; no longer consider it in this
+ 		 loop.  */
+diff --git a/gcc/testsuite/g++.dg/other/fsyntax-only1.C b/gcc/testsuite/g++.dg/other/fsyntax-only1.C
+new file mode 100644
+index 000000000..19adb7e61
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/other/fsyntax-only1.C
+@@ -0,0 +1,45 @@
++// PR c++/80831
++// { dg-options -fsyntax-only }
++// { dg-do compile { target c++11 } }
++
++class A
++{
++public:
++    virtual ~A() { }
++};
++
++class B { };
++
++class C : public A { };
++
++template<class J>
++class D : public C
++{
++public:
++    D() { }
++    ~D() { }
++};
++
++class E
++{
++public:
++    static E& p();
++    B q();
++    template<class J>
++    B q(void (J::*r)())
++    {
++        new D<J>();
++        return q();
++    }
++};
++
++void t()
++{
++  class F
++  {
++  public:
++    virtual void s() { }
++  };
++  E& x = E::p();
++  B y = x.q(&F::s);
++}

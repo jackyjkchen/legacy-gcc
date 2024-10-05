@@ -1,0 +1,115 @@
+diff --git a/gcc/cp/parser.c b/gcc/cp/parser.c
+index 70bb0d156..82ba3fbf4 100644
+--- a/gcc/cp/parser.c
++++ b/gcc/cp/parser.c
+@@ -39,6 +39,7 @@ along with GCC; see the file COPYING3.  If not see
+ #include "gomp-constants.h"
+ #include "c-family/c-indentation.h"
+ #include "context.h"
++#include "tree-iterator.h"
+ 
+ 
+ /* The lexer.  */
+@@ -33507,7 +33508,33 @@ cp_parser_omp_for_loop_init (cp_parser *parser,
+ 		  init = NULL_TREE;
+ 		}
+ 	      else
+-		init = pop_stmt_list (this_pre_body);
++		{
++		  init = pop_stmt_list (this_pre_body);
++		  if (init && TREE_CODE (init) == STATEMENT_LIST)
++		    {
++		      tree_stmt_iterator i = tsi_start (init);
++		      /* Move lambda DECL_EXPRs to FOR_BLOCK.  */
++		      while (!tsi_end_p (i))
++			{
++			  tree t = tsi_stmt (i);
++			  if (TREE_CODE (t) == DECL_EXPR
++			      && TREE_CODE (DECL_EXPR_DECL (t)) == TYPE_DECL)
++			    {
++			      tsi_delink (&i);
++			      vec_safe_push (for_block, t);
++			      continue;
++			    }
++			  break;
++			}
++		      if (tsi_one_before_end_p (i))
++			{
++			  tree t = tsi_stmt (i);
++			  tsi_delink (&i);
++			  free_stmt_list (init);
++			  init = t;
++			}
++		    }
++		}
+ 	      this_pre_body = NULL_TREE;
+ 	    }
+ 	  else
+@@ -33911,7 +33938,13 @@ cp_parser_omp_for_loop (cp_parser *parser, enum tree_code code, tree clauses,
+     }
+ 
+   while (!for_block->is_empty ())
+-    add_stmt (pop_stmt_list (for_block->pop ()));
++    {
++      tree t = for_block->pop ();
++      if (TREE_CODE (t) == STATEMENT_LIST)
++	add_stmt (pop_stmt_list (t));
++      else
++	add_stmt (t);
++    }
+   release_tree_vector (for_block);
+ 
+   return ret;
+diff --git a/libgomp/testsuite/libgomp.c++/pr58706.C b/libgomp/testsuite/libgomp.c++/pr58706.C
+new file mode 100644
+index 000000000..3d8ea89ce
+--- /dev/null
++++ b/libgomp/testsuite/libgomp.c++/pr58706.C
+@@ -0,0 +1,47 @@
++// PR c++/58706
++// { dg-do run }
++// { dg-options "-std=c++11" }
++
++template <typename T>
++T
++foo ()
++{
++  T n = T ();
++#pragma omp parallel for reduction (+: n)
++  for (T i = [](){ return 3; }(); i < 10; ++i)
++    n++;
++  return n;
++}
++
++template <typename T>
++T
++bar ()
++{
++  T n = T ();
++#pragma omp parallel for reduction (+: n)
++  for (T i = [](){ return 1; }() + [](){ return 4; }(); i < 10; ++i)
++    n++;
++  return n;
++}
++
++template <typename T>
++T
++baz ()
++{
++  T n = T ();
++#pragma omp parallel for reduction (+: n)
++  for (T i = T (); i < [](){ return 7; }() + [](){ return 11; }(); i += [](){ return 3; }() - [](){ return 1; }())
++    n++;
++  return n;
++}
++
++int
++main ()
++{
++  if (foo <int> () != 7 || foo <long long> () != 7)
++    __builtin_abort ();
++  if (bar <int> () != 5 || bar <char> () != 5)
++    __builtin_abort ();
++  if (baz <int> () != 9 || baz <long long> () != 9)
++    __builtin_abort ();
++}

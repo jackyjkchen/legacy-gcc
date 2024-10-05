@@ -1,0 +1,41 @@
+diff --git a/gcc/lto-streamer-out.c b/gcc/lto-streamer-out.c
+index 6b74817c5..e49934bb2 100644
+--- a/gcc/lto-streamer-out.c
++++ b/gcc/lto-streamer-out.c
+@@ -2078,6 +2078,9 @@ output_function (struct cgraph_node *node)
+      debug info.  */
+   if (gimple_has_body_p (function))
+     {
++      /* Fixup loops if required to match discovery done in the reader.  */
++      loop_optimizer_init (AVOID_CFG_MODIFICATIONS);
++
+       streamer_write_uhwi (ob, 1);
+       output_struct_function_base (ob, fn);
+ 
+@@ -2135,6 +2138,7 @@ output_function (struct cgraph_node *node)
+ 
+       output_cfg (ob, fn);
+ 
++      loop_optimizer_finalize ();
+       pop_cfun ();
+    }
+   else
+diff --git a/libgomp/testsuite/libgomp.oacc-c-c++-common/pr85422.c b/libgomp/testsuite/libgomp.oacc-c-c++-common/pr85422.c
+new file mode 100644
+index 000000000..bcc551d67
+--- /dev/null
++++ b/libgomp/testsuite/libgomp.oacc-c-c++-common/pr85422.c
+@@ -0,0 +1,13 @@
++/* { dg-do link } */
++
++int
++main (void)
++{
++  #pragma acc parallel
++  #pragma acc loop
++  for (int i = 1; i < 10; i++)
++    for (;;)
++      ;
++
++  return 0;
++}

@@ -1,0 +1,59 @@
+diff --git a/gcc/c-family/cilk.c b/gcc/c-family/cilk.c
+index 0b876b9fd..2bfa25d4a 100644
+--- a/gcc/c-family/cilk.c
++++ b/gcc/c-family/cilk.c
+@@ -312,8 +312,9 @@ create_cilk_helper_decl (struct wrapper_data *wd)
+     gcc_unreachable (); 
+   
+   clean_symbol_name (name);
+-  tree fndecl = build_decl (UNKNOWN_LOCATION, FUNCTION_DECL, 
+-			    get_identifier (name), wd->fntype);
++
++  tree fndecl = build_decl (DECL_SOURCE_LOCATION (current_function_decl),
++			    FUNCTION_DECL, get_identifier (name), wd->fntype);
+ 
+   TREE_PUBLIC (fndecl) = 0;
+   TREE_STATIC (fndecl) = 1;
+diff --git a/gcc/coverage.c b/gcc/coverage.c
+index 7ee37aa29..e8f310cbd 100644
+--- a/gcc/coverage.c
++++ b/gcc/coverage.c
+@@ -553,7 +553,8 @@ coverage_compute_lineno_checksum (void)
+     = expand_location (DECL_SOURCE_LOCATION (current_function_decl));
+   unsigned chksum = xloc.line;
+ 
+-  chksum = coverage_checksum_string (chksum, xloc.file);
++  if (xloc.file)
++    chksum = coverage_checksum_string (chksum, xloc.file);
+   chksum = coverage_checksum_string
+     (chksum, IDENTIFIER_POINTER (DECL_ASSEMBLER_NAME (current_function_decl)));
+ 
+@@ -580,7 +581,8 @@ coverage_compute_profile_id (struct cgraph_node *n)
+       bool use_name_only = (PARAM_VALUE (PARAM_PROFILE_FUNC_INTERNAL_ID) == 0);
+ 
+       chksum = (use_name_only ? 0 : xloc.line);
+-      chksum = coverage_checksum_string (chksum, xloc.file);
++      if (xloc.file)
++	chksum = coverage_checksum_string (chksum, xloc.file);
+       chksum = coverage_checksum_string
+ 	(chksum, IDENTIFIER_POINTER (DECL_ASSEMBLER_NAME (n->decl)));
+       if (!use_name_only && first_global_object_name)
+diff --git a/gcc/testsuite/g++.dg/cilk-plus/pr69028.C b/gcc/testsuite/g++.dg/cilk-plus/pr69028.C
+new file mode 100644
+index 000000000..31542f34e
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cilk-plus/pr69028.C
+@@ -0,0 +1,13 @@
++// PR c++/69028
++// { dg-require-effective-target c++11 }
++// { dg-options "-fcilkplus -fprofile-arcs" }
++
++void parallel()
++{
++}
++
++int main()
++{
++   _Cilk_spawn parallel();
++   _Cilk_sync;
++}

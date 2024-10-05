@@ -1,0 +1,71 @@
+diff --git a/gcc/cp/constexpr.c b/gcc/cp/constexpr.c
+index ff2d20afc..5af624a65 100644
+--- a/gcc/cp/constexpr.c
++++ b/gcc/cp/constexpr.c
+@@ -5654,6 +5654,25 @@ potential_constant_expression_1 (tree t, bool want_rval, bool strict,
+ 		      TREE_TYPE (t));
+ 	  return false;
+ 	}
++      /* This might be a conversion from a class to a (potentially) literal
++	 type.  Let's consider it potentially constant since the conversion
++	 might be a constexpr user-defined conversion.  */
++      else if (cxx_dialect >= cxx11
++	       && (dependent_type_p (TREE_TYPE (t))
++		   || !COMPLETE_TYPE_P (TREE_TYPE (t))
++		   || literal_type_p (TREE_TYPE (t)))
++	       && TREE_OPERAND (t, 0))
++	{
++	  tree type = TREE_TYPE (TREE_OPERAND (t, 0));
++	  /* If this is a dependent type, it could end up being a class
++	     with conversions.  */
++	  if (type == NULL_TREE || WILDCARD_TYPE_P (type))
++	    return true;
++	  /* Or a non-dependent class which has conversions.  */
++	  else if (CLASS_TYPE_P (type)
++		   && (TYPE_HAS_CONVERSION (type) || dependent_scope_p (type)))
++	    return true;
++	}
+ 
+       return (RECUR (TREE_OPERAND (t, 0),
+ 		     TREE_CODE (TREE_TYPE (t)) != REFERENCE_TYPE));
+diff --git a/gcc/testsuite/g++.dg/cpp0x/pr51225.C b/gcc/testsuite/g++.dg/cpp0x/pr51225.C
+index f80bd0e77..5b4e432f7 100644
+--- a/gcc/testsuite/g++.dg/cpp0x/pr51225.C
++++ b/gcc/testsuite/g++.dg/cpp0x/pr51225.C
+@@ -5,7 +5,7 @@ template<int> struct A {};
+ 
+ template<typename> void foo()
+ {
+-  A<int(x)> a; // { dg-error "not declared|invalid type" }
++  A<int(x)> a; // { dg-error "not declared|could not convert" }
+ }
+ 
+ template<typename> struct bar
+diff --git a/gcc/testsuite/g++.dg/cpp1z/constexpr-if21.C b/gcc/testsuite/g++.dg/cpp1z/constexpr-if21.C
+new file mode 100644
+index 000000000..56e108be4
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp1z/constexpr-if21.C
+@@ -0,0 +1,22 @@
++// PR c++/85032
++// { dg-options -std=c++17 }
++
++struct A
++{
++  constexpr operator bool () { return true; }
++  int i;
++};
++
++A a;
++
++template <class T>
++void f()
++{
++  constexpr bool b = a;
++  static_assert (a);
++}
++
++int main()
++{
++  f<int>();
++}

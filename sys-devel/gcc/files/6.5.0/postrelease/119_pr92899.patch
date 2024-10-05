@@ -1,0 +1,64 @@
+diff --git a/gcc/fortran/trans-openmp.c b/gcc/fortran/trans-openmp.c
+index cc9afaacb..d891c1d7d 100644
+--- a/gcc/fortran/trans-openmp.c
++++ b/gcc/fortran/trans-openmp.c
+@@ -2839,7 +2839,6 @@ gfc_trans_omp_atomic (gfc_code *code)
+   expr2 = code->expr2;
+   if (((atomic_code->ext.omp_atomic & GFC_OMP_ATOMIC_MASK)
+        != GFC_OMP_ATOMIC_WRITE)
+-      && (atomic_code->ext.omp_atomic & GFC_OMP_ATOMIC_SWAP) == 0
+       && expr2->expr_type == EXPR_FUNCTION
+       && expr2->value.function.isym
+       && expr2->value.function.isym->id == GFC_ISYM_CONVERSION)
+diff --git a/libgomp/testsuite/libgomp.fortran/atomic1.f90 b/libgomp/testsuite/libgomp.fortran/atomic1.f90
+new file mode 100644
+index 000000000..e0c13536f
+--- /dev/null
++++ b/libgomp/testsuite/libgomp.fortran/atomic1.f90
+@@ -0,0 +1,46 @@
++! PR fortran/92899
++
++program pr92899
++  real :: x = 1.0
++  double precision :: y
++  integer(kind=4) :: z = 4
++  integer(kind=8) :: w
++  !$omp atomic capture
++  y = x
++  x = 2.0
++  !$omp end atomic
++  if (y /= 1.0 .or. x /= 2.0) stop 1
++  !$omp atomic capture
++  x = y
++  y = 3.0
++  !$omp end atomic
++  if (x /= 1.0 .or. y /= 3.0) stop 2
++  !$omp atomic capture
++  w = z
++  z = 5
++  !$omp end atomic
++  if (w /= 4 .or. z /= 5) stop 3
++  !$omp atomic capture
++  z = w
++  w = 6
++  !$omp end atomic
++  if (z /= 4 .or. w /= 6) stop 4
++  !$omp atomic write
++  x = y
++  !$omp end atomic
++  if (x /= 3.0 .or. y /= 3.0) stop 5
++  x = 7.0
++  !$omp atomic write
++  y = x
++  !$omp end atomic
++  if (x /= 7.0 .or. y /= 7.0) stop 6
++  !$omp atomic write
++  z = w
++  !$omp end atomic
++  if (z /= 6 .or. w /= 6) stop 7
++  z = 8
++  !$omp atomic write
++  w = z
++  !$omp end atomic
++  if (z /= 8 .or. w /= 8) stop 8
++end

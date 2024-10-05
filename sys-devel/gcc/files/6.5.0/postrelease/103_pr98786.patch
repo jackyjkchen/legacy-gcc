@@ -1,0 +1,53 @@
+diff --git a/gcc/testsuite/gcc.dg/torture/pr98786.c b/gcc/testsuite/gcc.dg/torture/pr98786.c
+new file mode 100644
+index 000000000..ea364717a
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/torture/pr98786.c
+@@ -0,0 +1,23 @@
++/* { dg-do compile } */
++/* { dg-additional-options "-fno-tree-dce" } */
++
++void
++func_30 (void);
++
++int __attribute__ ((pure, returns_twice))
++func_38 (int g_15, int p_39)
++{
++  return !!g_15 ? p_39 : 0;
++}
++
++void
++func_26 (int func_26___trans_tmp_1)
++{
++  long int l_37 = 0;
++  int __trans_tmp_1;
++
++  func_26___trans_tmp_1 = func_38 (func_26___trans_tmp_1, 1);
++  __trans_tmp_1 = func_38 (func_26___trans_tmp_1, l_37);
++  l_37 = 1;
++  func_30 ();
++}
+diff --git a/gcc/tree-ssa-phiopt.c b/gcc/tree-ssa-phiopt.c
+index 5eec48f35..fdef46585 100644
+--- a/gcc/tree-ssa-phiopt.c
++++ b/gcc/tree-ssa-phiopt.c
+@@ -450,6 +450,9 @@ factor_out_conditional_conversion (edge e0, edge e1, gphi *phi,
+       if (!is_gimple_reg_type (TREE_TYPE (new_arg0)))
+ 	return NULL;
+     }
++  if (TREE_CODE (new_arg0) == SSA_NAME
++      && SSA_NAME_OCCURS_IN_ABNORMAL_PHI (new_arg0))
++    return NULL;
+ 
+   if (TREE_CODE (arg1) == SSA_NAME)
+     {
+@@ -464,6 +467,9 @@ factor_out_conditional_conversion (edge e0, edge e1, gphi *phi,
+       new_arg1 = gimple_assign_rhs1 (arg1_def_stmt);
+       if (convert_code == VIEW_CONVERT_EXPR)
+ 	new_arg1 = TREE_OPERAND (new_arg1, 0);
++      if (TREE_CODE (new_arg1) == SSA_NAME
++	  && SSA_NAME_OCCURS_IN_ABNORMAL_PHI (new_arg1))
++	return NULL;
+     }
+   else
+     {

@@ -1,0 +1,83 @@
+diff --git a/gcc/cp/decl.c b/gcc/cp/decl.c
+index 599faec3c..1fcfa0f1d 100644
+--- a/gcc/cp/decl.c
++++ b/gcc/cp/decl.c
+@@ -1259,8 +1259,11 @@ check_redeclaration_exception_specification (tree new_decl,
+       && UNEVALUATED_NOEXCEPT_SPEC_P (old_exceptions))
+     return;
+ 
+-  maybe_instantiate_noexcept (new_decl);
+-  maybe_instantiate_noexcept (old_decl);
++  if (!type_dependent_expression_p (old_decl))
++    {
++      maybe_instantiate_noexcept (new_decl);
++      maybe_instantiate_noexcept (old_decl);
++    }
+   new_exceptions = TYPE_RAISES_EXCEPTIONS (TREE_TYPE (new_decl));
+   old_exceptions = TYPE_RAISES_EXCEPTIONS (TREE_TYPE (old_decl));
+ 
+diff --git a/gcc/cp/except.c b/gcc/cp/except.c
+index c0b39f8c3..6ebc3ae13 100644
+--- a/gcc/cp/except.c
++++ b/gcc/cp/except.c
+@@ -1198,11 +1198,14 @@ build_noexcept_spec (tree expr, int complain)
+ {
+   /* This isn't part of the signature, so don't bother trying to evaluate
+      it until instantiation.  */
+-  if (!processing_template_decl && TREE_CODE (expr) != DEFERRED_NOEXCEPT)
++  if (TREE_CODE (expr) != DEFERRED_NOEXCEPT
++      && (!processing_template_decl
++	  || (flag_noexcept_type && !value_dependent_expression_p (expr))))
+     {
+       expr = perform_implicit_conversion_flags (boolean_type_node, expr,
+ 						complain,
+ 						LOOKUP_NORMAL);
++      expr = instantiate_non_dependent_expr (expr);
+       expr = cxx_constant_value (expr);
+     }
+   if (TREE_CODE (expr) == INTEGER_CST)
+diff --git a/gcc/cp/pt.c b/gcc/cp/pt.c
+index 743716778..3dd11071b 100644
+--- a/gcc/cp/pt.c
++++ b/gcc/cp/pt.c
+@@ -22670,7 +22670,8 @@ maybe_instantiate_noexcept (tree fn)
+   tree fntype, spec, noex, clone;
+ 
+   /* Don't instantiate a noexcept-specification from template context.  */
+-  if (processing_template_decl)
++  if (processing_template_decl
++      && (!flag_noexcept_type || type_dependent_expression_p (fn)))
+     return;
+ 
+   if (DECL_CLONED_FUNCTION_P (fn))
+@@ -22697,10 +22698,10 @@ maybe_instantiate_noexcept (tree fn)
+ 					tf_warning_or_error, fn,
+ 					/*function_p=*/false,
+ 					/*integral_constant_expression_p=*/true);
++	  spec = build_noexcept_spec (noex, tf_warning_or_error);
+ 	  pop_deferring_access_checks ();
+ 	  pop_access_scope (fn);
+ 	  pop_tinst_level ();
+-	  spec = build_noexcept_spec (noex, tf_warning_or_error);
+ 	  if (spec == error_mark_node)
+ 	    spec = noexcept_false_spec;
+ 	}
+diff --git a/gcc/testsuite/g++.dg/template/mem_func_ptr2.C b/gcc/testsuite/g++.dg/template/mem_func_ptr2.C
+new file mode 100644
+index 000000000..9ceabd364
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/template/mem_func_ptr2.C
+@@ -0,0 +1,13 @@
++// PR c++/85356
++
++struct A
++{
++  A& operator=(int);
++};
++
++void foo(A&(A::*)(int));
++
++template<int> void bar()
++{
++  foo(&A::operator=);
++}

@@ -1,0 +1,135 @@
+diff --git a/gcc/cgraph.c b/gcc/cgraph.c
+index e505b10e2..74c0e29f5 100644
+--- a/gcc/cgraph.c
++++ b/gcc/cgraph.c
+@@ -2952,7 +2952,9 @@ cgraph_node::collect_callers (void)
+   return redirect_callers;
+ }
+ 
+-/* Return TRUE if NODE2 a clone of NODE or is equivalent to it.  */
++
++/* Return TRUE if NODE2 a clone of NODE or is equivalent to it.  Return
++   optimistically true if this cannot be determined.  */
+ 
+ static bool
+ clone_of_p (cgraph_node *node, cgraph_node *node2)
+@@ -2964,12 +2966,17 @@ clone_of_p (cgraph_node *node, cgraph_node *node2)
+   /* There are no virtual clones of thunks so check former_clone_of or if we
+      might have skipped thunks because this adjustments are no longer
+      necessary.  */
+-  while (node->thunk.thunk_p)
++  while (node->thunk.thunk_p || node->former_thunk_p ())
+     {
+       if (node2->former_clone_of == node->decl)
+ 	return true;
+       if (!node->thunk.this_adjusting)
+ 	return false;
++      /* In case of instrumented expanded thunks, which can have multiple calls
++	 in them, we do not know how to continue and just have to be
++	 optimistic.  */
++      if (node->callees->next_callee)
++	return true;
+       node = node->callees->callee->ultimate_alias_target ();
+       skipped_thunk = true;
+     }
+@@ -2985,7 +2992,7 @@ clone_of_p (cgraph_node *node, cgraph_node *node2)
+ 	return false;
+     }
+ 
+-  while (node != node2 && node2)
++  while (node2 && node->decl != node2->decl)
+     node2 = node2->clone_of;
+   return node2 != NULL;
+ }
+diff --git a/gcc/cgraph.h b/gcc/cgraph.h
+index ee0538854..49fc7cb3f 100644
+--- a/gcc/cgraph.h
++++ b/gcc/cgraph.h
+@@ -1221,6 +1221,9 @@ public:
+      Note that at WPA stage, the function body may not be present in memory.  */
+   inline bool has_gimple_body_p (void);
+ 
++  /* Return true if this node represents a former, i.e. an expanded, thunk.  */
++  inline bool former_thunk_p (void);
++
+   /* Return true if function should be optimized for size.  */
+   bool optimize_for_size_p (void);
+ 
+@@ -2808,6 +2811,16 @@ cgraph_node::has_gimple_body_p (void)
+   return definition && !thunk.thunk_p && !alias;
+ }
+ 
++/* Return true if this node represents a former, i.e. an expanded, thunk.  */
++
++inline bool
++cgraph_node::former_thunk_p (void)
++{
++  return (!thunk.thunk_p
++	  && (thunk.fixed_offset
++	      || thunk.virtual_offset_p));
++}
++
+ /* Walk all functions with body defined.  */
+ #define FOR_EACH_FUNCTION_WITH_GIMPLE_BODY(node) \
+    for ((node) = symtab->first_function_with_gimple_body (); (node); \
+diff --git a/gcc/testsuite/g++.dg/ipa/pr88235.C b/gcc/testsuite/g++.dg/ipa/pr88235.C
+new file mode 100644
+index 000000000..29f3252b8
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/ipa/pr88235.C
+@@ -0,0 +1,55 @@
++// { dg-do compile }
++// { dg-options "-O1 -fdevirtualize -finline-small-functions -fipa-cp -fipa-cp-clone --param ipa-cp-eval-threshold=125 --param max-inline-insns-single=4" }
++
++extern "C" int printf (const char *, ...);
++enum E { vf_request, vf_event } want;
++
++int errs = 0;
++
++class ivResource {
++public:
++  virtual ~ivResource () { }
++};
++
++class ivHandler   : public ivResource   {
++public:
++  virtual void event() { }
++};
++
++class ivGlyph   : public ivResource   {
++public:
++  virtual ~ivGlyph  () { }
++  virtual void request () {
++    if (want!=vf_request)
++      ++errs;
++  }
++};
++
++class ItemView : public ivGlyph, public ivHandler {
++public:
++  virtual void event () {
++    if (want!=vf_event)
++      ++errs;
++  }
++} a;
++
++ivGlyph *bar() {
++  return &a;
++}
++
++ivHandler *bar2() {
++  return &a;
++}
++
++int main() {
++  want=vf_request;
++  bar()->request();
++  want=vf_event;
++  bar2()->event();
++  if (errs) {
++    printf("FAIL\n");
++    return 1;
++  }
++  printf("PASS\n");
++  return 0;
++}

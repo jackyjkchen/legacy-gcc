@@ -1,0 +1,132 @@
+diff --git a/gcc/cp/semantics.c b/gcc/cp/semantics.c
+index 86619998f..ebf203e81 100644
+--- a/gcc/cp/semantics.c
++++ b/gcc/cp/semantics.c
+@@ -8533,10 +8533,13 @@ finish_omp_cancel (tree clauses)
+   tree ifc = find_omp_clause (clauses, OMP_CLAUSE_IF);
+   if (ifc != NULL_TREE)
+     {
+-      tree type = TREE_TYPE (OMP_CLAUSE_IF_EXPR (ifc));
+-      ifc = fold_build2_loc (OMP_CLAUSE_LOCATION (ifc), NE_EXPR,
+-			     boolean_type_node, OMP_CLAUSE_IF_EXPR (ifc),
+-			     build_zero_cst (type));
++      if (!processing_template_decl)
++	ifc = maybe_convert_cond (OMP_CLAUSE_IF_EXPR (ifc));
++      else
++	ifc = build_x_binary_op (OMP_CLAUSE_LOCATION (ifc), NE_EXPR,
++				 OMP_CLAUSE_IF_EXPR (ifc), ERROR_MARK,
++				 integer_zero_node, ERROR_MARK,
++				 NULL, tf_warning_or_error);
+     }
+   else
+     ifc = boolean_true_node;
+diff --git a/gcc/testsuite/c-c++-common/gomp/cancel-2.c b/gcc/testsuite/c-c++-common/gomp/cancel-2.c
+new file mode 100644
+index 000000000..b69d48f52
+--- /dev/null
++++ b/gcc/testsuite/c-c++-common/gomp/cancel-2.c
+@@ -0,0 +1,10 @@
++/* { dg-do compile } */
++
++void
++foo (void)
++{
++  #pragma omp parallel
++  {
++    #pragma omp cancel parallel if (1) if (1)			/* { dg-error "too many 'if' clauses without modifier" } */
++  }
++}
+diff --git a/gcc/testsuite/g++.dg/gomp/cancel-1.C b/gcc/testsuite/g++.dg/gomp/cancel-1.C
+new file mode 100644
+index 000000000..a6b116785
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/gomp/cancel-1.C
+@@ -0,0 +1,26 @@
++// PR c++/88976
++// { dg-do compile }
++
++template <class T> void
++foo (T x)
++{
++#pragma omp parallel
++  {
++  #pragma omp cancel parallel if (x)
++  }
++#pragma omp parallel
++  {
++  #pragma omp cancel parallel if (1 == 1)
++  }
++}
++
++void
++bar (int x, double y, long long z)
++{
++  foo (0);
++  foo (1LL);
++  foo (1.25);
++  foo (x);
++  foo (y);
++  foo (z);
++}
+diff --git a/gcc/testsuite/g++.dg/gomp/cancel-2.C b/gcc/testsuite/g++.dg/gomp/cancel-2.C
+new file mode 100644
+index 000000000..c9269e7b3
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/gomp/cancel-2.C
+@@ -0,0 +1,20 @@
++// PR c++/88976
++// { dg-do compile }
++
++template <class T> void
++foo (T x)
++{
++#pragma omp parallel
++  {
++  #pragma omp cancel parallel if (x)	// { dg-error "no match for" }
++  }
++}
++
++struct S {};
++
++void
++bar ()
++{
++  S s;
++  foo (s);
++}
+diff --git a/gcc/testsuite/g++.dg/gomp/cancel-3.C b/gcc/testsuite/g++.dg/gomp/cancel-3.C
+new file mode 100644
+index 000000000..87e757b77
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/gomp/cancel-3.C
+@@ -0,0 +1,12 @@
++// { dg-do compile }
++
++struct S { int s; } s;
++
++void
++foo (void)
++{
++  #pragma omp parallel
++  {
++    #pragma omp cancel parallel if (s)	// { dg-error "could not convert 's' from 'S' to 'bool'" }
++  }
++}
+diff --git a/gcc/testsuite/gcc.dg/gomp/cancel-1.c b/gcc/testsuite/gcc.dg/gomp/cancel-1.c
+new file mode 100644
+index 000000000..c2832905d
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/gomp/cancel-1.c
+@@ -0,0 +1,12 @@
++/* { dg-do compile } */
++
++struct S { int s; } s;
++
++void
++foo (void)
++{
++  #pragma omp parallel
++  {
++    #pragma omp cancel parallel if (s)	/* { dg-error "used struct type value where scalar is required" } */
++  }
++}

@@ -1,0 +1,85 @@
+diff --git a/gcc/fortran/resolve.c b/gcc/fortran/resolve.c
+index 31a6660dd..c3661a5dd 100644
+--- a/gcc/fortran/resolve.c
++++ b/gcc/fortran/resolve.c
+@@ -12515,26 +12515,23 @@ gfc_resolve_finalizers (gfc_symbol* derived, bool *finalizable)
+   if (parent)
+     gfc_resolve_finalizers (parent, finalizable);
+ 
+-  /* Return early when not finalizable. Additionally, ensure that derived-type
+-     components have a their finalizables resolved.  */
+-  if (!derived->f2k_derived || !derived->f2k_derived->finalizers)
+-    {
+-      bool has_final = false;
+-      for (c = derived->components; c; c = c->next)
+-	if (c->ts.type == BT_DERIVED
+-	    && !c->attr.pointer && !c->attr.proc_pointer && !c->attr.allocatable)
+-	  {
+-	    bool has_final2 = false;
+-	    if (!gfc_resolve_finalizers (c->ts.u.derived, &has_final))
+-	      return false;  /* Error.  */
+-	    has_final = has_final || has_final2;
+-	  }
+-      if (!has_final)
+-	{
+-	  if (finalizable)
+-	    *finalizable = false;
+-	  return true;
+-	}
++  /* Ensure that derived-type components have a their finalizers resolved.  */
++  bool has_final = derived->f2k_derived && derived->f2k_derived->finalizers;
++  for (c = derived->components; c; c = c->next)
++    if (c->ts.type == BT_DERIVED
++	&& !c->attr.pointer && !c->attr.proc_pointer && !c->attr.allocatable)
++      {
++	bool has_final2 = false;
++	if (!gfc_resolve_finalizers (c->ts.u.derived, &has_final2))
++	  return false;  /* Error.  */
++	has_final = has_final || has_final2;
++      }
++  /* Return early if not finalizable.  */
++  if (!has_final)
++    {
++      if (finalizable)
++	*finalizable = false;
++      return true;
+     }
+ 
+   /* Walk over the list of finalizer-procedures, check them, and if any one
+diff --git a/gcc/testsuite/gfortran.dg/finalize_32.f90 b/gcc/testsuite/gfortran.dg/finalize_32.f90
+new file mode 100644
+index 000000000..45fb7c1e3
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/finalize_32.f90
+@@ -0,0 +1,31 @@
++! { dg-do compile }
++!
++! PR 79311: [OOP] ICE in generate_finalization_wrapper, at fortran/class.c:1992
++!
++! Contributed by DIL <liakhdi@ornl.gov>
++
++module tensor_recursive
++  implicit none
++
++  type :: tens_signature_t
++  contains
++    final :: tens_signature_dtor
++  end type
++
++  type :: tens_header_t
++    type(tens_signature_t) :: signature
++  contains
++    final :: tens_header_dtor
++  end type
++
++contains
++
++  subroutine tens_signature_dtor(this)
++    type(tens_signature_t) :: this
++  end subroutine
++
++  subroutine tens_header_dtor(this)
++    type(tens_header_t) :: this
++  end subroutine
++
++end

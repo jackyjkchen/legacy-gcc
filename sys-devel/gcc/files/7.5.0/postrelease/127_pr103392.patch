@@ -1,0 +1,41 @@
+diff --git a/gcc/fortran/simplify.c b/gcc/fortran/simplify.c
+index df5d7b40e..588d0f5c5 100644
+--- a/gcc/fortran/simplify.c
++++ b/gcc/fortran/simplify.c
+@@ -3772,6 +3772,12 @@ simplify_bound (gfc_expr *array, gfc_expr *dim, gfc_expr *kind, int upper)
+ 	     || (as->type == AS_ASSUMED_SHAPE && upper)))
+     return NULL;
+ 
++  /* 'array' shall not be an unallocated allocatable variable or a pointer that
++     is not associated.  */
++  if (array->expr_type == EXPR_VARIABLE
++      && (gfc_expr_attr (array).allocatable || gfc_expr_attr (array).pointer))
++    return NULL;
++
+   gcc_assert (!as
+ 	      || (as->type != AS_DEFERRED
+ 		  && array->expr_type == EXPR_VARIABLE
+diff --git a/gcc/testsuite/gfortran.dg/bound_simplification_7.f90 b/gcc/testsuite/gfortran.dg/bound_simplification_7.f90
+new file mode 100644
+index 000000000..3efecdff7
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/bound_simplification_7.f90
+@@ -0,0 +1,18 @@
++! { dg-do compile }
++! PR fortran/103392 - ICE in simplify_bound
++
++program p
++  integer, allocatable :: a(1:1) ! { dg-error "deferred shape or assumed rank" }
++  integer :: b(1) = lbound(a)    ! { dg-error "does not reduce" }
++  integer :: c(1) = ubound(a)    ! { dg-error "does not reduce" }
++end
++
++subroutine s(x, y)
++  type t
++     integer :: i(3)
++  end type t
++  type(t), pointer     :: x(:)
++  type(t), allocatable :: y(:)
++  integer, parameter   :: m(1) = ubound (x(1)% i)
++  integer              :: n(1) = ubound (y(1)% i)
++end subroutine s

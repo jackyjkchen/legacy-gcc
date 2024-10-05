@@ -1,0 +1,82 @@
+diff --git a/gcc/cp/pt.c b/gcc/cp/pt.c
+index a52b7825e..89be70db0 100644
+--- a/gcc/cp/pt.c
++++ b/gcc/cp/pt.c
+@@ -24954,8 +24954,10 @@ make_auto (void)
+ tree
+ make_template_placeholder (tree tmpl)
+ {
+-  tree t = make_auto_1 (DECL_NAME (tmpl), true);
++  tree t = make_auto_1 (DECL_NAME (tmpl), false);
+   CLASS_PLACEHOLDER_TEMPLATE (t) = tmpl;
++  /* Our canonical type depends on the placeholder.  */
++  TYPE_CANONICAL (t) = canonical_type_parameter (t);
+   return t;
+ }
+ 
+diff --git a/gcc/cp/typeck.c b/gcc/cp/typeck.c
+index 0447c2030..fb2a22b91 100644
+--- a/gcc/cp/typeck.c
++++ b/gcc/cp/typeck.c
+@@ -1336,6 +1336,11 @@ structural_comptypes (tree t1, tree t2, int strict)
+ 	 template parameters set, they can't be equal.  */
+       if (!comp_template_parms_position (t1, t2))
+ 	return false;
++      /* If T1 and T2 don't represent the same class template deduction,
++         they aren't equal.  */
++      if (CLASS_PLACEHOLDER_TEMPLATE (t1)
++	  != CLASS_PLACEHOLDER_TEMPLATE (t2))
++	return false;
+       /* Constrained 'auto's are distinct from parms that don't have the same
+ 	 constraints.  */
+       if (!equivalent_placeholder_constraints (t1, t2))
+diff --git a/gcc/testsuite/g++.dg/cpp1z/class-deduction58.C b/gcc/testsuite/g++.dg/cpp1z/class-deduction58.C
+new file mode 100644
+index 000000000..82c3f8371
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp1z/class-deduction58.C
+@@ -0,0 +1,16 @@
++// PR c++/86098
++// { dg-additional-options -std=c++17 }
++
++template <class _Res> class future;
++template <class T> T&& declval();
++
++template<template <class...> class T>
++struct construct_deduced {
++  template <class... AN>
++  using deduced_t = decltype(T{declval<AN>()...});
++  template<class... AN>
++  deduced_t<AN...> operator()(AN&&... an) const;
++};
++
++template<class T>
++future<T> future_from(T singleSender);
+diff --git a/gcc/testsuite/g++.dg/cpp1z/class-deduction62.C b/gcc/testsuite/g++.dg/cpp1z/class-deduction62.C
+new file mode 100644
+index 000000000..2baa3acb8
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp1z/class-deduction62.C
+@@ -0,0 +1,22 @@
++// PR c++/88419
++// { dg-additional-options -std=c++17 }
++
++template<class> struct ref_view {
++  template<class T> ref_view(T&&);
++};
++
++template<class R> ref_view(R&) -> ref_view<R>;
++
++struct ref_fn {
++  template<class R> auto operator()(R r) const
++    noexcept(noexcept(ref_view{r}));
++};
++
++template<class R> struct indirect_view {
++  indirect_view(R);
++};
++
++struct indirect_fn {
++  template<class R> auto operator()(R r) const
++    noexcept(noexcept(indirect_view{r}));
++};

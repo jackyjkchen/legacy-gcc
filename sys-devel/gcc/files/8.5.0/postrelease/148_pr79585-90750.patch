@@ -1,0 +1,85 @@
+diff --git a/gcc/cp/cp-tree.h b/gcc/cp/cp-tree.h
+index 12f7cf3b6..6f1e01d18 100644
+--- a/gcc/cp/cp-tree.h
++++ b/gcc/cp/cp-tree.h
+@@ -6371,6 +6371,7 @@ extern tree grokfield (const cp_declarator *, cp_decl_specifier_seq *,
+ 		       tree, bool, tree, tree);
+ extern tree grokbitfield (const cp_declarator *, cp_decl_specifier_seq *,
+ 			  tree, tree, tree);
++extern tree splice_template_attributes		(tree *, tree);
+ extern bool any_dependent_type_attributes_p	(tree);
+ extern tree cp_reconstruct_complex_type		(tree, tree);
+ extern bool attributes_naming_typedef_ok	(tree);
+diff --git a/gcc/cp/decl.c b/gcc/cp/decl.c
+index 9f263c388..82312e059 100644
+--- a/gcc/cp/decl.c
++++ b/gcc/cp/decl.c
+@@ -11125,9 +11125,13 @@ grokdeclarator (const cp_declarator *declarator,
+ 	    attr_flags |= (int) ATTR_FLAG_FUNCTION_NEXT;
+ 	  if (declarator->kind == cdk_array)
+ 	    attr_flags |= (int) ATTR_FLAG_ARRAY_NEXT;
++	  /* Assume that any attributes that get applied late to templates will
++	     DTRT when applied to the declaration as a whole.  */
++	  tree late_attrs = splice_template_attributes (&attrs, type);
+ 	  returned_attrs = decl_attributes (&type,
+ 					    chainon (returned_attrs, attrs),
+ 					    attr_flags);
++	  returned_attrs = chainon (late_attrs, returned_attrs);
+ 	}
+ 
+       inner_declarator = declarator->declarator;
+diff --git a/gcc/cp/decl2.c b/gcc/cp/decl2.c
+index 1a2fce3c4..0d1a61e47 100644
+--- a/gcc/cp/decl2.c
++++ b/gcc/cp/decl2.c
+@@ -1217,7 +1217,7 @@ is_late_template_attribute (tree attr, tree decl)
+    the declaration itself is dependent, so all attributes should be applied
+    at instantiation time.  */
+ 
+-static tree
++tree
+ splice_template_attributes (tree *attr_p, tree decl)
+ {
+   tree *p = attr_p;
+diff --git a/gcc/testsuite/g++.dg/ext/attr-type1.C b/gcc/testsuite/g++.dg/ext/attr-type1.C
+new file mode 100644
+index 000000000..6e84cccea
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/ext/attr-type1.C
+@@ -0,0 +1,19 @@
++// PR c++/90750
++// { dg-do compile { target c++11 } }
++
++template <typename> struct S
++{
++  static const int b = 64;
++};
++
++template <typename a> struct T: S<a>
++{
++  using A = S<a>;
++  using A::b;
++  char* __attribute__((aligned(b))) c;
++};
++
++T<int> t;
++
++#define SA(X) static_assert (X,#X)
++SA (alignof(T<int>) == S<int>::b);
+diff --git a/gcc/testsuite/g++.dg/warn/Wunused-var-26.C b/gcc/testsuite/g++.dg/warn/Wunused-var-26.C
+index b3e020b60..89c53de88 100644
+--- a/gcc/testsuite/g++.dg/warn/Wunused-var-26.C
++++ b/gcc/testsuite/g++.dg/warn/Wunused-var-26.C
+@@ -47,10 +47,10 @@ template <class T>
+ void f_var_type_unused ()
+ {
+   // The variable's type is marked unused.
+-  T* UNUSED t = new T;   // { dg-bogus "unused variable" "bug 79585" { xfail *-*-* } }
++  T* UNUSED t = new T;   // { dg-bogus "unused variable" "bug 79585" }
+ 
+   typedef T U;
+-  U* UNUSED u = new U;   // { dg-bogus "unused variable" "bug 79585" { xfail *-*-* } }
++  U* UNUSED u = new U;   // { dg-bogus "unused variable" "bug 79585" }
+ 
+   typedef T UNUSED U;
+   U v = U ();   // { dg-bogus "unused variable" "bug 79585" }

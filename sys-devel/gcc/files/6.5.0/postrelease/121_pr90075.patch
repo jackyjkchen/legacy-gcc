@@ -1,0 +1,250 @@
+diff --git a/gcc/config/aarch64/aarch64.md b/gcc/config/aarch64/aarch64.md
+index d0517f9cd..f546ce163 100644
+--- a/gcc/config/aarch64/aarch64.md
++++ b/gcc/config/aarch64/aarch64.md
+@@ -130,6 +130,7 @@
+     UNSPEC_RSQRTE
+     UNSPEC_RSQRTS
+     UNSPEC_NZCV
++    UNSPEC_COPYSIGN
+ ])
+ 
+ (define_c_enum "unspecv" [
+@@ -4726,45 +4727,45 @@
+ ;;   LDR d2, #(1 << 63)
+ ;;   BSL v2.8b, [y], [x]
+ ;;
+-;; or another, equivalent, sequence using one of BSL/BIT/BIF.
+-;; aarch64_simd_bsldf will select the best suited of these instructions
+-;; to generate based on register allocation, and knows how to partially
+-;; constant fold based on the values of X and Y, so expand through that.
+-
+-(define_expand "copysigndf3"
+-  [(match_operand:DF 0 "register_operand")
+-   (match_operand:DF 1 "register_operand")
+-   (match_operand:DF 2 "register_operand")]
++;; or another, equivalent, sequence using one of BSL/BIT/BIF.  Because
++;; we expect these operations to nearly always operate on
++;; floating-point values, we do not want the operation to be
++;; simplified into a bit-field insert operation that operates on the
++;; integer side, since typically that would involve three inter-bank
++;; register copies.  As we do not expect copysign to be followed by
++;; other logical operations on the result, it seems preferable to keep
++;; this as an unspec operation, rather than exposing the underlying
++;; logic to the compiler.
++
++(define_expand "copysign<GPF:mode>3"
++  [(match_operand:GPF 0 "register_operand")
++   (match_operand:GPF 1 "register_operand")
++   (match_operand:GPF 2 "register_operand")]
+   "TARGET_FLOAT && TARGET_SIMD"
+ {
+-  rtx mask = gen_reg_rtx (DImode);
+-  emit_move_insn (mask, GEN_INT (HOST_WIDE_INT_1U << 63));
+-  emit_insn (gen_aarch64_simd_bsldf (operands[0], mask,
+-				     operands[2], operands[1]));
++  rtx bitmask = gen_reg_rtx (<V_INT_EQUIV>mode);
++  emit_move_insn (bitmask, GEN_INT (HOST_WIDE_INT_M1U
++				<< (GET_MODE_BITSIZE (<MODE>mode) - 1)));
++  emit_insn (gen_copysign<mode>3_insn (operands[0], operands[1], operands[2],
++				       bitmask));
+   DONE;
+ }
+ )
+ 
+-;; As above, but we must first get to a 64-bit value if we wish to use
+-;; aarch64_simd_bslv2sf.
+-
+-(define_expand "copysignsf3"
+-  [(match_operand:SF 0 "register_operand")
+-   (match_operand:SF 1 "register_operand")
+-   (match_operand:SF 2 "register_operand")]
++(define_insn "copysign<GPF:mode>3_insn"
++  [(set (match_operand:GPF 0 "register_operand" "=w,w,w,r")
++	(unspec:GPF [(match_operand:GPF 1 "register_operand" "w,0,w,r")
++		     (match_operand:GPF 2 "register_operand" "w,w,0,0")
++		     (match_operand:<V_INT_EQUIV> 3 "register_operand"
++		     "0,w,w,X")]
++	 UNSPEC_COPYSIGN))]
+   "TARGET_FLOAT && TARGET_SIMD"
+-{
+-  rtx mask = gen_reg_rtx (DImode);
+-
+-  /* Juggle modes to get us in to a vector mode for BSL.  */
+-  rtx op1 = lowpart_subreg (V2SFmode, operands[1], SFmode);
+-  rtx op2 = lowpart_subreg (V2SFmode, operands[2], SFmode);
+-  rtx tmp = gen_reg_rtx (V2SFmode);
+-  emit_move_insn (mask, GEN_INT (HOST_WIDE_INT_1U << 31));
+-  emit_insn (gen_aarch64_simd_bslv2sf (tmp, mask, op2, op1));
+-  emit_move_insn (operands[0], lowpart_subreg (SFmode, tmp, V2SFmode));
+-  DONE;
+-}
++  "@
++   bsl\\t%0.<Vbtype>, %2.<Vbtype>, %1.<Vbtype>
++   bit\\t%0.<Vbtype>, %2.<Vbtype>, %3.<Vbtype>
++   bif\\t%0.<Vbtype>, %1.<Vbtype>, %3.<Vbtype>
++   bfxil\\t%<w1>0, %<w1>1, #0, <sizem1>"
++  [(set_attr "type" "neon_bsl<q>,neon_bsl<q>,neon_bsl<q>,bfm")]
+ )
+ 
+ ;; -------------------------------------------------------------------
+diff --git a/gcc/config/aarch64/iterators.md b/gcc/config/aarch64/iterators.md
+index d9bd39112..e9958c55e 100644
+--- a/gcc/config/aarch64/iterators.md
++++ b/gcc/config/aarch64/iterators.md
+@@ -394,7 +394,8 @@
+ (define_mode_attr sizen [(QI "8") (HI "16") (SI "32") (DI "64")])
+ 
+ ;; Give the ordinal of the MSB in the mode
+-(define_mode_attr sizem1 [(QI "#7") (HI "#15") (SI "#31") (DI "#63")])
++(define_mode_attr sizem1 [(QI "#7") (HI "#15") (SI "#31") (DI "#63")
++			  (HF "#15") (SF "#31") (DF "#63")])
+ 
+ ;; Attribute to describe constants acceptable in logical operations
+ (define_mode_attr lconst [(SI "K") (DI "L")])
+@@ -449,7 +450,7 @@
+ 			  (V8HF "16b") (V2SF  "8b")
+ 			  (V4SF "16b") (V2DF  "16b")
+ 			  (DI   "8b")  (DF    "8b")
+-			  (SI   "8b")])
++			  (SI   "8b")  (SF    "8b")])
+ 
+ ;; Define element mode for each vector mode.
+ (define_mode_attr VEL [(V8QI "QI") (V16QI "QI")
+@@ -590,6 +591,9 @@
+ ;; Double vector types for ALLX.
+ (define_mode_attr Vallxd [(QI "8b") (HI "4h") (SI "2s")])
+ 
++;; Mode with floating-point values replaced by like-sized integers.
++(define_mode_attr V_INT_EQUIV [(DF "DI") (SF "SI")])
++
+ ;; Mode of result of comparison operations.
+ (define_mode_attr V_cmp_result [(V8QI "V8QI") (V16QI "V16QI")
+ 				(V4HI "V4HI") (V8HI  "V8HI")
+diff --git a/gcc/testsuite/gcc.target/aarch64/pr90075.c b/gcc/testsuite/gcc.target/aarch64/pr90075.c
+new file mode 100644
+index 000000000..cae7e618f
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/aarch64/pr90075.c
+@@ -0,0 +1,21 @@
++/* { dg-do compile } */
++/* { dg-additional-options "-O1" } */
++
++typedef struct {
++  float one, two;
++} twofloats;
++
++float
++bug (twofloats tf)
++{
++  float f1, f2;
++  union {
++    twofloats tfloats;
++    float arr[2];
++  } utfloats;
++
++  utfloats.tfloats = tf;
++  f1 = utfloats.arr[1];
++  f2 = __builtin_copysignf (0, f1);
++  return f2;
++}
+diff --git a/init.mod b/init.mod
+new file mode 100644
+index 000000000..23da9b80e
+--- /dev/null
++++ b/init.mod
+@@ -0,0 +1,34 @@
++GFORTRAN module version '10' created from gcc/testsuite/gfortran.dg/pr89574.f90
++MD5:31a359b6d9d382f153820a5d86a94b76 -- If you edit this, you'll get what you deserve.
++
++(() () () () () () () () () () () () () () () () () () () () () () ()
++() () () ())
++
++()
++
++()
++
++()
++
++()
++
++()
++
++(2 'init' 'init' '' 1 ((MODULE UNKNOWN-INTENT UNKNOWN-PROC UNKNOWN
++UNKNOWN 0 0) (UNKNOWN 0 0 0 0 UNKNOWN ()) 0 0 () () 0 () () () 0 0)
++3 'mod1' 'mod1' '' 1 ((MODULE UNKNOWN-INTENT UNKNOWN-PROC UNKNOWN
++UNKNOWN 0 0) (UNKNOWN 0 0 0 0 UNKNOWN ()) 0 0 () () 0 () () () 0 0)
++4 'mod2' 'mod2' '' 1 ((MODULE UNKNOWN-INTENT UNKNOWN-PROC UNKNOWN
++UNKNOWN 0 0) (UNKNOWN 0 0 0 0 UNKNOWN ()) 0 0 () () 0 () () () 0 0)
++5 'sub' 'init' '' 1 ((PROCEDURE UNKNOWN-INTENT MODULE-PROC DECL UNKNOWN
++0 0 SUBROUTINE) (UNKNOWN 0 0 0 0 UNKNOWN ()) 0 0 () () 0 () () () 0 0)
++6 'init' 'mod1' '' 1 ((PROCEDURE UNKNOWN-INTENT MODULE-PROC DECL UNKNOWN
++0 0 SUBROUTINE IMPLICIT_PURE) (UNKNOWN 0 0 0 0 UNKNOWN ()) 0 0 () () 0 ()
++() () 0 0)
++7 'init' 'mod2' '' 1 ((PROCEDURE UNKNOWN-INTENT MODULE-PROC DECL UNKNOWN
++0 0 SUBROUTINE IMPLICIT_PURE) (UNKNOWN 0 0 0 0 UNKNOWN ()) 0 0 () () 0 ()
++() () 0 0)
++)
++
++('init' 0 2 'mod1' 0 3 'mod2' 0 4 'sub' 0 5 'test_init1' 0 6 'test_init2'
++0 7)
+diff --git a/mod1.mod b/mod1.mod
+new file mode 100644
+index 000000000..0637f9b57
+--- /dev/null
++++ b/mod1.mod
+@@ -0,0 +1,24 @@
++GFORTRAN module version '10' created from gcc/testsuite/gfortran.dg/pr89574.f90
++MD5:3845614a4a3b252a21f377ab3f306833 -- If you edit this, you'll get what you deserve.
++
++(() () () () () () () () () () () () () () () () () () () () () () () ()
++() () ())
++
++()
++
++()
++
++()
++
++()
++
++()
++
++(2 'init' 'mod1' '' 1 ((PROCEDURE UNKNOWN-INTENT MODULE-PROC DECL
++UNKNOWN 0 0 SUBROUTINE IMPLICIT_PURE) (UNKNOWN 0 0 0 0 UNKNOWN ()) 0 0 ()
++() 0 () () () 0 0)
++3 'mod1' 'mod1' '' 1 ((MODULE UNKNOWN-INTENT UNKNOWN-PROC UNKNOWN
++UNKNOWN 0 0) (UNKNOWN 0 0 0 0 UNKNOWN ()) 0 0 () () 0 () () () 0 0)
++)
++
++('init' 0 2 'mod1' 0 3)
+diff --git a/mod2.mod b/mod2.mod
+new file mode 100644
+index 000000000..8f9d6a9b8
+--- /dev/null
++++ b/mod2.mod
+@@ -0,0 +1,24 @@
++GFORTRAN module version '10' created from gcc/testsuite/gfortran.dg/pr89574.f90
++MD5:2dd0f42c2f7df7a4297409912a2f39f3 -- If you edit this, you'll get what you deserve.
++
++(() () () () () () () () () () () () () () () () () () () () () () () ()
++() () ())
++
++()
++
++()
++
++()
++
++()
++
++()
++
++(2 'init' 'mod2' '' 1 ((PROCEDURE UNKNOWN-INTENT MODULE-PROC DECL
++UNKNOWN 0 0 SUBROUTINE IMPLICIT_PURE) (UNKNOWN 0 0 0 0 UNKNOWN ()) 0 0 ()
++() 0 () () () 0 0)
++3 'mod2' 'mod2' '' 1 ((MODULE UNKNOWN-INTENT UNKNOWN-PROC UNKNOWN
++UNKNOWN 0 0) (UNKNOWN 0 0 0 0 UNKNOWN ()) 0 0 () () 0 () () () 0 0)
++)
++
++('init' 0 2 'mod2' 0 3)

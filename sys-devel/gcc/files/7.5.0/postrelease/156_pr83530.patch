@@ -1,0 +1,62 @@
+diff --git a/gcc/sel-sched.c b/gcc/sel-sched.c
+index c3923e6fa..41c3f05ba 100644
+--- a/gcc/sel-sched.c
++++ b/gcc/sel-sched.c
+@@ -4999,12 +4999,16 @@ remove_temp_moveop_nops (bool full_tidying)
+    distinguishing between bookkeeping copies and original insns.  */
+ static int max_uid_before_move_op = 0;
+ 
++/* When true, we're always scheduling next insn on the already scheduled code
++   to get the right insn data for the following bundling or other passes.  */
++static int force_next_insn = 0;
++
+ /* Remove from AV_VLIW_P all instructions but next when debug counter
+    tells us so.  Next instruction is fetched from BNDS.  */
+ static void
+ remove_insns_for_debug (blist_t bnds, av_set_t *av_vliw_p)
+ {
+-  if (! dbg_cnt (sel_sched_insn_cnt))
++  if (! dbg_cnt (sel_sched_insn_cnt) || force_next_insn)
+     /* Leave only the next insn in av_vliw.  */
+     {
+       av_set_iterator av_it;
+@@ -7638,9 +7642,15 @@ sel_sched_region (int rgn)
+   if (schedule_p)
+     sel_sched_region_1 ();
+   else
+-    /* Force initialization of INSN_SCHED_CYCLEs for correct bundling.  */
+-    reset_sched_cycles_p = true;
+-
++    {
++      /* Schedule always selecting the next insn to make the correct data
++	 for bundling or other later passes.  */
++      pipelining_p = false;
++      force_next_insn = 1;
++      sel_sched_region_1 ();
++      force_next_insn = 0;
++    }
++  reset_sched_cycles_p = pipelining_p;
+   sel_region_finish (reset_sched_cycles_p);
+ }
+ 
+diff --git a/gcc/testsuite/gcc.dg/pr83530.c b/gcc/testsuite/gcc.dg/pr83530.c
+new file mode 100644
+index 000000000..f4d8927de
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr83530.c
+@@ -0,0 +1,15 @@
++/* { dg-do compile { target powerpc*-*-* ia64-*-* i?86-*-* x86_64-*-* } } */
++/* { dg-options "-O2 -fmodulo-sched -fselective-scheduling2" } */
++int vm, z0;
++short int mz;
++
++int
++ny (void)
++{
++  int ch;
++
++  for (ch = 0; ch < 6; ++ch)
++    vm += ch / vm;
++
++  return z0 + mz;
++}

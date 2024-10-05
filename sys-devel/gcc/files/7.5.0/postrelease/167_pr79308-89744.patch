@@ -1,0 +1,134 @@
+diff --git a/gcc/cp/cp-tree.h b/gcc/cp/cp-tree.h
+index c1163dbf6..752dfc8b8 100644
+--- a/gcc/cp/cp-tree.h
++++ b/gcc/cp/cp-tree.h
+@@ -3215,7 +3215,15 @@ extern void decl_shadowed_for_var_insert (tree, tree);
+       template <typename T> struct S {};
+       template <typename T> struct S<T*> {};
+       
+-   the CLASSTPYE_TI_TEMPLATE for S<int*> will be S, not the S<T*>.  */
++   the CLASSTPYE_TI_TEMPLATE for S<int*> will be S, not the S<T*>.
++
++   For a member class template, CLASSTYPE_TI_TEMPLATE always refers to the
++   partial instantiation rather than the primary template.  CLASSTYPE_TI_ARGS
++   are for the primary template if the partial instantiation isn't
++   specialized, or for the explicit specialization if it is, e.g.
++
++      template <class T> class C { template <class U> class D; }
++      template <> template <class U> class C<int>::D;  */
+ #define CLASSTYPE_TI_TEMPLATE(NODE) TI_TEMPLATE (CLASSTYPE_TEMPLATE_INFO (NODE))
+ #define CLASSTYPE_TI_ARGS(NODE)     TI_ARGS (CLASSTYPE_TEMPLATE_INFO (NODE))
+ 
+diff --git a/gcc/cp/pt.c b/gcc/cp/pt.c
+index c3a557c60..3c38b39d0 100644
+--- a/gcc/cp/pt.c
++++ b/gcc/cp/pt.c
+@@ -1054,7 +1054,8 @@ maybe_process_partial_specialization (tree type)
+ 		  type_specializations->remove_elt (&elt);
+ 
+ 		  elt.tmpl = tmpl;
+-		  elt.args = INNERMOST_TEMPLATE_ARGS (elt.args);
++		  CLASSTYPE_TI_ARGS (inst)
++		    = elt.args = INNERMOST_TEMPLATE_ARGS (elt.args);
+ 
+ 		  spec_entry **slot
+ 		    = type_specializations->find_slot (&elt, INSERT);
+@@ -9122,6 +9123,16 @@ lookup_template_class_1 (tree d1, tree arglist, tree in_decl, tree context,
+ 		   : (TREE_CODE (found) == TYPE_DECL
+ 		      ? DECL_TI_TEMPLATE (found)
+ 		      : CLASSTYPE_TI_TEMPLATE (found)));
++
++	  if (DECL_CLASS_TEMPLATE_P (found)
++	      && CLASSTYPE_TEMPLATE_SPECIALIZATION (TREE_TYPE (found)))
++	    {
++	      /* If this partial instantiation is specialized, we want to
++		 use it for hash table lookup.  */
++	      elt.tmpl = found;
++	      elt.args = arglist = INNERMOST_TEMPLATE_ARGS (arglist);
++	      hash = spec_hasher::hash (&elt);
++	    }
+ 	}
+ 
+       // Build template info for the new specialization.
+@@ -9129,6 +9140,7 @@ lookup_template_class_1 (tree d1, tree arglist, tree in_decl, tree context,
+ 
+       elt.spec = t;
+       slot = type_specializations->find_slot_with_hash (&elt, hash, INSERT);
++      gcc_checking_assert (*slot == NULL);
+       entry = ggc_alloc<spec_entry> ();
+       *entry = elt;
+       *slot = entry;
+diff --git a/gcc/testsuite/g++.dg/template/mem-spec1.C b/gcc/testsuite/g++.dg/template/mem-spec1.C
+new file mode 100644
+index 000000000..b06df0aa8
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/template/mem-spec1.C
+@@ -0,0 +1,68 @@
++// PR c++/89744
++
++namespace N1 {
++  template<typename> struct A
++  {
++    template<typename> struct B {};
++    A() { B<int> b; }
++  };
++
++  template<> template<typename>
++  struct A<int>::B
++  {
++    virtual void foo() {}
++  };
++
++  A<int> a;
++}
++
++namespace N2 {
++  template<typename> struct A
++  {
++    template<typename> struct B {};
++    A() { B<int> b; }
++  };
++
++  template<> template<typename>
++  struct A<int>::B
++  {
++    virtual void foo() {}
++    void bar() {}
++  };
++
++  A<int> a;
++}
++
++namespace N3 {
++  template<typename> struct A
++  {
++    template<typename> struct B {};
++    A() { B<int> b; }
++  };
++
++  template<> template<typename>
++  struct A<int>::B
++  {
++    ~B() {}
++  };
++
++  A<int> a;
++}
++
++#if __cpp_variadic_templates
++namespace N4 {
++  template<typename...> struct A
++  {
++    template<typename> struct B {};
++    typedef B<int> X;
++  };
++
++  template<> template<typename>
++  struct A<int>::B
++  {
++    typedef int Y;
++  };
++
++  A<int>::B<int> b;
++}
++#endif

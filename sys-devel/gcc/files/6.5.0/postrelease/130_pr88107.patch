@@ -1,0 +1,95 @@
+diff --git a/gcc/testsuite/gcc.dg/gomp/pr88107.c b/gcc/testsuite/gcc.dg/gomp/pr88107.c
+new file mode 100644
+index 000000000..3b53b5665
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/gomp/pr88107.c
+@@ -0,0 +1,35 @@
++/* PR tree-optimization/88107 */
++/* { dg-do compile { target fgraphite } } */
++/* { dg-require-effective-target vect_simd_clones } */
++/* { dg-options "-O2 -fexceptions -floop-nest-optimize -fnon-call-exceptions -fopenmp-simd -ftree-parallelize-loops=2" } */
++
++#define N 1024
++int a[N], b[N];
++long int c[N];
++unsigned char d[N];
++
++#pragma omp declare simd notinbranch
++__attribute__((noinline)) static int
++foo (long int a, int b, int c)
++{
++  return a + b + c;
++}
++
++#pragma omp declare simd notinbranch
++__attribute__((noinline)) static long int
++bar (int a, int b, long int c)
++{
++  return a + b + c;
++}
++
++void
++baz (void)
++{
++  int i;
++  #pragma omp simd
++  for (i = 0; i < N; i++)
++    a[i] = foo (c[i], a[i], b[i]) + 6;
++  #pragma omp simd
++  for (i = 0; i < N; i++)
++    c[i] = bar (a[i], b[i], c[i]) * 2;
++}
+diff --git a/gcc/tree-cfg.c b/gcc/tree-cfg.c
+index 029444b10..c953f245e 100644
+--- a/gcc/tree-cfg.c
++++ b/gcc/tree-cfg.c
+@@ -6887,11 +6887,14 @@ move_block_to_fn (struct function *dest_cfun, basic_block bb,
+ }
+ 
+ /* Examine the statements in BB (which is in SRC_CFUN); find and return
+-   the outermost EH region.  Use REGION as the incoming base EH region.  */
++   the outermost EH region.  Use REGION as the incoming base EH region.
++   If there is no single outermost region, return NULL and set *ALL to
++   true.  */
+ 
+ static eh_region
+ find_outermost_region_in_block (struct function *src_cfun,
+-				basic_block bb, eh_region region)
++				basic_block bb, eh_region region,
++				bool *all)
+ {
+   gimple_stmt_iterator si;
+ 
+@@ -6910,7 +6913,11 @@ find_outermost_region_in_block (struct function *src_cfun,
+ 	  else if (stmt_region != region)
+ 	    {
+ 	      region = eh_region_outermost (src_cfun, stmt_region, region);
+-	      gcc_assert (region != NULL);
++	      if (region == NULL)
++		{
++		  *all = true;
++		  return NULL;
++		}
+ 	    }
+ 	}
+     }
+@@ -7204,12 +7211,17 @@ move_sese_region_to_fn (struct function *dest_cfun, basic_block entry_bb,
+   if (saved_cfun->eh)
+     {
+       eh_region region = NULL;
++      bool all = false;
+ 
+       FOR_EACH_VEC_ELT (bbs, i, bb)
+-	region = find_outermost_region_in_block (saved_cfun, bb, region);
++	{
++	  region = find_outermost_region_in_block (saved_cfun, bb, region, &all);
++	  if (all)
++	    break;
++	}
+ 
+       init_eh_for_function ();
+-      if (region != NULL)
++      if (region != NULL || all)
+ 	{
+ 	  new_label_map = htab_create (17, tree_map_hash, tree_map_eq, free);
+ 	  eh_map = duplicate_eh_regions (saved_cfun, region, 0,

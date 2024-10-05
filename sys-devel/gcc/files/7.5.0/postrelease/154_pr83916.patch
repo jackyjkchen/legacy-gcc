@@ -1,0 +1,79 @@
+diff --git a/gcc/cp/pt.c b/gcc/cp/pt.c
+index 0ea320cfd..2fcbbe43d 100644
+--- a/gcc/cp/pt.c
++++ b/gcc/cp/pt.c
+@@ -7783,7 +7783,11 @@ convert_template_argument (tree parm,
+     {
+       tree t = TREE_TYPE (parm);
+ 
+-      if (tree a = type_uses_auto (t))
++      if (TEMPLATE_PARM_LEVEL (get_template_parm_index (parm))
++	  > TMPL_ARGS_DEPTH (args))
++	/* We don't have enough levels of args to do any substitution.  This
++	   can happen in the context of -fnew-ttp-matching.  */;
++      else if (tree a = type_uses_auto (t))
+ 	{
+ 	  if (ARGUMENT_PACK_P (orig_arg))
+ 	    /* There's nothing to check for an auto argument pack.  */
+@@ -20796,14 +20800,22 @@ unify (tree tparms, tree targs, tree parm, tree arg, int strict,
+ 	 template-parameter exactly, except that a template-argument
+ 	 deduced from an array bound may be of any integral type.
+ 	 The non-type parameter might use already deduced type parameters.  */
+-      ++processing_template_decl;
+-      tparm = tsubst (TREE_TYPE (parm), targs, 0, NULL_TREE);
+-      --processing_template_decl;
+-      if (tree a = type_uses_auto (tparm))
++      tparm = TREE_TYPE (parm);
++      if (TEMPLATE_PARM_LEVEL (parm) > TMPL_ARGS_DEPTH (targs))
++	/* We don't have enough levels of args to do any substitution.  This
++	   can happen in the context of -fnew-ttp-matching.  */;
++      else
+ 	{
+-	  tparm = do_auto_deduction (tparm, arg, a, complain, adc_unify);
+-	  if (tparm == error_mark_node)
+-	    return 1;
++	  ++processing_template_decl;
++	  tparm = tsubst (tparm, targs, tf_none, NULL_TREE);
++	  --processing_template_decl;
++
++	  if (tree a = type_uses_auto (tparm))
++	    {
++	      tparm = do_auto_deduction (tparm, arg, a, complain, adc_unify);
++	      if (tparm == error_mark_node)
++		return 1;
++	    }
+ 	}
+ 
+       if (!TREE_TYPE (arg))
+diff --git a/gcc/testsuite/g++.dg/template/ttp31.C b/gcc/testsuite/g++.dg/template/ttp31.C
+new file mode 100644
+index 000000000..ff3f1f5c3
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/template/ttp31.C
+@@ -0,0 +1,10 @@
++// PR c++/83916
++// { dg-do compile { target c++11 } }
++
++template<class TA,
++	 template<TA...> class TTA, TA... VA>
++struct A { };
++
++template<class UC, class TC,
++	 template<TC...> class TTC, TC... VC>
++struct C : A<TC, TTC, VC...> { };
+diff --git a/gcc/testsuite/g++.dg/template/ttp32.C b/gcc/testsuite/g++.dg/template/ttp32.C
+new file mode 100644
+index 000000000..a96a62d33
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/template/ttp32.C
+@@ -0,0 +1,10 @@
++// PR c++/83916
++// { dg-do compile { target c++1z } }
++
++template<class TA,
++	 template<auto...> class TTA, TA... VA>
++struct A { };
++
++template<class UC, class TC,
++	 template<auto...> class TTC, TC... VC>
++struct C : A<TC, TTC, VC...> { };

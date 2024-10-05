@@ -1,0 +1,38 @@
+diff --git a/gcc/config/rs6000/rs6000.c b/gcc/config/rs6000/rs6000.c
+index 2342cd2fe..87a54f58e 100644
+--- a/gcc/config/rs6000/rs6000.c
++++ b/gcc/config/rs6000/rs6000.c
+@@ -23111,6 +23111,11 @@ rs6000_emit_cmove (rtx dest, rtx op, rtx true_cond, rtx false_cond)
+ 
+   /* At this point we know we can use fsel.  */
+ 
++  /* Don't allow compare_mode other than SFmode or DFmode, for others there
++     is no fsel instruction.  */
++  if (compare_mode != SFmode && compare_mode != DFmode)
++    return 0;
++
+   /* Reduce the comparison to a comparison against zero.  */
+   if (! is_against_zero)
+     {
+diff --git a/gcc/testsuite/gcc.target/powerpc/pr93073.c b/gcc/testsuite/gcc.target/powerpc/pr93073.c
+new file mode 100644
+index 000000000..6a0a47311
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/powerpc/pr93073.c
+@@ -0,0 +1,16 @@
++/* PR target/93073 */
++/* { dg-do compile { target powerpc_vsx_ok } } */
++/* { dg-options "-mvsx -O1 -ffinite-math-only -fno-trapping-math" } */
++
++void bar (void);
++
++void
++foo (long double x, double y, double z)
++{
++  for (;;)
++    {
++      double a = x > 0.0 ? y : z;
++      if (a == 0.0)
++	bar ();
++    }
++}

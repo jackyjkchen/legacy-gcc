@@ -1,0 +1,118 @@
+diff --git a/gcc/testsuite/gcc.dg/torture/pr89572.c b/gcc/testsuite/gcc.dg/torture/pr89572.c
+new file mode 100644
+index 000000000..1c293850c
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/torture/pr89572.c
+@@ -0,0 +1,28 @@
++/* { dg-do compile } */
++/* { dg-additional-options "-finline-functions" } */
++
++int vh, it, k1;
++
++void
++vn (void)
++{
++  ++vh;
++  if (vh == 0 && it == 0)
++    k1 = -k1;
++}
++
++__attribute__ ((returns_twice)) void
++ef (int *uw)
++{
++  while (uw != (void *) 0)
++    {
++      vn ();
++      *uw = 0;
++    }
++}
++
++void
++gu (int *uw)
++{
++  ef (uw);
++}
+diff --git a/gcc/testsuite/gcc.dg/uninit-pr89296.c b/gcc/testsuite/gcc.dg/uninit-pr89296.c
+new file mode 100644
+index 000000000..9d81b32b9
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/uninit-pr89296.c
+@@ -0,0 +1,13 @@
++/* { dg-do compile } */
++/* { dg-options "-O2 -Wuninitialized" } */
++
++int get_a_value ();
++void printk(const char *);
++void test_func()
++{
++    int loop;
++    while (!loop) {             /* { dg-warning "is used uninitialized" } */
++	loop = get_a_value();
++	printk("...");
++    }
++}
+diff --git a/gcc/tree-scalar-evolution.c b/gcc/tree-scalar-evolution.c
+index 88a0eaaa8..08fa552fd 100644
+--- a/gcc/tree-scalar-evolution.c
++++ b/gcc/tree-scalar-evolution.c
+@@ -866,7 +866,7 @@ get_loop_exit_condition (const struct loop *loop)
+       gimple *stmt;
+ 
+       stmt = last_stmt (exit_edge->src);
+-      if (gcond *cond_stmt = dyn_cast <gcond *> (stmt))
++      if (gcond *cond_stmt = safe_dyn_cast <gcond *> (stmt))
+ 	res = cond_stmt;
+     }
+ 
+diff --git a/gcc/tree-ssa-loop-ch.c b/gcc/tree-ssa-loop-ch.c
+index 907525627..085ad58cf 100644
+--- a/gcc/tree-ssa-loop-ch.c
++++ b/gcc/tree-ssa-loop-ch.c
+@@ -311,11 +311,23 @@ ch_base::copy_headers (function *fun)
+ 		{
+ 		  gimple *stmt = gsi_stmt (bsi);
+ 		  if (gimple_code (stmt) == GIMPLE_COND)
+-		    gimple_set_no_warning (stmt, true);
++		    {
++		      tree lhs = gimple_cond_lhs (stmt);
++		      if (gimple_cond_code (stmt) != EQ_EXPR
++			  && gimple_cond_code (stmt) != NE_EXPR
++			  && INTEGRAL_TYPE_P (TREE_TYPE (lhs))
++			  && TYPE_OVERFLOW_UNDEFINED (TREE_TYPE (lhs)))
++			gimple_set_no_warning (stmt, true);
++		    }
+ 		  else if (is_gimple_assign (stmt))
+ 		    {
+ 		      enum tree_code rhs_code = gimple_assign_rhs_code (stmt);
+-		      if (TREE_CODE_CLASS (rhs_code) == tcc_comparison)
++		      tree rhs1 = gimple_assign_rhs1 (stmt);
++		      if (TREE_CODE_CLASS (rhs_code) == tcc_comparison
++			  && rhs_code != EQ_EXPR
++			  && rhs_code != NE_EXPR
++			  && INTEGRAL_TYPE_P (TREE_TYPE (rhs1))
++			  && TYPE_OVERFLOW_UNDEFINED (TREE_TYPE (rhs1)))
+ 			gimple_set_no_warning (stmt, true);
+ 		    }
+ 		}
+diff --git a/gcc/tree-ssa-loop-ivcanon.c b/gcc/tree-ssa-loop-ivcanon.c
+index 9b59b4466..c8bb73394 100644
+--- a/gcc/tree-ssa-loop-ivcanon.c
++++ b/gcc/tree-ssa-loop-ivcanon.c
+@@ -1062,7 +1062,7 @@ canonicalize_loop_induction_variables (struct loop *loop,
+   niter = number_of_latch_executions (loop);
+   exit = single_exit (loop);
+   if (TREE_CODE (niter) == INTEGER_CST)
+-    locus = gimple_location (last_stmt (exit->src));
++    locus = gimple_location_safe (last_stmt (exit->src));
+   else
+     {
+       /* If the loop has more than one exit, try checking all of them
+@@ -1077,7 +1077,7 @@ canonicalize_loop_induction_variables (struct loop *loop,
+ 	niter = find_loop_niter_by_eval (loop, &exit);
+ 
+       if (exit)
+-        locus = gimple_location (last_stmt (exit->src));
++        locus = gimple_location_safe (last_stmt (exit->src));
+ 
+       if (TREE_CODE (niter) != INTEGER_CST)
+ 	exit = NULL;
