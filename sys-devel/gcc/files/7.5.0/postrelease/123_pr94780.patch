@@ -1,3 +1,63 @@
+diff --git a/gcc/config/aarch64/aarch64-builtins.c b/gcc/config/aarch64/aarch64-builtins.c
+index f09399f4c..191af99fc 100644
+--- a/gcc/config/aarch64/aarch64-builtins.c
++++ b/gcc/config/aarch64/aarch64-builtins.c
+@@ -1727,10 +1727,12 @@ aarch64_atomic_assign_expand_fenv (tree *hold, tree *clear, tree *update)
+   mask_sr = build_int_cst (unsigned_type_node,
+ 			   ~(AARCH64_FE_ALL_EXCEPT));
+ 
+-  ld_fenv_cr = build2 (MODIFY_EXPR, unsigned_type_node,
+-		       fenv_cr, build_call_expr (get_fpcr, 0));
+-  ld_fenv_sr = build2 (MODIFY_EXPR, unsigned_type_node,
+-		       fenv_sr, build_call_expr (get_fpsr, 0));
++  ld_fenv_cr = build4 (TARGET_EXPR, unsigned_type_node,
++		       fenv_cr, build_call_expr (get_fpcr, 0),
++		       NULL_TREE, NULL_TREE);
++  ld_fenv_sr = build4 (TARGET_EXPR, unsigned_type_node,
++		       fenv_sr, build_call_expr (get_fpsr, 0),
++		       NULL_TREE, NULL_TREE);
+ 
+   masked_fenv_cr = build2 (BIT_AND_EXPR, unsigned_type_node, fenv_cr, mask_cr);
+   masked_fenv_sr = build2 (BIT_AND_EXPR, unsigned_type_node, fenv_sr, mask_sr);
+@@ -1762,8 +1764,9 @@ aarch64_atomic_assign_expand_fenv (tree *hold, tree *clear, tree *update)
+        __atomic_feraiseexcept (new_fenv_var);  */
+ 
+   new_fenv_var = create_tmp_var_raw (unsigned_type_node);
+-  reload_fenv = build2 (MODIFY_EXPR, unsigned_type_node,
+-			new_fenv_var, build_call_expr (get_fpsr, 0));
++  reload_fenv = build4 (TARGET_EXPR, unsigned_type_node,
++			new_fenv_var, build_call_expr (get_fpsr, 0),
++			NULL_TREE, NULL_TREE);
+   restore_fnenv = build_call_expr (set_fpsr, 1, fenv_sr);
+   atomic_feraiseexcept = builtin_decl_implicit (BUILT_IN_ATOMIC_FERAISEEXCEPT);
+   update_call = build_call_expr (atomic_feraiseexcept, 1,
+diff --git a/gcc/config/arm/arm-builtins.c b/gcc/config/arm/arm-builtins.c
+index d3b671843..13bb30ea1 100644
+--- a/gcc/config/arm/arm-builtins.c
++++ b/gcc/config/arm/arm-builtins.c
+@@ -3234,8 +3234,9 @@ arm_atomic_assign_expand_fenv (tree *hold, tree *clear, tree *update)
+   mask = build_int_cst (unsigned_type_node,
+ 			~((ARM_FE_ALL_EXCEPT << ARM_FE_EXCEPT_SHIFT)
+ 			  | ARM_FE_ALL_EXCEPT));
+-  ld_fenv = build2 (MODIFY_EXPR, unsigned_type_node,
+-		    fenv_var, build_call_expr (get_fpscr, 0));
++  ld_fenv = build4 (TARGET_EXPR, unsigned_type_node,
++		    fenv_var, build_call_expr (get_fpscr, 0),
++		    NULL_TREE, NULL_TREE);
+   masked_fenv = build2 (BIT_AND_EXPR, unsigned_type_node, fenv_var, mask);
+   hold_fnclex = build_call_expr (set_fpscr, 1, masked_fenv);
+   *hold = build2 (COMPOUND_EXPR, void_type_node,
+@@ -3256,8 +3257,8 @@ arm_atomic_assign_expand_fenv (tree *hold, tree *clear, tree *update)
+        __atomic_feraiseexcept (new_fenv_var);  */
+ 
+   new_fenv_var = create_tmp_var_raw (unsigned_type_node);
+-  reload_fenv = build2 (MODIFY_EXPR, unsigned_type_node, new_fenv_var,
+-			build_call_expr (get_fpscr, 0));
++  reload_fenv = build4 (TARGET_EXPR, unsigned_type_node, new_fenv_var,
++			build_call_expr (get_fpscr, 0), NULL_TREE, NULL_TREE);
+   restore_fnenv = build_call_expr (set_fpscr, 1, fenv_var);
+   atomic_feraiseexcept = builtin_decl_implicit (BUILT_IN_ATOMIC_FERAISEEXCEPT);
+   update_call = build_call_expr (atomic_feraiseexcept, 1,
 diff --git a/gcc/config/i386/i386.c b/gcc/config/i386/i386.c
 index 40eaf7cd6..3d6ab80a3 100644
 --- a/gcc/config/i386/i386.c
@@ -52,6 +112,73 @@ index 40eaf7cd6..3d6ab80a3 100644
        tree ldmxcsr_update_call = build_call_expr (ldmxcsr, 1, mxcsr_orig_var);
        *update = build2 (COMPOUND_EXPR, void_type_node, *update,
  			ldmxcsr_update_call);
+diff --git a/gcc/config/mips/mips.c b/gcc/config/mips/mips.c
+index 6bfd86a07..0d875aa5d 100644
+--- a/gcc/config/mips/mips.c
++++ b/gcc/config/mips/mips.c
+@@ -22184,12 +22184,12 @@ mips_atomic_assign_expand_fenv (tree *hold, tree *clear, tree *update)
+   tree get_fcsr = mips_builtin_decls[MIPS_GET_FCSR];
+   tree set_fcsr = mips_builtin_decls[MIPS_SET_FCSR];
+   tree get_fcsr_hold_call = build_call_expr (get_fcsr, 0);
+-  tree hold_assign_orig = build2 (MODIFY_EXPR, MIPS_ATYPE_USI,
+-				  fcsr_orig_var, get_fcsr_hold_call);
++  tree hold_assign_orig = build4 (TARGET_EXPR, MIPS_ATYPE_USI,
++				  fcsr_orig_var, get_fcsr_hold_call, NULL, NULL);
+   tree hold_mod_val = build2 (BIT_AND_EXPR, MIPS_ATYPE_USI, fcsr_orig_var,
+ 			      build_int_cst (MIPS_ATYPE_USI, 0xfffff003));
+-  tree hold_assign_mod = build2 (MODIFY_EXPR, MIPS_ATYPE_USI,
+-				 fcsr_mod_var, hold_mod_val);
++  tree hold_assign_mod = build4 (TARGET_EXPR, MIPS_ATYPE_USI,
++				 fcsr_mod_var, hold_mod_val, NULL, NULL);
+   tree set_fcsr_hold_call = build_call_expr (set_fcsr, 1, fcsr_mod_var);
+   tree hold_all = build2 (COMPOUND_EXPR, MIPS_ATYPE_USI,
+ 			  hold_assign_orig, hold_assign_mod);
+@@ -22199,8 +22199,8 @@ mips_atomic_assign_expand_fenv (tree *hold, tree *clear, tree *update)
+   *clear = build_call_expr (set_fcsr, 1, fcsr_mod_var);
+ 
+   tree get_fcsr_update_call = build_call_expr (get_fcsr, 0);
+-  *update = build2 (MODIFY_EXPR, MIPS_ATYPE_USI,
+-		    exceptions_var, get_fcsr_update_call);
++  *update = build4 (TARGET_EXPR, MIPS_ATYPE_USI,
++		    exceptions_var, get_fcsr_update_call, NULL, NULL);
+   tree set_fcsr_update_call = build_call_expr (set_fcsr, 1, fcsr_orig_var);
+   *update = build2 (COMPOUND_EXPR, void_type_node, *update,
+ 		    set_fcsr_update_call);
+diff --git a/gcc/config/s390/s390.c b/gcc/config/s390/s390.c
+index 0161ba03f..851585a69 100644
+--- a/gcc/config/s390/s390.c
++++ b/gcc/config/s390/s390.c
+@@ -15666,12 +15666,13 @@ s390_atomic_assign_expand_fenv (tree *hold, tree *clear, tree *update)
+ 
+      fenv_var = __builtin_s390_efpc ();
+      __builtin_s390_sfpc (fenv_var & mask) */
+-  tree old_fpc = build2 (MODIFY_EXPR, unsigned_type_node, fenv_var, call_efpc);
+-  tree new_fpc =
+-    build2 (BIT_AND_EXPR, unsigned_type_node, fenv_var,
+-	    build_int_cst (unsigned_type_node,
+-			   ~(FPC_DXC_MASK | FPC_FLAGS_MASK |
+-			     FPC_EXCEPTION_MASK)));
++  tree old_fpc = build4 (TARGET_EXPR, unsigned_type_node, fenv_var, call_efpc,
++			 NULL_TREE, NULL_TREE);
++  tree new_fpc
++    = build2 (BIT_AND_EXPR, unsigned_type_node, fenv_var,
++	      build_int_cst (unsigned_type_node,
++			     ~(FPC_DXC_MASK | FPC_FLAGS_MASK
++			       | FPC_EXCEPTION_MASK)));
+   tree set_new_fpc = build_call_expr (sfpc, 1, new_fpc);
+   *hold = build2 (COMPOUND_EXPR, void_type_node, old_fpc, set_new_fpc);
+ 
+@@ -15690,8 +15691,8 @@ s390_atomic_assign_expand_fenv (tree *hold, tree *clear, tree *update)
+   __atomic_feraiseexcept ((old_fpc & FPC_FLAGS_MASK) >> FPC_FLAGS_SHIFT);  */
+ 
+   old_fpc = create_tmp_var_raw (unsigned_type_node);
+-  tree store_old_fpc = build2 (MODIFY_EXPR, void_type_node,
+-			       old_fpc, call_efpc);
++  tree store_old_fpc = build4 (TARGET_EXPR, void_type_node, old_fpc, call_efpc,
++			       NULL_TREE, NULL_TREE);
+ 
+   set_new_fpc = build_call_expr (sfpc, 1, fenv_var);
+ 
 diff --git a/gcc/testsuite/gcc.dg/pr94780.c b/gcc/testsuite/gcc.dg/pr94780.c
 new file mode 100644
 index 000000000..c4b723e24
