@@ -1,0 +1,62 @@
+diff --git a/gcc/ree.c b/gcc/ree.c
+index 60af8eade..3d27c1106 100644
+--- a/gcc/ree.c
++++ b/gcc/ree.c
+@@ -504,6 +504,14 @@ get_defs (rtx insn, rtx reg, vec<rtx> *dest)
+         return NULL;
+       if (DF_REF_INSN_INFO (ref_link->ref) == NULL)
+         return NULL;
++      /* As global regs are assumed to be defined at each function call
++	 dataflow can report a call_insn as being a definition of REG.
++	 But we can't do anything with that in this pass so proceed only
++	 if the instruction really sets REG in a way that can be deduced
++	 from the RTL structure.  */
++      if (global_regs[REGNO (reg)]
++	  && !set_of (reg, DF_REF_INSN (ref_link->ref)))
++	return NULL;
+     }
+ 
+   if (dest)
+@@ -602,7 +610,7 @@ make_defs_and_copies_lists (rtx extend_insn, const_rtx set_pat,
+ 
+   /* Initialize the work list.  */
+   if (!get_defs (extend_insn, src_reg, &state->work_list))
+-    gcc_unreachable ();
++    return false;
+ 
+   is_insn_visited = XCNEWVEC (bool, max_insn_uid);
+ 
+diff --git a/gcc/testsuite/gcc.target/aarch64/pr78038.c b/gcc/testsuite/gcc.target/aarch64/pr78038.c
+new file mode 100644
+index 000000000..76d97d3b0
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/aarch64/pr78038.c
+@@ -0,0 +1,28 @@
++/* { dg-do compile } */
++/* { dg-options "-O2" } */
++
++/* PR rtl-optimization/78038.
++   Make sure ree can gracefully handle extensions of the global
++   variable register after a call.  */
++
++typedef void (*test_fptr_t) (void);
++void
++test_f (void)
++{
++}
++test_fptr_t test_fptr = test_f;
++
++struct test2_s
++{
++  int f;
++};
++
++register struct test2_s *g __asm__("x28");
++
++void
++do_something ()
++{
++  test_fptr ();
++  struct test2_s *p1 = 0;
++  *p1 = *g;
++}

@@ -1,0 +1,52 @@
+diff --git a/gcc/cp/decl.c b/gcc/cp/decl.c
+index 5fe807fb4..7b1a9b52a 100644
+--- a/gcc/cp/decl.c
++++ b/gcc/cp/decl.c
+@@ -3438,7 +3438,7 @@ make_typename_type (tree context, tree name, enum tag_types tag_type,
+     return lookup_template_class (t, TREE_OPERAND (fullname, 1),
+ 				  NULL_TREE, context,
+ 				  /*entering_scope=*/0,
+-				  tf_warning_or_error | tf_user);
++				  complain | tf_user);
+   
+   if (DECL_ARTIFICIAL (t) || !(complain & tf_keep_type_decl))
+     t = TREE_TYPE (t);
+diff --git a/gcc/testsuite/g++.dg/cpp0x/sfinae55.C b/gcc/testsuite/g++.dg/cpp0x/sfinae55.C
+new file mode 100644
+index 000000000..7b6557ee7
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/sfinae55.C
+@@ -0,0 +1,33 @@
++// PR c++/64970
++// { dg-do compile { target c++11 } }
++
++template<typename T>
++T && declval();
++
++template<typename T>
++struct void_ { using type = void; };
++
++template<typename T>
++using void_t = typename void_<T>::type;
++
++template<class A, class B>
++struct Outer
++{
++    template<class C, class D>
++    using Inner = decltype(true ? declval<C>() : declval<D>());
++};
++
++template<class A, class B, typename Enable = void>
++struct S
++{};
++
++template<class A, class B>
++struct S<A, B, void_t<typename Outer<A, B>::template Inner<A, B>>>
++{};
++
++struct A{};
++struct B{};
++int main()
++{
++    S<A, B> s;
++}

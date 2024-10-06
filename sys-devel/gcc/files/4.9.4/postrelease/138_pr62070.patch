@@ -1,0 +1,47 @@
+diff --git a/gcc/testsuite/gcc.dg/pr62070.c b/gcc/testsuite/gcc.dg/pr62070.c
+new file mode 100644
+index 000000000..f7b082220
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr62070.c
+@@ -0,0 +1,19 @@
++/* { dg-do compile } */
++/* { dg-options "-O3 -fno-tree-vectorize" } */
++
++int in[8][4];
++int out[4];
++
++void
++foo (void)
++{
++  int sum = 1;
++  int i, j, k;
++  for (k = 0; k < 4; k++)
++    {
++      for (j = 0; j < 4; j++)
++	for (i = 0; i < 4; i++)
++	  sum *= in[i + k][j];
++      out[k] = sum;
++    }
++}
+diff --git a/gcc/tree-ssa-loop-manip.c b/gcc/tree-ssa-loop-manip.c
+index 9dcbc530c..3caf20a2d 100644
+--- a/gcc/tree-ssa-loop-manip.c
++++ b/gcc/tree-ssa-loop-manip.c
+@@ -761,17 +761,6 @@ gimple_duplicate_loop_to_header_edge (struct loop *loop, edge e,
+   if (!loops_state_satisfies_p (LOOPS_HAVE_PREHEADERS))
+     return false;
+ 
+-#ifdef ENABLE_CHECKING
+-  /* ???  This forces needless update_ssa calls after processing each
+-     loop instead of just once after processing all loops.  We should
+-     instead verify that loop-closed SSA form is up-to-date for LOOP
+-     only (and possibly SSA form).  For now just skip verifying if
+-     there are to-be renamed variables.  */
+-  if (!need_ssa_update_p (cfun)
+-      && loops_state_satisfies_p (LOOP_CLOSED_SSA))
+-    verify_loop_closed_ssa (true);
+-#endif
+-
+   first_new_block = last_basic_block_for_fn (cfun);
+   if (!duplicate_loop_to_header_edge (loop, e, ndupl, wont_exit,
+ 				      orig, to_remove, flags))

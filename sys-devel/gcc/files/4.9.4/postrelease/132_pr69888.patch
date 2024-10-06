@@ -1,0 +1,112 @@
+diff --git a/gcc/config/i386/i386.c b/gcc/config/i386/i386.c
+index cbed7d40b..0f7e137ad 100644
+--- a/gcc/config/i386/i386.c
++++ b/gcc/config/i386/i386.c
+@@ -23910,9 +23910,10 @@ alg_usable_p (enum stringop_alg alg, bool memset)
+ static enum stringop_alg
+ decide_alg (HOST_WIDE_INT count, HOST_WIDE_INT expected_size,
+ 	    unsigned HOST_WIDE_INT min_size, unsigned HOST_WIDE_INT max_size,
+-	    bool memset, bool zero_memset, int *dynamic_check, bool *noalign)
++	    bool memset, bool zero_memset, int *dynamic_check, bool *noalign,
++	    bool recur)
+ {
+-  const struct stringop_algs * algs;
++  const struct stringop_algs *algs;
+   bool optimize_for_speed;
+   int max = 0;
+   const struct processor_costs *cost;
+@@ -23946,7 +23947,7 @@ decide_alg (HOST_WIDE_INT count, HOST_WIDE_INT expected_size,
+       any_alg_usable_p |= usable;
+ 
+       if (candidate != libcall && candidate && usable)
+-	  max = algs->size[i].max;
++	max = algs->size[i].max;
+     }
+ 
+   /* If expected size is not known but max size is small enough
+@@ -23956,7 +23957,7 @@ decide_alg (HOST_WIDE_INT count, HOST_WIDE_INT expected_size,
+       && expected_size == -1)
+     expected_size = min_size / 2 + max_size / 2;
+ 
+-  /* If user specified the algorithm, honnor it if possible.  */
++  /* If user specified the algorithm, honor it if possible.  */
+   if (ix86_stringop_alg != no_stringop
+       && alg_usable_p (ix86_stringop_alg, memset))
+     return ix86_stringop_alg;
+@@ -24031,21 +24032,20 @@ decide_alg (HOST_WIDE_INT count, HOST_WIDE_INT expected_size,
+ 	  || !alg_usable_p (algs->unknown_size, memset)))
+     {
+       enum stringop_alg alg;
++      HOST_WIDE_INT new_expected_size = (max > 0 ? max : 4096) / 2;
+ 
+-      /* If there aren't any usable algorithms, then recursing on
+-         smaller sizes isn't going to find anything.  Just return the
+-         simple byte-at-a-time copy loop.  */
+-      if (!any_alg_usable_p)
+-        {
+-          /* Pick something reasonable.  */
+-          if (TARGET_INLINE_STRINGOPS_DYNAMICALLY)
+-            *dynamic_check = 128;
+-          return loop_1_byte;
+-        }
+-      if (max <= 0)
+-	max = 4096;
+-      alg = decide_alg (count, max / 2, min_size, max_size, memset,
+-			zero_memset, dynamic_check, noalign);
++      /* If there aren't any usable algorithms or if recursing already,
++	 then recursing on smaller sizes or same size isn't going to
++	 find anything.  Just return the simple byte-at-a-time copy loop.  */
++      if (!any_alg_usable_p || recur)
++	{
++	  /* Pick something reasonable.  */
++	  if (TARGET_INLINE_STRINGOPS_DYNAMICALLY && !recur)
++	    *dynamic_check = 128;
++	  return loop_1_byte;
++	}
++      alg = decide_alg (count, new_expected_size, min_size, max_size, memset,
++			zero_memset, dynamic_check, noalign, true);
+       gcc_assert (*dynamic_check == -1);
+       if (TARGET_INLINE_STRINGOPS_DYNAMICALLY)
+ 	*dynamic_check = max;
+@@ -24301,7 +24301,7 @@ ix86_expand_set_or_movmem (rtx dst, rtx src, rtx count_exp, rtx val_exp,
+   alg = decide_alg (count, expected_size, min_size, probable_max_size,
+ 		    issetmem,
+ 		    issetmem && val_exp == const0_rtx,
+-		    &dynamic_check, &noalign);
++		    &dynamic_check, &noalign, false);
+   if (alg == libcall)
+     return false;
+   gcc_assert (alg != no_stringop);
+diff --git a/gcc/testsuite/gcc.target/i386/pr69888.c b/gcc/testsuite/gcc.target/i386/pr69888.c
+new file mode 100644
+index 000000000..498fe5acc
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/i386/pr69888.c
+@@ -0,0 +1,10 @@
++/* PR target/69888 */
++/* { dg-do compile } */
++/* { dg-options "-minline-all-stringops -mmemset-strategy=no_stringop:-1:noalign" } */
++/* { dg-additional-options "-march=geode" { target ia32 } } */
++
++void
++foo (char *p)
++{
++  __builtin_memset (p, 0, 32);
++}
+diff --git a/gcc/testsuite/gcc.target/i386/pr70062.c b/gcc/testsuite/gcc.target/i386/pr70062.c
+new file mode 100644
+index 000000000..e5cb854f2
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/i386/pr70062.c
+@@ -0,0 +1,11 @@
++/* PR target/70062 */
++/* { dg-options "-minline-all-stringops -minline-stringops-dynamically -mmemcpy-strategy=libcall:-1:noalign -Wno-psabi" } */
++/* { dg-additional-options "-mtune=k6-2" { target ia32 } } */
++
++typedef int V __attribute__ ((vector_size (32)));
++
++V
++foo (V x)
++{
++  return (V) { x[0] };
++}

@@ -1,0 +1,54 @@
+diff --git a/gcc/cp/pt.c b/gcc/cp/pt.c
+index c0eec7f8c..bd77df33f 100644
+--- a/gcc/cp/pt.c
++++ b/gcc/cp/pt.c
+@@ -11881,13 +11881,20 @@ tsubst (tree t, tree args, tsubst_flags_t complain, tree in_decl)
+ 
+ 		if (code == BOUND_TEMPLATE_TEMPLATE_PARM)
+ 		  {
+-		    tree argvec = tsubst (TYPE_TI_ARGS (t), args,
++		    tree tinfo = TYPE_TEMPLATE_INFO (t);
++		    /* We might need to substitute into the types of non-type
++		       template parameters.  */
++		    tree tmpl = tsubst (TI_TEMPLATE (tinfo), args,
++					complain, in_decl);
++		    if (tmpl == error_mark_node)
++		      return error_mark_node;
++		    tree argvec = tsubst (TI_ARGS (tinfo), args,
+ 					  complain, in_decl);
+ 		    if (argvec == error_mark_node)
+ 		      return error_mark_node;
+ 
+ 		    TEMPLATE_TEMPLATE_PARM_TEMPLATE_INFO (r)
+-		      = build_template_info (TYPE_TI_TEMPLATE (t), argvec);
++		      = build_template_info (tmpl, argvec);
+ 		  }
+ 	      }
+ 	    break;
+diff --git a/gcc/testsuite/g++.dg/template/ttp29.C b/gcc/testsuite/g++.dg/template/ttp29.C
+new file mode 100644
+index 000000000..7d4e03ab2
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/template/ttp29.C
+@@ -0,0 +1,21 @@
++// PR c++/70778
++
++template <class KeyType>
++struct Stuff
++{
++  template <KeyType, class>
++  struct AddToFront;
++
++  template <KeyType ToAdd, template<KeyType> class Holder, KeyType Indexs>
++  struct AddToFront<ToAdd, Holder<Indexs> >
++  {
++  };
++};
++
++template <unsigned>
++struct Holder {};
++
++int main()
++{
++  Stuff<unsigned>::AddToFront<0, Holder<24> > t;
++}

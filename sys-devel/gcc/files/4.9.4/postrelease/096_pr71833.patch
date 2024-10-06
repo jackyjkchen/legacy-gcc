@@ -1,0 +1,47 @@
+diff --git a/gcc/cp/pt.c b/gcc/cp/pt.c
+index e2a2c9f20..67601ab07 100644
+--- a/gcc/cp/pt.c
++++ b/gcc/cp/pt.c
+@@ -6691,11 +6691,12 @@ coerce_template_parameter_pack (tree parms,
+ 
+   /* Convert the remaining arguments, which will be a part of the
+      parameter pack "parm".  */
++  int first_pack_arg = arg_idx;
+   for (; arg_idx < nargs; ++arg_idx)
+     {
+       tree arg = TREE_VEC_ELT (inner_args, arg_idx);
+       tree actual_parm = TREE_VALUE (parm);
+-      int pack_idx = arg_idx - parm_idx;
++      int pack_idx = arg_idx - first_pack_arg;
+ 
+       if (packed_parms)
+         {
+@@ -6724,11 +6725,11 @@ coerce_template_parameter_pack (tree parms,
+       TREE_VEC_ELT (packed_args, pack_idx) = arg;
+     }
+ 
+-  if (arg_idx - parm_idx < TREE_VEC_LENGTH (packed_args)
++  if (arg_idx - first_pack_arg < TREE_VEC_LENGTH (packed_args)
+       && TREE_VEC_LENGTH (packed_args) > 0)
+     {
+       error ("wrong number of template arguments (%d, should be %d)",
+-	     arg_idx - parm_idx, TREE_VEC_LENGTH (packed_args));
++	       arg_idx - first_pack_arg, TREE_VEC_LENGTH (packed_args));
+       return error_mark_node;
+     }
+ 
+diff --git a/gcc/testsuite/g++.dg/cpp0x/variadic-nested1.C b/gcc/testsuite/g++.dg/cpp0x/variadic-nested1.C
+new file mode 100644
+index 000000000..abfb49a71
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/variadic-nested1.C
+@@ -0,0 +1,9 @@
++// PR c++/71833
++// { dg-do compile { target c++11 } }
++
++template < typename ... Ts > struct A 
++{
++  template < Ts ..., typename ... Us > struct B {};
++};
++
++A <>::B < int > e;

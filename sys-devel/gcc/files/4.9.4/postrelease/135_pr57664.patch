@@ -1,0 +1,183 @@
+diff --git a/gcc/dwarf2out.c b/gcc/dwarf2out.c
+index f3226b62b..174035d7c 100644
+--- a/gcc/dwarf2out.c
++++ b/gcc/dwarf2out.c
+@@ -6827,14 +6827,13 @@ should_move_die_to_comdat (dw_die_ref die)
+     case DW_TAG_structure_type:
+     case DW_TAG_enumeration_type:
+     case DW_TAG_union_type:
+-      /* Don't move declarations, inlined instances, or types nested in a
+-	 subprogram.  */
++      /* Don't move declarations, inlined instances, types nested in a
++	 subprogram, or types that contain subprogram definitions.  */
+       if (is_declaration_die (die)
+           || get_AT (die, DW_AT_abstract_origin)
+-          || is_nested_in_subprogram (die))
++          || is_nested_in_subprogram (die)
++          || contains_subprogram_definition (die))
+         return 0;
+-      /* A type definition should never contain a subprogram definition.  */
+-      gcc_assert (!contains_subprogram_definition (die));
+       return 1;
+     case DW_TAG_array_type:
+     case DW_TAG_interface_type:
+@@ -6923,6 +6922,7 @@ clone_as_declaration (dw_die_ref die)
+ 
+       switch (a->dw_attr)
+         {
++        case DW_AT_abstract_origin:
+         case DW_AT_artificial:
+         case DW_AT_containing_type:
+         case DW_AT_external:
+@@ -7155,6 +7155,12 @@ generate_skeleton_bottom_up (skeleton_chain_node *parent)
+ 	    dw_die_ref clone = clone_die (c);
+ 	    move_all_children (c, clone);
+ 
++	    /* If the original has a DW_AT_object_pointer attribute,
++	       it would now point to a child DIE just moved to the
++	       cloned tree, so we need to remove that attribute from
++	       the original.  */
++	    remove_AT (c, DW_AT_object_pointer);
++
+ 	    replace_child (c, clone, prev);
+ 	    generate_skeleton_ancestor_tree (parent);
+ 	    add_child_die (parent->new_die, c);
+@@ -7296,28 +7302,38 @@ break_out_comdat_types (dw_die_ref die)
+   } while (next != NULL);
+ }
+ 
+-/* Like clone_tree, but additionally enter all the children into
+-   the hash table decl_table.  */
++/* Like clone_tree, but copy DW_TAG_subprogram DIEs as declarations.
++   Enter all the cloned children into the hash table decl_table.  */
+ 
+ static dw_die_ref
+-clone_tree_hash (dw_die_ref die, decl_hash_type decl_table)
++clone_tree_partial (dw_die_ref die, decl_hash_type decl_table)
+ {
+   dw_die_ref c;
+-  dw_die_ref clone = clone_die (die);
++  dw_die_ref clone;
+   struct decl_table_entry *entry;
+-  decl_table_entry **slot = decl_table.find_slot_with_hash (die,
+-					  htab_hash_pointer (die), INSERT);
++  decl_table_entry **slot;
++
++  if (die->die_tag == DW_TAG_subprogram)
++    clone = clone_as_declaration (die);
++  else
++    clone = clone_die (die);
++
++  slot = decl_table.find_slot_with_hash (die,
++					 htab_hash_pointer (die), INSERT);
++
+   /* Assert that DIE isn't in the hash table yet.  If it would be there
+      before, the ancestors would be necessarily there as well, therefore
+-     clone_tree_hash wouldn't be called.  */
++     clone_tree_partial wouldn't be called.  */
+   gcc_assert (*slot == HTAB_EMPTY_ENTRY);
++
+   entry = XCNEW (struct decl_table_entry);
+   entry->orig = die;
+   entry->copy = clone;
+   *slot = entry;
+ 
+-  FOR_EACH_CHILD (die, c,
+-		  add_child_die (clone, clone_tree_hash (c, decl_table)));
++  if (die->die_tag != DW_TAG_subprogram)
++    FOR_EACH_CHILD (die, c,
++		    add_child_die (clone, clone_tree_partial (c, decl_table)));
+ 
+   return clone;
+ }
+@@ -7368,9 +7384,15 @@ copy_decls_walk (dw_die_ref unit, dw_die_ref die, decl_hash_type decl_table)
+               entry->copy = copy;
+               *slot = entry;
+ 
+-	      FOR_EACH_CHILD (targ, c,
+-			      add_child_die (copy,
+-					     clone_tree_hash (c, decl_table)));
++	      /* If TARG is not a declaration DIE, we need to copy its
++	         children.  */
++	      if (!is_declaration_die (targ))
++		{
++		  FOR_EACH_CHILD (
++		      targ, c,
++		      add_child_die (copy,
++				     clone_tree_partial (c, decl_table)));
++		}
+ 
+               /* Make sure the cloned tree is marked as part of the
+                  type unit.  */
+diff --git a/gcc/testsuite/g++.dg/debug/dwarf2/dwarf4-nested.C b/gcc/testsuite/g++.dg/debug/dwarf2/dwarf4-nested.C
+new file mode 100644
+index 000000000..160694c3c
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/debug/dwarf2/dwarf4-nested.C
+@@ -0,0 +1,55 @@
++// { dg-do compile }
++// { dg-options "--std=c++11 -dA -gdwarf-4 -fdebug-types-section -fno-merge-debug-strings" }
++
++// Check that -fdebug-types-sections does not copy a full referenced type
++// into a type unit.
++
++// Checks that at least one type unit is generated.
++//
++// { dg-final { scan-assembler "DIE \\(\[^\n\]*\\) DW_TAG_type_unit" } }
++//
++// Check that func is declared exactly once in the debug info (in the
++// compile unit).
++//
++// { dg-final { scan-assembler-times "\\.ascii \"func\\\\0\"\[^\n\]*DW_AT_name" 1 } }
++//
++// Check to make sure that no type unit contains a DIE with DW_AT_low_pc
++// or DW_AT_ranges.  These patterns assume that the compile unit is always
++// emitted after all type units.
++//
++// { dg-final { scan-assembler-not "\\.quad\[^\n\]*DW_AT_low_pc.*DIE \\(\[^\n\]*\\) DW_TAG_compile_unit" } }
++// { dg-final { scan-assembler-not "\\.quad\[^\n\]*DW_AT_ranges.*DIE \\(\[^\n\]*\\) DW_TAG_compile_unit" } }
++
++struct A {
++  A();
++  virtual ~A();
++  virtual void foo();
++ private:
++  int data;
++};
++
++struct B {
++  B();
++  virtual ~B();
++};
++
++extern B* table[];
++
++struct D {
++  template <typename T>
++  T* get(int i)
++  {
++    B*& cell = table[i];
++    if (cell == 0)
++      cell = new T();
++    return static_cast<T*>(cell);
++  }
++};
++
++void func(D* d)
++{
++  struct C : B {
++    A a;
++  };
++  d->get<C>(0)->a.foo();
++}
+diff --git a/gcc/testsuite/g++.dg/debug/dwarf2/dwarf4-typedef.C b/gcc/testsuite/g++.dg/debug/dwarf2/dwarf4-typedef.C
+index c5520fa72..89a6bb44e 100644
+--- a/gcc/testsuite/g++.dg/debug/dwarf2/dwarf4-typedef.C
++++ b/gcc/testsuite/g++.dg/debug/dwarf2/dwarf4-typedef.C
+@@ -1,5 +1,5 @@
+ /* { dg-do compile } */
+-/* { dg-options "-gdwarf-4" } */
++/* { dg-options "-gdwarf-4 -fdebug-types-section" } */
+ 
+ /* Regression test for an ICE in output_die when using -gdwarf-4.  */
+ 

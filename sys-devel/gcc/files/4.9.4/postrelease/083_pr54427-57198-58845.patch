@@ -1,0 +1,179 @@
+diff --git a/gcc/c-family/c-common.c b/gcc/c-family/c-common.c
+index ea497e7e9..44b432509 100644
+--- a/gcc/c-family/c-common.c
++++ b/gcc/c-family/c-common.c
+@@ -1666,6 +1666,10 @@ warn_logical_operator (location_t location, enum tree_code code, tree type,
+ 	   || INTEGRAL_TYPE_P (TREE_TYPE (op_right))))
+     return;
+ 
++  /* The range computations only work with scalars.  */
++  if (VECTOR_TYPE_P (TREE_TYPE (op_left))
++      || VECTOR_TYPE_P (TREE_TYPE (op_right)))
++    return;
+ 
+   /* We first test whether either side separately is trivially true
+      (with OR) or trivially false (with AND).  If so, do not warn.
+diff --git a/gcc/cp/typeck.c b/gcc/cp/typeck.c
+index db69e2a55..ac22587f0 100644
+--- a/gcc/cp/typeck.c
++++ b/gcc/cp/typeck.c
+@@ -4031,8 +4031,8 @@ cp_build_binary_op (location_t location,
+             return error_mark_node;
+           case stv_firstarg:
+             {
+-	      op0 = save_expr (op0);
+               op0 = convert (TREE_TYPE (type1), op0);
++	      op0 = save_expr (op0);
+               op0 = build_vector_from_val (type1, op0);
+               type0 = TREE_TYPE (op0);
+               code0 = TREE_CODE (type0);
+@@ -4041,8 +4041,8 @@ cp_build_binary_op (location_t location,
+             }
+           case stv_secondarg:
+             {
+-	      op1 = save_expr (op1);
+               op1 = convert (TREE_TYPE (type0), op1);
++	      op1 = save_expr (op1);
+               op1 = build_vector_from_val (type0, op1);
+               type1 = TREE_TYPE (op1);
+               code1 = TREE_CODE (type1);
+@@ -4182,11 +4182,49 @@ cp_build_binary_op (location_t location,
+     case TRUTH_ORIF_EXPR:
+     case TRUTH_AND_EXPR:
+     case TRUTH_OR_EXPR:
+-      if (VECTOR_TYPE_P (type0) || VECTOR_TYPE_P (type1))
++      if (!VECTOR_TYPE_P (type0) && VECTOR_TYPE_P (type1))
+ 	{
+-	  sorry ("logical operation on vector type");
+-	  return error_mark_node;
++	  if (!COMPARISON_CLASS_P (op1))
++	    op1 = cp_build_binary_op (EXPR_LOCATION (op1), NE_EXPR, op1,
++				      build_zero_cst (type1), complain);
++	  if (code == TRUTH_ANDIF_EXPR)
++	    {
++	      tree z = build_zero_cst (TREE_TYPE (op1));
++	      return build_conditional_expr (location, op0, op1, z, complain);
++	    }
++	  else if (code == TRUTH_ORIF_EXPR)
++	    {
++	      tree m1 = build_all_ones_cst (TREE_TYPE (op1));
++	      return build_conditional_expr (location, op0, m1, op1, complain);
++	    }
++	  else
++	    gcc_unreachable ();
+ 	}
++      if (VECTOR_TYPE_P (type0))
++	{
++	  if (!COMPARISON_CLASS_P (op0))
++	    op0 = cp_build_binary_op (EXPR_LOCATION (op0), NE_EXPR, op0,
++				      build_zero_cst (type0), complain);
++	  if (!VECTOR_TYPE_P (type1))
++	    {
++	      tree m1 = build_all_ones_cst (TREE_TYPE (op0));
++	      tree z = build_zero_cst (TREE_TYPE (op0));
++	      op1 = build_conditional_expr (location, op1, z, m1, complain);
++	    }
++	  else if (!COMPARISON_CLASS_P (op1))
++	    op1 = cp_build_binary_op (EXPR_LOCATION (op1), NE_EXPR, op1,
++				      build_zero_cst (type1), complain);
++
++	  if (code == TRUTH_ANDIF_EXPR)
++	    code = BIT_AND_EXPR;
++	  else if (code == TRUTH_ORIF_EXPR)
++	    code = BIT_IOR_EXPR;
++	  else
++	    gcc_unreachable ();
++
++	  return cp_build_binary_op (location, code, op0, op1, complain);
++	}
++
+       result_type = boolean_type_node;
+       break;
+ 
+@@ -5658,6 +5696,9 @@ cp_build_unary_op (enum tree_code code, tree xarg, int noconvert,
+       break;
+ 
+     case TRUTH_NOT_EXPR:
++      if (VECTOR_INTEGER_TYPE_P (TREE_TYPE (arg)))
++	return cp_build_binary_op (input_location, EQ_EXPR, arg,
++				   build_zero_cst (TREE_TYPE (arg)), complain);
+       arg = perform_implicit_conversion (boolean_type_node, arg,
+ 					 complain);
+       val = invert_truthvalue_loc (input_location, arg);
+diff --git a/gcc/doc/extend.texi b/gcc/doc/extend.texi
+index b9eb98901..d97d58c73 100644
+--- a/gcc/doc/extend.texi
++++ b/gcc/doc/extend.texi
+@@ -7306,6 +7306,13 @@ vector. If both @code{b} and @code{c} are scalars and the type of
+ @code{b} and @code{c} are converted to a vector type whose elements have
+ this type and with the same number of elements as @code{a}.
+ 
++In C++, the logic operators @code{!, &&, ||} are available for vectors.
++@code{!v} is equivalent to @code{v == 0}, @code{a && b} is equivalent to
++@code{a!=0 & b!=0} and @code{a || b} is equivalent to @code{a!=0 | b!=0}.
++For mixed operations between a scalar @code{s} and a vector @code{v},
++@code{s && v} is equivalent to @code{s?v!=0:0} (the evaluation is
++short-circuit) and @code{v && s} is equivalent to @code{v!=0 & (s?-1:0)}.
++
+ Vector shuffling is available using functions
+ @code{__builtin_shuffle (vec, mask)} and
+ @code{__builtin_shuffle (vec0, vec1, mask)}.
+diff --git a/gcc/testsuite/g++.dg/ext/vector27.C b/gcc/testsuite/g++.dg/ext/vector27.C
+index 288e13c55..2f29577a4 100644
+--- a/gcc/testsuite/g++.dg/ext/vector27.C
++++ b/gcc/testsuite/g++.dg/ext/vector27.C
+@@ -1,7 +1,13 @@
+-// PR c++/58845
++/* { dg-do compile } */
+ 
+-void foo()
++typedef int veci __attribute__ ((vector_size (4 * sizeof (int))));
++typedef float vecf __attribute__ ((vector_size (4 * sizeof (float))));
++
++void f (veci *a, veci *b, int c)
++{
++  *a = !*a || *b < ++c;
++}
++void g (vecf *a, vecf *b)
+ {
+-  int v __attribute__((vector_size(8)));
+-  v = v || v;			// { dg-bogus "" "" { xfail *-*-* } }
++  *a = (*a < 1 && !(*b > 2)) ? *a + *b : 3;
+ }
+diff --git a/gcc/testsuite/g++.dg/ext/vector28.C b/gcc/testsuite/g++.dg/ext/vector28.C
+new file mode 100644
+index 000000000..ea48c9612
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/ext/vector28.C
+@@ -0,0 +1,10 @@
++/* { dg-do compile } */
++
++typedef int veci __attribute__ ((vector_size (4 * sizeof (int))));
++typedef float vecf __attribute__ ((vector_size (4 * sizeof (float))));
++
++void f (veci *a, vecf *b, int c)
++{
++  *a = c || *b;
++  *a = *a || c;
++}
+diff --git a/gcc/testsuite/g++.dg/ext/vector9.C b/gcc/testsuite/g++.dg/ext/vector9.C
+index 52b3f1714..42d150dd3 100644
+--- a/gcc/testsuite/g++.dg/ext/vector9.C
++++ b/gcc/testsuite/g++.dg/ext/vector9.C
+@@ -6,5 +6,5 @@ typedef int   v4i __attribute__((vector_size(8)));
+ void foo()
+ {
+   v4f v;
+-  !(v4i)v; // { dg-error "v4i|argument" }
++  !(v4i)v;
+ }
+diff --git a/gcc/testsuite/g++.dg/other/error23.C b/gcc/testsuite/g++.dg/other/error23.C
+index 959fe4075..c60603e8f 100644
+--- a/gcc/testsuite/g++.dg/other/error23.C
++++ b/gcc/testsuite/g++.dg/other/error23.C
+@@ -2,4 +2,4 @@
+ // { dg-do compile }
+ 
+ int v __attribute ((vector_size (8)));
+-bool b = !(v - v);	// { dg-error "could not convert .\\(__vector.2. int\\)\\{0, 0\\}. from .__vector.2. int. to .bool.|in argument to unary" }
++bool b = !(v - v);	// { dg-error "not convert .__vector.2. int. to .bool. in initialization" }

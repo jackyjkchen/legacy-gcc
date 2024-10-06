@@ -1,0 +1,58 @@
+diff --git a/gcc/fortran/trans-decl.c b/gcc/fortran/trans-decl.c
+index 1baa58bc4..2917d1c8f 100644
+--- a/gcc/fortran/trans-decl.c
++++ b/gcc/fortran/trans-decl.c
+@@ -1695,12 +1695,17 @@ gfc_get_extern_function_decl (gfc_symbol * sym)
+       if (gsym && !gsym->bind_c)
+ 	gsym = NULL;
+     }
+-  else
++  else if (sym->module == NULL)
+     {
+       gsym = gfc_find_gsymbol (gfc_gsym_root, sym->name);
+       if (gsym && gsym->bind_c)
+ 	gsym = NULL;
+     }
++  else
++    {
++      /* Procedure from a different module.  */
++      gsym = NULL;
++    }
+ 
+   if (gsym && !gsym->defined)
+     gsym = NULL;
+diff --git a/gcc/testsuite/gfortran.dg/pr89574.f90 b/gcc/testsuite/gfortran.dg/pr89574.f90
+new file mode 100644
+index 000000000..48dd0680a
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/pr89574.f90
+@@ -0,0 +1,29 @@
++! { dg-do compile }
++! PR fortran/89574 - ICE in conv_function_val, at fortran/trans-expr.c:3792
++
++module mod1
++contains
++  subroutine init
++  end subroutine
++end module
++
++module mod2
++contains
++  subroutine init
++  end subroutine
++end module
++
++module init
++  use mod1, only : test_init1 => init
++  use mod2, only : test_init2 => init
++  implicit none
++contains
++  subroutine sub
++    call test_init1
++    call test_init2
++    call init
++  contains
++    subroutine init
++    end subroutine
++  end subroutine
++end module

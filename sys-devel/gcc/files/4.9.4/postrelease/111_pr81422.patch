@@ -1,0 +1,55 @@
+diff --git a/gcc/config/aarch64/aarch64.c b/gcc/config/aarch64/aarch64.c
+index 5ca38b6f7..4827b2b2d 100644
+--- a/gcc/config/aarch64/aarch64.c
++++ b/gcc/config/aarch64/aarch64.c
+@@ -642,7 +642,8 @@ aarch64_load_symref_appropriately (rtx dest, rtx imm,
+ 	emit_insn (gen_tlsdesc_small (imm));
+ 	tp = aarch64_load_tp (NULL);
+ 	emit_insn (gen_rtx_SET (Pmode, dest, gen_rtx_PLUS (Pmode, tp, x0)));
+-	set_unique_reg_note (get_last_insn (), REG_EQUIV, imm);
++	if (REG_P (dest))
++	  set_unique_reg_note (get_last_insn (), REG_EQUIV, imm);
+ 	return;
+       }
+ 
+@@ -652,7 +653,8 @@ aarch64_load_symref_appropriately (rtx dest, rtx imm,
+ 	rtx tp = aarch64_load_tp (NULL);
+ 	emit_insn (gen_tlsie_small (tmp_reg, imm));
+ 	emit_insn (gen_rtx_SET (Pmode, dest, gen_rtx_PLUS (Pmode, tp, tmp_reg)));
+-	set_unique_reg_note (get_last_insn (), REG_EQUIV, imm);
++	if (REG_P (dest))
++	  set_unique_reg_note (get_last_insn (), REG_EQUIV, imm);
+ 	return;
+       }
+ 
+@@ -664,7 +666,8 @@ aarch64_load_symref_appropriately (rtx dest, rtx imm,
+ 	  tp = gen_lowpart (GET_MODE (dest), tp);
+ 
+ 	emit_insn (gen_tlsle_small (dest, tp, imm));
+-	set_unique_reg_note (get_last_insn (), REG_EQUIV, imm);
++	if (REG_P (dest))
++	  set_unique_reg_note (get_last_insn (), REG_EQUIV, imm);
+ 	return;
+       }
+ 
+diff --git a/gcc/testsuite/gcc.target/aarch64/pr81422.C b/gcc/testsuite/gcc.target/aarch64/pr81422.C
+new file mode 100644
+index 000000000..5bcc94899
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/aarch64/pr81422.C
+@@ -0,0 +1,15 @@
++/* { dg-do compile } */
++/* { dg-options "-O0" } */
++
++struct DArray
++{
++    __SIZE_TYPE__ length;
++    int* ptr;
++};
++
++void foo35(DArray)
++{
++    static __thread int x[5];
++    foo35({5, (int*)&x});
++}
++

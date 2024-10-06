@@ -1,0 +1,49 @@
+diff --git a/gcc/cp/decl.c b/gcc/cp/decl.c
+index 6c17f044d..84f20a1a8 100644
+--- a/gcc/cp/decl.c
++++ b/gcc/cp/decl.c
+@@ -12803,9 +12803,12 @@ finish_enum_value_list (tree enumtype)
+       input_location = saved_location;
+ 
+       /* Do not clobber shared ints.  */
+-      value = copy_node (value);
++      if (value != error_mark_node)
++	{
++	  value = copy_node (value);
+ 
+-      TREE_TYPE (value) = enumtype;
++	  TREE_TYPE (value) = enumtype;
++	}
+       DECL_INITIAL (decl) = value;
+     }
+ 
+diff --git a/gcc/cp/init.c b/gcc/cp/init.c
+index 6ec91fc47..d0b6ba23b 100644
+--- a/gcc/cp/init.c
++++ b/gcc/cp/init.c
+@@ -2036,7 +2036,8 @@ constant_value_1 (tree decl, bool integral_p, bool return_aggregate_cst_ok_p)
+       init = DECL_INITIAL (decl);
+       if (init == error_mark_node)
+ 	{
+-	  if (DECL_INITIALIZED_BY_CONSTANT_EXPRESSION_P (decl))
++	  if (TREE_CODE (decl) == CONST_DECL
++	      || DECL_INITIALIZED_BY_CONSTANT_EXPRESSION_P (decl))
+ 	    /* Treat the error as a constant to avoid cascading errors on
+ 	       excessively recursive template instantiation (c++/9335).  */
+ 	    return init;
+diff --git a/gcc/testsuite/g++.dg/ext/int128-5.C b/gcc/testsuite/g++.dg/ext/int128-5.C
+new file mode 100644
+index 000000000..c2d9297c2
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/ext/int128-5.C
+@@ -0,0 +1,10 @@
++// PR c++/79896
++// { dg-do compile { target { ilp32 && { ! int128 } } } }
++// { dg-options "" }
++
++enum E
++{
++  e1 = 0xffffffffffffffffULL,
++  e2,			// { dg-error "overflow in enumeration values" }
++  e3
++} e = e3;

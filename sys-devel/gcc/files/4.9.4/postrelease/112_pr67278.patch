@@ -1,0 +1,84 @@
+diff --git a/gcc/config/i386/i386.c b/gcc/config/i386/i386.c
+index df6d73373..cbed7d40b 100644
+--- a/gcc/config/i386/i386.c
++++ b/gcc/config/i386/i386.c
+@@ -6266,6 +6266,10 @@ type_natural_mode (const_tree type, const CUMULATIVE_ARGS *cum,
+ 	{
+ 	  enum machine_mode innermode = TYPE_MODE (TREE_TYPE (type));
+ 
++	  /* There are no XFmode vector modes.  */
++	  if (innermode == XFmode)
++	    return mode;
++
+ 	  if (TREE_CODE (TREE_TYPE (type)) == REAL_TYPE)
+ 	    mode = MIN_MODE_VECTOR_FLOAT;
+ 	  else
+diff --git a/gcc/testsuite/gcc.dg/simd-7.c b/gcc/testsuite/gcc.dg/simd-7.c
+new file mode 100644
+index 000000000..42feccb20
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/simd-7.c
+@@ -0,0 +1,20 @@
++/* { dg-do compile } */
++/* { dg-options "-w -Wno-psabi" } */
++
++#if __SIZEOF_LONG_DOUBLE__ == 16 || __SIZEOF_LONG_DOUBLE__ == 8
++typedef long double a __attribute__((vector_size (16)));
++
++a __attribute__((noinline))
++sum (a first, a second)
++{
++    return first + second;
++}
++
++a
++foo (a x, a y, a z)
++{
++  return sum (x, y) + z;
++}
++#else
++int main() {}
++#endif
+diff --git a/gcc/testsuite/gcc.dg/simd-8.c b/gcc/testsuite/gcc.dg/simd-8.c
+new file mode 100644
+index 000000000..5bc8637c8
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/simd-8.c
+@@ -0,0 +1,20 @@
++/* { dg-do compile } */
++/* { dg-options "-w -Wno-psabi" } */
++
++#if __SIZEOF_LONG_DOUBLE__ == 16 || __SIZEOF_LONG_DOUBLE__ == 8
++typedef long double a __attribute__((vector_size (32)));
++
++a __attribute__((noinline))
++sum (a first, a second)
++{
++    return first + second;
++}
++
++a
++foo (a x, a y, a z)
++{
++  return sum (x, y) + z;
++}
++#else
++int main() {}
++#endif
+diff --git a/gcc/tree-cfg.c b/gcc/tree-cfg.c
+index 1dc221099..9f6fb9926 100644
+--- a/gcc/tree-cfg.c
++++ b/gcc/tree-cfg.c
+@@ -2835,10 +2835,10 @@ verify_expr (tree *tp, int *walk_subtrees, void *data ATTRIBUTE_UNUSED)
+ 	    }
+ 	  else if (!INTEGRAL_TYPE_P (TREE_TYPE (t))
+ 		   && TYPE_MODE (TREE_TYPE (t)) != BLKmode
+-		   && (GET_MODE_PRECISION (TYPE_MODE (TREE_TYPE (t)))
++		   && (GET_MODE_BITSIZE (TYPE_MODE (TREE_TYPE (t)))
+ 		       != tree_to_uhwi (t1)))
+ 	    {
+-	      error ("mode precision of non-integral result does not "
++	      error ("mode size of non-integral result does not "
+ 		     "match field size of BIT_FIELD_REF");
+ 	      return t;
+ 	    }

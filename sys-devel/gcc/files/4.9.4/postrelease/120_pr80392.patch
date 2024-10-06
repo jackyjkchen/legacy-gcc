@@ -1,0 +1,45 @@
+diff --git a/gcc/fortran/trans-types.c b/gcc/fortran/trans-types.c
+index 26db35fb8..9a9e8a40f 100644
+--- a/gcc/fortran/trans-types.c
++++ b/gcc/fortran/trans-types.c
+@@ -2495,9 +2495,10 @@ gfc_get_derived_type (gfc_symbol * derived)
+ 	 the same as derived, by forcing the procedure pointer component to
+ 	 be built as if the explicit interface does not exist.  */
+       if (c->attr.proc_pointer
+-	  && ((c->ts.type != BT_DERIVED && c->ts.type != BT_CLASS)
+-	       || (c->ts.u.derived
+-		   && !gfc_compare_derived_types (derived, c->ts.u.derived))))
++	  && (c->ts.type != BT_DERIVED || (c->ts.u.derived
++		    && !gfc_compare_derived_types (derived, c->ts.u.derived)))
++	  && (c->ts.type != BT_CLASS || (CLASS_DATA (c)->ts.u.derived
++		    && !gfc_compare_derived_types (derived, CLASS_DATA (c)->ts.u.derived))))
+ 	field_type = gfc_get_ppc_type (c);
+       else if (c->attr.proc_pointer && derived->backend_decl)
+ 	{
+diff --git a/gcc/testsuite/gfortran.dg/proc_ptr_comp_49.f90 b/gcc/testsuite/gfortran.dg/proc_ptr_comp_49.f90
+new file mode 100644
+index 000000000..e89791f72
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/proc_ptr_comp_49.f90
+@@ -0,0 +1,21 @@
++! { dg-do compile }
++!
++! PR 80392: [5/6/7 Regression] [OOP] ICE with allocatable polymorphic function result in a procedure pointer component
++!
++! Contributed by <zed.three@gmail.com>
++
++module mwe
++
++  implicit none
++
++  type :: MyType
++     procedure(my_op), nopass, pointer :: op
++  end type
++
++contains
++
++  function my_op() result(foo)
++    class(MyType), allocatable :: foo
++  end function
++
++end module

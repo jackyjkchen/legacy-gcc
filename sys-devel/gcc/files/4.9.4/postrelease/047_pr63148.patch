@@ -1,0 +1,460 @@
+diff --git a/gcc/c-family/c-format.c b/gcc/c-family/c-format.c
+index cdc09c44b..6d41f9e5a 100644
+--- a/gcc/c-family/c-format.c
++++ b/gcc/c-family/c-format.c
+@@ -1460,12 +1460,13 @@ check_format_arg (void *ctx, tree format_tree,
+ 	  res->number_non_literal++;
+ 	  return;
+ 	}
+-      if (!tree_fits_shwi_p (arg1)
+-	  || (offset = tree_to_shwi (arg1)) < 0)
++      /* POINTER_PLUS_EXPR offsets are to be interpreted signed.  */
++      if (!cst_and_fits_in_hwi (arg1))
+ 	{
+ 	  res->number_non_literal++;
+ 	  return;
+ 	}
++      offset = int_cst_value (arg1);
+     }
+   if (TREE_CODE (format_tree) != ADDR_EXPR)
+     {
+@@ -1510,6 +1511,11 @@ check_format_arg (void *ctx, tree format_tree,
+       && tree_fits_shwi_p (TREE_OPERAND (format_tree, 1))
+       && (offset += tree_to_shwi (TREE_OPERAND (format_tree, 1))) >= 0)
+     format_tree = TREE_OPERAND (format_tree, 0);
++  if (offset < 0)
++    {
++      res->number_non_literal++;
++      return;
++    }
+   if (TREE_CODE (format_tree) == VAR_DECL
+       && TREE_CODE (TREE_TYPE (format_tree)) == ARRAY_TYPE
+       && (array_init = decl_constant_value (format_tree)) != format_tree
+diff --git a/gcc/fold-const.c b/gcc/fold-const.c
+index 516ffdd4a..2984bfac1 100644
+--- a/gcc/fold-const.c
++++ b/gcc/fold-const.c
+@@ -6937,218 +6937,6 @@ fold_sign_changed_comparison (location_t loc, enum tree_code code, tree type,
+   return fold_build2_loc (loc, code, type, arg0_inner, arg1);
+ }
+ 
+-/* Tries to replace &a[idx] p+ s * delta with &a[idx + delta], if s is
+-   step of the array.  Reconstructs s and delta in the case of s *
+-   delta being an integer constant (and thus already folded).  ADDR is
+-   the address. MULT is the multiplicative expression.  If the
+-   function succeeds, the new address expression is returned.
+-   Otherwise NULL_TREE is returned.  LOC is the location of the
+-   resulting expression.  */
+-
+-static tree
+-try_move_mult_to_index (location_t loc, tree addr, tree op1)
+-{
+-  tree s, delta, step;
+-  tree ref = TREE_OPERAND (addr, 0), pref;
+-  tree ret, pos;
+-  tree itype;
+-  bool mdim = false;
+-
+-  /*  Strip the nops that might be added when converting op1 to sizetype. */
+-  STRIP_NOPS (op1);
+-
+-  /* Canonicalize op1 into a possibly non-constant delta
+-     and an INTEGER_CST s.  */
+-  if (TREE_CODE (op1) == MULT_EXPR)
+-    {
+-      tree arg0 = TREE_OPERAND (op1, 0), arg1 = TREE_OPERAND (op1, 1);
+-
+-      STRIP_NOPS (arg0);
+-      STRIP_NOPS (arg1);
+-
+-      if (TREE_CODE (arg0) == INTEGER_CST)
+-        {
+-          s = arg0;
+-          delta = arg1;
+-        }
+-      else if (TREE_CODE (arg1) == INTEGER_CST)
+-        {
+-          s = arg1;
+-          delta = arg0;
+-        }
+-      else
+-        return NULL_TREE;
+-    }
+-  else if (TREE_CODE (op1) == INTEGER_CST)
+-    {
+-      delta = op1;
+-      s = NULL_TREE;
+-    }
+-  else
+-    {
+-      /* Simulate we are delta * 1.  */
+-      delta = op1;
+-      s = integer_one_node;
+-    }
+-
+-  /* Handle &x.array the same as we would handle &x.array[0].  */
+-  if (TREE_CODE (ref) == COMPONENT_REF
+-      && TREE_CODE (TREE_TYPE (ref)) == ARRAY_TYPE)
+-    {
+-      tree domain;
+-
+-      /* Remember if this was a multi-dimensional array.  */
+-      if (TREE_CODE (TREE_OPERAND (ref, 0)) == ARRAY_REF)
+-	mdim = true;
+-
+-      domain = TYPE_DOMAIN (TREE_TYPE (ref));
+-      if (! domain)
+-	goto cont;
+-      itype = TREE_TYPE (domain);
+-
+-      step = TYPE_SIZE_UNIT (TREE_TYPE (TREE_TYPE (ref)));
+-      if (TREE_CODE (step) != INTEGER_CST)
+-	goto cont;
+-
+-      if (s)
+-	{
+-	  if (! tree_int_cst_equal (step, s))
+-	    goto cont;
+-	}
+-      else
+-	{
+-	  /* Try if delta is a multiple of step.  */
+-	  tree tmp = div_if_zero_remainder (EXACT_DIV_EXPR, op1, step);
+-	  if (! tmp)
+-	    goto cont;
+-	  delta = tmp;
+-	}
+-
+-      /* Only fold here if we can verify we do not overflow one
+-	 dimension of a multi-dimensional array.  */
+-      if (mdim)
+-	{
+-	  tree tmp;
+-
+-	  if (!TYPE_MIN_VALUE (domain)
+-	      || !TYPE_MAX_VALUE (domain)
+-	      || TREE_CODE (TYPE_MAX_VALUE (domain)) != INTEGER_CST)
+-	    goto cont;
+-
+-	  tmp = fold_binary_loc (loc, PLUS_EXPR, itype,
+-				 fold_convert_loc (loc, itype,
+-						   TYPE_MIN_VALUE (domain)),
+-				 fold_convert_loc (loc, itype, delta));
+-	  if (TREE_CODE (tmp) != INTEGER_CST
+-	      || tree_int_cst_lt (TYPE_MAX_VALUE (domain), tmp))
+-	    goto cont;
+-	}
+-
+-      /* We found a suitable component reference.  */
+-
+-      pref = TREE_OPERAND (addr, 0);
+-      ret = copy_node (pref);
+-      SET_EXPR_LOCATION (ret, loc);
+-
+-      ret = build4_loc (loc, ARRAY_REF, TREE_TYPE (TREE_TYPE (ref)), ret,
+-			fold_build2_loc
+-			  (loc, PLUS_EXPR, itype,
+-			   fold_convert_loc (loc, itype,
+-					     TYPE_MIN_VALUE
+-					       (TYPE_DOMAIN (TREE_TYPE (ref)))),
+-			   fold_convert_loc (loc, itype, delta)),
+-			NULL_TREE, NULL_TREE);
+-      return build_fold_addr_expr_loc (loc, ret);
+-    }
+-
+-cont:
+-
+-  for (;; ref = TREE_OPERAND (ref, 0))
+-    {
+-      if (TREE_CODE (ref) == ARRAY_REF)
+-	{
+-	  tree domain;
+-
+-	  /* Remember if this was a multi-dimensional array.  */
+-	  if (TREE_CODE (TREE_OPERAND (ref, 0)) == ARRAY_REF)
+-	    mdim = true;
+-
+-	  domain = TYPE_DOMAIN (TREE_TYPE (TREE_OPERAND (ref, 0)));
+-	  if (! domain)
+-	    continue;
+-	  itype = TREE_TYPE (domain);
+-
+-	  step = array_ref_element_size (ref);
+-	  if (TREE_CODE (step) != INTEGER_CST)
+-	    continue;
+-
+-	  if (s)
+-	    {
+-	      if (! tree_int_cst_equal (step, s))
+-                continue;
+-	    }
+-	  else
+-	    {
+-	      /* Try if delta is a multiple of step.  */
+-	      tree tmp = div_if_zero_remainder (EXACT_DIV_EXPR, op1, step);
+-	      if (! tmp)
+-		continue;
+-	      delta = tmp;
+-	    }
+-
+-	  /* Only fold here if we can verify we do not overflow one
+-	     dimension of a multi-dimensional array.  */
+-	  if (mdim)
+-	    {
+-	      tree tmp;
+-
+-	      if (TREE_CODE (TREE_OPERAND (ref, 1)) != INTEGER_CST
+-		  || !TYPE_MAX_VALUE (domain)
+-		  || TREE_CODE (TYPE_MAX_VALUE (domain)) != INTEGER_CST)
+-		continue;
+-
+-	      tmp = fold_binary_loc (loc, PLUS_EXPR, itype,
+-				     fold_convert_loc (loc, itype,
+-						       TREE_OPERAND (ref, 1)),
+-				     fold_convert_loc (loc, itype, delta));
+-	      if (!tmp
+-		  || TREE_CODE (tmp) != INTEGER_CST
+-		  || tree_int_cst_lt (TYPE_MAX_VALUE (domain), tmp))
+-		continue;
+-	    }
+-
+-	  break;
+-	}
+-      else
+-	mdim = false;
+-
+-      if (!handled_component_p (ref))
+-	return NULL_TREE;
+-    }
+-
+-  /* We found the suitable array reference.  So copy everything up to it,
+-     and replace the index.  */
+-
+-  pref = TREE_OPERAND (addr, 0);
+-  ret = copy_node (pref);
+-  SET_EXPR_LOCATION (ret, loc);
+-  pos = ret;
+-
+-  while (pref != ref)
+-    {
+-      pref = TREE_OPERAND (pref, 0);
+-      TREE_OPERAND (pos, 0) = copy_node (pref);
+-      pos = TREE_OPERAND (pos, 0);
+-    }
+-
+-  TREE_OPERAND (pos, 1)
+-    = fold_build2_loc (loc, PLUS_EXPR, itype,
+-		       fold_convert_loc (loc, itype, TREE_OPERAND (pos, 1)),
+-		       fold_convert_loc (loc, itype, delta));
+-  return fold_build1_loc (loc, ADDR_EXPR, TREE_TYPE (addr), ret);
+-}
+-
+-
+ /* Fold A < X && A + 1 > Y to A < X && A >= Y.  Normally A + 1 > Y
+    means A >= Y && A != MAX, but in this case we know that
+    A < X <= MAX.  INEQ is A + 1 > Y, BOUND is A < X.  */
+@@ -10355,18 +10143,6 @@ fold_binary_loc (location_t loc,
+ 	return fold_build2_loc (loc, PLUS_EXPR, type, arg0,
+ 			    fold_convert_loc (loc, type, arg1));
+ 
+-     /* Try replacing &a[i1] +p c * i2 with &a[i1 + i2], if c is step
+-	of the array.  Loop optimizer sometimes produce this type of
+-	expressions.  */
+-      if (TREE_CODE (arg0) == ADDR_EXPR)
+-	{
+-	  tem = try_move_mult_to_index (loc, arg0,
+-					fold_convert_loc (loc,
+-							  ssizetype, arg1));
+-	  if (tem)
+-	    return fold_convert_loc (loc, type, tem);
+-	}
+-
+       return NULL_TREE;
+ 
+     case PLUS_EXPR:
+diff --git a/gcc/testsuite/c-c++-common/pr19807-1.c b/gcc/testsuite/c-c++-common/pr19807-1.c
+new file mode 100644
+index 000000000..92ee2245b
+--- /dev/null
++++ b/gcc/testsuite/c-c++-common/pr19807-1.c
+@@ -0,0 +1,10 @@
++/* { dg-do link } */
++
++extern void link_error(void);
++int main()
++{
++  int a[4];
++  if (&a[2]-1 != &a[1])
++    link_error();
++  return 0;
++}
+diff --git a/gcc/testsuite/g++.dg/tree-ssa/pr19807.C b/gcc/testsuite/g++.dg/tree-ssa/pr19807.C
+index 0eeeb18ab..8d7807050 100644
+--- a/gcc/testsuite/g++.dg/tree-ssa/pr19807.C
++++ b/gcc/testsuite/g++.dg/tree-ssa/pr19807.C
+@@ -11,6 +11,9 @@ void foo(void)
+ 	z = 1 + &a[1];
+ }
+ 
++/* { dg-final { scan-tree-dump-times "&MEM\\\[\\\(void .\\\)&a \\\+ 8B\\\]" 3 "optimized" } } */
++
++
+ void bar(int i)
+ {
+ 	x = &a[i] - 1;
+@@ -18,13 +21,7 @@ void bar(int i)
+ 	z = 1 + &a[i];
+ }
+ 
+-/* { dg-final { scan-tree-dump-times "&a\\\[2\\\]" 3 "optimized" } } */
+-
+-/* We want &a[D.bla + 1] and &a[D.foo - 1] in the final code, but
+-   tuples mean that the offset is calculated in a separate instruction.
+-   Simply test for the existence of +1 and -1 once, which also ensures
+-   the above.  If the addition/subtraction would be applied to the
+-   pointer we would instead see +-4 (or 8, depending on sizeof(int)).  */
+-/* { dg-final { scan-tree-dump "\\\+ (0x0f*|18446744073709551615|4294967295|-1);" "optimized" } } */
+-/* { dg-final { scan-tree-dump-times "\\\+ 1;" 1 "optimized" } } */
++/* We can't get &a[i +- 1] in the final code and it is not clear we
++   want this.  Instead we get to see &a[i] and pointer offsetting
++   by 4 and -4U.  */
+ /* { dg-final { cleanup-tree-dump "optimized" } } */
+diff --git a/gcc/testsuite/g++.dg/tree-ssa/tmmti-2.C b/gcc/testsuite/g++.dg/tree-ssa/tmmti-2.C
+deleted file mode 100644
+index 808b5ab27..000000000
+--- a/gcc/testsuite/g++.dg/tree-ssa/tmmti-2.C
++++ /dev/null
+@@ -1,22 +0,0 @@
+-/* { dg-do compile } */
+-/* { dg-options { -O -fdump-tree-optimized } } */
+-
+-int a[4][8];
+-
+-int foo(long i)
+-{
+-	return *(&a[0][0] + i*8); // a[i][0]
+-}
+-
+-struct Foo { double x, y; };
+-
+-Foo b[4];
+-
+-double bar(long i)
+-{
+-	return *(&b[0].x + i*2); // b[i].x
+-}
+-
+-/* { dg-final { scan-tree-dump "a\\\[.*i.*\\\]\\\[0\\\]" "optimized" { xfail *-*-* } } } */
+-/* { dg-final { scan-tree-dump "b\\\[.*i.*\\\].x" "optimized" } } */
+-/* { dg-final { cleanup-tree-dump "optimized" } } */
+diff --git a/gcc/testsuite/gcc.dg/vect/pr63148.c b/gcc/testsuite/gcc.dg/vect/pr63148.c
+new file mode 100644
+index 000000000..4967a0d73
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/vect/pr63148.c
+@@ -0,0 +1,93 @@
++/* { dg-do run } */
++
++#include "tree-vect.h"
++
++/* Extracted from MultiSource/Benchmarks/TSVC/tsc.inc
++   From LLVM test-suite */
++
++#define N 40
++
++int dummy(double[N], double[N], double[N], double[N]);
++
++double array[256*256] __attribute__((aligned(32)));
++
++double x[N] __attribute__((aligned(32)));
++double temp;
++int temp_int;
++struct GlobalData
++{
++  __attribute__((aligned(32))) double a[N];
++  int pad1[3];
++  __attribute__((aligned(32))) double b[N];
++  int pad2[5];
++  __attribute__((aligned(32))) double c[N];
++  int pad3[7];
++  __attribute__((aligned(32))) double d[N];
++  int pad4[11];
++} global_data;
++
++__attribute__((aligned(32))) double * const a = global_data.a;
++__attribute__((aligned(32))) double * const b = global_data.b;
++__attribute__((aligned(32))) double * const c = global_data.c;
++__attribute__((aligned(32))) double * const d = global_data.d;
++
++void init(void);
++void check(double *_a, double *_b);
++int s221(void)
++{
++  int i;
++
++  init();
++  for (i = 1; i < N; i++)
++    {
++      a[i] += c[i] * d[i];
++      b[i] = b[i - 1] + a[i] + d[i];
++    }
++  check(a, b);
++  return 0;
++}
++
++int set1d(double arr[N], double value)
++{
++  int i;
++
++  for (i = 0; i < N; i++) {
++    arr[i] = value;
++  }
++  return 0;
++}
++
++void init(void)
++{
++  set1d(a, 1);
++  set1d(b, 2);
++  set1d(c, 3);
++  set1d(d, 4);
++}
++
++void abort(void);
++
++void check(double *_a, double *_b)
++{
++  int i;
++
++  double suma = 0;
++  double sumb = 0;
++  for (i = 0; i < N; i++){
++    suma += _a[i];
++    sumb += _b[i];
++  }
++  if (suma != 508)
++    abort();
++  if (sumb != 13340.00)
++    abort();
++}
++
++int main(int argc, char *argv[])
++{
++  check_vect ();
++  s221();
++  return 0;
++}
++
++/* { dg-final { cleanup-tree-dump "vect" } } */
+diff --git a/gcc/tree-data-ref.c b/gcc/tree-data-ref.c
+index e034757b8..3ecf312c5 100644
+--- a/gcc/tree-data-ref.c
++++ b/gcc/tree-data-ref.c
+@@ -965,6 +965,7 @@ dr_analyze_indices (struct data_reference *dr, loop_p nest, loop_p loop)
+ 	  orig_type = TREE_TYPE (base);
+ 	  STRIP_USELESS_TYPE_CONVERSION (base);
+ 	  split_constant_offset (base, &base, &off);
++	  STRIP_USELESS_TYPE_CONVERSION (base);
+ 	  /* Fold the MEM_REF offset into the evolutions initial
+ 	     value to make more bases comparable.  */
+ 	  if (!integer_zerop (memoff))
