@@ -1,0 +1,34 @@
+diff --git a/gcc/cp/lambda.c b/gcc/cp/lambda.c
+index e03956846..8404a8ec0 100644
+--- a/gcc/cp/lambda.c
++++ b/gcc/cp/lambda.c
+@@ -1347,8 +1347,9 @@ lambda_static_thunk_p (tree fn)
+ bool
+ is_lambda_ignored_entity (tree val)
+ {
+-  /* Look past normal capture proxies.  */
+-  if (is_normal_capture_proxy (val))
++  /* Look past normal, non-VLA capture proxies.  */
++  if (is_normal_capture_proxy (val)
++      && !variably_modified_type_p (TREE_TYPE (val), NULL_TREE))
+     return true;
+ 
+   /* Always ignore lambda fields, their names are only for debugging.  */
+diff --git a/gcc/testsuite/g++.dg/cpp0x/lambda/lambda-vla4.C b/gcc/testsuite/g++.dg/cpp0x/lambda/lambda-vla4.C
+new file mode 100644
+index 000000000..3e9cf076d
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/lambda/lambda-vla4.C
+@@ -0,0 +1,12 @@
++// PR c++/60855
++// { dg-do compile { target c++11 } }
++// { dg-additional-options "-Wno-vla" }
++
++int main() {
++  unsigned count = 5;
++  bool array[count];
++  [&array] () {
++    array[0] = sizeof(array) > 5;
++  }();
++  return 0;
++}

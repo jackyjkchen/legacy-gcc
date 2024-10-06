@@ -1,0 +1,101 @@
+diff --git a/gcc/testsuite/gcc.dg/pr111914.c b/gcc/testsuite/gcc.dg/pr111914.c
+new file mode 100644
+index 000000000..05804bddc
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr111914.c
+@@ -0,0 +1,14 @@
++/* { dg-do compile } */
++/* { dg-options "-std=gnu99" } */
++
++__attribute__((always_inline))
++static inline void f(int n, int (*a())[n])
++{
++  /* Unused 'a'.  */
++}
++
++void g(void)
++{
++  int (*a())[1];
++  f(1, a);
++}
+diff --git a/gcc/tree-inline.c b/gcc/tree-inline.c
+index 35a6d082e..800d82857 100644
+--- a/gcc/tree-inline.c
++++ b/gcc/tree-inline.c
+@@ -3277,9 +3277,7 @@ setup_one_parameter (copy_body_data *id, tree p, tree value, tree fn,
+ 
+       STRIP_USELESS_TYPE_CONVERSION (rhs);
+ 
+-      /* If we are in SSA form properly remap the default definition
+-         or assign to a dummy SSA name if the parameter is unused and
+-	 we are not optimizing.  */
++      /* If we are in SSA form properly remap the default definition.  */
+       if (gimple_in_ssa_p (cfun) && is_gimple_reg (p))
+ 	{
+ 	  if (def)
+@@ -3289,11 +3287,6 @@ setup_one_parameter (copy_body_data *id, tree p, tree value, tree fn,
+ 	      SSA_NAME_IS_DEFAULT_DEF (def) = 0;
+ 	      set_ssa_default_def (cfun, var, NULL);
+ 	    }
+-	  else if (!optimize)
+-	    {
+-	      def = make_ssa_name (var);
+-	      init_stmt = gimple_build_assign (def, rhs);
+-	    }
+ 	}
+       else
+         init_stmt = gimple_build_assign (var, rhs);
+@@ -3304,6 +3297,29 @@ setup_one_parameter (copy_body_data *id, tree p, tree value, tree fn,
+   return init_stmt;
+ }
+ 
++/* Deal with mismatched formal/actual parameters, in a rather brute-force way
++   if need be (which should only be necessary for invalid programs).  Attempt
++   to convert VAL to TYPE and return the result if it is possible, just return
++   a zero constant of the given type if it fails.  */
++
++static tree
++force_value_to_type (tree type, tree value)
++{
++  /* If we can match up types by promotion/demotion do so.  */
++  if (fold_convertible_p (type, value))
++    return fold_convert (type, value);
++
++  /* ???  For valid programs we should not end up here.
++     Still if we end up with truly mismatched types here, fall back
++     to using a VIEW_CONVERT_EXPR or a literal zero to not leak invalid
++     GIMPLE to the following passes.  */
++  if (!is_gimple_reg_type (TREE_TYPE (value))
++	   || TYPE_SIZE (type) == TYPE_SIZE (TREE_TYPE (value)))
++    return fold_build1 (VIEW_CONVERT_EXPR, type, value);
++  else
++    return build_zero_cst (type);
++}
++
+ /* Generate code to initialize the parameters of the function at the
+    top of the stack in ID from the GIMPLE_CALL STMT.  */
+ 
+@@ -3353,6 +3369,23 @@ initialize_inlined_parameters (copy_body_data *id, gimple *stmt,
+ 		  && SSA_NAME_VAR (*defp) == var)
+ 		TREE_TYPE (*defp) = TREE_TYPE (var);
+ 	    }
++	  /* When not optimizing and the parameter is unused, assign to
++	     a dummy SSA name.  Do this after remapping the type above.  */
++	  else if (!optimize
++		   && is_gimple_reg (p)
++		   && i < gimple_call_num_args (stmt))
++	    {
++	      tree val = gimple_call_arg (stmt, i);
++	      if (val != error_mark_node)
++		{
++		  if (!useless_type_conversion_p (TREE_TYPE (p),
++						  TREE_TYPE (val)))
++		    val = force_value_to_type (TREE_TYPE (p), val);
++		  def = make_ssa_name (var);
++		  gimple *init_stmt = gimple_build_assign (def, val);
++		  insert_init_stmt (id, bb, init_stmt);
++		}
++	    }
+ 	}
+     }
+ 

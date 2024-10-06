@@ -1,0 +1,66 @@
+diff --git a/gcc/config/aarch64/aarch64.c b/gcc/config/aarch64/aarch64.c
+index f3e5eeaf3..69cc00b79 100644
+--- a/gcc/config/aarch64/aarch64.c
++++ b/gcc/config/aarch64/aarch64.c
+@@ -838,10 +838,14 @@ aarch64_load_symref_appropriately (rtx dest, rtx imm,
+     case SYMBOL_SMALL_TLSGD:
+       {
+ 	rtx_insn *insns;
+-	rtx result = gen_rtx_REG (Pmode, R0_REGNUM);
++	machine_mode mode = GET_MODE (dest);
++	rtx result = gen_rtx_REG (mode, R0_REGNUM);
+ 
+ 	start_sequence ();
+-	aarch64_emit_call_insn (gen_tlsgd_small (result, imm));
++	if (TARGET_ILP32)
++	  aarch64_emit_call_insn (gen_tlsgd_small_si (result, imm));
++	else
++	  aarch64_emit_call_insn (gen_tlsgd_small_di (result, imm));
+ 	insns = get_insns ();
+ 	end_sequence ();
+ 
+diff --git a/gcc/config/aarch64/aarch64.md b/gcc/config/aarch64/aarch64.md
+index 501ae4481..e5a4f131e 100644
+--- a/gcc/config/aarch64/aarch64.md
++++ b/gcc/config/aarch64/aarch64.md
+@@ -4285,20 +4285,20 @@
+ ;; The TLS ABI specifically requires that the compiler does not schedule
+ ;; instructions in the TLS stubs, in order to enable linker relaxation.
+ ;; Therefore we treat the stubs as an atomic sequence.
+-(define_expand "tlsgd_small"
++(define_expand "tlsgd_small_<mode>"
+  [(parallel [(set (match_operand 0 "register_operand" "")
+                   (call (mem:DI (match_dup 2)) (const_int 1)))
+-	     (unspec:DI [(match_operand:DI 1 "aarch64_valid_symref" "")] UNSPEC_GOTSMALLTLS)
++	     (unspec:DI [(match_operand:PTR 1 "aarch64_valid_symref" "")] UNSPEC_GOTSMALLTLS)
+ 	     (clobber (reg:DI LR_REGNUM))])]
+  ""
+ {
+   operands[2] = aarch64_tls_get_addr ();
+ })
+ 
+-(define_insn "*tlsgd_small"
++(define_insn "*tlsgd_small_<mode>"
+   [(set (match_operand 0 "register_operand" "")
+ 	(call (mem:DI (match_operand:DI 2 "" "")) (const_int 1)))
+-   (unspec:DI [(match_operand:DI 1 "aarch64_valid_symref" "S")] UNSPEC_GOTSMALLTLS)
++   (unspec:DI [(match_operand:PTR 1 "aarch64_valid_symref" "S")] UNSPEC_GOTSMALLTLS)
+    (clobber (reg:DI LR_REGNUM))
+   ]
+   ""
+diff --git a/gcc/testsuite/gcc.target/aarch64/pr78382.c b/gcc/testsuite/gcc.target/aarch64/pr78382.c
+new file mode 100644
+index 000000000..febe7bc8d
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/aarch64/pr78382.c
+@@ -0,0 +1,10 @@
++/* { dg-require-effective-target fpic } */
++/* { dg-options "-mtls-dialect=trad -fpic" } */
++
++__thread int abc;
++void
++foo ()
++{
++  int *p;
++  p = &abc;
++}

@@ -1,0 +1,44 @@
+diff --git a/gcc/testsuite/gcc.dg/pr112887.c b/gcc/testsuite/gcc.dg/pr112887.c
+new file mode 100644
+index 000000000..41f5cc8ca
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr112887.c
+@@ -0,0 +1,13 @@
++/* PR tree-optimization/112887 */
++/* { dg-do compile } */
++/* { dg-options "-O2 --param=l1-cache-line-size=0x20000000" } */
++
++void bar (long);
++long c;
++struct S { long a, b; } s;
++
++void
++foo (void)
++{
++  bar (c ? s.a : s.b);
++}
+diff --git a/gcc/tree-ssa-phiopt.c b/gcc/tree-ssa-phiopt.c
+index 17412ebe3..2f50bf8ad 100644
+--- a/gcc/tree-ssa-phiopt.c
++++ b/gcc/tree-ssa-phiopt.c
+@@ -1920,8 +1920,8 @@ static void
+ hoist_adjacent_loads (basic_block bb0, basic_block bb1,
+ 		      basic_block bb2, basic_block bb3)
+ {
+-  int param_align = PARAM_VALUE (PARAM_L1_CACHE_LINE_SIZE);
+-  unsigned param_align_bits = (unsigned) (param_align * BITS_PER_UNIT);
++  unsigned HOST_WIDE_INT param_align = PARAM_VALUE (PARAM_L1_CACHE_LINE_SIZE);
++  unsigned HOST_WIDE_INT param_align_bits = param_align * BITS_PER_UNIT;
+   gphi_iterator gsi;
+ 
+   /* Walk the phis in bb3 looking for an opportunity.  We are looking
+@@ -1933,8 +1933,7 @@ hoist_adjacent_loads (basic_block bb0, basic_block bb1,
+       gimple def1, def2, defswap;
+       tree arg1, arg2, ref1, ref2, field1, field2, fieldswap;
+       tree tree_offset1, tree_offset2, tree_size2, next;
+-      int offset1, offset2, size2;
+-      unsigned align1;
++      unsigned HOST_WIDE_INT offset1, offset2, size2, align1;
+       gimple_stmt_iterator gsi2;
+       basic_block bb_for_def1, bb_for_def2;
+ 

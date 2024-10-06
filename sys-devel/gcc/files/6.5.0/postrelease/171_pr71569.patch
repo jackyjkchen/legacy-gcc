@@ -1,0 +1,70 @@
+diff --git a/gcc/cp/parser.c b/gcc/cp/parser.c
+index 82ba3fbf4..45163904f 100644
+--- a/gcc/cp/parser.c
++++ b/gcc/cp/parser.c
+@@ -13142,6 +13142,10 @@ cp_parser_decltype_expr (cp_parser *parser,
+ 	expr = cp_parser_lookup_name_simple (parser, expr,
+ 					     id_expr_start_token->location);
+ 
++      if (expr && TREE_CODE (expr) == TEMPLATE_DECL)
++	/* A template without args is not a complete id-expression.  */
++	expr = error_mark_node;
++
+       if (expr
+           && expr != error_mark_node
+           && TREE_CODE (expr) != TYPE_DECL
+@@ -13207,6 +13211,9 @@ cp_parser_decltype_expr (cp_parser *parser,
+          expression.  */
+       cp_parser_abort_tentative_parse (parser);
+ 
++      /* Commit to the tentative_firewall so we get syntax errors.  */
++      cp_parser_commit_to_tentative_parse (parser);
++
+       /* Parse a full expression.  */
+       expr = cp_parser_expression (parser, /*pidk=*/NULL, /*cast_p=*/false,
+ 				   /*decltype_p=*/true);
+diff --git a/gcc/testsuite/g++.dg/cpp0x/decltype-33837.C b/gcc/testsuite/g++.dg/cpp0x/decltype-33837.C
+index fbbc6a149..4a8f05323 100644
+--- a/gcc/testsuite/g++.dg/cpp0x/decltype-33837.C
++++ b/gcc/testsuite/g++.dg/cpp0x/decltype-33837.C
+@@ -2,6 +2,6 @@
+ // PR c++/33837
+ void foo()
+ {
+-  __decltype (A::foo()); // { dg-error "was not declared|expected" }
+-  __decltype (B); // { dg-error "was not declared" }
++  __decltype (A::foo()); // { dg-error "A" }
++  __decltype (B); // { dg-error "B" }
+ }
+diff --git a/gcc/testsuite/g++.dg/cpp0x/decltype43.C b/gcc/testsuite/g++.dg/cpp0x/decltype43.C
+index 4df95a104..7a1dcbf87 100644
+--- a/gcc/testsuite/g++.dg/cpp0x/decltype43.C
++++ b/gcc/testsuite/g++.dg/cpp0x/decltype43.C
+@@ -22,6 +22,6 @@ struct B
+ int main()
+ {
+   int x = B<decltype(A<int>::a(1))>::b(A<int>::a(1));
+-  int y = B<decltype(A     ::a(2))>::b(A<int>::a(2)); // { dg-error "template argument" }
++  int y = B<decltype(A     ::a(2))>::b(A<int>::a(2)); // { dg-error "template" }
+   return x + y;
+ }
+diff --git a/gcc/testsuite/g++.dg/cpp1y/var-templ59.C b/gcc/testsuite/g++.dg/cpp1y/var-templ59.C
+new file mode 100644
+index 000000000..da9710e1c
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp1y/var-templ59.C
+@@ -0,0 +1,14 @@
++// PR c++/71569
++// { dg-do compile { target c++14 } }
++
++template <class T>
++struct A {
++  template <class U>
++  static U u;
++};
++
++int main()
++{
++  decltype(A<int>::u) a;	// { dg-error "missing template arguments" }
++  return a;
++}

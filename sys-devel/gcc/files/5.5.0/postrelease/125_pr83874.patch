@@ -1,0 +1,38 @@
+diff --git a/gcc/fortran/decl.c b/gcc/fortran/decl.c
+index d1d87f878..d09720caf 100644
+--- a/gcc/fortran/decl.c
++++ b/gcc/fortran/decl.c
+@@ -1494,7 +1494,7 @@ add_init_expr_to_sym (const char *name, gfc_expr **initp, locus *var_locus)
+ 		    }
+ 		  else if (init->expr_type == EXPR_ARRAY)
+ 		    {
+-		      if (init->ts.u.cl)
++		      if (init->ts.u.cl && init->ts.u.cl->length)
+ 			clen = mpz_get_si (init->ts.u.cl->length->value.integer);
+ 		      else if (init->value.constructor)
+ 			{
+diff --git a/gcc/testsuite/gfortran.dg/pr83874.f90 b/gcc/testsuite/gfortran.dg/pr83874.f90
+new file mode 100644
+index 000000000..d1bdc97b7
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/pr83874.f90
+@@ -0,0 +1,19 @@
++! { dg-do run }
++! PR fortran/83874
++! There was an ICE while initializing the character arrays
++!
++! Contributed by Harald Anlauf <anlauf@gmx.de>
++!
++program charinit
++  implicit none
++  type t
++     character(len=1) :: name
++  end type t
++  type(t), parameter :: z(2)= [ t ('a'), t ('b') ]
++  character(len=1), parameter :: names1(*) = z% name
++  character(len=*), parameter :: names2(2) = z% name
++  character(len=*), parameter :: names3(*) = z% name
++  if (.not. (names1(1) == "a" .and. names1(2) == "b")) call abort ()
++  if (.not. (names2(1) == "a" .and. names2(2) == "b")) call abort ()
++  if (.not. (names3(1) == "a" .and. names3(2) == "b")) call abort ()
++end program charinit

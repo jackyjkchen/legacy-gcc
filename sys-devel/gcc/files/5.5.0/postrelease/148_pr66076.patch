@@ -1,0 +1,33 @@
+diff --git a/gcc/rtlanal.c b/gcc/rtlanal.c
+index 417f9e04e..9b8d06f84 100644
+--- a/gcc/rtlanal.c
++++ b/gcc/rtlanal.c
+@@ -104,7 +104,10 @@ generic_subrtx_iterator <T>::add_single_to_queue (array_type &array,
+ 	  return base;
+ 	}
+       gcc_checking_assert (i == LOCAL_ELEMS);
+-      vec_safe_grow (array.heap, i + 1);
++      /* A previous iteration might also have moved from the stack to the
++	 heap, in which case the heap array will already be big enough.  */
++      if (vec_safe_length (array.heap) <= i)
++	vec_safe_grow (array.heap, i + 1);
+       base = array.heap->address ();
+       memcpy (base, array.stack, sizeof (array.stack));
+       base[LOCAL_ELEMS] = x;
+diff --git a/gcc/testsuite/gcc.dg/torture/pr66076.c b/gcc/testsuite/gcc.dg/torture/pr66076.c
+new file mode 100644
+index 000000000..7e7d34daa
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/torture/pr66076.c
+@@ -0,0 +1,11 @@
++/* { dg-do compile } */
++/* { dg-options "" } */
++/* { dg-options "-mno-prefer-avx128 -march=bdver4" { target i?86-*-* x86_64-*-* } } */
++
++void
++f0a (char *result, char *arg1, char *arg4, char temp_6)
++{
++  int idx = 0;
++  for (idx = 0; idx < 416; idx += 1)
++    result[idx] = (arg1[idx] + arg4[idx]) * temp_6;
++}

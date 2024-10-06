@@ -1,0 +1,575 @@
+diff --git a/gcc/testsuite/c-c++-common/missing-header-1.c b/gcc/testsuite/c-c++-common/missing-header-1.c
+new file mode 100644
+index 000000000..30e92ad32
+--- /dev/null
++++ b/gcc/testsuite/c-c++-common/missing-header-1.c
+@@ -0,0 +1,8 @@
++/* { dg-options "-fdiagnostics-show-caret" } */
++#include "this-file-does-not-exist.h" /* { dg-error "10: this-file-does-not-exist.h: No such file or directory" } */
++
++/* { dg-begin-multiline-output "" }
++ #include "this-file-does-not-exist.h"
++          ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
++compilation terminated.
++   { dg-end-multiline-output "" } */
+diff --git a/gcc/testsuite/c-c++-common/missing-header-2.c b/gcc/testsuite/c-c++-common/missing-header-2.c
+new file mode 100644
+index 000000000..a634703f3
+--- /dev/null
++++ b/gcc/testsuite/c-c++-common/missing-header-2.c
+@@ -0,0 +1,8 @@
++/* { dg-options "-fdiagnostics-show-caret" } */
++#include <this-file-does-not-exist.h> /* { dg-error "10: this-file-does-not-exist.h: No such file or directory" } */
++
++/* { dg-begin-multiline-output "" }
++ #include <this-file-does-not-exist.h>
++          ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
++compilation terminated.
++   { dg-end-multiline-output "" } */
+diff --git a/gcc/testsuite/c-c++-common/missing-header-3.c b/gcc/testsuite/c-c++-common/missing-header-3.c
+new file mode 100644
+index 000000000..4147367e1
+--- /dev/null
++++ b/gcc/testsuite/c-c++-common/missing-header-3.c
+@@ -0,0 +1,8 @@
++/* { dg-options "-fdiagnostics-show-caret -Wno-deprecated" } */
++#import <this-file-does-not-exist.h> /* { dg-error "9: this-file-does-not-exist.h: No such file or directory" } */
++
++/* { dg-begin-multiline-output "" }
++ #import <this-file-does-not-exist.h>
++         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
++compilation terminated.
++   { dg-end-multiline-output "" } */
+diff --git a/gcc/testsuite/c-c++-common/missing-header-4.c b/gcc/testsuite/c-c++-common/missing-header-4.c
+new file mode 100644
+index 000000000..d528d0dfc
+--- /dev/null
++++ b/gcc/testsuite/c-c++-common/missing-header-4.c
+@@ -0,0 +1,8 @@
++/* { dg-options "-fdiagnostics-show-caret -Wno-deprecated" } */
++#import "this-file-does-not-exist.h" /* { dg-error "9: this-file-does-not-exist.h: No such file or directory" } */
++
++/* { dg-begin-multiline-output "" }
++ #import "this-file-does-not-exist.h"
++         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
++compilation terminated.
++   { dg-end-multiline-output "" } */
+diff --git a/libcpp/directives.c b/libcpp/directives.c
+index 1617ff61c..772b83580 100644
+--- a/libcpp/directives.c
++++ b/libcpp/directives.c
+@@ -818,7 +818,7 @@ do_include_common (cpp_reader *pfile, enum include_type type)
+ 			   pfile->directive->name, fname, angle_brackets,
+ 			   buf);
+ 
+-      _cpp_stack_include (pfile, fname, angle_brackets, type);
++      _cpp_stack_include (pfile, fname, angle_brackets, type, location);
+     }
+ 
+   XDELETEVEC (fname);
+diff --git a/libcpp/errors.c b/libcpp/errors.c
+index 984737877..f7d411226 100644
+--- a/libcpp/errors.c
++++ b/libcpp/errors.c
+@@ -27,6 +27,24 @@ along with this program; see the file COPYING3.  If not see
+ #include "cpplib.h"
+ #include "internal.h"
+ 
++/* Print a diagnostic at the given location.  */
++
++ATTRIBUTE_FPTR_PRINTF(5,0)
++static bool
++cpp_diagnostic_at (cpp_reader * pfile, int level, int reason,
++		   source_location src_loc,
++		   const char *msgid, va_list *ap)
++{
++  bool ret;
++
++  if (!pfile->cb.error)
++    abort ();
++  rich_location richloc (pfile->line_table, src_loc);
++  ret = pfile->cb.error (pfile, level, reason, &richloc, _(msgid), ap);
++
++  return ret;
++}
++
+ /* Print a diagnostic at the location of the previously lexed token.  */
+ 
+ ATTRIBUTE_FPTR_PRINTF(4,0)
+@@ -35,7 +53,6 @@ cpp_diagnostic (cpp_reader * pfile, int level, int reason,
+                 const char *msgid, va_list *ap)
+ {
+   source_location src_loc;
+-  bool ret;
+ 
+   if (CPP_OPTION (pfile, traditional))
+     {
+@@ -54,13 +71,7 @@ cpp_diagnostic (cpp_reader * pfile, int level, int reason,
+     {
+       src_loc = pfile->cur_token[-1].src_loc;
+     }
+-
+-  if (!pfile->cb.error)
+-    abort ();
+-  rich_location richloc (pfile->line_table, src_loc);
+-  ret = pfile->cb.error (pfile, level, reason, &richloc, _(msgid), ap);
+-
+-  return ret;
++  return cpp_diagnostic_at (pfile, level, reason, src_loc, msgid, ap);
+ }
+ 
+ /* Print a warning or error, depending on the value of LEVEL.  */
+@@ -225,6 +236,25 @@ cpp_warning_with_line_syshdr (cpp_reader *pfile, int reason,
+   return ret;
+ }
+ 
++/* As cpp_error, but use SRC_LOC as the location of the error, without
++   a column override.  */
++
++bool
++cpp_error_at (cpp_reader * pfile, int level, source_location src_loc,
++	      const char *msgid, ...)
++{
++  va_list ap;
++  bool ret;
++
++  va_start (ap, msgid);
++
++  ret = cpp_diagnostic_at (pfile, level, CPP_W_NONE, src_loc,
++			   msgid, &ap);
++
++  va_end (ap);
++  return ret;
++}
++
+ /* Print a warning or error, depending on the value of LEVEL.  Include
+    information from errno.  */
+ 
+@@ -239,10 +269,12 @@ cpp_errno (cpp_reader *pfile, int level, const char *msgid)
+    that is not localized, but "" is replaced with localized "stdout".  */
+ 
+ bool
+-cpp_errno_filename (cpp_reader *pfile, int level, const char *filename)
++cpp_errno_filename (cpp_reader *pfile, int level, const char *filename,
++		    source_location loc)
+ {
+   if (filename[0] == '\0')
+     filename = _("stdout");
+ 
+-  return cpp_error (pfile, level, "%s: %s", filename, xstrerror (errno));
++  return cpp_error_at (pfile, level, loc, "%s: %s", filename,
++		       xstrerror (errno));
+ }
+diff --git a/libcpp/files.c b/libcpp/files.c
+index 5aa8d1ac9..c8bb637fb 100644
+--- a/libcpp/files.c
++++ b/libcpp/files.c
+@@ -171,14 +171,18 @@ static bool open_file (_cpp_file *file);
+ static bool pch_open_file (cpp_reader *pfile, _cpp_file *file,
+ 			   bool *invalid_pch);
+ static bool find_file_in_dir (cpp_reader *pfile, _cpp_file *file,
+-			      bool *invalid_pch);
+-static bool read_file_guts (cpp_reader *pfile, _cpp_file *file);
+-static bool read_file (cpp_reader *pfile, _cpp_file *file);
+-static bool should_stack_file (cpp_reader *, _cpp_file *file, bool import);
++			      bool *invalid_pch, source_location loc);
++static bool read_file_guts (cpp_reader *pfile, _cpp_file *file,
++			    source_location loc);
++static bool read_file (cpp_reader *pfile, _cpp_file *file,
++		       source_location loc);
++static bool should_stack_file (cpp_reader *, _cpp_file *file, bool import,
++			       source_location loc);
+ static struct cpp_dir *search_path_head (cpp_reader *, const char *fname,
+ 				 int angle_brackets, enum include_type);
+ static const char *dir_name_of_file (_cpp_file *file);
+-static void open_file_failed (cpp_reader *pfile, _cpp_file *file, int);
++static void open_file_failed (cpp_reader *pfile, _cpp_file *file, int,
++			      source_location);
+ static struct cpp_file_hash_entry *search_cache (struct cpp_file_hash_entry *head,
+ 					     const cpp_dir *start_dir);
+ static _cpp_file *make_cpp_file (cpp_reader *, cpp_dir *, const char *fname);
+@@ -368,10 +372,12 @@ maybe_shorter_path (const char * file)
+ /* Try to open the path FILE->name appended to FILE->dir.  This is
+    where remap and PCH intercept the file lookup process.  Return true
+    if the file was found, whether or not the open was successful.
+-   Set *INVALID_PCH to true if a PCH file is found but wasn't valid.  */
++   Set *INVALID_PCH to true if a PCH file is found but wasn't valid.
++   Use LOC when emitting any diagnostics.  */
+ 
+ static bool
+-find_file_in_dir (cpp_reader *pfile, _cpp_file *file, bool *invalid_pch)
++find_file_in_dir (cpp_reader *pfile, _cpp_file *file, bool *invalid_pch,
++		  source_location loc)
+ {
+   char *path;
+ 
+@@ -424,7 +430,7 @@ find_file_in_dir (cpp_reader *pfile, _cpp_file *file, bool *invalid_pch)
+ 
+       if (file->err_no != ENOENT)
+ 	{
+-	  open_file_failed (pfile, file, 0);
++	  open_file_failed (pfile, file, 0, loc);
+ 	  return true;
+ 	}
+ 
+@@ -495,10 +501,13 @@ _cpp_find_failed (_cpp_file *file)
+    If IMPLICIT_PREINCLUDE then it is OK for the file to be missing.
+    If present, it is OK for a precompiled header to be included after
+    it.
+-*/
++
++   Use LOC as the location for any errors.  */
++
+ _cpp_file *
+ _cpp_find_file (cpp_reader *pfile, const char *fname, cpp_dir *start_dir,
+-		bool fake, int angle_brackets, bool implicit_preinclude)
++		bool fake, int angle_brackets, bool implicit_preinclude,
++		source_location loc)
+ {
+   struct cpp_file_hash_entry *entry;
+   void **hash_slot;
+@@ -510,7 +519,7 @@ _cpp_find_file (cpp_reader *pfile, const char *fname, cpp_dir *start_dir,
+ 
+   /* Ensure we get no confusion between cached files and directories.  */
+   if (start_dir == NULL)
+-    cpp_error (pfile, CPP_DL_ICE, "NULL directory in find_file");
++    cpp_error_at (pfile, CPP_DL_ICE, loc, "NULL directory in find_file");
+ 
+   hash_slot
+     = htab_find_slot_with_hash (pfile->file_hash, fname,
+@@ -530,7 +539,7 @@ _cpp_find_file (cpp_reader *pfile, const char *fname, cpp_dir *start_dir,
+   /* Try each path in the include chain.  */
+   for (; !fake ;)
+     {
+-      if (find_file_in_dir (pfile, file, &invalid_pch))
++      if (find_file_in_dir (pfile, file, &invalid_pch, loc))
+ 	break;
+ 
+       file->dir = file->dir->next;
+@@ -579,7 +588,7 @@ _cpp_find_file (cpp_reader *pfile, const char *fname, cpp_dir *start_dir,
+ 	      return NULL;
+ 	    }
+ 	  else
+-	    open_file_failed (pfile, file, angle_brackets);
++	    open_file_failed (pfile, file, angle_brackets, loc);
+ 	  break;
+ 	}
+ 
+@@ -658,9 +667,11 @@ _cpp_find_file (cpp_reader *pfile, const char *fname, cpp_dir *start_dir,
+    except for plain files and block devices, since there is no
+    reliable portable way of doing this.
+ 
++   Use LOC for any diagnostics.
++
+    FIXME: Flush file cache and try again if we run out of memory.  */
+ static bool
+-read_file_guts (cpp_reader *pfile, _cpp_file *file)
++read_file_guts (cpp_reader *pfile, _cpp_file *file, source_location loc)
+ {
+   ssize_t size, total, count;
+   uchar *buf;
+@@ -668,7 +679,8 @@ read_file_guts (cpp_reader *pfile, _cpp_file *file)
+ 
+   if (S_ISBLK (file->st.st_mode))
+     {
+-      cpp_error (pfile, CPP_DL_ERROR, "%s is a block device", file->path);
++      cpp_error_at (pfile, CPP_DL_ERROR, loc,
++		    "%s is a block device", file->path);
+       return false;
+     }
+ 
+@@ -685,7 +697,8 @@ read_file_guts (cpp_reader *pfile, _cpp_file *file)
+ 	 does not bite us.  */
+       if (file->st.st_size > INTTYPE_MAXIMUM (ssize_t))
+ 	{
+-	  cpp_error (pfile, CPP_DL_ERROR, "%s is too large", file->path);
++	  cpp_error_at (pfile, CPP_DL_ERROR, loc,
++			"%s is too large", file->path);
+ 	  return false;
+ 	}
+ 
+@@ -718,13 +731,13 @@ read_file_guts (cpp_reader *pfile, _cpp_file *file)
+ 
+   if (count < 0)
+     {
+-      cpp_errno_filename (pfile, CPP_DL_ERROR, file->path);
++      cpp_errno_filename (pfile, CPP_DL_ERROR, file->path, loc);
+       free (buf);
+       return false;
+     }
+ 
+   if (regular && total != size && STAT_SIZE_RELIABLE (file->st))
+-    cpp_error (pfile, CPP_DL_WARNING,
++    cpp_error_at (pfile, CPP_DL_WARNING, loc,
+ 	       "%s is shorter than expected", file->path);
+ 
+   file->buffer = _cpp_convert_input (pfile,
+@@ -739,9 +752,10 @@ read_file_guts (cpp_reader *pfile, _cpp_file *file)
+ 
+ /* Convenience wrapper around read_file_guts that opens the file if
+    necessary and closes the file descriptor after reading.  FILE must
+-   have been passed through find_file() at some stage.  */
++   have been passed through find_file() at some stage.  Use LOC for
++   any diagnostics.  */
+ static bool
+-read_file (cpp_reader *pfile, _cpp_file *file)
++read_file (cpp_reader *pfile, _cpp_file *file, source_location loc)
+ {
+   /* If we already have its contents in memory, succeed immediately.  */
+   if (file->buffer_valid)
+@@ -753,11 +767,11 @@ read_file (cpp_reader *pfile, _cpp_file *file)
+ 
+   if (file->fd == -1 && !open_file (file))
+     {
+-      open_file_failed (pfile, file, 0);
++      open_file_failed (pfile, file, 0, loc);
+       return false;
+     }
+ 
+-  file->dont_read = !read_file_guts (pfile, file);
++  file->dont_read = !read_file_guts (pfile, file, loc);
+   close (file->fd);
+   file->fd = -1;
+ 
+@@ -765,9 +779,11 @@ read_file (cpp_reader *pfile, _cpp_file *file)
+ }
+ 
+ /* Returns TRUE if FILE's contents have been successfully placed in
+-   FILE->buffer and the file should be stacked, otherwise false.  */
++   FILE->buffer and the file should be stacked, otherwise false.
++   Use LOC for any diagnostics.  */
+ static bool
+-should_stack_file (cpp_reader *pfile, _cpp_file *file, bool import)
++should_stack_file (cpp_reader *pfile, _cpp_file *file, bool import,
++		   source_location loc)
+ {
+   _cpp_file *f;
+ 
+@@ -802,7 +818,7 @@ should_stack_file (cpp_reader *pfile, _cpp_file *file, bool import)
+       return false;
+     }
+ 
+-  if (!read_file (pfile, file))
++  if (!read_file (pfile, file, loc))
+     return false;
+ 
+   /* Check the file against the PCH file.  This is done before
+@@ -849,7 +865,7 @@ should_stack_file (cpp_reader *pfile, _cpp_file *file, bool import)
+ 	    /* The file is not stacked anymore.  We can reuse it.  */
+ 	    ref_file = f;
+ 
+-	  same_file_p = read_file (pfile, ref_file)
++	  same_file_p = read_file (pfile, ref_file, loc)
+ 			/* Size might have changed in read_file().  */
+ 			&& ref_file->st.st_size == file->st.st_size
+ 			&& !memcmp (ref_file->buffer,
+@@ -873,14 +889,15 @@ should_stack_file (cpp_reader *pfile, _cpp_file *file, bool import)
+ /* Place the file referenced by FILE into a new buffer on the buffer
+    stack if possible.  IMPORT is true if this stacking attempt is
+    because of a #import directive.  Returns true if a buffer is
+-   stacked.  */
++   stacked.  Use LOC for any diagnostics.  */
+ bool
+-_cpp_stack_file (cpp_reader *pfile, _cpp_file *file, bool import)
++_cpp_stack_file (cpp_reader *pfile, _cpp_file *file, bool import,
++		 source_location loc)
+ {
+   cpp_buffer *buffer;
+   int sysp;
+ 
+-  if (!should_stack_file (pfile, file, import))
++  if (!should_stack_file (pfile, file, import, loc))
+       return false;
+ 
+   if (pfile->buffer == NULL || file->dir == NULL)
+@@ -990,7 +1007,7 @@ dir_name_of_file (_cpp_file *file)
+    Returns true if a buffer was stacked.  */
+ bool
+ _cpp_stack_include (cpp_reader *pfile, const char *fname, int angle_brackets,
+-		    enum include_type type)
++		    enum include_type type, source_location loc)
+ {
+   struct cpp_dir *dir;
+   _cpp_file *file;
+@@ -1013,7 +1030,7 @@ _cpp_stack_include (cpp_reader *pfile, const char *fname, int angle_brackets,
+     return false;
+ 
+   file = _cpp_find_file (pfile, fname, dir, false, angle_brackets,
+-			 type == IT_DEFAULT);
++			 type == IT_DEFAULT, loc);
+   if (type == IT_DEFAULT && file == NULL)
+     return false;
+ 
+@@ -1029,7 +1046,7 @@ _cpp_stack_include (cpp_reader *pfile, const char *fname, int angle_brackets,
+       && type != IT_CMDLINE && type != IT_DEFAULT)
+     pfile->line_table->highest_location--;
+ 
+-  stacked = _cpp_stack_file (pfile, file, type == IT_IMPORT);
++  stacked = _cpp_stack_file (pfile, file, type == IT_IMPORT, loc);
+ 
+   if (!stacked)
+     /* _cpp_stack_file didn't stack the file, so let's rollback the
+@@ -1041,7 +1058,8 @@ _cpp_stack_include (cpp_reader *pfile, const char *fname, int angle_brackets,
+ 
+ /* Could not open FILE.  The complication is dependency output.  */
+ static void
+-open_file_failed (cpp_reader *pfile, _cpp_file *file, int angle_brackets)
++open_file_failed (cpp_reader *pfile, _cpp_file *file, int angle_brackets,
++		  source_location loc)
+ {
+   int sysp = pfile->line_table->highest_line > 1 && pfile->buffer ? pfile->buffer->sysp : 0;
+   bool print_dep = CPP_OPTION (pfile, deps.style) > (angle_brackets || !!sysp);
+@@ -1057,7 +1075,8 @@ open_file_failed (cpp_reader *pfile, _cpp_file *file, int angle_brackets)
+          being used, we must also flag an error.  */
+       if (CPP_OPTION (pfile, deps.need_preprocessor_output))
+ 	cpp_errno_filename (pfile, CPP_DL_FATAL,
+-			    file->path ? file->path : file->name);
++			    file->path ? file->path : file->name,
++			    loc);
+     }
+   else
+     {
+@@ -1072,10 +1091,12 @@ open_file_failed (cpp_reader *pfile, _cpp_file *file, int angle_brackets)
+           || print_dep
+           || CPP_OPTION (pfile, deps.need_preprocessor_output))
+ 	cpp_errno_filename (pfile, CPP_DL_FATAL,
+-			    file->path ? file->path : file->name);
++			    file->path ? file->path : file->name,
++			    loc);
+       else
+ 	cpp_errno_filename (pfile, CPP_DL_WARNING,
+-			    file->path ? file->path : file->name);
++			    file->path ? file->path : file->name,
++			    loc);
+     }
+ }
+ 
+@@ -1323,7 +1344,7 @@ cpp_clear_file_cache (cpp_reader *pfile)
+ void
+ _cpp_fake_include (cpp_reader *pfile, const char *fname)
+ {
+-  _cpp_find_file (pfile, fname, pfile->buffer->file->dir, true, 0, false);
++  _cpp_find_file (pfile, fname, pfile->buffer->file->dir, true, 0, false, 0);
+ }
+ 
+ /* Not everyone who wants to set system-header-ness on a buffer can
+@@ -1441,7 +1462,7 @@ _cpp_compare_file_date (cpp_reader *pfile, const char *fname,
+   if (!dir)
+     return -1;
+ 
+-  file = _cpp_find_file (pfile, fname, dir, false, angle_brackets, false);
++  file = _cpp_find_file (pfile, fname, dir, false, angle_brackets, false, 0);
+   if (file->err_no)
+     return -1;
+ 
+@@ -1459,7 +1480,7 @@ _cpp_compare_file_date (cpp_reader *pfile, const char *fname,
+ bool
+ cpp_push_include (cpp_reader *pfile, const char *fname)
+ {
+-  return _cpp_stack_include (pfile, fname, false, IT_CMDLINE);
++  return _cpp_stack_include (pfile, fname, false, IT_CMDLINE, 0);
+ }
+ 
+ /* Pushes the given file, implicitly included at the start of a
+@@ -1468,7 +1489,7 @@ cpp_push_include (cpp_reader *pfile, const char *fname)
+ bool
+ cpp_push_default_include (cpp_reader *pfile, const char *fname)
+ {
+-  return _cpp_stack_include (pfile, fname, true, IT_DEFAULT);
++  return _cpp_stack_include (pfile, fname, true, IT_DEFAULT, 0);
+ }
+ 
+ /* Do appropriate cleanup when a file INC's buffer is popped off the
+@@ -1853,7 +1874,7 @@ _cpp_save_file_entries (cpp_reader *pfile, FILE *fp)
+ 
+ 	  if (!open_file (f))
+ 	    {
+-	      open_file_failed (pfile, f, 0);
++	      open_file_failed (pfile, f, 0, 0);
+ 	      free (result);
+ 	      return false;
+ 	    }
+@@ -1980,7 +2001,7 @@ _cpp_has_header (cpp_reader *pfile, const char *fname, int angle_brackets,
+   cpp_dir *start_dir = search_path_head (pfile, fname, angle_brackets, type);
+   _cpp_file *file = _cpp_find_file (pfile, fname, start_dir,
+ 				    /*fake=*/false, angle_brackets,
+-				    /*implicit_preinclude=*/false);
++				    /*implicit_preinclude=*/false, 0);
+   return file->err_no != ENOENT;
+ }
+ 
+diff --git a/libcpp/include/cpplib.h b/libcpp/include/cpplib.h
+index 35b0375c0..366f0efe2 100644
+--- a/libcpp/include/cpplib.h
++++ b/libcpp/include/cpplib.h
+@@ -989,7 +989,8 @@ extern bool cpp_warning_syshdr (cpp_reader *, int, const char *msgid, ...)
+ extern bool cpp_errno (cpp_reader *, int, const char *msgid);
+ /* Similarly, but with "FILENAME: " instead of "MSGID: ", where
+    the filename is not localized.  */
+-extern bool cpp_errno_filename (cpp_reader *, int, const char *filename);
++extern bool cpp_errno_filename (cpp_reader *, int, const char *filename,
++				source_location loc);
+ 
+ /* Same as cpp_error, except additionally specifies a position as a
+    (translation unit) physical line and physical column.  If the line is
+@@ -1007,6 +1008,10 @@ extern bool cpp_warning_with_line_syshdr (cpp_reader *, int, source_location,
+                                           unsigned, const char *msgid, ...)
+   ATTRIBUTE_PRINTF_5;
+ 
++extern bool cpp_error_at (cpp_reader * pfile, int level,
++			  source_location src_loc, const char *msgid, ...)
++  ATTRIBUTE_PRINTF_4;
++
+ /* In lex.c */
+ extern int cpp_ideq (const cpp_token *, const char *);
+ extern void cpp_output_line (cpp_reader *, FILE *);
+diff --git a/libcpp/init.c b/libcpp/init.c
+index 4343075ba..06d7a98fb 100644
+--- a/libcpp/init.c
++++ b/libcpp/init.c
+@@ -613,6 +613,8 @@ cpp_post_options (cpp_reader *pfile)
+ const char *
+ cpp_read_main_file (cpp_reader *pfile, const char *fname)
+ {
++  const source_location loc = 0;
++
+   if (CPP_OPTION (pfile, deps.style) != DEPS_NONE)
+     {
+       if (!pfile->deps)
+@@ -623,11 +625,12 @@ cpp_read_main_file (cpp_reader *pfile, const char *fname)
+     }
+ 
+   pfile->main_file
+-    = _cpp_find_file (pfile, fname, &pfile->no_search_path, false, 0, false);
++    = _cpp_find_file (pfile, fname, &pfile->no_search_path, false, 0, false,
++		      loc);
+   if (_cpp_find_failed (pfile->main_file))
+     return NULL;
+ 
+-  _cpp_stack_file (pfile, pfile->main_file, false);
++  _cpp_stack_file (pfile, pfile->main_file, false, loc);
+ 
+   /* For foo.i, read the original filename foo.c now, for the benefit
+      of the front ends.  */
+diff --git a/libcpp/internal.h b/libcpp/internal.h
+index 9ce870738..1ac8fa286 100644
+--- a/libcpp/internal.h
++++ b/libcpp/internal.h
+@@ -640,13 +640,14 @@ extern void _cpp_destroy_hashtable (cpp_reader *);
+ /* In files.c */
+ typedef struct _cpp_file _cpp_file;
+ extern _cpp_file *_cpp_find_file (cpp_reader *, const char *, cpp_dir *,
+-				  bool, int, bool);
++				  bool, int, bool, source_location);
+ extern bool _cpp_find_failed (_cpp_file *);
+ extern void _cpp_mark_file_once_only (cpp_reader *, struct _cpp_file *);
+ extern void _cpp_fake_include (cpp_reader *, const char *);
+-extern bool _cpp_stack_file (cpp_reader *, _cpp_file*, bool);
++extern bool _cpp_stack_file (cpp_reader *, _cpp_file*, bool,
++			     source_location);
+ extern bool _cpp_stack_include (cpp_reader *, const char *, int,
+-				enum include_type);
++				enum include_type, source_location);
+ extern int _cpp_compare_file_date (cpp_reader *, const char *, int);
+ extern void _cpp_report_missing_guards (cpp_reader *);
+ extern void _cpp_init_files (cpp_reader *);

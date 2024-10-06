@@ -1,0 +1,49 @@
+diff --git a/gcc/cp/pt.c b/gcc/cp/pt.c
+index d8f852edd..6db5a7721 100644
+--- a/gcc/cp/pt.c
++++ b/gcc/cp/pt.c
+@@ -23166,7 +23166,7 @@ unify (tree tparms, tree targs, tree parm, tree arg, int strict,
+       if (is_overloaded_fn (parm) || type_unknown_p (parm))
+ 	return unify_success (explain_p);
+       gcc_assert (EXPR_P (parm)
+-		  || COMPOUND_LITERAL_P (parm)
++		  || TREE_CODE (parm) == CONSTRUCTOR
+ 		  || TREE_CODE (parm) == TRAIT_EXPR);
+     expr:
+       /* We must be looking at an expression.  This can happen with
+diff --git a/gcc/testsuite/g++.dg/template/ptrmem33.C b/gcc/testsuite/g++.dg/template/ptrmem33.C
+new file mode 100644
+index 000000000..dca741ae5
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/template/ptrmem33.C
+@@ -0,0 +1,30 @@
++// PR c++/108104
++// { dg-do compile { target c++11 } }
++
++struct A {
++  void x();
++  void y();
++};
++
++enum State { On };
++
++template<State state, void (A::*)()>
++struct B {
++  static void f();
++};
++
++template<State state>
++struct B<state, nullptr> {
++  static void g();
++};
++
++template<State state>
++struct B<state, &A::y> {
++  static void h();
++};
++
++int main() {
++  B<State::On, &A::x>::f();
++  B<State::On, nullptr>::g();
++  B<State::On, &A::y>::h();
++}

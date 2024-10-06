@@ -1,0 +1,42 @@
+diff --git a/gcc/expmed.c b/gcc/expmed.c
+index f28aa79fe..b2862eda2 100644
+--- a/gcc/expmed.c
++++ b/gcc/expmed.c
+@@ -1972,6 +1972,10 @@ extract_integral_bit_field (rtx op0, opt_scalar_int_mode op0_mode,
+ 					    unsignedp, reverse);
+ 	  return convert_extracted_bit_field (target, mode, tmode, unsignedp);
+ 	}
++      /* If OP0 is a hard register, copy it to a pseudo before calling
++	 simplify_gen_subreg.  */
++      if (REG_P (op0) && HARD_REGISTER_P (op0))
++	op0 = copy_to_reg (op0);
+       op0 = simplify_gen_subreg (word_mode, op0, op0_mode.require (),
+ 				 bitnum / BITS_PER_WORD * UNITS_PER_WORD);
+       op0_mode = word_mode;
+diff --git a/gcc/testsuite/gcc.target/i386/pr80270.c b/gcc/testsuite/gcc.target/i386/pr80270.c
+new file mode 100644
+index 000000000..85dcf103f
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/i386/pr80270.c
+@@ -0,0 +1,21 @@
++/* { dg-do compile { target { ! ia32 } } } */
++/* { dg-options "-O2" } */
++
++typedef int v8 __attribute__((vector_size(8)));
++struct S1 {
++  v8 s1f;
++};
++struct S2 {
++  struct S1 s2f1;
++  v8 s2f2;
++};
++
++extern void foo(int);
++
++void bar() {
++  int tmp, i = 3;
++  register struct S2 b asm("xmm0");
++  tmp = b.s2f1.s1f[i];
++  foo(tmp);
++}
++

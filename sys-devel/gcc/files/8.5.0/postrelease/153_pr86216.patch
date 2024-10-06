@@ -1,0 +1,41 @@
+diff --git a/gcc/cp/semantics.c b/gcc/cp/semantics.c
+index 6d949c6b2..ec386b23a 100644
+--- a/gcc/cp/semantics.c
++++ b/gcc/cp/semantics.c
+@@ -3364,8 +3364,15 @@ tree
+ process_outer_var_ref (tree decl, tsubst_flags_t complain, bool odr_use)
+ {
+   if (cp_unevaluated_operand)
+-    /* It's not a use (3.2) if we're in an unevaluated context.  */
+-    return decl;
++    {
++      tree type = TREE_TYPE (decl);
++      if (!dependent_type_p (type)
++	  && variably_modified_type_p (type, NULL_TREE))
++	/* VLAs are used even in unevaluated context.  */;
++      else
++	/* It's not a use (3.2) if we're in an unevaluated context.  */
++	return decl;
++    }
+   if (decl == error_mark_node)
+     return decl;
+ 
+diff --git a/gcc/testsuite/g++.dg/cpp0x/lambda/lambda-vla5.C b/gcc/testsuite/g++.dg/cpp0x/lambda/lambda-vla5.C
+new file mode 100644
+index 000000000..f3390b2d0
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/lambda/lambda-vla5.C
+@@ -0,0 +1,13 @@
++// PR c++/86216
++// { dg-do compile { target c++11 } }
++// { dg-additional-options -Wno-vla }
++
++template <typename T> void b(int n, T arg) {
++  int buffer[arg];
++  int buffer2[arg][arg];
++  [&] {
++    n = sizeof(buffer);
++    n = sizeof(buffer2);	// { dg-bogus "sorry" "" { xfail *-*-* } }
++  }();
++}
++int main() { b(2, 3); }

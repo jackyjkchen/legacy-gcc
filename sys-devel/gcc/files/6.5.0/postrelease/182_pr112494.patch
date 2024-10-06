@@ -1,0 +1,90 @@
+diff --git a/gcc/config/i386/i386.c b/gcc/config/i386/i386.c
+index f84bfb278..9f1c20e83 100644
+--- a/gcc/config/i386/i386.c
++++ b/gcc/config/i386/i386.c
+@@ -21673,12 +21673,9 @@ ix86_cc_mode (enum rtx_code code, rtx op0, rtx op1)
+ 	return CCNOmode;
+       else
+ 	return CCGCmode;
+-      /* strcmp pattern do (use flags) and combine may ask us for proper
+-	 mode.  */
+-    case USE:
+-      return CCmode;
+     default:
+-      gcc_unreachable ();
++      /* CCmode should be used in all other cases.  */
++      return CCmode;
+     }
+ }
+ 
+diff --git a/gcc/config/i386/i386.md b/gcc/config/i386/i386.md
+index 925e78329..345421609 100644
+--- a/gcc/config/i386/i386.md
++++ b/gcc/config/i386/i386.md
+@@ -17048,9 +17048,8 @@
+ 				     (const_int 0))
+ 		  (compare:CC (match_operand 4 "memory_operand")
+ 			      (match_operand 5 "memory_operand"))
+-		  (const_int 0)))
++		  (reg:CC FLAGS_REG)))
+ 	      (use (match_operand:SI 3 "immediate_operand"))
+-	      (use (reg:CC FLAGS_REG))
+ 	      (clobber (match_operand 0 "register_operand"))
+ 	      (clobber (match_operand 1 "register_operand"))
+ 	      (clobber (match_dup 2))])]
+@@ -17063,9 +17062,8 @@
+ 			     (const_int 0))
+ 	  (compare:CC (mem:BLK (match_operand:P 4 "register_operand" "0"))
+ 		      (mem:BLK (match_operand:P 5 "register_operand" "1")))
+-	  (const_int 0)))
++	  (reg:CC FLAGS_REG)))
+    (use (match_operand:SI 3 "immediate_operand" "i"))
+-   (use (reg:CC FLAGS_REG))
+    (clobber (match_operand:P 0 "register_operand" "=S"))
+    (clobber (match_operand:P 1 "register_operand" "=D"))
+    (clobber (match_operand:P 2 "register_operand" "=c"))]
+@@ -17173,9 +17171,8 @@
+ 			       (const_int 0))
+ 	    (compare:CC (mem:BLK (match_operand 4 "register_operand"))
+ 		        (mem:BLK (match_operand 5 "register_operand")))
+-	    (const_int 0)))
++	    (reg:CC FLAGS_REG)))
+      (use (match_operand:SI 3 "immediate_operand"))
+-     (use (reg:CC FLAGS_REG))
+      (clobber (match_operand 0 "register_operand"))
+      (clobber (match_operand 1 "register_operand"))
+      (clobber (match_operand 2 "register_operand"))])
+@@ -17193,9 +17190,8 @@
+ 			       (const_int 0))
+ 	    (compare:CC (mem:BLK (match_dup 4))
+ 			(mem:BLK (match_dup 5)))
+-	    (const_int 0)))
++	    (reg:CC FLAGS_REG)))
+      (use (match_dup 3))
+-     (use (reg:CC FLAGS_REG))
+      (clobber (match_dup 0))
+      (clobber (match_dup 1))
+      (clobber (match_dup 2))])])
+diff --git a/gcc/testsuite/gcc.target/i386/pr112494.c b/gcc/testsuite/gcc.target/i386/pr112494.c
+new file mode 100644
+index 000000000..e9482f5d0
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/i386/pr112494.c
+@@ -0,0 +1,17 @@
++/* PR target/112494 */
++/* { dg-options "-Og -fno-tree-copy-prop -fno-tree-fre -fno-tree-ccp -fno-tree-forwprop" } */
++
++#include <x86intrin.h>
++
++int main()
++{
++  long flags = 0xD7;
++
++  __writeeflags(0xD7);
++  flags && !__readeflags();
++
++  if ((flags && (!__readeflags())) != 0xD7)
++    ;
++
++  return 0;
++}

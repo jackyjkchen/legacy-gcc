@@ -1,0 +1,70 @@
+diff --git a/gcc/fortran/resolve.c b/gcc/fortran/resolve.c
+index dddef6c2b..42c7659b1 100644
+--- a/gcc/fortran/resolve.c
++++ b/gcc/fortran/resolve.c
+@@ -9557,7 +9557,8 @@ resolve_ordinary_assign (gfc_code *code, gfc_namespace *ns)
+ 
+   /* Assign the 'data' of a class object to a derived type.  */
+   if (lhs->ts.type == BT_DERIVED
+-      && rhs->ts.type == BT_CLASS)
++      && rhs->ts.type == BT_CLASS
++      && rhs->expr_type != EXPR_ARRAY)
+     gfc_add_data_component (rhs);
+ 
+   /* Insert a GFC_ISYM_CAF_SEND intrinsic, when the LHS is a coindexed variable.
+diff --git a/gcc/fortran/trans-array.c b/gcc/fortran/trans-array.c
+index f9855f6f8..2c2e3133e 100644
+--- a/gcc/fortran/trans-array.c
++++ b/gcc/fortran/trans-array.c
+@@ -1444,6 +1444,17 @@ gfc_trans_array_ctor_element (stmtblock_t * pblock, tree desc,
+ 	    }
+ 	}
+     }
++  else if (GFC_CLASS_TYPE_P (TREE_TYPE (se->expr))
++	   && !GFC_CLASS_TYPE_P (gfc_get_element_type (TREE_TYPE (desc))))
++    {
++      /* Assignment of a CLASS array constructor to a derived type array.  */
++      if (expr->expr_type == EXPR_FUNCTION)
++	se->expr = gfc_evaluate_now (se->expr, pblock);
++      se->expr = gfc_class_data_get (se->expr);
++      se->expr = build_fold_indirect_ref_loc (input_location, se->expr);
++      se->expr = fold_convert (TREE_TYPE (tmp), se->expr);
++      gfc_add_modify (&se->pre, tmp, se->expr);
++    }
+   else
+     {
+       /* TODO: Should the frontend already have done this conversion?  */
+diff --git a/gcc/testsuite/gfortran.dg/class_66.f90 b/gcc/testsuite/gfortran.dg/class_66.f90
+new file mode 100644
+index 000000000..1843ea7eb
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/class_66.f90
+@@ -0,0 +1,28 @@
++! { dg- do run }
++!
++! Test the fix for PR78641 in which an ICE occured on assignment
++! of a class array constructor to a derived type array.
++!
++! Contributed by Damian Rouson  <damian@sourceryinstitute.org>
++!
++  implicit none
++  type foo
++    integer :: i = 99
++  end type
++  type(foo) :: bar(4)
++  class(foo), allocatable :: barfoo
++
++  allocate(barfoo,source = f(11))
++  bar = [f(33), [f(22), barfoo], f(1)]
++  if (any (bar%i .ne. [33, 22, 11, 1])) call abort
++  deallocate (barfoo)
++
++contains
++
++  function f(arg) result(foobar)
++    class(foo), allocatable :: foobar
++    integer :: arg
++    allocate(foobar,source = foo(arg))
++  end function
++
++end program

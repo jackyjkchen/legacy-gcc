@@ -1,0 +1,88 @@
+diff --git a/gcc/cp/call.c b/gcc/cp/call.c
+index 881460555..07d6b73c0 100644
+--- a/gcc/cp/call.c
++++ b/gcc/cp/call.c
+@@ -3027,6 +3027,9 @@ add_template_candidate_real (struct z_candidate **candidates, tree tmpl,
+     {
+       if (first_arg_without_in_chrg != NULL_TREE)
+ 	first_arg_without_in_chrg = NULL_TREE;
++      else if (return_type && strict == DEDUCE_CALL)
++	/* We're deducing for a call to the result of a template conversion
++	   function, so the args don't contain 'this'; leave them alone.  */;
+       else
+ 	++skip_without_in_chrg;
+     }
+@@ -3205,6 +3208,11 @@ add_template_candidate (struct z_candidate **candidates, tree tmpl, tree ctype,
+ 				 flags, NULL_TREE, strict, complain);
+ }
+ 
++/* Create an overload candidate for the conversion function template TMPL,
++   returning RETURN_TYPE, which will be invoked for expression OBJ to produce a
++   pointer-to-function which will in turn be called with the argument list
++   ARGLIST, and add it to CANDIDATES.  This does not change ARGLIST.  FLAGS is
++   passed on to implicit_conversion.  */
+ 
+ static struct z_candidate *
+ add_template_conv_candidate (struct z_candidate **candidates, tree tmpl,
+@@ -3216,7 +3224,7 @@ add_template_conv_candidate (struct z_candidate **candidates, tree tmpl,
+   return
+     add_template_candidate_real (candidates, tmpl, NULL_TREE, NULL_TREE,
+ 				 first_arg, arglist, return_type, access_path,
+-				 conversion_path, 0, obj, DEDUCE_CONV,
++				 conversion_path, 0, obj, DEDUCE_CALL,
+ 				 complain);
+ }
+ 
+diff --git a/gcc/cp/pt.c b/gcc/cp/pt.c
+index 7bbb4c203..ee5acce44 100644
+--- a/gcc/cp/pt.c
++++ b/gcc/cp/pt.c
+@@ -16378,7 +16378,9 @@ pack_deducible_p (tree parm, tree fn)
+ 
+    DEDUCE_CALL:
+      We are deducing arguments for a function call, as in
+-     [temp.deduct.call].
++     [temp.deduct.call].  If RETURN_TYPE is non-null, we are
++     deducing arguments for a call to the result of a conversion
++     function template, as in [over.call.object].
+ 
+    DEDUCE_CONV:
+      We are deducing arguments for a conversion function, as in
+@@ -16545,7 +16547,15 @@ fn_type_unification (tree fn,
+   /* Never do unification on the 'this' parameter.  */
+   parms = skip_artificial_parms_for (fn, TYPE_ARG_TYPES (fntype));
+ 
+-  if (return_type)
++  if (return_type && strict == DEDUCE_CALL)
++    {
++      /* We're deducing for a call to the result of a template conversion
++         function.  The parms we really want are in return_type.  */
++      if (POINTER_TYPE_P (return_type))
++	return_type = TREE_TYPE (return_type);
++      parms = TYPE_ARG_TYPES (return_type);
++    }
++  else if (return_type)
+     {
+       tree *new_args;
+ 
+diff --git a/gcc/testsuite/g++.dg/cpp0x/conv-tmpl1.C b/gcc/testsuite/g++.dg/cpp0x/conv-tmpl1.C
+new file mode 100644
+index 000000000..7f866daf4
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/conv-tmpl1.C
+@@ -0,0 +1,15 @@
++// { dg-do compile { target c++11 } }
++
++template <class T>
++using Fn = void (*)(T);
++
++struct A
++{
++  template <class T>
++  operator Fn<T>();
++};
++
++int main()
++{
++  A()(42);
++}

@@ -1,0 +1,356 @@
+diff --git a/gcc/fortran/resolve.c b/gcc/fortran/resolve.c
+index 42c7659b1..e0145b30f 100644
+--- a/gcc/fortran/resolve.c
++++ b/gcc/fortran/resolve.c
+@@ -14013,10 +14013,15 @@ resolve_symbol (gfc_symbol *sym)
+ 
+       if ((!a->save && !a->dummy && !a->pointer
+ 	   && !a->in_common && !a->use_assoc
+-	   && (a->referenced || a->result)
+-	   && !(a->function && sym != sym->result))
++	   && !a->result && !a->function)
+ 	  || (a->dummy && a->intent == INTENT_OUT && !a->pointer))
+ 	apply_default_init (sym);
++      else if (a->function && sym->result && a->access != ACCESS_PRIVATE
++	       && (sym->ts.u.derived->attr.alloc_comp
++		   || sym->ts.u.derived->attr.pointer_comp))
++	/* Mark the result symbol to be referenced, when it has allocatable
++	   components.  */
++	sym->result->attr.referenced = 1;
+     }
+ 
+   if (sym->ts.type == BT_CLASS && sym->ns == gfc_current_ns
+diff --git a/gcc/fortran/trans-decl.c b/gcc/fortran/trans-decl.c
+index dcc4e7eb5..9929059a1 100644
+--- a/gcc/fortran/trans-decl.c
++++ b/gcc/fortran/trans-decl.c
+@@ -5972,9 +5972,33 @@ gfc_generate_function_code (gfc_namespace * ns)
+   tmp = gfc_trans_code (ns->code);
+   gfc_add_expr_to_block (&body, tmp);
+ 
+-  if (TREE_TYPE (DECL_RESULT (fndecl)) != void_type_node)
++  if (TREE_TYPE (DECL_RESULT (fndecl)) != void_type_node
++      || (sym->result && sym->result != sym
++	  && sym->result->ts.type == BT_DERIVED
++	  && sym->result->ts.u.derived->attr.alloc_comp))
+     {
++      bool artificial_result_decl = false;
+       tree result = get_proc_result (sym);
++      gfc_symbol *rsym = sym == sym->result ? sym : sym->result;
++
++      /* Make sure that a function returning an object with
++	 alloc/pointer_components always has a result, where at least
++	 the allocatable/pointer components are set to zero.  */
++      if (result == NULL_TREE && sym->attr.function
++	  && ((sym->result->ts.type == BT_DERIVED
++	       && (sym->attr.allocatable
++		   || sym->attr.pointer
++		   || sym->result->ts.u.derived->attr.alloc_comp
++		   || sym->result->ts.u.derived->attr.pointer_comp))
++	      || (sym->result->ts.type == BT_CLASS
++		  && (CLASS_DATA (sym)->attr.allocatable
++		      || CLASS_DATA (sym)->attr.class_pointer
++		      || CLASS_DATA (sym->result)->attr.alloc_comp
++		      || CLASS_DATA (sym->result)->attr.pointer_comp))))
++	{
++	  artificial_result_decl = true;
++	  result = gfc_get_fake_result_decl (sym, 0);
++	}
+ 
+       if (result != NULL_TREE && sym->attr.function && !sym->attr.pointer)
+ 	{
+@@ -5994,16 +6018,30 @@ gfc_generate_function_code (gfc_namespace * ns)
+ 							null_pointer_node));
+ 	    }
+ 	  else if (sym->ts.type == BT_DERIVED
+-		   && sym->ts.u.derived->attr.alloc_comp
+ 		   && !sym->attr.allocatable)
+ 	    {
+-	      rank = sym->as ? sym->as->rank : 0;
+-	      tmp = gfc_nullify_alloc_comp (sym->ts.u.derived, result, rank);
+-	      gfc_add_expr_to_block (&init, tmp);
++	      gfc_expr *init_exp;
++	      /* Arrays are not initialized using the default initializer of
++		 their elements.  Therefore only check if a default
++		 initializer is available when the result is scalar.  */
++	      init_exp = rsym->as ? NULL : gfc_default_initializer (&rsym->ts);
++	      if (init_exp)
++		{
++		  tmp = gfc_trans_structure_assign (result, init_exp, 0);
++		  gfc_free_expr (init_exp);
++		  gfc_add_expr_to_block (&init, tmp);
++		}
++	      else if (rsym->ts.u.derived->attr.alloc_comp)
++		{
++		  rank = rsym->as ? rsym->as->rank : 0;
++		  tmp = gfc_nullify_alloc_comp (rsym->ts.u.derived, result,
++						rank);
++		  gfc_prepend_expr_to_block (&body, tmp);
++		}
+ 	    }
+ 	}
+ 
+-      if (result == NULL_TREE)
++      if (result == NULL_TREE || artificial_result_decl)
+ 	{
+ 	  /* TODO: move to the appropriate place in resolve.c.  */
+ 	  if (warn_return_type && sym == sym->result)
+@@ -6013,7 +6051,7 @@ gfc_generate_function_code (gfc_namespace * ns)
+ 	  if (warn_return_type)
+ 	    TREE_NO_WARNING(sym->backend_decl) = 1;
+ 	}
+-      else
++      if (result != NULL_TREE)
+ 	gfc_add_expr_to_block (&body, gfc_generate_return ());
+     }
+ 
+diff --git a/gcc/fortran/trans-expr.c b/gcc/fortran/trans-expr.c
+index 989335104..41c5e1259 100644
+--- a/gcc/fortran/trans-expr.c
++++ b/gcc/fortran/trans-expr.c
+@@ -1442,7 +1442,6 @@ realloc_lhs_warning (bt type, bool array, locus *where)
+ }
+ 
+ 
+-static tree gfc_trans_structure_assign (tree dest, gfc_expr * expr, bool init);
+ static void gfc_apply_interface_mapping_to_expr (gfc_interface_mapping *,
+ 						 gfc_expr *);
+ 
+@@ -5300,8 +5299,19 @@ gfc_conv_procedure_call (gfc_se * se, gfc_symbol * sym,
+ 	    && !expr_may_alias_variables (e, elemental_proc))
+ 	{
+ 	  int parm_rank;
+-	  tmp = build_fold_indirect_ref_loc (input_location,
+-					 parmse.expr);
++	  /* It is known the e returns a structure type with at least one
++	     allocatable component.  When e is a function, ensure that the
++	     function is called once only by using a temporary variable.  */
++	  if (!DECL_P (parmse.expr))
++	    parmse.expr = gfc_evaluate_now_loc (input_location,
++						parmse.expr, &se->pre);
++
++	  if (fsym && fsym->attr.value)
++	    tmp = parmse.expr;
++	  else
++	    tmp = build_fold_indirect_ref_loc (input_location,
++					       parmse.expr);
++
+ 	  parm_rank = e->rank;
+ 	  switch (parm_kind)
+ 	    {
+@@ -7147,7 +7157,7 @@ gfc_trans_subcomponent_assign (tree dest, gfc_component * cm, gfc_expr * expr,
+ 
+ /* Assign a derived type constructor to a variable.  */
+ 
+-static tree
++tree
+ gfc_trans_structure_assign (tree dest, gfc_expr * expr, bool init)
+ {
+   gfc_constructor *c;
+@@ -7461,7 +7471,7 @@ gfc_conv_expr_reference (gfc_se * se, gfc_expr * expr)
+       if (expr->ts.type == BT_CHARACTER
+ 	  && expr->expr_type != EXPR_FUNCTION)
+ 	gfc_conv_string_parameter (se);
+-      else
++     else
+ 	se->expr = gfc_build_addr_expr (NULL_TREE, se->expr);
+ 
+       return;
+diff --git a/gcc/fortran/trans.h b/gcc/fortran/trans.h
+index 7ad7daaa9..9119d0f92 100644
+--- a/gcc/fortran/trans.h
++++ b/gcc/fortran/trans.h
+@@ -665,6 +665,9 @@ tree gfc_deallocate_scalar_with_status (tree, tree, bool, gfc_expr*, gfc_typespe
+ /* Generate code to call realloc().  */
+ tree gfc_call_realloc (stmtblock_t *, tree, tree);
+ 
++/* Assign a derived type constructor to a variable.  */
++tree gfc_trans_structure_assign (tree, gfc_expr *, bool);
++
+ /* Generate code for an assignment, includes scalarization.  */
+ tree gfc_trans_assignment (gfc_expr *, gfc_expr *, bool, bool);
+ 
+diff --git a/gcc/testsuite/gfortran.dg/alloc_comp_auto_array_3.f90 b/gcc/testsuite/gfortran.dg/alloc_comp_auto_array_3.f90
+index c96a4df23..863c46326 100644
+--- a/gcc/testsuite/gfortran.dg/alloc_comp_auto_array_3.f90
++++ b/gcc/testsuite/gfortran.dg/alloc_comp_auto_array_3.f90
+@@ -25,6 +25,6 @@ contains
+     allocate (array(1)%bigarr)
+   end function
+ end
+-! { dg-final { scan-tree-dump-times "builtin_malloc" 4 "original" } }
++! { dg-final { scan-tree-dump-times "builtin_malloc" 3 "original" } }
+ ! { dg-final { scan-tree-dump-times "builtin_free" 4 "original" } }
+ ! { dg-final { scan-tree-dump-times "while \\(1\\)" 4 "original" } }
+diff --git a/gcc/testsuite/gfortran.dg/alloc_comp_class_3.f03 b/gcc/testsuite/gfortran.dg/alloc_comp_class_3.f03
+new file mode 100644
+index 000000000..0753e33d5
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/alloc_comp_class_3.f03
+@@ -0,0 +1,55 @@
++! { dg-do run }
++! { dg-options "-Wreturn-type" }
++!
++! Check that pr58586 is fixed now.
++! Based on a contribution by Vladimir Fuka
++! Contibuted by Andre Vehreschild
++
++program test_pr58586
++  implicit none
++
++  type :: a
++  end type
++
++  type :: c
++     type(a), allocatable :: a
++  end type
++
++  type :: b
++     integer, allocatable :: a
++  end type
++
++  type :: t
++    integer, allocatable :: comp
++  end type
++  type :: u
++    type(t), allocatable :: comp
++  end type
++
++
++  ! These two are merely to check, if compilation works
++  call add(b())
++  call add(b(null()))
++
++  ! This needs to execute, to see whether the segfault at runtime is resolved
++  call add_c(c_init())
++
++  call sub(u())
++contains
++
++  subroutine add (d)
++    type(b), value :: d
++  end subroutine
++
++  subroutine add_c (d)
++    type(c), value :: d
++  end subroutine
++
++  type(c) function c_init()  ! { dg-warning "not set" }
++  end function
++
++  subroutine sub(d)
++    type(u), value :: d
++  end subroutine
++end program test_pr58586
++
+diff --git a/gcc/testsuite/gfortran.dg/alloc_comp_class_4.f03 b/gcc/testsuite/gfortran.dg/alloc_comp_class_4.f03
+new file mode 100644
+index 000000000..28b7e631a
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/alloc_comp_class_4.f03
+@@ -0,0 +1,105 @@
++! { dg-do run }
++! { dg-options "-Wreturn-type" }
++!
++! Check that pr58586 is fixed now.
++! Based on a contribution by Vladimir Fuka
++! Contibuted by Andre Vehreschild
++
++module test_pr58586_mod
++  implicit none
++
++  type :: a
++  end type
++
++  type :: c
++     type(a), allocatable :: a
++  end type
++
++  type :: d
++  contains
++     procedure :: init => d_init
++  end type
++
++  type, extends(d) :: e
++  contains
++     procedure :: init => e_init
++  end type
++
++  type :: b
++     integer, allocatable :: a
++  end type
++
++  type t
++    integer :: i = 5
++  end type
++
++contains
++
++  subroutine add (d)
++    type(b), value :: d
++  end subroutine
++
++  subroutine add_c (d)
++    type(c), value :: d
++  end subroutine
++
++  subroutine add_class_c (d)
++    class(c), value :: d
++  end subroutine
++
++  subroutine add_t (d)
++    type(t), value :: d
++  end subroutine
++
++  type(c) function c_init() ! { dg-warning "not set" }
++  end function
++
++  class(c) function c_init2() ! { dg-warning "not set" }
++    allocatable :: c_init2
++  end function
++
++  type(c) function d_init(this) ! { dg-warning "not set" }
++    class(d) :: this
++  end function
++
++  type(c) function e_init(this)
++    class(e) :: this
++    allocate (e_init%a)
++  end function
++
++  type(t) function t_init() ! { dg-warning "not set" }
++    allocatable :: t_init
++  end function
++
++  type(t) function static_t_init() ! { dg-warning "not set" }
++  end function
++end module test_pr58586_mod
++
++program test_pr58586
++  use test_pr58586_mod
++
++  class(d), allocatable :: od
++  class(e), allocatable :: oe
++  type(t), allocatable :: temp
++
++  ! These two are merely to check, if compilation works
++  call add(b())
++  call add(b(null()))
++
++  ! This needs to execute, to see whether the segfault at runtime is resolved
++  call add_c(c_init())
++  call add_class_c(c_init2())
++
++  call add_t(static_t_init())
++  ! temp = t_init() ! <-- This derefs a null-pointer currently
++  ! Filed as pr66775
++  if (allocated (temp)) call abort()
++
++  allocate(od)
++  call add_c(od%init())
++  deallocate(od)
++  allocate(oe)
++  call add_c(oe%init())
++  deallocate(oe)
++end program
++

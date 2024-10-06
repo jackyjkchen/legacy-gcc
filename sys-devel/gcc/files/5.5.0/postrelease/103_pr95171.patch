@@ -1,0 +1,66 @@
+diff --git a/gcc/testsuite/gcc.dg/pr95171.c b/gcc/testsuite/gcc.dg/pr95171.c
+new file mode 100644
+index 000000000..af9bde7bc
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr95171.c
+@@ -0,0 +1,18 @@
++/* { dg-do compile } */
++/* { dg-options "-fexceptions -ffinite-math-only -fnon-call-exceptions" } */
++
++inline double __attribute__ ((always_inline))
++w9 (int q2)
++{
++  return __builtin_fabs (__builtin_nan ("")) > 0.0 ? 1.0 : q2 / 1.0;
++}
++
++double __attribute__ ((optimize ("-fipa-cp")))
++o7 (int iz)
++{
++  int rj[1];
++
++  (void) rj;
++
++  return w9 (iz);
++}
+diff --git a/gcc/tree-inline.c b/gcc/tree-inline.c
+index 9b8d64203..573ea4843 100644
+--- a/gcc/tree-inline.c
++++ b/gcc/tree-inline.c
+@@ -1748,6 +1748,37 @@ remap_gimple_stmt (gimple stmt, copy_body_data *id)
+       gimple_set_vuse (copy, NULL_TREE);
+     }
+ 
++  if (cfun->can_throw_non_call_exceptions)
++    {
++      /* When inlining a function which does not have non-call exceptions
++	 enabled into a function that has (which only happens with
++	 always-inline) we have to fixup stmts that cannot throw.  */
++      if (gcond *cond = dyn_cast <gcond *> (copy))
++	if (gimple_could_trap_p (cond))
++	  {
++	    gassign *cmp
++	      = gimple_build_assign (make_ssa_name (boolean_type_node),
++				     gimple_cond_code (cond),
++				     gimple_cond_lhs (cond),
++				     gimple_cond_rhs (cond));
++	    gimple_seq_add_stmt (&stmts, cmp);
++	    gimple_cond_set_code (cond, NE_EXPR);
++	    gimple_cond_set_lhs (cond, gimple_assign_lhs (cmp));
++	    gimple_cond_set_rhs (cond, boolean_false_node);
++	  }
++      if (gassign *ass = dyn_cast <gassign *> (copy))
++	if ((gimple_assign_rhs_code (ass) == COND_EXPR
++	     || gimple_assign_rhs_code (ass) == VEC_COND_EXPR)
++	    && gimple_could_trap_p (ass))
++	  {
++	    gassign *cmp
++	      = gimple_build_assign (make_ssa_name (boolean_type_node),
++				     gimple_assign_rhs1 (ass));
++	    gimple_seq_add_stmt (&stmts, cmp);
++	    gimple_assign_set_rhs1 (ass, gimple_assign_lhs (cmp));
++	  }
++    }
++
+   gimple_seq_add_stmt (&stmts, copy);
+   return stmts;
+ }

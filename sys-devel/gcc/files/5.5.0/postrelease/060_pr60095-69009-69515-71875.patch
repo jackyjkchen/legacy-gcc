@@ -1,0 +1,257 @@
+diff --git a/gcc/cp/pt.c b/gcc/cp/pt.c
+index a19cc0c46..46b0a2411 100644
+--- a/gcc/cp/pt.c
++++ b/gcc/cp/pt.c
+@@ -182,7 +182,6 @@ static tree copy_template_args (tree);
+ static tree tsubst_template_arg (tree, tree, tsubst_flags_t, tree);
+ static tree tsubst_template_args (tree, tree, tsubst_flags_t, tree);
+ static tree tsubst_template_parms (tree, tree, tsubst_flags_t);
+-static void regenerate_decl_from_template (tree, tree);
+ static tree most_specialized_partial_spec (tree, tsubst_flags_t);
+ static tree tsubst_aggr_type (tree, tree, tsubst_flags_t, tree, int);
+ static tree tsubst_arg_types (tree, tree, tree, tsubst_flags_t, tree);
+@@ -16175,6 +16174,7 @@ instantiate_template_1 (tree tmpl, tree orig_args, tsubst_flags_t complain)
+ 
+   tree pattern = DECL_TEMPLATE_RESULT (gen_tmpl);
+ 
++  fndecl = NULL_TREE;
+   if (VAR_P (pattern))
+     {
+       /* We need to determine if we're using a partial or explicit
+@@ -16186,14 +16186,16 @@ instantiate_template_1 (tree tmpl, tree orig_args, tsubst_flags_t complain)
+ 	pattern = error_mark_node;
+       else if (elt)
+ 	{
+-	  tmpl = TREE_VALUE (elt);
+-	  pattern = DECL_TEMPLATE_RESULT (tmpl);
+-	  targ_ptr = TREE_PURPOSE (elt);
++	  tree partial_tmpl = TREE_VALUE (elt);
++	  tree partial_args = TREE_PURPOSE (elt);
++	  tree partial_pat = DECL_TEMPLATE_RESULT (partial_tmpl);
++	  fndecl = tsubst (partial_pat, partial_args, complain, gen_tmpl);
+ 	}
+     }
+ 
+   /* Substitute template parameters to obtain the specialization.  */
+-  fndecl = tsubst (pattern, targ_ptr, complain, gen_tmpl);
++  if (fndecl == NULL_TREE)
++    fndecl = tsubst (pattern, targ_ptr, complain, gen_tmpl);
+   if (DECL_CLASS_SCOPE_P (gen_tmpl))
+     pop_nested_class ();
+   pop_from_top_level ();
+@@ -19520,38 +19522,6 @@ most_general_template (tree decl)
+   return decl;
+ }
+ 
+-/* True iff the TEMPLATE_DECL tmpl is a partial specialization.  */
+-
+-static bool
+-partial_specialization_p (tree tmpl)
+-{
+-  /* Any specialization has DECL_TEMPLATE_SPECIALIZATION.  */
+-  if (!DECL_TEMPLATE_SPECIALIZATION (tmpl))
+-    return false;
+-  if (!VAR_P (DECL_TEMPLATE_RESULT (tmpl)))
+-    return false;
+-  tree t = DECL_TI_TEMPLATE (tmpl);
+-  /* A specialization that fully specializes one of the containing classes is
+-     not a partial specialization.  */
+-  return (list_length (DECL_TEMPLATE_PARMS (tmpl))
+-	  == list_length (DECL_TEMPLATE_PARMS (t)));
+-}
+-
+-/* If TMPL is a partial specialization, return the arguments for its primary
+-   template.  */
+-
+-static tree
+-impartial_args (tree tmpl, tree args)
+-{
+-  if (!partial_specialization_p (tmpl))
+-    return args;
+-
+-  /* If TMPL is a partial specialization, we need to substitute to get
+-     the args for the primary template.  */
+-  return tsubst_template_args (DECL_TI_ARGS (tmpl), args,
+-			       tf_warning_or_error, tmpl);
+-}
+-
+ /* Return the most specialized of the template partial specializations
+    which can produce TARGET, a specialization of some class or variable
+    template.  The value returned is actually a TREE_LIST; the TREE_VALUE is
+@@ -20046,14 +20016,12 @@ do_type_instantiation (tree t, tree storage, tsubst_flags_t complain)
+    to instantiate the DECL, we regenerate it.  */
+ 
+ static void
+-regenerate_decl_from_template (tree decl, tree tmpl)
++regenerate_decl_from_template (tree decl, tree tmpl, tree args)
+ {
+   /* The arguments used to instantiate DECL, from the most general
+      template.  */
+-  tree args;
+   tree code_pattern;
+ 
+-  args = DECL_TI_ARGS (decl);
+   code_pattern = DECL_TEMPLATE_RESULT (tmpl);
+ 
+   /* Make sure that we can see identifiers, and compute access
+@@ -20366,7 +20334,7 @@ instantiate_decl (tree d, int defer_ok,
+     return d;
+ 
+   gen_tmpl = most_general_template (tmpl);
+-  gen_args = impartial_args (tmpl, DECL_TI_ARGS (d));
++  gen_args = DECL_TI_ARGS (d);
+ 
+   if (tmpl != gen_tmpl)
+     /* We should already have the extra args.  */
+@@ -20385,6 +20353,20 @@ instantiate_decl (tree d, int defer_ok,
+   /* Set TD to the template whose DECL_TEMPLATE_RESULT is the pattern
+      for the instantiation.  */
+   td = template_for_substitution (d);
++  args = gen_args;
++
++  if (VAR_P (d))
++    {
++      /* Look up an explicit specialization, if any.  */
++      tree tid = lookup_template_variable (gen_tmpl, gen_args);
++      tree elt = most_specialized_partial_spec (tid, tf_warning_or_error);
++      if (elt && elt != error_mark_node)
++	{
++	  td = TREE_VALUE (elt);
++	  args = TREE_PURPOSE (elt);
++	}
++    }
++
+   code_pattern = DECL_TEMPLATE_RESULT (td);
+ 
+   /* We should never be trying to instantiate a member of a class
+@@ -20397,9 +20379,7 @@ instantiate_decl (tree d, int defer_ok,
+        outside the class, we may have too many arguments.  Drop the
+        ones we don't need.  The same is true for specializations.  */
+     args = get_innermost_template_args
+-      (gen_args, TMPL_PARMS_DEPTH  (DECL_TEMPLATE_PARMS (td)));
+-  else
+-    args = gen_args;
++      (args, TMPL_PARMS_DEPTH (DECL_TEMPLATE_PARMS (td)));
+ 
+   if (TREE_CODE (d) == FUNCTION_DECL)
+     {
+@@ -20563,7 +20543,7 @@ instantiate_decl (tree d, int defer_ok,
+ 
+   /* Regenerate the declaration in case the template has been modified
+      by a subsequent redeclaration.  */
+-  regenerate_decl_from_template (d, td);
++  regenerate_decl_from_template (d, td, args);
+ 
+   /* We already set the file and line above.  Reset them now in case
+      they changed as a result of calling regenerate_decl_from_template.  */
+diff --git a/gcc/testsuite/g++.dg/cpp1y/pr71875.C b/gcc/testsuite/g++.dg/cpp1y/pr71875.C
+new file mode 100644
+index 000000000..4d317966c
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp1y/pr71875.C
+@@ -0,0 +1,24 @@
++// PR c++/71875
++// { dg-do link { target c++14 } }
++
++template <typename T>
++constexpr bool IsMatrix = false;
++
++template<typename TElem>
++class Matrix {};
++
++template <typename TElem>
++constexpr bool IsMatrix<Matrix<TElem>> = true;
++
++template<typename TNestVec>
++class RowVecExpMatrix;
++
++template <typename TNestVec>
++constexpr bool IsMatrix<RowVecExpMatrix<TNestVec>> = true;
++
++int
++main ()
++{
++  static_assert (IsMatrix<RowVecExpMatrix<Matrix<int>>>, "Matrix check error");
++  static_assert (IsMatrix<Matrix<int>>, "Input type is not a matrix");
++}
+diff --git a/gcc/testsuite/g++.dg/cpp1y/var-templ39.C b/gcc/testsuite/g++.dg/cpp1y/var-templ39.C
+index e06519d54..5170a5bda 100644
+--- a/gcc/testsuite/g++.dg/cpp1y/var-templ39.C
++++ b/gcc/testsuite/g++.dg/cpp1y/var-templ39.C
+@@ -1,5 +1,5 @@
+ // PR c++/66260
+-// { dg-do compile { target c++14 } }
++// { dg-do assemble { target c++14 } }
+ 
+ template <class>
+ constexpr bool foo = false;
+diff --git a/gcc/testsuite/g++.dg/cpp1y/var-templ39a.C b/gcc/testsuite/g++.dg/cpp1y/var-templ39a.C
+new file mode 100644
+index 000000000..5ba1b9d45
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp1y/var-templ39a.C
+@@ -0,0 +1,27 @@
++// PR c++/66260
++// { dg-do compile { target c++14 } }
++
++template <class>
++bool foo = false;
++template <>
++bool foo<int> = true;
++template <class T, int N>
++bool foo<T[N]> = foo<T>;
++
++#define assert(X) if (!(X)) __builtin_abort();
++
++int main()
++{
++  // { dg-final { scan-assembler "_Z3fooIiE" } }
++  assert(foo<int>);
++  // { dg-final { scan-assembler "_Z3fooIdE" } }
++  assert(!foo<double>);
++  // { dg-final { scan-assembler "_Z3fooIA3_iE" } }
++  assert(foo<int[3]>);
++  // { dg-final { scan-assembler "_Z3fooIA3_dE" } }
++  assert(!foo<double[3]>);
++  // { dg-final { scan-assembler "_Z3fooIA2_A5_A3_iE" } }
++  assert(foo<int[2][5][3]>);
++  // { dg-final { scan-assembler "_Z3fooIA2_A5_A3_dE" } }
++  assert(!foo<double[2][5][3]>);
++}
+diff --git a/gcc/testsuite/g++.dg/cpp1y/var-templ51.C b/gcc/testsuite/g++.dg/cpp1y/var-templ51.C
+new file mode 100644
+index 000000000..f85ef9c11
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp1y/var-templ51.C
+@@ -0,0 +1,11 @@
++// PR c++/60095
++// { dg-do link { target c++14 } }
++
++template <class>
++constexpr bool b = false;
++template<typename T>
++constexpr bool b<T*> = true;
++int main() {
++    b<int*>;
++    b<double*>;
++}
+diff --git a/gcc/testsuite/g++.dg/cpp1y/var-templ52.C b/gcc/testsuite/g++.dg/cpp1y/var-templ52.C
+new file mode 100644
+index 000000000..61fd19e44
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp1y/var-templ52.C
+@@ -0,0 +1,14 @@
++// PR c++/69515
++// { dg-do link { target c++14 } }
++
++struct A { A(int = 0) {} };
++
++template<class...> class meow;
++
++template<typename T> A foo;
++template<typename... Ts> A foo<meow<Ts...>> = 1;
++
++auto&& a = foo<meow<int>>;
++auto&& b = foo<meow<int, int>>;
++
++int main() {}

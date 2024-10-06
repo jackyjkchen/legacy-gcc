@@ -1,0 +1,52 @@
+diff --git a/gcc/testsuite/g++.dg/torture/pr71405.C b/gcc/testsuite/g++.dg/torture/pr71405.C
+new file mode 100644
+index 000000000..52602437a
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/torture/pr71405.C
+@@ -0,0 +1,22 @@
++// PR tree-optimization/71405
++// { dg-do compile }
++
++struct C
++{
++  C () {}
++  int i;
++};
++
++void *
++operator new (__SIZE_TYPE__ x, void *y)
++{
++  return y;
++}
++
++int
++main ()
++{
++  int a;
++  new (&a) C;
++  return a; 
++}
+diff --git a/gcc/tree-ssa.c b/gcc/tree-ssa.c
+index a3c0c0d81..cb3c35c4c 100644
+--- a/gcc/tree-ssa.c
++++ b/gcc/tree-ssa.c
+@@ -1614,9 +1614,16 @@ execute_update_addresses_taken (void)
+ 		if (gimple_assign_lhs (stmt) != lhs
+ 		    && !useless_type_conversion_p (TREE_TYPE (lhs),
+ 						   TREE_TYPE (rhs)))
+-		  rhs = fold_build1 (VIEW_CONVERT_EXPR,
+-				     TREE_TYPE (lhs), rhs);
+-
++		  {
++		    if (gimple_clobber_p (stmt))
++		      {
++			rhs = build_constructor (TREE_TYPE (lhs), NULL);
++			TREE_THIS_VOLATILE (rhs) = 1;
++		      }
++		    else
++		      rhs = fold_build1 (VIEW_CONVERT_EXPR,
++					 TREE_TYPE (lhs), rhs);
++		  }
+ 		if (gimple_assign_lhs (stmt) != lhs)
+ 		  gimple_assign_set_lhs (stmt, lhs);
+ 

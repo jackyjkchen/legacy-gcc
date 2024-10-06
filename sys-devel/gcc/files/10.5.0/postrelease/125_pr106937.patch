@@ -1,0 +1,220 @@
+diff --git a/gcc/c-family/c-pretty-print.c b/gcc/c-family/c-pretty-print.c
+index e2b9fd8ca..6899806a4 100644
+--- a/gcc/c-family/c-pretty-print.c
++++ b/gcc/c-family/c-pretty-print.c
+@@ -455,7 +455,12 @@ pp_c_specifier_qualifier_list (c_pretty_printer *pp, tree t)
+ 	  {
+ 	    pp_c_whitespace (pp);
+ 	    pp_c_left_paren (pp);
+-	    pp_c_attributes_display (pp, TYPE_ATTRIBUTES (pointee));
++	    /* If we're dealing with the GNU form of attributes, print this:
++		 void (__attribute__((noreturn)) *f) ();
++	       If it is the standard [[]] attribute, we'll print the attribute
++	       in c_pretty_printer::direct_abstract_declarator/FUNCTION_TYPE.  */
++	    if (!cxx11_attribute_p (TYPE_ATTRIBUTES (pointee)))
++	      pp_c_attributes_display (pp, TYPE_ATTRIBUTES (pointee));
+ 	  }
+ 	else if (!c_dialect_cxx ())
+ 	  pp_c_whitespace (pp);
+@@ -582,6 +587,13 @@ c_pretty_printer::direct_abstract_declarator (tree t)
+     case FUNCTION_TYPE:
+       pp_c_parameter_type_list (this, t);
+       direct_abstract_declarator (TREE_TYPE (t));
++      /* If this is the standard [[]] attribute, print
++	 void (*)() [[noreturn]];  */
++      if (cxx11_attribute_p (TYPE_ATTRIBUTES (t)))
++	{
++	  pp_space (this);
++	  pp_c_attributes_display (this, TYPE_ATTRIBUTES (t));
++	}
+       break;
+ 
+     case ARRAY_TYPE:
+@@ -786,32 +798,7 @@ c_pretty_printer::declaration (tree t)
+   pp_c_init_declarator (this, t);
+ }
+ 
+-/* Pretty-print ATTRIBUTES using GNU C extension syntax.  */
+-
+-void
+-pp_c_attributes (c_pretty_printer *pp, tree attributes)
+-{
+-  if (attributes == NULL_TREE)
+-    return;
+-
+-  pp_c_ws_string (pp, "__attribute__");
+-  pp_c_left_paren (pp);
+-  pp_c_left_paren (pp);
+-  for (; attributes != NULL_TREE; attributes = TREE_CHAIN (attributes))
+-    {
+-      pp_tree_identifier (pp, TREE_PURPOSE (attributes));
+-      if (TREE_VALUE (attributes))
+-	pp_c_call_argument_list (pp, TREE_VALUE (attributes));
+-
+-      if (TREE_CHAIN (attributes))
+-	pp_separate_with (pp, ',');
+-    }
+-  pp_c_right_paren (pp);
+-  pp_c_right_paren (pp);
+-}
+-
+-/* Pretty-print ATTRIBUTES using GNU C extension syntax for attributes
+-   marked to be displayed on disgnostic.  */
++/* Pretty-print ATTRIBUTES marked to be displayed on diagnostic.  */
+ 
+ void
+ pp_c_attributes_display (c_pretty_printer *pp, tree a)
+@@ -821,10 +808,12 @@ pp_c_attributes_display (c_pretty_printer *pp, tree a)
+   if (a == NULL_TREE)
+     return;
+ 
++  const bool std_p = cxx11_attribute_p (a);
++
+   for (; a != NULL_TREE; a = TREE_CHAIN (a))
+     {
+-      const struct attribute_spec *as;
+-      as = lookup_attribute_spec (TREE_PURPOSE (a));
++      const struct attribute_spec *as
++	= lookup_attribute_spec (get_attribute_name (a));
+       if (!as || as->affects_type_identity == false)
+         continue;
+       if (c_dialect_cxx ()
+@@ -832,26 +821,47 @@ pp_c_attributes_display (c_pretty_printer *pp, tree a)
+ 	/* In C++ transaction_safe is printed at the end of the declarator.  */
+ 	continue;
+       if (is_first)
+-       {
+-         pp_c_ws_string (pp, "__attribute__");
+-         pp_c_left_paren (pp);
+-         pp_c_left_paren (pp);
+-         is_first = false;
+-       }
++	{
++	  if (std_p)
++	    {
++	      pp_c_left_bracket (pp);
++	      pp_c_left_bracket (pp);
++	    }
++	  else
++	    {
++	      pp_c_ws_string (pp, "__attribute__");
++	      pp_c_left_paren (pp);
++	      pp_c_left_paren (pp);
++	    }
++	  is_first = false;
++	}
+       else
+-       {
+-         pp_separate_with (pp, ',');
+-       }
+-      pp_tree_identifier (pp, TREE_PURPOSE (a));
++	pp_separate_with (pp, ',');
++      tree ns;
++      if (std_p && (ns = get_attribute_namespace (a)))
++	{
++	  pp_tree_identifier (pp, ns);
++	  pp_colon (pp);
++	  pp_colon (pp);
++	}
++      pp_tree_identifier (pp, get_attribute_name (a));
+       if (TREE_VALUE (a))
+-       pp_c_call_argument_list (pp, TREE_VALUE (a));
++	pp_c_call_argument_list (pp, TREE_VALUE (a));
+     }
+ 
+   if (!is_first)
+     {
+-      pp_c_right_paren (pp);
+-      pp_c_right_paren (pp);
+-      pp_c_whitespace (pp);
++      if (std_p)
++	{
++	  pp_c_right_bracket (pp);
++	  pp_c_right_bracket (pp);
++	}
++      else
++	{
++	  pp_c_right_paren (pp);
++	  pp_c_right_paren (pp);
++	  pp_c_whitespace (pp);
++	}
+     }
+ }
+ 
+diff --git a/gcc/c-family/c-pretty-print.h b/gcc/c-family/c-pretty-print.h
+index 9db6df01d..466628b2b 100644
+--- a/gcc/c-family/c-pretty-print.h
++++ b/gcc/c-family/c-pretty-print.h
+@@ -119,7 +119,6 @@ void pp_c_space_for_pointer_operator (c_pretty_printer *, tree);
+ /* Declarations.  */
+ void pp_c_tree_decl_identifier (c_pretty_printer *, tree);
+ void pp_c_function_definition (c_pretty_printer *, tree);
+-void pp_c_attributes (c_pretty_printer *, tree);
+ void pp_c_attributes_display (c_pretty_printer *, tree);
+ void pp_c_cv_qualifiers (c_pretty_printer *pp, int qualifiers, bool func_type);
+ void pp_c_type_qualifier_list (c_pretty_printer *, tree);
+diff --git a/gcc/cp/error.c b/gcc/cp/error.c
+index a84b6641b..c51e951df 100644
+--- a/gcc/cp/error.c
++++ b/gcc/cp/error.c
+@@ -35,6 +35,7 @@ along with GCC; see the file COPYING3.  If not see
+ #include "internal-fn.h"
+ #include "gcc-rich-location.h"
+ #include "cp-name-hint.h"
++#include "attribs.h"
+ 
+ #define pp_separate_with_comma(PP) pp_cxx_separate_with (PP, ',')
+ #define pp_separate_with_semicolon(PP) pp_cxx_separate_with (PP, ';')
+@@ -811,7 +812,12 @@ dump_type_prefix (cxx_pretty_printer *pp, tree t, int flags)
+ 	  {
+ 	    pp_cxx_whitespace (pp);
+ 	    pp_cxx_left_paren (pp);
+-	    pp_c_attributes_display (pp, TYPE_ATTRIBUTES (sub));
++	    /* If we're dealing with the GNU form of attributes, print this:
++		 void (__attribute__((noreturn)) *f) ();
++	       If it is the standard [[]] attribute, we'll print the attribute
++	       in dump_type_suffix.  */
++	    if (!cxx11_attribute_p (TYPE_ATTRIBUTES (sub)))
++	      pp_c_attributes_display (pp, TYPE_ATTRIBUTES (sub));
+ 	  }
+ 	if (TYPE_PTR_P (t))
+ 	  pp_star (pp);
+@@ -943,6 +949,14 @@ dump_type_suffix (cxx_pretty_printer *pp, tree t, int flags)
+ 	if (tx_safe_fn_type_p (t))
+ 	  pp_cxx_ws_string (pp, "transaction_safe");
+ 	dump_exception_spec (pp, TYPE_RAISES_EXCEPTIONS (t), flags);
++	/* If this is the standard [[]] attribute, print
++	     void (*)() [[noreturn]];  */
++	if (cxx11_attribute_p (TYPE_ATTRIBUTES (t)))
++	  {
++	    pp_space (pp);
++	    pp_c_attributes_display (pp, TYPE_ATTRIBUTES (t));
++	    pp->padding = pp_before;
++	  }
+ 	dump_type_suffix (pp, TREE_TYPE (t), flags);
+ 	break;
+       }
+diff --git a/gcc/testsuite/c-c++-common/pointer-to-fn1.c b/gcc/testsuite/c-c++-common/pointer-to-fn1.c
+new file mode 100644
+index 000000000..975885462
+--- /dev/null
++++ b/gcc/testsuite/c-c++-common/pointer-to-fn1.c
+@@ -0,0 +1,18 @@
++/* PR c++/106937 */
++/* { dg-options "-fcf-protection" } */
++/* { dg-additional-options "-std=c++11 -fpermissive" { target c++ } } */
++/* Test printing a pointer to function with attribute.  */
++
++__attribute__((nocf_check)) typedef void (*FPA1)();
++[[gnu::nocf_check]] typedef void (*FPA2)(int);
++typedef void (*FP1)();
++typedef void (*FP2)(int);
++
++void
++g (FP1 f1, FP2 f2)
++{
++  FPA1 p1 = f1; // { dg-warning {aka 'void \(__attribute__\(\(nocf_check\)\) \*\)\(\)'} }
++  FPA2 p2 = f2; // { dg-warning {aka 'void \(\*\)\(int\) \[\[gnu::nocf_check\]\]'} }
++  FP1 p3 = p1; // { dg-warning {aka 'void \(__attribute__\(\(nocf_check\)\) \*\)\(\)'} }
++  FP2 p4 = p2; // { dg-warning {aka 'void \(\*\)\(int\) \[\[gnu::nocf_check\]\]'} }
++}

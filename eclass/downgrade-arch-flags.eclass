@@ -126,8 +126,8 @@ downgrade_arch_flags() {
 		11  rocketlake cannonlake
 		11  alderlake skylake
 		10.3 znver3 znver2
-		10  tigerlake icelake-server
 		10  cooperlake cascadelake
+		9.4  tigerlake icelake-server
 		9   znver2 znver1
 		9   cascadelake skylake-avx512
 		9   tremont silvermont
