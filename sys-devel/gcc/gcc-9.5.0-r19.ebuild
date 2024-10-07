@@ -138,7 +138,7 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/119_pr106751.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/120_pr58646.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/121_pr113598.patch
-	eapply "${FILESDIR}"/${PV}/postrelease/122_pr113486.patch
+	#eapply "${FILESDIR}"/${PV}/postrelease/
 	eapply "${FILESDIR}"/${PV}/postrelease/123_pr80270.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/124_pr108104.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/125_pr111914.patch
