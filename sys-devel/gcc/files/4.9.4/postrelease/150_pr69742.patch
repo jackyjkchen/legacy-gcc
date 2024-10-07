@@ -1,0 +1,38 @@
+diff --git a/gcc/fortran/frontend-passes.c b/gcc/fortran/frontend-passes.c
+index 2d9ab3858..668ab2255 100644
+--- a/gcc/fortran/frontend-passes.c
++++ b/gcc/fortran/frontend-passes.c
+@@ -602,7 +602,7 @@ cfe_expr_0 (gfc_expr **e, int *walk_subtrees,
+ 
+   /* Don't do this optimization within OMP workshare. */
+ 
+-  if (in_omp_workshare)
++  if (in_omp_workshare || in_assoc_list)
+     {
+       *walk_subtrees = 0;
+       return 0;
+diff --git a/gcc/testsuite/gfortran.dg/associate_21.f90 b/gcc/testsuite/gfortran.dg/associate_21.f90
+new file mode 100644
+index 000000000..a7bbabab4
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/associate_21.f90
+@@ -0,0 +1,19 @@
++! { dg-do compile }
++! { dg-options "-ffrontend-optimize" }
++! PR 69742 - this used to ICE with front-end optimizatoin
++! Original test case by Marco Restelli.
++program p
++ implicit none
++ integer, allocatable :: i(:), j
++
++  allocate( i(5) )
++  i = (/( j , j=1,5 )/)
++
++  ! The ICE appears when "size(i)" is used twice in associate
++  associate( i5 => i(size(i):size(i)) ) ! this gives ICE
++  !associate( i5 => i(size(2*i):size(i)) ) ! this works
++  i5 = 2
++  end associate
++
++  write(*,*) i
++end program p

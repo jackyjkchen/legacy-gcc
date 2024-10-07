@@ -1,0 +1,90 @@
+diff --git a/gcc/cp/cp-tree.h b/gcc/cp/cp-tree.h
+index 7f1029b51..a860a9ad5 100644
+--- a/gcc/cp/cp-tree.h
++++ b/gcc/cp/cp-tree.h
+@@ -5235,6 +5235,7 @@ extern tree grokfield (const cp_declarator *, cp_decl_specifier_seq *,
+ extern tree grokbitfield (const cp_declarator *, cp_decl_specifier_seq *,
+ 			  tree, tree);
+ extern tree cp_reconstruct_complex_type		(tree, tree);
++extern bool attributes_naming_typedef_ok	(tree);
+ extern void cplus_decl_attributes		(tree *, tree, int);
+ extern void finish_anon_union			(tree);
+ extern void cp_write_global_declarations	(void);
+diff --git a/gcc/cp/decl.c b/gcc/cp/decl.c
+index cfc753f19..32db6357b 100644
+--- a/gcc/cp/decl.c
++++ b/gcc/cp/decl.c
+@@ -10123,6 +10123,7 @@ grokdeclarator (const cp_declarator *declarator,
+ 	  && TREE_CODE (TYPE_NAME (type)) == TYPE_DECL
+ 	  && TYPE_ANONYMOUS_P (type)
+ 	  && declspecs->type_definition_p
++	  && attributes_naming_typedef_ok (*attrlist)
+ 	  && cp_type_quals (type) == TYPE_UNQUALIFIED)
+ 	{
+ 	  tree t;
+diff --git a/gcc/cp/decl2.c b/gcc/cp/decl2.c
+index 923d31271..04ddc3926 100644
+--- a/gcc/cp/decl2.c
++++ b/gcc/cp/decl2.c
+@@ -1244,6 +1244,22 @@ save_template_attributes (tree *attr_p, tree *decl_p)
+     }
+ }
+ 
++/* Return true iff ATTRS are acceptable attributes to be applied in-place
++   to a typedef which gives a previously anonymous class or enum a name for
++   linkage purposes.  */
++
++bool
++attributes_naming_typedef_ok (tree attrs)
++{
++  for (; attrs; attrs = TREE_CHAIN (attrs))
++    {
++      tree name = get_attribute_name (attrs);
++      if (is_attribute_p ("vector_size", name))
++	return false;
++    }
++  return true;
++}
++
+ /* Like reconstruct_complex_type, but handle also template trees.  */
+ 
+ tree
+diff --git a/gcc/cp/tree.c b/gcc/cp/tree.c
+index 3618ede07..51557021e 100644
+--- a/gcc/cp/tree.c
++++ b/gcc/cp/tree.c
+@@ -2179,6 +2179,7 @@ no_linkage_check (tree t, bool relaxed_p)
+     case ARRAY_TYPE:
+     case POINTER_TYPE:
+     case REFERENCE_TYPE:
++    case VECTOR_TYPE:
+       return no_linkage_check (TREE_TYPE (t), relaxed_p);
+ 
+     case OFFSET_TYPE:
+diff --git a/gcc/testsuite/g++.dg/ext/vector26.C b/gcc/testsuite/g++.dg/ext/vector26.C
+new file mode 100644
+index 000000000..fc32f5531
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/ext/vector26.C
+@@ -0,0 +1,9 @@
++// PR c++/59633
++// In C++98, the definition of bar is an error.  In C++11, bar implicitly
++// gets internal linkage.
++// { dg-additional-options "-Wno-psabi" }
++
++typedef enum { e } T __attribute__((vector_size(8)));
++static void foo(T t) {}
++void bar (T t) {}		// { dg-error "no linkage" "" { target c++98 } }
++// { dg-final { scan-assembler-not "globl\[ \t]*_Z3bar" { target c++11 } } }
+diff --git a/gcc/tree.c b/gcc/tree.c
+index 938b613eb..0a2180a5b 100644
+--- a/gcc/tree.c
++++ b/gcc/tree.c
+@@ -10622,6 +10622,7 @@ walk_type_fields (tree type, walk_tree_fn func, void *data,
+     {
+     case POINTER_TYPE:
+     case REFERENCE_TYPE:
++    case VECTOR_TYPE:
+       /* We have to worry about mutually recursive pointers.  These can't
+ 	 be written in C.  They can in Ada.  It's pathological, but
+ 	 there's an ACATS test (c38102a) that checks it.  Deal with this

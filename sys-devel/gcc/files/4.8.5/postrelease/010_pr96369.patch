@@ -1,0 +1,36 @@
+diff --git a/gcc/fold-const.c b/gcc/fold-const.c
+index 4f6195796..6da179146 100644
+--- a/gcc/fold-const.c
++++ b/gcc/fold-const.c
+@@ -4925,6 +4925,13 @@ fold_range_test (location_t loc, enum tree_code code, tree type,
+     return 0;
+ 
+   lhs = make_range (op0, &in0_p, &low0, &high0, &strict_overflow_p);
++  /* If op0 is known true or false and this is a short-circuiting
++     operation we must not merge with op1 since that makes side-effects
++     unconditional.  So special-case this.  */
++  if (!lhs
++      && ((code == TRUTH_ORIF_EXPR && in0_p)
++	  || (code == TRUTH_ANDIF_EXPR && !in0_p)))
++    return op0;
+   rhs = make_range (op1, &in1_p, &low1, &high1, &strict_overflow_p);
+ 
+   /* If this is an OR operation, invert both sides; we will invert
+diff --git a/gcc/testsuite/c-c++-common/pr96369.c b/gcc/testsuite/c-c++-common/pr96369.c
+new file mode 100644
+index 000000000..8c468d9fe
+--- /dev/null
++++ b/gcc/testsuite/c-c++-common/pr96369.c
+@@ -0,0 +1,12 @@
++/* { dg-do compile } */
++/* { dg-options "-O" } */
++
++int main()
++{
++  const long ONE = 1L;
++  long y = 0L;
++  long x = ((long) (ONE || (y = 1L)) % 8L);
++  if (y != 0)
++    __builtin_abort ();
++  return 0;
++}

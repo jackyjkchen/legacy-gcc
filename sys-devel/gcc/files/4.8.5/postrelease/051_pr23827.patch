@@ -1,0 +1,173 @@
+diff --git a/gcc/testsuite/g++.dg/cpp/pr23827_cxx11.C b/gcc/testsuite/g++.dg/cpp/pr23827_cxx11.C
+new file mode 100644
+index 000000000..c1862ceda
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp/pr23827_cxx11.C
+@@ -0,0 +1,23 @@
++// { dg-do run { target c++11 } }
++// { dg-options "-pedantic-errors" }
++
++#define f (
++#define l )
++#define str(x) #x
++#define xstr(x) str(x)
++
++// C90 and C++98: "0x1p+( 0x1p+)"
++// C99 and C++11: "0x1p+f 0x1p+l"
++const char *s = xstr(0x1p+f 0x1p+l);
++
++extern "C" void abort (void);
++extern "C" int strcmp (const char *, const char *);
++
++int
++main()
++{
++  if (strcmp (s, "0x1p+( 0x1p+)"))
++    return 0; // Correct C99 and C++11 behavior.
++  else
++    abort (); // Correct C90 and C++ behavior.
++}
+diff --git a/gcc/testsuite/g++.dg/cpp/pr23827_cxx98.C b/gcc/testsuite/g++.dg/cpp/pr23827_cxx98.C
+new file mode 100644
+index 000000000..cd61be1c2
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp/pr23827_cxx98.C
+@@ -0,0 +1,23 @@
++// { dg-do run { target c++98 } }
++// { dg-options "-ansi -pedantic-errors" }
++
++#define f (
++#define l )
++#define str(x) #x
++#define xstr(x) str(x)
++
++// C90 and C++98: "0x1p+( 0x1p+)"
++// C99 and C++11: "0x1p+f 0x1p+l"
++const char *s = xstr(0x1p+f 0x1p+l);
++
++extern "C" void abort (void);
++extern "C" int strcmp (const char *, const char *);
++
++int
++main()
++{
++  if (strcmp (s, "0x1p+( 0x1p+)"))
++    abort (); // Correct C99 and C++11 behavior.
++  else
++    return 0; // Correct C90 and C++ behavior.
++}
+diff --git a/gcc/testsuite/g++.dg/cpp/pr23827_cxx98_neg.C b/gcc/testsuite/g++.dg/cpp/pr23827_cxx98_neg.C
+new file mode 100644
+index 000000000..9a3762665
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp/pr23827_cxx98_neg.C
+@@ -0,0 +1,4 @@
++// { dg-do compile { target c++98 } }
++/* { dg-options "-ansi -pedantic-errors" }  */
++
++double x = 0x3.1415babep0; // { dg-error "use of C..11 hexadecimal floating constant" }
+diff --git a/gcc/testsuite/gcc.dg/cpp/pr23827_c90.c b/gcc/testsuite/gcc.dg/cpp/pr23827_c90.c
+new file mode 100644
+index 000000000..e7ddc765a
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/cpp/pr23827_c90.c
+@@ -0,0 +1,23 @@
++/* { dg-do run }  */
++/* { dg-options "-std=c90 -pedantic-errors" }  */
++
++#define f (
++#define l )
++#define str(x) #x
++#define xstr(x) str(x)
++
++/* C90 and C++98: "0x1p+( 0x1p+)"  */
++/* C99 and C++11: "0x1p+f 0x1p+l"  */
++const char *s = xstr(0x1p+f 0x1p+l);
++
++void abort (void);
++int strcmp (const char *, const char *);
++
++int
++main()
++{
++  if (strcmp (s, "0x1p+( 0x1p+)"))
++    abort (); /* Correct C99 and C++11 behavior.  */
++  else
++    return 0; /* Correct C90 and C++ behavior.  */
++}
+diff --git a/gcc/testsuite/gcc.dg/cpp/pr23827_c90_neg.c b/gcc/testsuite/gcc.dg/cpp/pr23827_c90_neg.c
+new file mode 100644
+index 000000000..020697cdd
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/cpp/pr23827_c90_neg.c
+@@ -0,0 +1,4 @@
++/* { dg-do compile }  */
++/* { dg-options "-std=c90 -pedantic-errors" }  */
++
++double x = 0x3.1415babep0; /* { dg-error "use of C99 hexadecimal floating constant" }  */
+diff --git a/gcc/testsuite/gcc.dg/cpp/pr23827_c99.c b/gcc/testsuite/gcc.dg/cpp/pr23827_c99.c
+new file mode 100644
+index 000000000..4671c2ac7
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/cpp/pr23827_c99.c
+@@ -0,0 +1,23 @@
++/* { dg-do run { target c++11 } }  */
++/* { dg-options "-pedantic-errors" }  */
++
++#define f (
++#define l )
++#define str(x) #x
++#define xstr(x) str(x)
++
++/* C90 and C++98: "0x1p+( 0x1p+)"  */
++/* C99 and C++11: "0x1p+f 0x1p+l"  */
++const char *s = xstr(0x1p+f 0x1p+l);
++
++void abort (void);
++int strcmp (const char *, const char *);
++
++int
++main()
++{
++  if (strcmp (s, "0x1p+( 0x1p+)"))
++    return 0; /* Correct C99 and C++11 behavior.  */
++  else
++    abort (); /* Correct C90 and C++ behavior.  */
++}
+diff --git a/libcpp/expr.c b/libcpp/expr.c
+index 46d9fd386..4c25f7ffe 100644
+--- a/libcpp/expr.c
++++ b/libcpp/expr.c
+@@ -509,9 +509,16 @@ cpp_classify_number (cpp_reader *pfile, const cpp_token *token,
+ 	SYNTAX_ERROR_AT (virtual_location,
+ 			 "no digits in hexadecimal floating constant");
+ 
+-      if (radix == 16 && CPP_PEDANTIC (pfile) && !CPP_OPTION (pfile, c99))
+-	cpp_error_with_line (pfile, CPP_DL_PEDWARN, virtual_location, 0,
+-			     "use of C99 hexadecimal floating constant");
++      if (radix == 16 && CPP_PEDANTIC (pfile)
++	  && !CPP_OPTION (pfile, extended_numbers))
++	{
++	  if (CPP_OPTION (pfile, cplusplus))
++	    cpp_error_with_line (pfile, CPP_DL_PEDWARN, virtual_location, 0,
++				 "use of C++11 hexadecimal floating constant");
++	  else
++	    cpp_error_with_line (pfile, CPP_DL_PEDWARN, virtual_location, 0,
++				 "use of C99 hexadecimal floating constant");
++	}
+ 
+       if (float_flag == AFTER_EXPON)
+ 	{
+diff --git a/libcpp/init.c b/libcpp/init.c
+index 3037ecd9b..d0d0f4ba0 100644
+--- a/libcpp/init.c
++++ b/libcpp/init.c
+@@ -95,7 +95,7 @@ static const struct lang_flags lang_defaults[] =
+   /* STDC99   */  { 1,  0,  1,   0,  1,   1,   1,   0,   0,    0 },
+   /* STDC11   */  { 1,  0,  1,   0,  1,   1,   1,   1,   0,    0 },
+   /* GNUCXX   */  { 0,  1,  1,   0,  0,   1,   1,   0,   0,    0 },
+-  /* CXX98    */  { 0,  1,  1,   0,  1,   1,   1,   0,   0,    0 },
++  /* CXX98    */  { 0,  1,  0,   0,  1,   1,   1,   0,   0,    0 },
+   /* GNUCXX11 */  { 1,  1,  1,   0,  0,   1,   1,   1,   1,    1 },
+   /* CXX11    */  { 1,  1,  1,   0,  1,   1,   1,   1,   1,    1 },
+   /* ASM      */  { 0,  0,  1,   0,  0,   1,   0,   0,   0,    0 }

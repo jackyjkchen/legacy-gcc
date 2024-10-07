@@ -1,0 +1,130 @@
+diff --git a/gcc/cp/mangle.c b/gcc/cp/mangle.c
+index 2941ace48..51c4bb625 100644
+--- a/gcc/cp/mangle.c
++++ b/gcc/cp/mangle.c
+@@ -1234,6 +1234,9 @@ write_unqualified_name (const tree decl)
+ 	      fn_type = get_mostly_instantiated_function_type (decl);
+ 	      type = TREE_TYPE (fn_type);
+ 	    }
++	  else if (FNDECL_USED_AUTO (decl))
++	    type = (DECL_STRUCT_FUNCTION (decl)->language
++		    ->x_auto_return_pattern);
+ 	  else
+ 	    type = DECL_CONV_FN_TYPE (decl);
+ 	  write_conversion_operator_name (type);
+diff --git a/gcc/dwarf2out.c b/gcc/dwarf2out.c
+index 717ea5286..db1cf3f49 100644
+--- a/gcc/dwarf2out.c
++++ b/gcc/dwarf2out.c
+@@ -219,6 +219,9 @@ static GTY(()) bool cold_text_section_used = false;
+ /* The default cold text section.  */
+ static GTY(()) section *cold_text_section;
+ 
++/* The DIE for C++1y 'auto' in a function return type.  */
++static GTY(()) dw_die_ref auto_die;
++
+ /* Forward declarations for functions defined in this file.  */
+ 
+ static char *stripattributes (const char *);
+@@ -17664,6 +17667,13 @@ gen_subprogram_die (tree decl, dw_die_ref context_die)
+ 	    add_AT_file (subr_die, DW_AT_decl_file, file_index);
+ 	  if (get_AT_unsigned (old_die, DW_AT_decl_line) != (unsigned) s.line)
+ 	    add_AT_unsigned (subr_die, DW_AT_decl_line, s.line);
++
++	  /* If the prototype had an 'auto' return type, emit the real
++	     type on the definition die.  */
++	  if (is_cxx() && debug_info_level > DINFO_LEVEL_TERSE
++	      && get_AT_ref (old_die, DW_AT_type) == auto_die)
++	    add_type_attribute (subr_die, TREE_TYPE (TREE_TYPE (decl)),
++				0, 0, context_die);
+ 	}
+     }
+   else
+@@ -19488,6 +19498,25 @@ gen_type_die_with_usage (tree type, dw_die_ref context_die,
+       break;
+ 
+     default:
++      // A C++ function with deduced return type can have
++      // a TEMPLATE_TYPE_PARM named 'auto' in its type.
++      if (is_cxx ())
++	{
++	  tree name = TYPE_NAME (type);
++	  if (TREE_CODE (name) == TYPE_DECL)
++	    name = DECL_NAME (name);
++	  if (name == get_identifier ("auto"))
++	    {
++	      if (!auto_die)
++		{
++		  auto_die = new_die (DW_TAG_unspecified_type,
++				      comp_unit_die (), NULL_TREE);
++		  add_name_attribute (auto_die, "auto");
++		}
++	      equate_type_number_to_die (type, auto_die);
++	      break;
++	    }
++	}
+       gcc_unreachable ();
+     }
+ 
+diff --git a/gcc/testsuite/g++.dg/cpp1y/auto-fn12.C b/gcc/testsuite/g++.dg/cpp1y/auto-fn12.C
+index e4e58e899..ab4a1bbf2 100644
+--- a/gcc/testsuite/g++.dg/cpp1y/auto-fn12.C
++++ b/gcc/testsuite/g++.dg/cpp1y/auto-fn12.C
+@@ -1,5 +1,5 @@
+ // { dg-options -std=c++1y }
+-// { dg-final { scan-assembler "_ZN1AIiEcviEv" } }
++// { dg-final { scan-assembler "_ZN1AIiEcvDaEv" } }
+ 
+ template <class T>
+ struct A {
+diff --git a/gcc/testsuite/g++.dg/cpp1y/auto-fn22.C b/gcc/testsuite/g++.dg/cpp1y/auto-fn22.C
+new file mode 100644
+index 000000000..f05cbb993
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp1y/auto-fn22.C
+@@ -0,0 +1,9 @@
++// { dg-options "-std=c++1y" }
++
++struct A
++{
++  operator auto();
++};
++
++// { dg-final { scan-assembler "_ZN1AcvDaEv" } }
++A::operator auto() { return 42; }
+diff --git a/gcc/testsuite/g++.dg/debug/dwarf2/auto1.C b/gcc/testsuite/g++.dg/debug/dwarf2/auto1.C
+new file mode 100644
+index 000000000..188ca11ea
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/debug/dwarf2/auto1.C
+@@ -0,0 +1,30 @@
++// PR c++/53756
++// { dg-options "-std=c++1y -g -dA -fno-debug-types-section" }
++// We're looking for something like
++
++// .uleb128 0x3    # (DIE (0x33) DW_TAG_subprogram)
++// .ascii "a1\0"   # DW_AT_name
++// .long   0x4c    # DW_AT_type
++//...
++// .uleb128 0x5    # (DIE (0x4c) DW_TAG_unspecified_type)
++// .long   .LASF6  # DW_AT_name: "auto"
++//...
++// .uleb128 0x7    # (DIE (0x57) DW_TAG_subprogram)
++// .long   0x33    # DW_AT_specification
++// .long   0x87    # DW_AT_type
++//...
++// .uleb128 0x9    # (DIE (0x87) DW_TAG_base_type)
++// .ascii "int\0"  # DW_AT_name
++
++// { dg-final { scan-assembler "a1.*(0x\[0-9a-f\]+)\[ \t\]*# DW_AT_type.*\\1. DW_TAG_unspecified_type.*DW_AT_specification\[\n\r\]{1,2}\[^\n\r\]*(0x\[0-9a-f\]+)\[ \t\]*# DW_AT_type.*\\2. DW_TAG_base_type" } }
++
++struct A
++{
++  auto a1 () { return 42; }
++};
++
++int main()
++{
++  A a;
++  a.a1();
++}

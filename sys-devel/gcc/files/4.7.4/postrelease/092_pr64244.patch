@@ -1,0 +1,96 @@
+diff --git a/gcc/fortran/resolve.c b/gcc/fortran/resolve.c
+index d1ab5e776..1e24be75a 100644
+--- a/gcc/fortran/resolve.c
++++ b/gcc/fortran/resolve.c
+@@ -5794,7 +5794,7 @@ success:
+ /* Resolve a call to a type-bound subroutine.  */
+ 
+ static gfc_try
+-resolve_typebound_call (gfc_code* c, const char **name)
++resolve_typebound_call (gfc_code* c, const char **name, bool *overridable)
+ {
+   gfc_actual_arglist* newactual;
+   gfc_symtree* target;
+@@ -5818,6 +5818,10 @@ resolve_typebound_call (gfc_code* c, const char **name)
+   if (resolve_typebound_generic_call (c->expr1, name) == FAILURE)
+     return FAILURE;
+ 
++  /* Pass along the NON_OVERRIDABLE attribute of the specific TBP. */
++  if (overridable)
++    *overridable = !c->expr1->value.compcall.tbp->non_overridable;
++
+   /* Transform into an ordinary EXEC_CALL for now.  */
+ 
+   if (resolve_typebound_static (c->expr1, &target, &newactual) == FAILURE)
+@@ -6067,7 +6071,7 @@ resolve_typebound_subroutine (gfc_code *code)
+       if (c->ts.u.derived == NULL)
+ 	c->ts.u.derived = gfc_find_derived_vtab (declared);
+ 
+-      if (resolve_typebound_call (code, &name) == FAILURE)
++      if (resolve_typebound_call (code, &name, NULL) == FAILURE)
+ 	return FAILURE;
+ 
+       /* Use the generic name if it is there.  */
+@@ -6099,7 +6103,7 @@ resolve_typebound_subroutine (gfc_code *code)
+     }
+ 
+   if (st == NULL)
+-    return resolve_typebound_call (code, NULL);
++    return resolve_typebound_call (code, NULL, NULL);
+ 
+   if (resolve_ref (code->expr1) == FAILURE)
+     return FAILURE;
+@@ -6112,11 +6116,14 @@ resolve_typebound_subroutine (gfc_code *code)
+ 	 || (!class_ref && st->n.sym->ts.type != BT_CLASS))
+     {
+       gfc_free_ref_list (new_ref);
+-      return resolve_typebound_call (code, NULL);
++      return resolve_typebound_call (code, NULL, NULL);
+     }
+ 
+-  if (resolve_typebound_call (code, &name) == FAILURE)
+-    return FAILURE;
++  if (resolve_typebound_call (code, &name, &overridable) == FAILURE)
++	{
++      gfc_free_ref_list (new_ref);
++      return FAILURE;
++	}
+   ts = code->expr1->ts;
+ 
+   if (overridable)
+diff --git a/gcc/testsuite/gfortran.dg/typebound_call_26.f90 b/gcc/testsuite/gfortran.dg/typebound_call_26.f90
+new file mode 100644
+index 000000000..7c309c6cc
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/typebound_call_26.f90
+@@ -0,0 +1,30 @@
++! { dg-do compile }
++!
++! PR 64244: [4.8/4.9/5 Regression] ICE at class.c:236 when using non_overridable
++!
++! Contributed by OndÅej ÄertÃ­k <ondrej.certik@gmail.com>
++
++module m
++  implicit none
++
++  type :: A
++  contains
++    generic :: f => g
++    procedure, non_overridable :: g
++  end type
++
++contains
++
++  subroutine g(this)
++    class(A), intent(in) :: this
++  end subroutine
++
++end module
++
++
++program test_non_overridable
++  use m, only: A
++  implicit none
++  class(A), allocatable :: h
++  call h%f()
++end

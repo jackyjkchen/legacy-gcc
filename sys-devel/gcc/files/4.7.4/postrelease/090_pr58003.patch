@@ -1,0 +1,162 @@
+diff --git a/gcc/fortran/arith.c b/gcc/fortran/arith.c
+index 53a9dad42..65c604bf4 100644
+--- a/gcc/fortran/arith.c
++++ b/gcc/fortran/arith.c
+@@ -1972,6 +1972,17 @@ gfc_int2int (gfc_expr *src, int kind)
+ 	}
+     }
+ 
++  /*  If we do not trap numeric overflow, we need to convert the number to
++      signed, throwing away high-order bits if necessary.  */
++  if (gfc_option.flag_range_check == 0)
++    {
++      int k;
++
++      k = gfc_validate_kind (BT_INTEGER, kind, false);
++      gfc_convert_mpz_to_signed (result->value.integer,
++				 gfc_integer_kinds[k].bit_size);
++    }
++
+   return result;
+ }
+ 
+diff --git a/gcc/fortran/gfortran.h b/gcc/fortran/gfortran.h
+index 7db6dc550..c95de9c8c 100644
+--- a/gcc/fortran/gfortran.h
++++ b/gcc/fortran/gfortran.h
+@@ -2967,4 +2967,8 @@ typedef int (*walk_expr_fn_t) (gfc_expr **, int *, void *);
+ int gfc_expr_walker (gfc_expr **, walk_expr_fn_t, void *);
+ int gfc_code_walker (gfc_code **, walk_code_fn_t, walk_expr_fn_t, void *);
+ 
++/* simplify.c */
++
++void gfc_convert_mpz_to_signed (mpz_t, int);
++
+ #endif /* GCC_GFORTRAN_H  */
+diff --git a/gcc/fortran/simplify.c b/gcc/fortran/simplify.c
+index 1942bb7cb..94cc5b18c 100644
+--- a/gcc/fortran/simplify.c
++++ b/gcc/fortran/simplify.c
+@@ -150,8 +150,10 @@ convert_mpz_to_unsigned (mpz_t x, int bitsize)
+ 
+   if (mpz_sgn (x) < 0)
+     {
+-      /* Confirm that no bits above the signed range are unset.  */
+-      gcc_assert (mpz_scan0 (x, bitsize-1) == ULONG_MAX);
++      /* Confirm that no bits above the signed range are unset if we
++	 are doing range checking.  */
++      if (gfc_option.flag_range_check != 0)
++	gcc_assert (mpz_scan0 (x, bitsize-1) == ULONG_MAX);
+ 
+       mpz_init_set_ui (mask, 1);
+       mpz_mul_2exp (mask, mask, bitsize);
+@@ -174,13 +176,15 @@ convert_mpz_to_unsigned (mpz_t x, int bitsize)
+    If the bitsize-1 bit is set, this is taken as a sign bit and
+    the number is converted to the corresponding negative number.  */
+ 
+-static void
+-convert_mpz_to_signed (mpz_t x, int bitsize)
++void
++gfc_convert_mpz_to_signed (mpz_t x, int bitsize)
+ {
+   mpz_t mask;
+ 
+-  /* Confirm that no bits above the unsigned range are set.  */
+-  gcc_assert (mpz_scan1 (x, bitsize) == ULONG_MAX);
++  /* Confirm that no bits above the unsigned range are set if we are
++     doing range checking.  */
++  if (gfc_option.flag_range_check != 0)
++    gcc_assert (mpz_scan1 (x, bitsize) == ULONG_MAX);
+ 
+   if (mpz_tstbit (x, bitsize - 1) == 1)
+     {
+@@ -1947,7 +1951,7 @@ simplify_dshift (gfc_expr *arg1, gfc_expr *arg2, gfc_expr *shiftarg,
+       mpz_setbit (result->value.integer, shift + i);
+ 
+   /* Convert to a signed value.  */
+-  convert_mpz_to_signed (result->value.integer, size);
++  gfc_convert_mpz_to_signed (result->value.integer, size);
+ 
+   return result;
+ }
+@@ -2560,7 +2564,7 @@ gfc_simplify_ibclr (gfc_expr *x, gfc_expr *y)
+ 
+   mpz_clrbit (result->value.integer, pos);
+ 
+-  convert_mpz_to_signed (result->value.integer,
++  gfc_convert_mpz_to_signed (result->value.integer,
+ 			 gfc_integer_kinds[k].bit_size);
+ 
+   return result;
+@@ -2618,7 +2622,7 @@ gfc_simplify_ibits (gfc_expr *x, gfc_expr *y, gfc_expr *z)
+ 
+   free (bits);
+ 
+-  convert_mpz_to_signed (result->value.integer,
++  gfc_convert_mpz_to_signed (result->value.integer,
+ 			 gfc_integer_kinds[k].bit_size);
+ 
+   return result;
+@@ -2645,7 +2649,7 @@ gfc_simplify_ibset (gfc_expr *x, gfc_expr *y)
+ 
+   mpz_setbit (result->value.integer, pos);
+ 
+-  convert_mpz_to_signed (result->value.integer,
++  gfc_convert_mpz_to_signed (result->value.integer,
+ 			 gfc_integer_kinds[k].bit_size);
+ 
+   return result;
+@@ -3093,7 +3097,7 @@ simplify_shift (gfc_expr *e, gfc_expr *s, const char *name,
+ 	}
+     }
+ 
+-  convert_mpz_to_signed (result->value.integer, bitsize);
++  gfc_convert_mpz_to_signed (result->value.integer, bitsize);
+   free (bits);
+ 
+   return result;
+@@ -3234,7 +3238,7 @@ gfc_simplify_ishftc (gfc_expr *e, gfc_expr *s, gfc_expr *sz)
+ 	}
+     }
+ 
+-  convert_mpz_to_signed (result->value.integer, isize);
++  gfc_convert_mpz_to_signed (result->value.integer, isize);
+ 
+   free (bits);
+   return result;
+@@ -3951,7 +3955,7 @@ gfc_simplify_maskr (gfc_expr *i, gfc_expr *kind_arg)
+   mpz_mul_2exp (result->value.integer, result->value.integer, arg);
+   mpz_sub_ui (result->value.integer, result->value.integer, 1);
+ 
+-  convert_mpz_to_signed (result->value.integer, gfc_integer_kinds[k].bit_size);
++  gfc_convert_mpz_to_signed (result->value.integer, gfc_integer_kinds[k].bit_size);
+ 
+   return result;
+ }
+@@ -3987,7 +3991,7 @@ gfc_simplify_maskl (gfc_expr *i, gfc_expr *kind_arg)
+   mpz_sub (result->value.integer, z, result->value.integer);
+   mpz_clear (z);
+ 
+-  convert_mpz_to_signed (result->value.integer, gfc_integer_kinds[k].bit_size);
++  gfc_convert_mpz_to_signed (result->value.integer, gfc_integer_kinds[k].bit_size);
+ 
+   return result;
+ }
+diff --git a/gcc/testsuite/gfortran.dg/no_range_check_3.f90 b/gcc/testsuite/gfortran.dg/no_range_check_3.f90
+new file mode 100644
+index 000000000..24223af5b
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/no_range_check_3.f90
+@@ -0,0 +1,12 @@
++! { dg-do run }
++! { dg-options "-fno-range-check" }
++program test
++  integer :: i
++  i = int(z'FFFFFFFF',kind(i))
++  if (i /= -1) call abort
++  if (int(z'FFFFFFFF',kind(i)) /= -1) call abort
++
++  if (popcnt(int(z'0F00F00080000001',8)) /= 10) call abort
++  if (popcnt(int(z'800F0001',4)) /= 6) call abort
++
++end program test

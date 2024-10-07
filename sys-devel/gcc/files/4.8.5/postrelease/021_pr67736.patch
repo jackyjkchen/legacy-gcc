@@ -1,0 +1,110 @@
+diff --git a/gcc/combine.c b/gcc/combine.c
+index c259b80d5..e6ffe6e00 100644
+--- a/gcc/combine.c
++++ b/gcc/combine.c
+@@ -11084,8 +11084,8 @@ simplify_comparison (enum rtx_code code, rtx *pop0, rtx *pop1)
+ 		 tmode != GET_MODE (op0); tmode = GET_MODE_WIDER_MODE (tmode))
+ 	      if ((unsigned HOST_WIDE_INT) c0 == GET_MODE_MASK (tmode))
+ 		{
+-		  op0 = gen_lowpart (tmode, inner_op0);
+-		  op1 = gen_lowpart (tmode, inner_op1);
++		  op0 = gen_lowpart_or_truncate (tmode, inner_op0);
++		  op1 = gen_lowpart_or_truncate (tmode, inner_op1);
+ 		  code = unsigned_condition (code);
+ 		  changed = 1;
+ 		  break;
+@@ -11603,12 +11603,9 @@ simplify_comparison (enum rtx_code code, rtx *pop0, rtx *pop1)
+ 				   & GET_MODE_MASK (mode))
+ 				  + 1)) >= 0
+ 	      && const_op >> i == 0
+-	      && (tmode = mode_for_size (i, MODE_INT, 1)) != BLKmode
+-	      && (TRULY_NOOP_TRUNCATION_MODES_P (tmode, GET_MODE (op0))
+-		  || (REG_P (XEXP (op0, 0))
+-		      && reg_truncated_to_mode (tmode, XEXP (op0, 0)))))
++	      && (tmode = mode_for_size (i, MODE_INT, 1)) != BLKmode)
+ 	    {
+-	      op0 = gen_lowpart (tmode, XEXP (op0, 0));
++	      op0 = gen_lowpart_or_truncate (tmode, XEXP (op0, 0));
+ 	      continue;
+ 	    }
+ 
+diff --git a/gcc/testsuite/gcc.dg/combine-subregs.c b/gcc/testsuite/gcc.dg/combine-subregs.c
+new file mode 100644
+index 000000000..ccace233c
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/combine-subregs.c
+@@ -0,0 +1,36 @@
++/* { dg-do run { target { stdint_types } } } */
++/* { dg-options "-O2" } */
++
++#include <stdint.h>
++#include <stdlib.h>
++
++void __attribute__ ((noinline))
++foo (uint64_t state, uint32_t last)
++{
++  if (state == last) abort ();
++}
++
++/* This function may do a bad comparision by trying to
++   use SUBREGS during the compare on machines where comparing
++   two registers always compares the entire register regardless
++   of mode.  */
++
++int __attribute__ ((noinline))
++compare (uint64_t state, uint32_t *last, uint8_t buf)
++{
++    if (*last == ((state | buf) & 0xFFFFFFFF)) {
++	foo (state, *last);
++        return 0;
++    }
++    return 1;
++}
++
++int
++main(int argc, char **argv) {
++    uint64_t state = 0xF00000100U;
++    uint32_t last  = 0x101U;
++    int ret        = compare(state, &last, 0x01);
++    if (ret != 0)
++	abort ();
++    exit (0);
++}
+diff --git a/gcc/testsuite/gcc.dg/torture/pr67736.c b/gcc/testsuite/gcc.dg/torture/pr67736.c
+new file mode 100644
+index 000000000..024bb207a
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/torture/pr67736.c
+@@ -0,0 +1,32 @@
++/* { dg-do run { target { stdint_types } } } */
++
++#include <stdint.h>
++#include <stdlib.h>
++
++void f(uint64_t *a, uint64_t aa) __attribute__((noinline));
++void f(uint64_t *a, uint64_t aa)
++{
++  uint64_t new_value = aa;
++  uint64_t old_value = *a;
++  int bit_size = 32;
++    uint64_t mask = (uint64_t)(unsigned)(-1);
++    uint64_t tmp = old_value & mask;
++    new_value &= mask;
++    /* On overflow we need to add 1 in the upper bits */
++    if (tmp > new_value)
++        new_value += 1ull<<bit_size;
++    /* Add in the upper bits from the old value */
++    new_value += old_value & ~mask;
++    *a = new_value;
++}
++int main(void)
++{
++  uint64_t value, new_value, old_value;
++  value = 0x100000001;
++  old_value = value;
++  new_value = (value+1)&(uint64_t)(unsigned)(-1);
++  f(&value, new_value);
++  if (value != old_value+1)
++    __builtin_abort ();
++  return 0;
++}

@@ -1,0 +1,46 @@
+diff --git a/gcc/sel-sched-ir.c b/gcc/sel-sched-ir.c
+index fe667210e..0e93692d3 100644
+--- a/gcc/sel-sched-ir.c
++++ b/gcc/sel-sched-ir.c
+@@ -3185,7 +3185,7 @@ has_dependence_note_reg_set (int regno)
+ 	  || reg_last->clobbers != NULL)
+ 	*dsp = (*dsp & ~SPECULATIVE) | DEP_OUTPUT;
+ 
+-      if (reg_last->uses)
++      if (reg_last->uses || reg_last->implicit_sets)
+ 	*dsp = (*dsp & ~SPECULATIVE) | DEP_ANTI;
+     }
+ }
+@@ -3205,7 +3205,7 @@ has_dependence_note_reg_clobber (int regno)
+       if (reg_last->sets)
+ 	*dsp = (*dsp & ~SPECULATIVE) | DEP_OUTPUT;
+ 
+-      if (reg_last->uses)
++      if (reg_last->uses || reg_last->implicit_sets)
+ 	*dsp = (*dsp & ~SPECULATIVE) | DEP_ANTI;
+     }
+ }
+@@ -3225,7 +3225,7 @@ has_dependence_note_reg_use (int regno)
+       if (reg_last->sets)
+ 	*dsp = (*dsp & ~SPECULATIVE) | DEP_TRUE;
+ 
+-      if (reg_last->clobbers)
++      if (reg_last->clobbers || reg_last->implicit_sets)
+ 	*dsp = (*dsp & ~SPECULATIVE) | DEP_ANTI;
+ 
+       /* Merge BE_IN_SPEC bits into *DSP when the dependency producer
+diff --git a/gcc/testsuite/gcc.dg/pr54472.c b/gcc/testsuite/gcc.dg/pr54472.c
+new file mode 100644
+index 000000000..93952038e
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr54472.c
+@@ -0,0 +1,9 @@
++/* { dg-do compile { target powerpc*-*-* ia64-*-* x86_64-*-* } } */
++/* { dg-options "-O -fschedule-insns -fselective-scheduling" } */
++
++int main ()
++{
++  int a[3][3][3];
++  __builtin_memset (a, 0, sizeof a);
++  return 0;
++}

@@ -1,0 +1,39 @@
+diff --git a/gcc/testsuite/gcc.c-torture/execute/pr59388.c b/gcc/testsuite/gcc.c-torture/execute/pr59388.c
+new file mode 100644
+index 000000000..de3648a00
+--- /dev/null
++++ b/gcc/testsuite/gcc.c-torture/execute/pr59388.c
+@@ -0,0 +1,11 @@
++/* PR tree-optimization/59388 */
++
++int a;
++struct S { unsigned int f:1; } b;
++
++int
++main ()
++{
++  a = (0 < b.f) | b.f;
++  return a;
++}
+diff --git a/gcc/tree-ssa-reassoc.c b/gcc/tree-ssa-reassoc.c
+index 554ba3abe..6cc628c3c 100644
+--- a/gcc/tree-ssa-reassoc.c
++++ b/gcc/tree-ssa-reassoc.c
+@@ -1847,8 +1847,15 @@ update_range_test (struct range_entry *range, struct range_entry *otherrange,
+ 
+   tem = fold_convert_loc (loc, TREE_TYPE (op), tem);
+   gsi = gsi_for_stmt (SSA_NAME_DEF_STMT (op));
+-  tem = force_gimple_operand_gsi (&gsi, tem, true, NULL_TREE, true,
+-				  GSI_SAME_STMT);
++  /* In rare cases range->exp can be equal to lhs of stmt.
++     In that case we have to insert after the stmt rather then before
++     it.  */
++  if (op == range->exp)
++    tem = force_gimple_operand_gsi (&gsi, tem, true, NULL_TREE, false,
++				    GSI_SAME_STMT);
++  else
++    tem = force_gimple_operand_gsi (&gsi, tem, true, NULL_TREE, true,
++				    GSI_SAME_STMT);
+ 
+   VEC_index (operand_entry_t, *ops, range->idx)->op = tem;
+   range->exp = exp;

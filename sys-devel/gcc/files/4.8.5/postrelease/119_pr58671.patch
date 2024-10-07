@@ -1,0 +1,29 @@
+diff --git a/gcc/cp/decl2.c b/gcc/cp/decl2.c
+index 1a604a459..923d31271 100644
+--- a/gcc/cp/decl2.c
++++ b/gcc/cp/decl2.c
+@@ -2807,8 +2807,11 @@ var_defined_without_dynamic_init (tree var)
+      counts as dynamic initialization.  */
+   if (TYPE_HAS_NONTRIVIAL_DESTRUCTOR (TREE_TYPE (var)))
+     return false;
+-  /* If it's in this TU, its initializer has been processed.  */
+-  gcc_assert (DECL_INITIALIZED_P (var));
++  /* If it's in this TU, its initializer has been processed, unless
++     it's a case of self-initialization, then DECL_INITIALIZED_P is
++     false while the initializer is handled by finish_id_expression.  */
++  if (!DECL_INITIALIZED_P (var))
++    return false;
+   /* If it has no initializer or a constant one, it's not dynamic.  */
+   return (!DECL_NONTRIVIALLY_INITIALIZED_P (var)
+ 	  || DECL_INITIALIZED_BY_CONSTANT_EXPRESSION_P (var));
+diff --git a/gcc/testsuite/g++.dg/tls/thread_local-ice3.C b/gcc/testsuite/g++.dg/tls/thread_local-ice3.C
+new file mode 100644
+index 000000000..d061a239f
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/tls/thread_local-ice3.C
+@@ -0,0 +1,5 @@
++// PR c++/58671
++// { dg-do compile { target c++11 } }
++// { dg-require-effective-target tls }
++
++thread_local int i = i;

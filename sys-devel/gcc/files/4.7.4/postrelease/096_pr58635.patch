@@ -1,0 +1,58 @@
+diff --git a/gcc/cp/semantics.c b/gcc/cp/semantics.c
+index 89a17193d..04d34ac30 100644
+--- a/gcc/cp/semantics.c
++++ b/gcc/cp/semantics.c
+@@ -795,7 +795,8 @@ finish_return_stmt (tree expr)
+ 
+   expr = check_return_expr (expr, &no_warning);
+ 
+-  if (flag_openmp && !check_omp_return ())
++  if (error_operand_p (expr)
++      || (flag_openmp && !check_omp_return ()))
+     return error_mark_node;
+   if (!processing_template_decl)
+     {
+@@ -5090,7 +5091,8 @@ build_transaction_expr (location_t loc, tree expr, int flags, tree noex)
+   if (noex)
+     {
+       expr = build_must_not_throw_expr (expr, noex);
+-      SET_EXPR_LOCATION (expr, loc);
++      if (EXPR_P (expr))
++	SET_EXPR_LOCATION (expr, loc);
+       TREE_SIDE_EFFECTS (expr) = 1;
+     }
+   ret = build1 (TRANSACTION_EXPR, TREE_TYPE (expr), expr);
+diff --git a/gcc/testsuite/g++.dg/tm/pr58635-1.C b/gcc/testsuite/g++.dg/tm/pr58635-1.C
+new file mode 100644
+index 000000000..9287e1b8e
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/tm/pr58635-1.C
+@@ -0,0 +1,14 @@
++// { dg-do compile }
++// { dg-options "-std=c++11 -fgnu-tm" }
++
++int
++foo (void)
++{
++  return __transaction_atomic noexcept(false) (false);
++}
++
++int
++bar (int i)
++{
++  return __transaction_atomic noexcept(false) (i);
++}
+diff --git a/gcc/testsuite/g++.dg/tm/pr58635-2.C b/gcc/testsuite/g++.dg/tm/pr58635-2.C
+new file mode 100644
+index 000000000..8a27bc452
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/tm/pr58635-2.C
+@@ -0,0 +1,8 @@
++// { dg-do compile }
++// { dg-options "-std=c++11 -fgnu-tm" }
++
++int
++foo (void)
++{
++  return __transaction_atomic noexcept(false) (x); // { dg-error "was not declared in this scope" }
++}

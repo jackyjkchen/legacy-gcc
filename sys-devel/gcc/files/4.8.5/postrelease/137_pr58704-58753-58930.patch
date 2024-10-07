@@ -1,0 +1,149 @@
+diff --git a/gcc/cp/cp-tree.h b/gcc/cp/cp-tree.h
+index a860a9ad5..8401cdb86 100644
+--- a/gcc/cp/cp-tree.h
++++ b/gcc/cp/cp-tree.h
+@@ -6043,6 +6043,7 @@ extern tree store_init_value			(tree, tree, vec<tree, va_gc>**, int);
+ extern void check_narrowing			(tree, tree);
+ extern tree digest_init				(tree, tree, tsubst_flags_t);
+ extern tree digest_init_flags			(tree, tree, int);
++extern tree digest_nsdmi_init		        (tree, tree);
+ extern tree build_scoped_ref			(tree, tree, tree *);
+ extern tree build_x_arrow			(location_t, tree,
+ 						 tsubst_flags_t);
+diff --git a/gcc/cp/init.c b/gcc/cp/init.c
+index ef4f471d2..431616a2f 100644
+--- a/gcc/cp/init.c
++++ b/gcc/cp/init.c
+@@ -530,12 +530,16 @@ perform_member_init (tree member, tree init)
+   if (init == NULL_TREE)
+     {
+       if (DECL_LANG_SPECIFIC (member) && DECL_TEMPLATE_INFO (member))
+-	/* Do deferred instantiation of the NSDMI.  */
+-	init = (tsubst_copy_and_build
+-		(DECL_INITIAL (DECL_TI_TEMPLATE (member)),
+-		 DECL_TI_ARGS (member),
+-		 tf_warning_or_error, member, /*function_p=*/false,
+-		 /*integral_constant_expression_p=*/false));
++    {
++      /* Do deferred instantiation of the NSDMI.  */
++      init = (tsubst_copy_and_build
++	      (DECL_INITIAL (DECL_TI_TEMPLATE (member)),
++	       DECL_TI_ARGS (member),
++	       tf_warning_or_error, member, /*function_p=*/false,
++	       /*integral_constant_expression_p=*/false));
++
++      init = digest_nsdmi_init (member, init);
++    }
+       else
+ 	{
+ 	  init = DECL_INITIAL (member);
+diff --git a/gcc/cp/parser.c b/gcc/cp/parser.c
+index fdcb60933..d6e628a2c 100644
+--- a/gcc/cp/parser.c
++++ b/gcc/cp/parser.c
+@@ -22575,16 +22575,7 @@ cp_parser_late_parse_one_default_arg (cp_parser *parser, tree decl,
+ 	parsed_arg = check_default_argument (parmtype, parsed_arg,
+ 					     tf_warning_or_error);
+       else
+-	{
+-	  int flags = LOOKUP_IMPLICIT;
+-	  if (BRACE_ENCLOSED_INITIALIZER_P (parsed_arg)
+-	      && CONSTRUCTOR_IS_DIRECT_INIT (parsed_arg))
+-	    flags = LOOKUP_NORMAL;
+-	  parsed_arg = digest_init_flags (TREE_TYPE (decl), parsed_arg, flags);
+-	  if (TREE_CODE (parsed_arg) == TARGET_EXPR)
+-	    /* This represents the whole initialization.  */
+-	    TARGET_EXPR_DIRECT_INIT_P (parsed_arg) = true;
+-	}
++	parsed_arg = digest_nsdmi_init (decl, parsed_arg);
+     }
+ 
+   /* If the token stream has not been completely used up, then
+diff --git a/gcc/cp/typeck2.c b/gcc/cp/typeck2.c
+index 2cf1616a4..3e6c5f729 100644
+--- a/gcc/cp/typeck2.c
++++ b/gcc/cp/typeck2.c
+@@ -1009,6 +1009,22 @@ digest_init_flags (tree type, tree init, int flags)
+ {
+   return digest_init_r (type, init, false, flags, tf_warning_or_error);
+ }
++
++/* Process the initializer INIT for an NSDMI DECL (a FIELD_DECL).  */
++tree
++digest_nsdmi_init (tree decl, tree init)
++{
++  gcc_assert (TREE_CODE (decl) == FIELD_DECL);
++
++  int flags = LOOKUP_IMPLICIT;
++  if (DIRECT_LIST_INIT_P (init))
++    flags = LOOKUP_NORMAL;
++  init = digest_init_flags (TREE_TYPE (decl), init, flags);
++  if (TREE_CODE (init) == TARGET_EXPR)
++    /* This represents the whole initialization.  */
++    TARGET_EXPR_DIRECT_INIT_P (init) = true;
++  return init;
++}
+ 
+ /* Set of flags used within process_init_constructor to describe the
+    initializers.  */
+diff --git a/gcc/testsuite/g++.dg/cpp0x/nsdmi-template11.C b/gcc/testsuite/g++.dg/cpp0x/nsdmi-template11.C
+new file mode 100644
+index 000000000..60e53c419
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/nsdmi-template11.C
+@@ -0,0 +1,15 @@
++// PR c++/58930
++// { dg-do compile { target c++11 } }
++
++struct SampleModule
++{
++  explicit SampleModule (int);
++};
++
++template < typename >
++struct BaseHandler
++{
++  SampleModule module_ { 0 };
++};
++
++BaseHandler<int> a;
+diff --git a/gcc/testsuite/g++.dg/cpp0x/nsdmi-template12.C b/gcc/testsuite/g++.dg/cpp0x/nsdmi-template12.C
+new file mode 100644
+index 000000000..5b87f429e
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/nsdmi-template12.C
+@@ -0,0 +1,17 @@
++// PR c++/58753
++// { dg-do compile { target c++11 } }
++
++#include <initializer_list>
++
++template <class T>
++struct X {X(std::initializer_list<int>) {}};
++
++template <class zomg> 
++class T {
++  X<T> x{1}; 
++}; 
++
++int main()
++{
++  T<int> t;
++}
+diff --git a/gcc/testsuite/g++.dg/cpp0x/nsdmi-template13.C b/gcc/testsuite/g++.dg/cpp0x/nsdmi-template13.C
+new file mode 100644
+index 000000000..65ccd0aaa
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/nsdmi-template13.C
+@@ -0,0 +1,11 @@
++// PR c++/58704
++// { dg-do compile { target c++11 } }
++
++struct A {};
++
++template<typename> struct B
++{
++  A a[1] = { };
++};
++
++B<int> b;

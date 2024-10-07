@@ -1,0 +1,63 @@
+diff --git a/gcc/cp/parser.c b/gcc/cp/parser.c
+index 544daba4d..b07ef96ea 100644
+--- a/gcc/cp/parser.c
++++ b/gcc/cp/parser.c
+@@ -40399,8 +40399,8 @@ cp_parser_late_parsing_oacc_routine (cp_parser *parser, tree attrs)
+     = cp_parser_oacc_all_clauses (parser, OACC_ROUTINE_CLAUSE_MASK,
+ 				  "#pragma acc routine", pragma_tok);
+   cp_parser_pop_lexer (parser);
+-  /* Later, cp_finalize_oacc_routine will process the clauses, and then set
+-     fndecl_seen.  */
++  /* Later, cp_finalize_oacc_routine will process the clauses.  */
++  parser->oacc_routine->fndecl_seen = true;
+ 
+   return attrs;
+ }
+@@ -40418,16 +40418,17 @@ cp_finalize_oacc_routine (cp_parser *parser, tree fndecl, bool is_defn)
+ 	  || fndecl == error_mark_node)
+ 	return;
+ 
+-      if (parser->oacc_routine->fndecl_seen)
+-	{
+-	  error_at (parser->oacc_routine->loc,
+-		    "%<#pragma acc routine%> not immediately followed by"
+-		    " a single function declaration or definition");
+-	  parser->oacc_routine = NULL;
+-	  return;
+-	}
+       if (TREE_CODE (fndecl) != FUNCTION_DECL)
+ 	{
++	  if (parser->oacc_routine->fndecl_seen)
++	    {
++	      error_at (parser->oacc_routine->loc,
++			"%<#pragma acc routine%> not immediately followed by"
++			" a single function declaration or definition");
++	      parser->oacc_routine = NULL;
++	      return;
++	    }
++
+ 	  cp_ensure_no_oacc_routine (parser);
+ 	  return;
+ 	}
+@@ -40459,11 +40460,6 @@ cp_finalize_oacc_routine (cp_parser *parser, tree fndecl, bool is_defn)
+       DECL_ATTRIBUTES (fndecl)
+ 	= tree_cons (get_identifier ("omp declare target"),
+ 		     NULL_TREE, DECL_ATTRIBUTES (fndecl));
+-
+-      /* Don't unset parser->oacc_routine here: we may still need it to
+-	 diagnose wrong usage.  But, remember that we've used this "#pragma acc
+-	 routine".  */
+-      parser->oacc_routine->fndecl_seen = true;
+     }
+ }
+ 
+diff --git a/gcc/testsuite/c-c++-common/goacc/routine-6.c b/gcc/testsuite/c-c++-common/goacc/routine-6.c
+new file mode 100644
+index 000000000..0a231a015
+--- /dev/null
++++ b/gcc/testsuite/c-c++-common/goacc/routine-6.c
+@@ -0,0 +1,4 @@
++/* PR c++/101731 */
++
++#pragma acc routine	/* { dg-error "not immediately followed by a single function declaration or definition" "" { target c++ } } */
++int foo (int bar ());

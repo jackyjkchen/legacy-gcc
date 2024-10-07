@@ -1,0 +1,66 @@
+diff --git a/gcc/config/i386/i386.md b/gcc/config/i386/i386.md
+index c08a2245d..ded2929ba 100644
+--- a/gcc/config/i386/i386.md
++++ b/gcc/config/i386/i386.md
+@@ -11695,10 +11695,14 @@
+ ;; We need to disable this for TARGET_SEH, as otherwise
+ ;; shrink-wrapped prologue gets enabled too.  This might exceed
+ ;; the maximum size of prologue in unwind information.
++;; Also disallow shrink-wrapping if using stack slot to pass the
++;; static chain pointer - the first instruction has to be pushl %esi
++;; and it can't be moved around, as we use alternate entry points
++;; in that case.
+ 
+ (define_expand "simple_return"
+   [(simple_return)]
+-  "!TARGET_SEH"
++  "!TARGET_SEH && !ix86_static_chain_on_stack"
+ {
+   if (crtl->args.pops_args)
+     {
+diff --git a/gcc/testsuite/gcc.target/i386/pr67770.c b/gcc/testsuite/gcc.target/i386/pr67770.c
+new file mode 100644
+index 000000000..2d2c30243
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/i386/pr67770.c
+@@ -0,0 +1,40 @@
++/* PR target/67770 */
++/* { dg-do run { target ia32 } } */
++/* { dg-require-effective-target trampolines } */
++/* { dg-options "-O2 -Wno-trampolines" } */
++
++#ifndef NO_TRAMPOLINES
++__attribute__ ((noinline)) void
++foo (int i, void (* __attribute__ ((regparm (3))) bar) (int))
++{
++  bar (i);
++}
++#endif
++
++int
++main ()
++{
++#ifndef NO_TRAMPOLINES
++  int p = 0;
++
++  __attribute__ ((regparm (3), noinline)) void
++  bar (int i)
++  {
++    if (__builtin_expect (i, 0))
++      ++p;
++  }
++
++  foo (0, bar);
++  bar (0);
++
++  if (p != 0)
++    __builtin_abort ();
++
++  foo (1, bar);
++  bar (1);
++
++  if (p != 2)
++    __builtin_abort ();
++#endif
++  return 0;
++}

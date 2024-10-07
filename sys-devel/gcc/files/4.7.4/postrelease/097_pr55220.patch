@@ -1,0 +1,50 @@
+diff --git a/gcc/cp/pt.c b/gcc/cp/pt.c
+index e7791779e..ce9f878f3 100644
+--- a/gcc/cp/pt.c
++++ b/gcc/cp/pt.c
+@@ -16160,6 +16160,14 @@ unify (tree tparms, tree targs, tree parm, tree arg, int strict,
+                 && PACK_EXPANSION_P (TREE_VEC_ELT (parmvec, len - 1)))
+               parm_variadic_p = 1;
+             
++             for (i = 0; i < len - parm_variadic_p; ++i)
++	       /* If the template argument list of P contains a pack
++		  expansion that is not the last template argument, the
++		  entire template argument list is a non-deduced
++		  context.  */
++	       if (PACK_EXPANSION_P (TREE_VEC_ELT (parmvec, i)))
++		 return unify_success (explain_p);
++
+             if (TREE_VEC_LENGTH (argvec) < len - parm_variadic_p)
+               return unify_too_few_arguments (explain_p,
+ 					      TREE_VEC_LENGTH (argvec), len);
+diff --git a/gcc/testsuite/g++.dg/cpp0x/variadic-nondeduce2.C b/gcc/testsuite/g++.dg/cpp0x/variadic-nondeduce2.C
+new file mode 100644
+index 000000000..a82a098c3
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/variadic-nondeduce2.C
+@@ -0,0 +1,25 @@
++// PR c++/55220
++// { dg-do compile { target c++11 } }
++
++template <typename ...> struct something_like_tuple
++{
++
++};
++
++template <typename, typename> struct is_last
++{
++  static const bool value = false;
++};
++
++// Head is non-deducible, so this can't work as the user intended
++template <typename T, template <typename ...> class Tuple, typename ... Head>
++struct is_last<T, Tuple<Head ..., T>>
++{
++  static const bool value = true;
++};
++
++#define SA(X) static_assert (X, #X)
++
++typedef something_like_tuple<char, int, float> something_like_tuple_t;
++SA ((is_last<float, something_like_tuple_t>::value == false));
++SA ((is_last<int, something_like_tuple_t>::value == false));

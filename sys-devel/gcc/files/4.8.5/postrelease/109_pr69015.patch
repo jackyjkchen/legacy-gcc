@@ -1,0 +1,34 @@
+diff --git a/gcc/ifcvt.c b/gcc/ifcvt.c
+index b6839c9a9..19f11c81c 100644
+--- a/gcc/ifcvt.c
++++ b/gcc/ifcvt.c
+@@ -3678,8 +3678,11 @@ find_cond_trap (basic_block test_bb, edge then_edge, edge else_edge)
+     return FALSE;
+ 
+   /* If the conditional jump is more than just a conditional jump, then
+-     we can not do if-conversion on this block.  */
+-  if (! onlyjump_p (jump))
++     we can not do if-conversion on this block.  Give up for returnjump_p,
++     changing a conditional return followed by unconditional trap for
++     conditional trap followed by unconditional return is likely not
++     beneficial and harder to handle.  */
++  if (! onlyjump_p (jump) || returnjump_p (jump))
+     return FALSE;
+ 
+   /* We must be comparing objects whose modes imply the size.  */
+diff --git a/gcc/testsuite/gcc.dg/pr69015.c b/gcc/testsuite/gcc.dg/pr69015.c
+new file mode 100644
+index 000000000..9e75db9d0
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr69015.c
+@@ -0,0 +1,10 @@
++/* PR target/69015 */
++/* { dg-do compile } */
++/* { dg-options "-O2 -fno-if-conversion" } */
++
++void
++foo (int c)
++{
++  if (c)
++    __builtin_trap ();
++}

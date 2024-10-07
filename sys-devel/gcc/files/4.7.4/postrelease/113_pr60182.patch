@@ -1,0 +1,41 @@
+diff --git a/gcc/cp/pt.c b/gcc/cp/pt.c
+index d6b96528e..e9ff264b6 100644
+--- a/gcc/cp/pt.c
++++ b/gcc/cp/pt.c
+@@ -16095,9 +16095,11 @@ unify (tree tparms, tree targs, tree parm, tree arg, int strict,
+ 	  if (TREE_CODE (arg) != BOUND_TEMPLATE_TEMPLATE_PARM
+ 	      && !CLASSTYPE_SPECIALIZATION_OF_PRIMARY_TEMPLATE_P (arg))
+ 	    return unify_template_deduction_failure (explain_p, parm, arg);
+-
+ 	  {
+ 	    tree parmvec = TYPE_TI_ARGS (parm);
++	    /* An alias template name is never deduced.  */
++	    if (TYPE_ALIAS_P (arg))
++	      arg = strip_typedefs (arg);
+ 	    tree argvec = INNERMOST_TEMPLATE_ARGS (TYPE_TI_ARGS (arg));
+ 	    tree full_argvec = add_to_template_args (targs, argvec);
+ 	    tree parm_parms 
+diff --git a/gcc/testsuite/g++.dg/cpp0x/alias-decl-41.C b/gcc/testsuite/g++.dg/cpp0x/alias-decl-41.C
+new file mode 100644
+index 000000000..c444217b0
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/alias-decl-41.C
+@@ -0,0 +1,18 @@
++// PR c++/60182
++// { dg-require-effective-target c++11 }
++
++class B {};
++template <typename> using __allocator_base = B;
++template <typename> class F : __allocator_base<int> {};
++class C {};
++template <typename, typename = F<int> > class G : C {};
++template <typename> class D;
++class A {
++  using Container = G<D<char>>;
++  A();
++  A(D<char> const &);
++  Container m_elements;
++};
++template <template <class, class> class C, class A = F<D<int>>>
++void doSomething(C<D<char>, A> &);
++A::A(D<char> const &) : A() { doSomething(m_elements); }

@@ -1,0 +1,56 @@
+diff --git a/gcc/dce.c b/gcc/dce.c
+index b7ecc3046..9b7ab58df 100644
+--- a/gcc/dce.c
++++ b/gcc/dce.c
+@@ -108,7 +108,10 @@ deletable_insn_p (rtx insn, bool fast, bitmap arg_stores)
+       /* We can delete dead const or pure calls as long as they do not
+          infinite loop.  */
+       && (RTL_CONST_OR_PURE_CALL_P (insn)
+-	  && !RTL_LOOPING_CONST_OR_PURE_CALL_P (insn)))
++	  && !RTL_LOOPING_CONST_OR_PURE_CALL_P (insn))
++      /* Don't delete calls that may throw if we cannot do so.  */
++      && ((cfun->can_delete_dead_exceptions && can_alter_cfg)
++	  || insn_nothrow_p (insn)))
+     return find_call_stack_args (insn, false, fast, arg_stores);
+ 
+   /* Don't delete jumps, notes and the like.  */
+@@ -189,7 +192,9 @@ mark_insn (rtx insn, bool fast)
+ 	  && !df_in_progress
+ 	  && !SIBLING_CALL_P (insn)
+ 	  && (RTL_CONST_OR_PURE_CALL_P (insn)
+-	      && !RTL_LOOPING_CONST_OR_PURE_CALL_P (insn)))
++	      && !RTL_LOOPING_CONST_OR_PURE_CALL_P (insn))
++	  && ((cfun->can_delete_dead_exceptions && can_alter_cfg)
++	      || insn_nothrow_p (insn)))
+ 	find_call_stack_args (insn, true, fast, NULL);
+     }
+ }
+diff --git a/gcc/testsuite/gcc.dg/pr88870.c b/gcc/testsuite/gcc.dg/pr88870.c
+new file mode 100644
+index 000000000..3f46f32f3
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr88870.c
+@@ -0,0 +1,23 @@
++/* PR rtl-optimization/88870 */
++/* { dg-do compile } */
++/* { dg-options "-O1 -fexceptions -fnon-call-exceptions -ftrapv -fno-tree-dominator-opts" } */
++
++int a, b;
++
++void
++foo (int *x)
++{
++  int c = 0;
++  {
++    int d;
++    x = &c;
++    for (;;)
++      {
++        x = &d;
++        b = 0;
++        d = c + 1;
++        b = c = 1;
++        ++a;
++      }
++  }
++}

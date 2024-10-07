@@ -1,0 +1,47 @@
+diff --git a/gcc/fortran/trans-expr.c b/gcc/fortran/trans-expr.c
+index f2a88d8c0..3e111a1b2 100644
+--- a/gcc/fortran/trans-expr.c
++++ b/gcc/fortran/trans-expr.c
+@@ -8478,7 +8478,9 @@ gfc_trans_pointer_assignment (gfc_expr * expr1, gfc_expr * expr2)
+       if (expr1->ts.deferred)
+ 	{
+ 	  if (expr2->expr_type != EXPR_NULL && lse.string_length != NULL)
+-	    gfc_add_modify (&block, lse.string_length, rse.string_length);
++	    gfc_add_modify (&block, lse.string_length,
++			    fold_convert (TREE_TYPE (lse.string_length),
++					  rse.string_length));
+ 	  else if (lse.string_length != NULL)
+ 	    gfc_add_modify (&block, lse.string_length,
+ 			    build_int_cst (gfc_charlen_type_node, 0));
+diff --git a/gcc/testsuite/gfortran.dg/pr50892.f90 b/gcc/testsuite/gfortran.dg/pr50892.f90
+new file mode 100644
+index 000000000..13fe7e415
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/pr50892.f90
+@@ -0,0 +1,26 @@
++! { dg-do compile }
++program test
++  use, intrinsic :: ISO_C_Binding, only: c_ptr, c_int, c_char
++  type(c_ptr) :: text
++  character(len=:), pointer :: ftext
++  interface strlen
++! We can't do this yet in gfortran.  It doesn't allow two local names
++! to have the same binding label.  Should be allowed Fortran 2008.
++!     pure integer(c_int) function strlen_char ( c ) bind(c,name='strlen')
++!       import ! to get C_Int
++!       character(kind=c_char), intent(in) :: c(*)
++!     end function strlen_char
++
++    pure integer(c_int) function strlen_void ( c ) bind(c,name='strlen')
++      import ! to get C_Int
++      type(c_ptr), intent(in), value :: c
++    end function strlen_void
++  end interface
++  ftext => FortranChar(text)
++contains
++  function FortranChar ( C )
++    type(c_ptr), intent(in), value :: C
++    character(len=strlen(c),kind=c_char), pointer :: FortranChar
++    call c_f_pointer ( c, FortranChar )
++  end function FortranChar
++end program test

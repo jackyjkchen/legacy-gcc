@@ -1,0 +1,38 @@
+diff --git a/gcc/cp/semantics.c b/gcc/cp/semantics.c
+index 851b1bfd3..1efb87a87 100644
+--- a/gcc/cp/semantics.c
++++ b/gcc/cp/semantics.c
+@@ -7789,6 +7789,16 @@ cxx_eval_constant_expression (const constexpr_call *call, tree t,
+       break;
+ 
+     case COMPONENT_REF:
++      if (is_overloaded_fn (t))
++	{
++	  /* We can only get here in checking mode via 
++	     build_non_dependent_expr,  because any expression that
++	     calls or takes the address of the function will have
++	     pulled a FUNCTION_DECL out of the COMPONENT_REF.  */
++	  gcc_checking_assert (allow_non_constant);
++	  *non_constant_p = true;
++	  return t;
++	}
+       r = cxx_eval_component_reference (call, t, allow_non_constant, addr,
+ 					non_constant_p);
+       break;
+diff --git a/gcc/testsuite/g++.dg/parse/crash66.C b/gcc/testsuite/g++.dg/parse/crash66.C
+new file mode 100644
+index 000000000..ceedd2be2
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/parse/crash66.C
+@@ -0,0 +1,11 @@
++// PR c++/58647
++
++struct A
++{
++  static void foo();
++};
++
++template<typename> void bar()
++{
++  A().foo;
++}

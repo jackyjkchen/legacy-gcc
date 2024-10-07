@@ -1,0 +1,119 @@
+diff --git a/gcc/config/aarch64/aarch64.c b/gcc/config/aarch64/aarch64.c
+index ab399e189..6ae03e74c 100644
+--- a/gcc/config/aarch64/aarch64.c
++++ b/gcc/config/aarch64/aarch64.c
+@@ -5811,6 +5811,26 @@ aapcs_vfp_sub_candidate (const_tree type, enum machine_mode *modep)
+   return -1;
+ }
+ 
++/* Return TRUE if the type, as described by TYPE and MODE, is a short vector
++   type as described in AAPCS64 \S 4.1.2.
++
++   See the comment above aarch64_composite_type_p for the notes on MODE.  */
++
++static bool
++aarch64_short_vector_p (const_tree type,
++			machine_mode mode)
++{
++  HOST_WIDE_INT size = -1;
++
++  if (type && TREE_CODE (type) == VECTOR_TYPE)
++    size = int_size_in_bytes (type);
++  else if (GET_MODE_CLASS (mode) == MODE_VECTOR_INT
++	    || GET_MODE_CLASS (mode) == MODE_VECTOR_FLOAT)
++    size = GET_MODE_SIZE (mode);
++
++  return (size == 8 || size == 16);
++}
++
+ /* Return TRUE if the type, as described by TYPE and MODE, is a composite
+    type as described in AAPCS64 \S 4.3.  This includes aggregate, union and
+    array types.  The C99 floating-point complex types are also considered
+@@ -5832,6 +5852,9 @@ static bool
+ aarch64_composite_type_p (const_tree type,
+ 			  enum machine_mode mode)
+ {
++  if (aarch64_short_vector_p (type, mode))
++    return false;
++
+   if (type && (AGGREGATE_TYPE_P (type) || TREE_CODE (type) == COMPLEX_TYPE))
+     return true;
+ 
+@@ -5843,27 +5866,6 @@ aarch64_composite_type_p (const_tree type,
+   return false;
+ }
+ 
+-/* Return TRUE if the type, as described by TYPE and MODE, is a short vector
+-   type as described in AAPCS64 \S 4.1.2.
+-
+-   See the comment above aarch64_composite_type_p for the notes on MODE.  */
+-
+-static bool
+-aarch64_short_vector_p (const_tree type,
+-			enum machine_mode mode)
+-{
+-  HOST_WIDE_INT size = -1;
+-
+-  if (type && TREE_CODE (type) == VECTOR_TYPE)
+-    size = int_size_in_bytes (type);
+-  else if (!aarch64_composite_type_p (type, mode)
+-	   && (GET_MODE_CLASS (mode) == MODE_VECTOR_INT
+-	       || GET_MODE_CLASS (mode) == MODE_VECTOR_FLOAT))
+-    size = GET_MODE_SIZE (mode);
+-
+-  return (size == 8 || size == 16) ? true : false;
+-}
+-
+ /* Return TRUE if an argument, whose type is described by TYPE and MODE,
+    shall be passed or returned in simd/fp register(s) (providing these
+    parameter passing registers are available).
+diff --git a/gcc/testsuite/gcc.target/aarch64/aapcs64/func-ret-1.c b/gcc/testsuite/gcc.target/aarch64/aapcs64/func-ret-1.c
+index 16b5c1efd..a21c9265c 100644
+--- a/gcc/testsuite/gcc.target/aarch64/aapcs64/func-ret-1.c
++++ b/gcc/testsuite/gcc.target/aarch64/aapcs64/func-ret-1.c
+@@ -12,6 +12,8 @@
+ 
+ vf2_t vf2 = (vf2_t){ 17.f, 18.f };
+ vi4_t vi4 = (vi4_t){ 0xdeadbabe, 0xbabecafe, 0xcafebeef, 0xbeefdead };
++vlf1_t vlf1 = (vlf1_t) { 17.0 };
++
+ union int128_t qword;
+ 
+ int *int_ptr = (int *)0xabcdef0123456789ULL;
+@@ -41,4 +43,5 @@ FUNC_VAL_CHECK (11,   long double, 98765432123456789.987654321L, Q0, flat)
+ FUNC_VAL_CHECK (12,         vf2_t,        vf2, D0, f32in64)
+ FUNC_VAL_CHECK (13,         vi4_t,        vi4, Q0, i32in128)
+ FUNC_VAL_CHECK (14,         int *,    int_ptr, X0, flat)
++FUNC_VAL_CHECK (15,         vlf1_t,    vlf1, Q0, flat)
+ #endif
+diff --git a/gcc/testsuite/gcc.target/aarch64/aapcs64/type-def.h b/gcc/testsuite/gcc.target/aarch64/aapcs64/type-def.h
+index 07e56fff8..3b9b3499e 100644
+--- a/gcc/testsuite/gcc.target/aarch64/aapcs64/type-def.h
++++ b/gcc/testsuite/gcc.target/aarch64/aapcs64/type-def.h
+@@ -10,6 +10,9 @@ typedef float vf4_t __attribute__((vector_size (16)));
+ /* 128-bit vector of 4 ints.  */
+ typedef int vi4_t __attribute__((vector_size (16)));
+ 
++/* 128-bit vector of 1 quad precision float.  */
++typedef long double vlf1_t __attribute__((vector_size (16)));
++
+ /* signed quad-word (in an union for the convenience of initialization).  */
+ union int128_t
+ {
+diff --git a/gcc/testsuite/gcc.target/aarch64/pr65491_1.c b/gcc/testsuite/gcc.target/aarch64/pr65491_1.c
+new file mode 100644
+index 000000000..a548afb1a
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/aarch64/pr65491_1.c
+@@ -0,0 +1,11 @@
++/* { dg-do compile } */
++/* { dg-options "-O2" } */
++
++typedef long double a __attribute__((vector_size (16)));
++
++a
++sum (a first, a second)
++{
++  return first + second;
++}
++

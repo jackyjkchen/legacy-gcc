@@ -1,0 +1,155 @@
+diff --git a/gcc/c-family/c-common.c b/gcc/c-family/c-common.c
+index 18be7025f..1843a9480 100644
+--- a/gcc/c-family/c-common.c
++++ b/gcc/c-family/c-common.c
+@@ -7414,10 +7414,18 @@ handle_aligned_attribute (tree *node, tree ARG_UNUSED (name), tree args,
+   tree decl = NULL_TREE;
+   tree *type = NULL;
+   int is_type = 0;
+-  tree align_expr = (args ? TREE_VALUE (args)
+-		     : size_int (ATTRIBUTE_ALIGNED_VALUE / BITS_PER_UNIT));
++  tree align_expr;
+   int i;
+ 
++  if (args)
++    {
++      align_expr = TREE_VALUE (args);
++      if (align_expr && TREE_CODE (align_expr) != IDENTIFIER_NODE)
++	align_expr = default_conversion (align_expr);
++    }
++  else
++    align_expr = size_int (ATTRIBUTE_ALIGNED_VALUE / BITS_PER_UNIT);
++
+   if (DECL_P (*node))
+     {
+       decl = *node;
+@@ -7923,6 +7931,9 @@ handle_alloc_size_attribute (tree *node, tree ARG_UNUSED (name), tree args,
+   for (; args; args = TREE_CHAIN (args))
+     {
+       tree position = TREE_VALUE (args);
++      if (position && TREE_CODE (position) != IDENTIFIER_NODE
++	  && TREE_CODE (position) != FUNCTION_DECL)
++	position = default_conversion (position);
+ 
+       if (TREE_CODE (position) != INTEGER_CST
+ 	  || TREE_INT_CST_HIGH (position)
+@@ -8328,6 +8339,8 @@ handle_vector_size_attribute (tree *node, tree name, tree args,
+   *no_add_attrs = true;
+ 
+   size = TREE_VALUE (args);
++  if (size && TREE_CODE (size) != IDENTIFIER_NODE)
++    size = default_conversion (size);
+ 
+   if (!host_integerp (size, 1))
+     {
+@@ -8421,11 +8434,16 @@ handle_nonnull_attribute (tree *node, tree ARG_UNUSED (name),
+ 
+   /* Argument list specified.  Verify that each argument number references
+      a pointer argument.  */
+-  for (attr_arg_num = 1; args; args = TREE_CHAIN (args))
++  for (attr_arg_num = 1; args; attr_arg_num++, args = TREE_CHAIN (args))
+     {
+       unsigned HOST_WIDE_INT arg_num = 0, ck_num;
+ 
+-      if (!get_nonnull_operand (TREE_VALUE (args), &arg_num))
++      tree arg = TREE_VALUE (args);
++      if (arg && TREE_CODE (arg) != IDENTIFIER_NODE
++	  && TREE_CODE (arg) != FUNCTION_DECL)
++	arg = default_conversion (arg);
++
++      if (!get_nonnull_operand (arg, &arg_num))
+ 	{
+ 	  error ("nonnull argument has invalid operand number (argument %lu)",
+ 		 (unsigned long) attr_arg_num);
+diff --git a/gcc/cp/tree.c b/gcc/cp/tree.c
+index dd219fe22..3618ede07 100644
+--- a/gcc/cp/tree.c
++++ b/gcc/cp/tree.c
+@@ -3245,6 +3245,7 @@ handle_init_priority_attribute (tree* node,
+   int pri;
+ 
+   STRIP_NOPS (initp_expr);
++  initp_expr = default_conversion (initp_expr);
+ 
+   if (!initp_expr || TREE_CODE (initp_expr) != INTEGER_CST)
+     {
+diff --git a/gcc/doc/extend.texi b/gcc/doc/extend.texi
+index 63d85ff93..79d83035e 100644
+--- a/gcc/doc/extend.texi
++++ b/gcc/doc/extend.texi
+@@ -2211,7 +2211,7 @@ For instance,
+ 
+ @smallexample
+ void* my_calloc(size_t, size_t) __attribute__((alloc_size(1,2)))
+-void my_realloc(void*, size_t) __attribute__((alloc_size(2)))
++void* my_realloc(void*, size_t) __attribute__((alloc_size(2)))
+ @end smallexample
+ 
+ @noindent
+diff --git a/gcc/testsuite/c-c++-common/attributes-1.c b/gcc/testsuite/c-c++-common/attributes-1.c
+new file mode 100644
+index 000000000..af4dd1227
+--- /dev/null
++++ b/gcc/testsuite/c-c++-common/attributes-1.c
+@@ -0,0 +1,23 @@
++/* { dg-do compile } */
++/* { dg-prune-output "undeclared here \\(not in a function\\)|\[^\n\r\]* was not declared in this scope" } */
++
++void* my_calloc(unsigned, unsigned) __attribute__((alloc_size(1,bar))); /* { dg-warning "outside range" } */
++void* my_realloc(void*, unsigned) __attribute__((alloc_size(bar))); /* { dg-warning "outside range" } */
++
++typedef char vec __attribute__((vector_size(bar))); /* { dg-warning "ignored" } */
++
++void f1(char*) __attribute__((nonnull(bar))); /* { dg-error "invalid operand" } */
++void f2(char*) __attribute__((nonnull(1,bar))); /* { dg-error "invalid operand" } */
++
++void g() __attribute__((aligned(bar))); /* { dg-error "invalid value|not an integer" } */
++
++void foo(void);
++void* my_calloc(unsigned, unsigned) __attribute__((alloc_size(1,foo))); /* { dg-warning "outside range" } */
++void* my_realloc(void*, unsigned) __attribute__((alloc_size(foo))); /* { dg-warning "outside range" } */
++
++typedef char vec __attribute__((vector_size(foo))); /* { dg-warning "ignored" } */
++
++void f1(char*) __attribute__((nonnull(foo))); /* { dg-error "invalid operand" } */
++void f2(char*) __attribute__((nonnull(1,foo))); /* { dg-error "invalid operand" } */
++
++void g() __attribute__((aligned(foo))); /* { dg-error "invalid value|not an integer" } */
+diff --git a/gcc/testsuite/g++.dg/cpp0x/constexpr-attribute2.C b/gcc/testsuite/g++.dg/cpp0x/constexpr-attribute2.C
+new file mode 100644
+index 000000000..755188ee0
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/constexpr-attribute2.C
+@@ -0,0 +1,32 @@
++// { dg-options -std=gnu++11 }
++
++struct t { t(); };
++
++constexpr int prio = 123;
++constexpr int size = 8;
++constexpr int pos = 1;
++enum A { zero = 0, one, two };
++__attribute__((init_priority(prio))) t a;
++
++enum class E1 : int {
++    first = 101,
++    second,
++    third,
++};
++__attribute__((init_priority(E1::second))) t b; // Should not compile?
++
++enum E2 {
++    E2_first = 141,
++    E2_second,
++    E2_third,
++};
++__attribute__((init_priority(E2_second))) t c;
++
++void* my_calloc(unsigned, unsigned) __attribute__((alloc_size(pos,two)));
++void* my_realloc(void*, unsigned) __attribute__((alloc_size(two)));
++
++typedef char vec __attribute__((vector_size(size)));
++
++void f(char*) __attribute__((nonnull(pos)));
++
++void g() __attribute__((aligned(size)));

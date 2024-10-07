@@ -1,0 +1,120 @@
+diff --git a/gcc/config/arm/arm.c b/gcc/config/arm/arm.c
+index 6ed357526..cfdf7bc8c 100644
+--- a/gcc/config/arm/arm.c
++++ b/gcc/config/arm/arm.c
+@@ -235,7 +235,6 @@ static tree arm_gimplify_va_arg_expr (tree, tree, gimple_seq *, gimple_seq *);
+ static void arm_option_override (void);
+ static unsigned HOST_WIDE_INT arm_shift_truncation_mask (enum machine_mode);
+ static bool arm_cannot_copy_insn_p (rtx);
+-static bool arm_tls_symbol_p (rtx x);
+ static int arm_issue_rate (void);
+ static void arm_output_dwarf_dtprel (FILE *, int, rtx) ATTRIBUTE_UNUSED;
+ static bool arm_output_addr_const_extra (FILE *, rtx);
+@@ -6447,6 +6446,32 @@ legitimize_tls_address (rtx x, rtx reg)
+ rtx
+ arm_legitimize_address (rtx x, rtx orig_x, enum machine_mode mode)
+ {
++  if (arm_tls_referenced_p (x))
++    {
++      rtx addend = NULL;
++
++      if (GET_CODE (x) == CONST && GET_CODE (XEXP (x, 0)) == PLUS)
++	{
++	  addend = XEXP (XEXP (x, 0), 1);
++	  x = XEXP (XEXP (x, 0), 0);
++	}
++
++      if (GET_CODE (x) != SYMBOL_REF)
++	return x;
++
++      gcc_assert (SYMBOL_REF_TLS_MODEL (x) != 0);
++
++      x = legitimize_tls_address (x, NULL_RTX);
++
++      if (addend)
++	{
++	  x = gen_rtx_PLUS (SImode, x, addend);
++	  orig_x = x;
++	}
++      else
++	return x;
++    }
++
+   if (!TARGET_ARM)
+     {
+       /* TODO: legitimize_address for Thumb2.  */
+@@ -6455,9 +6480,6 @@ arm_legitimize_address (rtx x, rtx orig_x, enum machine_mode mode)
+       return thumb_legitimize_address (x, orig_x, mode);
+     }
+ 
+-  if (arm_tls_symbol_p (x))
+-    return legitimize_tls_address (x, NULL_RTX);
+-
+   if (GET_CODE (x) == PLUS)
+     {
+       rtx xop0 = XEXP (x, 0);
+@@ -6569,9 +6591,6 @@ arm_legitimize_address (rtx x, rtx orig_x, enum machine_mode mode)
+ rtx
+ thumb_legitimize_address (rtx x, rtx orig_x, enum machine_mode mode)
+ {
+-  if (arm_tls_symbol_p (x))
+-    return legitimize_tls_address (x, NULL_RTX);
+-
+   if (GET_CODE (x) == PLUS
+       && GET_CODE (XEXP (x, 1)) == CONST_INT
+       && (INTVAL (XEXP (x, 1)) >= 32 * GET_MODE_SIZE (mode)
+@@ -6863,20 +6882,6 @@ thumb_legitimize_reload_address (rtx *x_p,
+ 
+ /* Test for various thread-local symbols.  */
+ 
+-/* Return TRUE if X is a thread-local symbol.  */
+-
+-static bool
+-arm_tls_symbol_p (rtx x)
+-{
+-  if (! TARGET_HAVE_TLS)
+-    return false;
+-
+-  if (GET_CODE (x) != SYMBOL_REF)
+-    return false;
+-
+-  return SYMBOL_REF_TLS_MODEL (x) != 0;
+-}
+-
+ /* Helper for arm_tls_referenced_p.  */
+ 
+ static int
+diff --git a/gcc/testsuite/gcc.dg/tls/pr58595.c b/gcc/testsuite/gcc.dg/tls/pr58595.c
+new file mode 100644
+index 000000000..d830e76d4
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/tls/pr58595.c
+@@ -0,0 +1,28 @@
++/* PR target/58595 */
++/* { dg-do run } */
++/* { dg-options "-O2" } */
++/* { dg-additional-options "-fpic" { target fpic } } */
++/* { dg-require-effective-target tls } */
++/* { dg-require-effective-target sync_int_long } */
++
++struct S { unsigned long a, b; };
++__thread struct S s;
++void bar (unsigned long *);
++
++__attribute__((noinline)) void
++foo (void)
++{
++  int i;
++  for (i = 0; i < 10; i++)
++    __sync_fetch_and_add (&s.b, 1L);
++}
++
++int
++main ()
++{
++  s.b = 12;
++  foo ();
++  if (s.b != 22)
++    __builtin_abort ();
++  return 0;
++}

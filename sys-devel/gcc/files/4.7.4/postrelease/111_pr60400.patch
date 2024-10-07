@@ -1,0 +1,85 @@
+diff --git a/gcc/testsuite/c-c++-common/cpp/pr60400-1.h b/gcc/testsuite/c-c++-common/cpp/pr60400-1.h
+new file mode 100644
+index 000000000..3e32175fe
+--- /dev/null
++++ b/gcc/testsuite/c-c++-common/cpp/pr60400-1.h
+@@ -0,0 +1,3 @@
++??=ifndef PR60400_1_H
++??=define PR60400_1_H
++??=endif
+diff --git a/gcc/testsuite/c-c++-common/cpp/pr60400-2.h b/gcc/testsuite/c-c++-common/cpp/pr60400-2.h
+new file mode 100644
+index 000000000..d9a590636
+--- /dev/null
++++ b/gcc/testsuite/c-c++-common/cpp/pr60400-2.h
+@@ -0,0 +1,4 @@
++??=ifndef PR60400_2_H
++??=define PR60400_2_H
++??=include "pr60400-1.h"
++??=endif
+diff --git a/gcc/testsuite/c-c++-common/cpp/pr60400.c b/gcc/testsuite/c-c++-common/cpp/pr60400.c
+new file mode 100644
+index 000000000..fc3e0d9f4
+--- /dev/null
++++ b/gcc/testsuite/c-c++-common/cpp/pr60400.c
+@@ -0,0 +1,13 @@
++/* PR preprocessor/60400 */
++/* { dg-do compile } */
++/* { dg-options "-trigraphs -Wtrigraphs" } */
++
++??=include "pr60400-1.h"
++??=include "pr60400-2.h"
++
++/* { dg-warning "trigraph" "" { target *-*-* } 1 } */
++/* { dg-warning "trigraph" "" { target *-*-* } 2 } */
++/* { dg-warning "trigraph" "" { target *-*-* } 3 } */
++/* { dg-warning "trigraph" "" { target *-*-* } 4 } */
++/* { dg-warning "trigraph" "" { target *-*-* } 5 } */
++/* { dg-warning "trigraph" "" { target *-*-* } 6 } */
+diff --git a/libcpp/files.c b/libcpp/files.c
+index 29ccf3b70..f2257d7f5 100644
+--- a/libcpp/files.c
++++ b/libcpp/files.c
+@@ -911,6 +911,7 @@ _cpp_stack_include (cpp_reader *pfile, const char *fname, int angle_brackets,
+ {
+   struct cpp_dir *dir;
+   _cpp_file *file;
++  bool stacked;
+ 
+   dir = search_path_head (pfile, fname, angle_brackets, type);
+   if (!dir)
+@@ -918,18 +919,25 @@ _cpp_stack_include (cpp_reader *pfile, const char *fname, int angle_brackets,
+ 
+   file = _cpp_find_file (pfile, fname, dir, false, angle_brackets);
+ 
+-  /* Compensate for the increment in linemap_add that occurs in
+-     _cpp_stack_file.  In the case of a normal #include, we're
+-     currently at the start of the line *following* the #include.  A
+-     separate source_location for this location makes no sense (until
+-     we do the LC_LEAVE), and complicates LAST_SOURCE_LINE_LOCATION.
+-     This does not apply if we found a PCH file (in which case
+-     linemap_add is not called) or we were included from the
+-     command-line.  */
++  /* Compensate for the increment in linemap_add that occurs if
++      _cpp_stack_file actually stacks the file.  In the case of a
++     normal #include, we're currently at the start of the line
++     *following* the #include.  A separate source_location for this
++     location makes no sense (until we do the LC_LEAVE), and
++     complicates LAST_SOURCE_LINE_LOCATION.  This does not apply if we
++     found a PCH file (in which case linemap_add is not called) or we
++     were included from the command-line.  */
+   if (file->pchname == NULL && file->err_no == 0 && type != IT_CMDLINE)
+     pfile->line_table->highest_location--;
+ 
+-  return _cpp_stack_file (pfile, file, type == IT_IMPORT);
++  stacked = _cpp_stack_file (pfile, file, type == IT_IMPORT);
++
++  if (!stacked)
++    /* _cpp_stack_file didn't stack the file, so let's rollback the
++       compensation dance we performed above.  */
++    pfile->line_table->highest_location++;
++
++  return stacked;
+ }
+ 
+ /* Could not open FILE.  The complication is dependency output.  */

@@ -1,0 +1,173 @@
+diff --git a/gcc/config/avr/avr.md b/gcc/config/avr/avr.md
+index 5a38e7988..7f60427fa 100644
+--- a/gcc/config/avr/avr.md
++++ b/gcc/config/avr/avr.md
+@@ -620,6 +620,22 @@
+     if (avr_mem_flash_p (dest))
+       DONE;
+ 
++    if (QImode == <MODE>mode
++        && SUBREG == GET_CODE (src)
++        && CONSTANT_ADDRESS_P (SUBREG_REG (src))
++        && can_create_pseudo_p())
++      {
++        // store_bitfield may want to store a SYMBOL_REF or CONST in a
++        // structure that's represented as PSImode.  As the upper 16 bits
++        // of PSImode cannot be expressed as an HImode subreg, the rhs is
++        // decomposed into QImode (word_mode) subregs of SYMBOL_REF,
++        // CONST or LABEL_REF; cf. PR71103.
++
++        rtx const_addr = SUBREG_REG (src);
++        operands[1] = src = copy_rtx (src);
++        SUBREG_REG (src) = copy_to_mode_reg (GET_MODE (const_addr), const_addr);
++      }
++
+     /* One of the operands has to be in a register.  */
+     if (!register_operand (dest, <MODE>mode)
+         && !reg_or_0_operand (src, <MODE>mode))
+diff --git a/gcc/testsuite/gcc.target/avr/pr71103.c b/gcc/testsuite/gcc.target/avr/pr71103.c
+new file mode 100644
+index 000000000..43244d15e
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/avr/pr71103.c
+@@ -0,0 +1,16 @@
++/* { dg-do compile } */
++/* { dg-options "-O1" } */
++
++struct ResponseStruct{                                                                                            
++    unsigned char responseLength;
++    char *response;
++};
++
++static char response[5];
++struct ResponseStruct something(){
++    struct ResponseStruct returnValue;
++    returnValue.responseLength = 5;
++    returnValue.response = response;
++    return returnValue;
++}
++
+diff --git a/gcc/testsuite/gcc.target/avr/torture/pr71103-2.c b/gcc/testsuite/gcc.target/avr/torture/pr71103-2.c
+new file mode 100644
+index 000000000..480ad05ac
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/avr/torture/pr71103-2.c
+@@ -0,0 +1,118 @@
++/* Use -g0 so that this test case doesn't just fail because
++   of PR52472.  */
++
++/* { dg-do compile } */
++/* { dg-options "-std=gnu99 -g0" } */
++
++struct S12
++{
++  char c;
++  const char *p;
++};
++
++struct S12f
++{
++  char c;
++  struct S12f (*f)(void);
++};
++
++struct S12labl
++{
++  char c;
++  void **labl;
++};
++
++struct S121
++{
++  char c;
++  const char *p;
++  char d;
++};
++
++const char str[5] = "abcd";
++
++struct S12 test_S12_0 (void)
++{
++  struct S12 s;
++  s.c = 'A';
++  s.p = str;
++  return s;
++}
++
++struct S12 test_S12_4 (void)
++{
++  struct S12 s;
++  s.c = 'A';
++  s.p = str + 4;
++  return s;
++}
++
++struct S12f test_S12f (void)
++{
++  struct S12f s;
++  s.c = 'A';
++  s.f = test_S12f;
++  return s;
++}
++
++struct S121 test_S121 (void)
++{
++  struct S121 s;
++  s.c = 'c';
++  s.p = str + 4;
++  s.d = 'd';
++  return s;
++}
++
++extern void use_S12lab (struct S12labl*);
++
++struct S12labl test_S12lab (void)
++{
++  struct S12labl s;
++labl:;
++  s.c = 'A';
++  s.labl = &&labl;
++  return s;
++}
++
++#ifdef __MEMX
++
++struct S13
++{
++  char c;
++  const __memx char *p;
++};
++
++const __memx char str_x[] = "abcd";
++
++struct S13 test_S13_0 (void)
++{
++  struct S13 s;
++  s.c = 'A';
++  s.p = str_x;
++  return s;
++}
++
++struct S13 test_S13_4a (void)
++{
++  struct S13 s;
++  s.c = 'A';
++  s.p = str_x + 4;
++  return s;
++}
++
++#ifdef __FLASH1
++
++const __flash1 char str_1[] = "abcd";
++
++struct S13 test_13_4b (void)
++{
++  struct S13 s;
++  s.c = 'A';
++  s.p = str_1 + 4;
++  return s;
++}
++
++#endif /* have __flash1 */
++#endif /* have __memx */
++

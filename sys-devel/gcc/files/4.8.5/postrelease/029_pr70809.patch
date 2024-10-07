@@ -1,0 +1,46 @@
+diff --git a/gcc/config/aarch64/aarch64-simd.md b/gcc/config/aarch64/aarch64-simd.md
+index 3f186416e..739e01fac 100644
+--- a/gcc/config/aarch64/aarch64-simd.md
++++ b/gcc/config/aarch64/aarch64-simd.md
+@@ -1236,17 +1236,6 @@
+   "TARGET_SIMD"
+   {})
+ 
+-(define_insn "aarch64_vmls<mode>"
+-  [(set (match_operand:VDQF 0 "register_operand" "=w")
+-       (minus:VDQF (match_operand:VDQF 1 "register_operand" "0")
+-		   (mult:VDQF (match_operand:VDQF 2 "register_operand" "w")
+-			      (match_operand:VDQF 3 "register_operand" "w"))))]
+-  "TARGET_SIMD"
+- "fmls\\t%0.<Vtype>, %2.<Vtype>, %3.<Vtype>"
+-  [(set_attr "simd_type" "simd_fmla")
+-   (set_attr "simd_mode" "<MODE>")]
+-)
+-
+ ;; FP Max/Min
+ ;; Max/Min are introduced by idiom recognition by GCC's mid-end.  An
+ ;; expression like:
+diff --git a/gcc/testsuite/gcc.target/aarch64/pr70809_1.c b/gcc/testsuite/gcc.target/aarch64/pr70809_1.c
+new file mode 100644
+index 000000000..2e1bbf4b0
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/aarch64/pr70809_1.c
+@@ -0,0 +1,18 @@
++/* PR target/70809.  */
++/* { dg-do compile } */
++/* { dg-options "-O2 -ftree-vectorize -ffp-contract=off -mtune=generic" } */
++
++/* Check that vector FMLS is not generated when contraction is disabled.  */
++
++void
++foo (float *__restrict__ __attribute__ ((aligned (16))) a,
++     float *__restrict__ __attribute__ ((aligned (16))) x,
++     float *__restrict__ __attribute__ ((aligned (16))) y,
++     float *__restrict__ __attribute__ ((aligned (16))) z)
++{
++  unsigned i = 0;
++  for (i = 0; i < 256; i++)
++    a[i] = x[i] - (y[i] * z[i]);
++}
++
++/* { dg-final { scan-assembler-not "fmls\tv.*" } } */

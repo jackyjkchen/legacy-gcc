@@ -1,0 +1,47 @@
+diff --git a/gcc/cfgexpand.c b/gcc/cfgexpand.c
+index 10bacda2c..d15e78570 100644
+--- a/gcc/cfgexpand.c
++++ b/gcc/cfgexpand.c
+@@ -2854,10 +2854,7 @@ expand_debug_expr (tree exp)
+ 	  op0 = plus_constant (op0, INTVAL (op1));
+ 	}
+ 
+-      if (POINTER_TYPE_P (TREE_TYPE (exp)))
+-	as = TYPE_ADDR_SPACE (TREE_TYPE (TREE_TYPE (exp)));
+-      else
+-	as = ADDR_SPACE_GENERIC;
++      as = TYPE_ADDR_SPACE (TREE_TYPE (TREE_TYPE (TREE_OPERAND (exp, 0))));
+ 
+       op0 = convert_debug_memory_address (targetm.addr_space.address_mode (as),
+ 					  op0, as);
+@@ -3352,7 +3349,7 @@ expand_debug_expr (tree exp)
+ 	  return NULL;
+ 	}
+ 
+-      as = TYPE_ADDR_SPACE (TREE_TYPE (exp));
++      as = TYPE_ADDR_SPACE (TREE_TYPE (TREE_TYPE (exp)));
+       op0 = convert_debug_memory_address (mode, XEXP (op0, 0), as);
+ 
+       return op0;
+diff --git a/gcc/testsuite/gcc.target/avr/pr52472.c b/gcc/testsuite/gcc.target/avr/pr52472.c
+new file mode 100644
+index 000000000..701cfb42a
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/avr/pr52472.c
+@@ -0,0 +1,16 @@
++/* { dg-do compile } */
++/* { dg-options "-Os -g -Wno-pointer-to-int-cast" } */
++
++/* This testcase exposes PR52472. expand_debug_expr mistakenly
++   considers the address space of data to be generic, and
++   asserts that PSImode pointers aren't valid in the generic 
++   address space. */
++
++extern const __memx unsigned data[][10];
++
++unsigned long ice (void)
++{
++  unsigned long addr32;
++
++  return addr32 = ((unsigned long) data);
++}

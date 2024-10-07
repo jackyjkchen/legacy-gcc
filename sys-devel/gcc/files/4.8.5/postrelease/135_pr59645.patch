@@ -1,0 +1,46 @@
+diff --git a/gcc/cgraphunit.c b/gcc/cgraphunit.c
+index 7dd2c1d55..11deaa0c5 100644
+--- a/gcc/cgraphunit.c
++++ b/gcc/cgraphunit.c
+@@ -1488,7 +1488,17 @@ assemble_thunk (struct cgraph_node *node)
+       else
+         vargs.quick_push (a);
+       for (i = 1, arg = DECL_CHAIN (a); i < nargs; i++, arg = DECL_CHAIN (arg))
+-	vargs.quick_push (arg);
++	  {
++	    tree tmp = arg;
++	    if (!is_gimple_val (arg))
++	      {
++		tmp = create_tmp_reg (TYPE_MAIN_VARIANT
++				      (TREE_TYPE (arg)), "arg");
++		gimple stmt = gimple_build_assign (tmp, arg);
++		gsi_insert_after (&bsi, stmt, GSI_NEW_STMT);
++	      }
++	    vargs.quick_push (tmp);
++	  }
+       call = gimple_build_call_vec (build_fold_addr_expr_loc (0, alias), vargs);
+       vargs.release ();
+       gimple_call_set_from_thunk (call, true);
+diff --git a/gcc/testsuite/g++.dg/inherit/covariant21.C b/gcc/testsuite/g++.dg/inherit/covariant21.C
+new file mode 100644
+index 000000000..42cdf8700
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/inherit/covariant21.C
+@@ -0,0 +1,17 @@
++// PR c++/59645
++
++struct A { virtual ~A(); };
++struct B { virtual ~B(); };
++struct C : A, B {};
++
++struct X
++{
++  virtual B* foo(volatile int);
++};
++
++struct Y : X
++{
++  virtual C* foo(volatile int);
++};
++
++C* Y::foo(volatile int) { return 0; }

@@ -1,0 +1,159 @@
+diff --git a/gcc/cp/cp-objcp-common.h b/gcc/cp/cp-objcp-common.h
+index 1bb19ee04..53ccee470 100644
+--- a/gcc/cp/cp-objcp-common.h
++++ b/gcc/cp/cp-objcp-common.h
+@@ -92,6 +92,8 @@ extern void cp_common_init_ts (void);
+ #define LANG_HOOKS_BUILTIN_FUNCTION_EXT_SCOPE cxx_builtin_function_ext_scope
+ #undef	LANG_HOOKS_TYPE_HASH_EQ
+ #define LANG_HOOKS_TYPE_HASH_EQ	cxx_type_hash_eq
++#undef	LANG_HOOKS_COPY_LANG_QUALIFIERS
++#define LANG_HOOKS_COPY_LANG_QUALIFIERS	cxx_copy_lang_qualifiers
+ #undef LANG_HOOKS_MISSING_NORETURN_OK_P
+ #define LANG_HOOKS_MISSING_NORETURN_OK_P cp_missing_noreturn_ok_p
+ #undef LANG_HOOKS_BLOCK_MAY_FALLTHRU
+diff --git a/gcc/cp/cp-tree.h b/gcc/cp/cp-tree.h
+index 4b13b2976..ed39aac6c 100644
+--- a/gcc/cp/cp-tree.h
++++ b/gcc/cp/cp-tree.h
+@@ -6578,6 +6578,7 @@ extern tree convert_bitfield_to_declared_type   (tree);
+ extern tree cp_save_expr			(tree);
+ extern bool cast_valid_in_integral_constant_expression_p (tree);
+ extern bool cxx_type_hash_eq			(const_tree, const_tree);
++extern tree cxx_copy_lang_qualifiers		(const_tree, const_tree);
+ 
+ extern void cxx_print_statistics		(void);
+ extern bool maybe_warn_zero_as_null_pointer_constant (tree, location_t);
+diff --git a/gcc/cp/tree.c b/gcc/cp/tree.c
+index a861e5167..85a5efbd7 100644
+--- a/gcc/cp/tree.c
++++ b/gcc/cp/tree.c
+@@ -3936,6 +3936,21 @@ cxx_type_hash_eq (const_tree typea, const_tree typeb)
+ 			    TYPE_RAISES_EXCEPTIONS (typeb), ce_exact);
+ }
+ 
++/* Copy the language-specific type variant modifiers from TYPEB to TYPEA.  For
++   C++, these are the exception-specifier and ref-qualifier.  */
++
++tree
++cxx_copy_lang_qualifiers (const_tree typea, const_tree typeb)
++{
++  tree type = CONST_CAST_TREE (typea);
++  if (TREE_CODE (type) == FUNCTION_TYPE || TREE_CODE (type) == METHOD_TYPE)
++    {
++      type = build_exception_variant (type, TYPE_RAISES_EXCEPTIONS (typeb));
++      type = build_ref_qualified_type (type, type_memfn_rqual (typeb));
++    }
++  return type;
++}
++
+ /* Apply FUNC to all language-specific sub-trees of TP in a pre-order
+    traversal.  Called from walk_tree.  */
+ 
+diff --git a/gcc/langhooks-def.h b/gcc/langhooks-def.h
+index a2566ec30..3bae7b622 100644
+--- a/gcc/langhooks-def.h
++++ b/gcc/langhooks-def.h
+@@ -171,6 +171,7 @@ extern tree lhd_make_node (enum tree_code);
+   lhd_omp_firstprivatize_type_sizes
+ #define LANG_HOOKS_OMP_MAPPABLE_TYPE	lhd_omp_mappable_type
+ #define LANG_HOOKS_TYPE_HASH_EQ		NULL
++#define LANG_HOOKS_COPY_LANG_QUALIFIERS NULL
+ #define LANG_HOOKS_GET_ARRAY_DESCR_INFO	NULL
+ #define LANG_HOOKS_GET_SUBRANGE_BOUNDS	NULL
+ #define LANG_HOOKS_GET_TYPE_BIAS	NULL
+@@ -194,6 +195,7 @@ extern tree lhd_make_node (enum tree_code);
+   LANG_HOOKS_OMP_FIRSTPRIVATIZE_TYPE_SIZES, \
+   LANG_HOOKS_OMP_MAPPABLE_TYPE, \
+   LANG_HOOKS_TYPE_HASH_EQ, \
++  LANG_HOOKS_COPY_LANG_QUALIFIERS, \
+   LANG_HOOKS_GET_ARRAY_DESCR_INFO, \
+   LANG_HOOKS_GET_SUBRANGE_BOUNDS, \
+   LANG_HOOKS_GET_TYPE_BIAS, \
+diff --git a/gcc/langhooks.h b/gcc/langhooks.h
+index bcfd389aa..d68ec9144 100644
+--- a/gcc/langhooks.h
++++ b/gcc/langhooks.h
+@@ -120,6 +120,10 @@ struct lang_hooks_for_types
+      FUNCTION_TYPEs.  */
+   bool (*type_hash_eq) (const_tree, const_tree);
+ 
++  /* If non-NULL, return TYPE1 with any language-specific modifiers copied from
++     TYPE2.  */
++  tree (*copy_lang_qualifiers) (const_tree, const_tree);
++
+   /* Return TRUE if TYPE uses a hidden descriptor and fills in information
+      for the debugger about the array bounds, strides, etc.  */
+   bool (*get_array_descr_info) (const_tree, struct array_descr_info *);
+diff --git a/gcc/testsuite/g++.dg/ext/attrib54.C b/gcc/testsuite/g++.dg/ext/attrib54.C
+new file mode 100644
+index 000000000..5ff28c836
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/ext/attrib54.C
+@@ -0,0 +1,14 @@
++// PR c++/82406
++
++class a
++{
++public:
++  template <typename b> void operator() (const b &);
++};
++void c () throw () __attribute__ ((__nonnull__));
++void
++d ()
++{
++  a e;
++  e (c);
++}
+diff --git a/gcc/testsuite/g++.dg/lto/pr70029_0.C b/gcc/testsuite/g++.dg/lto/pr70029_0.C
+new file mode 100644
+index 000000000..9c8c31cf6
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/lto/pr70029_0.C
+@@ -0,0 +1,10 @@
++// PR c++/70029
++// { dg-lto-do assemble }
++
++struct A
++{
++  A();
++  int foo() && __attribute__ ((__warn_unused_result__)) { return 0; }
++};
++
++A a;
+diff --git a/gcc/tree.c b/gcc/tree.c
+index bb3ca2ee8..1286432e3 100644
+--- a/gcc/tree.c
++++ b/gcc/tree.c
+@@ -4846,8 +4846,9 @@ build_decl_attribute_variant (tree ddecl, tree attribute)
+    Record such modified types already made so we don't make duplicates.  */
+ 
+ tree
+-build_type_attribute_qual_variant (tree ttype, tree attribute, int quals)
++build_type_attribute_qual_variant (tree otype, tree attribute, int quals)
+ {
++  tree ttype = otype;
+   if (! attribute_list_equal (TYPE_ATTRIBUTES (ttype), attribute))
+     {
+       inchash::hash hstate;
+@@ -4874,6 +4875,11 @@ build_type_attribute_qual_variant (tree ttype, tree attribute, int quals)
+ 	}
+ 
+       ttype = build_qualified_type (ttype, TYPE_UNQUALIFIED);
++      if (lang_hooks.types.copy_lang_qualifiers
++	  && otype != TYPE_MAIN_VARIANT (otype))
++	ttype = (lang_hooks.types.copy_lang_qualifiers
++		 (ttype, TYPE_MAIN_VARIANT (otype)));
++
+       ntype = build_distinct_type_copy (ttype);
+ 
+       TYPE_ATTRIBUTES (ntype) = attribute;
+@@ -4920,6 +4926,9 @@ build_type_attribute_qual_variant (tree ttype, tree attribute, int quals)
+ 	TYPE_CANONICAL (ntype) = TYPE_CANONICAL (ttype);
+ 
+       ttype = build_qualified_type (ntype, quals);
++      if (lang_hooks.types.copy_lang_qualifiers
++	  && otype != TYPE_MAIN_VARIANT (otype))
++	ttype = lang_hooks.types.copy_lang_qualifiers (ttype, otype);
+     }
+   else if (TYPE_QUALS (ttype) != quals)
+     ttype = build_qualified_type (ttype, quals);
