@@ -411,7 +411,7 @@ if tc_has_feature objc-gc ; then
 fi
 
 if tc_has_feature graphite ; then
-	RDEPEND+=" graphite? ( dev-libs/isl )"
+	tc_version_is_at_least 8 && RDEPEND+=" graphite? ( dev-libs/isl )"
 fi
 
 BDEPEND="
@@ -677,7 +677,8 @@ get_gcc_src_uri() {
 			GCC_SRC_URI+=" $(gentoo_urls gcc-${PATCH_GCC_VER}-patches-${PATCH_VER}.tar.${TOOLCHAIN_PATCH_SUFFIX})"
 		[[ -n ${MUSL_VER} ]] && \
 			GCC_SRC_URI+=" $(gentoo_urls gcc-${MUSL_GCC_VER}-musl-patches-${MUSL_VER}.tar.${TOOLCHAIN_PATCH_SUFFIX})"
-
+	elif tc_version_is_between 6 8; then
+		GCC_SRC_URI+=" https://gcc.gnu.org/pub/gcc/infrastructure/isl-0.18.tar.bz2"
 	fi
 
 	echo "${GCC_SRC_URI}"
@@ -863,6 +864,10 @@ toolchain_src_prepare() {
 
 	if tc_version_is_between 4.9 10 && _tc_use_if_iuse sanitize && ! is_djgpp ; then
 		eapply "${FILESDIR}"/san-fix-for-glibc-2_36.patch
+	fi
+
+	if tc_version_is_between 6 8 && in_iuse graphite ; then
+		mv "${WORKDIR}"/isl-0.18 "${WORKDIR}"/gcc-${PV}/isl || die
 	fi
 }
 
@@ -1794,7 +1799,6 @@ toolchain_src_configure() {
 	# library issues. bug #448024, bug #701270
 	if tc_version_is_at_least 6.5 && in_iuse graphite ; then
 		confgcc+=( $(use_with graphite isl) )
-		use graphite && confgcc+=( --disable-isl-version-check )
 	elif tc_version_is_at_least 5.0 ; then
 		confgcc+=( --without-isl )
 	elif tc_version_is_at_least 4.8 ; then
@@ -1955,13 +1959,16 @@ toolchain_src_configure() {
 			--disable-systemtap
 			--enable-host-shared
 			--enable-languages=jit
-			# Might be used for the just-built GCC. Easier to just
-			# respect USE=graphite here in case the user passes some
-			# graphite flags rather than try strip them out.
-			$(use_with graphite isl)
 			--without-zstd
 			--with-system-zlib
 		)
+
+		if tc_version_is_at_least 6.5 ; then
+			# Might be used for the just-built GCC. Easier to just
+			# respect USE=graphite here in case the user passes some
+			# graphite flags rather than try strip them out.
+			confgcc_jit+=( $(use_with graphite isl) )
+		fi
 
 		if tc_version_is_at_least 13.1 ; then
 			confgcc_jit+=( --disable-fixincludes )
