@@ -24,14 +24,13 @@ src_prepare() {
 			[[ ${DEFAULT_ABI} == "n32" ]] && eapply "${FILESDIR}"/${PV}/02_mips64-default-n32-abi.patch
 			;;
 	esac
-
 	[[ $(tc-arch) == "hppa" ]] && eapply "${FILESDIR}"/${PV}/03_hppa-fix-build.patch
 	! is_crosscompile && eapply "${FILESDIR}"/${PV}/04_workaround-for-legacy-glibc-in-non-system-dir.patch
-
-	use vanilla && return 0
 	eapply "${FILESDIR}"/${PV}/06_fix-werror.patch
 	eapply "${FILESDIR}"/${PV}/07_backport-static-libstdc++-option.patch
 	eapply "${FILESDIR}"/${PV}/08_workaround-x86-64-simd.patch
+
+	use vanilla && return 0
 
 	eapply "${FILESDIR}"/${PV}/postrelease/00_pr13685.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/01_pr22127.patch

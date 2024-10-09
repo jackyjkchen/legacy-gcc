@@ -12,9 +12,9 @@ src_prepare() {
 	toolchain_src_prepare
 
 	[[ $(tc-arch) == "mips" && ${DEFAULT_ABI} == "n64" ]] && eapply "${FILESDIR}"/${PV}/01_mips64-default-n64-abi.patch
+	eapply "${FILESDIR}"/${PV}/02_fix-werror.patch
 
 	use vanilla && return 0
-	eapply "${FILESDIR}"/${PV}/02_fix-werror.patch
 
 	eapply "${FILESDIR}"/${PV}/postrelease/000_pr77450-77605-78185-78333.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/001_pr77943.patch
@@ -109,7 +109,7 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/090_pr105376.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/091_pr82314.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/092_pr60881.patch
-	#eapply "${FILESDIR}"/${PV}/postrelease/
+	eapply "${FILESDIR}"/${PV}/postrelease/093_pr58704-58753-58930.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/094_pr60697.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/095_pr93140.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/096_pr87647.patch
@@ -153,7 +153,6 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/134_pr53756.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/135_pr59645.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/136_pr59633.patch
-	eapply "${FILESDIR}"/${PV}/postrelease/137_pr58704-58753-58930.patch
 
 	if use test ; then
 		rm -rf gcc/testsuite/gcc.c-torture/execute/vfprintf-chk-1.c gcc/testsuite/gcc.c-torture/execute/vprintf-chk-1.c gcc/testsuite/gcc.dg/format/opt-*.c

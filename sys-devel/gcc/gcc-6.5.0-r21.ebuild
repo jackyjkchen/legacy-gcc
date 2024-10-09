@@ -12,9 +12,9 @@ src_prepare() {
 	toolchain_src_prepare
 
 	use graphite && eapply "${FILESDIR}"/${PV}/01_compat-new-isl.patch
+	eapply "${FILESDIR}"/${PV}/02_fix-werror.patch
 
 	use vanilla && return 0
-	eapply "${FILESDIR}"/${PV}/02_fix-werror.patch
 
 	eapply "${FILESDIR}"/${PV}/postrelease/000_pr94460.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/001_pr80693-81019-81020.patch

@@ -1,0 +1,64 @@
+diff --git a/gcc/sel-sched.c b/gcc/sel-sched.c
+index 9d45d704f..7d8e12e76 100644
+--- a/gcc/sel-sched.c
++++ b/gcc/sel-sched.c
+@@ -814,18 +814,12 @@ count_occurrences_1 (rtx *cur_rtx, void *arg)
+ {
+   rtx_search_arg_p p = (rtx_search_arg_p) arg;
+ 
+-  /* The last param FOR_GCSE is true, because otherwise it performs excessive
+-    substitutions like
+-	r8 = r33
+-	r16 = r33
+-    for the last insn it presumes r33 equivalent to r8, so it changes it to
+-    r33.  Actually, there's no change, but it spoils debugging.  */
+-  if (exp_equiv_p (*cur_rtx, p->x, 0, true))
+-    {
+-      /* Bail out if we occupy more than one register.  */
+-      if (REG_P (*cur_rtx)
+-          && HARD_REGISTER_P (*cur_rtx)
+-          && hard_regno_nregs[REGNO(*cur_rtx)][GET_MODE (*cur_rtx)] > 1)
++  if (REG_P (*cur_rtx) && REGNO (*cur_rtx) == REGNO (p->x))
++    {
++      /* Bail out if mode is different or more than one register is used.  */
++      if (GET_MODE (*cur_rtx) != GET_MODE (p->x)
++          || (HARD_REGISTER_P (*cur_rtx)
++	      && hard_regno_nregs[REGNO(*cur_rtx)][GET_MODE (*cur_rtx)] > 1))
+         {
+           p->n = 0;
+           return 1;
+@@ -838,7 +832,6 @@ count_occurrences_1 (rtx *cur_rtx, void *arg)
+     }
+ 
+   if (GET_CODE (*cur_rtx) == SUBREG
+-      && REG_P (p->x)
+       && (!REG_P (SUBREG_REG (*cur_rtx))
+ 	  || REGNO (SUBREG_REG (*cur_rtx)) == REGNO (p->x)))
+     {
+@@ -860,6 +853,7 @@ count_occurrences_equiv (rtx what, rtx where)
+ {
+   struct rtx_search_arg arg;
+ 
++  gcc_assert (REG_P (what));
+   arg.x = what;
+   arg.n = 0;
+ 
+diff --git a/gcc/testsuite/gcc.dg/pr50205.c b/gcc/testsuite/gcc.dg/pr50205.c
+new file mode 100644
+index 000000000..ff523d07f
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr50205.c
+@@ -0,0 +1,13 @@
++/* { dg-do compile { target powerpc*-*-* ia64-*-* i?86-*-* x86_64-*-* } } */
++/* { dg-options "-O2 -fno-cprop-registers -fno-dce -fno-forward-propagate -fselective-scheduling2 -funroll-loops -fno-web" } */
++extern int a[];
++
++void foo (void)
++{
++  int i;
++  for (i = 0; i < 199; i++)
++    {
++      if (a[i] != i)
++	__builtin_abort ();
++    }
++}

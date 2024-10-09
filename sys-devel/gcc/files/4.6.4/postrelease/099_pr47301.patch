@@ -1,0 +1,55 @@
+diff --git a/gcc/cp/decl.c b/gcc/cp/decl.c
+index baeb737af..7f5d49301 100644
+--- a/gcc/cp/decl.c
++++ b/gcc/cp/decl.c
+@@ -7579,6 +7579,9 @@ compute_array_index_type (tree name, tree size, tsubst_flags_t complain)
+ 	      if (size == error_mark_node)
+ 		return error_mark_node;
+ 	      type = TREE_TYPE (size);
++	      /* We didn't support this case in GCC 3.2, so don't bother
++		 trying to model it now in ABI v1.  */
++	      abi_1_itype = error_mark_node;
+ 	    }
+ 
+ 	  size = maybe_constant_value (size);
+@@ -7623,7 +7626,8 @@ compute_array_index_type (tree name, tree size, tsubst_flags_t complain)
+       return itype;
+     }
+   
+-  if (!abi_version_at_least (2) && processing_template_decl)
++  if (!abi_version_at_least (2) && processing_template_decl
++      && abi_1_itype == NULL_TREE)
+     /* For abi-1, we handled all instances in templates the same way,
+        even when they were non-dependent. This affects the manglings
+        produced.  So, we do the normal checking for non-dependent
+@@ -7737,7 +7741,7 @@ compute_array_index_type (tree name, tree size, tsubst_flags_t complain)
+     }
+ 
+   /* Create and return the appropriate index type.  */
+-  if (abi_1_itype)
++  if (abi_1_itype && abi_1_itype != error_mark_node)
+     {
+       tree t = build_index_type (itype);
+       TYPE_CANONICAL (abi_1_itype) = TYPE_CANONICAL (t);
+diff --git a/gcc/testsuite/g++.dg/cpp0x/constexpr-abi1.C b/gcc/testsuite/g++.dg/cpp0x/constexpr-abi1.C
+new file mode 100644
+index 000000000..e83f14230
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/constexpr-abi1.C
+@@ -0,0 +1,16 @@
++// PR c++/47301
++// { dg-options "-std=c++0x -fabi-version=1" }
++
++struct A
++{
++  constexpr operator int ()
++  {
++    return 1;
++  }
++};
++
++template < int > struct B
++{
++  static constexpr A a = A();
++  int ar[a];
++};

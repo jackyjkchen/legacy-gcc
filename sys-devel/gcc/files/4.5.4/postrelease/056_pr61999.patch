@@ -1,0 +1,48 @@
+diff --git a/gcc/fortran/simplify.c b/gcc/fortran/simplify.c
+index 74ecc3265..ae1101c57 100644
+--- a/gcc/fortran/simplify.c
++++ b/gcc/fortran/simplify.c
+@@ -1672,6 +1672,7 @@ gfc_expr*
+ gfc_simplify_dot_product (gfc_expr *vector_a, gfc_expr *vector_b)
+ {
+   gfc_expr *result;
++  gfc_expr temp;
+ 
+   if (!is_constant_array_expr (vector_a)
+       || !is_constant_array_expr (vector_b))
+@@ -1679,7 +1680,13 @@ gfc_simplify_dot_product (gfc_expr *vector_a, gfc_expr *vector_b)
+ 
+   gcc_assert (vector_a->rank == 1);
+   gcc_assert (vector_b->rank == 1);
+-  gcc_assert (gfc_compare_types (&vector_a->ts, &vector_b->ts));
++
++  temp.expr_type = EXPR_OP;
++  gfc_clear_ts (&temp.ts);
++  temp.value.op.op = INTRINSIC_NONE;
++  temp.value.op.op1 = vector_a;
++  temp.value.op.op2 = vector_b;
++  gfc_type_convert_binary (&temp, 1);
+ 
+   if (vector_a->value.constructor && vector_b->value.constructor)
+     return compute_dot_product (vector_a->value.constructor, 1,
+diff --git a/gcc/testsuite/gfortran.dg/dot_product_3.f90 b/gcc/testsuite/gfortran.dg/dot_product_3.f90
+new file mode 100644
+index 000000000..6e11556ee
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/dot_product_3.f90
+@@ -0,0 +1,15 @@
++! { dg-do compile }
++! { dg-options "-fdump-tree-original" }
++! PR 61999 - this used to ICE.
++! Original test case by A. Kasahara
++program main
++   use, intrinsic:: iso_fortran_env, only: output_unit
++
++   implicit none
++
++   write(output_unit, *) dot_product([1, 2], [2.0, 3.0])
++
++   stop
++end program main
++! { dg-final { scan-tree-dump-times "8\\.0e\\+0" 1 "original" } }
++! { dg-final { cleanup-tree-dump "original" } }

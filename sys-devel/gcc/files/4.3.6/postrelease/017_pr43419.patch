@@ -1,0 +1,41 @@
+diff --git a/gcc/builtins.c b/gcc/builtins.c
+index c5c6286d..bd8b80d4 100644
+--- a/gcc/builtins.c
++++ b/gcc/builtins.c
+@@ -2966,7 +2966,10 @@ expand_builtin_pow (tree exp, rtx target, rtx subtarget)
+ 	  && ((flag_unsafe_math_optimizations
+ 	       && !optimize_size
+ 	       && powi_cost (n/2) <= POWI_MAX_MULTS)
+-	      || n == 1))
++	      /* Even the c==0.5 case cannot be done unconditionally
++	         when we need to preserve signed zeros, as
++		 pow (-0, 0.5) is +0, while sqrt(-0) is -0.  */
++	      || (!HONOR_SIGNED_ZEROS (mode) && n == 1)))
+ 	{
+ 	  tree call_expr = build_call_expr (fn, 1, narg0);
+ 	  /* Use expand_expr in case the newly built call expression
+diff --git a/gcc/testsuite/gcc.dg/pr43419.c b/gcc/testsuite/gcc.dg/pr43419.c
+new file mode 100644
+index 00000000..834d72cf
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr43419.c
+@@ -0,0 +1,19 @@
++/* { dg-do run } */
++/* { dg-options "-O1" } */
++/* { dg-options "-mieee -O1" { target alpha*-*-* sh*-*-* } } */
++#include <math.h>
++
++extern void abort (void);
++void __attribute__((noinline)) f (double x)
++{
++  double pluszero = pow (x, 0.5);
++  double minuszero = sqrt (x);
++  if (signbit (pluszero) == signbit (minuszero))
++    abort ();
++}
++
++int main(void)
++{
++  f (-0.0);
++  return 0;
++}

@@ -1,0 +1,52 @@
+diff --git a/gcc/cp/class.c b/gcc/cp/class.c
+index c6fbbabdb..977d51503 100644
+--- a/gcc/cp/class.c
++++ b/gcc/cp/class.c
+@@ -4298,8 +4298,7 @@ in_class_defaulted_default_constructor (tree t)
+ }
+ 
+ /* Returns true iff FN is a user-provided function, i.e. user-declared
+-   and not defaulted at its first declaration; or explicit, private,
+-   protected, or non-const.  */
++   and not defaulted at its first declaration.  */
+ 
+ bool
+ user_provided_p (tree fn)
+diff --git a/gcc/cp/pt.c b/gcc/cp/pt.c
+index 1b96d215d..0d6b90034 100644
+--- a/gcc/cp/pt.c
++++ b/gcc/cp/pt.c
+@@ -17019,7 +17019,8 @@ do_type_instantiation (tree t, tree storage, tsubst_flags_t complain)
+     if (! static_p)
+       for (tmp = TYPE_METHODS (t); tmp; tmp = DECL_CHAIN (tmp))
+ 	if (TREE_CODE (tmp) == FUNCTION_DECL
+-	    && DECL_TEMPLATE_INSTANTIATION (tmp))
++	    && DECL_TEMPLATE_INSTANTIATION (tmp)
++	    && (!extern_p || user_provided_p (tmp)))
+ 	  instantiate_class_member (tmp, extern_p);
+ 
+     for (tmp = TYPE_FIELDS (t); tmp; tmp = DECL_CHAIN (tmp))
+diff --git a/gcc/testsuite/g++.dg/cpp0x/explicit12.C b/gcc/testsuite/g++.dg/cpp0x/explicit12.C
+new file mode 100644
+index 000000000..1373623d7
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/explicit12.C
+@@ -0,0 +1,18 @@
++// PR c++/57728
++// { dg-do link }
++// { dg-options "-std=c++0x" }
++
++template<typename T>
++struct A
++{
++  T x;
++  A() = default;
++  A(const A &other) = delete;
++};
++
++extern template class A<int>;
++
++int main()
++{
++  A<int> a;
++}

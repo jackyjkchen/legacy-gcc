@@ -1,0 +1,76 @@
+diff --git a/gcc/c-typeck.c b/gcc/c-typeck.c
+index 95c0353d2..5df0dbeb4 100644
+--- a/gcc/c-typeck.c
++++ b/gcc/c-typeck.c
+@@ -3490,7 +3490,8 @@ build_unary_op (location_t location,
+       /* Report invalid types.  */
+ 
+       if (typecode != POINTER_TYPE && typecode != FIXED_POINT_TYPE
+-	  && typecode != INTEGER_TYPE && typecode != REAL_TYPE)
++	  && typecode != INTEGER_TYPE && typecode != REAL_TYPE
++	  && typecode != VECTOR_TYPE)
+ 	{
+ 	  if (code == PREINCREMENT_EXPR || code == POSTINCREMENT_EXPR)
+ 	    error_at (location, "wrong type argument to increment");
+@@ -3555,7 +3556,9 @@ build_unary_op (location_t location,
+ 	  }
+ 	else
+ 	  {
+-	    inc = integer_one_node;
++	    inc = (TREE_CODE (argtype) == VECTOR_TYPE
++		   ? build_one_cst (argtype)
++		   : integer_one_node);
+ 	    inc = convert (argtype, inc);
+ 	  }
+ 
+diff --git a/gcc/cp/typeck.c b/gcc/cp/typeck.c
+index f319dfb7a..3342c9648 100644
+--- a/gcc/cp/typeck.c
++++ b/gcc/cp/typeck.c
+@@ -4884,7 +4884,9 @@ cp_build_unary_op (enum tree_code code, tree xarg, int noconvert,
+ 	    inc = cxx_sizeof_nowarn (TREE_TYPE (argtype));
+ 	  }
+ 	else
+-	  inc = integer_one_node;
++	  inc = (TREE_CODE (argtype) == VECTOR_TYPE
++		 ? build_one_cst (argtype)
++		 : integer_one_node);
+ 
+ 	inc = cp_convert (argtype, inc);
+ 
+diff --git a/gcc/testsuite/c-c++-common/pr59032.c b/gcc/testsuite/c-c++-common/pr59032.c
+new file mode 100644
+index 000000000..327f5aeb6
+--- /dev/null
++++ b/gcc/testsuite/c-c++-common/pr59032.c
+@@ -0,0 +1,30 @@
++/* { dg-do compile } */
++/* { dg-options "-O2" } */
++
++void
++foo()
++{
++  float v __attribute__((vector_size(8)));
++  v++;
++}
++
++void
++foo2 ()
++{
++  float v __attribute__((vector_size(8)));
++  ++v;
++}
++
++void
++foo3 ()
++{
++  float v __attribute__((vector_size(8)));
++  v--;
++}
++
++void
++foo4 ()
++{
++  float v __attribute__((vector_size(8)));
++  --v;
++}

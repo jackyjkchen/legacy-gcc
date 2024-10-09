@@ -1,0 +1,57 @@
+diff --git a/gcc/testsuite/gfortran.dg/pr52621.f90 b/gcc/testsuite/gfortran.dg/pr52621.f90
+new file mode 100644
+index 000000000..b45d3edc9
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/pr52621.f90
+@@ -0,0 +1,20 @@
++! { dg-do compile }
++! { dg-options "-O2 -fprefetch-loop-arrays -w" }
++
++      SUBROUTINE GHDSYM(IZ,IS,LMMAX,S,LMS,Y,L2M,DRL,NLAY2,K0,DCUT)!,
++!
++      COMPLEX Y(L2M,L2M),H(33),S(LMS)
++      COMPLEX RU,CI,CZ,K0,FF,Z,Z1,Z2,Z3,ST
++!
++      DO 140 KK=1,4
++            DO 130 L=1,L2M
++               L1=L*L-L
++               DO 120 M=1,L
++                  IPM=L1+M
++                  IMM=L1-M+2
++                  S(IPM)=S(IPM)+Z3*Y(L,M)
++                  IF (M.NE.1) S(IMM)=S(IMM)+Z3*Y(M-1,L)*CSGN
++120            CONTINUE
++130         CONTINUE
++140   CONTINUE
++      END
+diff --git a/gcc/tree-chrec.c b/gcc/tree-chrec.c
+index 1e49c1d5b..fb9f250f3 100644
+--- a/gcc/tree-chrec.c
++++ b/gcc/tree-chrec.c
+@@ -1008,6 +1008,8 @@ evolution_function_is_invariant_rec_p (tree chrec, int loopnum)
+   if (TREE_CODE (chrec) == POLYNOMIAL_CHREC)
+     {
+       if (CHREC_VARIABLE (chrec) == (unsigned) loopnum
++	  || flow_loop_nested_p (get_loop (loopnum),
++				 get_loop (CHREC_VARIABLE (chrec)))
+ 	  || !evolution_function_is_invariant_rec_p (CHREC_RIGHT (chrec),
+ 						     loopnum)
+ 	  || !evolution_function_is_invariant_rec_p (CHREC_LEFT (chrec),
+@@ -1111,6 +1113,8 @@ evolution_function_is_univariate_p (const_tree chrec)
+ 	  break;
+ 
+ 	default:
++	  if (tree_contains_chrecs (CHREC_LEFT (chrec), NULL))
++	    return false;
+ 	  break;
+ 	}
+ 
+@@ -1124,6 +1128,8 @@ evolution_function_is_univariate_p (const_tree chrec)
+ 	  break;
+ 
+ 	default:
++	  if (tree_contains_chrecs (CHREC_RIGHT (chrec), NULL))
++	    return false;
+ 	  break;
+ 	}
+ 

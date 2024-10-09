@@ -1,0 +1,42 @@
+diff --git a/gcc/predict.c b/gcc/predict.c
+index 18fda083d..84e4bef4a 100644
+--- a/gcc/predict.c
++++ b/gcc/predict.c
+@@ -126,6 +126,8 @@ maybe_hot_frequency_p (int freq)
+   if (node->frequency == NODE_FREQUENCY_EXECUTED_ONCE
+       && freq <= (ENTRY_BLOCK_PTR->frequency * 2 / 3))
+     return false;
++  if (PARAM_VALUE (HOT_BB_FREQUENCY_FRACTION) == 0)
++    return false;
+   if (freq < ENTRY_BLOCK_PTR->frequency / PARAM_VALUE (HOT_BB_FREQUENCY_FRACTION))
+     return false;
+   return true;
+@@ -178,10 +180,13 @@ cgraph_maybe_hot_edge_p (struct cgraph_edge *edge)
+   if (edge->caller->frequency == NODE_FREQUENCY_EXECUTED_ONCE
+       && edge->frequency < CGRAPH_FREQ_BASE * 3 / 2)
+     return false;
+-  if (flag_guess_branch_prob
+-      && edge->frequency <= (CGRAPH_FREQ_BASE
+-      			     / PARAM_VALUE (HOT_BB_FREQUENCY_FRACTION)))
+-    return false;
++  if (flag_guess_branch_prob)
++    {
++      if (PARAM_VALUE (HOT_BB_FREQUENCY_FRACTION) == 0
++	  || edge->frequency <= (CGRAPH_FREQ_BASE
++				 / PARAM_VALUE (HOT_BB_FREQUENCY_FRACTION)))
++        return false;
++    }
+   return true;
+ }
+ 
+diff --git a/gcc/testsuite/gcc.dg/pr48186.c b/gcc/testsuite/gcc.dg/pr48186.c
+new file mode 100644
+index 000000000..5635f930d
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr48186.c
+@@ -0,0 +1,5 @@
++/* PR tree-optimization/48186 */
++/* { dg-do compile } */
++/* { dg-options "-O --param hot-bb-frequency-fraction=0" } */
++
++void foo (void) { }

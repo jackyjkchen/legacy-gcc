@@ -1,0 +1,85 @@
+diff --git a/gcc/cp/parser.c b/gcc/cp/parser.c
+index 9c0b0797f..ef6dc28dc 100644
+--- a/gcc/cp/parser.c
++++ b/gcc/cp/parser.c
+@@ -11746,7 +11746,12 @@ cp_parser_template_id (cp_parser *parser,
+      the effort required to do the parse, nor will we issue duplicate
+      error messages about problems during instantiation of the
+      template.  */
+-  if (start_of_id)
++  if (start_of_id
++      /* Don't do this if we had a parse error in a declarator; re-parsing
++	 might succeed if a name changes meaning (60361).  */
++      && !(cp_parser_error_occurred (parser)
++	   && cp_parser_parsing_tentatively (parser)
++	   && parser->in_declarator_p))
+     {
+       cp_token *token = cp_lexer_token_at (parser->lexer, start_of_id);
+ 
+diff --git a/gcc/cp/semantics.c b/gcc/cp/semantics.c
+index a2751b2eb..4e8888024 100644
+--- a/gcc/cp/semantics.c
++++ b/gcc/cp/semantics.c
+@@ -2966,7 +2966,7 @@ finish_id_expression (tree id_expression,
+ 	  && DECL_CONTEXT (decl) == NULL_TREE
+ 	  && !cp_unevaluated_operand)
+ 	{
+-	  error ("use of parameter %qD outside function body", decl);
++	  *error_msg = "use of parameter outside function body";
+ 	  return error_mark_node;
+ 	}
+     }
+diff --git a/gcc/testsuite/g++.dg/parse/ambig7.C b/gcc/testsuite/g++.dg/parse/ambig7.C
+new file mode 100644
+index 000000000..9a5b8791d
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/parse/ambig7.C
+@@ -0,0 +1,16 @@
++// PR c++/60361
++
++struct Helper
++{
++  Helper(int a, void (*pfunc)());
++};
++
++template <int I> void function();
++
++const int A = 1;
++const int B = 2;
++
++Helper testOk(A, function<A>);
++Helper testOk2(int(A), function<B>);
++Helper testOk3((int(A)), function<A>);
++Helper testFail(int(A), function<A>);
+diff --git a/gcc/testsuite/g++.dg/parse/parameter-declaration-2.C b/gcc/testsuite/g++.dg/parse/parameter-declaration-2.C
+index 7a9a24fb7..ab4532eab 100644
+--- a/gcc/testsuite/g++.dg/parse/parameter-declaration-2.C
++++ b/gcc/testsuite/g++.dg/parse/parameter-declaration-2.C
+@@ -1 +1 @@
+-void f (int i, int p[i]); // { dg-error "use of parameter .i. outside function body" }
++void f (int i, int p[i]); // { dg-error "use of parameter.*outside function body" }
+diff --git a/gcc/testsuite/g++.dg/parse/typename7.C b/gcc/testsuite/g++.dg/parse/typename7.C
+index 2d823f807..3cee4bac6 100644
+--- a/gcc/testsuite/g++.dg/parse/typename7.C
++++ b/gcc/testsuite/g++.dg/parse/typename7.C
+@@ -7,10 +7,9 @@
+ 
+ struct A
+ {
+-  template<typename>   void foo(int); // { dg-message "note" }
+-  template<typename T> void bar(T t) { // { dg-message "note" }
++  template<typename>   void foo(int);
++  template<typename T> void bar(T t) {
+     this->foo<typename T>(t); } // { dg-error "expected|parse error|no matching" }
+-  // { dg-message "candidate" "candidate note" { target *-*-* } 12 }
+   template<typename T> void bad(T t) {
+     foo<typename T>(t); } // { dg-error "expected|parse error|no matching" }
+ };
+@@ -20,7 +19,6 @@ struct B
+ {
+   void bar(T t) {
+     A().bar<typename T>(t); } // { dg-error "expected|parse error|no matching" }
+-  // { dg-message "candidate" "candidate note" { target *-*-* } 22 }
+   void bad(T t) {
+     B<typename T>::bar(t); } // { dg-error "invalid|not a template" }
+ };

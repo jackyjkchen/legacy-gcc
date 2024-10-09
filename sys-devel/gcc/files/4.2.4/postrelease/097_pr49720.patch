@@ -1,0 +1,42 @@
+diff --git a/gcc/simplify-rtx.c b/gcc/simplify-rtx.c
+index ec0b4e72..6b5ff47d 100644
+--- a/gcc/simplify-rtx.c
++++ b/gcc/simplify-rtx.c
+@@ -3625,10 +3625,20 @@ simplify_relational_operation_1 (enum rtx_code code, enum machine_mode mode,
+     {
+       rtx x = XEXP (op0, 0);
+       rtx c = XEXP (op0, 1);
++      enum rtx_code invcode = op0code == PLUS ? MINUS : PLUS;
++      rtx tem = simplify_gen_binary (invcode, cmp_mode, op1, c);
++
++      /* Detect an infinite recursive condition, where we oscillate at this
++	 simplification case between:
++	    A + B == C  <--->  C - B == A,
++	 where A, B, and C are all constants with non-simplifiable expressions,
++	 usually SYMBOL_REFs.  */
++      if (GET_CODE (tem) == invcode
++	  && CONSTANT_P (x)
++	  && rtx_equal_p (c, XEXP (tem, 1)))
++	return NULL_RTX;
+ 
+-      c = simplify_gen_binary (op0code == PLUS ? MINUS : PLUS,
+-			       cmp_mode, op1, c);
+-      return simplify_gen_relational (code, mode, cmp_mode, x, c);
++      return simplify_gen_relational (code, mode, cmp_mode, x, tem);
+     }
+ 
+   /* (ne:SI (zero_extract:SI FOO (const_int 1) BAR) (const_int 0))) is
+diff --git a/gcc/testsuite/g++.dg/torture/pr49720.C b/gcc/testsuite/g++.dg/torture/pr49720.C
+new file mode 100644
+index 00000000..c5da7ba6
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/torture/pr49720.C
+@@ -0,0 +1,8 @@
++/* { dg-do compile } */
++
++extern char t_start[], t_end[], t_size[];
++bool foo (void)
++{
++  long size = reinterpret_cast<long>(t_size);
++  return (size == t_end - t_start);
++}

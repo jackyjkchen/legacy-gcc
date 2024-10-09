@@ -1,0 +1,45 @@
+diff --git a/gcc/predict.c b/gcc/predict.c
+index 105980e2..3d2c2032 100644
+--- a/gcc/predict.c
++++ b/gcc/predict.c
+@@ -727,7 +727,8 @@ predict_loops (void)
+ 	  if (TREE_CODE (niter) == INTEGER_CST)
+ 	    {
+ 	      if (host_integerp (niter, 1)
+-		  && compare_tree_int (niter, max-1) == -1)
++		  && max
++		  && compare_tree_int (niter, max - 1) == -1)
+ 		nitercst = tree_low_cst (niter, 1) + 1;
+ 	      else
+ 		nitercst = max;
+@@ -749,6 +750,11 @@ predict_loops (void)
+ 	  else
+ 	    continue;
+ 
++	  /* If the prediction for number of iterations is zero, do not
++	     predict the exit edges.  */
++	  if (nitercst == 0)
++	    continue;
++
+ 	  probability = ((REG_BR_PROB_BASE + nitercst / 2) / nitercst);
+ 	  predict_edge (ex, predictor, probability);
+ 	}
+diff --git a/gcc/testsuite/gcc.dg/pr48189.c b/gcc/testsuite/gcc.dg/pr48189.c
+new file mode 100644
+index 00000000..86b995dc
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr48189.c
+@@ -0,0 +1,13 @@
++/* PR tree-optimization/48189 */
++/* { dg-do compile } */
++/* { dg-options "-O --param max-predicted-iterations=0" } */
++
++struct S { int s[8]; };
++  
++void
++foo (int *x, struct S *y)
++{
++  int i;
++  for (i = 0; y[i].s[i]; i++)
++    *x++ = y[i].s[i];
++}

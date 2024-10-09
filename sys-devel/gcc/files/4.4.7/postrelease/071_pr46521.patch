@@ -1,0 +1,512 @@
+diff --git a/gcc/sel-sched.c b/gcc/sel-sched.c
+index 419284818..ee25d9311 100644
+--- a/gcc/sel-sched.c
++++ b/gcc/sel-sched.c
+@@ -1,5 +1,6 @@
+ /* Instruction scheduling pass.  Selective scheduler and pipeliner.
+-   Copyright (C) 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
++   Copyright (C) 2006, 2007, 2008, 2009, 2010, 2011
++   Free Software Foundation, Inc.
+ 
+ This file is part of GCC.
+ 
+@@ -4344,7 +4345,8 @@ find_best_expr (av_set_t *av_vliw_ptr, blist_t bnds, fence_t fence,
+     {
+       can_issue_more = invoke_aftermath_hooks (fence, EXPR_INSN_RTX (best),
+                                                can_issue_more);
+-      if (can_issue_more == 0)
++      if (targetm.sched.variable_issue
++	  && can_issue_more == 0)
+         *pneed_stall = 1;
+     }
+   
+@@ -5290,7 +5292,7 @@ fill_insns (fence_t fence, int seqno, ilist_t **scheduled_insns_tailpp)
+       blist_t *bnds_tailp1, *bndsp;
+       expr_t expr_vliw;
+       int need_stall;
+-      int was_stall = 0, scheduled_insns = 0, stall_iterations = 0;
++      int was_stall = 0, scheduled_insns = 0;
+       int max_insns = pipelining_p ? issue_rate : 2 * issue_rate;
+       int max_stall = pipelining_p ? 1 : 3;
+       
+@@ -5307,16 +5309,15 @@ fill_insns (fence_t fence, int seqno, ilist_t **scheduled_insns_tailpp)
+       do
+         {
+           expr_vliw = find_best_expr (&av_vliw, bnds, fence, &need_stall);
+-          if (!expr_vliw && need_stall)
++          if (! expr_vliw && need_stall)
+             {
+               /* All expressions required a stall.  Do not recompute av sets
+                  as we'll get the same answer (modulo the insns between
+                  the fence and its boundary, which will not be available for
+-                 pipelining).  */
+-              gcc_assert (! expr_vliw && stall_iterations < 2);
+-              was_stall++;
+-	      /* If we are going to stall for too long, break to recompute av
++                 pipelining).
++		 If we are going to stall for too long, break to recompute av
+ 		 sets and bring more insns for pipelining.  */
++              was_stall++;
+ 	      if (need_stall <= 3)
+ 		stall_for_cycles (fence, need_stall);
+ 	      else
+@@ -6454,6 +6455,8 @@ init_seqno_1 (basic_block bb, sbitmap visited_bbs, bitmap blocks_to_reschedule)
+ 
+ 	  init_seqno_1 (succ, visited_bbs, blocks_to_reschedule);
+ 	}
++      else if (blocks_to_reschedule)
++        bitmap_set_bit (forced_ebb_heads, succ->index);
+     }
+ 
+   for (insn = BB_END (bb); insn != note; insn = PREV_INSN (insn))
+@@ -6708,6 +6711,7 @@ reset_sched_cycles_in_current_ebb (void)
+   int last_clock = 0;
+   int haifa_last_clock = -1;
+   int haifa_clock = 0;
++  int issued_insns = 0;
+   insn_t insn;
+ 
+   if (targetm.sched.md_init)
+@@ -6726,7 +6730,7 @@ reset_sched_cycles_in_current_ebb (void)
+     {
+       int cost, haifa_cost;
+       int sort_p;
+-      bool asm_p, real_insn, after_stall;
++      bool asm_p, real_insn, after_stall, all_issued;
+       int clock;
+ 
+       if (!INSN_P (insn))
+@@ -6762,7 +6766,9 @@ reset_sched_cycles_in_current_ebb (void)
+           haifa_cost = cost;
+           after_stall = 1;
+         }
+-
++      all_issued = issued_insns == issue_rate;
++      if (haifa_cost == 0 && all_issued)
++	haifa_cost = 1;
+       if (haifa_cost > 0)
+ 	{
+ 	  int i = 0;
+@@ -6770,6 +6776,7 @@ reset_sched_cycles_in_current_ebb (void)
+ 	  while (haifa_cost--)
+ 	    {
+ 	      advance_state (curr_state);
++	      issued_insns = 0;
+               i++;
+ 
+ 	      if (sched_verbose >= 2)
+@@ -6786,9 +6793,22 @@ reset_sched_cycles_in_current_ebb (void)
+                   && haifa_cost > 0
+                   && estimate_insn_cost (insn, curr_state) == 0)
+                 break;
+-	    }
++
++              /* When the data dependency stall is longer than the DFA stall,
++                 and when we have issued exactly issue_rate insns and stalled,
++                 it could be that after this longer stall the insn will again
++                 become unavailable  to the DFA restrictions.  Looks strange
++                 but happens e.g. on x86-64.  So recheck DFA on the last
++                 iteration.  */
++              if ((after_stall || all_issued)
++                  && real_insn
++                  && haifa_cost == 0)
++                haifa_cost = estimate_insn_cost (insn, curr_state);
++            }
+ 
+ 	  haifa_clock += i;
++          if (sched_verbose >= 2)
++            sel_print ("haifa clock: %d\n", haifa_clock);
+ 	}
+       else
+ 	gcc_assert (haifa_cost == 0);
+@@ -6802,21 +6822,27 @@ reset_sched_cycles_in_current_ebb (void)
+ 					    &sort_p))
+ 	  {
+ 	    advance_state (curr_state);
++	    issued_insns = 0;
+ 	    haifa_clock++;
+ 	    if (sched_verbose >= 2)
+               {
+                 sel_print ("advance_state (dfa_new_cycle)\n");
+                 debug_state (curr_state);
++		sel_print ("haifa clock: %d\n", haifa_clock + 1);
+               }
+           }
+ 
+       if (real_insn)
+ 	{
+ 	  cost = state_transition (curr_state, insn);
++	  issued_insns++;
+ 
+           if (sched_verbose >= 2)
+-            debug_state (curr_state);
+-
++	    {
++	      sel_print ("scheduled insn %d, clock %d\n", INSN_UID (insn),
++			 haifa_clock + 1);
++              debug_state (curr_state);
++	    }
+ 	  gcc_assert (cost < 0);
+ 	}
+ 
+@@ -7229,21 +7255,23 @@ sel_sched_region_1 (void)
+             {
+               basic_block bb = EBB_FIRST_BB (i);
+ 
+-              if (sel_bb_empty_p (bb))
+-                {
+-                  bitmap_clear_bit (blocks_to_reschedule, bb->index);
+-                  continue;
+-                }
+-
+               if (bitmap_bit_p (blocks_to_reschedule, bb->index))
+                 {
++                  if (! bb_ends_ebb_p (bb))
++                    bitmap_set_bit (blocks_to_reschedule, bb_next_bb (bb)->index);
++                  if (sel_bb_empty_p (bb))
++                    {
++                      bitmap_clear_bit (blocks_to_reschedule, bb->index);
++                      continue;
++                    }
+                   clear_outdated_rtx_info (bb);
+                   if (sel_insn_is_speculation_check (BB_END (bb))
+                       && JUMP_P (BB_END (bb)))
+                     bitmap_set_bit (blocks_to_reschedule,
+                                     BRANCH_EDGE (bb)->dest->index);
+                 }
+-              else if (INSN_SCHED_TIMES (sel_bb_head (bb)) <= 0)
++              else if (! sel_bb_empty_p (bb)
++                       && INSN_SCHED_TIMES (sel_bb_head (bb)) <= 0)
+                 bitmap_set_bit (blocks_to_reschedule, bb->index);
+             }
+ 
+diff --git a/gcc/testsuite/gcc.dg/pr45352-1.c b/gcc/testsuite/gcc.dg/pr45352-1.c
+new file mode 100644
+index 000000000..3b092cd13
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr45352-1.c
+@@ -0,0 +1,13 @@
++/* { dg-do compile { target powerpc*-*-* ia64-*-* x86_64-*-* } } */
++/* { dg-options "-O3 -fschedule-insns -fschedule-insns2 -fselective-scheduling2 -fsel-sched-pipelining -funroll-loops -fprefetch-loop-arrays" } */
++
++void main1 (float *pa, float *pc)
++{
++  int i;
++  float b[256];
++  float c[256];
++  for (i = 0; i < 256; i++)
++    b[i] = c[i] = pc[i];
++  for (i = 0; i < 256; i++)
++    pa[i] = b[i] * c[i];
++}
+diff --git a/gcc/testsuite/gcc.dg/pr45352-2.c b/gcc/testsuite/gcc.dg/pr45352-2.c
+new file mode 100644
+index 000000000..eed384717
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr45352-2.c
+@@ -0,0 +1,17 @@
++/* { dg-do compile { target powerpc*-*-* ia64-*-* x86_64-*-* } } */
++/* { dg-options "-O1 -freorder-blocks -fschedule-insns2 -funswitch-loops -fselective-scheduling2 -fsel-sched-pipelining -funroll-all-loops" } */
++void
++foo1 (int *s)
++{
++  s[0] = s[1];
++  while (s[6] - s[8])
++    {
++      s[6] -= s[8];
++      if (s[8] || s[0])
++	{
++	  s[3] += s[0];
++	  s[4] += s[1];
++	}
++      s[7]++;
++    }
++}
+diff --git a/gcc/testsuite/gcc.dg/pr45352-3.c b/gcc/testsuite/gcc.dg/pr45352-3.c
+new file mode 100644
+index 000000000..ce7879f86
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr45352-3.c
+@@ -0,0 +1,16 @@
++/* { dg-do compile { target powerpc*-*-* ia64-*-* x86_64-*-* } } */
++/* { dg-options "-O -fprofile-generate -fgcse -fno-gcse-lm -fgcse-sm -fno-ivopts -fno-tree-loop-im -ftree-pre -funroll-loops -fno-web -fschedule-insns2 -fselective-scheduling2 -fsel-sched-pipelining" } */
++
++extern volatile float f[];
++
++void foo (void)
++{
++  int i;
++  for (i = 0; i < 100; i++)
++    f[i] = 0;
++  for (i = 0; i < 100; i++)
++    f[i] = 0;
++  for (i = 0; i < 100; i++)
++    if (f[i])
++      __builtin_abort ();
++}
+diff --git a/gcc/testsuite/gcc.dg/pr45352.c b/gcc/testsuite/gcc.dg/pr45352.c
+new file mode 100644
+index 000000000..75f9a2137
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr45352.c
+@@ -0,0 +1,24 @@
++/* { dg-do compile { target powerpc*-*-* ia64-*-* x86_64-*-* } } */
++/* { dg-options "-Os -fselective-scheduling2 -fsel-sched-pipelining -fprofile-generate" } */
++
++static inline void
++bmp_iter_next (int *bi, int *bit_no)
++{
++  *bi >>= 1;
++  *bit_no += 1;
++}
++
++int bmp_iter_set (int *bi, int *bit_no);
++void bitmap_initialize_stat (int, ...);
++void bitmap_clear (void);
++
++void
++df_md_alloc (int bi, int bb_index, void *bb_info)
++{
++  for (; bmp_iter_set (&bi, &bb_index); bmp_iter_next (&bi, &bb_index))
++
++    if (bb_info)
++      bitmap_clear ();
++    else
++      bitmap_initialize_stat (0);
++}
+diff --git a/gcc/testsuite/gcc.dg/pr46521.c b/gcc/testsuite/gcc.dg/pr46521.c
+new file mode 100644
+index 000000000..0c41c4328
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr46521.c
+@@ -0,0 +1,20 @@
++/* { dg-do compile { target powerpc*-*-* ia64-*-* x86_64-*-* } } */
++/* { dg-options "-Os -fselective-scheduling2 -fsel-sched-pipelining -fprofile-generate -fno-early-inlining" } */
++
++static void bmp_iter_next (int *bi)
++{
++  *bi >>= 1;
++}
++
++int bmp_iter_set (int *, int);
++void bitmap_clear (void);
++void bitmap_initialize_stat (void);
++
++void df_md_alloc (int bi, int bb_index, int bb_info)
++{
++  for (; bmp_iter_set (&bi, bb_index); bmp_iter_next (&bi))
++    if (bb_info)
++      bitmap_clear ();
++    else
++      bitmap_initialize_stat ();
++}
+diff --git a/gcc/testsuite/gcc.dg/pr46522.c b/gcc/testsuite/gcc.dg/pr46522.c
+new file mode 100644
+index 000000000..13a5aa9da
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr46522.c
+@@ -0,0 +1,33 @@
++/* { dg-do compile { target powerpc*-*-* ia64-*-* x86_64-*-* } } */
++/* { dg-options "-O3 -fkeep-inline-functions -fsel-sched-pipelining -fselective-scheduling2 -funroll-loops" } */
++
++struct S
++{
++  unsigned i, j;
++};
++
++static inline void
++bar (struct S *s)
++{
++  if (s->i++ == 1)
++    {
++      s->i = 0;
++      s->j++;
++    }
++}
++
++void
++foo1 (struct S *s)
++{
++  bar (s);
++}
++
++void
++foo2 (struct S s1, struct S s2, int i)
++{
++  while (s1.i != s2.i) {
++    if (i)
++      *(unsigned *) 0 |= (1U << s1.i);
++    bar (&s1);
++  }
++}
+diff --git a/gcc/testsuite/gcc.target/i386/pr45352-1.c b/gcc/testsuite/gcc.target/i386/pr45352-1.c
+new file mode 100644
+index 000000000..5cd1bd842
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/i386/pr45352-1.c
+@@ -0,0 +1,19 @@
++/* { dg-do compile } */
++/* { dg-options "-mtune=amdfam10 -O3 -fpeel-loops -fselective-scheduling2 -fsel-sched-pipelining -fPIC" } */
++
++static int FIR_Tab_16[16][16];
++
++void
++V_Pass_Avrg_16_C_ref (int *Dst, int *Src, int W, int BpS, int Rnd)
++{
++  while (W-- > 0)
++    {
++      int i, k;
++      int Sums[16] = { };
++      for (i = 0; i < 16; ++i)
++	for (k = 0; k < 16; ++k)
++	  Sums[k] += FIR_Tab_16[i][k] * Src[i];
++      for (i = 0; i < 16; ++i)
++	Dst[i] = Sums[i] + Src[i];
++    }
++}
+diff --git a/gcc/testsuite/gcc.target/i386/pr45352-2.c b/gcc/testsuite/gcc.target/i386/pr45352-2.c
+new file mode 100644
+index 000000000..5f9ebb18f
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/i386/pr45352-2.c
+@@ -0,0 +1,109 @@
++/* { dg-do compile } */
++/* { dg-options "-O1 -mtune=amdfam10 -fexpensive-optimizations -fgcse -foptimize-register-move -freorder-blocks -fschedule-insns2 -funswitch-loops -fgcse-las -fselective-scheduling2 -fsel-sched-pipelining -funroll-all-loops" } */
++
++typedef char uint8_t;
++typedef uint32_t;
++typedef vo_frame_t;
++struct vo_frame_s
++{
++    uint8_t base[3];
++  int pitches[3];};
++typedef struct
++{
++void
++    (*proc_macro_block)
++    (void);
++}
++xine_xvmc_t;
++typedef struct
++{
++  uint8_t ref[2][3];
++int pmv;
++}
++motion_t;
++typedef struct
++{
++  uint32_t bitstream_buf;
++  int bitstream_bits;
++    uint8_t * bitstream_ptr;
++    uint8_t dest[3];
++  int pitches[3];
++  int offset;
++    motion_t b_motion;
++    motion_t f_motion;
++  int v_offset;
++  int coded_picture_width;
++  int picture_structure;
++struct vo_frame_s *current_frame;}
++picture_t;
++typedef struct
++{
++int xvmc_last_slice_code;}
++mpeg2dec_accel_t;
++static int bitstream_init (picture_t * picture, void *start)
++{
++  picture->bitstream_ptr = start;
++  return (int) (long) start;
++}
++static slice_xvmc_init (picture_t * picture, int code)
++{
++  int offset;
++  struct vo_frame_s *forward_reference_frame;
++  offset = picture->picture_structure == 2;
++  picture->pitches[0] = picture->current_frame->pitches[0];
++  picture->pitches[1] = picture->current_frame->pitches[1];
++  if (picture)
++    picture->f_motion.ref
++      [0]
++      [0]
++      = (char) (long) (forward_reference_frame->base + (offset ? picture->pitches[0] : 0));
++  picture->f_motion.ref[0][1] = (offset);
++  if (picture->picture_structure)
++      picture->pitches[0] <<= picture->pitches[1] <<= 1;
++  offset = 0;
++  while (1)
++    {
++      if (picture->bitstream_buf >= 0x08000000)
++	  break;
++      switch (picture->bitstream_buf >> 12)
++	{
++	case 8:
++	  offset += 33;
++		picture->bitstream_buf
++		  |=
++		  picture->bitstream_ptr[1] << picture->bitstream_bits;
++	}
++    }
++  picture->offset = (offset);
++  while (picture->offset - picture->coded_picture_width >= 0)
++    {
++      picture->offset -= picture->coded_picture_width;
++      if (picture->current_frame)
++	{
++	  picture->dest[0] += picture->pitches[0];
++	  picture->dest[1] += picture->pitches[1];
++	}
++      picture->v_offset += 16;
++    }
++}
++
++void
++mpeg2_xvmc_slice
++  (mpeg2dec_accel_t * accel, picture_t * picture, int code, uint8_t buffer,int mba_inc)
++{
++  xine_xvmc_t * xvmc = (xine_xvmc_t *) (long) bitstream_init (picture, (void *) (long) buffer);
++  slice_xvmc_init (picture, code);
++    while (1)
++      {
++	if (picture)
++	    break;
++	switch (picture->bitstream_buf)
++	  {
++	  case 8:
++	    mba_inc += accel->xvmc_last_slice_code = code;
++		  xvmc->proc_macro_block   ();
++	    while (mba_inc)
++	      ;
++	  }
++      }
++}
+diff --git a/gcc/testsuite/gcc.target/i386/pr45352.c b/gcc/testsuite/gcc.target/i386/pr45352.c
+new file mode 100644
+index 000000000..ef710ce6b
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/i386/pr45352.c
+@@ -0,0 +1,25 @@
++/* { dg-do compile } */
++/* { dg-options "-O3 -march=amdfam10 -fselective-scheduling2 -fsel-sched-pipelining -funroll-all-loops" } */
++
++struct S
++{
++  struct
++  {
++    int i;
++  } **p;
++  int x;
++  int y;
++};
++
++extern int baz (void);
++extern int bar (void *, int, int);
++
++void
++foo (struct S *s)
++{
++  int i;
++  for (i = 0; i < s->x; i++)
++    bar (s->p[i], baz (), s->y);
++  for (i = 0; i < s->x; i++)
++    s->p[i]->i++;
++}

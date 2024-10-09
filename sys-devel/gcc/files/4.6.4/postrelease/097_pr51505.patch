@@ -1,0 +1,99 @@
+diff --git a/gcc/df-problems.c b/gcc/df-problems.c
+index 58a8c64c4..5426b2236 100644
+--- a/gcc/df-problems.c
++++ b/gcc/df-problems.c
+@@ -2747,10 +2747,12 @@ df_ignore_stack_reg (int regno ATTRIBUTE_UNUSED)
+ 
+ 
+ /* Remove all of the REG_DEAD or REG_UNUSED notes from INSN and add
+-   them to OLD_DEAD_NOTES and OLD_UNUSED_NOTES.  */
++   them to OLD_DEAD_NOTES and OLD_UNUSED_NOTES.  Remove also
++   REG_EQUAL/REG_EQUIV notes referring to dead pseudos using LIVE
++   as the bitmap of currently live registers.  */
+ 
+ static void
+-df_kill_notes (rtx insn)
++df_kill_notes (rtx insn, bitmap live)
+ {
+   rtx *pprev = &REG_NOTES (insn);
+   rtx link = *pprev;
+@@ -2797,6 +2799,45 @@ df_kill_notes (rtx insn)
+ 	    }
+ 	  break;
+ 
++	case REG_EQUAL:
++	case REG_EQUIV:
++	  {
++	    /* Remove the notes that refer to dead registers.  As we have at most
++	       one REG_EQUAL/EQUIV note, all of EQ_USES will refer to this note
++	       so we need to purge the complete EQ_USES vector when removing
++	       the note using df_notes_rescan.  */
++	    df_ref *use_rec;
++	    bool deleted = false;
++
++	    for (use_rec = DF_INSN_EQ_USES (insn); *use_rec; use_rec++)
++	      {
++		df_ref use = *use_rec;
++		if (DF_REF_REGNO (use) > FIRST_PSEUDO_REGISTER
++		    && (DF_REF_FLAGS (use) & DF_REF_IN_NOTE)
++		    && ! bitmap_bit_p (live, DF_REF_REGNO (use)))
++		  {
++		    deleted = true;
++		    break;
++		  }
++	      }
++	    if (deleted)
++	      {
++		rtx next;
++#ifdef REG_DEAD_DEBUGGING
++		df_print_note ("deleting: ", insn, link);
++#endif
++		next = XEXP (link, 1);
++		free_EXPR_LIST_node (link);
++		*pprev = link = next;
++		df_notes_rescan (insn);
++	      }
++	    else
++	      {
++		pprev = &XEXP (link, 1);
++		link = *pprev;
++	      }
++	    break;
++	  }
+ 	default:
+ 	  pprev = &XEXP (link, 1);
+ 	  link = *pprev;
+@@ -3298,7 +3339,7 @@ df_note_bb_compute (unsigned int bb_index,
+       debug_insn = DEBUG_INSN_P (insn);
+ 
+       bitmap_clear (do_not_gen);
+-      df_kill_notes (insn);
++      df_kill_notes (insn, live);
+ 
+       /* Process the defs.  */
+       if (CALL_P (insn))
+diff --git a/gcc/testsuite/gcc.dg/pr51505.c b/gcc/testsuite/gcc.dg/pr51505.c
+new file mode 100644
+index 000000000..dbcd3226d
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr51505.c
+@@ -0,0 +1,19 @@
++/* PR rtl-optimization/51505 */
++/* { dg-do compile } */
++/* { dg-options "-O --param max-cse-insns=1" } */
++struct S
++{
++char a[256];
++};
++
++int bar(struct S, char[16]);
++
++void foo ()
++{
++  struct S u, s1, s2;
++  char e[256];
++  char i;
++  e[i] = ~s1.a[i] & s2.a[i];
++  if (bar(u, e))
++    __builtin_abort ();
++}

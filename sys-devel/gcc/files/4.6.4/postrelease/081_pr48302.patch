@@ -1,0 +1,109 @@
+diff --git a/gcc/sel-sched-ir.c b/gcc/sel-sched-ir.c
+index 38aaff67b..8eecb1d7e 100644
+--- a/gcc/sel-sched-ir.c
++++ b/gcc/sel-sched-ir.c
+@@ -6096,11 +6096,11 @@ sel_find_rgns (void)
+   bbs_in_loop_rgns = NULL;
+ }
+ 
+-/* Adds the preheader blocks from previous loop to current region taking
+-   it from LOOP_PREHEADER_BLOCKS (current_loop_nest).
++/* Add the preheader blocks from previous loop to current region taking
++   it from LOOP_PREHEADER_BLOCKS (current_loop_nest) and record them in *BBS.
+    This function is only used with -fsel-sched-pipelining-outer-loops.  */
+ void
+-sel_add_loop_preheaders (void)
++sel_add_loop_preheaders (bb_vec_t *bbs)
+ {
+   int i;
+   basic_block bb;
+@@ -6111,6 +6111,7 @@ sel_add_loop_preheaders (void)
+        VEC_iterate (basic_block, preheader_blocks, i, bb);
+        i++)
+     {
++      VEC_safe_push (basic_block, heap, *bbs, bb);
+       VEC_safe_push (basic_block, heap, last_added_blocks, bb);
+       sel_add_bb (bb);
+     }
+diff --git a/gcc/sel-sched-ir.h b/gcc/sel-sched-ir.h
+index 13af1b56d..a9d2d5b76 100644
+--- a/gcc/sel-sched-ir.h
++++ b/gcc/sel-sched-ir.h
+@@ -1629,7 +1629,7 @@ extern void sel_sched_region (int);
+ extern loop_p get_loop_nest_for_rgn (unsigned int);
+ extern bool considered_for_pipelining_p (struct loop *);
+ extern void make_region_from_loop_preheader (VEC(basic_block, heap) **);
+-extern void sel_add_loop_preheaders (void);
++extern void sel_add_loop_preheaders (bb_vec_t *);
+ extern bool sel_is_loop_preheader_p (basic_block);
+ extern void clear_outdated_rtx_info (basic_block);
+ extern void free_data_sets (basic_block);
+diff --git a/gcc/sel-sched.c b/gcc/sel-sched.c
+index bc390d581..d166c2e31 100644
+--- a/gcc/sel-sched.c
++++ b/gcc/sel-sched.c
+@@ -6877,7 +6877,7 @@ current_region_empty_p (void)
+ 
+ /* Prepare and verify loop nest for pipelining.  */
+ static void
+-setup_current_loop_nest (int rgn)
++setup_current_loop_nest (int rgn, bb_vec_t *bbs)
+ {
+   current_loop_nest = get_loop_nest_for_rgn (rgn);
+ 
+@@ -6886,7 +6886,7 @@ setup_current_loop_nest (int rgn)
+ 
+   /* If this loop has any saved loop preheaders from nested loops,
+      add these basic blocks to the current region.  */
+-  sel_add_loop_preheaders ();
++  sel_add_loop_preheaders (bbs);
+ 
+   /* Check that we're starting with a valid information.  */
+   gcc_assert (loop_latch_edge (current_loop_nest));
+@@ -6925,9 +6925,6 @@ sel_region_init (int rgn)
+   if (current_region_empty_p ())
+     return true;
+ 
+-  if (flag_sel_sched_pipelining)
+-    setup_current_loop_nest (rgn);
+-
+   sel_setup_region_sched_flags ();
+ 
+   bbs = VEC_alloc (basic_block, heap, current_nr_blocks);
+@@ -6937,6 +6934,9 @@ sel_region_init (int rgn)
+ 
+   sel_init_bbs (bbs, NULL);
+ 
++  if (flag_sel_sched_pipelining)
++    setup_current_loop_nest (rgn, &bbs);
++
+   /* Initialize luids and dependence analysis which both sel-sched and haifa
+      need.  */
+   sched_init_luids (bbs, NULL, NULL, NULL);
+diff --git a/gcc/testsuite/g++.dg/opt/pr48302.C b/gcc/testsuite/g++.dg/opt/pr48302.C
+new file mode 100644
+index 000000000..fd51ba412
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/opt/pr48302.C
+@@ -0,0 +1,21 @@
++// { dg-do compile { target powerpc*-*-* ia64-*-* x86_64-*-* } }
++// { dg-options "-O -fcrossjumping -fgcse -fschedule-insns2 -fsel-sched-pipelining -fsel-sched-pipelining-outer-loops -fselective-scheduling2 --param lim-expensive=320 --param min-crossjump-insns=1" }
++
++struct S
++{
++  int i, j;
++  S *s;
++  ~S();
++};
++
++S *gs;
++
++void foo ()
++{
++restart:
++  for (S *s = gs; s; s = s->s)
++    if (s->j && s->j != (s->i & 1)) {
++	    delete s;
++	    goto restart;
++      }
++}

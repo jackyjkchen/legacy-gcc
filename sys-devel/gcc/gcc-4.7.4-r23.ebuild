@@ -13,11 +13,11 @@ src_prepare() {
 
 	[[ $(tc-arch) == "mips" && ${DEFAULT_ABI} == "n64" ]] && eapply "${FILESDIR}"/${PV}/01_mips64-default-n64-abi.patch
 	[[ $(tc-arch) == "alpha" ]] && eapply "${FILESDIR}"/${PV}/02_fix-alpha-bootstrap.patch
-
-	use vanilla && return 0
 	eapply "${FILESDIR}"/${PV}/03_remove-matrix-reorg.patch
 	eapply "${FILESDIR}"/${PV}/04_fix-cpp98-break.patch
 	eapply "${FILESDIR}"/${PV}/05_fix-werror.patch
+
+	use vanilla && return 0
 
 	eapply "${FILESDIR}"/${PV}/postrelease/000_pr77605-78185-78333.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/001_pr58943.patch

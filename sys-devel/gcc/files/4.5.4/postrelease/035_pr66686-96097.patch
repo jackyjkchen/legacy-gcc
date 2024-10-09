@@ -1,0 +1,66 @@
+diff --git a/gcc/cp/pt.c b/gcc/cp/pt.c
+index 161c4808c..f78e336e9 100644
+--- a/gcc/cp/pt.c
++++ b/gcc/cp/pt.c
+@@ -5344,11 +5344,16 @@ coerce_template_template_parm (tree parm,
+ 	   D<int, C> d;
+ 
+ 	 i.e. the parameter list of TT depends on earlier parameters.  */
+-      if (!uses_template_parms (TREE_TYPE (arg))
+-	  && !same_type_p
+-	        (tsubst (TREE_TYPE (parm), outer_args, complain, in_decl),
+-		 TREE_TYPE (arg)))
+-	return 0;
++      if (!uses_template_parms (TREE_TYPE (arg)))
++	{
++	  tree t = NULL_TREE;
++	  ++processing_template_decl;
++	  t = tsubst (TREE_TYPE (parm), outer_args, complain, in_decl);
++	  --processing_template_decl;
++	  if (!uses_template_parms (t)
++	      && !same_type_p (t, TREE_TYPE (arg)))
++	    return 0;
++	}
+       
+       if (TEMPLATE_PARM_PARAMETER_PACK (DECL_INITIAL (arg))
+ 	  && !TEMPLATE_PARM_PARAMETER_PACK (DECL_INITIAL (parm)))
+diff --git a/gcc/testsuite/g++.dg/template/pr66686.C b/gcc/testsuite/g++.dg/template/pr66686.C
+new file mode 100644
+index 000000000..d8aea625d
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/template/pr66686.C
+@@ -0,0 +1,15 @@
++// PR c++/66686
++
++template <int>
++struct Y { };
++
++template <class B, template <template <B> class Z> class C>
++struct X
++{
++  C<Y> a;  // { dg-bogus "mismatch" }
++};
++
++template <template <int> class>
++struct A { };
++
++X<int, A> a;
+diff --git a/gcc/testsuite/g++.dg/template/ttp44.C b/gcc/testsuite/g++.dg/template/ttp44.C
+new file mode 100644
+index 000000000..2a4129752
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/template/ttp44.C
+@@ -0,0 +1,13 @@
++// PR c++/96097
++// { dg-do compile }
++
++template <template <typename T, typename T::type TT> class X>
++void func() {}
++
++template <typename U, int I>
++struct Y {};
++
++void test()
++{
++  func<Y>();
++}

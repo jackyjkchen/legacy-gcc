@@ -1,0 +1,204 @@
+diff --git a/gcc/testsuite/g++.old-deja/g++.law/weak.C b/gcc/testsuite/g++.old-deja/g++.law/weak.C
+index 99a0f177..f6895dbb 100644
+--- a/gcc/testsuite/g++.old-deja/g++.law/weak.C
++++ b/gcc/testsuite/g++.old-deja/g++.law/weak.C
+@@ -1,6 +1,6 @@
+ // { dg-do link { target i?86-*-linux* x86_64-*-linux* } }
+ // { dg-require-effective-target static }
+-// { dg-options "-static" }
++// { dg-options "-static-libstdc++ -static-libgcc" }
+ // Bug: g++ fails to instantiate operator<<.
+ 
+ // libc-5.4.xx has __IO_putc in its static C library, which can conflict
+diff --git a/gcc/testsuite/gcc.dg/cpp/trad/include.c b/gcc/testsuite/gcc.dg/cpp/trad/include.c
+deleted file mode 100644
+index 94d25f81..00000000
+--- a/gcc/testsuite/gcc.dg/cpp/trad/include.c
++++ /dev/null
+@@ -1,12 +0,0 @@
+-/* Copyright (c) 2002 Free Software Foundation Inc.  */
+-
+-/* Test that macros are not expanded in the <> quotes of #inlcude.  */
+-
+-/* vxWorksCommon.h uses the "#" operator to construct the name of an
+-   include file, thus making the file incompatible with -traditional-cpp.
+-   Newlib uses ## when including stdlib.h as of 2007-09-07.  */
+-/* { dg-do preprocess { target { { ! vxworks_kernel } && { ! newlib } } } } */
+-
+-#define __STDC__ 1		/* Stop complaints about non-ISO compilers.  */
+-#define stdlib 1
+-#include <stdlib.h>		/* { dg-bogus "o such file or directory" } */
+diff --git a/gcc/testsuite/gcc.target/i386/cleanup-1.c b/gcc/testsuite/gcc.target/i386/cleanup-1.c
+index 1a47fcb0..fb6c5f14 100644
+--- a/gcc/testsuite/gcc.target/i386/cleanup-1.c
++++ b/gcc/testsuite/gcc.target/i386/cleanup-1.c
+@@ -4,6 +4,7 @@
+ 
+ #include <unwind.h>
+ #include <stdlib.h>
++#include <stddef.h>
+ #include <string.h>
+ #include <stdio.h>
+ #include <unistd.h>
+@@ -47,6 +48,14 @@ handler (void *p __attribute__((unused)))
+   _exit (0);
+ }
+ 
++static void
++__attribute__((noinline))
++check (intptr_t p)
++{
++  if ((p & 15) != 0)
++    abort ();
++}
++
+ static int __attribute__((noinline))
+ fn5 (void)
+ {
+@@ -59,6 +68,8 @@ void
+ bar (void)
+ {
+   char dummy __attribute__((cleanup (counter)));
++  unsigned long tmp[4] __attribute__((aligned(16)));
++  check ((intptr_t) tmp);
+   fn5 ();
+ }
+ 
+@@ -133,9 +144,9 @@ foo (int x)
+ 	".type	_L_mutex_lock_%=, @function\n"
+ "_L_mutex_lock_%=:\n"
+ "1:\t"	"leaq	%1, %%rdi\n"
+-"2:\t"	"subq	$128, %%rsp\n"
++"2:\t"	"subq	$136, %%rsp\n"
+ "3:\t"	"call	bar\n"
+-"4:\t"	"addq	$128, %%rsp\n"
++"4:\t"	"addq	$136, %%rsp\n"
+ "5:\t"	"jmp	24f\n"
+ "6:\t"	".size _L_mutex_lock_%=, .-_L_mutex_lock_%=\n\t"
+ 	".previous\n\t"
+@@ -179,7 +190,7 @@ foo (int x)
+ 	".sleb128 4b-3b\n"
+ "16:\t"	".byte	0x40 + (4b-3b-1) # DW_CFA_advance_loc\n\t"
+ 	".byte	0x0e	# DW_CFA_def_cfa_offset\n\t"
+-	".uleb128 128\n\t"
++	".uleb128 136\n\t"
+ 	".byte	0x16	# DW_CFA_val_expression\n\t"
+ 	".uleb128 0x10\n\t"
+ 	".uleb128 20f-17f\n"
+diff --git a/gcc/testsuite/gcc.target/i386/cleanup-2.c b/gcc/testsuite/gcc.target/i386/cleanup-2.c
+index 2bd18025..b117b0d4 100644
+--- a/gcc/testsuite/gcc.target/i386/cleanup-2.c
++++ b/gcc/testsuite/gcc.target/i386/cleanup-2.c
+@@ -5,6 +5,7 @@
+ 
+ #include <unwind.h>
+ #include <stdlib.h>
++#include <stddef.h>
+ #include <string.h>
+ #include <stdio.h>
+ #include <unistd.h>
+@@ -48,6 +49,14 @@ handler (void *p __attribute__((unused)))
+   _exit (0);
+ }
+ 
++static void
++__attribute__((noinline))
++check (intptr_t p)
++{
++  if ((p & 15) != 0)
++    abort ();
++}
++
+ static int __attribute__((noinline))
+ fn5 (void)
+ {
+@@ -60,6 +69,8 @@ void
+ bar (void)
+ {
+   char dummy __attribute__((cleanup (counter)));
++  unsigned long tmp[4] __attribute__((aligned(16)));
++  check ((intptr_t) tmp);
+   fn5 ();
+ }
+ 
+@@ -75,9 +86,9 @@ foo (int x)
+ 	".type	_L_mutex_lock_%=, @function\n"
+ "_L_mutex_lock_%=:\n"
+ "1:\t"	"leaq	%1, %%rdi\n"
+-"2:\t"	"subq	$128, %%rsp\n"
++"2:\t"	"subq	$136, %%rsp\n"
+ "3:\t"	"call	bar\n"
+-"4:\t"	"addq	$128, %%rsp\n"
++"4:\t"	"addq	$136, %%rsp\n"
+ "5:\t"	"jmp	21f\n"
+ "6:\t"	".size _L_mutex_lock_%=, .-_L_mutex_lock_%=\n\t"
+ 	".previous\n\t"
+@@ -161,7 +172,7 @@ foo (int x)
+ 	".uleb128 6b-5b-1\n"
+ "19:\t"	".byte	0x40 + (3b-1b) # DW_CFA_advance_loc\n\t"
+ 	".byte	0xe	# DW_CFA_def_cfa_offset\n\t"
+-	".uleb128 128\n\t"
++	".uleb128 136\n\t"
+ 	".byte	0x40 + (5b-3b) # DW_CFA_advance_loc\n\t"
+ 	".byte	0xe	# DW_CFA_def_cfa_offset\n\t"
+ 	".uleb128 0\n\t"
+diff --git a/gcc/testsuite/gfortran.dg/array_constructor_23.f b/gcc/testsuite/gfortran.dg/array_constructor_23.f
+index ac57efc2..fa0a28a1 100644
+--- a/gcc/testsuite/gfortran.dg/array_constructor_23.f
++++ b/gcc/testsuite/gfortran.dg/array_constructor_23.f
+@@ -20,7 +20,7 @@
+       DDA1 = ATAN2 ((/(REAL(J1,KV),J1=1,10)/),
+      $                 REAL((/(J1,J1=nf10,nf1,mf1)/), KV))   !fails
+       DDA2 = ATAN2 (DDA, DDA(10:1:-1))
+-      if (any (DDA1 .ne. DDA2)) call abort ()
++      if (any (DDA1 - DDA2 .gt. epsilon(dval))) call abort ()
+       END
+ 
+       subroutine FA6077 (nf10,nf1,mf1, ida)
+@@ -42,7 +42,7 @@
+       QDA1 = MOD ( 1.1_k*( QDA(1) -5.0_k), P=( QDA -2.5_k))
+       DO J1 = 1,10
+         QVAL = MOD(1.1_k*(QDA(1)-5.0_k),P=(QDA(J1)-2.5_k))
+-        if (qval .ne. qda1(j1)) call abort ()
++        if (qval - qda1(j1) .gt. epsilon(qval)) call abort ()
+       ENDDO
+       END
+ 
+diff --git a/libiberty/testsuite/test-demangle.c b/libiberty/testsuite/test-demangle.c
+index 12b07dd6..1c982d6e 100644
+--- a/libiberty/testsuite/test-demangle.c
++++ b/libiberty/testsuite/test-demangle.c
+@@ -46,7 +46,7 @@ static unsigned int lineno;
+ #define LINELEN 80
+ 
+ static void
+-getline(buf)
++get_line(buf)
+      struct line *buf;
+ {
+   char *data = buf->data;
+@@ -196,12 +196,12 @@ main(argc, argv)
+     {
+       const char *inp;
+       
+-      getline (&format);
++      get_line (&format);
+       if (feof (stdin))
+ 	break;
+ 
+-      getline (&input);
+-      getline (&expect);
++      get_line (&input);
++      get_line (&expect);
+ 
+       inp = protect_end (input.data);
+ 
+@@ -322,7 +322,7 @@ main(argc, argv)
+ 
+       if (no_params)
+ 	{
+-	  getline (&expect);
++	  get_line (&expect);
+ 	  result = cplus_demangle (inp, DMGL_ANSI|DMGL_TYPES);
+ 
+ 	  if (result

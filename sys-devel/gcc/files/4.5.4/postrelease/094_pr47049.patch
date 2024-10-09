@@ -1,0 +1,51 @@
+diff --git a/gcc/cp/decl.c b/gcc/cp/decl.c
+index 4f190dac4..28f5b3aa6 100644
+--- a/gcc/cp/decl.c
++++ b/gcc/cp/decl.c
+@@ -12072,6 +12072,7 @@ start_preparsed_function (tree decl1, tree attrs, int flags)
+ 	DECL_EXTERNAL (decl1) = 0;
+ 
+       if (ctx != NULL_TREE && DECL_DECLARED_INLINE_P (ctx)
++	  && !processing_template_decl
+ 	  && TREE_PUBLIC (ctx))
+ 	/* This is a function in a local class in an extern inline
+ 	   function.  */
+diff --git a/gcc/cp/semantics.c b/gcc/cp/semantics.c
+index a852e08bd..3aad27c03 100644
+--- a/gcc/cp/semantics.c
++++ b/gcc/cp/semantics.c
+@@ -5991,7 +5991,7 @@ maybe_add_lambda_conv_op (tree type)
+     {
+       /* Put the thunk in the same comdat group as the call op.  */
+       struct cgraph_node *callop_node, *thunk_node;
+-      DECL_COMDAT_GROUP (statfn) = DECL_COMDAT_GROUP (callop);
++      DECL_COMDAT_GROUP (statfn) = cxx_comdat_group (callop);
+       callop_node = cgraph_node (callop);
+       thunk_node = cgraph_node (statfn);
+       gcc_assert (callop_node->same_comdat_group == NULL);
+diff --git a/gcc/testsuite/g++.dg/cpp0x/lambda/lambda-template2.C b/gcc/testsuite/g++.dg/cpp0x/lambda/lambda-template2.C
+new file mode 100644
+index 000000000..12ffde724
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/lambda/lambda-template2.C
+@@ -0,0 +1,20 @@
++// PR c++/47049
++// { dg-options -std=c++0x }
++
++enum { E = 0, F = 1 };
++template <int N, int M = ((N == 1) ? F : E)> class S {};
++template <int N>
++struct T
++{
++  static void
++  foo (S<N> *p)
++  {
++    S<N> u;
++    [&u] ()->bool {} ();
++  }
++};
++
++int main()
++{
++  T<0>().foo(0);
++}

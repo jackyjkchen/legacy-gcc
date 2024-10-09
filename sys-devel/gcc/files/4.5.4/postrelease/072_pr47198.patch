@@ -1,0 +1,111 @@
+diff --git a/gcc/cp/parser.c b/gcc/cp/parser.c
+index 0accdc419..844a01df5 100644
+--- a/gcc/cp/parser.c
++++ b/gcc/cp/parser.c
+@@ -18922,8 +18922,15 @@ cp_parser_single_declaration (cp_parser* parser,
+     }
+ 
+   /* Complain about missing 'typename' or other invalid type names.  */
+-  if (!decl_specifiers.any_type_specifiers_p)
+-    cp_parser_parse_and_diagnose_invalid_type_name (parser);
++  if (!decl_specifiers.any_type_specifiers_p
++      && cp_parser_parse_and_diagnose_invalid_type_name (parser))
++    {
++      /* cp_parser_parse_and_diagnose_invalid_type_name calls
++	 cp_parser_skip_to_end_of_block_or_statement, so don't try to parse
++	 the rest of this declaration.  */
++      decl = error_mark_node;
++      goto out;
++    }
+ 
+   /* If it's not a template class, try for a template function.  If
+      the next token is a `;', then this declaration does not declare
+@@ -18956,6 +18963,13 @@ cp_parser_single_declaration (cp_parser* parser,
+       }
+     }
+ 
++  /* Look for a trailing `;' after the declaration.  */
++  if (!function_definition_p
++      && (decl == error_mark_node
++	  || !cp_parser_require (parser, CPP_SEMICOLON, "%<;%>")))
++    cp_parser_skip_to_end_of_block_or_statement (parser);
++
++ out:
+   pop_deferring_access_checks ();
+ 
+   /* Clear any current qualification; whatever comes next is the start
+@@ -18963,11 +18977,6 @@ cp_parser_single_declaration (cp_parser* parser,
+   parser->scope = NULL_TREE;
+   parser->qualifying_scope = NULL_TREE;
+   parser->object_scope = NULL_TREE;
+-  /* Look for a trailing `;' after the declaration.  */
+-  if (!function_definition_p
+-      && (decl == error_mark_node
+-	  || !cp_parser_require (parser, CPP_SEMICOLON, "%<;%>")))
+-    cp_parser_skip_to_end_of_block_or_statement (parser);
+ 
+   return decl;
+ }
+diff --git a/gcc/testsuite/g++.dg/cpp0x/syntax-err1.C b/gcc/testsuite/g++.dg/cpp0x/syntax-err1.C
+new file mode 100644
+index 000000000..ce1c9eea5
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/syntax-err1.C
+@@ -0,0 +1,8 @@
++// PR c++/47198
++// { dg-options -std=c++0x }
++
++struct S
++{
++  template < int > sometype foo (); // { dg-error "sometype. does not name a type" }
++  S () = default;
++};
+diff --git a/gcc/testsuite/g++.dg/parse/error36.C b/gcc/testsuite/g++.dg/parse/error36.C
+index 0d7f8cfc4..8fcaa2fb2 100644
+--- a/gcc/testsuite/g++.dg/parse/error36.C
++++ b/gcc/testsuite/g++.dg/parse/error36.C
+@@ -30,4 +30,3 @@ void g(const A<T>::type &t);	// { dg-error "typename" }
+ 
+ // PR c++/18451
+ template <class T> A<T>::B A<T>::b; // { dg-error "typename" }
+-// { dg-error "expected" "" { target *-*-* } 32 }
+diff --git a/gcc/testsuite/g++.old-deja/g++.pt/ctor2.C b/gcc/testsuite/g++.old-deja/g++.pt/ctor2.C
+index eb8f31264..a8be91ddb 100644
+--- a/gcc/testsuite/g++.old-deja/g++.pt/ctor2.C
++++ b/gcc/testsuite/g++.old-deja/g++.pt/ctor2.C
+@@ -10,4 +10,4 @@ struct A {
+ template <class T>
+ A<T>::A<T>()   // { dg-error "constructor|qualified name" }
+ {
+-} // { dg-error "end of input" }
++}
+diff --git a/gcc/testsuite/g++.old-deja/g++.pt/typename3.C b/gcc/testsuite/g++.old-deja/g++.pt/typename3.C
+index 0708f1f24..ad026a770 100644
+--- a/gcc/testsuite/g++.old-deja/g++.pt/typename3.C
++++ b/gcc/testsuite/g++.old-deja/g++.pt/typename3.C
+@@ -18,4 +18,4 @@ struct B : public A<U>
+ 
+ template <class U>
+ B<U>::A_Type B<U>::Func() { // { dg-error "typename" } implicit typename
+-}			    // { dg-error "expected" }
++}
+diff --git a/gcc/testsuite/g++.old-deja/g++.pt/typename4.C b/gcc/testsuite/g++.old-deja/g++.pt/typename4.C
+index 7238470e4..47fb250a9 100644
+--- a/gcc/testsuite/g++.old-deja/g++.pt/typename4.C
++++ b/gcc/testsuite/g++.old-deja/g++.pt/typename4.C
+@@ -23,4 +23,4 @@ struct C : public B<U>
+ 
+ template <class U>
+ C<U>::A_Type C<U>::Func() { // { dg-error "typename" } implicit typename
+-}			    // { dg-error "expected" }
++}
+diff --git a/gcc/testsuite/g++.old-deja/g++.pt/typename6.C b/gcc/testsuite/g++.old-deja/g++.pt/typename6.C
+index 0a5f0184b..734781202 100644
+--- a/gcc/testsuite/g++.old-deja/g++.pt/typename6.C
++++ b/gcc/testsuite/g++.old-deja/g++.pt/typename6.C
+@@ -17,4 +17,4 @@ struct B : public A<U>
+ template <class U>
+ A<U>::A_Type B<U>::Func()       // { dg-error "typename" } function
+ {				
+-} // { dg-error "expected" }
++}

@@ -1,0 +1,216 @@
+diff --git a/gcc/fwprop.c b/gcc/fwprop.c
+index a01de13e3..f116eea01 100644
+--- a/gcc/fwprop.c
++++ b/gcc/fwprop.c
+@@ -1174,8 +1174,10 @@ struct rtl_opt_pass pass_rtl_fwprop =
+   0,                                    /* properties_provided */
+   0,                                    /* properties_destroyed */
+   0,                                    /* todo_flags_start */
+-  TODO_df_finish | TODO_verify_rtl_sharing |
+-  TODO_dump_func                        /* todo_flags_finish */
++  TODO_df_finish
++    | TODO_verify_flow
++    | TODO_verify_rtl_sharing
++    | TODO_dump_func                    /* todo_flags_finish */
+  }
+ };
+ 
+diff --git a/gcc/loop-init.c b/gcc/loop-init.c
+index a1a91639d..9e53afa73 100644
+--- a/gcc/loop-init.c
++++ b/gcc/loop-init.c
+@@ -124,13 +124,6 @@ loop_optimizer_finalize (void)
+       bb->loop_father = NULL;
+     }
+ 
+-  /* Checking.  */
+-#ifdef ENABLE_CHECKING
+-  /* FIXME: no point to verify flow info after bundling on ia64.  Use this 
+-     hack for achieving this.  */
+-  if (!reload_completed)
+-    verify_flow_info ();
+-#endif
+ }
+ 
+ 
+@@ -235,7 +228,9 @@ struct rtl_opt_pass pass_rtl_loop_done =
+   0,                                    /* properties_provided */
+   0,                                    /* properties_destroyed */
+   0,                                    /* todo_flags_start */
+-  TODO_dump_func | TODO_verify_rtl_sharing /* todo_flags_finish */
++  TODO_verify_flow
++    | TODO_verify_rtl_sharing
++    | TODO_dump_func                    /* todo_flags_finish */
+  }
+ };
+ 
+diff --git a/gcc/loop-unroll.c b/gcc/loop-unroll.c
+index dfead0764..b00ae59b6 100644
+--- a/gcc/loop-unroll.c
++++ b/gcc/loop-unroll.c
+@@ -889,7 +889,7 @@ split_edge_and_insert (edge e, rtx insns)
+      CFG.  For this purpose we used to set the BB_SUPERBLOCK flag on BB
+      and call break_superblocks when going out of cfglayout mode.  But it
+      turns out that this never happens; and that if it does ever happen,
+-     the verify_flow_info call in loop_optimizer_finalize would fail.
++     the TODO_verify_flow at the end of the RTL loop passes would fail.
+ 
+      There are two reasons why we expected we could have control flow insns
+      in INSNS.  The first is when a comparison has to be done in parts, and
+diff --git a/gcc/modulo-sched.c b/gcc/modulo-sched.c
+index 7134bfc0d..7011e0f5c 100644
+--- a/gcc/modulo-sched.c
++++ b/gcc/modulo-sched.c
+@@ -2891,9 +2891,11 @@ struct rtl_opt_pass pass_sms =
+   0,                                    /* properties_provided */
+   0,                                    /* properties_destroyed */
+   TODO_dump_func,                       /* todo_flags_start */
+-  TODO_df_finish | TODO_verify_rtl_sharing |
+-  TODO_dump_func |
+-  TODO_ggc_collect                      /* todo_flags_finish */
++  TODO_df_finish
++    | TODO_verify_flow
++    | TODO_verify_rtl_sharing
++    | TODO_dump_func
++    | TODO_ggc_collect                  /* todo_flags_finish */
+  }
+ };
+ 
+diff --git a/gcc/testsuite/gcc.dg/pr46494.c b/gcc/testsuite/gcc.dg/pr46494.c
+new file mode 100644
+index 000000000..29f96856b
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr46494.c
+@@ -0,0 +1,9 @@
++/* { dg-do compile }
++/* { dg-options "-O -fno-tree-ccp -fno-tree-fre -ftree-vrp" } */
++
++extern void foo (void) __attribute__((noreturn));
++void g (void)
++{
++  void (*f) (void) = foo;
++  f ();
++}
+diff --git a/gcc/tree-ssa-dom.c b/gcc/tree-ssa-dom.c
+index 6a34bda9f..ffd4a1341 100644
+--- a/gcc/tree-ssa-dom.c
++++ b/gcc/tree-ssa-dom.c
+@@ -786,10 +786,11 @@ struct gimple_opt_pass pass_dominator =
+   0,					/* properties_provided */
+   0,					/* properties_destroyed */
+   0,					/* todo_flags_start */
+-  TODO_dump_func
++  TODO_cleanup_cfg
+     | TODO_update_ssa
+-    | TODO_cleanup_cfg
+-    | TODO_verify_ssa			/* todo_flags_finish */
++    | TODO_verify_ssa
++    | TODO_verify_flow
++    | TODO_dump_func			/* todo_flags_finish */
+  }
+ };
+ 
+diff --git a/gcc/tree-ssa-loop-ch.c b/gcc/tree-ssa-loop-ch.c
+index 9f1f4c3d0..3bd4d65e0 100644
+--- a/gcc/tree-ssa-loop-ch.c
++++ b/gcc/tree-ssa-loop-ch.c
+@@ -275,7 +275,9 @@ struct gimple_opt_pass pass_ch =
+   0,					/* properties_provided */
+   0,					/* properties_destroyed */
+   0,					/* todo_flags_start */
+-  TODO_cleanup_cfg | TODO_dump_func 
+-  | TODO_verify_ssa			/* todo_flags_finish */
++  TODO_cleanup_cfg
++    | TODO_verify_ssa
++    | TODO_verify_flow
++    | TODO_dump_func			/* todo_flags_finish */
+  }
+ };
+diff --git a/gcc/tree-ssa-loop.c b/gcc/tree-ssa-loop.c
+index 33cb130e4..b645fb43c 100644
+--- a/gcc/tree-ssa-loop.c
++++ b/gcc/tree-ssa-loop.c
+@@ -577,7 +577,7 @@ struct gimple_opt_pass pass_complete_unrolli =
+   0,					/* properties_provided */
+   0,					/* properties_destroyed */
+   0,					/* todo_flags_start */
+-  TODO_dump_func | TODO_verify_loops
++  TODO_verify_flow | TODO_dump_func | TODO_verify_loops
+     | TODO_ggc_collect 			/* todo_flags_finish */
+  }
+ };
+@@ -720,6 +720,8 @@ struct gimple_opt_pass pass_tree_loop_done =
+   0,					/* properties_provided */
+   0,					/* properties_destroyed */
+   0,					/* todo_flags_start */
+-  TODO_cleanup_cfg | TODO_dump_func	/* todo_flags_finish */
++  TODO_cleanup_cfg
++    | TODO_verify_flow
++    | TODO_dump_func			/* todo_flags_finish */
+  }
+ };
+diff --git a/gcc/tree-ssa-pre.c b/gcc/tree-ssa-pre.c
+index 0041d22e4..78b5e846f 100644
+--- a/gcc/tree-ssa-pre.c
++++ b/gcc/tree-ssa-pre.c
+@@ -4281,7 +4281,10 @@ execute_pre (bool do_fre ATTRIBUTE_UNUSED)
+   clear_expression_ids ();
+   free_scc_vn ();
+   if (!do_fre)
+-    remove_dead_inserted_code ();
++    {
++      remove_dead_inserted_code ();
++      todo |= TODO_verify_flow;
++    }
+ 
+   fini_pre (do_fre);
+ 
+diff --git a/gcc/tree-ssa-reassoc.c b/gcc/tree-ssa-reassoc.c
+index 126d0e48b..abff26faa 100644
+--- a/gcc/tree-ssa-reassoc.c
++++ b/gcc/tree-ssa-reassoc.c
+@@ -2074,7 +2074,10 @@ struct gimple_opt_pass pass_reassoc =
+   0,					/* properties_provided */
+   0,					/* properties_destroyed */
+   0,					/* todo_flags_start */
+-  TODO_dump_func | TODO_ggc_collect | TODO_verify_ssa /* todo_flags_finish */
++  TODO_verify_ssa
++    | TODO_verify_flow
++    | TODO_dump_func
++    | TODO_ggc_collect			/* todo_flags_finish */
+  }
+ };
+ 
+diff --git a/gcc/tree-ssa-sink.c b/gcc/tree-ssa-sink.c
+index a190a22f5..068beb7f9 100644
+--- a/gcc/tree-ssa-sink.c
++++ b/gcc/tree-ssa-sink.c
+@@ -575,8 +575,9 @@ struct gimple_opt_pass pass_sink_code =
+   0,					/* properties_destroyed */
+   0,					/* todo_flags_start */
+   TODO_update_ssa 
++    | TODO_verify_ssa
++    | TODO_verify_flow
+     | TODO_dump_func
+-    | TODO_ggc_collect
+-    | TODO_verify_ssa			/* todo_flags_finish */
++    | TODO_ggc_collect			/* todo_flags_finish */
+  }
+ };
+diff --git a/gcc/tree-vrp.c b/gcc/tree-vrp.c
+index 4023ded06..b9c012aa4 100644
+--- a/gcc/tree-vrp.c
++++ b/gcc/tree-vrp.c
+@@ -7347,9 +7347,10 @@ struct gimple_opt_pass pass_vrp =
+   0,					/* properties_destroyed */
+   0,					/* todo_flags_start */
+   TODO_cleanup_cfg
+-    | TODO_ggc_collect
++    | TODO_update_ssa
+     | TODO_verify_ssa
++    | TODO_verify_flow
+     | TODO_dump_func
+-    | TODO_update_ssa			/* todo_flags_finish */
++    | TODO_ggc_collect			/* todo_flags_finish */
+  }
+ };

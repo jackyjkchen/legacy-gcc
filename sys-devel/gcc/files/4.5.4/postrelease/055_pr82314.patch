@@ -1,0 +1,47 @@
+diff --git a/gcc/fortran/decl.c b/gcc/fortran/decl.c
+index 19fdede27..3f4a2d9db 100644
+--- a/gcc/fortran/decl.c
++++ b/gcc/fortran/decl.c
+@@ -1316,6 +1316,25 @@ add_init_expr_to_sym (const char *name, gfc_expr **initp, locus *var_locus)
+ 	    }
+ 	}
+ 
++      /* Ensure that explicit bounds are simplified.  */
++      if (sym->attr.flavor == FL_PARAMETER && sym->attr.dimension
++	  && sym->as->type == AS_EXPLICIT)
++	{
++	  int dim = 0;
++	  for (dim = 0; dim < sym->as->rank; ++dim)
++	    {
++	      gfc_expr *e;
++
++	      e = sym->as->lower[dim];
++	      if (e->expr_type != EXPR_CONSTANT)
++		gfc_reduce_init_expr (e);
++
++	      e = sym->as->upper[dim];
++	      if (e->expr_type != EXPR_CONSTANT)
++		gfc_reduce_init_expr (e);
++	    }
++	}
++
+       /* Need to check if the expression we initialized this
+ 	 to was one of the iso_c_binding named constants.  If so,
+ 	 and we're a parameter (constant), let it be iso_c.
+diff --git a/gcc/testsuite/gfortran.dg/pr82314.f90 b/gcc/testsuite/gfortran.dg/pr82314.f90
+new file mode 100644
+index 000000000..3a147e227
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/pr82314.f90
+@@ -0,0 +1,11 @@
++! { dg-do run }
++! PR fortran/82314 - ICE in gfc_conv_expr_descriptor
++
++program p
++  implicit none
++  integer, parameter :: karray(merge(3,7,.true.):merge(3,7,.false.)) = 1
++  integer, parameter :: i = size   (karray)
++  integer, parameter :: l = lbound (karray,1)
++  integer, parameter :: u = ubound (karray,1)
++  if (l /= 3 .or. u /= 7 .or. i /= 5) stop 1
++end

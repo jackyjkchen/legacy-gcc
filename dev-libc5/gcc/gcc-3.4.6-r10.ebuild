@@ -12,11 +12,10 @@ src_prepare() {
 	toolchain-oldlibc_src_prepare
 
 	eapply "${FILESDIR}"/${PV}/04_workaround-for-legacy-glibc-in-non-system-dir.patch
-
+	eapply "${FILESDIR}"/${PV}/07_backport-static-libstdc++-option.patch
 	eapply "${FILESDIR}"/${PV}/10_fix-for-libc5.patch
 
 	use vanilla && return 0
-	eapply "${FILESDIR}"/${PV}/07_backport-static-libstdc++-option.patch
 
 	eapply "${FILESDIR}"/${PV}/postrelease/00_pr13685.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/01_pr22127.patch

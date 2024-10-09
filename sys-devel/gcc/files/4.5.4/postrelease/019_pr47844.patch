@@ -1,0 +1,57 @@
+diff --git a/gcc/fortran/trans-array.c b/gcc/fortran/trans-array.c
+index b94c32273..a1747f217 100644
+--- a/gcc/fortran/trans-array.c
++++ b/gcc/fortran/trans-array.c
+@@ -2460,6 +2460,18 @@ gfc_conv_array_index_offset (gfc_se * se, gfc_ss_info * info, int dim, int i,
+       /* Temporary array or derived type component.  */
+       gcc_assert (se->loop);
+       index = se->loop->loopvar[se->loop->order[i]];
++
++      /* Pointer functions can have stride[0] different from unity. 
++	 Use the stride returned by the function call and stored in
++	 the descriptor for the temporary.  */ 
++      if (se->ss && se->ss->type == GFC_SS_FUNCTION
++	    && se->ss->expr
++	    && se->ss->expr->symtree
++	    && se->ss->expr->symtree->n.sym->result
++	    && se->ss->expr->symtree->n.sym->result->attr.pointer)
++	stride = gfc_conv_descriptor_stride_get (info->descriptor,
++						 gfc_rank_cst[dim]);
++
+       if (!integer_zerop (info->delta[i]))
+ 	index = fold_build2 (PLUS_EXPR, gfc_array_index_type,
+ 			     index, info->delta[i]);
+diff --git a/gcc/testsuite/gfortran.dg/pointer_function_result_1.f90 b/gcc/testsuite/gfortran.dg/pointer_function_result_1.f90
+new file mode 100644
+index 000000000..764a666be
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/pointer_function_result_1.f90
+@@ -0,0 +1,28 @@
++! { dg-do run }
++! Test the fix for PR47844, in which the stride in the function result
++! was ignored. Previously, the result was [1,3] at lines 15 and 16.
++!
++! Contributed by KePu  <Kdx1999@gmail.com>
++!
++PROGRAM test_pointer_value
++  IMPLICIT NONE
++  INTEGER, DIMENSION(10), TARGET :: array= [1,3,5,7,9,11,13,15,17,19]
++  INTEGER, dimension(2) :: array_fifth
++  INTEGER, POINTER, DIMENSION(:) :: ptr_array => NULL()
++  INTEGER, POINTER, DIMENSION(:) :: ptr_array_fifth => NULL()
++  ptr_array => array
++  array_fifth = every_fifth (ptr_array)
++  if (any (array_fifth .ne. [1,11])) call abort
++  if (any (every_fifth(ptr_array) .ne. [1,11])) call abort
++CONTAINS
++  FUNCTION every_fifth (ptr_array) RESULT (ptr_fifth)
++    IMPLICIT NONE
++    INTEGER, POINTER, DIMENSION(:) :: ptr_fifth
++    INTEGER, POINTER, DIMENSION(:), INTENT(in) :: ptr_array
++    INTEGER :: low
++    INTEGER :: high
++    low = LBOUND (ptr_array, 1)
++    high = UBOUND (ptr_array, 1)
++    ptr_fifth => ptr_array (low: high: 5) 
++  END FUNCTION every_fifth
++END PROGRAM test_pointer_value

@@ -1,0 +1,104 @@
+diff --git a/gcc/config/i386/cygming.h b/gcc/config/i386/cygming.h
+index 3b18af5b..582a8b5d 100644
+--- a/gcc/config/i386/cygming.h
++++ b/gcc/config/i386/cygming.h
+@@ -407,6 +407,9 @@ do {						\
+ #define TARGET_CXX_ADJUST_CLASS_AT_DEFINITION i386_pe_adjust_class_at_definition
+ #define TARGET_MANGLE_DECL_ASSEMBLER_NAME i386_pe_mangle_decl_assembler_name
+ 
++#undef TARGET_ASM_ASSEMBLE_VISIBILITY
++#define TARGET_ASM_ASSEMBLE_VISIBILITY i386_pe_assemble_visibility
++
+ #undef TREE
+ 
+ #ifndef BUFSIZ
+diff --git a/gcc/config/i386/i386-protos.h b/gcc/config/i386/i386-protos.h
+index bbf48ccd..07a28922 100644
+--- a/gcc/config/i386/i386-protos.h
++++ b/gcc/config/i386/i386-protos.h
+@@ -224,6 +224,7 @@ extern void i386_pe_asm_output_aligned_decl_common (FILE *, tree,
+ 						    HOST_WIDE_INT,
+ 						    HOST_WIDE_INT);
+ extern void i386_pe_file_end (void);
++extern void i386_pe_assemble_visibility (tree, int);
+ extern tree i386_pe_mangle_decl_assembler_name (tree, tree);
+ 
+ /* In winnt-cxx.c and winnt-stubs.c  */
+diff --git a/gcc/config/i386/winnt.c b/gcc/config/i386/winnt.c
+index 1936c7c3..7973b0fb 100644
+--- a/gcc/config/i386/winnt.c
++++ b/gcc/config/i386/winnt.c
+@@ -228,6 +228,22 @@ i386_pe_maybe_mangle_decl_assembler_name (tree decl, tree id)
+   return new_id;
+ }
+ 
++/* Emit an assembler directive to set symbol for DECL visibility to
++   the visibility type VIS, which must not be VISIBILITY_DEFAULT.
++   As for PE there is no hidden support in gas, we just warn for
++   user-specified visibility attributes.  */
++
++void
++i386_pe_assemble_visibility (tree decl,
++			     int vis ATTRIBUTE_UNUSED)
++{
++  if (!decl
++      || !lookup_attribute ("visibility", DECL_ATTRIBUTES (decl)))
++    return;
++  warning (OPT_Wattributes, "visibility attribute not supported "
++	   "in this configuration; ignored");
++}
++
+ /* This is used as a target hook to modify the DECL_ASSEMBLER_NAME
+    in the language-independent default hook
+    langhooks,c:lhd_set_decl_assembler_name ()
+diff --git a/gcc/cp/cp-tree.h b/gcc/cp/cp-tree.h
+index ddb59441..d181e8a2 100644
+--- a/gcc/cp/cp-tree.h
++++ b/gcc/cp/cp-tree.h
+@@ -1054,9 +1054,9 @@ enum languages { lang_c, lang_cplusplus, lang_java };
+ 
+ /* Gives the visibility specification for a class type.  */
+ #define CLASSTYPE_VISIBILITY(TYPE)		\
+-	DECL_VISIBILITY (TYPE_NAME (TYPE))
++	DECL_VISIBILITY (TYPE_MAIN_DECL (TYPE))
+ #define CLASSTYPE_VISIBILITY_SPECIFIED(TYPE)	\
+-	DECL_VISIBILITY_SPECIFIED (TYPE_NAME (TYPE))
++	DECL_VISIBILITY_SPECIFIED (TYPE_MAIN_DECL (TYPE))
+ 
+ typedef struct tree_pair_s GTY (())
+ {
+diff --git a/gcc/cp/decl2.c b/gcc/cp/decl2.c
+index 67e80e58..5a43ef8b 100644
+--- a/gcc/cp/decl2.c
++++ b/gcc/cp/decl2.c
+@@ -1958,7 +1958,8 @@ determine_visibility (tree decl)
+ 	  tree underlying_type = TREE_TYPE (DECL_NAME (decl));
+ 	  int underlying_vis = type_visibility (underlying_type);
+ 	  if (underlying_vis == VISIBILITY_ANON
+-	      || CLASSTYPE_VISIBILITY_SPECIFIED (underlying_type))
++	      || (CLASS_TYPE_P (underlying_type)
++		  && CLASSTYPE_VISIBILITY_SPECIFIED (underlying_type)))
+ 	    constrain_visibility (decl, underlying_vis);
+ 	  else
+ 	    DECL_VISIBILITY (decl) = VISIBILITY_DEFAULT;
+diff --git a/gcc/testsuite/g++.dg/ext/pr47213.C b/gcc/testsuite/g++.dg/ext/pr47213.C
+new file mode 100644
+index 00000000..b39013c8
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/ext/pr47213.C
+@@ -0,0 +1,15 @@
++// { dg-do compile }
++// { dg-options "-fvisibility-ms-compat" }
++#include <typeinfo>
++
++template < typename T > void
++bar ()
++{
++  typeid (T);
++}
++
++void
++foo ()
++{
++  bar < int () > ();
++}

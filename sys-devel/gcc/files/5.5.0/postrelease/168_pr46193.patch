@@ -1,0 +1,147 @@
+diff --git a/gcc/omp-low.c b/gcc/omp-low.c
+index 220e9eb73..a8893a7b6 100644
+--- a/gcc/omp-low.c
++++ b/gcc/omp-low.c
+@@ -3448,6 +3448,12 @@ omp_reduction_init (tree clause, tree type)
+ 	    real_maxval (&min, 1, TYPE_MODE (type));
+ 	  return build_real (type, min);
+ 	}
++      else if (POINTER_TYPE_P (type))
++	{
++	  wide_int min
++	    = wi::min_value (TYPE_PRECISION (type), TYPE_SIGN (type));
++	  return wide_int_to_tree (type, min);
++	}
+       else
+ 	{
+ 	  gcc_assert (INTEGRAL_TYPE_P (type));
+@@ -3464,6 +3470,12 @@ omp_reduction_init (tree clause, tree type)
+ 	    real_maxval (&max, 0, TYPE_MODE (type));
+ 	  return build_real (type, max);
+ 	}
++      else if (POINTER_TYPE_P (type))
++	{
++	  wide_int max
++	    = wi::max_value (TYPE_PRECISION (type), TYPE_SIGN (type));
++	  return wide_int_to_tree (type, max);
++	}
+       else
+ 	{
+ 	  gcc_assert (INTEGRAL_TYPE_P (type));
+diff --git a/gcc/testsuite/gcc.dg/autopar/pr46193.c b/gcc/testsuite/gcc.dg/autopar/pr46193.c
+new file mode 100644
+index 000000000..544a5dabc
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/autopar/pr46193.c
+@@ -0,0 +1,38 @@
++/* { dg-do compile } */
++/* { dg-options "-O2 -ftree-parallelize-loops=2 -fdump-tree-parloops-details" } */
++
++extern void abort (void);
++
++char *
++foo (int count, char **list)
++{
++  char *minaddr = list[0];
++  int i;
++
++  for (i = 0; i < count; i++)
++    {
++      char *addr = list[i];
++      if (addr < minaddr)
++	minaddr = addr;
++    }
++
++  return minaddr;
++}
++
++char *
++foo2 (int count, char **list)
++{
++  char *maxaddr = list[0];
++  int i;
++
++  for (i = 0; i < count; i++)
++    {
++      char *addr = list[i];
++      if (addr > maxaddr)
++	maxaddr = addr;
++    }
++
++  return maxaddr;
++}
++
++/* { dg-final { scan-tree-dump-times "parallelizing inner loop" 2 "parloops" } } */
+diff --git a/libgomp/testsuite/libgomp.c/pr46193.c b/libgomp/testsuite/libgomp.c/pr46193.c
+new file mode 100644
+index 000000000..1e27faf85
+--- /dev/null
++++ b/libgomp/testsuite/libgomp.c/pr46193.c
+@@ -0,0 +1,67 @@
++/* { dg-do run } */
++/* { dg-additional-options "-ftree-parallelize-loops=2" } */
++
++extern void abort (void);
++
++char *
++foo (int count, char **list)
++{
++  char *minaddr = list[0];
++  int i;
++
++  for (i = 0; i < count; i++)
++    {
++      char *addr = list[i];
++      if (addr < minaddr)
++	minaddr = addr;
++    }
++
++  return minaddr;
++}
++
++char *
++foo2 (int count, char **list)
++{
++  char *maxaddr = list[0];
++  int i;
++
++  for (i = 0; i < count; i++)
++    {
++      char *addr = list[i];
++      if (addr > maxaddr)
++	maxaddr = addr;
++    }
++
++  return maxaddr;
++}
++
++#define N 5
++
++static void
++init (char **list)
++{
++  int i;
++  for (i = 0; i < N; ++i)
++    list[i] = (char *)&list[i];
++}
++
++int
++main (void)
++{
++  char *list[N];
++  char * res;
++
++  init (list);
++
++  res = foo (N, list);
++
++  if (res != (char *)&list[0])
++    abort ();
++
++  res = foo2 (N, list);
++
++  if (res != (char *)&list[N-1])
++    abort ();
++
++  return 0;
++}

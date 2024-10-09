@@ -1,0 +1,132 @@
+diff --git a/gcc/dwarf2out.c b/gcc/dwarf2out.c
+index 174035d7c..39dd1fe5c 100644
+--- a/gcc/dwarf2out.c
++++ b/gcc/dwarf2out.c
+@@ -22124,6 +22124,14 @@ output_macinfo (void)
+ static void
+ dwarf2out_init (const char *filename ATTRIBUTE_UNUSED)
+ {
++  /* This option is currently broken, see (PR53118 and PR46102).  */
++  if (flag_eliminate_dwarf2_dups
++      && strstr (lang_hooks.name, "C++"))
++    {
++      warning (0, "-feliminate-dwarf2-dups is broken for C++, ignoring");
++      flag_eliminate_dwarf2_dups = 0;
++    }
++
+   /* Allocate the file_table.  */
+   file_table = htab_create_ggc (50, file_table_hash,
+ 				file_table_eq, NULL);
+diff --git a/gcc/testsuite/g++.dg/debug/dwarf2-2.C b/gcc/testsuite/g++.dg/debug/dwarf2-2.C
+deleted file mode 100644
+index 9e6dbd216..000000000
+--- a/gcc/testsuite/g++.dg/debug/dwarf2-2.C
++++ /dev/null
+@@ -1,17 +0,0 @@
+-// PR debug/27057
+-// { dg-do compile }
+-// { dg-options "-g -feliminate-dwarf2-dups" }
+-
+-namespace N
+-{
+-}
+-
+-struct A
+-{
+-  void foo ();
+-};
+-
+-void A::foo ()
+-{
+-  using namespace N;
+-}
+diff --git a/gcc/testsuite/g++.dg/debug/dwarf2-1.C b/gcc/testsuite/g++.dg/debug/dwarf2/dwarf2-1.C
+similarity index 61%
+rename from gcc/testsuite/g++.dg/debug/dwarf2-1.C
+rename to gcc/testsuite/g++.dg/debug/dwarf2/dwarf2-1.C
+index e90d51030..d0176bae6 100644
+--- a/gcc/testsuite/g++.dg/debug/dwarf2-1.C
++++ b/gcc/testsuite/g++.dg/debug/dwarf2/dwarf2-1.C
+@@ -4,7 +4,7 @@
+ // PR 24824
+ // Origin:   	 wanderer@rsu.ru
+ 
+-// { dg-options "-feliminate-dwarf2-dups" }
++// { dg-options "-gdwarf -feliminate-dwarf2-dups" }
+ 
+ namespace N
+ {
+@@ -20,3 +20,5 @@ namespace N
+ }
+ 
+ N::Derived thing;
++
++/* { dg-bogus "-feliminate-dwarf2-dups is broken for C\\+\\+, ignoring" "broken -feliminate-dwarf2-dups" { xfail *-*-* } 1 } */
+diff --git a/gcc/testsuite/g++.dg/debug/dwarf2/dwarf2-2.C b/gcc/testsuite/g++.dg/debug/dwarf2/dwarf2-2.C
+new file mode 100644
+index 000000000..23175c666
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/debug/dwarf2/dwarf2-2.C
+@@ -0,0 +1,19 @@
++// PR debug/27057
++// { dg-do compile }
++// { dg-options "-gdwarf -feliminate-dwarf2-dups" }
++
++namespace N
++{
++}
++
++struct A
++{
++  void foo ();
++};
++
++void A::foo ()
++{
++  using namespace N;
++}
++
++/* { dg-bogus "-feliminate-dwarf2-dups is broken for C\\+\\+, ignoring" "broken -feliminate-dwarf2-dups" { xfail *-*-* } 1 } */
+diff --git a/gcc/testsuite/g++.dg/debug/pr46123.C b/gcc/testsuite/g++.dg/debug/dwarf2/pr46123-2.C
+similarity index 81%
+rename from gcc/testsuite/g++.dg/debug/pr46123.C
+rename to gcc/testsuite/g++.dg/debug/dwarf2/pr46123-2.C
+index 9e115cd06..b262034ea 100644
+--- a/gcc/testsuite/g++.dg/debug/pr46123.C
++++ b/gcc/testsuite/g++.dg/debug/dwarf2/pr46123-2.C
+@@ -45,3 +45,5 @@ int main ()
+     return 1;
+   return 0;
+ }
++
++/* { dg-bogus "-feliminate-dwarf2-dups is broken for C\\+\\+, ignoring" "broken -feliminate-dwarf2-dups" { xfail *-*-* } 1 } */
+diff --git a/gcc/testsuite/g++.dg/debug/dwarf2/typedef5.C b/gcc/testsuite/g++.dg/debug/dwarf2/typedef5.C
+index d9d058c9c..b742c1dfd 100644
+--- a/gcc/testsuite/g++.dg/debug/dwarf2/typedef5.C
++++ b/gcc/testsuite/g++.dg/debug/dwarf2/typedef5.C
+@@ -8,3 +8,5 @@ typedef struct
+ } A;
+ 
+ A a;
++
++/* { dg-bogus "-feliminate-dwarf2-dups is broken for C\\+\\+, ignoring" "broken -feliminate-dwarf2-dups" { xfail *-*-* } 1 } */
+diff --git a/gcc/testsuite/gcc.dg/debug/dwarf2-3.c b/gcc/testsuite/gcc.dg/debug/dwarf2/dwarf2-3.c
+similarity index 77%
+rename from gcc/testsuite/gcc.dg/debug/dwarf2-3.c
+rename to gcc/testsuite/gcc.dg/debug/dwarf2/dwarf2-3.c
+index f0c129c60..e36467057 100644
+--- a/gcc/testsuite/gcc.dg/debug/dwarf2-3.c
++++ b/gcc/testsuite/gcc.dg/debug/dwarf2/dwarf2-3.c
+@@ -1,7 +1,7 @@
+ /* Test -feliminate-dwarf2-dups */
+ /* Contributed by Devang Patel <dpatel@apple.com> */
+ /* { dg-do compile } */
+-/* { dg-options "-feliminate-dwarf2-dups" } */
++/* { dg-options "-gdwarf -feliminate-dwarf2-dups" } */
+ 
+ #include "dwarf2-3.h"
+ 
+diff --git a/gcc/testsuite/gcc.dg/debug/dwarf2-3.h b/gcc/testsuite/gcc.dg/debug/dwarf2/dwarf2-3.h
+similarity index 100%
+rename from gcc/testsuite/gcc.dg/debug/dwarf2-3.h
+rename to gcc/testsuite/gcc.dg/debug/dwarf2/dwarf2-3.h

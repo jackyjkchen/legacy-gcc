@@ -1,0 +1,43 @@
+diff --git a/gcc/expr.c b/gcc/expr.c
+index 3e82e59b..c7f64954 100644
+--- a/gcc/expr.c
++++ b/gcc/expr.c
+@@ -7955,8 +7955,11 @@ expand_expr_real_1 (tree exp, rtx target, enum machine_mode tmode,
+       if (modifier == EXPAND_STACK_PARM)
+ 	target = 0;
+       op0 = expand_expr (TREE_OPERAND (exp, 0), subtarget, VOIDmode, 0);
+-      return expand_shift (code, mode, op0, TREE_OPERAND (exp, 1), target,
++      temp = expand_shift (code, mode, op0, TREE_OPERAND (exp, 1), target,
+ 			   unsignedp);
++      if (code == LSHIFT_EXPR)
++	temp = REDUCE_BIT_FIELD (temp);
++      return temp;
+ 
+       /* Could determine the answer when only additive constants differ.  Also,
+ 	 the addition of one can be handled by changing the condition.  */
+diff --git a/gcc/testsuite/gcc.c-torture/execute/pr32244-1.c b/gcc/testsuite/gcc.c-torture/execute/pr32244-1.c
+new file mode 100644
+index 00000000..afad2565
+--- /dev/null
++++ b/gcc/testsuite/gcc.c-torture/execute/pr32244-1.c
+@@ -0,0 +1,20 @@
++struct foo
++{
++  unsigned long long b:40;
++} x;
++
++extern void abort (void);
++
++void test1(unsigned long long res)
++{
++  /* The shift is carried out in 40 bit precision.  */
++  if (x.b<<32 != res)
++    abort ();
++}
++
++int main()
++{
++  x.b = 0x0100;
++  test1(0);
++  return 0;
++}

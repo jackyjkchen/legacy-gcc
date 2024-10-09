@@ -33,10 +33,10 @@ src_prepare() {
 	toolchain_src_prepare
 
 	eapply "${FILESDIR}"/${PV}/01_riscv-fix-multilib.patch
-
-	use vanilla && return 0
 	eapply "${FILESDIR}"/${PV}/02_fix-werror.patch
 	eapply "${FILESDIR}"/${PV}/03_fix-libbacktrace.patch
+
+	use vanilla && return 0
 
 	eapply "${FILESDIR}"/${PV}/postrelease/000_pr111224.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/001_pr100130.patch

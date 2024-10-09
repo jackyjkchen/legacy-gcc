@@ -1264,7 +1264,7 @@ toolchain_src_configure() {
 				# sh4 and so on
 				;;
 		esac
-		if [[ ${ENABLE_WERROR} == "yes" ]] && ! is_crosscompile && ! _tc_use_if_iuse vanilla ; then
+		if [[ ${ENABLE_WERROR} == "yes" ]] && ! is_crosscompile ; then
 			confgcc+=( --enable-werror )
 		else
 			confgcc+=( --disable-werror )
@@ -2185,11 +2185,11 @@ gcc_do_make() {
 	if [[ ${GCC_MAKE_TARGET} == "all" ]] ; then
 		STAGE1_CFLAGS=${STAGE1_CFLAGS-"${CFLAGS}"}
 	elif [[ ${GCC_BRANCH_VER} == "4.9" && $(tc-arch) == "ppc64" ]] ; then
-		STAGE1_CFLAGS=
+		STAGE1_CFLAGS="-O1 -pipe"
 	elif [[ ${GCC_BRANCH_VER} == "3.4" && $(tc-arch) == "hppa" ]] ; then
-		STAGE1_CFLAGS=
+		STAGE1_CFLAGS="-O1 -pipe"
 	elif [[ ${GCC_BRANCH_VER} == "3.0" ]] ; then
-		STAGE1_CFLAGS=
+		STAGE1_CFLAGS="-O1 -pipe"
 	else
 		STAGE1_CFLAGS=${STAGE1_CFLAGS-"${CFLAGS}"}
 	fi

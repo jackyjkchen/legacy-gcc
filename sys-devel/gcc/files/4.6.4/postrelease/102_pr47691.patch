@@ -1,0 +1,143 @@
+diff --git a/gcc/graphite-clast-to-gimple.c b/gcc/graphite-clast-to-gimple.c
+index 41356dc81..9492d7c4b 100644
+--- a/gcc/graphite-clast-to-gimple.c
++++ b/gcc/graphite-clast-to-gimple.c
+@@ -931,7 +931,7 @@ translate_clast_user (sese region, struct clast_user_stmt *stmt, edge next_e,
+ 
+   build_iv_mapping (iv_map, region, *newivs, newivs_index, stmt, params_index);
+   next_e = copy_bb_and_scalar_dependences (GBB_BB (gbb), region,
+-					   next_e, iv_map);
++					   next_e, iv_map, &gloog_error);
+   VEC_free (tree, heap, iv_map);
+ 
+   new_bb = next_e->src;
+diff --git a/gcc/sese.c b/gcc/sese.c
+index bfb0276d3..25e28c631 100644
+--- a/gcc/sese.c
++++ b/gcc/sese.c
+@@ -459,11 +459,13 @@ set_rename (htab_t rename_map, tree old_name, tree expr)
+    substitution map RENAME_MAP, inserting the gimplification code at
+    GSI_TGT, for the translation REGION, with the original copied
+    statement in LOOP, and using the induction variable renaming map
+-   IV_MAP.  Returns true when something has been renamed.  */
++   IV_MAP.  Returns true when something has been renamed.  GLOOG_ERROR
++   is set when the code generation cannot continue.  */
+ 
+ static bool
+ rename_uses (gimple copy, htab_t rename_map, gimple_stmt_iterator *gsi_tgt,
+-	     sese region, loop_p loop, VEC (tree, heap) *iv_map)
++	     sese region, loop_p loop, VEC (tree, heap) *iv_map,
++	     bool *gloog_error)
+ {
+   use_operand_p use_p;
+   ssa_op_iter op_iter;
+@@ -521,7 +523,11 @@ rename_uses (gimple copy, htab_t rename_map, gimple_stmt_iterator *gsi_tgt,
+ 	 scalar SSA_NAME used in the scop: all the other scalar
+ 	 SSA_NAMEs should have been translated out of SSA using
+ 	 arrays with one element.  */
+-      gcc_assert (!chrec_contains_undetermined (scev));
++      if (chrec_contains_undetermined (scev))
++	{
++	  *gloog_error = true;
++	  return false;
++	}
+ 
+       new_expr = chrec_apply_map (scev, iv_map);
+ 
+@@ -529,8 +535,12 @@ rename_uses (gimple copy, htab_t rename_map, gimple_stmt_iterator *gsi_tgt,
+ 	 the uses of the new induction variables.  We should be
+ 	 able to use new_expr instead of the old_name in the newly
+ 	 generated loop nest.  */
+-      gcc_assert (!chrec_contains_undetermined (new_expr)
+-		  && !tree_contains_chrecs (new_expr, NULL));
++      if (chrec_contains_undetermined (new_expr)
++	  || tree_contains_chrecs (new_expr, NULL))
++	{
++	  *gloog_error = true;
++	  return false;
++	}
+ 
+       /* Replace the old_name with the new_expr.  */
+       new_expr = force_gimple_operand (unshare_expr (new_expr), &stmts,
+@@ -554,12 +564,14 @@ rename_uses (gimple copy, htab_t rename_map, gimple_stmt_iterator *gsi_tgt,
+ }
+ 
+ /* Duplicates the statements of basic block BB into basic block NEW_BB
+-   and compute the new induction variables according to the IV_MAP.  */
++   and compute the new induction variables according to the IV_MAP.
++   GLOOG_ERROR is set when the code generation cannot continue.  */
+ 
+ static void
+ graphite_copy_stmts_from_block (basic_block bb, basic_block new_bb,
+ 				htab_t rename_map,
+-				VEC (tree, heap) *iv_map, sese region)
++				VEC (tree, heap) *iv_map, sese region,
++				bool *gloog_error)
+ {
+   gimple_stmt_iterator gsi, gsi_tgt;
+   loop_p loop = bb->loop_father;
+@@ -604,27 +616,34 @@ graphite_copy_stmts_from_block (basic_block bb, basic_block new_bb,
+ 	  set_rename (rename_map, old_name, new_name);
+  	}
+ 
+-      if (rename_uses (copy, rename_map, &gsi_tgt, region, loop, iv_map))
++      if (rename_uses (copy, rename_map, &gsi_tgt, region, loop, iv_map,
++		       gloog_error))
+ 	fold_stmt_inplace (copy);
+ 
++      if (*gloog_error)
++	break;
++
+       update_stmt (copy);
+     }
+ }
+ 
+ /* Copies BB and includes in the copied BB all the statements that can
+    be reached following the use-def chains from the memory accesses,
+-   and returns the next edge following this new block.  */
++   and returns the next edge following this new block.  GLOOG_ERROR is
++   set when the code generation cannot continue.  */
+ 
+ edge
+ copy_bb_and_scalar_dependences (basic_block bb, sese region,
+-				edge next_e, VEC (tree, heap) *iv_map)
++				edge next_e, VEC (tree, heap) *iv_map,
++				bool *gloog_error)
+ {
+   basic_block new_bb = split_edge (next_e);
+   htab_t rename_map = htab_create (10, rename_map_elt_info,
+ 				   eq_rename_map_elts, free);
+ 
+   next_e = single_succ_edge (new_bb);
+-  graphite_copy_stmts_from_block (bb, new_bb, rename_map, iv_map, region);
++  graphite_copy_stmts_from_block (bb, new_bb, rename_map, iv_map, region,
++				  gloog_error);
+   remove_phi_nodes (new_bb);
+   htab_delete (rename_map);
+ 
+diff --git a/gcc/sese.h b/gcc/sese.h
+index d3b8958ce..7c6a9c688 100644
+--- a/gcc/sese.h
++++ b/gcc/sese.h
+@@ -57,7 +57,7 @@ extern void free_sese (sese);
+ extern void sese_insert_phis_for_liveouts (sese, basic_block, edge, edge);
+ extern void build_sese_loop_nests (sese);
+ extern edge copy_bb_and_scalar_dependences (basic_block, sese, edge,
+-					    VEC (tree, heap) *);
++					    VEC (tree, heap) *, bool *);
+ extern struct loop *outermost_loop_in_sese (sese, basic_block);
+ extern void insert_loop_close_phis (htab_t, loop_p);
+ extern void insert_guard_phis (basic_block, edge, edge, htab_t, htab_t);
+diff --git a/gcc/testsuite/gfortran.dg/graphite/id-pr47691.f b/gcc/testsuite/gfortran.dg/graphite/id-pr47691.f
+new file mode 100644
+index 000000000..0abbd5562
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/graphite/id-pr47691.f
+@@ -0,0 +1,7 @@
++! { dg-options "-O -fgraphite-identity -ffast-math -fno-tree-scev-cprop" }
++      dimension b(12,8)
++      do i=1,norb
++      end do
++      b(i,j) = 0
++      call rdrsym(b)
++      end
