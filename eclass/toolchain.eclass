@@ -1306,8 +1306,6 @@ toolchain_src_configure() {
 					confgcc+=( --enable-checking="${GCC_CHECKS_LIST:-$(usex debug misc,tree,rtlflag,gc yes)}" )
 					;;
 			esac
-		elif tc_version_is_at_least 3.0 ; then
-			confgcc+=( --enable-checking="${GCC_CHECKS_LIST:-$(usex debug misc,tree,gc yes)}" )
 		else
 			confgcc+=( --enable-checking="${GCC_CHECKS_LIST:-$(usex debug yes no)}" )
 		fi

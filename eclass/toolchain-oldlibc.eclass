@@ -445,8 +445,6 @@ toolchain-oldlibc_src_configure() {
 	if in_iuse debug ; then
 		if tc_version_is_at_least 3.3 ; then
 			confgcc+=( --enable-checking="${GCC_CHECKS_LIST:-$(usex debug misc,tree,rtlflag,gc,rtl yes)}" )
-		elif tc_version_is_at_least 3.0 ; then
-			confgcc+=( --enable-checking="${GCC_CHECKS_LIST:-$(usex debug misc,tree,gc yes)}" )
 		else
 			confgcc+=( --enable-checking="${GCC_CHECKS_LIST:-$(usex debug yes no)}" )
 		fi
