@@ -194,7 +194,7 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/168_pr46193.patch
 
 	if use test ; then
-		rm -rf gcc/testsuite/gcc.c-torture/execute/vfprintf-chk-1.c gcc/testsuite/gcc.c-torture/execute/vprintf-chk-1.c gcc/testsuite/gcc.dg/format/opt-*.c
+		rm -rf gcc/testsuite/gcc.c-torture/execute/vfprintf-chk-1.c gcc/testsuite/gcc.c-torture/execute/vprintf-chk-1.c
 		eapply "${FILESDIR}"/${PV}/postrelease/900_fix-known-test-fail.patch
 		[[ $(tc-arch) == "arm" ]] && eapply "${FILESDIR}"/${PV}/postrelease/901_fix-arm-test-fail.patch
 	fi
