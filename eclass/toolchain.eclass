@@ -2291,13 +2291,15 @@ toolchain_src_test() {
 	# "asan needs a whole shadow address space"
 	ulimit -v unlimited
 
+	[[ $(tc-arch) == "x86" || $(tc-arch) == "arm" ]] && export OMP_NUM_THREADS=16
+
 	# 'asan' wants to be preloaded first, so does 'sandbox'.
 	# To make asan tests work disable sandbox for all of test suite.
 	# 'backtrace' tests also does not like 'libsandbox.so' presence.
 	if tc_version_is_at_least 3.4 ; then
 		SANDBOX_ON=0 LD_PRELOAD= emake -k check
 	else
-		SANDBOX_ON=0 LD_PRELOAD= emake -k check -j2
+		SANDBOX_ON=0 LD_PRELOAD= emake -k check -j4
 	fi
 	local success_tests=$?
 
