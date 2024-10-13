@@ -2291,8 +2291,6 @@ toolchain_src_test() {
 	# "asan needs a whole shadow address space"
 	ulimit -v unlimited
 
-	[[ $(tc-arch) == "x86" || $(tc-arch) == "arm" ]] && export OMP_NUM_THREADS=16
-
 	# 'asan' wants to be preloaded first, so does 'sandbox'.
 	# To make asan tests work disable sandbox for all of test suite.
 	# 'backtrace' tests also does not like 'libsandbox.so' presence.
