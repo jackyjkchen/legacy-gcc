@@ -15,21 +15,22 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/10_fix-for-libc5.patch
 
 	use vanilla && return 0
-	eapply "${FILESDIR}"/${PV}/postrelease/00_pr13685.patch
-	eapply "${FILESDIR}"/${PV}/postrelease/01_pr45262.patch
-	eapply "${FILESDIR}"/${PV}/postrelease/02_pr26729.patch
-	eapply "${FILESDIR}"/${PV}/postrelease/03_pr24969.patch
-	eapply "${FILESDIR}"/${PV}/postrelease/04_pr25572.patch
-	eapply "${FILESDIR}"/${PV}/postrelease/05_pr31419.patch
-	eapply "${FILESDIR}"/${PV}/postrelease/06_pr29236.patch
-	eapply "${FILESDIR}"/${PV}/postrelease/07_pr24915.patch
-	eapply "${FILESDIR}"/${PV}/postrelease/08_pr18681.patch
-	eapply "${FILESDIR}"/${PV}/postrelease/09_pr19983.patch
-	eapply "${FILESDIR}"/${PV}/postrelease/10_pr24449.patch
-	eapply "${FILESDIR}"/${PV}/postrelease/11_pr42466.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/000_pr13685.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/001_pr45262.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/002_pr26729.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/003_pr24969.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/004_pr25572.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/005_pr31419.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/006_pr29236.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/007_pr24915.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/008_pr18681.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/009_pr19983.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/010_pr24449.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/011_pr42466.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/012_pr24683.patch
 
 	if use test ; then
-		eapply "${FILESDIR}"/${PV}/postrelease/fix-known-test-fail.patch
+		eapply "${FILESDIR}"/${PV}/postrelease/900_fix-known-test-fail.patch
 		rm -rf libstdc++-v3/testsuite/27_io/filebuf_members.cc
 	fi
 }
