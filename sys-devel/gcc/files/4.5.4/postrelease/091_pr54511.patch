@@ -1,0 +1,33 @@
+diff --git a/gcc/cp/pt.c b/gcc/cp/pt.c
+index 37cbf584d..571deccd5 100644
+--- a/gcc/cp/pt.c
++++ b/gcc/cp/pt.c
+@@ -9548,6 +9548,16 @@ tsubst_decl (tree t, tree args, tsubst_flags_t complain)
+ 	    break;
+ 	  }
+ 
++	if (TREE_CODE (t) == VAR_DECL && DECL_ANON_UNION_VAR_P (t))
++	  {
++	    /* Just use name lookup to find a member alias for an anonymous
++	       union, but then add it to the hash table.  */
++	    r = lookup_name (DECL_NAME (t));
++	    gcc_assert (DECL_ANON_UNION_VAR_P (r));
++	    register_local_specialization (r, t);
++	    break;
++	  }
++
+ 	/* Create a new node for the specialization we need.  */
+ 	r = copy_decl (t);
+ 	if (type == NULL_TREE)
+diff --git a/gcc/testsuite/g++.dg/template/anonunion2.C b/gcc/testsuite/g++.dg/template/anonunion2.C
+new file mode 100644
+index 000000000..cb3c12dff
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/template/anonunion2.C
+@@ -0,0 +1,6 @@
++template <int i>
++struct S
++{
++  S () { union { int a; }; a = 0; }
++};
++S<0> s;

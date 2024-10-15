@@ -1,0 +1,53 @@
+diff --git a/gcc/gimple.c b/gcc/gimple.c
+index 2808d263a..6bb26204d 100644
+--- a/gcc/gimple.c
++++ b/gcc/gimple.c
+@@ -4376,6 +4376,20 @@ walk_stmt_load_store_addr_ops (gimple stmt, void *data,
+ 		   && TREE_CODE (OBJ_TYPE_REF_OBJECT (rhs)) == ADDR_EXPR)
+ 	    ret |= visit_addr (stmt, TREE_OPERAND (OBJ_TYPE_REF_OBJECT (rhs),
+ 						   0), data);
++	  else if (TREE_CODE (rhs) == CONSTRUCTOR)
++	    {
++	      unsigned int ix;
++	      tree val;
++
++	      FOR_EACH_CONSTRUCTOR_VALUE (CONSTRUCTOR_ELTS (rhs), ix, val)
++		if (TREE_CODE (val) == ADDR_EXPR)
++		  ret |= visit_addr (stmt, TREE_OPERAND (val, 0), data);
++		else if (TREE_CODE (val) == OBJ_TYPE_REF
++			 && TREE_CODE (OBJ_TYPE_REF_OBJECT (val)) == ADDR_EXPR)
++		  ret |= visit_addr (stmt,
++				     TREE_OPERAND (OBJ_TYPE_REF_OBJECT (val),
++						   0), data);
++	    }
+           lhs = gimple_assign_lhs (stmt);
+ 	  if (TREE_CODE (lhs) == TARGET_MEM_REF
+               && TMR_BASE (lhs) != NULL_TREE
+diff --git a/gcc/testsuite/gcc.dg/pr49948.c b/gcc/testsuite/gcc.dg/pr49948.c
+new file mode 100644
+index 000000000..f74239380
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr49948.c
+@@ -0,0 +1,22 @@
++/* PR tree-optimization/49948 */
++/* { dg-do compile } */
++/* { dg-options "-O3 -ftree-parallelize-loops=2" } */
++
++extern int a, *b;
++int
++foo (void)
++{
++  int c, d = 8, *e[8], i;
++  if (a <= 7)
++    {
++      for (i = 0; i < 8; ++i)
++	e[i] = &c;
++      while (--d)
++	{
++	  a = 0;
++	  b = e[0];
++	}
++      return 0;
++    }
++  return b == &d;
++}

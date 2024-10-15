@@ -2026,8 +2026,6 @@ gcc_do_filter_flags() {
 			amd64|x86)
 				filter-flags '-mcpu=*'
 
-				tc_version_is_between 4.4 4.5 && append-flags -mno-avx # 357287
-
 				if tc_version_is_between 4.6 4.7 ; then
 					# https://bugs.gentoo.org/411333
 					# https://bugs.gentoo.org/466454
@@ -2295,7 +2293,11 @@ toolchain_src_test() {
 	# To make asan tests work disable sandbox for all of test suite.
 	# 'backtrace' tests also does not like 'libsandbox.so' presence.
 	if tc_version_is_at_least 3.4 ; then
-		SANDBOX_ON=0 LD_PRELOAD= emake -k check
+		if tc_version_is_between 4.9 8 && [[ $(tc-arch) == "x86" || $(tc-arch) == "arm" ]] ; then
+			OMP_NUM_THREADS=8 SANDBOX_ON=0 LD_PRELOAD= emake -k check
+		else
+			SANDBOX_ON=0 LD_PRELOAD= emake -k check
+		fi
 	else
 		SANDBOX_ON=0 LD_PRELOAD= emake -k check -j4
 	fi

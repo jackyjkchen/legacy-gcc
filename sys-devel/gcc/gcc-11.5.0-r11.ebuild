@@ -120,6 +120,7 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/080_pr106937.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/081_pr113799.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/082_pr101731.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/083_pr67046.patch
 
 	if use test ; then
 		rm -rf gcc/testsuite/gcc.c-torture/execute/vfprintf-chk-1.c gcc/testsuite/gcc.c-torture/execute/vprintf-chk-1.c gcc/testsuite/c-c++-common/Warray-bounds-2.c gcc/testsuite/c-c++-common/Wrestrict-2.c gcc/testsuite/g++.dg/warn/Wstringop-truncation-1.C gcc/testsuite/gcc.target/aarch64/cpunative/native_cpu_18.c
