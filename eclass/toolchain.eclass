@@ -1612,7 +1612,7 @@ toolchain_src_configure() {
 			# Enable hardvfp
 			if [[ $(tc-is-softfloat) == "no" ]] && \
 			   [[ ${CTARGET} == armv[67]* ]] && \
-			   tc_version_is_at_least 4.5
+			   tc_version_is_at_least 4.4
 			then
 				# Follow the new arm hardfp distro standard by default
 				confgcc+=( --with-float=hard )
