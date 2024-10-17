@@ -1,0 +1,81 @@
+diff --git a/gcc/dojump.c b/gcc/dojump.c
+index 611e3888..2906e079 100644
+--- a/gcc/dojump.c
++++ b/gcc/dojump.c
+@@ -306,8 +306,6 @@ do_jump (tree exp, rtx if_false_label, rtx if_true_label)
+ 	break;
+       }
+ 
+-    case TRUTH_ANDIF_EXPR:
+-    case TRUTH_ORIF_EXPR:
+     case COMPOUND_EXPR:
+       /* Lowered by gimplify.c.  */
+       gcc_unreachable ();
+@@ -517,6 +515,7 @@ do_jump (tree exp, rtx if_false_label, rtx if_true_label)
+       if (BRANCH_COST >= 4 || TREE_SIDE_EFFECTS (TREE_OPERAND (exp, 1)))
+ 	goto normal;
+ 
++    case TRUTH_ANDIF_EXPR:
+       if (if_false_label == NULL_RTX)
+         {
+ 	  drop_through_label = gen_label_rtx ();
+@@ -537,6 +536,7 @@ do_jump (tree exp, rtx if_false_label, rtx if_true_label)
+       if (BRANCH_COST >= 4 || TREE_SIDE_EFFECTS (TREE_OPERAND (exp, 1)))
+ 	goto normal;
+ 
++    case TRUTH_ORIF_EXPR:
+       if (if_true_label == NULL_RTX)
+ 	{
+           drop_through_label = gen_label_rtx ();
+diff --git a/gcc/expr.c b/gcc/expr.c
+index de8ddbf0..e3509c13 100644
+--- a/gcc/expr.c
++++ b/gcc/expr.c
+@@ -8025,7 +8025,10 @@ expand_expr_real_1 (tree exp, rtx target, enum machine_mode tmode,
+       /* If no set-flag instruction, must generate a conditional store
+ 	 into a temporary variable.  Drop through and handle this
+ 	 like && and ||.  */
+-
++      /* Although TRUTH_{AND,OR}IF_EXPR aren't present in GIMPLE, they
++	 are occassionally created by folding during expansion.  */
++    case TRUTH_ANDIF_EXPR:
++    case TRUTH_ORIF_EXPR:
+       if (! ignore
+ 	  && (target == 0
+ 	      || modifier == EXPAND_STACK_PARM
+@@ -8226,8 +8229,6 @@ expand_expr_real_1 (tree exp, rtx target, enum machine_mode tmode,
+     case POSTDECREMENT_EXPR:
+     case LOOP_EXPR:
+     case EXIT_EXPR:
+-    case TRUTH_ANDIF_EXPR:
+-    case TRUTH_ORIF_EXPR:
+       /* Lowered by gimplify.c.  */
+       gcc_unreachable ();
+ 
+diff --git a/gcc/testsuite/gcc.c-torture/compile/20080812-1.c b/gcc/testsuite/gcc.c-torture/compile/20080812-1.c
+new file mode 100644
+index 00000000..2e4c13a7
+--- /dev/null
++++ b/gcc/testsuite/gcc.c-torture/compile/20080812-1.c
+@@ -0,0 +1,21 @@
++/* PR middle-end/37014 */
++
++void bar (signed char *);
++
++void
++foo (int x, int y)
++{
++  int i;
++  signed char a[123], b[123], c;
++  for (i = 0; i < 123; i++)
++    {
++      int e = y - x;
++      int d = e < 0 ? -e : e;
++      c = d < 75;
++      a[y] = c;
++      b[y] = c;
++      y--;
++    }
++  bar (b);
++  bar (a);
++}

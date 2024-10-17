@@ -1,0 +1,271 @@
+diff --git a/gcc/cp/decl.c b/gcc/cp/decl.c
+index 0995d327a..0cb5ad88b 100644
+--- a/gcc/cp/decl.c
++++ b/gcc/cp/decl.c
+@@ -6408,6 +6408,19 @@ value_dependent_init_p (tree init)
+   return false;
+ }
+ 
++/* A helper function to be called via walk_tree.  If any label exists
++   under *TP, it is (going to be) forced.  Set has_forced_label_in_static.  */
++
++static tree
++notice_forced_label_r (tree *tp, int *walk_subtrees, void *)
++{
++  if (TYPE_P (*tp))
++    *walk_subtrees = 0;
++  if (TREE_CODE (*tp) == LABEL_DECL)
++    cfun->has_forced_label_in_static = 1;
++  return NULL_TREE;
++}
++
+ /* Finish processing of a declaration;
+    install its line number and initial value.
+    If the length of an array type is not known before,
+@@ -6650,13 +6663,17 @@ cp_finish_decl (tree decl, tree init, bool init_const_expr_p,
+ 	  && !DECL_ARTIFICIAL (decl))
+ 	{
+ 	  push_local_name (decl);
+-	  if (DECL_CONSTRUCTOR_P (current_function_decl)
+-	      || DECL_DESTRUCTOR_P (current_function_decl))
+-	    /* Normally local_decls is populated during GIMPLE lowering,
+-	       but [cd]tors are never actually compiled directly.  We need
+-	       to put statics on the list so we can deal with the label
+-	       address extension.  FIXME.  */
+-	    add_local_decl (cfun, decl);
++	  /* Normally has_forced_label_in_static is set during GIMPLE
++	     lowering, but [cd]tors are never actually compiled directly.
++	     We need to set this early so we can deal with the label
++	     address extension.  */
++	  if ((DECL_CONSTRUCTOR_P (current_function_decl)
++	       || DECL_DESTRUCTOR_P (current_function_decl))
++	      && init)
++	    {
++	      walk_tree (&init, notice_forced_label_r, NULL, NULL);
++	      add_local_decl (cfun, decl);
++	    }
+ 	}
+ 
+       /* Convert the initializer to the type of DECL, if we have not
+diff --git a/gcc/function.h b/gcc/function.h
+index bfa6f80ca..f2a27bd88 100644
+--- a/gcc/function.h
++++ b/gcc/function.h
+@@ -620,6 +620,10 @@ struct GTY(()) function {
+      from nested functions.  */
+   unsigned int has_nonlocal_label : 1;
+ 
++  /* Nonzero if function being compiled has a forced label
++     placed into static storage.  */
++  unsigned int has_forced_label_in_static : 1;
++
+   /* Nonzero if we've set cannot_be_copied_reason.  I.e. if
+      (cannot_be_copied_set && !cannot_be_copied_reason), the function
+      can in fact be copied.  */
+diff --git a/gcc/gimplify.c b/gcc/gimplify.c
+index 867d0e57c..3d5ba1394 100644
+--- a/gcc/gimplify.c
++++ b/gcc/gimplify.c
+@@ -1381,7 +1381,10 @@ force_labels_r (tree *tp, int *walk_subtrees, void *data ATTRIBUTE_UNUSED)
+   if (TYPE_P (*tp))
+     *walk_subtrees = 0;
+   if (TREE_CODE (*tp) == LABEL_DECL)
+-    FORCED_LABEL (*tp) = 1;
++    {
++      FORCED_LABEL (*tp) = 1;
++      cfun->has_forced_label_in_static = 1;
++    }
+ 
+   return NULL_TREE;
+ }
+diff --git a/gcc/ipa-chkp.c b/gcc/ipa-chkp.c
+index d3f086314..cdc3e8ffa 100644
+--- a/gcc/ipa-chkp.c
++++ b/gcc/ipa-chkp.c
+@@ -502,7 +502,7 @@ chkp_instrumentable_p (tree fndecl)
+   return (!lookup_attribute ("bnd_legacy", DECL_ATTRIBUTES (fndecl))
+ 	  && (!flag_chkp_instrument_marked_only
+ 	      || lookup_attribute ("bnd_instrument", DECL_ATTRIBUTES (fndecl)))
+-	  && (!fn || !copy_forbidden (fn, fndecl)));
++	  && (!fn || !copy_forbidden (fn)));
+ }
+ 
+ /* Return clone created for instrumentation of NODE or NULL.  */
+@@ -676,22 +676,22 @@ chkp_versioning (void)
+ 
+   FOR_EACH_DEFINED_FUNCTION (node)
+     {
++      tree decl = node->decl;
+       if (!node->instrumentation_clone
+ 	  && !node->instrumented_version
+ 	  && !node->alias
+ 	  && !node->thunk.thunk_p
+-	  && (!DECL_BUILT_IN (node->decl)
+-	      || (DECL_BUILT_IN_CLASS (node->decl) == BUILT_IN_NORMAL
+-		  && DECL_FUNCTION_CODE (node->decl) < BEGIN_CHKP_BUILTINS)))
++	  && (!DECL_BUILT_IN (decl)
++	      || (DECL_BUILT_IN_CLASS (decl) == BUILT_IN_NORMAL
++		  && DECL_FUNCTION_CODE (decl) < BEGIN_CHKP_BUILTINS)))
+ 	{
+-	  if (chkp_instrumentable_p (node->decl))
+-	    chkp_maybe_create_clone (node->decl);
+-	  else if ((reason = copy_forbidden (DECL_STRUCT_FUNCTION (node->decl),
+-					     node->decl)))
++	  if (chkp_instrumentable_p (decl))
++	    chkp_maybe_create_clone (decl);
++	  else if ((reason = copy_forbidden (DECL_STRUCT_FUNCTION (decl))))
+ 	    {
+-	      if (warning_at (DECL_SOURCE_LOCATION (node->decl), OPT_Wchkp,
++	      if (warning_at (DECL_SOURCE_LOCATION (decl), OPT_Wchkp,
+ 			      "function cannot be instrumented"))
+-		inform (DECL_SOURCE_LOCATION (node->decl), reason, node->decl);
++		inform (DECL_SOURCE_LOCATION (decl), reason, decl);
+ 	    }
+ 	}
+     }
+diff --git a/gcc/lto-streamer-in.c b/gcc/lto-streamer-in.c
+index 4268bdeb8..7940e34d6 100644
+--- a/gcc/lto-streamer-in.c
++++ b/gcc/lto-streamer-in.c
+@@ -1045,6 +1045,7 @@ input_struct_function_base (struct function *fn, struct data_in *data_in,
+   fn->after_inlining = bp_unpack_value (&bp, 1);
+   fn->stdarg = bp_unpack_value (&bp, 1);
+   fn->has_nonlocal_label = bp_unpack_value (&bp, 1);
++  fn->has_forced_label_in_static = bp_unpack_value (&bp, 1);
+   fn->calls_alloca = bp_unpack_value (&bp, 1);
+   fn->calls_setjmp = bp_unpack_value (&bp, 1);
+   fn->has_force_vectorize_loops = bp_unpack_value (&bp, 1);
+diff --git a/gcc/lto-streamer-out.c b/gcc/lto-streamer-out.c
+index d36cfbcc3..da4c7f4c5 100644
+--- a/gcc/lto-streamer-out.c
++++ b/gcc/lto-streamer-out.c
+@@ -2007,6 +2007,7 @@ output_struct_function_base (struct output_block *ob, struct function *fn)
+   bp_pack_value (&bp, fn->after_inlining, 1);
+   bp_pack_value (&bp, fn->stdarg, 1);
+   bp_pack_value (&bp, fn->has_nonlocal_label, 1);
++  bp_pack_value (&bp, fn->has_forced_label_in_static, 1);
+   bp_pack_value (&bp, fn->calls_alloca, 1);
+   bp_pack_value (&bp, fn->calls_setjmp, 1);
+   bp_pack_value (&bp, fn->has_force_vectorize_loops, 1);
+diff --git a/gcc/testsuite/gcc.c-torture/compile/pr70199.c b/gcc/testsuite/gcc.c-torture/compile/pr70199.c
+new file mode 100644
+index 000000000..a4323f09f
+--- /dev/null
++++ b/gcc/testsuite/gcc.c-torture/compile/pr70199.c
+@@ -0,0 +1,20 @@
++static volatile int v = 0;
++static
++void benchmark(long runs) {
++  void* labels[] = {
++    &&l0, &&l1, &&l2
++  };
++  for(unsigned int mask = 0x1F; mask > 0; mask >>= 1) {
++    unsigned lfsr = 0xACE1u;
++    long n = 10000000;
++    while(n > 0) {
++      l2: v;
++      l1: v;
++      goto *labels[lfsr & mask];
++      l0: n--;
++    }
++  }
++}
++int f(void) {
++  benchmark(10000000);
++}
+diff --git a/gcc/tree-inline.c b/gcc/tree-inline.c
+index 42bb83178..05f5d26d9 100644
+--- a/gcc/tree-inline.c
++++ b/gcc/tree-inline.c
+@@ -3597,33 +3597,13 @@ declare_return_variable (copy_body_data *id, tree return_slot, tree modify_dest,
+   return use;
+ }
+ 
+-/* Callback through walk_tree.  Determine if a DECL_INITIAL makes reference
+-   to a local label.  */
+-
+-static tree
+-has_label_address_in_static_1 (tree *nodep, int *walk_subtrees, void *fnp)
+-{
+-  tree node = *nodep;
+-  tree fn = (tree) fnp;
+-
+-  if (TREE_CODE (node) == LABEL_DECL && DECL_CONTEXT (node) == fn)
+-    return node;
+-
+-  if (TYPE_P (node))
+-    *walk_subtrees = 0;
+-
+-  return NULL_TREE;
+-}
+-
+ /* Determine if the function can be copied.  If so return NULL.  If
+    not return a string describng the reason for failure.  */
+ 
+ const char *
+-copy_forbidden (struct function *fun, tree fndecl)
++copy_forbidden (struct function *fun)
+ {
+   const char *reason = fun->cannot_be_copied_reason;
+-  tree decl;
+-  unsigned ix;
+ 
+   /* Only examine the function once.  */
+   if (fun->cannot_be_copied_set)
+@@ -3642,19 +3622,12 @@ copy_forbidden (struct function *fun, tree fndecl)
+       goto fail;
+     }
+ 
+-  FOR_EACH_LOCAL_DECL (fun, ix, decl)
+-    if (TREE_CODE (decl) == VAR_DECL
+-	&& TREE_STATIC (decl)
+-	&& !DECL_EXTERNAL (decl)
+-	&& DECL_INITIAL (decl)
+-	&& walk_tree_without_duplicates (&DECL_INITIAL (decl),
+-					 has_label_address_in_static_1,
+-					 fndecl))
+-      {
+-	reason = G_("function %q+F can never be copied because it saves "
+-		    "address of local label in a static variable");
+-	goto fail;
+-      }
++  if (fun->has_forced_label_in_static)
++    {
++      reason = G_("function %q+F can never be copied because it saves "
++		  "address of local label in a static variable");
++      goto fail;
++    }
+ 
+  fail:
+   fun->cannot_be_copied_reason = reason;
+@@ -3798,7 +3771,7 @@ inline_forbidden_p (tree fndecl)
+   bool forbidden_p = false;
+ 
+   /* First check for shared reasons not to copy the code.  */
+-  inline_forbidden_reason = copy_forbidden (fun, fndecl);
++  inline_forbidden_reason = copy_forbidden (fun);
+   if (inline_forbidden_reason != NULL)
+     return true;
+ 
+@@ -5592,7 +5565,7 @@ bool
+ tree_versionable_function_p (tree fndecl)
+ {
+   return (!lookup_attribute ("noclone", DECL_ATTRIBUTES (fndecl))
+-	  && copy_forbidden (DECL_STRUCT_FUNCTION (fndecl), fndecl) == NULL);
++	  && copy_forbidden (DECL_STRUCT_FUNCTION (fndecl)) == NULL);
+ }
+ 
+ /* Delete all unreachable basic blocks and update callgraph.
+diff --git a/gcc/tree-inline.h b/gcc/tree-inline.h
+index b3f616cde..7aba73ae9 100644
+--- a/gcc/tree-inline.h
++++ b/gcc/tree-inline.h
+@@ -234,7 +234,7 @@ extern tree remap_type (tree type, copy_body_data *id);
+ extern gimple_seq copy_gimple_seq_and_replace_locals (gimple_seq seq);
+ extern bool debug_find_tree (tree, tree);
+ extern tree copy_fn (tree, tree&, tree&);
+-extern const char *copy_forbidden (struct function *fun, tree fndecl);
++extern const char *copy_forbidden (struct function *fun);
+ 
+ /* This is in tree-inline.c since the routine uses
+    data structures from the inliner.  */

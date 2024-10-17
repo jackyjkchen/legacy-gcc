@@ -1,0 +1,217 @@
+diff --git a/gcc/cp/error.c b/gcc/cp/error.c
+index f502127f3..f5e082321 100644
+--- a/gcc/cp/error.c
++++ b/gcc/cp/error.c
+@@ -1312,6 +1312,14 @@ dump_template_decl (cxx_pretty_printer *pp, tree t, int flags)
+ 	  tree inner_parms = INNERMOST_TEMPLATE_PARMS (parms);
+ 	  int len = TREE_VEC_LENGTH (inner_parms);
+ 
++	  if (len == 0)
++	    {
++	      /* Skip over the dummy template levels of a template template
++		 parm.  */
++	      gcc_assert (TREE_CODE (TREE_TYPE (t)) == TEMPLATE_TEMPLATE_PARM);
++	      continue;
++	    }
++
+ 	  pp_cxx_ws_string (pp, "template");
+ 	  pp_cxx_begin_template_argument_list (pp);
+ 
+diff --git a/gcc/cp/pt.c b/gcc/cp/pt.c
+index ee5acce44..9e0110415 100644
+--- a/gcc/cp/pt.c
++++ b/gcc/cp/pt.c
+@@ -665,6 +665,12 @@ begin_template_parm_list (void)
+   ++processing_template_decl;
+   ++processing_template_parmlist;
+   note_template_header (0);
++
++  /* Add a dummy parameter level while we process the parameter list.  */
++  current_template_parms
++    = tree_cons (size_int (processing_template_decl),
++		 make_tree_vec (0),
++		 current_template_parms);
+ }
+ 
+ /* This routine is called when a specialization is declared.  If it is
+@@ -3865,6 +3871,9 @@ end_template_parm_list (tree parms)
+   tree parm, next;
+   tree saved_parmlist = make_tree_vec (list_length (parms));
+ 
++  /* Pop the dummy parameter level and add the real one.  */
++  current_template_parms = TREE_CHAIN (current_template_parms);
++
+   current_template_parms
+     = tree_cons (size_int (processing_template_decl),
+ 		 saved_parmlist, current_template_parms);
+@@ -4000,21 +4009,6 @@ template_parms_to_args (tree parms)
+ 	args = a;
+     }
+ 
+-    if (length > 1 && TREE_VEC_ELT (args, 0) == NULL_TREE)
+-      /* This can happen for template parms of a template template
+-	 parameter, e.g:
+-
+-	 template<template<class T, class U> class TT> struct S;
+-
+-	 Consider the level of the parms of TT; T and U both have
+-	 level 2; TT has no template parm of level 1. So in this case
+-	 the first element of full_template_args is NULL_TREE. If we
+-	 leave it like this TMPL_ARGS_DEPTH on args returns 1 instead
+-	 of 2. This will make tsubst wrongly consider that T and U
+-	 have level 1. Instead, let's create a dummy vector as the
+-	 first element of full_template_args so that TMPL_ARGS_DEPTH
+-	 returns the correct depth for args.  */
+-      TREE_VEC_ELT (args, 0) = make_tree_vec (1);
+   return args;
+ }
+ 
+@@ -12160,7 +12154,8 @@ tsubst (tree t, tree args, tsubst_flags_t complain, tree in_decl)
+ 	template_parm_level_and_index (t, &level, &idx); 
+ 
+ 	levels = TMPL_ARGS_DEPTH (args);
+-	if (level <= levels)
++	if (level <= levels
++	    && TREE_VEC_LENGTH (TMPL_ARGS_LEVEL (args, level)) > 0)
+ 	  {
+ 	    arg = TMPL_ARG (args, level, idx);
+ 
+@@ -22564,11 +22559,6 @@ splice_late_return_type (tree type, tree late_return_type)
+     return type;
+   argvec = make_tree_vec (1);
+   TREE_VEC_ELT (argvec, 0) = late_return_type;
+-  if (processing_template_parmlist)
+-    /* For a late-specified return type in a template type-parameter, we
+-       need to add a dummy argument level for its parmlist.  */
+-    argvec = add_to_template_args
+-      (make_tree_vec (processing_template_parmlist), argvec);
+   if (current_template_parms)
+     argvec = add_to_template_args (current_template_args (), argvec);
+   return tsubst (type, argvec, tf_warning_or_error, NULL_TREE);
+diff --git a/gcc/testsuite/g++.dg/cpp0x/auto46.C b/gcc/testsuite/g++.dg/cpp0x/auto46.C
+new file mode 100644
+index 000000000..09e9f4436
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/auto46.C
+@@ -0,0 +1,5 @@
++// Addendum to auto23.C, now with nested template parameter lists
++// { dg-do compile { target c++11 } }
++
++template<template <auto f()->int> class> struct A { };
++template<template <template <auto f()->int> class> class> struct B { };
+diff --git a/gcc/testsuite/g++.dg/cpp0x/variadic18.C b/gcc/testsuite/g++.dg/cpp0x/variadic18.C
+index fc0e2ddcf..57fdc8655 100644
+--- a/gcc/testsuite/g++.dg/cpp0x/variadic18.C
++++ b/gcc/testsuite/g++.dg/cpp0x/variadic18.C
+@@ -1,7 +1,7 @@
+ // { dg-do compile { target c++11 } }
+ template<typename...> class tuple { };
+ 
+-template<typename T, template<typename T> class... Metafunctions>
++template<typename T, template<typename U> class... Metafunctions>
+ struct apply_all
+ {
+   typedef tuple<typename Metafunctions<T>::type...> type;
+diff --git a/gcc/testsuite/g++.dg/cpp0x/variadic19.C b/gcc/testsuite/g++.dg/cpp0x/variadic19.C
+index 0ae2672bf..3be9bb022 100644
+--- a/gcc/testsuite/g++.dg/cpp0x/variadic19.C
++++ b/gcc/testsuite/g++.dg/cpp0x/variadic19.C
+@@ -4,7 +4,7 @@ struct tuple {
+   static const int value = 0;
+ };
+ 
+-template<typename T, template<class T> class... Metafunctions>
++template<typename T, template<class U> class... Metafunctions>
+ struct tuple<Metafunctions<T>...> {
+   static const int value = 1;
+ };
+diff --git a/gcc/testsuite/g++.dg/template/canon-type-13.C b/gcc/testsuite/g++.dg/template/canon-type-13.C
+index 4f3702b84..5a8d37d18 100644
+--- a/gcc/testsuite/g++.dg/template/canon-type-13.C
++++ b/gcc/testsuite/g++.dg/template/canon-type-13.C
+@@ -11,7 +11,7 @@ struct S1
+ {
+ };
+ 
+-template<class T, template<class T>  class A, template<class T>  class B = A>
++template<class T, template<class U>  class A, template<class U>  class B = A>
+ struct C
+ {
+   B<T> m;
+diff --git a/gcc/testsuite/g++.dg/template/crash83.C b/gcc/testsuite/g++.dg/template/crash83.C
+index b83dd2139..7dcbed93d 100644
+--- a/gcc/testsuite/g++.dg/template/crash83.C
++++ b/gcc/testsuite/g++.dg/template/crash83.C
+@@ -2,4 +2,4 @@
+ 
+ template<int> struct A {};
+ 
+-template<typename = class A<0>: > struct B {}; // { dg-error "explicit specialization|expected" }
++template<typename = class A<0>: > struct B {}; // { dg-error "" }
+diff --git a/gcc/testsuite/g++.dg/template/error55.C b/gcc/testsuite/g++.dg/template/error55.C
+new file mode 100644
+index 000000000..41f9595ae
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/template/error55.C
+@@ -0,0 +1,8 @@
++// Check that template template parameters get printed properly in error
++// messages.
++
++template <template <class A> class B>
++struct Y
++{
++  B<5> y;  // { dg-error "for 'template<class A> class B'" }
++};
+diff --git a/gcc/testsuite/g++.dg/template/pr30044.C b/gcc/testsuite/g++.dg/template/pr30044.C
+new file mode 100644
+index 000000000..415e6f095
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/template/pr30044.C
+@@ -0,0 +1,14 @@
++// PR c++/30044
++
++template <typename T1, typename T2, template <T2> class Comp, class Result = Comp<1> >
++struct sort { };
++
++
++template <typename Type, template <Type, Type> class Comp, class Result = Comp<1, 2> >
++struct sort2 { };
++
++template <typename Type, template <int, Type> class Comp, class Result = Comp<1, 2> >
++struct sort3 { };
++
++template <template <typename T1, typename T2, template <T2> class Comp, class Result = Comp<1> > class Foo>
++struct sort4 { };
+diff --git a/gcc/testsuite/g++.dg/template/shadow2.C b/gcc/testsuite/g++.dg/template/shadow2.C
+new file mode 100644
+index 000000000..7f6a6dc17
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/template/shadow2.C
+@@ -0,0 +1,3 @@
++template <class A, // { dg-error "shadows template parm 'class A'" }
++          template <class A> class B> // { dg-error "declaration of 'class A'" }
++class X;
+diff --git a/gcc/testsuite/g++.dg/torture/20070621-1.C b/gcc/testsuite/g++.dg/torture/20070621-1.C
+index 15d1ac74c..9bd8cc38c 100644
+--- a/gcc/testsuite/g++.dg/torture/20070621-1.C
++++ b/gcc/testsuite/g++.dg/torture/20070621-1.C
+@@ -89,7 +89,7 @@ namespace __gnu_test {
+         SharedInfo->first=ptr;
+       }
+     };
+-    template <class T, template<class T> class ItType>   struct test_container   {
++    template <class T, template<class U> class ItType>   struct test_container   {
+       typename ItType<T>::ContainerType bounds;
+       test_container(T* _first, T* _last):bounds(_first, _last)     {
+   }
+diff --git a/gcc/testsuite/g++.old-deja/g++.pt/ttp42.C b/gcc/testsuite/g++.old-deja/g++.pt/ttp42.C
+index 53bdae1e9..a2ac23961 100644
+--- a/gcc/testsuite/g++.old-deja/g++.pt/ttp42.C
++++ b/gcc/testsuite/g++.old-deja/g++.pt/ttp42.C
+@@ -1,5 +1,5 @@
+ // { dg-do run  }
+-template <class T, template <class T> class C>
++template <class T, template <class U> class C>
+ struct X
+ {};
+ 

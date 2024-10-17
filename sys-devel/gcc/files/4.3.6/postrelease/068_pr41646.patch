@@ -1,0 +1,50 @@
+diff --git a/gcc/calls.c b/gcc/calls.c
+index 233018a4..8589c6b2 100644
+--- a/gcc/calls.c
++++ b/gcc/calls.c
+@@ -3056,7 +3056,10 @@ expand_call (tree exp, rtx target, int ignore)
+ 	}
+       else if (TYPE_MODE (TREE_TYPE (exp)) == BLKmode)
+ 	{
+-	  target = copy_blkmode_from_reg (target, valreg, TREE_TYPE (exp));
++	  rtx val = valreg;
++	  if (GET_MODE (val) != BLKmode)
++	    val = avoid_likely_spilled_reg (val);
++	  target = copy_blkmode_from_reg (target, val, TREE_TYPE (exp));
+ 
+ 	  /* We can not support sibling calls for this case.  */
+ 	  sibcall_failure = 1;
+diff --git a/gcc/testsuite/gcc.c-torture/compile/pr41646.c b/gcc/testsuite/gcc.c-torture/compile/pr41646.c
+new file mode 100644
+index 00000000..f07b6ba1
+--- /dev/null
++++ b/gcc/testsuite/gcc.c-torture/compile/pr41646.c
+@@ -0,0 +1,28 @@
++/* PR rtl-optimization/41646 */
++
++struct A { unsigned long a; };
++struct B { unsigned short b, c, d; };
++struct B bar (unsigned long);
++
++char *
++foo (char *a, struct A *x)
++{
++  struct B b = bar (x->a);
++  unsigned char c;
++  unsigned short d;
++  a[3] = ((unsigned char) (b.b % 10) + 48);
++  d = b.b / 10;
++  a[2] = ((unsigned char) (d % 10) + 48);
++  d = d / 10;
++  a[1] = ((unsigned char) (d % 10) + 48);
++  a[0] = ((unsigned char) ((d / 10) % 10) + 48);
++  a[4] = 46;
++  c = (unsigned char) b.c;
++  a[6] = (c % 10 + 48);
++  a[5] = ((c / 10) % 10 + 48);
++  a[7] = 46;
++  c = b.d;
++  a[9] = (c % 10 + 48);
++  a[8] = ((c / 10) % 10 + 48);
++  return a + 10;
++}

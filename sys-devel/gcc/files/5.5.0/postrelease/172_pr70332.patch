@@ -1,0 +1,51 @@
+diff --git a/gcc/cp/pt.c b/gcc/cp/pt.c
+index 9e0110415..a829ccf52 100644
+--- a/gcc/cp/pt.c
++++ b/gcc/cp/pt.c
+@@ -13058,10 +13058,13 @@ tsubst_copy (tree t, tree args, tsubst_flags_t complain, tree in_decl)
+ 
+       if (r == NULL_TREE)
+ 	{
+-	  /* We get here for a use of 'this' in an NSDMI.  */
++	  /* We get here for a use of 'this' in an NSDMI as part of a
++	     constructor call or as part of an aggregate initialization.  */
+ 	  if (DECL_NAME (t) == this_identifier
+-	      && current_function_decl
+-	      && DECL_CONSTRUCTOR_P (current_function_decl))
++	      && ((current_function_decl
++		   && DECL_CONSTRUCTOR_P (current_function_decl))
++		  || (current_class_ref
++		      && TREE_CODE (current_class_ref) == PLACEHOLDER_EXPR)))
+ 	    return current_class_ptr;
+ 
+ 	  /* This can happen for a parameter name used later in a function
+diff --git a/gcc/testsuite/g++.dg/cpp1y/nsdmi-aggr5.C b/gcc/testsuite/g++.dg/cpp1y/nsdmi-aggr5.C
+new file mode 100644
+index 000000000..fe377c399
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp1y/nsdmi-aggr5.C
+@@ -0,0 +1,24 @@
++// PR c++/70332
++// { dg-do run { target c++14 } }
++
++template <class T>
++struct C
++{
++ T m;
++ T *n = &m;
++};
++
++C<int> c { };
++
++int
++main ()
++{
++  *c.n = 5;
++  if (c.m != 5)
++    __builtin_abort ();
++
++  C<int> d { 10 };
++  *d.n = *d.n + 1;
++  if (d.m != 11)
++    __builtin_abort ();
++}

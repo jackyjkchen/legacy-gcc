@@ -1,0 +1,49 @@
+diff --git a/gcc/fortran/trans-array.c b/gcc/fortran/trans-array.c
+index a9f779de..9958f932 100644
+--- a/gcc/fortran/trans-array.c
++++ b/gcc/fortran/trans-array.c
+@@ -5167,6 +5167,9 @@ gfc_conv_array_parameter (gfc_se * se, gfc_expr * expr, gfc_ss * ss, int g77,
+ 		      && expr->ref->u.ar.type == AR_FULL);
+   sym = full_array_var ? expr->symtree->n.sym : NULL;
+ 
++  /* The symbol should have an array specification.  */
++  gcc_assert (!sym || sym->as);
++
+   if (expr->expr_type == EXPR_ARRAY && expr->ts.type == BT_CHARACTER)
+     {
+       get_array_ctor_strlen (&se->pre, expr->value.constructor, &tmp);
+diff --git a/gcc/testsuite/gfortran.dg/array_function_4.f90 b/gcc/testsuite/gfortran.dg/array_function_4.f90
+new file mode 100644
+index 00000000..c7e7d6e5
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/array_function_4.f90
+@@ -0,0 +1,29 @@
++! { dg-do compile }
++
++! PR fortran/37411
++! This used to cause an ICE because of a missing array spec after interface
++! mapping.
++
++! Contributed by Kristjan Jonasson <jonasson@hi.is>
++
++MODULE B1
++CONTAINS
++  subroutine sub()
++    integer :: x(1)
++    character(3) :: st
++    st = fun(x)
++  end subroutine sub
++
++  function fun(x) result(st)
++    integer, intent(in) :: x(1)
++    character(lenf(x)) :: st
++    st = 'abc'
++  end function fun
++
++  pure integer function lenf(x)
++    integer, intent(in) :: x(1)
++    lenf = x(1)
++  end function lenf
++END MODULE B1
++
++! { dg-final { cleanup-modules "B1" } }
