@@ -1,0 +1,102 @@
+diff --git a/gcc/combine.c b/gcc/combine.c
+index 1e91035f..570b4f70 100644
+--- a/gcc/combine.c
++++ b/gcc/combine.c
+@@ -6590,7 +6590,8 @@ make_compound_operation (rtx x, enum rtx_code in_code)
+       if (GET_CODE (rhs) == CONST_INT
+ 	  && GET_CODE (lhs) == ASHIFT
+ 	  && GET_CODE (XEXP (lhs, 1)) == CONST_INT
+-	  && INTVAL (rhs) >= INTVAL (XEXP (lhs, 1)))
++	  && INTVAL (rhs) >= INTVAL (XEXP (lhs, 1))
++	  && INTVAL (rhs) < mode_width)
+ 	{
+ 	  new = make_compound_operation (XEXP (lhs, 0), next_code);
+ 	  new = make_extraction (mode, new,
+@@ -6610,6 +6611,7 @@ make_compound_operation (rtx x, enum rtx_code in_code)
+ 		&& (OBJECT_P (SUBREG_REG (lhs))))
+ 	  && GET_CODE (rhs) == CONST_INT
+ 	  && INTVAL (rhs) < HOST_BITS_PER_WIDE_INT
++	  && INTVAL (rhs) < mode_width
+ 	  && (new = extract_left_shift (lhs, INTVAL (rhs))) != 0)
+ 	new = make_extraction (mode, make_compound_operation (new, next_code),
+ 			       0, NULL_RTX, mode_width - INTVAL (rhs),
+@@ -8587,11 +8589,6 @@ simplify_shift_const_1 (enum rtx_code code, enum machine_mode result_mode,
+       if (GET_CODE (varop) == CLOBBER)
+ 	return NULL_RTX;
+ 
+-      /* If we discovered we had to complement VAROP, leave.  Making a NOT
+-	 here would cause an infinite loop.  */
+-      if (complement_p)
+-	break;
+-
+       /* Convert ROTATERT to ROTATE.  */
+       if (code == ROTATERT)
+ 	{
+@@ -8637,6 +8634,11 @@ simplify_shift_const_1 (enum rtx_code code, enum machine_mode result_mode,
+ 	    }
+ 	}
+ 
++      /* If we discovered we had to complement VAROP, leave.  Making a NOT
++	 here would cause an infinite loop.  */
++      if (complement_p)
++	break;
++
+       /* An arithmetic right shift of a quantity known to be -1 or 0
+ 	 is a no-op.  */
+       if (code == ASHIFTRT
+diff --git a/gcc/testsuite/gcc.c-torture/execute/pr37924.c b/gcc/testsuite/gcc.c-torture/execute/pr37924.c
+new file mode 100644
+index 00000000..ec098ff5
+--- /dev/null
++++ b/gcc/testsuite/gcc.c-torture/execute/pr37924.c
+@@ -0,0 +1,50 @@
++/* PR c/37924 */
++
++extern void abort (void);
++
++signed char a;
++unsigned char b;
++
++int
++test1 (void)
++{
++  int c = -1;
++  return ((unsigned int) (a ^ c)) >> 9;
++}
++
++int
++test2 (void)
++{
++  int c = -1;
++  return ((unsigned int) (b ^ c)) >> 9;
++}
++
++int
++main (void)
++{
++  a = 0;
++  if (test1 () != (-1U >> 9))
++    abort ();
++  a = 0x40;
++  if (test1 () != (-1U >> 9))
++    abort ();
++  a = 0x80;
++  if (test1 () != (a < 0) ? 0 : (-1U >> 9))
++    abort ();
++  a = 0xff;
++  if (test1 () != (a < 0) ? 0 : (-1U >> 9))
++    abort ();
++  b = 0;
++  if (test2 () != (-1U >> 9))
++    abort ();
++  b = 0x40;
++  if (test2 () != (-1U >> 9))
++    abort ();
++  b = 0x80;
++  if (test2 () != (-1U >> 9))
++    abort ();
++  b = 0xff;
++  if (test2 () != (-1U >> 9))
++    abort ();
++  return 0;
++}

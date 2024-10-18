@@ -103,9 +103,11 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/079_pr42697.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/080_pr43327.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/081_pr40081.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/082_pr34180.patch
 
 	if use test ; then
 		eapply "${FILESDIR}"/${PV}/postrelease/900_fix-known-test-fail.patch
 		[[ $(tc-arch) == "amd64" ]] && eapply "${FILESDIR}"/${PV}/postrelease/901_workaround-pr34999.patch
+		[[ ${CTARGET} == arm*-*-*eabi ]] && eapply "${FILESDIR}"/${PV}/postrelease/902_fix-armel-test-fail.patch
 	fi
 }

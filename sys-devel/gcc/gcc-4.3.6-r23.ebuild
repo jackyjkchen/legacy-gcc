@@ -86,10 +86,10 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/063_pr49648.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/064_pr62135.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/065_pr49720.patch
-	#eapply "${FILESDIR}"/${PV}/postrelease/
+	eapply "${FILESDIR}"/${PV}/postrelease/066_pr38640.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/067_pr45894-47589.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/068_pr41646.patch
-	#eapply "${FILESDIR}"/${PV}/postrelease/
+	eapply "${FILESDIR}"/${PV}/postrelease/069_pr39764.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/070_pr42697.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/071_pr43327.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/072_pr41044-41167.patch
@@ -97,10 +97,19 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/074_pr40081.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/075_pr39431.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/076_pr37411.patch
+	#eapply "${FILESDIR}"/${PV}/postrelease/
+	eapply "${FILESDIR}"/${PV}/postrelease/078_pr39412.patch
+	#eapply "${FILESDIR}"/${PV}/postrelease/
+	eapply "${FILESDIR}"/${PV}/postrelease/080_pr38700.patch
+	#eapply "${FILESDIR}"/${PV}/postrelease/
+	eapply "${FILESDIR}"/${PV}/postrelease/082_pr34180.patch
+	#eapply "${FILESDIR}"/${PV}/postrelease/
+	eapply "${FILESDIR}"/${PV}/postrelease/084_pr38795.patch
 
 	if use test ; then
 		eapply "${FILESDIR}"/${PV}/postrelease/900_fix-known-test-fail.patch
-		[[ $(tc-arch) == "x86" || $(tc-arch) == "amd64" ]] && eapply "${FILESDIR}"/${PV}/postrelease/901_fix-known-test-fail-x86.patch
+		[[ $(tc-arch) == "x86" || $(tc-arch) == "amd64" ]] && eapply "${FILESDIR}"/${PV}/postrelease/901_fix-x86-test-fail.patch
 		[[ $(tc-arch) == "arm" ]] && rm -rf gcc/testsuite/obj-c++.dg/try-catch-11.mm
+		[[ ${CTARGET} == arm*-*-*eabi ]] && eapply "${FILESDIR}"/${PV}/postrelease/902_fix-armel-test-fail.patch
 	fi
 }

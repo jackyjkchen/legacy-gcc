@@ -326,9 +326,7 @@ case $(tc-arch) in
 		;;
 esac
 tc_version_is_between 2.9 4.0 && IUSE+=" f77"
-# fortran support appeared in 4.1, but 4.1 needs outdated mpfr
-tc_version_is_at_least 4.1 && IUSE+=" +fortran" TC_FEATURES+=( fortran )
-tc_version_is_between 4.0 4.1 && IUSE+=" f95"
+tc_version_is_at_least 4.0 && IUSE+=" +fortran" TC_FEATURES+=( fortran )
 tc_version_is_at_least 3.0 && IUSE+=" doc"
 tc_version_is_at_least 3.1 && IUSE+=" multilib"
 tc_version_is_at_least 4.2 && IUSE+=" pgo"
@@ -1235,7 +1233,6 @@ toolchain_src_configure() {
 	# currently supported standard depending on gcc version.
 	is_fortran && GCC_LANG+=",fortran"
 	is_f77 && GCC_LANG+=",f77"
-	is_f95 && GCC_LANG+=",f95"
 
 	is_ada && GCC_LANG+=",ada"
 
@@ -2963,13 +2960,12 @@ is_f77() {
 	_tc_use_if_iuse f77
 }
 
-is_f95() {
-	gcc-lang-supported f95 || return 1
-	_tc_use_if_iuse f95
-}
-
 is_fortran() {
-	gcc-lang-supported fortran || return 1
+	if tc_version_is_at_least 4.1 ; then
+		gcc-lang-supported fortran || return 1
+	else
+		gcc-lang-supported f95 || return 1
+	fi
 	_tc_use_if_iuse fortran
 }
 

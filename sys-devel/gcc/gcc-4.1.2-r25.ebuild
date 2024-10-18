@@ -120,15 +120,17 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/093_pr45043.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/094_pr62135.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/095_pr49720.patch
-	#eapply "${FILESDIR}"/${PV}/postrelease/
-	#eapply "${FILESDIR}"/${PV}/postrelease/
+	eapply "${FILESDIR}"/${PV}/postrelease/096_pr38700.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/097_pr31260-38357.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/098_pr42697.patch
-	#eapply "${FILESDIR}"/${PV}/postrelease/
+	eapply "${FILESDIR}"/${PV}/postrelease/099_pr34180.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/100_pr37037.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/101_pr37014.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/102_pr34868.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/103_pr34895.patch
 
 	if use test ; then
 		eapply "${FILESDIR}"/${PV}/postrelease/900_fix-known-test-fail.patch
-		[[ $(tc-arch) == "x86" || $(tc-arch) == "amd64" ]] && eapply "${FILESDIR}"/${PV}/postrelease/901_fix-known-test-fail-x86.patch
+		[[ $(tc-arch) == "x86" || $(tc-arch) == "amd64" ]] && eapply "${FILESDIR}"/${PV}/postrelease/901_fix-x86-test-fail.patch
 	fi
 }
