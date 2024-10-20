@@ -1,0 +1,62 @@
+diff --git a/gcc/cp/tree.c b/gcc/cp/tree.c
+index 079f9d33..173c50a1 100644
+--- a/gcc/cp/tree.c
++++ b/gcc/cp/tree.c
+@@ -2310,8 +2310,11 @@ stabilize_call (tree call, tree *initp)
+   tree inits = NULL_TREE;
+   tree t;
+ 
+-  if (call == error_mark_node)
+-    return;
++  if (call == error_mark_node || processing_template_decl)
++    {
++      *initp = NULL_TREE;
++      return;
++    }
+ 
+   gcc_assert (TREE_CODE (call) == CALL_EXPR
+ 	      || TREE_CODE (call) == AGGR_INIT_EXPR);
+@@ -2343,7 +2346,7 @@ stabilize_init (tree init, tree *initp)
+ 
+   *initp = NULL_TREE;
+ 
+-  if (t == error_mark_node)
++  if (t == error_mark_node || processing_template_decl)
+     return true;
+ 
+   if (TREE_CODE (t) == INIT_EXPR
+diff --git a/gcc/testsuite/g++.dg/template/new8.C b/gcc/testsuite/g++.dg/template/new8.C
+new file mode 100644
+index 00000000..b8f3f97e
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/template/new8.C
+@@ -0,0 +1,29 @@
++// PR c++/34336
++// { dg-do compile }
++
++struct A;
++
++template <class T>
++struct S
++{
++  T *m;
++  T &operator* () { return *m; }
++};
++
++struct B
++{
++  B (const A &);
++};
++
++template <class T>
++struct C
++{
++  C ();
++  S<A> c;
++};
++
++template <class T>
++C<T>::C ()
++{
++  B *b = new B (*c);
++}

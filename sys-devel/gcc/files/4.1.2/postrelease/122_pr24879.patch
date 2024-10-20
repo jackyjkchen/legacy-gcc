@@ -1,0 +1,107 @@
+diff --git a/gcc/config/i386/pmmintrin.h b/gcc/config/i386/pmmintrin.h
+index ca295590..7dbf0304 100644
+--- a/gcc/config/i386/pmmintrin.h
++++ b/gcc/config/i386/pmmintrin.h
+@@ -1,4 +1,4 @@
+-/* Copyright (C) 2003, 2004, 2005 Free Software Foundation, Inc.
++/* Copyright (C) 2003, 2004, 2005, 2006 Free Software Foundation, Inc.
+ 
+    This file is part of GCC.
+ 
+@@ -25,7 +25,7 @@
+    Public License.  */
+ 
+ /* Implemented from the specification included in the Intel C++ Compiler
+-   User Guide and Reference, version 8.0.  */
++   User Guide and Reference, version 9.0.  */
+ 
+ #ifndef _PMMINTRIN_H_INCLUDED
+ #define _PMMINTRIN_H_INCLUDED
+@@ -110,7 +110,6 @@ _mm_lddqu_si128 (__m128i const *__P)
+   return (__m128i) __builtin_ia32_lddqu ((char const *)__P);
+ }
+ 
+-#if 0
+ static __inline void __attribute__((__always_inline__))
+ _mm_monitor (void const * __P, unsigned int __E, unsigned int __H)
+ {
+@@ -122,10 +121,6 @@ _mm_mwait (unsigned int __E, unsigned int __H)
+ {
+   __builtin_ia32_mwait (__E, __H);
+ }
+-#else
+-#define _mm_monitor(P, E, H)	__builtin_ia32_monitor ((P), (E), (H))
+-#define _mm_mwait(E, H)		__builtin_ia32_mwait ((E), (H))
+-#endif
+ 
+ #endif /* __SSE3__ */
+ 
+diff --git a/gcc/config/i386/sse.md b/gcc/config/i386/sse.md
+index 7bd8d469..15a1f2bd 100644
+--- a/gcc/config/i386/sse.md
++++ b/gcc/config/i386/sse.md
+@@ -3920,7 +3920,10 @@
+ 		     (match_operand:SI 1 "register_operand" "c")]
+ 		    UNSPECV_MWAIT)]
+   "TARGET_SSE3"
+-  "mwait\t%0, %1"
++;; 64bit version is "mwait %rax,%rcx". But only lower 32bits are used.
++;; Since 32bit register operands are implicitly zero extended to 64bit,
++;; we only need to set up 32bit registers.
++  "mwait"
+   [(set_attr "length" "3")])
+ 
+ (define_insn "sse3_monitor"
+@@ -3928,6 +3931,18 @@
+ 		     (match_operand:SI 1 "register_operand" "c")
+ 		     (match_operand:SI 2 "register_operand" "d")]
+ 		    UNSPECV_MONITOR)]
+-  "TARGET_SSE3"
++  "TARGET_SSE3 && !TARGET_64BIT"
+   "monitor\t%0, %1, %2"
+   [(set_attr "length" "3")])
++
++(define_insn "sse3_monitor64"
++  [(unspec_volatile [(match_operand:DI 0 "register_operand" "a")
++		     (match_operand:SI 1 "register_operand" "c")
++		     (match_operand:SI 2 "register_operand" "d")]
++		    UNSPECV_MONITOR)]
++  "TARGET_SSE3 && TARGET_64BIT"
++;; 64bit version is "monitor %rax,%rcx,%rdx". But only lower 32bits in
++;; RCX and RDX are used.  Since 32bit register operands are implicitly
++;; zero extended to 64bit, we only need to set up 32bit registers.
++  "monitor"
++  [(set_attr "length" "3")])
+diff --git a/gcc/testsuite/gcc.target/i386/monitor.c b/gcc/testsuite/gcc.target/i386/monitor.c
+new file mode 100644
+index 00000000..d98a2fd2
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/i386/monitor.c
+@@ -0,0 +1,27 @@
++/* { dg-do compile { target i?86-*-* x86_64-*-* } } */
++/* { dg-options "-O2 -msse3" } */
++
++/* Verify that they work in both 32bit and 64bit.  */
++
++#include <pmmintrin.h>
++
++void
++foo (char *p, int x, int y, int z)
++{
++   _mm_monitor (p, y, x);
++   _mm_mwait (z, y);
++}
++
++void
++bar (char *p, long x, long y, long z)
++{
++   _mm_monitor (p, y, x);
++   _mm_mwait (z, y);
++}
++
++void
++foo1 (char *p)
++{
++   _mm_monitor (p, 0, 0);
++   _mm_mwait (0, 0);
++}

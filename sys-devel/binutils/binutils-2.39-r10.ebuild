@@ -14,7 +14,7 @@ src_prepare() {
 
 	eapply "${FILESDIR}"/${PV}/00_disable-test-warning.patch
 	eapply "${FILESDIR}"/${PV}/01_workaround-unknown-reloc.patch
-	eapply "${FILESDIR}"/${PV}/03_support-lsx-lasx-lvz-lbt.patch
+	eapply "${FILESDIR}"/${PV}/02_support-lsx-lasx-lvz-lbt.patch
 }
 
 src_configure() {

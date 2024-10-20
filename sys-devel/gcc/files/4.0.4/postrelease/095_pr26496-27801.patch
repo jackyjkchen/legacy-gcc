@@ -1,0 +1,83 @@
+diff --git a/gcc/cp/call.c b/gcc/cp/call.c
+index 769203f9..1c0ad7d6 100644
+--- a/gcc/cp/call.c
++++ b/gcc/cp/call.c
+@@ -2703,6 +2703,8 @@ resolve_args (tree args)
+ 	  error ("invalid use of void expression");
+ 	  return error_mark_node;
+ 	}
++      else if (invalid_nonstatic_memfn_p (arg))
++	return error_mark_node;
+     }
+   return args;
+ }
+@@ -6368,6 +6370,14 @@ perform_implicit_conversion (tree type, tree expr)
+       error ("could not convert %qE to %qT", expr, type);
+       expr = error_mark_node;
+     }
++  else if (processing_template_decl)
++    {
++      /* In a template, we are only concerned about determining the
++	 type of non-dependent expressions, so we do not have to
++	 perform the actual conversion.  */
++      if (TREE_TYPE (expr) != type)
++	expr = build_nop (type, expr);
++    }
+   else
+     expr = convert_like (conv, expr);
+ 
+diff --git a/gcc/cp/init.c b/gcc/cp/init.c
+index 16fddd34..bdd73efe 100644
+--- a/gcc/cp/init.c
++++ b/gcc/cp/init.c
+@@ -1552,7 +1552,7 @@ build_offset_ref (tree type, tree name, bool address_p)
+ 	    }
+ 	  error ("invalid use of non-static member function %qD", 
+ 		 TREE_OPERAND (member, 1));
+-	  return member;
++	  return error_mark_node;
+ 	}
+       else if (TREE_CODE (member) == FIELD_DECL)
+ 	{
+diff --git a/gcc/testsuite/g++.dg/template/cond6.C b/gcc/testsuite/g++.dg/template/cond6.C
+new file mode 100644
+index 00000000..e4cede35
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/template/cond6.C
+@@ -0,0 +1,6 @@
++// PR c++/27801
++
++template<int> int foo(int i)
++{
++  return !( (1 && i) ? 0 : 1 );
++}
+diff --git a/gcc/testsuite/g++.dg/template/crash51.C b/gcc/testsuite/g++.dg/template/crash51.C
+new file mode 100644
+index 00000000..8c2553d1
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/template/crash51.C
+@@ -0,0 +1,11 @@
++// PR c++/26496
++
++template< typename _Generator> int generate_n(_Generator __gen);
++struct Distribution { };
++typedef double (Distribution::* Pstd_mem)();
++int main(void)
++{
++  Distribution* rng;
++  Pstd_mem ptr;
++  generate_n(rng->*ptr); // { dg-error "non-static member" } 
++}
+diff --git a/gcc/testsuite/g++.old-deja/g++.mike/net36.C b/gcc/testsuite/g++.old-deja/g++.mike/net36.C
+index 98b38eed..3ffa60e3 100644
+--- a/gcc/testsuite/g++.old-deja/g++.mike/net36.C
++++ b/gcc/testsuite/g++.old-deja/g++.mike/net36.C
+@@ -11,7 +11,7 @@ typedef void (A::*handler) (X*);
+ 
+ class B {
+ public:
+-  void setHandler(handler); // { dg-error "candidate" }
++  void setHandler(handler);
+ };
+ 
+ void f(B* b) {

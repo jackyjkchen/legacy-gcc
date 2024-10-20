@@ -1,0 +1,53 @@
+diff --git a/gcc/predict.c b/gcc/predict.c
+index 8f50ba02..338845d1 100644
+--- a/gcc/predict.c
++++ b/gcc/predict.c
+@@ -1222,7 +1222,8 @@ apply_return_prediction (int *heads)
+   FOR_EACH_EDGE (e, ei, EXIT_BLOCK_PTR->preds)
+     {
+       return_stmt = last_stmt (e->src);
+-      if (TREE_CODE (return_stmt) == RETURN_EXPR)
++      if (return_stmt
++	  && TREE_CODE (return_stmt) == RETURN_EXPR)
+ 	break;
+     }
+   if (!e)
+@@ -1335,11 +1336,14 @@ tree_estimate_probability (void)
+ 
+       FOR_EACH_EDGE (e, ei, bb->succs)
+ 	{
++	  tree tmp;
++
+ 	  /* Predict early returns to be probable, as we've already taken
+ 	     care for error returns and other cases are often used for
+ 	     fast paths trought function.  */
+ 	  if (e->dest == EXIT_BLOCK_PTR
+-	      && TREE_CODE (last_stmt (bb)) == RETURN_EXPR
++	      && (tmp = last_stmt (bb))
++	      && TREE_CODE (tmp) == RETURN_EXPR
+ 	      && !single_pred_p (bb))
+ 	    {
+ 	      edge e1;
+diff --git a/gcc/testsuite/g++.dg/torture/pr34953.C b/gcc/testsuite/g++.dg/torture/pr34953.C
+new file mode 100644
+index 00000000..5d7b38c9
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/torture/pr34953.C
+@@ -0,0 +1,17 @@
++/* { dg-do compile } */
++/* { dg-options "-w" } */
++
++void B_CLEAR(void* ret);
++void B_NeverReturns(void* ret) __attribute__((noreturn));
++
++int main()
++{
++    const struct AutoErrPop { ~AutoErrPop() { } } AutoErrPopper = { };
++    B_NeverReturns(0);
++}
++
++void B_NeverReturns(void* ret)
++{
++    B_CLEAR(ret); /* Never returns (does a setjmp/goto) */
++}
++

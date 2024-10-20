@@ -1,0 +1,46 @@
+diff --git a/gcc/cp/call.c b/gcc/cp/call.c
+index dac3e05b..2e882b85 100644
+--- a/gcc/cp/call.c
++++ b/gcc/cp/call.c
+@@ -4587,10 +4587,14 @@ convert_default_arg (tree type, tree arg, tree fn, int parmnum)
+     }
+   else
+     {
+-      /* This could get clobbered by the following call.  */
+-      if (TREE_HAS_CONSTRUCTOR (arg))
++      /* We must make a copy of ARG, in case subsequent processing
++	 alters any part of it.  For example, during gimplification a
++	 cast of the form (T) &X::f (where "f" is a member function)
++	 will lead to replacing the PTRMEM_CST for &X::f with a
++	 VAR_DECL.  We can avoid the copy for constants, since they
++	 are never modified in place.  */
++      if (!CONSTANT_CLASS_P (arg))
+ 	arg = copy_node (arg);
+-
+       arg = convert_for_initialization (0, type, arg, LOOKUP_NORMAL,
+ 					"default argument", fn, parmnum);
+       arg = convert_for_arg_passing (type, arg);
+diff --git a/gcc/testsuite/g++.dg/other/default6.C b/gcc/testsuite/g++.dg/other/default6.C
+new file mode 100644
+index 00000000..2641801b
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/other/default6.C
+@@ -0,0 +1,18 @@
++// PR c++/30108
++
++class BaseRobot {
++  typedef void (BaseRobot::*PseudoState)(void);
++  typedef PseudoState STATE;
++  STATE initial ();
++  int ready ();
++  STATE stpOtherTask ();
++  STATE commonEventProcessing (STATE pIdleTarget=(STATE)&BaseRobot::ready);
++};
++BaseRobot::STATE BaseRobot::initial ()
++{
++  return commonEventProcessing ();
++}
++BaseRobot::STATE BaseRobot::stpOtherTask ()
++{
++  return commonEventProcessing ();
++}

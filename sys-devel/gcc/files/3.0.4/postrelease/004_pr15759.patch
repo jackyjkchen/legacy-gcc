@@ -1,0 +1,69 @@
+diff --git a/gcc/cp/tree.c b/gcc/cp/tree.c
+index add0ff9..afe6441 100644
+--- a/gcc/cp/tree.c
++++ b/gcc/cp/tree.c
+@@ -1630,16 +1630,11 @@ bot_manip (tp, walk_subtrees, data)
+       tree u;
+ 
+       if (TREE_CODE (TREE_OPERAND (t, 1)) == AGGR_INIT_EXPR)
+-	{
+-	  mark_used (TREE_OPERAND (TREE_OPERAND (TREE_OPERAND (t, 1), 0), 0));
+-	  u = build_cplus_new
+-	    (TREE_TYPE (t), break_out_target_exprs (TREE_OPERAND (t, 1)));
+-	}
++	u = build_cplus_new
++	  (TREE_TYPE (t), break_out_target_exprs (TREE_OPERAND (t, 1)));
+       else 
+-	{
+-	  u = build_target_expr_with_type
+-	    (break_out_target_exprs (TREE_OPERAND (t, 1)), TREE_TYPE (t));
+-	}
++	u = build_target_expr_with_type
++	  (break_out_target_exprs (TREE_OPERAND (t, 1)), TREE_TYPE (t));
+ 
+       /* Map the old variable to the new one.  */
+       splay_tree_insert (target_remap, 
+@@ -1654,8 +1649,6 @@ bot_manip (tp, walk_subtrees, data)
+       *walk_subtrees = 0;
+       return NULL_TREE;
+     }
+-  else if (TREE_CODE (t) == CALL_EXPR)
+-    mark_used (TREE_OPERAND (TREE_OPERAND (t, 0), 0));
+ 
+   /* Make a copy of this node.  */
+   return copy_tree_r (tp, walk_subtrees, NULL);
+diff --git a/gcc/testsuite/g++.dg/other/default4.C b/gcc/testsuite/g++.dg/other/default4.C
+new file mode 100644
+index 0000000..d59bc2a
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/other/default4.C
+@@ -0,0 +1,29 @@
++// PR c++/15759
++// Origin:   Lars Rune Nøstdal  <larsnostdal@gmail.com>
++// Testcase: Volker Reichelt    <reichelt@igpm.rwth-aachen.de>
++
++// { dg-do run }
++
++extern "C" void abort();
++
++int n = 0;
++
++int f() { return ++n; }
++
++int(&foo1)() = f;
++int(*foo2)() = &f;
++int(*foo3)() = f;
++
++int bar1(int i = foo1()) { return i; }
++int bar2(int i = foo2()) { return i; }
++int bar3(int i = foo3()) { return i; }
++int bar4(int i = f())    { return i; }
++
++int main()
++{
++  if (bar1() != 1) abort();
++  if (bar2() != 2) abort();
++  if (bar3() != 3) abort();
++  if (bar4() != 4) abort();
++  return 0;
++}

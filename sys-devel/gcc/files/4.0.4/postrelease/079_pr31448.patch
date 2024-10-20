@@ -1,0 +1,82 @@
+diff --git a/gcc/expr.c b/gcc/expr.c
+index e3509c13..7a54312d 100644
+--- a/gcc/expr.c
++++ b/gcc/expr.c
+@@ -8308,7 +8308,14 @@ reduce_to_bit_field_precision (rtx exp, rtx target, tree type)
+   HOST_WIDE_INT prec = TYPE_PRECISION (type);
+   if (target && GET_MODE (target) != GET_MODE (exp))
+     target = 0;
+-  if (TYPE_UNSIGNED (type))
++  /* For constant values, reduce using build_int_cst_type. */
++  if (GET_CODE (exp) == CONST_INT)
++    {
++      HOST_WIDE_INT value = INTVAL (exp);
++      tree t = build_int_cst_type (type, value);
++      return expand_expr (t, target, VOIDmode, EXPAND_NORMAL);
++    }
++  else if (TYPE_UNSIGNED (type))
+     {
+       rtx mask;
+       if (prec < HOST_BITS_PER_WIDE_INT)
+diff --git a/gcc/testsuite/g++.old-deja/g++.warn/flow1.C b/gcc/testsuite/g++.old-deja/g++.warn/flow1.C
+deleted file mode 100644
+index 61f6a554..00000000
+--- a/gcc/testsuite/g++.old-deja/g++.warn/flow1.C
++++ /dev/null
+@@ -1,14 +0,0 @@
+-// { dg-do assemble  }
+-// { dg-options "-Wreturn-type" }
+-// Test that we don't get a warning about flowing off the end.
+-
+-struct A {
+-  ~A ();
+-};
+-
+-int f()
+-{
+-  A a1[2];
+-  A a2[2];
+-  return 1234567;
+-}
+diff --git a/gcc/testsuite/gcc.c-torture/execute/pr31448.c b/gcc/testsuite/gcc.c-torture/execute/pr31448.c
+new file mode 100644
+index 00000000..720ba926
+--- /dev/null
++++ b/gcc/testsuite/gcc.c-torture/execute/pr31448.c
+@@ -0,0 +1,36 @@
++/* PR middle-end/31448, this used to ICE during expand because
++   reduce_to_bit_field_precision was not ready to handle constants. */
++
++typedef struct _st {
++    int iIndex : 24;
++    int iIndex1 : 24;
++} st;
++st *next;
++void g(void)
++{
++    st *next = 0;
++    int nIndx;
++    const static int constreg[] = { 0,};
++    nIndx = 0;
++    next->iIndex = constreg[nIndx];
++}
++void f(void)
++{
++    int nIndx;
++    const static int constreg[] = { 0xFEFEFEFE,};
++    nIndx = 0;
++    next->iIndex = constreg[nIndx];
++    next->iIndex1 = constreg[nIndx];
++}
++int main(void)
++{
++  st a;
++  next = &a;
++  f();
++  if (next->iIndex != 0xFFFEFEFE)
++    __builtin_abort ();
++  if (next->iIndex1 != 0xFFFEFEFE)
++    __builtin_abort ();
++  return 0;
++}
++

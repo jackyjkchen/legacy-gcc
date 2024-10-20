@@ -1,0 +1,54 @@
+diff --git a/gcc/cp/pt.c b/gcc/cp/pt.c
+index e494cbd0..0b1d01c4 100644
+--- a/gcc/cp/pt.c
++++ b/gcc/cp/pt.c
+@@ -13475,9 +13475,16 @@ resolve_typename_type (tree type, bool only_current_p)
+      to look inside it.  */
+   if (only_current_p && !currently_open_class (scope))
+     return type;
+-  /* If SCOPE is a partial instantiation, it will not have a valid
+-     TYPE_FIELDS list, so use the original template.  */
+-  scope = CLASSTYPE_PRIMARY_TEMPLATE_TYPE (scope);
++  /* If SCOPE isn't the template itself, it will not have a valid
++     TYPE_FIELDS list.  */
++  if (same_type_p (scope, CLASSTYPE_PRIMARY_TEMPLATE_TYPE (scope)))
++    /* scope is either the template itself or a compatible instantiation
++       like X<T>, so look up the name in the original template.  */
++    scope = CLASSTYPE_PRIMARY_TEMPLATE_TYPE (scope);
++  else
++    /* scope is a partial instantiation, so we can't do the lookup or we
++       will lose the template arguments.  */
++    return type;
+   /* Enter the SCOPE so that name lookup will be resolved as if we
+      were in the class definition.  In particular, SCOPE will no
+      longer be considered a dependent type.  */
+diff --git a/gcc/testsuite/g++.dg/template/memtmpl3.C b/gcc/testsuite/g++.dg/template/memtmpl3.C
+new file mode 100644
+index 00000000..583155ea
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/template/memtmpl3.C
+@@ -0,0 +1,24 @@
++// PR c++/33239
++
++struct null_type;
++
++template<typename T1, typename T2>
++struct tuple_impl
++{
++  template<typename U>
++  struct append
++  {
++    typedef tuple_impl<U, null_type> type;
++  };
++
++  int data;
++};
++
++template<typename T1>
++class tuple
++: public tuple_impl<T1, null_type>::template append<T1>::type
++{
++  using tuple_impl<T1, null_type>::template append<T1>::type::data;
++};
++
++tuple<int>  my_tuple;

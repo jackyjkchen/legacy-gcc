@@ -1,0 +1,71 @@
+diff --git a/gcc/c-family/c-attribs.c b/gcc/c-family/c-attribs.c
+index 72c521467..d4e2821ff 100644
+--- a/gcc/c-family/c-attribs.c
++++ b/gcc/c-family/c-attribs.c
+@@ -2135,7 +2135,21 @@ handle_mode_attribute (tree *node, tree name, tree args,
+ 	  return NULL_TREE;
+ 	}
+ 
+-      *node = build_qualified_type (typefm, TYPE_QUALS (type));
++      /* Copy any quals and attributes to the new type.  */
++      *node = build_type_attribute_qual_variant (typefm, TYPE_ATTRIBUTES (type),
++						 TYPE_QUALS (type));
++      if (TYPE_USER_ALIGN (type))
++	*node = build_aligned_type (*node, TYPE_ALIGN (type));
++
++      tree decl = node[2];
++      if (decl && TYPE_NAME (type) == decl)
++	{
++	  /* Set up the typedef all over again.  */
++	  DECL_ORIGINAL_TYPE (decl) = NULL_TREE;
++	  TREE_TYPE (decl) = *node;
++	  set_underlying_type (decl);
++	  *node = TREE_TYPE (decl);
++	}
+     }
+ 
+   return NULL_TREE;
+diff --git a/gcc/c-family/c-common.c b/gcc/c-family/c-common.c
+index ae3ef89b0..fe1d2621c 100644
+--- a/gcc/c-family/c-common.c
++++ b/gcc/c-family/c-common.c
+@@ -7929,15 +7929,16 @@ check_missing_format_attribute (tree ltype, tree rtype)
+ void
+ set_underlying_type (tree x)
+ {
+-  if (x == error_mark_node)
++  if (x == error_mark_node || TREE_TYPE (x) == error_mark_node)
+     return;
+   if (DECL_IS_UNDECLARED_BUILTIN (x) && TREE_CODE (TREE_TYPE (x)) != ARRAY_TYPE)
+     {
+       if (TYPE_NAME (TREE_TYPE (x)) == 0)
+ 	TYPE_NAME (TREE_TYPE (x)) = x;
+     }
+-  else if (TREE_TYPE (x) != error_mark_node
+-	   && DECL_ORIGINAL_TYPE (x) == NULL_TREE)
++  else if (DECL_ORIGINAL_TYPE (x))
++    gcc_checking_assert (TYPE_NAME (TREE_TYPE (x)) == x);
++  else
+     {
+       tree tt = TREE_TYPE (x);
+       DECL_ORIGINAL_TYPE (x) = tt;
+diff --git a/gcc/testsuite/c-c++-common/attr-mode-1.c b/gcc/testsuite/c-c++-common/attr-mode-1.c
+new file mode 100644
+index 000000000..04a2431f5
+--- /dev/null
++++ b/gcc/testsuite/c-c++-common/attr-mode-1.c
+@@ -0,0 +1,4 @@
++// PR c/100545
++// { dg-additional-options -g }
++
++typedef int fatp_t __attribute__((aligned, mode(SI)));
+diff --git a/gcc/testsuite/c-c++-common/attr-mode-2.c b/gcc/testsuite/c-c++-common/attr-mode-2.c
+new file mode 100644
+index 000000000..de65f49c6
+--- /dev/null
++++ b/gcc/testsuite/c-c++-common/attr-mode-2.c
+@@ -0,0 +1,4 @@
++typedef int I;
++int x;
++I y __attribute__ ((mode(QI)));
++extern I x;

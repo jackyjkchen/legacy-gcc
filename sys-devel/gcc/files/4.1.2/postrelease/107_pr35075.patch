@@ -1,0 +1,49 @@
+diff --git a/gcc/cp/pt.c b/gcc/cp/pt.c
+index 7fccb7aa..f53779c4 100644
+--- a/gcc/cp/pt.c
++++ b/gcc/cp/pt.c
+@@ -3707,6 +3707,27 @@ convert_nontype_argument (tree type, tree expr)
+ 	 shall be one of: [...]
+ 
+ 	 -- the address of an object or function with external linkage.  */
++      if (TREE_CODE (expr) == INDIRECT_REF
++	  && TYPE_REF_OBJ_P (TREE_TYPE (TREE_OPERAND (expr, 0))))
++	{
++	  expr = TREE_OPERAND (expr, 0);
++	  if (DECL_P (expr))
++	    {
++	      error ("%q#D is not a valid template argument for type %qT "
++		     "because a reference variable does not have a constant "
++		     "address", expr, type);
++	      return NULL_TREE;
++	    }
++	}
++
++      if (!DECL_P (expr))
++	{
++	  error ("%qE is not a valid template argument for type %qT "
++		 "because it is not an object with external linkage",
++		 expr, type);
++	  return NULL_TREE;
++	}
++
+       if (!DECL_EXTERNAL_LINKAGE_P (expr))
+ 	{
+ 	  error ("%qE is not a valid template argument for type %qT "
+diff --git a/gcc/testsuite/g++.dg/template/ref5.C b/gcc/testsuite/g++.dg/template/ref5.C
+new file mode 100644
+index 00000000..6d765f9b
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/template/ref5.C
+@@ -0,0 +1,11 @@
++// PR c++/35075
++
++template<int&> struct A {};
++
++template<typename T> struct B
++{
++  static const T t;
++  A<t> a;			// { dg-error "reference variable" }
++};
++
++B<int&> b;			// { dg-error "instantiated" }

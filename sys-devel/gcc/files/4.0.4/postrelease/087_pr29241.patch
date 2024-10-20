@@ -1,0 +1,36 @@
+diff --git a/gcc/cgraphunit.c b/gcc/cgraphunit.c
+index c0fd68d1..965004d4 100644
+--- a/gcc/cgraphunit.c
++++ b/gcc/cgraphunit.c
+@@ -1754,7 +1754,9 @@ cgraph_preserve_function_body_p (tree decl)
+   if (dump_enabled_p (TDI_tree_all))
+     return true;
+   if (!cgraph_global_info_ready)
+-    return (DECL_INLINE (decl) && !flag_really_no_inline);
++    return (flag_really_no_inline
++	    ? lang_hooks.tree_inlining.disregard_inline_limits (decl)
++	    : DECL_INLINE (decl));
+   /* Look if there is any clone around.  */
+   for (node = cgraph_node (decl); node; node = node->next_clone)
+     if (node->global.inlined_to)
+diff --git a/gcc/testsuite/gcc.c-torture/compile/pr29241.c b/gcc/testsuite/gcc.c-torture/compile/pr29241.c
+new file mode 100644
+index 00000000..6db15c1c
+--- /dev/null
++++ b/gcc/testsuite/gcc.c-torture/compile/pr29241.c
+@@ -0,0 +1,15 @@
++static inline __attribute__((always_inline)) void ip_finish_output2(){}
++void ip_fragment(void (*)(void));
++static inline __attribute__((always_inline)) void ip_finish_output()
++{
++ ip_fragment(ip_finish_output2);
++ ip_finish_output2();
++}
++void ip_mc_output()
++{
++ ip_finish_output();
++}
++void ip_output()
++{
++ ip_finish_output();
++}

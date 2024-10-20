@@ -1,0 +1,144 @@
+diff --git a/gcc/expmed.c b/gcc/expmed.c
+index 72ef6ce..17a2eab 100644
+--- a/gcc/expmed.c
++++ b/gcc/expmed.c
+@@ -352,25 +352,11 @@ store_bit_field (str_rtx, bitsize, bitnum, fieldmode, value, total_size)
+ 	     || (offset * BITS_PER_UNIT % bitsize == 0
+ 		 && MEM_ALIGN (op0) % GET_MODE_BITSIZE (fieldmode) == 0))))
+     {
+-      if (GET_MODE (op0) != fieldmode)
+-	{
+-	  if (GET_CODE (op0) == SUBREG)
+-	    {
+-	      if (GET_MODE (SUBREG_REG (op0)) == fieldmode
+-		  || GET_MODE_CLASS (fieldmode) == MODE_INT
+-		  || GET_MODE_CLASS (fieldmode) == MODE_PARTIAL_INT)
+-		op0 = SUBREG_REG (op0);
+-	      else
+-		/* Else we've got some float mode source being extracted into
+-		   a different float mode destination -- this combination of
+-		   subregs results in Severe Tire Damage.  */
+-		abort ();
+-	    }
+-	  if (GET_CODE (op0) == REG)
+-	    op0 = gen_rtx_SUBREG (fieldmode, op0, byte_offset);
+-	  else
+-	    op0 = adjust_address (op0, fieldmode, offset);
+-	}
++      if (GET_CODE (op0) == MEM)
++	op0 = adjust_address (op0, fieldmode, offset);
++      else if (GET_MODE (op0) != fieldmode)
++	op0 = simplify_gen_subreg (fieldmode, op0, GET_MODE (op0),
++				   byte_offset);
+       emit_move_insn (op0, value);
+       return value;
+     }
+@@ -586,6 +572,7 @@ store_bit_field (str_rtx, bitsize, bitnum, fieldmode, value, total_size)
+ 	    bestmode = GET_MODE (op0);
+ 
+ 	  if (bestmode == VOIDmode
++	      || GET_MODE_SIZE (bestmode) < GET_MODE_SIZE (fieldmode)
+ 	      || (SLOW_UNALIGNED_ACCESS (bestmode, MEM_ALIGN (op0))
+ 		  && GET_MODE_BITSIZE (bestmode) > MEM_ALIGN (op0)))
+ 	    goto insv_loses;
+@@ -1313,6 +1300,11 @@ extract_bit_field (str_rtx, bitsize, bitnum, unsignedp,
+ 		  xbitpos = bitnum % unit;
+ 		  xop0 = adjust_address (xop0, bestmode, xoffset);
+ 
++		  /* Make sure register is big enough for the whole field. */
++		  if (xoffset * BITS_PER_UNIT + unit 
++		      < offset * BITS_PER_UNIT + bitsize)
++		    goto extzv_loses;
++
+ 		  /* Fetch it to a register in that size.  */
+ 		  xop0 = force_reg (bestmode, xop0);
+ 
+@@ -1443,6 +1435,11 @@ extract_bit_field (str_rtx, bitsize, bitnum, unsignedp,
+ 		  xbitpos = bitnum % unit;
+ 		  xop0 = adjust_address (xop0, bestmode, xoffset);
+ 
++		  /* Make sure register is big enough for the whole field. */
++		  if (xoffset * BITS_PER_UNIT + unit 
++		      < offset * BITS_PER_UNIT + bitsize)
++		    goto extv_loses;
++
+ 		  /* Fetch it to a register in that size.  */
+ 		  xop0 = force_reg (bestmode, xop0);
+ 
+diff --git a/gcc/testsuite/gcc.c-torture/execute/20051113-1.c b/gcc/testsuite/gcc.c-torture/execute/20051113-1.c
+new file mode 100644
+index 0000000..6dbd1f0
+--- /dev/null
++++ b/gcc/testsuite/gcc.c-torture/execute/20051113-1.c
+@@ -0,0 +1,71 @@
++extern void *malloc(__SIZE_TYPE__);
++extern void *memset(void *, int, __SIZE_TYPE__);
++typedef struct
++{
++  short a;  
++  unsigned short b;
++  unsigned short c;
++  unsigned long long Count;
++  long long Count2;
++} __attribute__((packed)) Struct1;
++
++typedef struct
++{
++  short a;
++  unsigned short b;
++  unsigned short c;
++  unsigned long long d;
++  long long e;
++  long long f;
++} __attribute__((packed)) Struct2;
++
++typedef union
++{
++  Struct1 a;
++  Struct2 b;
++} Union;
++
++typedef struct
++{
++  int Count;
++  Union List[0];
++} __attribute__((packed)) Struct3;
++
++unsigned long long Sum (Struct3 *instrs) __attribute__((noinline));
++unsigned long long Sum (Struct3 *instrs)
++{
++    unsigned long long  count = 0;
++    int     i;
++    
++    for (i = 0; i < instrs->Count; i++) {
++        count += instrs->List[i].a.Count;
++    }
++    return count;
++}
++long long Sum2 (Struct3 *instrs) __attribute__((noinline));
++long long Sum2 (Struct3 *instrs)
++{
++    long long  count = 0;
++    int     i;
++    
++    for (i = 0; i < instrs->Count; i++) {
++        count += instrs->List[i].a.Count2;
++    }
++    return count;
++}
++main() {
++  Struct3 *p = malloc (sizeof (int) + 3 * sizeof(Struct1));
++  memset(p, 0, sizeof(int) + 3*sizeof(Struct1));
++  p->Count = 3;
++  p->List[0].a.Count = 555;
++  p->List[1].a.Count = 999;
++  p->List[2].a.Count = 0x101010101ULL;
++  p->List[0].a.Count2 = 555;
++  p->List[1].a.Count2 = 999;
++  p->List[2].a.Count2 = 0x101010101LL;
++  if (Sum(p) != 555 + 999 + 0x101010101ULL)
++    abort();
++  if (Sum2(p) != 555 + 999 + 0x101010101LL)
++    abort();
++  return 0;
++}

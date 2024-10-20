@@ -1,0 +1,152 @@
+diff --git a/gcc/rtl.h b/gcc/rtl.h
+index cec4adb4..c5de92be 100644
+--- a/gcc/rtl.h
++++ b/gcc/rtl.h
+@@ -1118,8 +1118,8 @@ do {						\
+    refer to part of a DECL.  */
+ #define REG_EXPR(RTX) (REG_ATTRS (RTX) == 0 ? 0 : REG_ATTRS (RTX)->decl)
+ 
+-/* For a MEM rtx, the offset from the start of MEM_DECL, if known, as a
+-   RTX that is always a CONST_INT.  */
++/* For a REG rtx, the offset from the start of REG_EXPR, if known, as an
++   HOST_WIDE_INT.  */
+ #define REG_OFFSET(RTX) (REG_ATTRS (RTX) == 0 ? 0 : REG_ATTRS (RTX)->offset)
+ 
+ /* Copy the attributes that apply to memory locations from RHS to LHS.  */
+diff --git a/gcc/testsuite/gcc.dg/out-of-bounds-1.c b/gcc/testsuite/gcc.dg/out-of-bounds-1.c
+new file mode 100644
+index 00000000..14c4591a
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/out-of-bounds-1.c
+@@ -0,0 +1,13 @@
++/* PR rtl-optimization/33822 */
++/* Origin: Andrew Pinski <pinskia@gcc.gnu.org> */
++
++/* { dg-do compile } */
++/* { dg-options "-O -g" } */
++/* { dg-options "-O -g -mstrict-align" { target powerpc*-*-* } } */
++
++void ProjectOverlay(const float localTextureAxis[2], char *lump)
++{
++   const void *d = &localTextureAxis;
++   int size = sizeof(float)*8 ;
++   __builtin_memcpy( &lump[ 0 ], d, size );  
++}
+diff --git a/gcc/var-tracking.c b/gcc/var-tracking.c
+index 14401620..73486b76 100644
+--- a/gcc/var-tracking.c
++++ b/gcc/var-tracking.c
+@@ -251,6 +251,9 @@ typedef struct variable_def
+ /* Pointer to the BB's information specific to variable tracking pass.  */
+ #define VTI(BB) ((variable_tracking_info) (BB)->aux)
+ 
++/* Macro to access MEM_OFFSET as an HOST_WIDE_INT.  Evaluates MEM twice.  */
++#define INT_MEM_OFFSET(mem) (MEM_OFFSET (mem) ? INTVAL (MEM_OFFSET (mem)) : 0)
++
+ /* Alloc pool for struct attrs_def.  */
+ static alloc_pool attrs_pool;
+ 
+@@ -906,7 +909,7 @@ static void
+ var_mem_delete_and_set (dataflow_set *set, rtx loc)
+ {
+   tree decl = MEM_EXPR (loc);
+-  HOST_WIDE_INT offset = MEM_OFFSET (loc) ? INTVAL (MEM_OFFSET (loc)) : 0;
++  HOST_WIDE_INT offset = INT_MEM_OFFSET (loc);
+ 
+   set_variable_part (set, loc, decl, offset);
+ }
+@@ -918,7 +921,7 @@ static void
+ var_mem_delete (dataflow_set *set, rtx loc)
+ {
+   tree decl = MEM_EXPR (loc);
+-  HOST_WIDE_INT offset = MEM_OFFSET (loc) ? INTVAL (MEM_OFFSET (loc)) : 0;
++  HOST_WIDE_INT offset = INT_MEM_OFFSET (loc);
+ 
+   delete_variable_part (set, loc, decl, offset);
+ }
+@@ -1509,6 +1512,18 @@ track_expr_p (tree expr)
+   return 1;
+ }
+ 
++/* Return true if OFFSET is a valid offset for a register or memory
++   access we want to track.  This is used to reject out-of-bounds
++   accesses that can cause assertions to fail later.  Note that we
++   don't reject negative offsets because they can be generated for
++   paradoxical subregs on big-endian architectures.  */
++
++static inline bool
++offset_valid_for_tracked_p (HOST_WIDE_INT offset)
++{
++  return (-MAX_VAR_PARTS < offset) && (offset < MAX_VAR_PARTS);
++}
++
+ /* Count uses (register and memory references) LOC which will be tracked.
+    INSN is instruction which the LOC is part of.  */
+ 
+@@ -1527,7 +1542,8 @@ count_uses (rtx *loc, void *insn)
+     }
+   else if (MEM_P (*loc)
+ 	   && MEM_EXPR (*loc)
+-	   && track_expr_p (MEM_EXPR (*loc)))
++	   && track_expr_p (MEM_EXPR (*loc))
++	   && offset_valid_for_tracked_p (INT_MEM_OFFSET (*loc)))
+     {
+ 	  VTI (bb)->n_mos++;
+     }
+@@ -1563,14 +1579,19 @@ add_uses (rtx *loc, void *insn)
+       basic_block bb = BLOCK_FOR_INSN ((rtx) insn);
+       micro_operation *mo = VTI (bb)->mos + VTI (bb)->n_mos++;
+ 
+-      mo->type = ((REG_EXPR (*loc) && track_expr_p (REG_EXPR (*loc)))
+-		  ? MO_USE : MO_USE_NO_VAR);
++      if (REG_EXPR (*loc)
++	  && track_expr_p (REG_EXPR (*loc))
++	  && offset_valid_for_tracked_p (REG_OFFSET (*loc)))
++	mo->type = MO_USE;
++      else
++	mo->type = MO_USE_NO_VAR;
+       mo->u.loc = *loc;
+       mo->insn = (rtx) insn;
+     }
+   else if (MEM_P (*loc)
+ 	   && MEM_EXPR (*loc)
+-	   && track_expr_p (MEM_EXPR (*loc)))
++	   && track_expr_p (MEM_EXPR (*loc))
++	   && offset_valid_for_tracked_p (INT_MEM_OFFSET (*loc)))
+     {
+       basic_block bb = BLOCK_FOR_INSN ((rtx) insn);
+       micro_operation *mo = VTI (bb)->mos + VTI (bb)->n_mos++;
+@@ -1603,15 +1624,20 @@ add_stores (rtx loc, rtx expr, void *insn)
+       basic_block bb = BLOCK_FOR_INSN ((rtx) insn);
+       micro_operation *mo = VTI (bb)->mos + VTI (bb)->n_mos++;
+ 
+-      mo->type = ((GET_CODE (expr) != CLOBBER && REG_EXPR (loc)
+-		   && track_expr_p (REG_EXPR (loc)))
+-		  ? MO_SET : MO_CLOBBER);
++      if (GET_CODE (expr) != CLOBBER
++	  && REG_EXPR (loc)
++	  && track_expr_p (REG_EXPR (loc))
++	  && offset_valid_for_tracked_p (REG_OFFSET (loc)))
++	mo->type = MO_SET;
++      else
++	mo->type = MO_CLOBBER;
+       mo->u.loc = loc;
+       mo->insn = (rtx) insn;
+     }
+   else if (MEM_P (loc)
+ 	   && MEM_EXPR (loc)
+-	   && track_expr_p (MEM_EXPR (loc)))
++	   && track_expr_p (MEM_EXPR (loc))
++	   && offset_valid_for_tracked_p (INT_MEM_OFFSET (loc)))
+     {
+       basic_block bb = BLOCK_FOR_INSN ((rtx) insn);
+       micro_operation *mo = VTI (bb)->mos + VTI (bb)->n_mos++;
+@@ -2570,7 +2596,7 @@ vt_get_decl_and_offset (rtx rtl, tree *declp, HOST_WIDE_INT *offsetp)
+       if (MEM_ATTRS (rtl))
+ 	{
+ 	  *declp = MEM_EXPR (rtl);
+-	  *offsetp = MEM_OFFSET (rtl) ? INTVAL (MEM_OFFSET (rtl)) : 0;
++	  *offsetp = INT_MEM_OFFSET (rtl);
+ 	  return true;
+ 	}
+     }

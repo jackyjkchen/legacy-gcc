@@ -1,0 +1,52 @@
+diff --git a/gcc/cp/decl.c b/gcc/cp/decl.c
+index e147a9aa..a9c704a2 100644
+--- a/gcc/cp/decl.c
++++ b/gcc/cp/decl.c
+@@ -5037,7 +5037,21 @@ cp_finish_decl (tree decl, tree init, bool init_const_expr_p,
+ 	  goto finish_end;
+ 	}
+ 
+-      init = fold_non_dependent_expr (init);
++      if (TREE_CODE (init) == TREE_LIST)
++	{
++	  /* If the parenthesized-initializer form was used (e.g.,
++	     "int A<N>::i(X)"), then INIT will be a TREE_LIST of initializer
++	     arguments.  (There is generally only one.)  We convert them
++	     individually.  */
++	  tree list = init;
++	  for (; list; list = TREE_CHAIN (list))
++	    {
++	      tree elt = TREE_VALUE (list);
++	      TREE_VALUE (list) = fold_non_dependent_expr (elt);
++	    }
++	}
++      else
++	init = fold_non_dependent_expr (init);
+       processing_template_decl = 0;
+     }
+ 
+diff --git a/gcc/testsuite/g++.dg/template/static31.C b/gcc/testsuite/g++.dg/template/static31.C
+new file mode 100644
+index 00000000..935a8a79
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/template/static31.C
+@@ -0,0 +1,19 @@
++// PR c++/32674
++
++class C
++{
++  static const int j = 3;
++};
++
++template<int> class A
++{
++  static const int i1;
++  static const int i2;
++  static const int i3;
++  static const int i4;
++};
++
++template<int N> const int A<N>::i1(C::j);
++template<int N> const int A<N>::i2 = C::j;
++template<int N> const int A<N>::i3(C::j, 5); // { dg-error "compound expression" }
++template<int N> const int A<N>::i4 = (C::j, 7);

@@ -1,0 +1,41 @@
+diff --git a/gcc/cp/semantics.c b/gcc/cp/semantics.c
+index f9f8494c..5e905fe5 100644
+--- a/gcc/cp/semantics.c
++++ b/gcc/cp/semantics.c
+@@ -1471,9 +1471,11 @@ check_accessibility_of_qualified_id (tree decl,
+        its bases.  */
+     qualifying_type = currently_open_derived_class (scope);
+ 
+-  if (qualifying_type && IS_AGGR_TYPE_CODE (TREE_CODE (qualifying_type)))
+-    /* It is possible for qualifying type to be a TEMPLATE_TYPE_PARM
+-       or similar in a default argument value.  */
++  if (qualifying_type 
++      /* It is possible for qualifying type to be a TEMPLATE_TYPE_PARM
++	 or similar in a default argument value.  */
++      && CLASS_TYPE_P (qualifying_type)
++      && !dependent_type_p (qualifying_type))
+     perform_or_defer_access_check (TYPE_BINFO (qualifying_type), decl);
+ }
+ 
+diff --git a/gcc/testsuite/g++.dg/template/defarg9.C b/gcc/testsuite/g++.dg/template/defarg9.C
+new file mode 100644
+index 00000000..de7528f6
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/template/defarg9.C
+@@ -0,0 +1,16 @@
++// PR c++/28048
++
++template<typename T> struct Boom;
++
++template<typename T, bool D = Boom<T>::Internal::Value> // <--ICE
++    struct Foo
++    {
++    };
++
++template<typename T> struct Boom
++{
++    struct Internal
++    {
++      static const bool Value = false;
++    };
++};
