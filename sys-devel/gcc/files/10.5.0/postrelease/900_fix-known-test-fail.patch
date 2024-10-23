@@ -1,3 +1,41 @@
+diff --git a/gcc/doc/sourcebuild.texi b/gcc/doc/sourcebuild.texi
+index cb2e9e5b8..289ac6de0 100644
+--- a/gcc/doc/sourcebuild.texi
++++ b/gcc/doc/sourcebuild.texi
+@@ -1997,12 +1997,18 @@ ARM Target supports options suitable for accessing the SIMD32 intrinsics from
+ @code{arm_acle.h}.
+ Some multilibs may be incompatible with these options.
+ 
+-@item arm_qbit_ok
+-@anchor{arm_qbit_ok}
+-ARM Target supports options suitable for accessing the Q-bit manipulation
++@item arm_sat_ok
++@anchor{arm_sat_ok}
++ARM Target supports options suitable for accessing the saturation
+ intrinsics from @code{arm_acle.h}.
+ Some multilibs may be incompatible with these options.
+ 
++@item arm_dsp_ok
++@anchor{arm_dsp_ok}
++ARM Target supports options suitable for accessing the DSP intrinsics
++from @code{arm_acle.h}.
++Some multilibs may be incompatible with these options.
++
+ @item arm_softfp_ok
+ @anchor{arm_softfp_ok}
+ ARM target supports the @code{-mfloat-abi=softfp} option.
+@@ -2659,6 +2665,11 @@ Add options to enable generation of the @code{VFMAL} and @code{VFMSL}
+ instructions, if this is supported by the target; see the
+ @ref{arm_fp16fml_neon_ok} effective target keyword.
+ 
++@item arm_dsp
++Add options for ARM DSP intrinsics support, if this is supported by
++the target; see the @ref{arm_dsp_ok,,arm_dsp_ok effective target
++keyword}.
++
+ @item bind_pic_locally
+ Add the target-specific flags needed to enable functions to bind
+ locally when using pic/PIC passes in the testsuite.
 diff --git a/gcc/testsuite/c-c++-common/asan/strncpy-overflow-1.c b/gcc/testsuite/c-c++-common/asan/strncpy-overflow-1.c
 index 3d439160b..16eb0d775 100644
 --- a/gcc/testsuite/c-c++-common/asan/strncpy-overflow-1.c
@@ -1274,6 +1312,32 @@ index 76b8d03af..11fcac7b8 100644
  /* { dg-additional-options "-mharden-sls=retbr -Wno-pedantic " } */
  /*
     Ensure that the SLS hardening of RET and BR leaves no unprotected RET/BR
+diff --git a/gcc/testsuite/gcc.target/arm/acle/dsp_arith.c b/gcc/testsuite/gcc.target/arm/acle/dsp_arith.c
+index 9ebd55a12..7bf458e8f 100644
+--- a/gcc/testsuite/gcc.target/arm/acle/dsp_arith.c
++++ b/gcc/testsuite/gcc.target/arm/acle/dsp_arith.c
+@@ -1,6 +1,6 @@
+ /* { dg-do compile } */
+-/* { dg-require-effective-target arm_qbit_ok } */
+-/* { dg-add-options arm_qbit  } */
++/* { dg-require-effective-target arm_dsp_ok } */
++/* { dg-add-options arm_dsp } */
+ 
+ #include <arm_acle.h>
+ 
+diff --git a/gcc/testsuite/gcc.target/arm/acle/saturation.c b/gcc/testsuite/gcc.target/arm/acle/saturation.c
+index 0b3fe5199..a9f99e562 100644
+--- a/gcc/testsuite/gcc.target/arm/acle/saturation.c
++++ b/gcc/testsuite/gcc.target/arm/acle/saturation.c
+@@ -1,6 +1,6 @@
+ /* { dg-do compile } */
+-/* { dg-require-effective-target arm_qbit_ok } */
+-/* { dg-add-options arm_qbit } */
++/* { dg-require-effective-target arm_sat_ok } */
++/* { dg-add-options arm_sat } */
+ 
+ #include <arm_acle.h>
+ 
 diff --git a/gcc/testsuite/gcc.target/arm/pr84826.c b/gcc/testsuite/gcc.target/arm/pr84826.c
 index a7af61db2..effd2d1bb 100644
 --- a/gcc/testsuite/gcc.target/arm/pr84826.c
@@ -2363,6 +2427,110 @@ index b10c4fc0a..c8a7d896b 100644
 +! { dg-final { scan-tree-dump-times "vectorized 24 loops" 1 "vect" { target aarch64*-*-* } } }
 +! { dg-final { scan-tree-dump-times "vectorized 2\[234\] loops" 1 "vect" { target { vect_intdouble_cvt && { ! aarch64*-*-* } } } } }
  ! { dg-final { scan-tree-dump-times "vectorized 17 loops" 1 "vect" { target { { ! vect_intdouble_cvt } && { ! aarch64*-*-* } } } } }
+diff --git a/gcc/testsuite/lib/target-supports.exp b/gcc/testsuite/lib/target-supports.exp
+index 2e6cf66e2..f9d8467b8 100644
+--- a/gcc/testsuite/lib/target-supports.exp
++++ b/gcc/testsuite/lib/target-supports.exp
+@@ -4022,24 +4022,64 @@ proc add_options_for_arm_simd32 { flags } {
+     return "$flags $et_arm_simd32_flags"
+ }
+ 
+-# Return 1 if this is an ARM target supporting the saturation intrinsics
+-# from arm_acle.h.  Some multilibs may be incompatible with these options.
+-# Also set et_arm_qbit_flags to the best options to add.
++# Return 1 if this is an ARM target supporting the __ssat and __usat
++# saturation intrinsics from arm_acle.h.  Some multilibs may be
++# incompatible with these options.  Also set et_arm_sat_flags to the
++# best options to add.  arm_acle.h includes stdint.h which can cause
++# trouble with incompatible -mfloat-abi= options.
++
++proc check_effective_target_arm_sat_ok_nocache { } {
++    global et_arm_sat_flags
++    set et_arm_sat_flags ""
++    foreach flags {"" "-march=armv6" "-march=armv6 -mfloat-abi=softfp" "-march=armv6 -mfloat-abi=hard -mfpu=vfp"} {
++      if { [check_no_compiler_messages_nocache et_arm_sat_flags object {
++	#include <arm_acle.h>
++	int dummy;
++	#ifndef __ARM_FEATURE_SAT
++	#error not SAT
++	#endif
++      } "$flags"] } {
++	set et_arm_sat_flags $flags
++	return 1
++      }
++    }
++
++  return 0
++}
++
++proc check_effective_target_arm_sat_ok { } {
++    return [check_cached_effective_target et_arm_sat_flags \
++		check_effective_target_arm_sat_ok_nocache]
++}
++
++proc add_options_for_arm_sat { flags } {
++    if { ! [check_effective_target_arm_sat_ok] } {
++	return "$flags"
++    }
++    global et_arm_sat_flags
++    return "$flags $et_arm_sat_flags"
++}
++
++# Return 1 if this is an ARM target supporting the DSP intrinsics from
++# arm_acle.h.  Some multilibs may be incompatible with these options.
++# Also set et_arm_dsp_flags to the best options to add.
+ # arm_acle.h includes stdint.h which can cause trouble with incompatible
+ # -mfloat-abi= options.
++# check_effective_target_arm_dsp also exists, which checks the current
++# multilib, without trying other options.
+ 
+-proc check_effective_target_arm_qbit_ok_nocache { } {
+-    global et_arm_qbit_flags
+-    set et_arm_qbit_flags ""
++proc check_effective_target_arm_dsp_ok_nocache { } {
++    global et_arm_dsp_flags
++    set et_arm_dsp_flags ""
+     foreach flags {"" "-march=armv5te" "-march=armv5te -mfloat-abi=softfp" "-march=armv5te -mfloat-abi=hard"} {
+-      if { [check_no_compiler_messages_nocache et_arm_qbit_flags object {
++      if { [check_no_compiler_messages_nocache et_arm_dsp_ok object {
+ 	#include <arm_acle.h>
+ 	int dummy;
+-	#ifndef __ARM_FEATURE_QBIT
+-	#error not QBIT
++	#ifndef __ARM_FEATURE_DSP
++	#error not DSP
+ 	#endif
+       } "$flags"] } {
+-	set et_arm_qbit_flags $flags
++	set et_arm_dsp_flags $flags
+ 	return 1
+       }
+     }
+@@ -4047,17 +4087,17 @@ proc check_effective_target_arm_qbit_ok_nocache { } {
+   return 0
+ }
+ 
+-proc check_effective_target_arm_qbit_ok { } {
+-    return [check_cached_effective_target et_arm_qbit_flags \
+-		check_effective_target_arm_qbit_ok_nocache]
++proc check_effective_target_arm_dsp_ok { } {
++    return [check_cached_effective_target et_arm_dsp_flags \
++		check_effective_target_arm_dsp_ok_nocache]
+ }
+ 
+-proc add_options_for_arm_qbit { flags } {
+-    if { ! [check_effective_target_arm_qbit_ok] } {
++proc add_options_for_arm_dsp { flags } {
++    if { ! [check_effective_target_arm_dsp_ok] } {
+ 	return "$flags"
+     }
+-    global et_arm_qbit_flags
+-    return "$flags $et_arm_qbit_flags"
++    global et_arm_dsp_flags
++    return "$flags $et_arm_dsp_flags"
+ }
+ 
+ # Return 1 if this is an ARM target supporting -mfpu=neon without any
 diff --git a/gcc/testsuite/objc.dg/torture/strings/const-str-3.m b/gcc/testsuite/objc.dg/torture/strings/const-str-3.m
 index 0eb2d6a01..785352592 100644
 --- a/gcc/testsuite/objc.dg/torture/strings/const-str-3.m

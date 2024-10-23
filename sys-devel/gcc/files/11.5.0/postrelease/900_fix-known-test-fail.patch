@@ -1,3 +1,20 @@
+diff --git a/gcc/doc/sourcebuild.texi b/gcc/doc/sourcebuild.texi
+index b00012477..e67272eae 100644
+--- a/gcc/doc/sourcebuild.texi
++++ b/gcc/doc/sourcebuild.texi
+@@ -2038,9 +2038,9 @@ ARM Target supports options suitable for accessing the SIMD32 intrinsics from
+ @code{arm_acle.h}.
+ Some multilibs may be incompatible with these options.
+ 
+-@item arm_qbit_ok
+-@anchor{arm_qbit_ok}
+-ARM Target supports options suitable for accessing the Q-bit manipulation
++@item arm_sat_ok
++@anchor{arm_sat_ok}
++ARM Target supports options suitable for accessing the saturation
+ intrinsics from @code{arm_acle.h}.
+ Some multilibs may be incompatible with these options.
+ 
 diff --git a/gcc/testsuite/c-c++-common/asan/strncpy-overflow-1.c b/gcc/testsuite/c-c++-common/asan/strncpy-overflow-1.c
 index 3d439160b..16eb0d775 100644
 --- a/gcc/testsuite/c-c++-common/asan/strncpy-overflow-1.c
@@ -1220,6 +1237,17 @@ index def8d137f..1378bf817 100644
  
  struct s { int x; };
  struct s f (int);
+diff --git a/gcc/testsuite/gcc.dg/vect/pr108950.c b/gcc/testsuite/gcc.dg/vect/pr108950.c
+index ecf076c96..563c4b9df 100644
+--- a/gcc/testsuite/gcc.dg/vect/pr108950.c
++++ b/gcc/testsuite/gcc.dg/vect/pr108950.c
+@@ -1,5 +1,5 @@
+-/* { dg-require-effective-target vect_simd_clones } */
+ /* { dg-do compile } */
++/* { dg-require-effective-target vect_simd_clones } */
+ 
+ int m;
+ short int n;
 diff --git a/gcc/testsuite/gcc.target/aarch64/aapcs64/aapcs64.exp b/gcc/testsuite/gcc.target/aarch64/aapcs64/aapcs64.exp
 index 0a74c35ba..6bf28e440 100644
 --- a/gcc/testsuite/gcc.target/aarch64/aapcs64/aapcs64.exp
@@ -1502,6 +1530,19 @@ index 76b8d03af..11fcac7b8 100644
  /* { dg-additional-options "-mharden-sls=retbr -Wno-pedantic " } */
  /*
     Ensure that the SLS hardening of RET and BR leaves no unprotected RET/BR
+diff --git a/gcc/testsuite/gcc.target/arm/acle/saturation.c b/gcc/testsuite/gcc.target/arm/acle/saturation.c
+index 0b3fe5199..a9f99e562 100644
+--- a/gcc/testsuite/gcc.target/arm/acle/saturation.c
++++ b/gcc/testsuite/gcc.target/arm/acle/saturation.c
+@@ -1,6 +1,6 @@
+ /* { dg-do compile } */
+-/* { dg-require-effective-target arm_qbit_ok } */
+-/* { dg-add-options arm_qbit } */
++/* { dg-require-effective-target arm_sat_ok } */
++/* { dg-add-options arm_sat } */
+ 
+ #include <arm_acle.h>
+ 
 diff --git a/gcc/testsuite/gcc.target/arm/pr84826.c b/gcc/testsuite/gcc.target/arm/pr84826.c
 index a7af61db2..effd2d1bb 100644
 --- a/gcc/testsuite/gcc.target/arm/pr84826.c
@@ -2761,18 +2802,73 @@ index 9994805d7..c8a7d896b 100644
 +! { dg-final { scan-tree-dump-times "vectorized 2\[234\] loops" 1 "vect" { target { vect_intdouble_cvt && { ! aarch64*-*-* } } } } }
  ! { dg-final { scan-tree-dump-times "vectorized 17 loops" 1 "vect" { target { { ! vect_intdouble_cvt } && { ! aarch64*-*-* } } } } }
 diff --git a/gcc/testsuite/lib/target-supports.exp b/gcc/testsuite/lib/target-supports.exp
-index a059a8002..27012cba2 100644
+index a059a8002..cca3004d8 100644
 --- a/gcc/testsuite/lib/target-supports.exp
 +++ b/gcc/testsuite/lib/target-supports.exp
-@@ -10915,7 +10915,7 @@ proc check_effective_target_arm_v8_3a_fp16_complex_neon_ok_nocache { } {
+@@ -4315,24 +4315,24 @@ proc add_options_for_arm_simd32 { flags } {
+     return "$flags $et_arm_simd32_flags"
+ }
  
-     # Iterate through sets of options to find the compiler flags that
-     # need to be added to the -march option.
--    foreach flags {"" "-mfloat-abi=softfp -mfpu=auto" "-mfloat-abi=hard -mfpu=auto"} {
-+    foreach flags {"-mfpu=auto" "-mfloat-abi=softfp -mfpu=auto" "-mfloat-abi=hard -mfpu=auto"} {
-         if { [check_no_compiler_messages_nocache \
-                   arm_v8_3a_fp16_complex_neon_ok assembly {
-             #if !defined (__ARM_FEATURE_COMPLEX)
+-# Return 1 if this is an ARM target supporting the saturation intrinsics
+-# from arm_acle.h.  Some multilibs may be incompatible with these options.
+-# Also set et_arm_qbit_flags to the best options to add.
+-# arm_acle.h includes stdint.h which can cause trouble with incompatible
+-# -mfloat-abi= options.
+-
+-proc check_effective_target_arm_qbit_ok_nocache { } {
+-    global et_arm_qbit_flags
+-    set et_arm_qbit_flags ""
+-    foreach flags {"" "-march=armv5te" "-march=armv5te -mfloat-abi=softfp" "-march=armv5te -mfloat-abi=hard"} {
+-      if { [check_no_compiler_messages_nocache et_arm_qbit_flags object {
++# Return 1 if this is an ARM target supporting the __ssat and __usat
++# saturation intrinsics from arm_acle.h.  Some multilibs may be
++# incompatible with these options.  Also set et_arm_sat_flags to the
++# best options to add.  arm_acle.h includes stdint.h which can cause
++# trouble with incompatible -mfloat-abi= options.
++
++proc check_effective_target_arm_sat_ok_nocache { } {
++    global et_arm_sat_flags
++    set et_arm_sat_flags ""
++    foreach flags {"" "-march=armv6" "-march=armv6 -mfloat-abi=softfp" "-march=armv6 -mfloat-abi=hard -mfpu=vfp"} {
++      if { [check_no_compiler_messages_nocache et_arm_sat_flags object {
+ 	#include <arm_acle.h>
+ 	int dummy;
+-	#ifndef __ARM_FEATURE_QBIT
+-	#error not QBIT
++	#ifndef __ARM_FEATURE_SAT
++	#error not SAT
+ 	#endif
+       } "$flags"] } {
+-	set et_arm_qbit_flags $flags
++	set et_arm_sat_flags $flags
+ 	return 1
+       }
+     }
+@@ -4340,17 +4340,17 @@ proc check_effective_target_arm_qbit_ok_nocache { } {
+   return 0
+ }
+ 
+-proc check_effective_target_arm_qbit_ok { } {
+-    return [check_cached_effective_target et_arm_qbit_flags \
+-		check_effective_target_arm_qbit_ok_nocache]
++proc check_effective_target_arm_sat_ok { } {
++    return [check_cached_effective_target et_arm_sat_flags \
++		check_effective_target_arm_sat_ok_nocache]
+ }
+ 
+-proc add_options_for_arm_qbit { flags } {
+-    if { ! [check_effective_target_arm_qbit_ok] } {
++proc add_options_for_arm_sat { flags } {
++    if { ! [check_effective_target_arm_sat_ok] } {
+ 	return "$flags"
+     }
+-    global et_arm_qbit_flags
+-    return "$flags $et_arm_qbit_flags"
++    global et_arm_sat_flags
++    return "$flags $et_arm_sat_flags"
+ }
+ 
+ # Return 1 if this is an ARM target supporting the DSP intrinsics from
 diff --git a/gcc/testsuite/objc.dg/torture/strings/const-str-3.m b/gcc/testsuite/objc.dg/torture/strings/const-str-3.m
 index 0eb2d6a01..785352592 100644
 --- a/gcc/testsuite/objc.dg/torture/strings/const-str-3.m
