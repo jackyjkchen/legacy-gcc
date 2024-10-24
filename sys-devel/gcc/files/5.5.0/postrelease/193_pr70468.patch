@@ -1,0 +1,77 @@
+diff --git a/gcc/cp/pt.c b/gcc/cp/pt.c
+index a829ccf52..dc8ee4d9a 100644
+--- a/gcc/cp/pt.c
++++ b/gcc/cp/pt.c
+@@ -20879,6 +20879,7 @@ static tree
+ tsubst_initializer_list (tree t, tree argvec)
+ {
+   tree inits = NULL_TREE;
++  tree target_ctor = error_mark_node;
+ 
+   for (; t; t = TREE_CHAIN (t))
+     {
+@@ -20995,6 +20996,28 @@ tsubst_initializer_list (tree t, tree argvec)
+               in_base_initializer = 0;
+             }
+ 
++	  if (target_ctor != error_mark_node
++	      && init != error_mark_node)
++	    {
++	      error ("mem-initializer for %qD follows constructor delegation",
++		     decl);
++	      return inits;
++	    }
++	  /* Look for a target constructor. */
++	  if (init != error_mark_node
++	      && decl && CLASS_TYPE_P (decl)
++	      && same_type_p (decl, current_class_type))
++	    {
++	      maybe_warn_cpp0x (CPP0X_DELEGATING_CTORS);
++	      if (inits)
++		{
++		  error ("constructor delegation follows mem-initializer for %qD",
++			 TREE_PURPOSE (inits));
++		  continue;
++		}
++	      target_ctor = init;
++	    }
++
+           if (decl)
+             {
+               init = build_tree_list (decl, init);
+diff --git a/gcc/testsuite/g++.dg/cpp0x/dc9.C b/gcc/testsuite/g++.dg/cpp0x/dc9.C
+new file mode 100644
+index 000000000..b87f5ce61
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/dc9.C
+@@ -0,0 +1,30 @@
++// PR c++/70468
++// { dg-do compile { target c++11 } }
++// { dg-additional-options -w }
++
++struct S {}; 
++
++template < typename = S > 
++class A 
++{
++public:
++  A () : f0 (), f1 () {}	// { dg-error "" }
++
++private:
++  typedef A<> f0; 
++  int f1;
++};
++
++template < typename = S, typename = S > 
++class B
++{
++}; 
++
++template < typename T1, typename T2 > 
++B < T1, T2 > &operator<< (B < T1, T2 >&, const int) 
++{
++  A<> (); 
++}
++
++template 
++B < S, S > &operator<< (B < S, S >&, const int);

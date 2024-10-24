@@ -1,0 +1,68 @@
+diff --git a/gcc/cp/decl.c b/gcc/cp/decl.c
+index 192a0c2e4..bd1f66b06 100644
+--- a/gcc/cp/decl.c
++++ b/gcc/cp/decl.c
+@@ -11664,13 +11664,29 @@ grokdeclarator (const cp_declarator *declarator,
+ 		    friendp = 0;
+ 		  }
+ 		if (decl_context == NORMAL)
+-		  error ("friend declaration not in class definition");
++		  error_at (declarator->id_loc,
++			    "friend declaration not in class definition");
+ 		if (current_function_decl && funcdef_flag)
+ 		  {
+-		    error ("can%'t define friend function %qs in a local "
+-			   "class definition", name);
++		    error_at (declarator->id_loc,
++			      "cannot define friend function %qs in a local "
++			      "class definition", name);
+ 		    friendp = 0;
+ 		  }
++		/* [class.friend]/6: A function can be defined in a friend
++		   declaration if the function name is unqualified.  */
++		if (funcdef_flag && in_namespace)
++		  {
++		    if (in_namespace == global_namespace)
++		      error_at (declarator->id_loc,
++				"friend function definition %qs cannot have "
++				"a name qualified with %<::%>", name);
++		    else
++		      error_at (declarator->id_loc,
++				"friend function definition %qs cannot have "
++				"a name qualified with %<%D::%>", name,
++				in_namespace);
++		  }
+ 	      }
+ 	    else if (ctype && sfk == sfk_conversion)
+ 	      {
+diff --git a/gcc/testsuite/g++.dg/diagnostic/friend2.C b/gcc/testsuite/g++.dg/diagnostic/friend2.C
+new file mode 100644
+index 000000000..4f4ada8bc
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/diagnostic/friend2.C
+@@ -0,0 +1,10 @@
++// PR c++/61490
++// { dg-do compile }
++
++namespace N { void f (); }
++void f2 ();
++
++struct A {
++  friend void N::f () { } // { dg-error "15:friend function definition 'f' cannot have a name qualified with 'N::'" }
++  friend void ::f2 () { } // { dg-error "15:friend function definition 'f2' cannot have a name qualified with '::'" }
++};
+diff --git a/gcc/testsuite/g++.dg/diagnostic/friend3.C b/gcc/testsuite/g++.dg/diagnostic/friend3.C
+new file mode 100644
+index 000000000..574d7caa5
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/diagnostic/friend3.C
+@@ -0,0 +1,9 @@
++// { dg-do compile }
++
++void
++fn ()
++{
++  struct S {
++    friend void bar () { } // { dg-error "17:cannot define friend function 'bar' in a local class definition" }
++  };
++}

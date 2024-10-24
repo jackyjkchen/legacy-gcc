@@ -1,0 +1,111 @@
+diff --git a/gcc/cp/cp-tree.h b/gcc/cp/cp-tree.h
+index 7d0538a91..bdd4a1227 100644
+--- a/gcc/cp/cp-tree.h
++++ b/gcc/cp/cp-tree.h
+@@ -5432,9 +5432,10 @@ class cp_evaluated
+ public:
+   int uneval;
+   int inhibit;
+-  cp_evaluated ()
++  cp_evaluated (bool reset = true)
+     : uneval(cp_unevaluated_operand), inhibit(c_inhibit_evaluation_warnings)
+-  { cp_unevaluated_operand = c_inhibit_evaluation_warnings = 0; }
++  { if (reset)
++      cp_unevaluated_operand = c_inhibit_evaluation_warnings = 0; }
+   ~cp_evaluated ()
+   { cp_unevaluated_operand = uneval;
+     c_inhibit_evaluation_warnings = inhibit; }
+diff --git a/gcc/cp/parser.c b/gcc/cp/parser.c
+index e9cae5626..88c32712c 100644
+--- a/gcc/cp/parser.c
++++ b/gcc/cp/parser.c
+@@ -2110,7 +2110,7 @@ static enum tree_code cp_parser_assignment_operator_opt
+ static cp_expr cp_parser_expression
+   (cp_parser *, cp_id_kind * = NULL, bool = false, bool = false, bool = false);
+ static cp_expr cp_parser_constant_expression
+-  (cp_parser *, bool = false, bool * = NULL, bool = false);
++  (cp_parser *, int = 0, bool * = NULL, bool = false);
+ static cp_expr cp_parser_builtin_offsetof
+   (cp_parser *);
+ static cp_expr cp_parser_lambda_expression
+@@ -10110,13 +10110,15 @@ cp_parser_expression (cp_parser* parser, cp_id_kind * pidk,
+   If ALLOW_NON_CONSTANT_P a non-constant expression is silently
+   accepted.  If ALLOW_NON_CONSTANT_P is true and the expression is not
+   constant, *NON_CONSTANT_P is set to TRUE.  If ALLOW_NON_CONSTANT_P
+-  is false, NON_CONSTANT_P should be NULL.  If STRICT_P is true,
++  is false, NON_CONSTANT_P should be NULL.  If ALLOW_NON_CONSTANT_P is
++  greater than 1, this isn't really a constant-expression, only a
++  potentially constant-evaluated expression.  If STRICT_P is true,
+   only parse a conditional-expression, otherwise parse an
+   assignment-expression.  See below for rationale.  */
+ 
+ static cp_expr
+ cp_parser_constant_expression (cp_parser* parser,
+-			       bool allow_non_constant_p,
++			       int allow_non_constant_p,
+ 			       bool *non_constant_p,
+ 			       bool strict_p)
+ {
+@@ -10152,6 +10154,11 @@ cp_parser_constant_expression (cp_parser* parser,
+   parser->allow_non_integral_constant_expression_p
+     = (allow_non_constant_p || cxx_dialect >= cxx11);
+   parser->non_integral_constant_expression_p = false;
++
++  /* A manifestly constant-evaluated expression is evaluated even in an
++     unevaluated operand.  */
++  cp_evaluated ev (/*reset if*/allow_non_constant_p <= 1);
++
+   /* Although the grammar says "conditional-expression", when not STRICT_P,
+      we parse an "assignment-expression", which also permits
+      "throw-expression" and the use of assignment operators.  In the case
+@@ -23266,7 +23273,7 @@ cp_parser_initializer_clause (cp_parser* parser, bool* non_constant_p)
+     {
+       initializer
+ 	= cp_parser_constant_expression (parser,
+-					/*allow_non_constant_p=*/true,
++					/*allow_non_constant_p=*/2,
+ 					non_constant_p);
+     }
+   else
+diff --git a/gcc/testsuite/g++.dg/cpp0x/decltype-nonstatic1.C b/gcc/testsuite/g++.dg/cpp0x/decltype-nonstatic1.C
+new file mode 100644
+index 000000000..bc488ff38
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/decltype-nonstatic1.C
+@@ -0,0 +1,16 @@
++// PR c++/100205
++// { dg-do compile { target c++11 } }
++
++struct coordinate_matrix {
++  using index_t = unsigned;
++  struct convert_to_matrix_coordinate {
++    index_t column_id;
++  };
++  index_t column_id;
++
++  // does not work
++  using value_type2 = decltype(convert_to_matrix_coordinate{column_id});
++
++  // does work
++  using value_type5 = decltype(column_id);
++};
+diff --git a/gcc/testsuite/g++.dg/parse/uneval1.C b/gcc/testsuite/g++.dg/parse/uneval1.C
+new file mode 100644
+index 000000000..dfc1bb4e0
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/parse/uneval1.C
+@@ -0,0 +1,14 @@
++// PR c++/93314
++
++struct S {
++  int m;
++  static int f() {
++    return sizeof(char[m]);	// { dg-error "S::m" }
++  }
++};
++
++int main()
++{
++  return S().f()
++    + sizeof(char[S::m]);	// { dg-error "S::m" }
++}

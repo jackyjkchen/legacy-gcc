@@ -1,0 +1,150 @@
+diff --git a/gcc/fortran/gfortran.h b/gcc/fortran/gfortran.h
+index 2a669a377..9eda8b7ad 100644
+--- a/gcc/fortran/gfortran.h
++++ b/gcc/fortran/gfortran.h
+@@ -3515,6 +3515,8 @@ void gfc_module_done_2 (void);
+ void gfc_dump_module (const char *, int);
+ bool gfc_check_symbol_access (gfc_symbol *);
+ void gfc_free_use_stmts (gfc_use_list *);
++void gfc_save_module_list ();
++void gfc_restore_old_module_list ();
+ const char *gfc_dt_lower_string (const char *);
+ const char *gfc_dt_upper_string (const char *);
+ 
+diff --git a/gcc/fortran/module.c b/gcc/fortran/module.c
+index 0c14f2a81..212222b98 100644
+--- a/gcc/fortran/module.c
++++ b/gcc/fortran/module.c
+@@ -195,7 +195,12 @@ static const char *module_name;
+ /* The name of the .smod file that the submodule will write to.  */
+ static const char *submodule_name;
+ 
++/* The list of use statements to apply to the current namespace
++   before parsing the non-use statements.  */
+ static gfc_use_list *module_list;
++/* The end of the MODULE_LIST list above at the time the recognition
++   of the current statement started.  */
++static gfc_use_list **old_module_list_tail;
+ 
+ /* If we're reading an intrinsic module, this is its ID.  */
+ static intmod_id current_intmod;
+@@ -7336,6 +7341,8 @@ gfc_use_modules (void)
+       gfc_use_module (module_list);
+       free (module_list);
+     }
++  module_list = NULL;
++  old_module_list_tail = &module_list;
+   gfc_rename_list = NULL;
+ }
+ 
+@@ -7359,6 +7366,30 @@ gfc_free_use_stmts (gfc_use_list *use_stmts)
+ }
+ 
+ 
++/* Remember the end of the MODULE_LIST list, so that the list can be restored
++   to its previous state if the current statement is erroneous.  */
++
++void
++gfc_save_module_list ()
++{
++  gfc_use_list **tail = &module_list;
++  while (*tail != NULL)
++    tail = &(*tail)->next;
++  old_module_list_tail = tail;
++}
++
++
++/* Restore the MODULE_LIST list to its previous value and free the use
++   statements that are no longer part of the list.  */
++
++void
++gfc_restore_old_module_list ()
++{
++  gfc_free_use_stmts (*old_module_list_tail);
++  *old_module_list_tail = NULL;
++}
++
++
+ void
+ gfc_module_init_2 (void)
+ {
+diff --git a/gcc/fortran/parse.c b/gcc/fortran/parse.c
+index 69c0f4350..62f7d10d2 100644
+--- a/gcc/fortran/parse.c
++++ b/gcc/fortran/parse.c
+@@ -1482,6 +1482,7 @@ next_statement (void)
+   locus old_locus;
+ 
+   gfc_enforce_clean_symbol_state ();
++  gfc_save_module_list ();
+ 
+   gfc_new_block = NULL;
+ 
+@@ -2629,6 +2630,9 @@ reject_statement (void)
+ 
+   gfc_reject_data (gfc_current_ns);
+ 
++  /* Don't queue use-association of a module if we reject the use statement.  */
++  gfc_restore_old_module_list ();
++
+   gfc_new_block = NULL;
+   gfc_undo_symbols ();
+   gfc_clear_warning ();
+diff --git a/gcc/testsuite/gfortran.dg/pr89943_3.f90 b/gcc/testsuite/gfortran.dg/pr89943_3.f90
+index 38b723e24..84a9fb747 100644
+--- a/gcc/testsuite/gfortran.dg/pr89943_3.f90
++++ b/gcc/testsuite/gfortran.dg/pr89943_3.f90
+@@ -22,7 +22,7 @@ submodule(Foo_mod) Foo_smod
+       module subroutine runFoo4C(ndim) bind(C, name="runFu")   ! { dg-error "Mismatch in BIND" }
+          use, intrinsic :: iso_c_binding                 ! { dg-error "Unexpected USE statement" }
+          implicit none                                   ! { dg-error "Unexpected IMPLICIT NONE statement" }
+-         integer(c_int32_t) , intent(in) :: ndim         ! { dg-error "Unexpected data declaration" }
++         integer(c_int32_t) , intent(in) :: ndim         ! { dg-error "Symbol 'c_int32_t' at .1. has no IMPLICIT type" }
+       end subroutine runFoo4C                            ! { dg-error " Expecting END SUBMODULE" }
+ 
+ end submodule Foo_smod
+diff --git a/gcc/testsuite/gfortran.dg/pr89943_4.f90 b/gcc/testsuite/gfortran.dg/pr89943_4.f90
+index 8eba2eda1..cb955d01c 100644
+--- a/gcc/testsuite/gfortran.dg/pr89943_4.f90
++++ b/gcc/testsuite/gfortran.dg/pr89943_4.f90
+@@ -23,7 +23,7 @@ submodule(Foo_mod) Foo_smod
+       module function runFoo4C(ndim) bind(C, name="runFu")  ! { dg-error "Mismatch in BIND" }
+          use, intrinsic :: iso_c_binding     ! { dg-error "Unexpected USE statement in" }
+          implicit none                       ! { dg-error "Unexpected IMPLICIT NONE statement" }
+-         integer(c_int32_t) , intent(in) :: ndim   ! { dg-error "Unexpected data declaration" }
++         integer(c_int32_t) , intent(in) :: ndim   ! { dg-error "Symbol 'c_int32_t' at .1. has no IMPLICIT type" }
+       end function runFoo4C                  ! { dg-error "Expecting END SUBMODULE" }
+ 
+ end submodule Foo_smod
+diff --git a/gcc/testsuite/gfortran.dg/use_31.f90 b/gcc/testsuite/gfortran.dg/use_31.f90
+new file mode 100644
+index 000000000..89a9ab30d
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/use_31.f90
+@@ -0,0 +1,26 @@
++! { dg-do compile }
++!
++! PR fortran/107426
++! This example used to generate an ICE, caused by the use stmt from the nested
++! procedure declaration setting the result of the C_LOC global intrinsic symbol
++! to the symbol of C_PTR from ISO_C_BINDING being imported, before freeing the
++! latter symbol because of the rejection of the use statement.
++!
++! Contributed by Gerhard Steinmetz <gscfq@t-online.de>
++
++module m
++contains
++   subroutine p() bind(c)
++      use, intrinsic :: iso_c_binding
++      integer, target :: a = 1
++      type(c_ptr) :: z
++      interface
++         subroutine s(x) bind(cc)            ! { dg-error "Missing closing paren" }
++            use, intrinsic :: iso_c_binding  ! { dg-error "Unexpected USE statement in INTERFACE block" }
++            integer(c_int), value :: x       ! { dg-error "Parameter 'c_int' at .1. has not been declared" }
++         end                                 ! { dg-error "END INTERFACE statement expected" }
++      end interface
++      z = c_loc(a)
++      call s(z)
++   end
++end

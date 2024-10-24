@@ -1,0 +1,56 @@
+diff --git a/gcc/fortran/data.c b/gcc/fortran/data.c
+index 0ca41c3da..81906c130 100644
+--- a/gcc/fortran/data.c
++++ b/gcc/fortran/data.c
+@@ -593,6 +593,10 @@ gfc_assign_data_value (gfc_expr *lvalue, gfc_expr *rvalue, mpz_t index,
+ 	gfc_convert_type (expr, &lvalue->ts, 0);
+     }
+ 
++  if (IS_POINTER (symbol)
++      && !gfc_check_pointer_assign (lvalue, rvalue, false, true))
++    return false;
++
+   if (last_con == NULL)
+     symbol->value = expr;
+   else
+diff --git a/gcc/fortran/gfortran.h b/gcc/fortran/gfortran.h
+index f1163082c..2297d6e3a 100644
+--- a/gcc/fortran/gfortran.h
++++ b/gcc/fortran/gfortran.h
+@@ -3556,6 +3556,9 @@ bool gfc_is_finalizable (gfc_symbol *, gfc_expr **);
+ 	 && CLASS_DATA (sym) \
+ 	 && CLASS_DATA (sym)->attr.dimension \
+ 	 && !CLASS_DATA (sym)->attr.class_pointer)
++#define IS_POINTER(sym) \
++	(sym->ts.type == BT_CLASS && sym->attr.class_ok && CLASS_DATA (sym) \
++	 ? CLASS_DATA (sym)->attr.class_pointer : sym->attr.pointer)
+ 
+ /* frontend-passes.c */
+ 
+diff --git a/gcc/testsuite/gfortran.dg/data_pointer_2.f90 b/gcc/testsuite/gfortran.dg/data_pointer_2.f90
+new file mode 100644
+index 000000000..e1677d1c3
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/data_pointer_2.f90
+@@ -0,0 +1,21 @@
++! { dg-do compile }
++! { dg-options "-O -g" }
++! PR fortran/77693 - ICE in rtl_for_decl_init
++! Contributed by G.Steinmetz
++
++program p
++  implicit none
++  complex, target  :: y    = (1.,2.)
++  complex, target  :: z(2) = (3.,4.)
++  complex, pointer :: a => y
++  complex, pointer :: b => z(1)
++  complex, pointer :: c, d, e
++  data c /NULL()/   ! Valid
++  data d /y/        ! Valid
++  data e /(1.,2.)/  ! { dg-error "Pointer assignment target" }
++  if (associated (a)) print *, a% re
++  if (associated (b)) print *, b% im
++  if (associated (c)) print *, c% re
++  if (associated (d)) print *, d% im
++  if (associated (e)) print *, e% re
++end

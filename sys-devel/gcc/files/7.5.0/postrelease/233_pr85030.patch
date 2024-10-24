@@ -1,0 +1,35 @@
+diff --git a/gcc/lra-constraints.c b/gcc/lra-constraints.c
+index c62d1d93b..36c83de47 100644
+--- a/gcc/lra-constraints.c
++++ b/gcc/lra-constraints.c
+@@ -2202,6 +2202,14 @@ process_alt_operands (int only_alternative)
+ 		    else
+ 		      did_match = true;
+ 
++		    /* Don't match wrong asm insn operands for proper
++		       diagnostic later.  */
++		    if (INSN_CODE (curr_insn) < 0
++			&& (curr_operand_mode[m] == BLKmode
++			    || curr_operand_mode[nop] == BLKmode)
++			&& curr_operand_mode[m] != curr_operand_mode[nop])
++		      break;
++		    
+ 		    this_alternative_matches = m;
+ 		    /* This can be fixed with reloads if the operand
+ 		       we are supposed to match can be fixed with
+diff --git a/gcc/testsuite/gcc.target/i386/pr85030.c b/gcc/testsuite/gcc.target/i386/pr85030.c
+new file mode 100644
+index 000000000..ff41df6bb
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/i386/pr85030.c
+@@ -0,0 +1,10 @@
++/* { dg-do compile } */
++/* { dg-options "-O1" } */
++struct S { int c, *b, *e; };
++
++void
++foo ()
++{
++  struct S a;
++  asm volatile ("" : "=rm" (a) : "0" (1)); /* { dg-error "inconsistent operand constraints in an 'asm'" } */
++}

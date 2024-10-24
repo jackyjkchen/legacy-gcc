@@ -1,0 +1,70 @@
+diff --git a/gcc/cp/parser.c b/gcc/cp/parser.c
+index 45163904f..f7a7e9c97 100644
+--- a/gcc/cp/parser.c
++++ b/gcc/cp/parser.c
+@@ -20203,7 +20203,10 @@ cp_parser_parameter_declaration_clause (cp_parser* parser)
+ 
+   if (!processing_specialization
+       && !processing_template_parmlist
+-      && !processing_explicit_instantiation)
++      && !processing_explicit_instantiation
++      /* default_arg_ok_p tracks whether this is a parameter-clause for an
++         actual function or a random abstract declarator.  */
++      && parser->default_arg_ok_p)
+     if (!current_function_decl
+ 	|| (current_class_type && LAMBDA_TYPE_P (current_class_type)))
+       parser->auto_is_implicit_function_template_parm_p = true;
+diff --git a/gcc/testsuite/g++.dg/cpp0x/auto-60626.C b/gcc/testsuite/g++.dg/cpp0x/auto-60626.C
+new file mode 100644
+index 000000000..35671924e
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/auto-60626.C
+@@ -0,0 +1,6 @@
++// PR c++/60626
++// { dg-do compile { target c++14 } }
++
++struct A {};
++
++void (*A::p)(auto) = 0;  // { dg-error "auto|static data member|template" }
+diff --git a/gcc/testsuite/g++.dg/cpp0x/auto51.C b/gcc/testsuite/g++.dg/cpp0x/auto51.C
+new file mode 100644
+index 000000000..dfb08336b
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/auto51.C
+@@ -0,0 +1,9 @@
++// PR c++/84798
++// { dg-do compile { target c++11 } }
++
++template<typename T>
++struct S {
++    static constexpr T value = 0;
++};
++
++constexpr auto x = S<void(*)(auto)>::value; // { dg-error "auto" }
+diff --git a/gcc/testsuite/g++.dg/cpp1y/pr60393.C b/gcc/testsuite/g++.dg/cpp1y/pr60393.C
+index 27fe2b722..2ae21ed11 100644
+--- a/gcc/testsuite/g++.dg/cpp1y/pr60393.C
++++ b/gcc/testsuite/g++.dg/cpp1y/pr60393.C
+@@ -1,8 +1,7 @@
+ // PR c++/60393
+ // { dg-do compile { target c++14 } }
+-// { dg-options "" }
+ 
+-void (*f)(auto) + 0; // { dg-error "expected" }
++void (*f)(auto) + 0; // { dg-error "auto|expected" }
+ 
+ struct A
+ {
+diff --git a/gcc/testsuite/g++.dg/cpp1y/pr60626.C b/gcc/testsuite/g++.dg/cpp1y/pr60626.C
+deleted file mode 100644
+index 311464472..000000000
+--- a/gcc/testsuite/g++.dg/cpp1y/pr60626.C
++++ /dev/null
+@@ -1,7 +0,0 @@
+-// PR c++/60626
+-// { dg-do compile { target c++14 } }
+-// { dg-options "" }
+-
+-struct A {};
+-
+-void (*A::p)(auto) = 0;  // { dg-error "static data member|template" }

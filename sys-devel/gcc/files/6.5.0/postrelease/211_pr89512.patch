@@ -1,0 +1,45 @@
+diff --git a/gcc/cp/semantics.c b/gcc/cp/semantics.c
+index ebf203e81..ebd2d2fcb 100644
+--- a/gcc/cp/semantics.c
++++ b/gcc/cp/semantics.c
+@@ -2021,6 +2021,14 @@ finish_qualified_id_expr (tree qualifying_class,
+     }
+   else if (BASELINK_P (expr))
+     ;
++  else if (!template_p
++	   && TREE_CODE (expr) == TEMPLATE_DECL
++	   && !DECL_FUNCTION_TEMPLATE_P (expr))
++    {
++      if (complain & tf_error)
++	error ("%qE missing template arguments", expr);
++      return error_mark_node;
++    }
+   else
+     {
+       /* In a template, return a SCOPE_REF for most qualified-ids
+diff --git a/gcc/testsuite/g++.dg/cpp1y/var-templ61.C b/gcc/testsuite/g++.dg/cpp1y/var-templ61.C
+new file mode 100644
+index 000000000..be2fe0f44
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp1y/var-templ61.C
+@@ -0,0 +1,20 @@
++// PR c++/89512
++// { dg-do compile { target c++14 } }
++
++struct A {
++  template <typename T>
++  static const int a = 0;
++};
++
++struct B {
++  template <typename T>
++  static int foo ()
++  {
++    return T::a;		// { dg-error "missing template arguments" }
++  }
++};
++
++int bar ()
++{
++  return B::foo<A> ();		// { dg-message "required from here" }
++}

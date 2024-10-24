@@ -1,0 +1,36 @@
+diff --git a/gcc/cp/decl.c b/gcc/cp/decl.c
+index e94377c2b..9d312793e 100644
+--- a/gcc/cp/decl.c
++++ b/gcc/cp/decl.c
+@@ -7249,12 +7249,12 @@ expand_static_init (tree decl, tree init)
+   gcc_assert (TREE_STATIC (decl));
+ 
+   /* Some variables require no dynamic initialization.  */
+-  if (!init
+-      && TYPE_HAS_TRIVIAL_DESTRUCTOR (TREE_TYPE (decl)))
++  if (TYPE_HAS_TRIVIAL_DESTRUCTOR (TREE_TYPE (decl)))
+     {
+       /* Make sure the destructor is callable.  */
+       cxx_maybe_build_cleanup (decl, tf_warning_or_error);
+-      return;
++      if (!init)
++	return;
+     }
+ 
+   if (DECL_THREAD_LOCAL_P (decl) && DECL_GNU_TLS_P (decl)
+diff --git a/gcc/testsuite/g++.dg/cpp0x/deleted12.C b/gcc/testsuite/g++.dg/cpp0x/deleted12.C
+new file mode 100644
+index 000000000..770bb9c30
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/deleted12.C
+@@ -0,0 +1,10 @@
++// PR c++/66542
++// { dg-do compile { target c++11 } }
++
++struct A
++{
++  A() {}
++  ~A() = delete;		// { dg-message "declared here" }
++};
++
++static A a;			// { dg-error "deleted" }

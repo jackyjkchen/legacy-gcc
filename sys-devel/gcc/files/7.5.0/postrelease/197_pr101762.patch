@@ -1,0 +1,81 @@
+diff --git a/gcc/fortran/expr.c b/gcc/fortran/expr.c
+index 09401a4c3..faf155fa8 100644
+--- a/gcc/fortran/expr.c
++++ b/gcc/fortran/expr.c
+@@ -3777,6 +3777,7 @@ gfc_check_pointer_assign (gfc_expr *lvalue, gfc_expr *rvalue, bool is_init_expr)
+     {
+       gfc_symbol *sym;
+       bool target;
++      gfc_ref *ref;
+ 
+       gcc_assert (rvalue->symtree);
+       sym = rvalue->symtree->n.sym;
+@@ -3793,6 +3794,39 @@ gfc_check_pointer_assign (gfc_expr *lvalue, gfc_expr *rvalue, bool is_init_expr)
+ 		     &rvalue->where);
+ 	  return false;
+ 	}
++
++      for (ref = rvalue->ref; ref; ref = ref->next)
++	{
++	  switch (ref->type)
++	    {
++	    case REF_ARRAY:
++	      for (int n = 0; n < ref->u.ar.dimen; n++)
++		if (!gfc_is_constant_expr (ref->u.ar.start[n])
++		    || !gfc_is_constant_expr (ref->u.ar.end[n])
++		    || !gfc_is_constant_expr (ref->u.ar.stride[n]))
++		  {
++		    gfc_error ("Every subscript of target specification "
++			       "at %L must be a constant expression",
++			       &ref->u.ar.where);
++		    return false;
++		  }
++	      break;
++
++	    case REF_SUBSTRING:
++	      if (!gfc_is_constant_expr (ref->u.ss.start)
++		  || !gfc_is_constant_expr (ref->u.ss.end))
++		{
++		  gfc_error ("Substring starting and ending points of target "
++			     "specification at %L must be constant expressions",
++			     &ref->u.ss.start->where);
++		  return false;
++		}
++	      break;
++
++	    default:
++	      break;
++	    }
++	}
+     }
+   else
+     {
+diff --git a/gcc/testsuite/gfortran.dg/pr101762.f90 b/gcc/testsuite/gfortran.dg/pr101762.f90
+new file mode 100644
+index 000000000..9ffd7540d
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/pr101762.f90
+@@ -0,0 +1,23 @@
++! { dg-do compile }
++! PR fortran/101762 - ICE on non-constant pointer initialization targets
++! Contributed by G.Steinmetz
++
++program p
++  integer,      target  :: a(3) = [7, 8, 9]
++  integer,      pointer :: x    => a(3)
++  integer,      pointer :: y    => a(n())  ! { dg-error "constant expression" }
++  integer,      pointer :: z(:) => a(:n()) ! { dg-error "constant expression" }
++  character(7), target  :: c    = "abcdefg"
++  character(3), pointer :: c0   => c(2:4)
++  character(3), pointer :: c1   => c(m():) ! { dg-error "constant expression" }
++  character(3), pointer :: c2   => c(:m()) ! { dg-error "constant expression" }
++  print *, x, y
++contains
++  pure integer function k ()
++    k = 2
++  end function k
++  subroutine s ()
++    integer, pointer :: yy => a(k()) ! { dg-error "constant expression" }
++    print *, yy
++  end subroutine s
++end

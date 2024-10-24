@@ -1,0 +1,69 @@
+diff --git a/gcc/cp/typeck.c b/gcc/cp/typeck.c
+index 04e473855..3cd4cee29 100644
+--- a/gcc/cp/typeck.c
++++ b/gcc/cp/typeck.c
+@@ -7839,22 +7839,18 @@ build_reinterpret_cast_1 (location_t loc, tree type, tree expr,
+     type = cv_unqualified (type);
+ 
+   /* [expr.reinterpret.cast]
+-     A glvalue expression of type T1 can be cast to the type
++     A glvalue of type T1, designating an object x, can be cast to the type
+      "reference to T2" if an expression of type "pointer to T1" can be
+-     explicitly converted to the type "pointer to T2" using a
+-     reinterpret_cast.  */
++     explicitly converted to the type "pointer to T2" using a reinterpret_cast.
++     The result is that of *reinterpret_cast<T2 *>(p) where p is a pointer to x
++     of type "pointer to T1". No temporary is created, no copy is made, and no
++     constructors (11.4.4) or conversion functions (11.4.7) are called.  */
+   if (TYPE_REF_P (type))
+     {
+-      if (TYPE_REF_IS_RVALUE (type) && !VOID_TYPE_P (intype))
+-	{
+-	  if (!obvalue_p (expr))
+-	    /* Perform the temporary materialization conversion.  */
+-	    expr = get_target_expr_sfinae (expr, complain);
+-	}
+-      else if (!lvalue_p (expr))
++      if (!glvalue_p (expr))
+ 	{
+           if (complain & tf_error)
+-            error_at (loc, "invalid cast of an rvalue expression of type "
++	    error_at (loc, "invalid cast of a prvalue expression of type "
+ 		      "%qT to type %qT",
+ 		      intype, type);
+ 	  return error_mark_node;
+diff --git a/gcc/testsuite/g++.dg/cpp0x/reinterpret_cast2.C b/gcc/testsuite/g++.dg/cpp0x/reinterpret_cast2.C
+index c173576e2..5402e825a 100644
+--- a/gcc/testsuite/g++.dg/cpp0x/reinterpret_cast2.C
++++ b/gcc/testsuite/g++.dg/cpp0x/reinterpret_cast2.C
+@@ -6,5 +6,5 @@ struct S { };
+ void
+ foo ()
+ {
+-  auto a = reinterpret_cast<S&&>(foo ());	// { dg-error "12:invalid cast of an rvalue expression of type 'void' to type" }
++  auto a = reinterpret_cast<S&&>(foo ()); // { dg-error "12:invalid cast of a prvalue expression of type 'void' to type" }
+ }
+diff --git a/gcc/testsuite/g++.dg/cpp0x/rv-cast6.C b/gcc/testsuite/g++.dg/cpp0x/rv-cast6.C
+index 3ae5691c5..3adf683f8 100644
+--- a/gcc/testsuite/g++.dg/cpp0x/rv-cast6.C
++++ b/gcc/testsuite/g++.dg/cpp0x/rv-cast6.C
+@@ -5,7 +5,7 @@ struct A { virtual void f(); };
+ struct B : A {};
+ 
+ auto && a = static_cast<A&&>(B());
+-auto && b = reinterpret_cast<A&&>(B());
++auto && b = reinterpret_cast<A&&>(B()); // { dg-error "prvalue" }
+ auto && c = dynamic_cast<A&&>(B());
+ auto && d = dynamic_cast<B&&>(static_cast<A&&>(B()));
+ auto && e = const_cast<B&&>(B());
+diff --git a/gcc/testsuite/g++.old-deja/g++.jason/rvalue3.C b/gcc/testsuite/g++.old-deja/g++.jason/rvalue3.C
+index 49191c9e4..77969bc60 100644
+--- a/gcc/testsuite/g++.old-deja/g++.jason/rvalue3.C
++++ b/gcc/testsuite/g++.old-deja/g++.jason/rvalue3.C
+@@ -2,5 +2,5 @@
+ int main ()
+ {
+    int i;
+-   int &ir = (int&)(int)i;	// { dg-error "14:invalid cast of an rvalue expression" } casting rvalue to reference type
++   int &ir = (int&)(int)i;	// { dg-error "14:invalid cast of a prvalue expression" } casting rvalue to reference type
+ }

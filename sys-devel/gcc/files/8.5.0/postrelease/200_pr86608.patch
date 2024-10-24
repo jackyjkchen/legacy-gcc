@@ -1,0 +1,60 @@
+diff --git a/gcc/cp/constexpr.c b/gcc/cp/constexpr.c
+index 9b86c4dc6..48897c750 100644
+--- a/gcc/cp/constexpr.c
++++ b/gcc/cp/constexpr.c
+@@ -5367,10 +5367,11 @@ potential_constant_expression_1 (tree t, bool want_rval, bool strict, bool now,
+   if (t == NULL_TREE)
+     return true;
+   location_t loc = EXPR_LOC_OR_LOC (t, input_location);
+-  if (TREE_THIS_VOLATILE (t) && !DECL_P (t))
++  if (TREE_THIS_VOLATILE (t) && want_rval)
+     {
+       if (flags & tf_error)
+-        error_at (loc, "expression %qE has side-effects", t);
++	error_at (loc, "lvalue-to-rvalue conversion of a volatile lvalue "
++		  "%qE with type %qT", t, TREE_TYPE (t));
+       return false;
+     }
+   if (CONSTANT_CLASS_P (t))
+diff --git a/gcc/cp/decl2.c b/gcc/cp/decl2.c
+index 0d1a61e47..2434cdf73 100644
+--- a/gcc/cp/decl2.c
++++ b/gcc/cp/decl2.c
+@@ -4286,7 +4286,7 @@ decl_maybe_constant_var_p (tree decl)
+   tree type = TREE_TYPE (decl);
+   if (!VAR_P (decl))
+     return false;
+-  if (DECL_DECLARED_CONSTEXPR_P (decl))
++  if (DECL_DECLARED_CONSTEXPR_P (decl) && !TREE_THIS_VOLATILE (decl))
+     return true;
+   if (DECL_HAS_VALUE_EXPR_P (decl))
+     /* A proxy isn't constant.  */
+diff --git a/gcc/testsuite/g++.dg/cpp0x/constexpr-volatile2.C b/gcc/testsuite/g++.dg/cpp0x/constexpr-volatile2.C
+new file mode 100644
+index 000000000..0def8d737
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/constexpr-volatile2.C
+@@ -0,0 +1,13 @@
++// PR c++/86608
++// { dg-do compile { target c++11 } }
++
++template<typename T, T v> struct X {};
++
++int
++main ()
++{
++  static constexpr volatile int a = 3;
++  constexpr volatile int b = 2;
++  return (sizeof(X<decltype(a), a>) // { dg-error "lvalue-to-rvalue conversion of a volatile lvalue" }
++	  + sizeof(X<decltype(b), b>)); // { dg-error "lvalue-to-rvalue conversion of a volatile lvalue" }
++}
+diff --git a/gcc/testsuite/g++.dg/cpp0x/pr65327.C b/gcc/testsuite/g++.dg/cpp0x/pr65327.C
+index c6cefaba6..5176b3c32 100644
+--- a/gcc/testsuite/g++.dg/cpp0x/pr65327.C
++++ b/gcc/testsuite/g++.dg/cpp0x/pr65327.C
+@@ -15,4 +15,4 @@ constexpr volatile int
+ bar ()
+ {
+   return i;
+-}
++} // { dg-error "lvalue-to-rvalue conversion of a volatile lvalue" }

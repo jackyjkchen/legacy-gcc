@@ -1,0 +1,72 @@
+diff --git a/gcc/cp/constexpr.c b/gcc/cp/constexpr.c
+index 71501c1e0..f397d9d53 100644
+--- a/gcc/cp/constexpr.c
++++ b/gcc/cp/constexpr.c
+@@ -74,7 +74,8 @@ literal_type_p (tree t)
+ }
+ 
+ /* If DECL is a variable declared `constexpr', require its type
+-   be literal.  Return the DECL if OK, otherwise NULL.  */
++   be literal.  Return error_mark_node if we give an error, the
++   DECL otherwise.  */
+ 
+ tree
+ ensure_literal_type_for_constexpr_object (tree decl)
+@@ -96,6 +97,7 @@ ensure_literal_type_for_constexpr_object (tree decl)
+ 	      error ("the type %qT of constexpr variable %qD is not literal",
+ 		     type, decl);
+ 	      explain_non_literal_class (type);
++	      decl = error_mark_node;
+ 	    }
+ 	  else
+ 	    {
+@@ -104,10 +106,10 @@ ensure_literal_type_for_constexpr_object (tree decl)
+ 		  error ("variable %qD of non-literal type %qT in %<constexpr%> "
+ 			 "function", decl, type);
+ 		  explain_non_literal_class (type);
++		  decl = error_mark_node;
+ 		}
+ 	      cp_function_chain->invalid_constexpr = true;
+ 	    }
+-	  return NULL;
+ 	}
+     }
+   return decl;
+diff --git a/gcc/cp/decl.c b/gcc/cp/decl.c
+index 5200b542c..bc47cf46a 100644
+--- a/gcc/cp/decl.c
++++ b/gcc/cp/decl.c
+@@ -6884,8 +6884,12 @@ cp_finish_decl (tree decl, tree init, bool init_const_expr_p,
+       cp_apply_type_quals_to_decl (cp_type_quals (type), decl);
+     }
+ 
+-  if (!ensure_literal_type_for_constexpr_object (decl))
+-    DECL_DECLARED_CONSTEXPR_P (decl) = 0;
++  if (ensure_literal_type_for_constexpr_object (decl)
++      == error_mark_node)
++    {
++      DECL_DECLARED_CONSTEXPR_P (decl) = 0;
++      return;
++    }
+ 
+   if (VAR_P (decl)
+       && DECL_CLASS_SCOPE_P (decl)
+diff --git a/gcc/testsuite/g++.dg/cpp0x/constexpr-ice19.C b/gcc/testsuite/g++.dg/cpp0x/constexpr-ice19.C
+new file mode 100644
+index 000000000..7066eabdf
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/constexpr-ice19.C
+@@ -0,0 +1,13 @@
++// PR c++/81054
++// { dg-do compile { target c++11 } }
++
++struct A
++{
++  volatile int i;
++  constexpr A() : i() {}
++};
++
++struct B
++{
++  static constexpr A a {};  // { dg-error "not literal" }
++};

@@ -1,0 +1,90 @@
+diff --git a/gcc/omp-simd-clone.c b/gcc/omp-simd-clone.c
+index 08daa2f17..68d07d803 100644
+--- a/gcc/omp-simd-clone.c
++++ b/gcc/omp-simd-clone.c
+@@ -1011,6 +1011,8 @@ ipa_simd_modify_function_body (struct cgraph_node *node,
+ 	  if (greturn *return_stmt = dyn_cast <greturn *> (stmt))
+ 	    {
+ 	      tree retval = gimple_return_retval (return_stmt);
++	      edge e = find_edge (bb, EXIT_BLOCK_PTR_FOR_FN (cfun));
++	      e->flags |= EDGE_FALLTHRU;
+ 	      if (!retval)
+ 		{
+ 		  gsi_remove (&gsi, true);
+@@ -1150,14 +1152,9 @@ simd_clone_adjust (struct cgraph_node *node)
+       basic_block orig_exit = EDGE_PRED (EXIT_BLOCK_PTR_FOR_FN (cfun), 0)->src;
+       incr_bb = create_empty_bb (orig_exit);
+       add_bb_to_loop (incr_bb, body_bb->loop_father);
+-      /* The succ of orig_exit was EXIT_BLOCK_PTR_FOR_FN (cfun), with an empty
+-	 flag.  Set it now to be a FALLTHRU_EDGE.  */
+-      gcc_assert (EDGE_COUNT (orig_exit->succs) == 1);
+-      EDGE_SUCC (orig_exit, 0)->flags |= EDGE_FALLTHRU;
+-      for (unsigned i = 0;
+-	   i < EDGE_COUNT (EXIT_BLOCK_PTR_FOR_FN (cfun)->preds); ++i)
++      while (EDGE_COUNT (EXIT_BLOCK_PTR_FOR_FN (cfun)->preds))
+ 	{
+-	  edge e = EDGE_PRED (EXIT_BLOCK_PTR_FOR_FN (cfun), i);
++	  edge e = EDGE_PRED (EXIT_BLOCK_PTR_FOR_FN (cfun), 0);
+ 	  redirect_edge_succ (e, incr_bb);
+ 	}
+     }
+diff --git a/gcc/testsuite/gcc.dg/gomp/pr87895-1.c b/gcc/testsuite/gcc.dg/gomp/pr87895-1.c
+new file mode 100644
+index 000000000..22f5c6914
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/gomp/pr87895-1.c
+@@ -0,0 +1,19 @@
++/* PR tree-optimization/87895 */
++/* { dg-do compile } */
++/* { dg-additional-options "-O0" } */
++
++#pragma omp declare simd
++int
++foo (int x)
++{
++  if (x == 0)
++    return 0;
++}
++
++#pragma omp declare simd
++int
++bar (int *x, int y)
++{
++  if ((y == 0) ? (*x = 0) : *x)
++    return 0;
++}
+diff --git a/gcc/testsuite/gcc.dg/gomp/pr87895-2.c b/gcc/testsuite/gcc.dg/gomp/pr87895-2.c
+new file mode 100644
+index 000000000..3d2771542
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/gomp/pr87895-2.c
+@@ -0,0 +1,5 @@
++/* PR tree-optimization/87895 */
++/* { dg-do compile } */
++/* { dg-additional-options "-O1" } */
++
++#include "pr87895-1.c"
+diff --git a/gcc/testsuite/gcc.dg/gomp/pr87895-3.c b/gcc/testsuite/gcc.dg/gomp/pr87895-3.c
+new file mode 100644
+index 000000000..382ad6d84
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/gomp/pr87895-3.c
+@@ -0,0 +1,18 @@
++/* PR tree-optimization/87895 */
++/* { dg-do compile } */
++/* { dg-additional-options "-O2" } */
++
++#pragma omp declare simd
++int foo (int x) __attribute__((noreturn));
++
++#pragma omp declare simd
++int
++bar (int x, int y)
++{
++  if (y == 1)
++    foo (x + 2);
++  if (y == 10)
++    foo (x + 6);
++  if (y != 25)
++    return 4;
++}

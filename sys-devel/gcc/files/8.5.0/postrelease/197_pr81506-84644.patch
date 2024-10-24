@@ -1,0 +1,121 @@
+diff --git a/gcc/cp/decl.c b/gcc/cp/decl.c
+index 5d74d38ea..13c132cd6 100644
+--- a/gcc/cp/decl.c
++++ b/gcc/cp/decl.c
+@@ -4818,15 +4818,20 @@ check_tag_decl (cp_decl_specifier_seq *declspecs,
+     declared_type = declspecs->type;
+   else if (declspecs->type == error_mark_node)
+     error_p = true;
+-  if (declared_type == NULL_TREE && ! saw_friend && !error_p)
+-    permerror (input_location, "declaration does not declare anything");
+-  else if (declared_type != NULL_TREE && type_uses_auto (declared_type))
++
++  if (type_uses_auto (declared_type))
+     {
+       error_at (declspecs->locations[ds_type_spec],
+ 		"%<auto%> can only be specified for variables "
+ 		"or function declarations");
+       return error_mark_node;
+     }
++
++  if (declared_type && !OVERLOAD_TYPE_P (declared_type))
++    declared_type = NULL_TREE;
++
++  if (!declared_type && !saw_friend && !error_p)
++    permerror (input_location, "declaration does not declare anything");
+   /* Check for an anonymous union.  */
+   else if (declared_type && RECORD_OR_UNION_CODE_P (TREE_CODE (declared_type))
+ 	   && TYPE_UNNAMED_P (declared_type))
+diff --git a/gcc/testsuite/g++.dg/cpp0x/decltype-33838.C b/gcc/testsuite/g++.dg/cpp0x/decltype-33838.C
+index effe08dcc..43888da54 100644
+--- a/gcc/testsuite/g++.dg/cpp0x/decltype-33838.C
++++ b/gcc/testsuite/g++.dg/cpp0x/decltype-33838.C
+@@ -2,5 +2,5 @@
+ // PR c++/33838
+ template<typename T> struct A
+ {
+-  __decltype (T* foo()); // { dg-error "expected|no arguments|accept" }
++  __decltype (T* foo()); // { dg-error "expected|no arguments|declaration" }
+ };
+diff --git a/gcc/testsuite/g++.dg/cpp0x/decltype-pr81506.C b/gcc/testsuite/g++.dg/cpp0x/decltype-pr81506.C
+new file mode 100644
+index 000000000..ecf762eb7
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/decltype-pr81506.C
+@@ -0,0 +1,28 @@
++// PR c++/81506 - Invalid declaration with decltype accepted
++// { dg-do compile }
++//
++
++#if __cplusplus < 201103L
++# define decltype __typeof__
++#endif
++
++template <int>
++struct A
++{
++  A () {
++    decltype (this);     // { dg-error "declaration does not declare anything" }
++  }
++};
++
++A<0> a;
++
++template <class>
++struct B
++{
++  B () {
++    __typeof__ (this);   // { dg-error "declaration does not declare anything" }
++  }
++};
++
++B<int> b;
++
+diff --git a/gcc/testsuite/g++.dg/cpp0x/decltype68.C b/gcc/testsuite/g++.dg/cpp0x/decltype68.C
+new file mode 100644
+index 000000000..58740c1f1
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/decltype68.C
+@@ -0,0 +1,7 @@
++// PR c++/84644
++// { dg-do compile { target c++11 } }
++
++template<int a>
++struct b {
++  decltype(a) __attribute__((break));  // { dg-error "declaration does not declare anything" }
++};
+diff --git a/gcc/testsuite/g++.dg/template/pr98297.C b/gcc/testsuite/g++.dg/template/pr98297.C
+index 9e7d07e2c..0dd63a57b 100644
+--- a/gcc/testsuite/g++.dg/template/pr98297.C
++++ b/gcc/testsuite/g++.dg/template/pr98297.C
+@@ -2,5 +2,5 @@
+ // { dg-do compile { target c++11 } }
+ template <template <class> class a>
+ struct [[b]]
+-a <int>; // { dg-error "name of class shadows template template parameter" }
++a <int>; // { dg-error "does not declare anything" }
+ // { dg-warning "ignored" "" { target *-*-* } .-1 }
+diff --git a/gcc/testsuite/g++.dg/template/spec32.C b/gcc/testsuite/g++.dg/template/spec32.C
+index 6ef172b50..7cb3f4026 100644
+--- a/gcc/testsuite/g++.dg/template/spec32.C
++++ b/gcc/testsuite/g++.dg/template/spec32.C
+@@ -2,5 +2,5 @@
+ 
+ struct A
+ {
+-  template<template<int> class B> struct B<0>;  // { dg-error "name of class shadows" }
++  template<template<int> class B> struct B<0>;  // { dg-error "declaration does not declare anything" }
+ };
+diff --git a/gcc/testsuite/g++.dg/template/ttp22.C b/gcc/testsuite/g++.dg/template/ttp22.C
+index 08eaa3042..64aaf7437 100644
+--- a/gcc/testsuite/g++.dg/template/ttp22.C
++++ b/gcc/testsuite/g++.dg/template/ttp22.C
+@@ -2,7 +2,7 @@
+ // { dg-do compile }
+ 
+ template<template<int> class A>
+-class A<0>;  // { dg-error "shadows template template parameter" }
++class A<0>;  // { dg-error "declaration does not declare anything" }
+ 
+ template<template<int> class B>
+ class B<0> {};  // { dg-error "shadows template template parameter" }

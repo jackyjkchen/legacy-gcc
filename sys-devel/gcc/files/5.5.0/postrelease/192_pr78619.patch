@@ -1,0 +1,68 @@
+diff --git a/gcc/fortran/check.c b/gcc/fortran/check.c
+index c2cc09f60..327bdc1e3 100644
+--- a/gcc/fortran/check.c
++++ b/gcc/fortran/check.c
+@@ -404,15 +404,22 @@ less_than_bitsize2 (const char *arg1, gfc_expr *expr1, const char *arg2,
+ /* Make sure two expressions have the same type.  */
+ 
+ static bool
+-same_type_check (gfc_expr *e, int n, gfc_expr *f, int m)
++same_type_check (gfc_expr *e, int n, gfc_expr *f, int m, bool assoc = false)
+ {
+   gfc_typespec *ets = &e->ts;
+   gfc_typespec *fts = &f->ts;
+ 
+-  if (e->ts.type == BT_PROCEDURE && e->symtree->n.sym)
+-    ets = &e->symtree->n.sym->ts;
+-  if (f->ts.type == BT_PROCEDURE && f->symtree->n.sym)
+-    fts = &f->symtree->n.sym->ts;
++  if (assoc)
++    {
++      /* Procedure pointer component expressions have the type of the interface
++	 procedure. If they are being tested for association with a procedure
++	 pointer (ie. not a component), the type of the procedure must be
++	 determined.  */
++      if (e->ts.type == BT_PROCEDURE && e->symtree->n.sym)
++	ets = &e->symtree->n.sym->ts;
++      if (f->ts.type == BT_PROCEDURE && f->symtree->n.sym)
++	fts = &f->symtree->n.sym->ts;
++    }
+ 
+   if (gfc_compare_types (ets, fts))
+     return true;
+@@ -968,7 +975,7 @@ gfc_check_associated (gfc_expr *pointer, gfc_expr *target)
+     }
+ 
+   t = true;
+-  if (!same_type_check (pointer, 0, target, 1))
++  if (!same_type_check (pointer, 0, target, 1, true))
+     t = false;
+   if (!rank_check (target, 0, pointer->rank))
+     t = false;
+diff --git a/gcc/testsuite/gfortran.dg/pr78619.f90 b/gcc/testsuite/gfortran.dg/pr78619.f90
+new file mode 100644
+index 000000000..5fbe185cf
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/pr78619.f90
+@@ -0,0 +1,21 @@
++! { dg-do compile }
++! { dg-options "-Werror -O3" }
++!
++! Tests the fix for PR78619, in which the recursive use of 'f' at line 13
++! caused an ICE.
++!
++! Contributed by Gerhard Steinmetz  <gerhard.steinmetz.fortran@t-online.de>
++!
++  print *, g(1.0) ! 'g' is OK
++contains
++  function f(x) result(z)
++    real :: x, z
++    z = sign(1.0, f) ! { dg-error "calling itself recursively|must be the same type" }
++  end
++  real function g(x)
++    real :: x
++    g = -1
++    g = -sign(1.0, g) ! This is OK.
++  end
++end
++! { dg-message "all warnings being treated as errors" "" { target *-*-* } 0 }

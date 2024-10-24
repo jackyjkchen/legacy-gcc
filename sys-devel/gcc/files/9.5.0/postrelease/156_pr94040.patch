@@ -1,0 +1,329 @@
+diff --git a/gcc/c/c-decl.c b/gcc/c/c-decl.c
+index eda3cdd59..f0dc458e7 100644
+--- a/gcc/c/c-decl.c
++++ b/gcc/c/c-decl.c
+@@ -1640,13 +1640,17 @@ c_bind (location_t loc, tree decl, bool is_global)
+ }
+ 
+ 
+-/* Stores the first FILE*, const struct tm* etc. argument type (whatever it
+-   is) seen in a declaration of a file I/O etc. built-in.  Subsequent
+-   declarations of such built-ins are expected to refer to it rather than to
+-   fileptr_type_node etc. which is just void* (or to any other type).
++/* Stores the first FILE*, const struct tm* etc. argument type (whatever
++   it is) seen in a declaration of a file I/O etc. built-in, corresponding
++   to the builtin_structptr_types array.  Subsequent declarations of such
++   built-ins are expected to refer to it rather than to fileptr_type_node,
++   etc. which is just void* (or to any other type).
+    Used only by match_builtin_function_types.  */
+ 
+-static GTY(()) tree last_structptr_types[6];
++static const unsigned builtin_structptr_type_count
++  = sizeof builtin_structptr_types / sizeof builtin_structptr_types[0];
++
++static GTY(()) tree last_structptr_types[builtin_structptr_type_count];
+ 
+ /* Subroutine of compare_decls.  Allow harmless mismatches in return
+    and argument types provided that the type modes match.  Set *STRICT
+@@ -1676,10 +1680,13 @@ match_builtin_function_types (tree newtype, tree oldtype,
+   tree newargs = TYPE_ARG_TYPES (newtype);
+   tree tryargs = newargs;
+ 
+-  gcc_checking_assert ((sizeof (last_structptr_types)
+-			/ sizeof (last_structptr_types[0]))
+-		       == (sizeof (builtin_structptr_types)
+-			   / sizeof (builtin_structptr_types[0])));
++  const unsigned nlst
++    = sizeof last_structptr_types / sizeof last_structptr_types[0];
++  const unsigned nbst
++    = sizeof builtin_structptr_types / sizeof builtin_structptr_types[0];
++
++  gcc_checking_assert (nlst == nbst);
++
+   for (unsigned i = 1; oldargs || newargs; ++i)
+     {
+       if (!oldargs
+@@ -1702,11 +1709,12 @@ match_builtin_function_types (tree newtype, tree oldtype,
+ 	  || POINTER_TYPE_P (oldtype) != POINTER_TYPE_P (newtype))
+ 	return NULL_TREE;
+ 
+-      unsigned j = (sizeof (builtin_structptr_types)
+-		    / sizeof (builtin_structptr_types[0]));
++      unsigned j = nbst;
+       if (POINTER_TYPE_P (oldtype))
+-	for (j = 0; j < (sizeof (builtin_structptr_types)
+-			 / sizeof (builtin_structptr_types[0])); ++j)
++	/* Iterate over well-known struct types like FILE (whose types
++	   aren't known to us) and compare the pointer to each to
++	   the pointer argument.  */
++	for (j = 0; j < nbst; ++j)
+ 	  {
+ 	    if (TREE_VALUE (oldargs) != builtin_structptr_types[j].node)
+ 	      continue;
+@@ -1726,13 +1734,26 @@ match_builtin_function_types (tree newtype, tree oldtype,
+ 	      last_structptr_types[j] = newtype;
+ 	    break;
+ 	  }
+-      if (j == (sizeof (builtin_structptr_types)
+-		/ sizeof (builtin_structptr_types[0]))
+-	  && !*strict
+-	  && !comptypes (oldtype, newtype))
++
++      if (j == nbst && !comptypes (oldtype, newtype))
+ 	{
+-	  *argno = i;
+-	  *strict = oldtype;
++	  if (POINTER_TYPE_P (oldtype))
++	    {
++	      /* For incompatible pointers, only reject differences in
++		 the unqualified variants of the referenced types but
++		 consider differences in qualifiers as benign (report
++		 those to caller via *STRICT below).  */
++	      tree oldref = TYPE_MAIN_VARIANT (TREE_TYPE (oldtype));
++	      tree newref = TYPE_MAIN_VARIANT (TREE_TYPE (newtype));
++	      if (!comptypes (oldref, newref))
++		return NULL_TREE;
++	    }
++
++	  if (!*strict)
++	    {
++	      *argno = i;
++	      *strict = oldtype;
++	    }
+ 	}
+ 
+       oldargs = TREE_CHAIN (oldargs);
+@@ -1994,8 +2015,6 @@ diagnose_mismatched_decls (tree newdecl, tree olddecl,
+ 
+ 	  if (mismatch_expect && extra_warnings)
+ 	    {
+-	      /* If types match only loosely, print a warning but accept
+-		 the redeclaration.  */
+ 	      location_t newloc = DECL_SOURCE_LOCATION (newdecl);
+ 	      if (mismatch_argno)
+ 		warning_at (newloc, OPT_Wbuiltin_declaration_mismatch,
+diff --git a/gcc/testsuite/gcc.dg/Wbuiltin-declaration-mismatch-12.c b/gcc/testsuite/gcc.dg/Wbuiltin-declaration-mismatch-12.c
+index 6bf97623b..f12ef6afb 100644
+--- a/gcc/testsuite/gcc.dg/Wbuiltin-declaration-mismatch-12.c
++++ b/gcc/testsuite/gcc.dg/Wbuiltin-declaration-mismatch-12.c
+@@ -3,6 +3,6 @@
+    { dg-do compile }
+    { dg-options "-Wbuiltin-declaration-mismatch -Wextra" } */
+ 
+-extern void __clear_cache (char*, char*);   /* { dg-warning "mismatch in argument 1 type of built-in function .__clear_cache.; expected .void \\\*." } */
++extern void __clear_cache (char*, char*);      // { dg-warning "\\\[-Wbuiltin-declaration-mismatch" }
+ 
+-void __builtin_prefetch (const char *, ...);   /* { dg-warning "mismatch in argument 1 type of built-in function .__builtin_prefetch.; expected .const void \\\*." } */
++void __builtin_prefetch (const char *, ...);   // { dg-warning "\\\[-Wbuiltin-declaration-mismatch" }
+diff --git a/gcc/testsuite/gcc.dg/Wbuiltin-declaration-mismatch-14.c b/gcc/testsuite/gcc.dg/Wbuiltin-declaration-mismatch-14.c
+new file mode 100644
+index 000000000..cc536d714
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/Wbuiltin-declaration-mismatch-14.c
+@@ -0,0 +1,77 @@
++/* PR c/94040 - ICE on a call to an invalid redeclaration of strftime
++   { dg-do compile }
++   { dg-options "-Wall" } */
++
++typedef __SIZE_TYPE__ size_t;
++
++struct tm;
++
++size_t strftime (char *, size_t, int *, struct tm *);   // { dg-warning "-Wbuiltin-declaration-mismatch" }
++
++size_t call_strftime (char *d, size_t n, int *f, struct tm *t)
++{
++  size_t r = 0;
++  r += strftime (0, 0, 0, 0);
++  r += strftime (d, 0, 0, 0);
++  r += strftime (d, n, 0, 0);
++  r += strftime (d, n, f, 0);
++  r += strftime (d, n, f, t);
++  return r;
++}
++
++
++char* strchr (char*, char*); // { dg-warning "-Wbuiltin-declaration-mismatch" }
++
++// Verify that missing/extra qualifiers aren't diagnosed without -Wextra.
++
++int strcmp (char*, char*);
++int strncmp (volatile char*, volatile char*, size_t);
++
++// Verify that a difference in pointers is diagnosed.
++
++size_t strlen (const char**);
++// { dg-warning "-Wbuiltin-declaration-mismatch" "pointer" { target *-*-* } .-1 }
++
++ size_t strnlen (const char* const*, size_t);
++// { dg-warning "-Wbuiltin-declaration-mismatch" "pointer" { target *-*-* } .-1 }
++
++
++// Verify that calls to the compatibly-redeclared built-ins are treated
++// as those to the built-ins and diagnosed.
++
++int test_builtin_calls (size_t n)
++{
++  int r = 0;
++  r += strcmp ((char*)0, "");               // { dg-warning "\\\[-Wnonnull]" }
++  r += strcmp ("", (char*)0);               // { dg-warning "\\\[-Wnonnull]" }
++
++  r += strncmp ((char*)0, "", n);           // { dg-warning "\\\[-Wnonnull]" }
++  r += strncmp ("", (char*)0, n);           // { dg-warning "\\\[-Wnonnull]" }
++
++  return r;
++}
++
++
++// Verify that calls to the incompatibly-redeclared built-ins are not
++// treated as those to the built-ins by the middle-end.  It doesn't
++// matter if the front-end diagnoses them but the middle-end should
++// not because it shouldn't recognize them as built-ins.
++
++#pragma GCC optimize "2"
++
++size_t test_nonbuiltin_calls (char *s, int c)
++{
++  void *null = 0;
++
++  char *r;
++  r = strchr ((char*)null, s);
++  r = strchr (r, (char*)null);
++  *s = *r;   // use the result
++
++  size_t n = 0;
++  n += strftime (0, 0, 0, 0);
++  n += strlen ((const char**)null);
++  n += strnlen ((const char**)null, n);
++
++  return n;
++}
+diff --git a/gcc/testsuite/gcc.dg/Wbuiltin-declaration-mismatch-15.c b/gcc/testsuite/gcc.dg/Wbuiltin-declaration-mismatch-15.c
+new file mode 100644
+index 000000000..3c32a5fc5
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/Wbuiltin-declaration-mismatch-15.c
+@@ -0,0 +1,56 @@
++/* PR c/94040 - ICE on a call to an invalid redeclaration of strftime
++   { dg-do compile }
++   { dg-options "-Wall -Wextra" } */
++
++typedef __SIZE_TYPE__ size_t;
++
++struct tm;
++
++size_t strftime (const char *, size_t, char *, struct tm *);
++// { dg-warning "-Wbuiltin-declaration-mismatch" "arg 1" { target *-*-* } .-1 }
++
++// Verify that missing/extra qualifiers are diagnosed with -Wextra.
++
++int strcmp (char*, const char*);
++// { dg-warning "-Wbuiltin-declaration-mismatch" "arg 1" { target *-*-* } .-1 }
++
++int strncmp (const char*, volatile char*, size_t);
++// { dg-warning "-Wbuiltin-declaration-mismatch" "arg 2" { target *-*-* } .-1 }
++
++size_t strlen (char*);
++// { dg-warning "-Wbuiltin-declaration-mismatch" "arg 1" { target *-*-* } .-1 }
++
++
++// Verify that calls to built-ins declared with missing/extra qualifiers
++// are still treated as those to built-ins by the front-end.
++
++int test_builtin_calls_fe (size_t n)
++{
++  int r = 0;
++  r += strcmp ((char*)0, "");               // { dg-warning "\\\[-Wnonnull]" }
++  r += strcmp ("", (char*)0);               // { dg-warning "\\\[-Wnonnull]" }
++
++  r += strncmp ((char*)0, "", n);           // { dg-warning "\\\[-Wnonnull]" }
++  r += strncmp ("", (char*)0, n);           // { dg-warning "\\\[-Wnonnull]" }
++
++  r += strlen ((char*)0);                   // { dg-warning "\\\[-Wnonnull]" }
++  return r;
++}
++
++
++// Ditto but by the middle-end.
++
++#pragma GCC optimize "2"
++
++int test_builtin_calls_me (void)
++{
++  char *null1 = 0;
++  char *null2 = null1;
++  char *null3 = null2;
++
++  int r = 0;
++  r += strcmp (null1, "123");               // { dg-warning "\\\[-Wnonnull]" }
++  r += strncmp ("2345", null2, 4);          // { dg-warning "\\\[-Wnonnull]" }
++  r += strlen (null3);                      // { dg-warning "\\\[-Wnonnull]" }
++  return r;
++}
+diff --git a/gcc/testsuite/gcc.dg/pr62090.c b/gcc/testsuite/gcc.dg/pr62090.c
+index 53089cf19..42f1345e6 100644
+--- a/gcc/testsuite/gcc.dg/pr62090.c
++++ b/gcc/testsuite/gcc.dg/pr62090.c
+@@ -15,3 +15,5 @@ log_bad_request ()
+ {
+   b += sprintf (0, "foo");
+ }
++
++/* { dg-prune-output "\\\[-Wbuiltin-declaration-mismatch]" } */
+diff --git a/gcc/testsuite/gcc.dg/pr89314.c b/gcc/testsuite/gcc.dg/pr89314.c
+index e35dd8c81..27b3a510b 100644
+--- a/gcc/testsuite/gcc.dg/pr89314.c
++++ b/gcc/testsuite/gcc.dg/pr89314.c
+@@ -2,7 +2,7 @@
+ /* { dg-do compile } */
+ /* { dg-options "-O2 -Wbuiltin-declaration-mismatch -Wextra" } */
+ 
+-extern __SIZE_TYPE__ strlen (const float *);	/* { dg-warning "mismatch in argument 1 type of built-in function" } */
++extern __SIZE_TYPE__ strlen (const float *);	/* { dg-warning "\\\[-Wbuiltin-declaration-mismatch" } */
+ void bar (void);
+ 
+ void
+diff --git a/gcc/testsuite/gcc.dg/torture/pr54261-1.c b/gcc/testsuite/gcc.dg/torture/pr54261-1.c
+index 071b3232d..7286124e9 100644
+--- a/gcc/testsuite/gcc.dg/torture/pr54261-1.c
++++ b/gcc/testsuite/gcc.dg/torture/pr54261-1.c
+@@ -8,23 +8,23 @@
+    a PASS.  Where the bug trigs (at the time this test-case was added),
+    cas_int is also false but the fallback isn't used.  */
+ __attribute__((__noinline__, __noclone__))
+-int
++unsigned
+ # if __INT_MAX__ == 0x7fff
+  __sync_fetch_and_add_2
+ # else
+  __sync_fetch_and_add_4
+ # endif
+- (int *at, int val)
++ (volatile void *at, unsigned val)
+ {
+-  int tmp = *at;
++  unsigned tmp = *(volatile unsigned*)at;
+   asm ("");
+-  *at = tmp + val;
++  *(volatile unsigned*)at = tmp + val;
+   return tmp;
+ }
+ #endif
+ 
+ __attribute__((__noinline__, __noclone__))
+-void g (int *at, int val)
++void g (unsigned *at, unsigned val)
+ {
+   asm ("");
+   __sync_fetch_and_add (at, val);
+@@ -35,8 +35,8 @@ int main(void)
+   /* On PTX it is not valid to perform atomic operations on auto
+      variables, which end up in .local.  Making this static places it
+      in .global.  */
+-  static int x = 41;
+-  int a = 1;
++  static unsigned x = 41;
++  unsigned a = 1;
+   g (&x, a);
+ 
+   if (x != 42)

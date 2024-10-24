@@ -1,0 +1,60 @@
+diff --git a/gcc/reload.c b/gcc/reload.c
+index 06426d923..40635baee 100644
+--- a/gcc/reload.c
++++ b/gcc/reload.c
+@@ -714,25 +714,23 @@ find_valid_class_1 (machine_mode outer ATTRIBUTE_UNUSED,
+ 
+   for (rclass = 1; rclass < N_REG_CLASSES; rclass++)
+     {
+-      int bad = 0;
+-      for (regno = 0; regno < FIRST_PSEUDO_REGISTER && !bad; regno++)
+-	{
+-	  if (in_hard_reg_set_p (reg_class_contents[rclass], mode, regno)
+-	      && !HARD_REGNO_MODE_OK (regno, mode))
+-	    bad = 1;
+-	}
+-      
+-      if (bad)
+-	continue;
++      unsigned int computed_rclass_size = 0;
++
++      for (regno = 0; regno < FIRST_PSEUDO_REGISTER; regno++)
++        {
++          if (in_hard_reg_set_p (reg_class_contents[rclass], mode, regno)
++              && (HARD_REGNO_MODE_OK (regno, mode)))
++            computed_rclass_size++;
++        }
+ 
+       cost = register_move_cost (outer, (enum reg_class) rclass, dest_class);
+ 
+-      if ((reg_class_size[rclass] > best_size
++      if ((computed_rclass_size > best_size
+ 	   && (best_cost < 0 || best_cost >= cost))
+ 	  || best_cost > cost)
+ 	{
+ 	  best_class = (enum reg_class) rclass;
+-	  best_size = reg_class_size[rclass];
++	  best_size = computed_rclass_size;
+ 	  best_cost = register_move_cost (outer, (enum reg_class) rclass,
+ 					  dest_class);
+ 	}
+diff --git a/gcc/testsuite/gcc.target/avr/pr71627.c b/gcc/testsuite/gcc.target/avr/pr71627.c
+new file mode 100644
+index 000000000..eaef3d208
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/avr/pr71627.c
+@@ -0,0 +1,14 @@
++/* { dg-do compile } */
++/* { dg-options "-O1" } */
++
++
++extern volatile __memx const long  a, b, c, d, e, f;
++extern volatile long result;
++
++extern void vfunc (const char*, ...);
++
++void foo (void)
++{
++	result = a + b + c + d + e + f;
++	vfunc ("text", a, b, c, d, e, f, result);
++}

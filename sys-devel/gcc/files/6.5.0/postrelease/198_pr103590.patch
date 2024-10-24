@@ -1,0 +1,60 @@
+diff --git a/gcc/fortran/resolve.c b/gcc/fortran/resolve.c
+index 25c3af335..21b6f30f4 100644
+--- a/gcc/fortran/resolve.c
++++ b/gcc/fortran/resolve.c
+@@ -4303,7 +4303,7 @@ gfc_resolve_dim_arg (gfc_expr *dim)
+    the stored reference to references.  Component references can
+    provide an additional array specification.  */
+ 
+-static void
++static bool
+ find_array_spec (gfc_expr *e)
+ {
+   gfc_array_spec *as;
+@@ -4320,7 +4320,11 @@ find_array_spec (gfc_expr *e)
+       {
+       case REF_ARRAY:
+ 	if (as == NULL)
+-	  gfc_internal_error ("find_array_spec(): Missing spec");
++	  {
++	    gfc_error ("Invalid array reference of a non-array entity at %L",
++		       &ref->u.ar.where);
++	    return false;
++	  }
+ 
+ 	ref->u.ar.as = as;
+ 	as = NULL;
+@@ -4343,6 +4347,8 @@ find_array_spec (gfc_expr *e)
+ 
+   if (as != NULL)
+     gfc_internal_error ("find_array_spec(): unused as(2)");
++
++  return true;
+ }
+ 
+ 
+@@ -4641,7 +4647,8 @@ resolve_ref (gfc_expr *expr)
+   for (ref = expr->ref; ref; ref = ref->next)
+     if (ref->type == REF_ARRAY && ref->u.ar.as == NULL)
+       {
+-	find_array_spec (expr);
++	if (!find_array_spec (expr))
++	  return false;
+ 	break;
+       }
+ 
+diff --git a/gcc/testsuite/gfortran.dg/associate_59.f90 b/gcc/testsuite/gfortran.dg/associate_59.f90
+new file mode 100644
+index 000000000..2da97731d
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/associate_59.f90
+@@ -0,0 +1,9 @@
++! { dg-do compile }
++! PR fortran/103590 - ICE: find_array_spec(): Missing spec 
++! Contributed by G.Steinmetz
++
++program p
++  associate (a => 1)
++    print *, [character(a(1)) :: '1'] ! { dg-error "Scalar INTEGER expression" }
++  end associate
++end

@@ -1,0 +1,34 @@
+diff --git a/gcc/cp/decl.c b/gcc/cp/decl.c
+index 79aea17b7..bb9433718 100644
+--- a/gcc/cp/decl.c
++++ b/gcc/cp/decl.c
+@@ -10312,9 +10312,15 @@ grokdeclarator (const cp_declarator *declarator,
+   if (declarator
+       && declarator->kind == cdk_id
+       && declarator->std_attributes)
+-    /* [dcl.meaning]/1: The optional attribute-specifier-seq following
+-       a declarator-id appertains to the entity that is declared.  */
+-    *attrlist = chainon (*attrlist, declarator->std_attributes);
++    {
++      /* [dcl.meaning]/1: The optional attribute-specifier-seq following
++	 a declarator-id appertains to the entity that is declared.  */
++      if (declarator->std_attributes != error_mark_node)
++	*attrlist = chainon (*attrlist, declarator->std_attributes);
++      else
++	/* We should have already diagnosed the issue (c++/78344).  */
++	gcc_assert (seen_error ());
++    }
+ 
+   /* Handle parameter packs. */
+   if (parameter_pack_p)
+diff --git a/gcc/testsuite/g++.dg/cpp0x/alignas13.C b/gcc/testsuite/g++.dg/cpp0x/alignas13.C
+new file mode 100644
+index 000000000..4811b03a5
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/alignas13.C
+@@ -0,0 +1,5 @@
++// PR c++/78344
++// { dg-do compile { target c++11 } }
++
++alignas(double) int f alignas;         // { dg-error "30:expected '\\('" }
++alignas(double) int g alignas(double;  // { dg-error "37:expected '\\)'" }

@@ -1,0 +1,155 @@
+diff --git a/gcc/cp/cp-tree.h b/gcc/cp/cp-tree.h
+index 3cf3358f3..905a97ca9 100644
+--- a/gcc/cp/cp-tree.h
++++ b/gcc/cp/cp-tree.h
+@@ -1379,6 +1379,25 @@ struct warning_sentinel
+   ~warning_sentinel() { flag = val; }
+ };
+ 
++/* RAII sentinel that saves the value of a variable, optionally
++   overrides it right away, and restores its value when the sentinel
++   id destructed.  */
++
++template <typename T>
++class temp_override
++{
++  T& overridden_variable;
++  T saved_value;
++public:
++  temp_override(T& var) : overridden_variable (var), saved_value (var) {}
++  temp_override(T& var, T overrider)
++    : overridden_variable (var), saved_value (var)
++  {
++    overridden_variable = overrider;
++  }
++  ~temp_override() { overridden_variable = saved_value; }
++};
++
+ /* The cached class binding level, from the most recently exited
+    class, or NULL if none.  */
+ 
+diff --git a/gcc/cp/parser.c b/gcc/cp/parser.c
+index 0399e202e..e26e0ad48 100644
+--- a/gcc/cp/parser.c
++++ b/gcc/cp/parser.c
+@@ -2272,6 +2272,8 @@ static tree synthesize_implicit_template_parm
+   (cp_parser *, tree);
+ static tree finish_fully_implicit_template
+   (cp_parser *, tree);
++static void abort_fully_implicit_template
++  (cp_parser *);
+ 
+ /* Classes [gram.class] */
+ 
+@@ -3459,7 +3461,7 @@ cp_parser_skip_to_end_of_statement (cp_parser* parser)
+ 
+   /* Unwind generic function template scope if necessary.  */
+   if (parser->fully_implicit_function_template_p)
+-    finish_fully_implicit_template (parser, /*member_decl_opt=*/0);
++    abort_fully_implicit_template (parser);
+ 
+   while (true)
+     {
+@@ -3549,7 +3551,7 @@ cp_parser_skip_to_end_of_block_or_statement (cp_parser* parser)
+ 
+   /* Unwind generic function template scope if necessary.  */
+   if (parser->fully_implicit_function_template_p)
+-    finish_fully_implicit_template (parser, /*member_decl_opt=*/0);
++    abort_fully_implicit_template (parser);
+ 
+   while (nesting_depth >= 0)
+     {
+@@ -3810,6 +3812,36 @@ cp_parser_new (void)
+   return parser;
+ }
+ 
++/* Like finish_fully_implicit_template, but to be used in error
++   recovery, rearranging scopes so that we restore the state we had
++   before synthesize_implicit_template_parm inserted the implement
++   template parms scope.  */
++
++static void
++abort_fully_implicit_template (cp_parser *parser)
++{
++  cp_binding_level *return_to_scope = current_binding_level;
++
++  if (parser->implicit_template_scope
++      && return_to_scope != parser->implicit_template_scope)
++    {
++      cp_binding_level *child = return_to_scope;
++      for (cp_binding_level *scope = child->level_chain;
++	   scope != parser->implicit_template_scope;
++	   scope = child->level_chain)
++	child = scope;
++      child->level_chain = parser->implicit_template_scope->level_chain;
++      parser->implicit_template_scope->level_chain = return_to_scope;
++      current_binding_level = parser->implicit_template_scope;
++    }
++  else
++    return_to_scope = return_to_scope->level_chain;
++
++  finish_fully_implicit_template (parser, NULL);
++
++  gcc_assert (current_binding_level == return_to_scope);
++}
++
+ /* Create a cp_lexer structure which will emit the tokens in CACHE
+    and push it onto the parser's lexer stack.  This is used for delayed
+    parsing of in-class method bodies and default arguments, and should
+@@ -21068,16 +21100,8 @@ cp_parser_parameter_declaration_clause (cp_parser* parser)
+   bool ellipsis_p;
+   bool is_error;
+ 
+-  struct cleanup {
+-    cp_parser* parser;
+-    int auto_is_implicit_function_template_parm_p;
+-    ~cleanup() {
+-      parser->auto_is_implicit_function_template_parm_p
+-	= auto_is_implicit_function_template_parm_p;
+-    }
+-  } cleanup = { parser, parser->auto_is_implicit_function_template_parm_p };
+-
+-  (void) cleanup;
++  temp_override<bool> cleanup
++    (parser->auto_is_implicit_function_template_parm_p);
+ 
+   if (!processing_specialization
+       && !processing_template_parmlist
+@@ -24707,6 +24731,9 @@ cp_parser_gnu_attributes_opt (cp_parser* parser)
+ {
+   tree attributes = NULL_TREE;
+ 
++  temp_override<bool> cleanup
++    (parser->auto_is_implicit_function_template_parm_p, false);
++
+   while (true)
+     {
+       cp_token *token;
+@@ -24906,6 +24933,9 @@ cp_parser_std_attribute (cp_parser *parser, tree attr_ns)
+   tree attribute, attr_id = NULL_TREE, arguments;
+   cp_token *token;
+ 
++  temp_override<bool> cleanup
++    (parser->auto_is_implicit_function_template_parm_p, false);
++
+   /* First, parse name of the attribute, a.k.a attribute-token.  */
+ 
+   token = cp_lexer_peek_token (parser->lexer);
+diff --git a/gcc/testsuite/g++.dg/cpp0x/pr84610.C b/gcc/testsuite/g++.dg/cpp0x/pr84610.C
+new file mode 100644
+index 000000000..cc7074896
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/pr84610.C
+@@ -0,0 +1,3 @@
++// { dg-do compile { target c++11 } }
++
++a (int &__attribute__ ((aligned(auto x)) y)); // { dg-error "parameter declaration|before|expected constructor" }
+diff --git a/gcc/testsuite/g++.dg/cpp0x/pr84642.C b/gcc/testsuite/g++.dg/cpp0x/pr84642.C
+new file mode 100644
+index 000000000..5c6895edb
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/pr84642.C
+@@ -0,0 +1,3 @@
++// { dg-do compile { target c++11 } }
++
++a(int(const &&__attribute__((b(auto;))))) // { dg-error "parameter declaration|with no type|before|expected constructor" }

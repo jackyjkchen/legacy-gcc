@@ -1,0 +1,39 @@
+diff --git a/gcc/c/c-typeck.c b/gcc/c/c-typeck.c
+index 753d13ad2..98945f926 100644
+--- a/gcc/c/c-typeck.c
++++ b/gcc/c/c-typeck.c
+@@ -13579,6 +13579,12 @@ c_build_va_arg (location_t loc1, tree expr, location_t loc2, tree type)
+ 		"type %qT", type);
+       return error_mark_node;
+     }
++  else if (TREE_CODE (type) == FUNCTION_TYPE)
++    {
++      error_at (loc2, "second argument to %<va_arg%> is a function type %qT",
++		type);
++      return error_mark_node;
++    }
+   else if (warn_cxx_compat && TREE_CODE (type) == ENUMERAL_TYPE)
+     warning_at (loc2, OPT_Wc___compat,
+ 		"C++ requires promoted type, not enum type, in %<va_arg%>");
+diff --git a/gcc/testsuite/gcc.dg/pr105149.c b/gcc/testsuite/gcc.dg/pr105149.c
+new file mode 100644
+index 000000000..b748f454d
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr105149.c
+@@ -0,0 +1,16 @@
++/* PR c/105149 */
++/* { dg-do compile } */
++/* { dg-options "-O2" } */
++
++#include <stdarg.h>
++
++void
++foo (int s, ...)
++{
++  int e;
++  va_list ap;
++
++  va_start (ap, s);
++  e = va_arg (ap, int (void)) ();	/* { dg-error "second argument to 'va_arg' is a function type" } */
++  va_end (ap);
++}

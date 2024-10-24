@@ -1,0 +1,75 @@
+diff --git a/gcc/fortran/resolve.c b/gcc/fortran/resolve.c
+index ce12f7a6f..56be6bc95 100644
+--- a/gcc/fortran/resolve.c
++++ b/gcc/fortran/resolve.c
+@@ -4897,7 +4897,7 @@ gfc_resolve_dim_arg (gfc_expr *dim)
+ static void
+ resolve_assoc_var (gfc_symbol* sym, bool resolve_target);
+ 
+-static void
++static bool
+ find_array_spec (gfc_expr *e)
+ {
+   gfc_array_spec *as;
+@@ -4925,7 +4925,11 @@ find_array_spec (gfc_expr *e)
+       {
+       case REF_ARRAY:
+ 	if (as == NULL)
+-	  gfc_internal_error ("find_array_spec(): Missing spec");
++	  {
++	    gfc_error ("Invalid array reference of a non-array entity at %L",
++		       &ref->u.ar.where);
++	    return false;
++	  }
+ 
+ 	ref->u.ar.as = as;
+ 	as = NULL;
+@@ -4949,6 +4953,8 @@ find_array_spec (gfc_expr *e)
+ 
+   if (as != NULL)
+     gfc_internal_error ("find_array_spec(): unused as(2)");
++
++  return true;
+ }
+ 
+ 
+@@ -5270,7 +5276,8 @@ gfc_resolve_ref (gfc_expr *expr)
+   for (ref = expr->ref; ref; ref = ref->next)
+     if (ref->type == REF_ARRAY && ref->u.ar.as == NULL)
+       {
+-	find_array_spec (expr);
++	if (!find_array_spec (expr))
++	  return false;
+ 	break;
+       }
+ 
+diff --git a/gcc/testsuite/gfortran.dg/associate_54.f90 b/gcc/testsuite/gfortran.dg/associate_54.f90
+index 003175a47..680ad5d14 100644
+--- a/gcc/testsuite/gfortran.dg/associate_54.f90
++++ b/gcc/testsuite/gfortran.dg/associate_54.f90
+@@ -26,9 +26,8 @@ contains
+     integer, intent(in) :: a
+     associate (state => obj%state(TEST_STATES)) ! { dg-error "is used as array" }
+ !      state = a
+-      state(TEST_STATE) = a
++      state(TEST_STATE) = a ! { dg-error "array reference of a non-array" }
+     end associate
+   end subroutine test_alter_state1
+ 
+ end module test
+-
+diff --git a/gcc/testsuite/gfortran.dg/associate_59.f90 b/gcc/testsuite/gfortran.dg/associate_59.f90
+new file mode 100644
+index 000000000..2da97731d
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/associate_59.f90
+@@ -0,0 +1,9 @@
++! { dg-do compile }
++! PR fortran/103590 - ICE: find_array_spec(): Missing spec 
++! Contributed by G.Steinmetz
++
++program p
++  associate (a => 1)
++    print *, [character(a(1)) :: '1'] ! { dg-error "Scalar INTEGER expression" }
++  end associate
++end

@@ -1,0 +1,32 @@
+diff --git a/gcc/attribs.c b/gcc/attribs.c
+index 7d0f4b5b7..cd0c48609 100644
+--- a/gcc/attribs.c
++++ b/gcc/attribs.c
+@@ -389,7 +389,12 @@ diag_attr_exclusions (tree last_decl, tree node, tree attrname,
+   if (DECL_P (node))
+     {
+       attrs[0] = DECL_ATTRIBUTES (node);
+-      attrs[1] = TYPE_ATTRIBUTES (TREE_TYPE (node));
++      if (TREE_TYPE (node))
++	attrs[1] = TYPE_ATTRIBUTES (TREE_TYPE (node));
++      else
++	/* TREE_TYPE can be NULL e.g. while processing attributes on
++	   enumerators.  */
++	attrs[1] = NULL_TREE;
+     }
+   else
+     {
+diff --git a/gcc/testsuite/g++.dg/ext/attrib68.C b/gcc/testsuite/g++.dg/ext/attrib68.C
+new file mode 100644
+index 000000000..be3b11084
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/ext/attrib68.C
+@@ -0,0 +1,8 @@
++// PR c++/114634
++// { dg-do compile }
++
++template <int N>
++struct A
++{
++  enum { e __attribute__ ((aligned (16))) };	// { dg-error "alignment may not be specified for 'e'" }
++};

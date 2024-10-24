@@ -1,0 +1,78 @@
+diff --git a/gcc/cp/constexpr.c b/gcc/cp/constexpr.c
+index 5af624a65..67c92f506 100644
+--- a/gcc/cp/constexpr.c
++++ b/gcc/cp/constexpr.c
+@@ -4109,8 +4109,6 @@ cxx_eval_constant_expression (const constexpr_ctx *ctx, tree t,
+ 	r = *p;
+       else if (lval)
+ 	/* Defer in case this is only used for its type.  */;
+-      else if (TREE_CODE (TREE_TYPE (t)) == REFERENCE_TYPE)
+-	/* Defer, there's no lvalue->rvalue conversion.  */;
+       else if (COMPLETE_TYPE_P (TREE_TYPE (t))
+ 	       && is_really_empty_class (TREE_TYPE (t)))
+ 	{
+diff --git a/gcc/testsuite/g++.dg/cpp0x/constexpr-array-ptr6.C b/gcc/testsuite/g++.dg/cpp0x/constexpr-array-ptr6.C
+index 3a483989c..1c0651203 100644
+--- a/gcc/testsuite/g++.dg/cpp0x/constexpr-array-ptr6.C
++++ b/gcc/testsuite/g++.dg/cpp0x/constexpr-array-ptr6.C
+@@ -12,7 +12,7 @@ constexpr auto sz_d = size(array_double);
+ static_assert(sz_d == 3, "Array size failure");
+ 
+ void f(bool (&param)[2]) {
+-  static_assert(size(param) == 2, "Array size failure"); // Line 13
++  static_assert(size(param) == 2, "Array size failure"); // { dg-error "" }
+   short data[] = {-1, 2, -45, 6, 88, 99, -345};
+   static_assert(size(data) == 7, "Array size failure");
+ }
+diff --git a/gcc/testsuite/g++.dg/cpp0x/constexpr-ref12.C b/gcc/testsuite/g++.dg/cpp0x/constexpr-ref12.C
+new file mode 100644
+index 000000000..7c3ce66b4
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/constexpr-ref12.C
+@@ -0,0 +1,46 @@
++// PR c++/66477
++// { dg-do compile { target c++11 } }
++
++struct a { constexpr bool g() const { return true; } };
++constexpr bool g(a&) { return true;}
++constexpr bool h(a) { return true;}
++
++a a1;
++a& ar = a1;
++
++void f(a ap, a& arp)
++{
++  a a2;
++  a& ar2 = a2;
++
++  // Most of these are OK because no data is actually loaded.
++  static_assert (a1.g(),"");
++  static_assert (g(a1),"");
++  static_assert (h(a1),"");
++
++  static_assert (a2.g(),"");
++  static_assert (g(a2),"");
++  static_assert (h(a2),"");
++
++  static_assert (ap.g(),"");
++  static_assert (g(ap),"");
++  static_assert (h(ap),"");
++
++  static_assert (ar.g(),"");
++  static_assert (g(ar),"");
++  static_assert (h(ar),"");
++
++  // But these are specifically prohibited in [expr.const]/4.12:
++  // * an id-expression that refers to a variable or data member of reference
++  //   type unless the reference has a preceding initialization and either
++  // ** it is usable in constant expressions or
++  // ** its lifetime began within the evaluation of e;
++
++  static_assert (ar2.g(),"");	// { dg-error "constant" }
++  static_assert (g(ar2),"");	// { dg-error "constant" }
++  static_assert (h(ar2),"");	// { dg-error "constant" }
++
++  static_assert (arp.g(),"");	// { dg-error "constant" }
++  static_assert (g(arp),"");	// { dg-error "constant" }
++  static_assert (h(arp),"");	// { dg-error "constant" }
++}

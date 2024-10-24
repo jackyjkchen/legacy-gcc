@@ -1,0 +1,62 @@
+diff --git a/gcc/cp/semantics.c b/gcc/cp/semantics.c
+index e96fd3989..f5499faca 100644
+--- a/gcc/cp/semantics.c
++++ b/gcc/cp/semantics.c
+@@ -9767,6 +9767,14 @@ finish_decltype_type (tree expr, bool id_expression_or_member_access_p,
+ 
+       return type;
+     }
++  else if (processing_template_decl)
++    {
++      ++cp_unevaluated_operand;
++      expr = instantiate_non_dependent_expr_sfinae (expr, complain);
++      --cp_unevaluated_operand;
++      if (expr == error_mark_node)
++	return error_mark_node;
++    }
+ 
+   /* The type denoted by decltype(e) is defined as follows:  */
+ 
+diff --git a/gcc/testsuite/g++.dg/cpp0x/decltype76.C b/gcc/testsuite/g++.dg/cpp0x/decltype76.C
+new file mode 100644
+index 000000000..239fe6d2a
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/decltype76.C
+@@ -0,0 +1,7 @@
++// PR c+/57943
++// { dg-do compile { target c++11 } }
++
++struct a { };
++
++template <typename T = decltype (a(0))> // { dg-error "" }
++void f() { }
+diff --git a/gcc/testsuite/g++.dg/cpp0x/decltype78.C b/gcc/testsuite/g++.dg/cpp0x/decltype78.C
+new file mode 100644
+index 000000000..6f4e5b4ad
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/decltype78.C
+@@ -0,0 +1,24 @@
++// PR c++/81339
++// { dg-do compile { target c++11 } }
++
++struct true_type { static const bool value = true; };
++struct false_type { static const bool value = false; };
++
++template <typename T>
++struct IsDefaultConstructibleT
++{
++    // using T here (instead of U) should be an error
++    template <typename U, typename = decltype(T())> // { dg-error "deleted" }
++      static true_type test(void*);
++
++    template <typename U>
++      static false_type test(...);
++
++    static constexpr bool value = decltype(test<T>(nullptr))::value;
++};
++
++struct S {
++  S() = delete;
++};
++
++static_assert( IsDefaultConstructibleT<S>::value, "" ); // { dg-error "assertion failed" }

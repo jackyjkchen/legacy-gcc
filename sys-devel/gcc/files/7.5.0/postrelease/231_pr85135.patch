@@ -1,0 +1,60 @@
+diff --git a/gcc/cp/decl.c b/gcc/cp/decl.c
+index 656a7c68a..2652046d9 100644
+--- a/gcc/cp/decl.c
++++ b/gcc/cp/decl.c
+@@ -11119,20 +11119,29 @@ grokdeclarator (const cp_declarator *declarator,
+ 			       name, type);
+ 			return error_mark_node;
+ 		      }
+-		    if (tree tmpl = CLASS_PLACEHOLDER_TEMPLATE (auto_node))
++		    tree tmpl = CLASS_PLACEHOLDER_TEMPLATE (auto_node);
++		    if (!tmpl)
++		      if (tree late_auto = type_uses_auto (late_return_type))
++			tmpl = CLASS_PLACEHOLDER_TEMPLATE (late_auto);
++		    if (tmpl)
+ 		      {
+-			if (!late_return_type)
++			if (!dguide_name_p (unqualified_id))
+ 			  {
+-			    if (dguide_name_p (unqualified_id))
+-			      error_at (declarator->id_loc, "deduction guide "
+-					"for %qT must have trailing return "
+-					"type", TREE_TYPE (tmpl));
+-			    else
+-			      error_at (declarator->id_loc, "deduced class "
+-					"type %qT in function return type",
+-					type);
++			    error_at (declarator->id_loc, "deduced class "
++				      "type %qD in function return type",
++				      DECL_NAME (tmpl));
+ 			    inform (DECL_SOURCE_LOCATION (tmpl),
+ 				    "%qD declared here", tmpl);
++			    return error_mark_node;
++			  }
++			else if (!late_return_type)
++			  {
++			    error_at (declarator->id_loc, "deduction guide "
++				      "for %qT must have trailing return "
++				      "type", TREE_TYPE (tmpl));
++			    inform (DECL_SOURCE_LOCATION (tmpl),
++				    "%qD declared here", tmpl);
++			    return error_mark_node;
+ 			  }
+ 			else if (CLASS_TYPE_P (late_return_type)
+ 				 && CLASSTYPE_TEMPLATE_INFO (late_return_type)
+diff --git a/gcc/testsuite/g++.dg/cpp1z/class-deduction53.C b/gcc/testsuite/g++.dg/cpp1z/class-deduction53.C
+new file mode 100644
+index 000000000..6025dc47c
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp1z/class-deduction53.C
+@@ -0,0 +1,10 @@
++// PR c++/85135
++// { dg-do compile { target c++11 } }
++
++template<int> struct A {};
++
++auto foo() -> A;		// { dg-error "A" }
++
++template<typename> struct B {};
++
++auto foo() -> A;		// { dg-error "A" }

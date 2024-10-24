@@ -1,0 +1,62 @@
+diff --git a/gcc/cp/parser.c b/gcc/cp/parser.c
+index d11cfb261..20a3b5f04 100644
+--- a/gcc/cp/parser.c
++++ b/gcc/cp/parser.c
+@@ -29097,6 +29097,8 @@ cp_parser_sizeof_operand (cp_parser* parser, enum rid keyword)
+     {
+       tree type = NULL_TREE;
+ 
++      tentative_firewall firewall (parser);
++
+       /* We can't be sure yet whether we're looking at a type-id or an
+ 	 expression.  */
+       cp_parser_parse_tentatively (parser);
+@@ -29124,11 +29126,15 @@ cp_parser_sizeof_operand (cp_parser* parser, enum rid keyword)
+       /* If all went well, then we're done.  */
+       if (cp_parser_parse_definitely (parser))
+ 	expr = type;
+-    }
++      else
++	{
++	  /* Commit to the tentative_firewall so we get syntax errors.  */
++	  cp_parser_commit_to_tentative_parse (parser);
+ 
+-  /* If the type-id production did not work out, then we must be
+-     looking at the unary-expression production.  */
+-  if (!expr)
++	  expr = cp_parser_unary_expression (parser);
++	}
++    }
++  else
+     expr = cp_parser_unary_expression (parser);
+ 
+   /* Go back to evaluating expressions.  */
+diff --git a/gcc/testsuite/g++.dg/cpp0x/decltype-pr66548.C b/gcc/testsuite/g++.dg/cpp0x/decltype-pr66548.C
+index f4b7caa9e..3f20d152a 100644
+--- a/gcc/testsuite/g++.dg/cpp0x/decltype-pr66548.C
++++ b/gcc/testsuite/g++.dg/cpp0x/decltype-pr66548.C
+@@ -11,7 +11,7 @@ struct Meow {};
+ 
+ void f ()
+ {
+-  decltype (Meow.purr ()) d;   // { dg-error "expected primary-expression" "pr89875" { xfail c++98_only } }
++  decltype (Meow.purr ()) d;   // { dg-error "expected primary-expression" }
+   (void)&d;
+ }
+ 
+diff --git a/gcc/testsuite/g++.dg/template/sizeof-template-argument.C b/gcc/testsuite/g++.dg/template/sizeof-template-argument.C
+index 31aeeec9b..2bfff6d9a 100644
+--- a/gcc/testsuite/g++.dg/template/sizeof-template-argument.C
++++ b/gcc/testsuite/g++.dg/template/sizeof-template-argument.C
+@@ -3,9 +3,9 @@
+ 
+ template<int> struct A {};
+ 
+-template<typename> struct B : A <sizeof(=)> {}; /* { dg-error "template argument" } */
++template<typename> struct B : A <sizeof(=)> {}; /* { dg-error "expected primary-expression" } */
+ 
+-template<typename> struct C : A <sizeof(=)> {}; /* { dg-error "template argument" } */
++template<typename> struct C : A <sizeof(=)> {}; /* { dg-error "expected primary-expression" } */
+ 
+ int a;
+ 

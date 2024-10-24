@@ -1,0 +1,105 @@
+diff --git a/gcc/cp/pt.c b/gcc/cp/pt.c
+index dc8ee4d9a..d38e0a594 100644
+--- a/gcc/cp/pt.c
++++ b/gcc/cp/pt.c
+@@ -18826,11 +18826,20 @@ unify (tree tparms, tree targs, tree parm, tree arg, int strict,
+       return unify_template_argument_mismatch (explain_p, parm, arg);
+ 
+     case VAR_DECL:
+-      /* A non-type template parameter that is a variable should be a
+-	 an integral constant, in which case, it whould have been
+-	 folded into its (constant) value. So we should not be getting
+-	 a variable here.  */
+-      gcc_unreachable ();
++      /* We might get a variable as a non-type template argument in parm if the
++	 corresponding parameter is type-dependent.  Make any necessary
++	 adjustments based on whether arg is a reference.  */
++      if (CONSTANT_CLASS_P (arg))
++	parm = fold_non_dependent_expr (parm);
++      else if (REFERENCE_REF_P (arg))
++	{
++	  tree sub = TREE_OPERAND (arg, 0);
++	  STRIP_NOPS (sub);
++	  if (TREE_CODE (sub) == ADDR_EXPR)
++	    arg = TREE_OPERAND (sub, 0);
++	}
++      /* Now use the normal expression code to check whether they match.  */
++      goto expr;
+ 
+     case TYPE_ARGUMENT_PACK:
+     case NONTYPE_ARGUMENT_PACK:
+@@ -18863,7 +18872,7 @@ unify (tree tparms, tree targs, tree parm, tree arg, int strict,
+       if (is_overloaded_fn (parm) || type_unknown_p (parm))
+ 	return unify_success (explain_p);
+       gcc_assert (EXPR_P (parm) || TREE_CODE (parm) == TRAIT_EXPR);
+-
++    expr:
+       /* We must be looking at an expression.  This can happen with
+ 	 something like:
+ 
+diff --git a/gcc/testsuite/g++.dg/cpp0x/temp_default6.C b/gcc/testsuite/g++.dg/cpp0x/temp_default6.C
+new file mode 100644
+index 000000000..10cde2d08
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/temp_default6.C
+@@ -0,0 +1,27 @@
++// PR c++/59759
++// { dg-do compile { target c++11 } }
++
++namespace std {
++template <typename _Tp>
++struct B {
++  static constexpr _Tp value = 0;
++};
++typedef B<int> false_type;
++struct C : false_type {};
++template <typename>
++struct is_integral : C {};
++template <int, typename _Tp>
++struct enable_if {
++  typedef _Tp type;
++};
++}
++enum class enabled;
++extern constexpr enabled dummy{};
++template <typename T, typename std::enable_if<std::is_integral<T>::value,
++                                              T>::type = dummy>
++class A;
++template <typename T>
++void f(A<const T&>*) {
++  A<const enabled&>* map;
++  f(map);
++}
+diff --git a/gcc/testsuite/g++.dg/cpp0x/temp_default7.C b/gcc/testsuite/g++.dg/cpp0x/temp_default7.C
+new file mode 100644
+index 000000000..c517aadb1
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/temp_default7.C
+@@ -0,0 +1,27 @@
++// PR c++/59759
++// { dg-do compile { target c++11 } }
++
++namespace std {
++template <typename _Tp>
++struct B {
++  static constexpr _Tp value = 0;
++};
++typedef B<int> false_type;
++struct C : false_type {};
++template <typename>
++struct is_integral : C {};
++template <int, typename _Tp>
++struct enable_if {
++  typedef _Tp type;
++};
++}
++enum class enabled;
++constexpr enabled dummy{};
++template <typename T, typename std::enable_if<std::is_integral<T>::value,
++                                              enabled>::type = dummy>
++class A;
++template <typename T>
++void f(A<T>*) {
++  A<int>* map;
++  f(map);
++}

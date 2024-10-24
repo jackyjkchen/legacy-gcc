@@ -1,0 +1,54 @@
+diff --git a/gcc/cp/constexpr.c b/gcc/cp/constexpr.c
+index 70838d411..8b09a5e29 100644
+--- a/gcc/cp/constexpr.c
++++ b/gcc/cp/constexpr.c
+@@ -1944,7 +1944,12 @@ cxx_eval_array_reference (const constexpr_ctx *ctx, tree t,
+ 
+   if (!found)
+     {
+-      if (tree_int_cst_lt (index, array_type_nelts_top (TREE_TYPE (ary))))
++      tree nelts = array_type_nelts_top (TREE_TYPE (ary));
++      /* For VLAs, the number of elements won't be an integer constant.  */
++      nelts = cxx_eval_constant_expression (ctx, nelts, false, non_constant_p,
++					    overflow_p);
++      VERIFY_CONSTANT (nelts);
++      if (tree_int_cst_lt (index, nelts))
+ 	{
+ 	  /* If it's within the array bounds but doesn't have an explicit
+      initializer, it's initialized from {}.  But use build_value_init
+diff --git a/gcc/testsuite/g++.dg/ext/constexpr-vla1.C b/gcc/testsuite/g++.dg/ext/constexpr-vla1.C
+new file mode 100644
+index 000000000..a5615bb36
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/ext/constexpr-vla1.C
+@@ -0,0 +1,30 @@
++// PR c++/69496
++// { dg-do compile { target c++14 } }
++
++constexpr int
++fn_ok (int n)
++{
++    __extension__ int a[n] = { };
++    int z = 0;
++
++    for (unsigned i = 0; i < sizeof (a) / sizeof (int); ++i)
++      z += a[i];
++
++    return z;
++}
++
++
++constexpr int
++fn_not_ok (int n)
++{
++    __extension__ int a[n] = { };
++    int z = 0;
++
++    for (unsigned i = 0; i < sizeof (a); ++i)
++      z += a[i];
++
++    return z;
++}
++
++constexpr int n1 = fn_ok (3);
++constexpr int n2 = fn_not_ok (3); // { dg-error "array subscript out of bound" }

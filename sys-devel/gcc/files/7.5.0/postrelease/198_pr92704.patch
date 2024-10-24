@@ -1,0 +1,57 @@
+diff --git a/gcc/testsuite/gcc.dg/torture/pr92704.c b/gcc/testsuite/gcc.dg/torture/pr92704.c
+new file mode 100644
+index 000000000..79994a39b
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/torture/pr92704.c
+@@ -0,0 +1,24 @@
++/* { dg-do compile } */
++/* { dg-additional-options "-fexceptions -fnon-call-exceptions -fno-tree-dce -ftree-loop-if-convert" } */
++int zr, yx;
++
++void __attribute__ ((simd))
++oj (int rd, int q7)
++{
++  int wo = (__UINTPTR_TYPE__)&rd;
++
++  while (q7 < 1)
++    {
++      int kv;
++      short int v3;
++
++      for (v3 = 0; v3 < 82; v3 += 3)
++        {
++        }
++
++      kv = zr ? 0 : v3;
++      yx = kv < rd;
++      zr = zr && yx;
++      ++q7;
++    }
++}
+diff --git a/gcc/tree-if-conv.c b/gcc/tree-if-conv.c
+index 8ec10f917..ac9cb126e 100644
+--- a/gcc/tree-if-conv.c
++++ b/gcc/tree-if-conv.c
+@@ -2458,6 +2458,11 @@ combine_blocks (struct loop *loop)
+       vphi = get_virtual_phi (bb);
+       if (vphi)
+ 	{
++	  /* When there's just loads inside the loop a stray virtual
++	     PHI merging the uses can appear, update last_vdef from
++	     it.  */
++	  if (!last_vdef)
++	    last_vdef = gimple_phi_arg_def (vphi, 0);
+ 	  imm_use_iterator iter;
+ 	  use_operand_p use_p;
+ 	  gimple *use_stmt;
+@@ -2487,6 +2492,10 @@ combine_blocks (struct loop *loop)
+ 	      if (gimple_vdef (stmt))
+ 		last_vdef = gimple_vdef (stmt);
+ 	    }
++	  else
++	    /* If this is the first load we arrive at update last_vdef
++	       so we handle stray PHIs correctly.  */
++	    last_vdef = gimple_vuse (stmt);
+ 	  if (predicated[i])
+ 	    {
+ 	      ssa_op_iter i;

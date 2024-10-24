@@ -1,0 +1,120 @@
+diff --git a/gcc/config/i386/i386.c b/gcc/config/i386/i386.c
+index b6f0f83f0..ed21c565f 100644
+--- a/gcc/config/i386/i386.c
++++ b/gcc/config/i386/i386.c
+@@ -14930,8 +14930,8 @@ ix86_print_operand (FILE *file, rtx x, int code)
+ 	      break;
+ 
+ 	    default:
+-	      output_operand_lossage
+-		("invalid operand size for operand code 'O'");
++	      output_operand_lossage ("invalid operand size for operand "
++				      "code 'O'");
+ 	      return;
+ 	    }
+ 
+@@ -14965,15 +14965,14 @@ ix86_print_operand (FILE *file, rtx x, int code)
+ 		  return;
+ 
+ 		default:
+-		  output_operand_lossage
+-		    ("invalid operand size for operand code 'z'");
++		  output_operand_lossage ("invalid operand size for operand "
++					  "code 'z'");
+ 		  return;
+ 		}
+ 	    }
+ 
+ 	  if (GET_MODE_CLASS (GET_MODE (x)) == MODE_FLOAT)
+-	    warning
+-	      (0, "non-integer operand used with operand code 'z'");
++	    warning (0, "non-integer operand used with operand code 'z'");
+ 	  /* FALLTHRU */
+ 
+ 	case 'Z':
+@@ -15035,13 +15034,12 @@ ix86_print_operand (FILE *file, rtx x, int code)
+ 	    }
+ 	  else
+ 	    {
+-	      output_operand_lossage
+-		("invalid operand type used with operand code 'Z'");
++	      output_operand_lossage ("invalid operand type used with "
++				      "operand code 'Z'");
+ 	      return;
+ 	    }
+ 
+-	  output_operand_lossage
+-	    ("invalid operand size for operand code 'Z'");
++	  output_operand_lossage ("invalid operand size for operand code 'Z'");
+ 	  return;
+ 
+ 	case 'd':
+@@ -15233,7 +15231,12 @@ ix86_print_operand (FILE *file, rtx x, int code)
+ 	  break;
+ 
+ 	case 'K':
+-	  gcc_assert (CONST_INT_P (x));
++	  if (!CONST_INT_P (x))
++	    {
++	      output_operand_lossage ("operand is not an integer, invalid "
++				      "operand code 'K'");
++	      return;
++	    }
+ 
+ 	  if (INTVAL (x) & IX86_HLE_ACQUIRE)
+ #ifdef HAVE_AS_IX86_HLE
+@@ -15256,8 +15259,12 @@ ix86_print_operand (FILE *file, rtx x, int code)
+ 	  return;
+ 
+ 	case 'r':
+-	  gcc_assert (CONST_INT_P (x));
+-	  gcc_assert (INTVAL (x) == ROUND_SAE);
++	  if (!CONST_INT_P (x) || INTVAL (x) != ROUND_SAE)
++	    {
++	      output_operand_lossage ("operand is not a specific integer, "
++				      "invalid operand code 'r'");
++	      return;
++	    }
+ 
+ 	  if (ASSEMBLER_DIALECT == ASM_INTEL)
+ 	    fputs (", ", file);
+@@ -15270,7 +15277,12 @@ ix86_print_operand (FILE *file, rtx x, int code)
+ 	  return;
+ 
+ 	case 'R':
+-	  gcc_assert (CONST_INT_P (x));
++	  if (!CONST_INT_P (x))
++	    {
++	      output_operand_lossage ("operand is not an integer, invalid "
++				      "operand code 'R'");
++	      return;
++	    }
+ 
+ 	  if (ASSEMBLER_DIALECT == ASM_INTEL)
+ 	    fputs (", ", file);
+@@ -15380,7 +15392,7 @@ ix86_print_operand (FILE *file, rtx x, int code)
+ 	  return;
+ 
+ 	default:
+-	    output_operand_lossage ("invalid operand code '%c'", code);
++	  output_operand_lossage ("invalid operand code '%c'", code);
+ 	}
+     }
+ 
+diff --git a/gcc/testsuite/gcc.target/i386/pr79559.c b/gcc/testsuite/gcc.target/i386/pr79559.c
+new file mode 100644
+index 000000000..2eeb652a8
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/i386/pr79559.c
+@@ -0,0 +1,11 @@
++/* PR target/79559 */
++/* { dg-do compile } */
++
++void
++foo (int x)
++{
++  __asm__ volatile ("# %K0" : : "r" (x));	/* { dg-error "invalid operand code" } */
++  __asm__ volatile ("# %r0" : : "r" (x));	/* { dg-error "invalid operand code" } */
++  __asm__ volatile ("# %r0" : : "n" (129));	/* { dg-error "invalid operand code" } */
++  __asm__ volatile ("# %R0" : : "r" (x));	/* { dg-error "invalid operand code" } */
++}

@@ -1,0 +1,104 @@
+diff --git a/gcc/testsuite/g++.dg/cpp1y/digit-sep-neg-2.C b/gcc/testsuite/g++.dg/cpp1y/digit-sep-neg-2.C
+new file mode 100644
+index 000000000..09393aaf8
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp1y/digit-sep-neg-2.C
+@@ -0,0 +1,4 @@
++// Test adjacent digit separators rejected in exponent (bug 83873).
++// { dg-do compile { target c++14 } }
++
++double d = 1.0e1''0; /* { dg-error "adjacent digit separators" } */
+diff --git a/gcc/testsuite/g++.dg/cpp1y/digit-sep-neg.C b/gcc/testsuite/g++.dg/cpp1y/digit-sep-neg.C
+index 727e74e2e..423859f14 100644
+--- a/gcc/testsuite/g++.dg/cpp1y/digit-sep-neg.C
++++ b/gcc/testsuite/g++.dg/cpp1y/digit-sep-neg.C
+@@ -14,7 +14,7 @@ main()
+   unsigned u = 0b0001'0000'0000'0000'0000'0000'U; // { dg-error "digit separator outside digit sequence" }
+ 
+   double d = 0.0;
+-  d = 1'.602'176'565e-19; // { dg-error "digit separator adjacent to decimal point" }
++  d = 1'.602'176'565e-19; // { dg-warning "multi-character" }
+   d = 1.'602'176'565e-19; // { dg-error "digit separator adjacent to decimal point" }
+   d = 1.602''176'565e-19; // { dg-error "adjacent digit separators" }
+   d = 1.602'176'565'e-19; // { dg-error "digit separator adjacent to exponent" }
+@@ -27,4 +27,5 @@ main()
+ 
+ // { dg-error "exponent has no digits" "exponent has no digits" { target *-*-* } 21 }
+ // { dg-error "expected ';' before" "expected ';' before" { target *-*-* } 13 }
++// { dg-error "expected ';' before" "expected ';' before" { target *-*-* } 17 }
+ // { dg-error "expected ';' before" "expected ';' before" { target *-*-* } 24 }
+diff --git a/gcc/testsuite/g++.dg/cpp1y/digit-sep-pp-number.C b/gcc/testsuite/g++.dg/cpp1y/digit-sep-pp-number.C
+new file mode 100644
+index 000000000..977738222
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp1y/digit-sep-pp-number.C
+@@ -0,0 +1,17 @@
++// Test lexing of pp-numbers does not allow digit separators that do
++// not form part of the pp-number syntax, when the code is valid with
++// correct lexing but not with too many characters accepted in the
++// pp-number (bug 97604).
++// { dg-do compile { target c++14 } }
++
++static_assert (0x0'e-0xe == 0, "signs");
++
++#define a0 '.' -
++#define acat(x) a ## x
++static_assert (acat (0'.') == 0, ".");
++
++// This case was not actually buggy.
++#define c0(x) 0
++#define b0 c0 (
++#define bcat(x) b ## x
++static_assert (bcat (0'\u00c0')) == 0, "identifier-nondigit");
+diff --git a/libcpp/expr.c b/libcpp/expr.c
+index 634190d26..fb36e40e5 100644
+--- a/libcpp/expr.c
++++ b/libcpp/expr.c
+@@ -572,11 +572,7 @@ cpp_classify_number (cpp_reader *pfile, const cpp_token *token,
+ 	    max_digit = c;
+ 	}
+       else if (DIGIT_SEP (c))
+-	{
+-	  if (seen_digit_sep)
+-	    SYNTAX_ERROR_AT (virtual_location, "adjacent digit separators");
+-	  seen_digit_sep = true;
+-	}
++	seen_digit_sep = true;
+       else if (c == '.')
+ 	{
+ 	  if (seen_digit_sep || DIGIT_SEP (*str))
+diff --git a/libcpp/lex.c b/libcpp/lex.c
+index cd2801ca7..107a3eeb9 100644
+--- a/libcpp/lex.c
++++ b/libcpp/lex.c
+@@ -1548,18 +1548,28 @@ lex_number (cpp_reader *pfile, cpp_string *number,
+   base = pfile->buffer->cur - 1;
+   do
+     {
++      const uchar *adj_digit_sep = NULL;
+       cur = pfile->buffer->cur;
+ 
+       /* N.B. ISIDNUM does not include $.  */
+-      while (ISIDNUM (*cur) || *cur == '.' || DIGIT_SEP (*cur)
+-	     || VALID_SIGN (*cur, cur[-1]))
++      while (ISIDNUM (*cur)
++	     || (*cur == '.' && !DIGIT_SEP (cur[-1]))
++	     || DIGIT_SEP (*cur)
++	     || (VALID_SIGN (*cur, cur[-1]) && !DIGIT_SEP (cur[-2])))
+ 	{
+ 	  NORMALIZE_STATE_UPDATE_IDNUM (nst, *cur);
++	  /* Adjacent digit separators do not form part of the pp-number syntax.
++	     However, they can safely be diagnosed here as an error, since '' is
++	     not a valid preprocessing token.  */
++	  if (DIGIT_SEP (*cur) && DIGIT_SEP (cur[-1]) && !adj_digit_sep)
++	    adj_digit_sep = cur;
+ 	  cur++;
+ 	}
+       /* A number can't end with a digit separator.  */
+       while (cur > pfile->buffer->cur && DIGIT_SEP (cur[-1]))
+ 	--cur;
++      if (adj_digit_sep && adj_digit_sep < cur)
++	cpp_error (pfile, CPP_DL_ERROR, "adjacent digit separators");
+ 
+       pfile->buffer->cur = cur;
+     }

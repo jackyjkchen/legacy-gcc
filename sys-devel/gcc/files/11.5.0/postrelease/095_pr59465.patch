@@ -1,0 +1,121 @@
+diff --git a/gcc/cp/init.c b/gcc/cp/init.c
+index 8be2a1a30..cc1ffd1ba 100644
+--- a/gcc/cp/init.c
++++ b/gcc/cp/init.c
+@@ -775,6 +775,33 @@ maybe_warn_list_ctor (tree member, tree init)
+ 	     "of the underlying array", member, begin);
+ }
+ 
++/* Return true if it's OK to initialize an array TYPE from INIT.  Mere mortals
++   can't copy arrays, but the compiler can do so with a VEC_INIT_EXPR in
++   certain cases.  */
++
++static bool
++can_init_array_with_p (tree type, tree init)
++{
++  if (!init)
++    /* Value-init, OK.  */
++    return true;
++  if (!same_type_ignoring_top_level_qualifiers_p (type, TREE_TYPE (init)))
++    return false;
++  /* We're called from synthesize_method, and we're processing the
++     mem-initializers of a constructor.  */
++  if (DECL_DEFAULTED_FN (current_function_decl))
++    return true;
++  /* As an extension, we allow copying from a compound literal.  */
++  if (TREE_CODE (init) == TARGET_EXPR)
++    {
++      init = TARGET_EXPR_INITIAL (init);
++      if (TREE_CODE (init) == CONSTRUCTOR)
++	return CONSTRUCTOR_C99_COMPOUND_LITERAL (init);
++    }
++
++  return false;
++}
++
+ /* Initialize MEMBER, a FIELD_DECL, with INIT, a TREE_LIST of
+    arguments.  If TREE_LIST is void_type_node, an empty initializer
+    list was given; if NULL_TREE no initializer was given.  */
+@@ -920,9 +947,7 @@ perform_member_init (tree member, tree init)
+     {
+       if (TREE_CODE (type) == ARRAY_TYPE)
+ 	{
+-	  if (init == NULL_TREE
+-	      || same_type_ignoring_top_level_qualifiers_p (type,
+-							    TREE_TYPE (init)))
++	  if (can_init_array_with_p (type, init))
+ 	    {
+ 	      if (TYPE_DOMAIN (type) && TYPE_MAX_VALUE (TYPE_DOMAIN (type)))
+ 		{
+diff --git a/gcc/testsuite/g++.dg/init/array62.C b/gcc/testsuite/g++.dg/init/array62.C
+new file mode 100644
+index 000000000..2a786a36e
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/init/array62.C
+@@ -0,0 +1,19 @@
++// PR c++/59465
++// { dg-do compile }
++
++struct string {} a[1];
++struct pair {
++  string s[1];
++  pair() : s(a) {} // { dg-error "invalid initializer for array member" }
++};
++
++struct S {
++  char s[10];
++  S() : s("aaa") {}
++};
++
++void
++g ()
++{
++  string x[1](a); // { dg-error "array must be initialized" }
++}
+diff --git a/gcc/testsuite/g++.dg/init/array63.C b/gcc/testsuite/g++.dg/init/array63.C
+new file mode 100644
+index 000000000..57e980561
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/init/array63.C
+@@ -0,0 +1,13 @@
++// PR c++/59465
++// { dg-do compile }
++
++struct I {
++    const bool b;
++};
++struct O {
++    I a[2];
++    static I const data[2];
++    O() : a(data){}  // { dg-error "invalid initializer for array member" }
++};
++
++I const O::data[2] = {true, false};
+diff --git a/gcc/testsuite/g++.dg/init/array64.C b/gcc/testsuite/g++.dg/init/array64.C
+new file mode 100644
+index 000000000..e0afdfab3
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/init/array64.C
+@@ -0,0 +1,22 @@
++// PR c++/59465
++// { dg-do compile }
++
++static const int my_size = 10;
++
++class UserType
++{
++public:
++  UserType(): f_(){}
++private:
++int f_;
++};
++
++typedef UserType Array[my_size];
++
++class Foo
++{
++public:
++  Foo(Array& m) : m_(m) {};  // { dg-error "invalid initializer for array member" }
++private:
++  Array m_;
++};

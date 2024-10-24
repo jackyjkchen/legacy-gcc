@@ -1,0 +1,60 @@
+diff --git a/gcc/cp/semantics.c b/gcc/cp/semantics.c
+index a0031425e..c8cae1dda 100644
+--- a/gcc/cp/semantics.c
++++ b/gcc/cp/semantics.c
+@@ -3821,8 +3821,9 @@ calculate_bases_helper (tree type)
+   vec<tree, va_gc> *vector = make_tree_vector();
+ 
+   /* Now add non-virtual base classes in order of construction */
+-  dfs_walk_all (TYPE_BINFO (type),
+-                dfs_calculate_bases_pre, dfs_calculate_bases_post, &vector);
++  if (TYPE_BINFO (type))
++    dfs_walk_all (TYPE_BINFO (type),
++		  dfs_calculate_bases_pre, dfs_calculate_bases_post, &vector);
+   return vector;
+ }
+ 
+@@ -3856,13 +3857,18 @@ calculate_bases (tree type)
+   vec_safe_splice (vector, nonvbases);
+   release_tree_vector (nonvbases);
+ 
+-  /* Last element is entire class, so don't copy */
+-  bases_vec = make_tree_vec (vector->length () - 1);
+-
+-  for (i = 0; i < vector->length () - 1; ++i)
++  /* Note that during error recovery vector->length can even be zero.  */
++  if (vector->length () > 1)
+     {
+-      TREE_VEC_ELT (bases_vec, i) = (*vector)[i];
++      /* Last element is entire class, so don't copy */
++      bases_vec = make_tree_vec (vector->length() - 1);
++
++      for (i = 0; i < vector->length () - 1; ++i)
++	TREE_VEC_ELT (bases_vec, i) = (*vector)[i];
+     }
++  else
++    bases_vec = make_tree_vec (0);
++
+   release_tree_vector (vector);
+   return bases_vec;
+ }
+diff --git a/gcc/testsuite/g++.dg/ext/bases2.C b/gcc/testsuite/g++.dg/ext/bases2.C
+new file mode 100644
+index 000000000..a8806dde8
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/ext/bases2.C
+@@ -0,0 +1,14 @@
++// PR c++/60218
++// { dg-do compile { target c++11 } }
++
++template<typename...> struct A {};
++
++template<typename T> struct B
++{
++  typedef A<__bases(T)...> C;
++};
++
++struct X {};
++struct Y : X* {};  // { dg-error "expected" }
++
++B<Y> b;

@@ -1,0 +1,114 @@
+diff --git a/gcc/cp/decl.c b/gcc/cp/decl.c
+index e0ce593a8..9cb86e729 100644
+--- a/gcc/cp/decl.c
++++ b/gcc/cp/decl.c
+@@ -1849,6 +1849,19 @@ duplicate_decls (tree newdecl, tree olddecl, bool newdecl_is_friend)
+   DECL_ATTRIBUTES (newdecl)
+     = (*targetm.merge_decl_attributes) (olddecl, newdecl);
+ 
++  if (DECL_DECLARES_FUNCTION_P (olddecl) && DECL_DECLARES_FUNCTION_P (newdecl))
++    {
++      olddecl_friend = DECL_FRIEND_P (olddecl);
++      hidden_friend = (DECL_ANTICIPATED (olddecl)
++		       && DECL_HIDDEN_FRIEND_P (olddecl)
++		       && newdecl_is_friend);
++      if (!hidden_friend)
++	{
++	  DECL_ANTICIPATED (olddecl) = 0;
++	  DECL_HIDDEN_FRIEND_P (olddecl) = 0;
++	}
++    }
++
+   if (TREE_CODE (newdecl) == TEMPLATE_DECL)
+     {
+       tree old_result;
+@@ -2133,10 +2146,6 @@ duplicate_decls (tree newdecl, tree olddecl, bool newdecl_is_friend)
+       if (DECL_DECLARES_FUNCTION_P (newdecl))
+ 	{
+ 	  DECL_NONCONVERTING_P (newdecl) = DECL_NONCONVERTING_P (olddecl);
+-	  olddecl_friend = DECL_FRIEND_P (olddecl);
+-	  hidden_friend = (DECL_ANTICIPATED (olddecl)
+-			   && DECL_HIDDEN_FRIEND_P (olddecl)
+-			   && newdecl_is_friend);
+ 	  DECL_BEFRIENDING_CLASSES (newdecl)
+ 	    = chainon (DECL_BEFRIENDING_CLASSES (newdecl),
+ 		       DECL_BEFRIENDING_CLASSES (olddecl));
+diff --git a/gcc/cp/name-lookup.c b/gcc/cp/name-lookup.c
+index f46fb89ae..3b6d7ac51 100644
+--- a/gcc/cp/name-lookup.c
++++ b/gcc/cp/name-lookup.c
+@@ -922,7 +922,18 @@ pushdecl_maybe_friend_1 (tree x, bool is_friend)
+ 	}
+ 
+       if (DECL_DECLARES_FUNCTION_P (t))
+-	check_default_args (t);
++	{
++	  check_default_args (t);
++
++	  if (is_friend && t == x && !flag_friend_injection)
++	    {
++	      /* This is a new friend declaration of a function or a
++		 function template, so hide it from ordinary function
++		 lookup.  */
++	      DECL_ANTICIPATED (t) = 1;
++	      DECL_HIDDEN_FRIEND_P (t) = 1;
++	    }
++	}
+ 
+       if (t != x || DECL_FUNCTION_TEMPLATE_P (t))
+ 	return t;
+@@ -985,16 +996,6 @@ pushdecl_maybe_friend_1 (tree x, bool is_friend)
+ 	    }
+ 	}
+ 
+-      if (TREE_CODE (x) == FUNCTION_DECL
+-	  && is_friend
+-	  && !flag_friend_injection)
+-	{
+-	  /* This is a new declaration of a friend function, so hide
+-	     it from ordinary function lookup.  */
+-	  DECL_ANTICIPATED (x) = 1;
+-	  DECL_HIDDEN_FRIEND_P (x) = 1;
+-	}
+-
+       /* This name is new in its binding level.
+ 	 Install the new declaration and return it.  */
+       if (namespace_bindings_p ())
+diff --git a/gcc/testsuite/g++.dg/template/friend57.C b/gcc/testsuite/g++.dg/template/friend57.C
+new file mode 100644
+index 000000000..7077d5e53
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/template/friend57.C
+@@ -0,0 +1,21 @@
++// PR c++/59366
++// { dg-do compile }
++template<typename T> void f(T);
++
++struct S
++{
++  template<typename T> friend void f(T) {}
++  template<typename T> friend void g(T) {}
++  template<typename T> friend void h(T) {}
++};
++
++template<typename T> void h(T);
++
++int
++main ()
++{
++  f(1);
++  g(1); // { dg-error "'g' was not declared in this scope" }
++  g(S());
++  h(1);
++}
+diff --git a/gcc/testsuite/g++.old-deja/g++.pt/friend5.C b/gcc/testsuite/g++.old-deja/g++.pt/friend5.C
+index 3feeb684e..edb9d6233 100644
+--- a/gcc/testsuite/g++.old-deja/g++.pt/friend5.C
++++ b/gcc/testsuite/g++.old-deja/g++.pt/friend5.C
+@@ -14,5 +14,5 @@ class C
+ 
+ int main()
+ {
+-  f(7);
++  f(C());
+ }

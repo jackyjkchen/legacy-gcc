@@ -1,0 +1,77 @@
+diff --git a/gcc/cp/typeck.c b/gcc/cp/typeck.c
+index e9cbef11a..341ea4474 100644
+--- a/gcc/cp/typeck.c
++++ b/gcc/cp/typeck.c
+@@ -1616,9 +1616,9 @@ compparms (const_tree parms1, const_tree parms2)
+ }
+ 
+ 
+-/* Process a sizeof or alignof expression where the operand is a
+-   type. STD_ALIGNOF indicates whether an alignof has C++11 (minimum alignment)
+-   or GNU (preferred alignment) semantics; it is ignored if op is
++/* Process a sizeof or alignof expression where the operand is a type.
++   STD_ALIGNOF indicates whether an alignof has C++11 (minimum alignment)
++   or GNU (preferred alignment) semantics; it is ignored if OP is
+    SIZEOF_EXPR.  */
+ 
+ tree
+@@ -1643,6 +1643,13 @@ cxx_sizeof_or_alignof_type (tree type, enum tree_code op, bool std_alignof,
+ 	return error_mark_node;
+       value = size_one_node;
+     }
++  else if (VOID_TYPE_P (type) && std_alignof)
++    {
++      if (complain)
++	error_at (input_location, "invalid application of %qs to a void type",
++		  OVL_OP_INFO (false, op)->name);
++      return error_mark_node;
++    }
+ 
+   dependent_p = dependent_type_p (type);
+   if (!dependent_p)
+@@ -1847,10 +1854,10 @@ cxx_alignas_expr (tree e)
+     /* [dcl.align]/3:
+        
+ 	   When the alignment-specifier is of the form
+-	   alignas(type-id ), it shall have the same effect as
+-	   alignas(alignof(type-id )).  */
++	   alignas(type-id), it shall have the same effect as
++	   alignas(alignof(type-id)).  */
+ 
+-    return cxx_sizeof_or_alignof_type (e, ALIGNOF_EXPR, true, false);
++    return cxx_sizeof_or_alignof_type (e, ALIGNOF_EXPR, true, true);
+   
+   /* If we reach this point, it means the alignas expression if of
+      the form "alignas(assignment-expression)", so we should follow
+diff --git a/gcc/testsuite/g++.dg/cpp0x/alignas20.C b/gcc/testsuite/g++.dg/cpp0x/alignas20.C
+new file mode 100644
+index 000000000..01a55f3d4
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/alignas20.C
+@@ -0,0 +1,26 @@
++// PR c++/104944
++// { dg-do compile { target c++11 } }
++// { dg-options "-Wpedantic" }
++
++struct inc;
++
++struct alignas(inc) S1 { }; // { dg-error "invalid application" }
++struct alignas(void) S2 { }; // { dg-error "invalid application" }
++
++template <typename T>
++struct alignas(T) S4 {}; // { dg-error "invalid application" }
++
++template <typename T>
++struct alignas(T) S5 {}; // { dg-error "invalid application" }
++
++S4<void> s1;
++S5<inc> s2;
++
++void
++g ()
++{
++  auto s1 = alignof(void); // { dg-error "invalid application" }
++  auto s2 = alignof(const void); // { dg-error "invalid application" }
++  auto s3 = __alignof(void); // { dg-warning "invalid application" }
++  auto s4 = alignof(inc); // { dg-error "invalid application" }
++}

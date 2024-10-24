@@ -1,0 +1,231 @@
+diff --git a/gcc/cp/cp-tree.h b/gcc/cp/cp-tree.h
+index f6f4fdfa1..6b34f6a8a 100644
+--- a/gcc/cp/cp-tree.h
++++ b/gcc/cp/cp-tree.h
+@@ -6168,6 +6168,7 @@ extern void inject_this_parameter (tree, cp_cv_quals);
+ 
+ /* in pt.c */
+ extern bool check_template_shadow		(tree);
++extern bool check_auto_in_tmpl_args             (tree, tree);
+ extern tree get_innermost_template_args		(tree, int);
+ extern void maybe_begin_member_template_processing (tree);
+ extern void maybe_end_member_template_processing (void);
+diff --git a/gcc/cp/parser.c b/gcc/cp/parser.c
+index e26e0ad48..d41003170 100644
+--- a/gcc/cp/parser.c
++++ b/gcc/cp/parser.c
+@@ -15641,8 +15641,16 @@ cp_parser_template_id (cp_parser *parser,
+       arguments = cp_parser_enclosed_template_argument_list (parser);
+     }
+ 
++  /* Check for concepts autos where they don't belong.  We could
++     identify types in some cases of idnetifier TEMPL, looking ahead
++     for a CPP_SCOPE, but that would buy us nothing: we accept auto in
++     types.  We reject them in functions, but if what we have is an
++     identifier, even with none_type we can't conclude it's NOT a
++     type, we have to wait for template substitution.  */
++  if (flag_concepts && check_auto_in_tmpl_args (templ, arguments))
++    template_id = error_mark_node;
+   /* Build a representation of the specialization.  */
+-  if (identifier_p (templ))
++  else if (identifier_p (templ))
+     template_id = build_min_nt_loc (next_token->location,
+ 				    TEMPLATE_ID_EXPR,
+ 				    templ, arguments);
+diff --git a/gcc/cp/pt.c b/gcc/cp/pt.c
+index 0ac6d5340..f9538655c 100644
+--- a/gcc/cp/pt.c
++++ b/gcc/cp/pt.c
+@@ -14570,6 +14570,15 @@ tsubst_qualified_id (tree qualified_id, tree args,
+ 
+   if (is_template)
+     {
++      /* We may be repeating a check already done during parsing, but
++	 if it was well-formed and passed then, it will pass again
++	 now, and if it didn't, we wouldn't have got here.  The case
++	 we want to catch is when we couldn't tell then, and can now,
++	 namely when templ prior to substitution was an
++	 identifier.  */
++      if (flag_concepts && check_auto_in_tmpl_args (expr, template_args))
++	return error_mark_node;
++
+       if (variable_template_p (expr))
+ 	expr = lookup_and_finish_template_variable (expr, template_args,
+ 						    complain);
+@@ -25929,6 +25938,49 @@ type_uses_auto_or_concept (tree type)
+ }
+ 
+ 
++/* Report ill-formed occurrences of auto types in ARGUMENTS.  If
++   concepts are enabled, auto is acceptable in template arguments, but
++   only when TEMPL identifies a template class.  Return TRUE if any
++   such errors were reported.  */
++
++bool
++check_auto_in_tmpl_args (tree tmpl, tree args)
++{
++  /* If there were previous errors, nevermind.  */
++  if (!args || TREE_CODE (args) != TREE_VEC)
++    return false;
++
++  /* If TMPL is an identifier, we're parsing and we can't tell yet
++     whether TMPL is supposed to be a type, a function or a variable.
++     We'll only be able to tell during template substitution, so we
++     expect to be called again then.  If concepts are enabled and we
++     know we have a type, we're ok.  */
++  if (flag_concepts
++      && (identifier_p (tmpl)
++	  || (DECL_P (tmpl)
++	      &&  (DECL_TYPE_TEMPLATE_P (tmpl)
++		   || DECL_TEMPLATE_TEMPLATE_PARM_P (tmpl)))))
++    return false;
++
++  /* Quickly search for any occurrences of auto; usually there won't
++     be any, and then we'll avoid allocating the vector.  */
++  if (!type_uses_auto (args))
++    return false;
++
++  bool errors = false;
++
++  tree vec = extract_autos (args);
++  for (int i = 0; i < TREE_VEC_LENGTH (vec); i++)
++    {
++      tree xauto = TREE_VALUE (TREE_VEC_ELT (vec, i));
++      error_at (DECL_SOURCE_LOCATION (xauto),
++		"invalid use of %qT in template argument", xauto);
++      errors = true;
++    }
++
++  return errors;
++}
++
+ /* For a given template T, return the vector of typedefs referenced
+    in T for which access check is needed at T instantiation time.
+    T is either  a FUNCTION_DECL or a RECORD_TYPE.
+diff --git a/gcc/cp/typeck2.c b/gcc/cp/typeck2.c
+index eb3469129..1f24a7b14 100644
+--- a/gcc/cp/typeck2.c
++++ b/gcc/cp/typeck2.c
+@@ -1981,7 +1981,8 @@ build_functional_cast (tree exp, tree parms, tsubst_flags_t complain)
+       if (!CLASS_PLACEHOLDER_TEMPLATE (anode))
+ 	{
+ 	  if (complain & tf_error)
+-	    error ("invalid use of %qT", anode);
++	    error_at (DECL_SOURCE_LOCATION (TEMPLATE_TYPE_DECL (anode)),
++		      "invalid use of %qT", anode);
+ 	  return error_mark_node;
+ 	}
+       else if (!parms)
+diff --git a/gcc/testsuite/g++.dg/concepts/pr84979-2.C b/gcc/testsuite/g++.dg/concepts/pr84979-2.C
+new file mode 100644
+index 000000000..ce69a0f8a
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/concepts/pr84979-2.C
+@@ -0,0 +1,41 @@
++// { dg-do compile { target c++11 } }
++// { dg-options "-fconcepts" }
++
++template <typename T>
++void foo1(T& t) {
++  typename T::template C<void> tcv = t;
++  typename T::template C<auto> u = tcv;
++  T::template C<auto>::f (tcv, u); // { dg-error "incomplete" }
++  (typename T::template D<auto> (t)); // { dg-error "invalid" }
++}
++
++struct T1 {
++  template <typename T> struct C {
++    C(T1&);
++    static void f(T1&, C&);
++  };
++  template <typename T> struct D {
++    D(T1&);
++  };
++};
++
++template <typename T>
++void foo2(T& t) {
++  typename T::template C<void> tcv = t;
++  typename T::template C<auto> u = tcv;
++  T::template C<auto>::f (tcv, u); // { dg-error "incomplete" }
++  T::template D<auto> (t); // { dg-error "invalid" }
++}
++
++struct T2 {
++  template <typename T> struct C {
++    C(T2&);
++    static void f(T2&, C&);
++  };
++  template <typename T> static void D(T2&);
++};
++
++void f(T1& t1, T2& t2) {
++  foo1 (t1);
++  foo2 (t2);
++}
+diff --git a/gcc/testsuite/g++.dg/concepts/pr84979-3.C b/gcc/testsuite/g++.dg/concepts/pr84979-3.C
+new file mode 100644
+index 000000000..3809c2d30
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/concepts/pr84979-3.C
+@@ -0,0 +1,45 @@
++// { dg-do compile { target c++11 } }
++// { dg-options "-fconcepts" }
++
++// This is like pr84979-2.C, except that we swap the types passed to
++// the template functions foo1 and foo2, so that the expectations WRT
++// D's typeness are not met.
++
++template <typename T>
++void foo1(T& t) {
++  typename T::template C<void> tcv = t;
++  typename T::template C<auto> u = tcv;
++  T::template C<auto>::f (tcv, u); // { dg-error "incomplete" }
++  (typename T::template D<auto> (t)); // { dg-error "invalid" }
++}
++
++struct T1 {
++  template <typename T> struct C {
++    C(T1&);
++    static void f(T1&, C&);
++  };
++  template <typename T> struct D {
++    D(T1&);
++  };
++};
++
++template <typename T>
++void foo2(T& t) {
++  typename T::template C<void> tcv = t;
++  typename T::template C<auto> u = tcv;
++  T::template C<auto>::f (tcv, u); // { dg-error "incomplete" }
++  T::template D<auto> (t); // { dg-error "yields a type" }
++}
++
++struct T2 {
++  template <typename T> struct C {
++    C(T2&);
++    static void f(T2&, C&);
++  };
++  template <typename T> static void D(T2&);
++};
++
++void f(T1& t1, T2& t2) {
++  foo1 (t2);
++  foo2 (t1);
++}
+diff --git a/gcc/testsuite/g++.dg/concepts/pr84979.C b/gcc/testsuite/g++.dg/concepts/pr84979.C
+new file mode 100644
+index 000000000..9bd40df10
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/concepts/pr84979.C
+@@ -0,0 +1,9 @@
++// { dg-do compile { target c++11 } }
++// { dg-options "-fconcepts" }
++
++template<typename> void foo() {}
++
++void bar()
++{
++  foo<auto>(); // { dg-error "invalid" }
++}

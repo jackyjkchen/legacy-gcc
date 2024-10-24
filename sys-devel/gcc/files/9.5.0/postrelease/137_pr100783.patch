@@ -1,0 +1,52 @@
+diff --git a/gcc/c-family/c-attribs.c b/gcc/c-family/c-attribs.c
+index 5f36e06e8..6aca04c51 100644
+--- a/gcc/c-family/c-attribs.c
++++ b/gcc/c-family/c-attribs.c
+@@ -618,6 +618,9 @@ positional_argument (const_tree fntype, const_tree atname, tree pos,
+ 
+   if (tree argtype = type_argument_type (fntype, ipos))
+     {
++      if (argtype == error_mark_node)
++	return NULL_TREE;
++
+       if (flags & POSARG_ELLIPSIS)
+ 	{
+ 	  if (argno < 1)
+diff --git a/gcc/c/c-objc-common.c b/gcc/c/c-objc-common.c
+index 2b76737a7..473288b93 100644
+--- a/gcc/c/c-objc-common.c
++++ b/gcc/c/c-objc-common.c
+@@ -67,6 +67,12 @@ c_objc_common_init (void)
+ static void
+ print_type (c_pretty_printer *cpp, tree t, bool *quoted)
+ {
++  if (t == error_mark_node)
++    {
++      pp_string (cpp, _("{erroneous}"));
++      return;
++    }
++
+   gcc_assert (TYPE_P (t));
+   struct obstack *ob = pp_buffer (cpp)->obstack;
+   char *p = (char *) obstack_base (ob);
+diff --git a/gcc/testsuite/gcc.dg/nonnull-6.c b/gcc/testsuite/gcc.dg/nonnull-6.c
+new file mode 100644
+index 000000000..8f368702e
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/nonnull-6.c
+@@ -0,0 +1,15 @@
++/* PR c/100783 - ICE on -Wnonnull and erroneous type
++   { dg-do compile }
++   { dg-options "-Wall" } */
++
++__attribute__((nonnull (1))) void
++f1 (char[][n]);                         // { dg-error "undeclared" }
++
++__attribute__((nonnull (2))) void
++f2 (int n, char[n][m]);                 // { dg-error "undeclared" }
++
++__attribute__((nonnull (1))) void
++f3 (char[*][n]);                        // { dg-error "undeclared" }
++
++__attribute__((nonnull (1))) void
++f4 (char[f1]);                          // { dg-error "size" }

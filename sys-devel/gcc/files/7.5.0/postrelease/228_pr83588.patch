@@ -1,0 +1,76 @@
+diff --git a/gcc/cp/class.c b/gcc/cp/class.c
+index 6af37d4b7..d215b19ab 100644
+--- a/gcc/cp/class.c
++++ b/gcc/cp/class.c
+@@ -6992,14 +6992,17 @@ find_flexarrays (tree t, flexmems_t *fmem, bool base_p,
+ 	  /* Flexible array members have no upper bound.  */
+ 	  if (fmem->array)
+ 	    {
+-	      /* Replace the zero-length array if it's been stored and
+-		 reset the after pointer.  */
+ 	      if (TYPE_DOMAIN (TREE_TYPE (fmem->array)))
+ 		{
++		  /* Replace the zero-length array if it's been stored and
++		     reset the after pointer.  */
+ 		  fmem->after[bool (pun)] = NULL_TREE;
+ 		  fmem->array = fld;
+ 		  fmem->enclosing = pstr;
+ 		}
++	      else if (!fmem->after[bool (pun)])
++		/* Make a record of another flexible array member.  */
++		fmem->after[bool (pun)] = fld;
+ 	    }
+ 	  else
+ 	    {
+diff --git a/gcc/testsuite/g++.dg/ext/flexary28.C b/gcc/testsuite/g++.dg/ext/flexary28.C
+new file mode 100644
+index 000000000..68172c486
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/ext/flexary28.C
+@@ -0,0 +1,46 @@
++// PR c++/83588 - struct with two flexible arrays causes an internal compiler
++// error
++// { dg-do compile }
++// { dg-options "-Wno-pedantic" }
++
++struct A {
++  int i;
++  int a[];          // { dg-error "flexible array member .A::a. not at end of .struct A." }
++  int b[];
++};
++
++struct B {
++  int i;
++  int a[];          // { dg-error "flexible array member .B::a. not at end of .struct B." }
++  int j;
++  int b[][2];
++};
++
++struct C {
++  int i;
++  struct {
++    int a[];        // { dg-error "flexible array member .C::<unnamed struct>::a. not at end of .struct C." }
++  };
++  int b[];
++};
++
++struct D {
++  int i;
++  struct {
++    int a[];        // { dg-error "flexible array member .D::<unnamed struct>::a. not at end of .struct D." }
++  } b[];
++  int c[];
++};
++
++struct E {
++  int i;
++  int a[0];
++  int b[];          // { dg-error "flexible array member .E::b. not at end of .struct E." }
++  int d[];
++};
++
++struct F {
++  int i;
++  int a[];          // { dg-error "flexible array member .F::a. not at end of .struct F." }
++  int b[], c[], d[];
++};

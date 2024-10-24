@@ -1,0 +1,140 @@
+diff --git a/gcc/c/c-decl.c b/gcc/c/c-decl.c
+index fe7f75e9b..74bb0d83e 100644
+--- a/gcc/c/c-decl.c
++++ b/gcc/c/c-decl.c
+@@ -948,6 +948,17 @@ global_bindings_p (void)
+   return current_scope == file_scope;
+ }
+ 
++/* Return true if we're declaring parameters in an old-style function
++   declaration.  */
++
++bool
++old_style_parameter_scope (void)
++{
++  /* If processing parameters and there is no function statement list, we
++   * have an old-style function declaration.  */
++  return (current_scope->parm_flag && !DECL_SAVED_TREE (current_function_decl));
++}
++
+ void
+ keep_next_level (void)
+ {
+diff --git a/gcc/c/c-parser.c b/gcc/c/c-parser.c
+index 339b9a0cd..5424c253b 100644
+--- a/gcc/c/c-parser.c
++++ b/gcc/c/c-parser.c
+@@ -7708,7 +7708,10 @@ c_parser_postfix_expression (c_parser *parser)
+ 	  c_parser_consume_token (parser);
+ 	  brace_loc = c_parser_peek_token (parser)->location;
+ 	  c_parser_consume_token (parser);
+-	  if (!building_stmt_list_p ())
++	  /* If we've not yet started the current function's statement list,
++	     or we're in the parameter scope of an old-style function
++	     declaration, statement expressions are not allowed.  */
++	  if (!building_stmt_list_p () || old_style_parameter_scope ())
+ 	    {
+ 	      error_at (loc, "braced-group within expression allowed "
+ 			"only inside a function");
+diff --git a/gcc/c/c-parser.h b/gcc/c/c-parser.h
+index 1e344c40e..78a22ef81 100644
+--- a/gcc/c/c-parser.h
++++ b/gcc/c/c-parser.h
+@@ -152,6 +152,9 @@ extern c_token * c_parser_tokens_buf (c_parser *parser, unsigned n);
+ extern bool c_parser_error (c_parser *parser);
+ extern void c_parser_set_error (c_parser *parser, bool);
+ 
++/* A bit of a hack to have this here.  It would be better in a c-decl.h.  */
++extern bool old_style_parameter_scope (void);
++
+ /* Return true if the next token from PARSER has the indicated
+    TYPE.  */
+ 
+diff --git a/gcc/testsuite/gcc.dg/noncompile/pr30552-1.c b/gcc/testsuite/gcc.dg/noncompile/pr30552-1.c
+new file mode 100644
+index 000000000..a19d9e08f
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/noncompile/pr30552-1.c
+@@ -0,0 +1,17 @@
++/* PR c/30552 */
++
++/* Statement expression as formal array argument size in nested old-style 
++   function declaration should generate user error, not internal compiler 
++   error.  */
++
++/* { dg-do compile } */
++/* { dg-options "" } */
++
++int main()
++{
++  void fun(int a) /* { dg-error "old-style parameter declarations in prototyped function definition" } */
++    int a[({void h(){}2;})]; /* { dg-error "braced-group within expression allowed only inside a function" } */
++  {
++  }
++  return 0;
++}
+diff --git a/gcc/testsuite/gcc.dg/noncompile/pr30552-2.c b/gcc/testsuite/gcc.dg/noncompile/pr30552-2.c
+new file mode 100644
+index 000000000..d88488397
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/noncompile/pr30552-2.c
+@@ -0,0 +1,17 @@
++/* PR c/30552 */
++
++/* Another example of a statement expression as formal array argument size in
++ * nested old-style function declaration should generate user error, not 
++ * internal compiler error.  */
++
++/* { dg-do compile } */
++/* { dg-options "" } */
++
++int main()
++{
++  void fun(a)
++    int a[({int b=2; b;})]; /* { dg-error "braced-group within expression allowed only inside a function" } */
++  {
++  }
++  return 0;
++}
+diff --git a/gcc/testsuite/gcc.dg/noncompile/pr30552-3.c b/gcc/testsuite/gcc.dg/noncompile/pr30552-3.c
+new file mode 100644
+index 000000000..7b48e763e
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/noncompile/pr30552-3.c
+@@ -0,0 +1,15 @@
++/* PR c/30552 */
++
++/* Related example where statement expression used as old-style formal array 
++ * argument size in an invalid nested function declaration should generate 
++ * user error, not internal compiler error. */
++
++/* { dg-do compile } */
++/* { dg-options "" } */
++
++int main()
++{
++  int g()
++    int a[( {int b} )]; /* { dg-error "braced-group within expression allowed only inside a function|declaration for parameter" } */
++  return 0; /* { dg-error "expected declaration specifiers before" } */
++} /* { dg-error "expected declaration specifiers before|end of input|expected declaration or statement at end of input" } */
+diff --git a/gcc/testsuite/gcc.dg/noncompile/pr30552-4.c b/gcc/testsuite/gcc.dg/noncompile/pr30552-4.c
+new file mode 100644
+index 000000000..d1f9c6b08
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/noncompile/pr30552-4.c
+@@ -0,0 +1,15 @@
++/* PR c/30552 */
++
++/* Statement expression as formal array argument size in nested function
++ * prototype scope is valid.  */
++
++/* { dg-do compile } */
++/* { dg-options "" } */
++
++int main()
++{
++  void fun(int a[({void h(){}10;})])
++  {
++  }
++  return 0;
++}

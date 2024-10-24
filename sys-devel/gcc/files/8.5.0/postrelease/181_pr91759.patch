@@ -1,0 +1,37 @@
+diff --git a/gcc/cp/decl.c b/gcc/cp/decl.c
+index 82312e059..5d74d38ea 100644
+--- a/gcc/cp/decl.c
++++ b/gcc/cp/decl.c
+@@ -9040,6 +9040,15 @@ grokfndecl (tree ctype,
+ 		    "namespace scope", decl);
+ 	  return NULL_TREE;
+ 	}
++      tree type = TREE_TYPE (DECL_NAME (decl));
++      if (in_namespace == NULL_TREE
++	  && CP_DECL_CONTEXT (decl) != CP_TYPE_CONTEXT (type))
++	{
++	  error_at (location, "deduction guide %qD must be declared in the "
++			      "same scope as %qT", decl, type);
++	  inform (location_of (type), "  declared here");
++	  return NULL_TREE;
++	}
+       if (funcdef_flag)
+ 	error_at (location,
+ 		  "deduction guide %qD must not have a function body", decl);
+diff --git a/gcc/testsuite/g++.dg/cpp1z/class-deduction72.C b/gcc/testsuite/g++.dg/cpp1z/class-deduction72.C
+new file mode 100644
+index 000000000..60c559907
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp1z/class-deduction72.C
+@@ -0,0 +1,11 @@
++// PR c++/91759
++// { dg-do compile { target c++17 } }
++
++namespace N {
++  template <typename T>
++  struct X{ X(int); };	// { dg-message "declared here" }
++}
++
++using N::X;
++
++X(int) -> X<int>;	// { dg-error "must be declared in the same scope as" }

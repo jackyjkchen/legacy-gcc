@@ -1,0 +1,46 @@
+diff --git a/gcc/cp/pt.c b/gcc/cp/pt.c
+index f9538655c..4409f17aa 100644
+--- a/gcc/cp/pt.c
++++ b/gcc/cp/pt.c
+@@ -8319,6 +8319,22 @@ coerce_template_parms (tree parms,
+       return error_mark_node;
+     }
+ 
++  if (arg_idx < nargs)
++    {
++      /* We had some pack expansion arguments that will only work if the packs
++	 are empty, but wait until instantiation time to complain.
++	 See variadic-ttp3.C.  */
++      int len = nparms + (nargs - arg_idx);
++      tree args = make_tree_vec (len);
++      int i = 0;
++      for (; i < nparms; ++i)
++	TREE_VEC_ELT (args, i) = TREE_VEC_ELT (new_inner_args, i);
++      for (; i < len; ++i, ++arg_idx)
++	TREE_VEC_ELT (args, i) = TREE_VEC_ELT (inner_args,
++					       arg_idx - pack_adjust);
++      new_inner_args = args;
++    }
++
+   if (lost)
+     {
+       if ((complain & tf_error) && !seen_error())
+diff --git a/gcc/testsuite/g++.dg/cpp0x/variadic-empty1.C b/gcc/testsuite/g++.dg/cpp0x/variadic-empty1.C
+new file mode 100644
+index 000000000..42daeaa3d
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/variadic-empty1.C
+@@ -0,0 +1,13 @@
++// PR c++/85093
++// { dg-do compile { target c++11 } }
++
++template<class V> class A {};
++
++template<class V, class... G> class B {
++  typedef A<V,G...> AB;		// { dg-error "arguments" }
++  AB ab;
++};
++
++int main() {
++  B<int,double> b;  
++}

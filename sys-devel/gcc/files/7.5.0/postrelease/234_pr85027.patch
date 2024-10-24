@@ -1,0 +1,42 @@
+diff --git a/gcc/cp/class.c b/gcc/cp/class.c
+index d215b19ab..539b8b396 100644
+--- a/gcc/cp/class.c
++++ b/gcc/cp/class.c
+@@ -8492,6 +8492,11 @@ instantiate_type (tree lhstype, tree rhs, tsubst_flags_t complain)
+ 	}
+     }
+ 
++  /* If we instantiate a template, and it is a A ?: C expression
++     with omitted B, look through the SAVE_EXPR.  */
++  if (TREE_CODE (rhs) == SAVE_EXPR)
++    rhs = TREE_OPERAND (rhs, 0);
++
+   if (BASELINK_P (rhs))
+     {
+       access_path = BASELINK_ACCESS_BINFO (rhs);
+@@ -8507,11 +8512,6 @@ instantiate_type (tree lhstype, tree rhs, tsubst_flags_t complain)
+       return error_mark_node;
+     }
+ 
+-  /* If we instantiate a template, and it is a A ?: C expression
+-     with omitted B, look through the SAVE_EXPR.  */
+-  if (TREE_CODE (rhs) == SAVE_EXPR)
+-    rhs = TREE_OPERAND (rhs, 0);
+-
+   /* There are only a few kinds of expressions that may have a type
+      dependent on overload resolution.  */
+   gcc_assert (TREE_CODE (rhs) == ADDR_EXPR
+diff --git a/gcc/testsuite/g++.dg/pr85027.C b/gcc/testsuite/g++.dg/pr85027.C
+new file mode 100644
+index 000000000..01b1b291a
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/pr85027.C
+@@ -0,0 +1,8 @@
++// { dg-do compile }
++
++// Avoid -pedantic-error default
++// { dg-options "" }
++
++struct A { static int a; };
++
++int t = A::A ? : 0; // { dg-error "cannot resolve" }

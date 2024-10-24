@@ -1,0 +1,45 @@
+diff --git a/gcc/cp/call.c b/gcc/cp/call.c
+index 7ad4c787f..13ac5893b 100644
+--- a/gcc/cp/call.c
++++ b/gcc/cp/call.c
+@@ -6752,6 +6752,8 @@ convert_like_real (conversion *convs, tree expr, tree fn, int argnum,
+ 	    && TYPE_HAS_DEFAULT_CONSTRUCTOR (totype))
+ 	  {
+ 	    bool direct = CONSTRUCTOR_IS_DIRECT_INIT (expr);
++	    if (abstract_virtuals_error_sfinae (NULL_TREE, totype, complain))
++	      return error_mark_node;
+ 	    expr = build_value_init (totype, complain);
+ 	    expr = get_target_expr_sfinae (expr, complain);
+ 	    if (expr != error_mark_node)
+diff --git a/gcc/testsuite/g++.dg/cpp0x/abstract-default1.C b/gcc/testsuite/g++.dg/cpp0x/abstract-default1.C
+new file mode 100644
+index 000000000..e98af7661
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/abstract-default1.C
+@@ -0,0 +1,26 @@
++// PR c++/83796
++// { dg-do compile { target c++11 } }
++
++struct MyAbstractClass
++{
++  virtual int foo() const = 0;
++};
++
++struct TestClass
++{
++  TestClass(const MyAbstractClass& m = {})  // { dg-error "abstract type" }
++  : value_(m.foo()) {}
++
++  int value_;
++};
++
++int TestFunction(const MyAbstractClass& m = {})  // { dg-error "abstract type" }
++{
++  return m.foo();
++}
++
++int main()
++{
++  TestClass testInstance;  // { dg-error "abstract type" }
++  TestFunction();  // { dg-error "abstract type" }
++}

@@ -1,0 +1,271 @@
+diff --git a/gcc/cp/parser.c b/gcc/cp/parser.c
+index 9e93502e7..8a7804388 100644
+--- a/gcc/cp/parser.c
++++ b/gcc/cp/parser.c
+@@ -246,7 +246,7 @@ static void cp_lexer_stop_debugging
+ static cp_token_cache *cp_token_cache_new
+   (cp_token *, cp_token *);
+ static tree cp_parser_late_noexcept_specifier
+-  (cp_parser *, tree, tree);
++  (cp_parser *, tree);
+ static void noexcept_override_late_checks
+   (tree);
+ 
+@@ -2251,7 +2251,7 @@ static cp_ref_qualifier cp_parser_ref_qualifier_opt
+ static tree cp_parser_tx_qualifier_opt
+   (cp_parser *);
+ static tree cp_parser_late_return_type_opt
+-  (cp_parser *, cp_declarator *, tree &, cp_cv_quals);
++  (cp_parser *, cp_declarator *, tree &);
+ static tree cp_parser_declarator_id
+   (cp_parser *, bool);
+ static tree cp_parser_type_id
+@@ -2390,11 +2390,11 @@ static tree cp_parser_exception_declaration
+ static tree cp_parser_throw_expression
+   (cp_parser *);
+ static tree cp_parser_exception_specification_opt
+-  (cp_parser *, cp_parser_flags, cp_cv_quals);
++  (cp_parser *, cp_parser_flags);
+ static tree cp_parser_type_id_list
+   (cp_parser *);
+ static tree cp_parser_noexcept_specification_opt
+-  (cp_parser *, cp_parser_flags, bool, bool *, bool, cp_cv_quals);
++  (cp_parser *, cp_parser_flags, bool, bool *, bool);
+ 
+ /* GNU Extensions */
+ 
+@@ -11120,8 +11120,7 @@ cp_parser_lambda_declarator_opt (cp_parser* parser, tree lambda_expr)
+ 
+       /* Parse optional exception specification.  */
+       exception_spec
+-	= cp_parser_exception_specification_opt (parser, CP_PARSER_FLAGS_NONE,
+-						 quals);
++	= cp_parser_exception_specification_opt (parser, CP_PARSER_FLAGS_NONE);
+ 
+       /* GCC 8 accepted attributes here, and this is the place for standard
+ 	 C++11 attributes that appertain to the function type.  */
+@@ -21297,11 +21296,16 @@ cp_parser_direct_declarator (cp_parser* parser,
+ 		  if (declarator == NULL || declarator->kind != cdk_id)
+ 		    flags &= ~CP_PARSER_FLAGS_DELAY_NOEXCEPT;
+ 
+-		  /* And the exception-specification.  */
++		  tree save_ccp = current_class_ptr;
++		  tree save_ccr = current_class_ref;
++		  if (memfn)
++		    /* DR 1207: 'this' is in scope after the cv-quals.  */
++		    inject_this_parameter (current_class_type, cv_quals);
++
++		  /* Parse the exception-specification.  */
+ 		  exception_specification
+ 		    = cp_parser_exception_specification_opt (parser,
+-							     flags,
+-							     cv_quals);
++							     flags);
+ 
+ 		  attrs = cp_parser_std_attribute_spec_seq (parser);
+ 
+@@ -21311,8 +21315,7 @@ cp_parser_direct_declarator (cp_parser* parser,
+ 		  tree gnu_attrs = NULL_TREE;
+ 		  tree requires_clause = NULL_TREE;
+ 		  late_return = (cp_parser_late_return_type_opt
+-				 (parser, declarator, requires_clause,
+-				  memfn ? cv_quals : -1));
++				 (parser, declarator, requires_clause));
+ 
+ 		  /* Parse the virt-specifier-seq.  */
+ 		  virt_specifiers = cp_parser_virt_specifier_seq_opt (parser);
+@@ -21334,6 +21337,9 @@ cp_parser_direct_declarator (cp_parser* parser,
+ 		     function.  */
+ 		  parser->default_arg_ok_p = false;
+ 
++		  current_class_ptr = save_ccp;
++		  current_class_ref = save_ccr;
++
+ 		  /* Restore the state of local_variables_forbidden_p.  */
+ 		  parser->local_variables_forbidden_p
+ 		    = local_variables_forbidden_p;
+@@ -22147,7 +22153,7 @@ parsing_nsdmi (void)
+ 
+ static tree
+ cp_parser_late_return_type_opt (cp_parser* parser, cp_declarator *declarator,
+-				tree& requires_clause, cp_cv_quals quals)
++				tree& requires_clause)
+ {
+   cp_token *token;
+   tree type = NULL_TREE;
+@@ -22169,14 +22175,6 @@ cp_parser_late_return_type_opt (cp_parser* parser, cp_declarator *declarator,
+       && !(declare_simd_p || oacc_routine_p))
+     return NULL_TREE;
+ 
+-  tree save_ccp = current_class_ptr;
+-  tree save_ccr = current_class_ref;
+-  if (quals >= 0)
+-    {
+-      /* DR 1207: 'this' is in scope in the trailing return type.  */
+-      inject_this_parameter (current_class_type, quals);
+-    }
+-
+   if (token->type == CPP_DEREF)
+     {
+       /* Consume the ->.  */
+@@ -22198,12 +22196,6 @@ cp_parser_late_return_type_opt (cp_parser* parser, cp_declarator *declarator,
+       = cp_parser_late_parsing_oacc_routine (parser,
+ 					     declarator->attributes);
+ 
+-  if (quals >= 0)
+-    {
+-      current_class_ptr = save_ccp;
+-      current_class_ref = save_ccr;
+-    }
+-
+   return type;
+ }
+ 
+@@ -23852,6 +23844,14 @@ inject_parm_decls (tree decl)
+   tree args = DECL_ARGUMENTS (decl);
+ 
+   do_push_parm_decls (decl, args, /*nonparms=*/NULL);
++
++  if (args && is_this_parameter (args))
++    {
++      gcc_checking_assert (current_class_ptr == NULL_TREE);
++      current_class_ptr = NULL_TREE;
++      current_class_ref = cp_build_fold_indirect_ref (args);
++      current_class_ptr = args;
++    }
+ }
+ 
+ /* Undo the effects of inject_parm_decls.  */
+@@ -23860,6 +23860,7 @@ static void
+ pop_injected_parms (void)
+ {
+   pop_bindings_and_leave_scope ();
++  current_class_ptr = current_class_ref = NULL_TREE;
+ }
+ 
+ /* Parse a class-specifier.
+@@ -24172,7 +24173,7 @@ cp_parser_class_specifier_1 (cp_parser* parser)
+ 	    parser->local_variables_forbidden_p |= THIS_FORBIDDEN;
+ 
+ 	  /* Now we can parse the noexcept-specifier.  */
+-	  spec = cp_parser_late_noexcept_specifier (parser, spec, decl);
++	  spec = cp_parser_late_noexcept_specifier (parser, spec);
+ 
+ 	  if (spec != error_mark_node)
+ 	    TREE_TYPE (decl) = build_exception_variant (TREE_TYPE (decl), spec);
+@@ -25826,8 +25827,7 @@ cp_parser_save_noexcept (cp_parser *parser)
+    member function.  */
+ 
+ static tree
+-cp_parser_late_noexcept_specifier (cp_parser *parser, tree default_arg,
+-				   tree decl)
++cp_parser_late_noexcept_specifier (cp_parser *parser, tree default_arg)
+ {
+   /* Make sure we've gotten something that hasn't been parsed yet.  */
+   gcc_assert (TREE_CODE (default_arg) == DEFERRED_PARSE);
+@@ -25839,16 +25839,13 @@ cp_parser_late_noexcept_specifier (cp_parser *parser, tree default_arg,
+   cp_token_cache *tokens = DEFPARSE_TOKENS (default_arg);
+   cp_parser_push_lexer_for_tokens (parser, tokens);
+ 
+-  /* We need to know if this member function was declared `const'.  Look
+-     at the this parameter to figure that out.  */
+-  cp_cv_quals quals = type_memfn_quals (TREE_TYPE (decl));
+   /* Parse the cached noexcept-specifier.  */
+   tree parsed_arg
+     = cp_parser_noexcept_specification_opt (parser,
+ 					    CP_PARSER_FLAGS_NONE,
+ 					    /*require_constexpr=*/true,
+ 					    /*consumed_expr=*/NULL,
+-					    /*return_cond=*/false, quals);
++					    /*return_cond=*/false);
+ 
+   /* Revert to the main lexer.  */
+   cp_parser_pop_lexer (parser);
+@@ -25905,8 +25902,7 @@ cp_parser_noexcept_specification_opt (cp_parser* parser,
+ 				      cp_parser_flags flags,
+ 				      bool require_constexpr,
+ 				      bool* consumed_expr,
+-				      bool return_cond,
+-				      cp_cv_quals quals)
++				      bool return_cond)
+ {
+   cp_token *token;
+   const char *saved_message;
+@@ -25948,12 +25944,6 @@ cp_parser_noexcept_specification_opt (cp_parser* parser,
+ 	  matching_parens parens;
+ 	  parens.consume_open (parser);
+ 
+-	  tree save_ccp = current_class_ptr;
+-	  tree save_ccr = current_class_ref;
+-
+-	  if (current_class_type)
+-	    inject_this_parameter (current_class_type, quals);
+-
+ 	  if (require_constexpr)
+ 	    {
+ 	      /* Types may not be defined in an exception-specification.  */
+@@ -25983,9 +25973,6 @@ cp_parser_noexcept_specification_opt (cp_parser* parser,
+ 	    }
+ 
+ 	  parens.require_close (parser);
+-
+-	  current_class_ptr = save_ccp;
+-	  current_class_ref = save_ccr;
+ 	}
+       else
+ 	{
+@@ -26017,8 +26004,7 @@ cp_parser_noexcept_specification_opt (cp_parser* parser,
+ 
+ static tree
+ cp_parser_exception_specification_opt (cp_parser* parser,
+-				       cp_parser_flags flags,
+-				       cp_cv_quals quals)
++				       cp_parser_flags flags)
+ {
+   cp_token *token;
+   tree type_id_list;
+@@ -26032,7 +26018,7 @@ cp_parser_exception_specification_opt (cp_parser* parser,
+     = cp_parser_noexcept_specification_opt (parser, flags,
+ 					    /*require_constexpr=*/true,
+ 					    /*consumed_expr=*/NULL,
+-					    /*return_cond=*/false, quals);
++					    /*return_cond=*/false);
+   if (type_id_list != NULL_TREE)
+     return type_id_list;
+ 
+@@ -43422,8 +43408,7 @@ cp_parser_transaction (cp_parser *parser, cp_token *token)
+ 						 CP_PARSER_FLAGS_NONE,
+ 						 /*require_constexpr=*/true,
+ 						 /*consumed_expr=*/NULL,
+-						 /*return_cond=*/true,
+-						 TYPE_UNQUALIFIED);
++						 /*return_cond=*/true);
+ 
+   /* Keep track if we're in the lexical scope of an outer transaction.  */
+   new_in = this_in | (old_in & TM_STMT_ATTR_OUTER);
+@@ -43487,8 +43472,7 @@ cp_parser_transaction_expression (cp_parser *parser, enum rid keyword)
+ 					       CP_PARSER_FLAGS_NONE,
+ 					       /*require_constexpr=*/false,
+ 					       &noex_expr,
+-					       /*return_cond=*/true,
+-					       TYPE_UNQUALIFIED);
++					       /*return_cond=*/true);
+ 
+   if (!noex || !noex_expr
+       || cp_lexer_peek_token (parser->lexer)->type == CPP_OPEN_PAREN)
+diff --git a/gcc/testsuite/g++.dg/cpp0x/noexcept59.C b/gcc/testsuite/g++.dg/cpp0x/noexcept59.C
+new file mode 100644
+index 000000000..c752601ba
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/noexcept59.C
+@@ -0,0 +1,10 @@
++// PR c++/90748
++// { dg-do compile { target c++11 } }
++
++template <class ...Ts> class A
++{
++  void e ();
++  bool f (int() noexcept(this->e())); // { dg-error "this" }
++  bool g (int() noexcept(e()));	      // { dg-error "without object" }
++};
++A<> b;

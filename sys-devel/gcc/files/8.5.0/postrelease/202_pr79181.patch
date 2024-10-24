@@ -1,0 +1,157 @@
+diff --git a/gcc/collect-utils.c b/gcc/collect-utils.c
+index 567d8195d..78a79ccd9 100644
+--- a/gcc/collect-utils.c
++++ b/gcc/collect-utils.c
+@@ -56,6 +56,43 @@ fatal_signal (int signum)
+      so its normal effect occurs.  */
+   kill (getpid (), signum);
+ }
++
++/* Setup the signal handlers for the utils. */
++void
++setup_signals (void)
++{
++#ifdef SIGQUIT
++  if (signal (SIGQUIT, SIG_IGN) != SIG_IGN)
++    signal (SIGQUIT, fatal_signal);
++#endif
++  if (signal (SIGINT, SIG_IGN) != SIG_IGN)
++    signal (SIGINT, fatal_signal);
++#ifdef SIGALRM
++  if (signal (SIGALRM, SIG_IGN) != SIG_IGN)
++    signal (SIGALRM, fatal_signal);
++#endif
++#ifdef SIGHUP
++  if (signal (SIGHUP, SIG_IGN) != SIG_IGN)
++    signal (SIGHUP, fatal_signal);
++#endif
++  if (signal (SIGSEGV, SIG_IGN) != SIG_IGN)
++    signal (SIGSEGV, fatal_signal);
++  if (signal (SIGTERM, SIG_IGN) != SIG_IGN)
++    signal (SIGTERM, fatal_signal);
++#ifdef SIGPIPE
++  if (signal (SIGPIPE, SIG_IGN) != SIG_IGN)
++    signal (SIGPIPE, fatal_signal);
++#endif
++#ifdef SIGBUS
++  if (signal (SIGBUS, SIG_IGN) != SIG_IGN)
++    signal (SIGBUS, fatal_signal);
++#endif
++#ifdef SIGCHLD
++  /* We *MUST* set SIGCHLD to SIG_DFL so that the wait4() call will
++     receive the signal.  A different setting is inheritable */
++  signal (SIGCHLD, SIG_DFL);
++#endif
++}
+ 
+ /* Wait for a process to finish, and exit if a nonzero status is found.  */
+ 
+diff --git a/gcc/collect-utils.h b/gcc/collect-utils.h
+index 38f379547..416632a76 100644
+--- a/gcc/collect-utils.h
++++ b/gcc/collect-utils.h
+@@ -24,6 +24,7 @@ along with GCC; see the file COPYING3.  If not see
+ extern void notice (const char *, ...)
+   __attribute__ ((format (printf, 1, 2)));
+ extern void fatal_signal (int);
++extern void setup_signals (void);
+ 
+ extern struct pex_obj *collect_execute (const char *, char **,
+ 					const char *, const char *,
+diff --git a/gcc/collect2.c b/gcc/collect2.c
+index 7607168a6..8159491de 100644
+--- a/gcc/collect2.c
++++ b/gcc/collect2.c
+@@ -300,7 +300,6 @@ const char tool_name[] = "collect2";
+ 
+ static symkind is_ctor_dtor (const char *);
+ 
+-static void handler (int);
+ static void maybe_unlink_list (char **);
+ static void add_to_list (struct head *, const char *);
+ static int extract_init_priority (const char *);
+@@ -421,14 +420,6 @@ collect_atexit (void)
+   tool_cleanup (false);
+ }
+ 
+-static void
+-handler (int signo)
+-{
+-  tool_cleanup (true);
+-
+-  signal (signo, SIG_DFL);
+-  raise (signo);
+-}
+ /* Notify user of a non-error, without translating the format string.  */
+ void
+ notice_translated (const char *cmsgid, ...)
+@@ -959,11 +950,7 @@ main (int argc, char **argv)
+   COLLECT2_HOST_INITIALIZATION;
+ #endif
+ 
+-#ifdef SIGCHLD
+-  /* We *MUST* set SIGCHLD to SIG_DFL so that the wait4() call will
+-     receive the signal.  A different setting is inheritable */
+-  signal (SIGCHLD, SIG_DFL);
+-#endif
++  setup_signals ();
+ 
+   /* Unlock the stdio streams.  */
+   unlock_std_streams ();
+@@ -1073,27 +1060,6 @@ main (int argc, char **argv)
+   if (argc < 2)
+     fatal_error (input_location, "no arguments");
+ 
+-#ifdef SIGQUIT
+-  if (signal (SIGQUIT, SIG_IGN) != SIG_IGN)
+-    signal (SIGQUIT, handler);
+-#endif
+-  if (signal (SIGINT, SIG_IGN) != SIG_IGN)
+-    signal (SIGINT, handler);
+-#ifdef SIGALRM
+-  if (signal (SIGALRM, SIG_IGN) != SIG_IGN)
+-    signal (SIGALRM, handler);
+-#endif
+-#ifdef SIGHUP
+-  if (signal (SIGHUP, SIG_IGN) != SIG_IGN)
+-    signal (SIGHUP, handler);
+-#endif
+-  if (signal (SIGSEGV, SIG_IGN) != SIG_IGN)
+-    signal (SIGSEGV, handler);
+-#ifdef SIGBUS
+-  if (signal (SIGBUS, SIG_IGN) != SIG_IGN)
+-    signal (SIGBUS, handler);
+-#endif
+-
+   /* Extract COMPILER_PATH and PATH into our prefix list.  */
+   prefix_from_env ("COMPILER_PATH", &cpath);
+   prefix_from_env ("PATH", &path);
+diff --git a/gcc/lto-wrapper.c b/gcc/lto-wrapper.c
+index dada53d26..87eb5dcea 100644
+--- a/gcc/lto-wrapper.c
++++ b/gcc/lto-wrapper.c
+@@ -1756,23 +1756,7 @@ main (int argc, char *argv[])
+   if (atexit (lto_wrapper_cleanup) != 0)
+     fatal_error (input_location, "atexit failed");
+ 
+-  if (signal (SIGINT, SIG_IGN) != SIG_IGN)
+-    signal (SIGINT, fatal_signal);
+-#ifdef SIGHUP
+-  if (signal (SIGHUP, SIG_IGN) != SIG_IGN)
+-    signal (SIGHUP, fatal_signal);
+-#endif
+-  if (signal (SIGTERM, SIG_IGN) != SIG_IGN)
+-    signal (SIGTERM, fatal_signal);
+-#ifdef SIGPIPE
+-  if (signal (SIGPIPE, SIG_IGN) != SIG_IGN)
+-    signal (SIGPIPE, fatal_signal);
+-#endif
+-#ifdef SIGCHLD
+-  /* We *MUST* set SIGCHLD to SIG_DFL so that the wait4() call will
+-     receive the signal.  A different setting is inheritable */
+-  signal (SIGCHLD, SIG_DFL);
+-#endif
++  setup_signals ();
+ 
+   /* We may be called with all the arguments stored in some file and
+      passed with @file.  Expand them into argv before processing.  */

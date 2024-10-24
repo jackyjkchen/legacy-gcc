@@ -1,0 +1,135 @@
+diff --git a/gcc/cp/parser.c b/gcc/cp/parser.c
+index 973e4657d..52728bd3f 100644
+--- a/gcc/cp/parser.c
++++ b/gcc/cp/parser.c
+@@ -3291,7 +3291,7 @@ cp_parser_parse_and_diagnose_invalid_type_name (cp_parser *parser)
+ 				/*template_keyword_p=*/false,
+ 				/*check_dependency_p=*/true,
+ 				/*template_p=*/NULL,
+-				/*declarator_p=*/true,
++				/*declarator_p=*/false,
+ 				/*optional_p=*/false);
+   /* If the next token is a (, this is a function with no explicit return
+      type, i.e. constructor, destructor or conversion op.  */
+diff --git a/gcc/cp/pt.c b/gcc/cp/pt.c
+index 31a64d559..dd0d029c2 100644
+--- a/gcc/cp/pt.c
++++ b/gcc/cp/pt.c
+@@ -23708,6 +23708,9 @@ resolve_typename_type (tree type, bool only_current_p)
+   gcc_assert (TREE_CODE (type) == TYPENAME_TYPE);
+ 
+   scope = TYPE_CONTEXT (type);
++  /* We shouldn't have built a TYPENAME_TYPE with a non-dependent scope.  */
++  gcc_checking_assert (uses_template_parms (scope));
++
+   /* Usually the non-qualified identifier of a TYPENAME_TYPE is
+      TYPE_IDENTIFIER (type). But when 'type' is a typedef variant of
+      a TYPENAME_TYPE node, then TYPE_NAME (type) is set to the TYPE_DECL representing
+@@ -23744,8 +23747,6 @@ resolve_typename_type (tree type, bool only_current_p)
+     /* scope is either the template itself or a compatible instantiation
+        like X<T>, so look up the name in the original template.  */
+     scope = CLASSTYPE_PRIMARY_TEMPLATE_TYPE (scope);
+-  /* We shouldn't have built a TYPENAME_TYPE with a non-dependent scope.  */
+-  gcc_checking_assert (uses_template_parms (scope));
+   /* If scope has no fields, it can't be a current instantiation.  Check this
+      before currently_open_class to avoid infinite recursion (71515).  */
+   if (!TYPE_FIELDS (scope))
+diff --git a/gcc/testsuite/g++.dg/parse/dtor11.C b/gcc/testsuite/g++.dg/parse/dtor11.C
+index 63ffb60ba..83fd93489 100644
+--- a/gcc/testsuite/g++.dg/parse/dtor11.C
++++ b/gcc/testsuite/g++.dg/parse/dtor11.C
+@@ -8,5 +8,5 @@ struct A
+ 
+ struct B
+ {
+-  A::~B B();  // { dg-error "as member of" }
++  A::~B B();  // { dg-error "as member of|as a type" }
+ };
+diff --git a/gcc/testsuite/g++.dg/template/pr84789-2.C b/gcc/testsuite/g++.dg/template/pr84789-2.C
+new file mode 100644
+index 000000000..0b42148ef
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/template/pr84789-2.C
+@@ -0,0 +1,26 @@
++// { dg-do compile }
++
++struct K {
++  struct L {
++    static double j;
++  };
++};
++
++template <typename T>
++struct M {
++  struct N {
++    static int i;
++  };
++};
++
++template <typename T>
++struct O {
++  typedef M<T> P;
++  typedef K Q;
++};
++
++template <typename T>
++int O<T>::P::N::i = 42; // This is obfuscated, but apparently ok.
++
++template <typename T>
++double O<T>::Q::L::j = 42.0; // { dg-error "non-template" }
+diff --git a/gcc/testsuite/g++.dg/template/pr84789-3.C b/gcc/testsuite/g++.dg/template/pr84789-3.C
+new file mode 100644
+index 000000000..bc38c1544
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/template/pr84789-3.C
+@@ -0,0 +1,31 @@
++// { dg-do compile }
++
++struct A
++{
++  static int i;
++};
++struct B
++{
++  typedef ::A A;
++};
++int B::A::i = 0;
++
++struct K
++{
++  struct L
++  {
++    template <typename T>
++    static void f(T);
++  };
++};
++
++template <typename T>
++struct O
++{
++  typedef K Q;
++};
++
++template <typename T>
++void O<T>::Q::L::f(T)
++{
++}
+diff --git a/gcc/testsuite/g++.dg/template/pr84789.C b/gcc/testsuite/g++.dg/template/pr84789.C
+new file mode 100644
+index 000000000..63b9832fe
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/template/pr84789.C
+@@ -0,0 +1,13 @@
++// { dg-do compile }
++
++struct A
++{
++  typedef int I;
++};
++
++template<typename> struct B : A {};
++
++template<typename T> struct C : B<T>
++{
++  B<T>::A::I::I i; // { dg-error "not a class type|does not name a type|typename" }
++};

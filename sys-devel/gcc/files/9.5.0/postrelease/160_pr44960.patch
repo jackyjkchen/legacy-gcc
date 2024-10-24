@@ -1,0 +1,63 @@
+diff --git a/gcc/fortran/primary.c b/gcc/fortran/primary.c
+index 1e1f16eba..6f0a05867 100644
+--- a/gcc/fortran/primary.c
++++ b/gcc/fortran/primary.c
+@@ -3725,6 +3725,7 @@ gfc_match_rvalue (gfc_expr **result)
+ 	  gfc_error ("The leftmost part-ref in a data-ref cannot be a "
+ 		     "function reference at %C");
+ 	  m = MATCH_ERROR;
++	  break;
+ 	}
+ 
+       m = MATCH_YES;
+diff --git a/gcc/fortran/resolve.c b/gcc/fortran/resolve.c
+index b8b81c4c6..eb5b269bc 100644
+--- a/gcc/fortran/resolve.c
++++ b/gcc/fortran/resolve.c
+@@ -3142,6 +3142,13 @@ resolve_function (gfc_expr *expr)
+ 	  || sym->intmod_sym_id == GFC_ISYM_CAF_SEND))
+     return true;
+ 
++  if (expr->ref)
++    {
++      gfc_error ("Unexpected junk after %qs at %L", expr->symtree->n.sym->name,
++		 &expr->where);
++      return false;
++    }
++
+   if (sym && sym->attr.intrinsic
+       && !gfc_resolve_intrinsic (sym, &expr->where))
+     return false;
+diff --git a/gcc/testsuite/gfortran.dg/function_reference_1.f90 b/gcc/testsuite/gfortran.dg/function_reference_1.f90
+new file mode 100644
+index 000000000..be634c9dd
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/function_reference_1.f90
+@@ -0,0 +1,11 @@
++! { dg-do compile }
++! PR 44960 - this was erroneusly accepted.
++! Original test case by Daniel Franke.
++
++type t
++  integer :: a
++end type t
++type(t) :: foo
++print *, foo(1)%a ! { dg-error "Unexpected junk" }
++end
++
+diff --git a/gcc/testsuite/gfortran.dg/function_reference_2.f90 b/gcc/testsuite/gfortran.dg/function_reference_2.f90
+new file mode 100644
+index 000000000..375c58bb6
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/function_reference_2.f90
+@@ -0,0 +1,10 @@
++! { dg-do compile }
++! PR 44960 - improve the error message
++program main
++  type t
++  integer :: a
++end type t
++type(t) :: foo
++external foo
++i = foo(1)%1 ! { dg-error "leftmost part-ref in a data-ref cannot be a function reference" }
++end

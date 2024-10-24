@@ -1,0 +1,299 @@
+diff --git a/gcc/cp/cp-tree.h b/gcc/cp/cp-tree.h
+index 8c2390111..d4b90b5b5 100644
+--- a/gcc/cp/cp-tree.h
++++ b/gcc/cp/cp-tree.h
+@@ -6641,6 +6641,7 @@ extern void note_iteration_stmt_body_end	(bool);
+ extern void determine_local_discriminator	(tree);
+ extern int decls_match				(tree, tree, bool = true);
+ extern bool maybe_version_functions		(tree, tree, bool);
++extern bool merge_default_template_args		(tree, tree, bool);
+ extern tree duplicate_decls			(tree, tree,
+ 						 bool hiding = false,
+ 						 bool was_hidden = false);
+diff --git a/gcc/cp/decl.c b/gcc/cp/decl.c
+index a149ebae4..512ec44e9 100644
+--- a/gcc/cp/decl.c
++++ b/gcc/cp/decl.c
+@@ -1455,6 +1455,43 @@ duplicate_function_template_decls (tree newdecl, tree olddecl)
+   return false;
+ }
+ 
++/* OLD_PARMS is the innermost set of template parameters for some template
++   declaration, and NEW_PARMS is the corresponding set of template parameters
++   for a redeclaration of that template.  Merge the default arguments within
++   these two sets of parameters.  CLASS_P is true iff the template in
++   question is a class template.  */
++
++bool
++merge_default_template_args (tree new_parms, tree old_parms, bool class_p)
++{
++  gcc_checking_assert (TREE_VEC_LENGTH (new_parms)
++		       == TREE_VEC_LENGTH (old_parms));
++  for (int i = 0; i < TREE_VEC_LENGTH (new_parms); i++)
++    {
++      tree new_parm = TREE_VALUE (TREE_VEC_ELT (new_parms, i));
++      tree old_parm = TREE_VALUE (TREE_VEC_ELT (old_parms, i));
++      tree& new_default = TREE_PURPOSE (TREE_VEC_ELT (new_parms, i));
++      tree& old_default = TREE_PURPOSE (TREE_VEC_ELT (old_parms, i));
++      if (new_default != NULL_TREE && old_default != NULL_TREE)
++	{
++	  auto_diagnostic_group d;
++	  error ("redefinition of default argument for %q+#D", new_parm);
++	  inform (DECL_SOURCE_LOCATION (old_parm),
++		  "original definition appeared here");
++	  return false;
++	}
++      else if (new_default != NULL_TREE)
++	/* Update the previous template parameters (which are the ones
++	   that will really count) with the new default value.  */
++	old_default = new_default;
++      else if (class_p && old_default != NULL_TREE)
++	/* Update the new parameters, too; they'll be used as the
++	   parameters for any members.  */
++	new_default = old_default;
++    }
++  return true;
++}
++
+ /* If NEWDECL is a redeclaration of OLDDECL, merge the declarations.
+    If the redeclaration is invalid, a diagnostic is issued, and the
+    error_mark_node is returned.  Otherwise, OLDDECL is returned.
+@@ -1976,7 +2013,21 @@ duplicate_decls (tree newdecl, tree olddecl, bool hiding, bool was_hidden)
+ 		     template shall be specified on the initial declaration
+ 		     of the member function within the class template.  */
+ 		  || CLASSTYPE_TEMPLATE_INFO (CP_DECL_CONTEXT (olddecl))))
+-	    check_redeclaration_no_default_args (newdecl);
++	    {
++	      check_redeclaration_no_default_args (newdecl);
++
++	      if (DECL_TEMPLATE_INFO (olddecl)
++		  && DECL_MEMBER_TEMPLATE_P (DECL_TI_TEMPLATE (olddecl)))
++		{
++		  tree new_parms = DECL_TEMPLATE_INFO (newdecl)
++		    ? DECL_INNERMOST_TEMPLATE_PARMS (DECL_TI_TEMPLATE (newdecl))
++		    : INNERMOST_TEMPLATE_PARMS (current_template_parms);
++		  tree old_parms
++		    = DECL_INNERMOST_TEMPLATE_PARMS (DECL_TI_TEMPLATE (olddecl));
++		  merge_default_template_args (new_parms, old_parms,
++					       /*class_p=*/false);
++		}
++	    }
+ 	  else
+ 	    {
+ 	      tree t1 = FUNCTION_FIRST_USER_PARMTYPE (olddecl);
+@@ -2221,6 +2272,11 @@ duplicate_decls (tree newdecl, tree olddecl, bool hiding, bool was_hidden)
+ 		 translation unit."  */
+ 	      check_no_redeclaration_friend_default_args
+ 		(old_result, new_result);
++
++	      tree new_parms = DECL_INNERMOST_TEMPLATE_PARMS (newdecl);
++	      tree old_parms = DECL_INNERMOST_TEMPLATE_PARMS (olddecl);
++	      merge_default_template_args (new_parms, old_parms,
++					   /*class_p=*/false);
+ 	    }
+ 	  if (!DECL_UNIQUE_FRIEND_P (new_result))
+ 	    DECL_UNIQUE_FRIEND_P (old_result) = false;
+diff --git a/gcc/cp/pt.c b/gcc/cp/pt.c
+index fadb8158c..69d86bfa6 100644
+--- a/gcc/cp/pt.c
++++ b/gcc/cp/pt.c
+@@ -6289,8 +6289,6 @@ redeclare_class_template (tree type, tree parms, tree cons)
+     {
+       tree tmpl_parm;
+       tree parm;
+-      tree tmpl_default;
+-      tree parm_default;
+ 
+       if (TREE_VEC_ELT (tmpl_parms, i) == error_mark_node
+           || TREE_VEC_ELT (parms, i) == error_mark_node)
+@@ -6301,8 +6299,6 @@ redeclare_class_template (tree type, tree parms, tree cons)
+ 	return false;
+ 
+       parm = TREE_VALUE (TREE_VEC_ELT (parms, i));
+-      tmpl_default = TREE_PURPOSE (TREE_VEC_ELT (tmpl_parms, i));
+-      parm_default = TREE_PURPOSE (TREE_VEC_ELT (parms, i));
+ 
+       /* TMPL_PARM and PARM can be either TYPE_DECL, PARM_DECL, or
+ 	 TEMPLATE_DECL.  */
+@@ -6318,7 +6314,7 @@ redeclare_class_template (tree type, tree parms, tree cons)
+ 	{
+ 	  auto_diagnostic_group d;
+ 	  error ("template parameter %q+#D", tmpl_parm);
+-	  inform (input_location, "redeclared here as %q#D", parm);
++	  inform (DECL_SOURCE_LOCATION (parm), "redeclared here as %q#D", parm);
+ 	  return false;
+ 	}
+ 
+@@ -6336,28 +6332,6 @@ redeclare_class_template (tree type, tree parms, tree cons)
+ 	  return false;
+ 	}
+ 
+-      if (tmpl_default != NULL_TREE && parm_default != NULL_TREE)
+-	{
+-	  /* We have in [temp.param]:
+-
+-	     A template-parameter may not be given default arguments
+-	     by two different declarations in the same scope.  */
+-	  auto_diagnostic_group d;
+-	  error_at (input_location, "redefinition of default argument for %q#D", parm);
+-	  inform (DECL_SOURCE_LOCATION (tmpl_parm),
+-		  "original definition appeared here");
+-	  return false;
+-	}
+-
+-      if (parm_default != NULL_TREE)
+-	/* Update the previous template parameters (which are the ones
+-	   that will really count) with the new default value.  */
+-	TREE_PURPOSE (TREE_VEC_ELT (tmpl_parms, i)) = parm_default;
+-      else if (tmpl_default != NULL_TREE)
+-	/* Update the new parameters, too; they'll be used as the
+-	   parameters for any members.  */
+-	TREE_PURPOSE (TREE_VEC_ELT (parms, i)) = tmpl_default;
+-
+       /* Give each template template parm in this redeclaration a
+ 	 DECL_CONTEXT of the template for which they are a parameter.  */
+       if (TREE_CODE (parm) == TEMPLATE_DECL)
+@@ -6370,6 +6344,9 @@ redeclare_class_template (tree type, tree parms, tree cons)
+ 	TEMPLATE_TYPE_PARM_FOR_CLASS (TREE_TYPE (parm)) = true;
+     }
+ 
++  if (!merge_default_template_args (parms, tmpl_parms, /*class_p=*/true))
++    return false;
++
+   tree ci = get_constraints (tmpl);
+   tree req1 = ci ? CI_TEMPLATE_REQS (ci) : NULL_TREE;
+   tree req2 = cons ? CI_TEMPLATE_REQS (cons) : NULL_TREE;
+diff --git a/gcc/testsuite/g++.dg/cpp0x/vt-34314.C b/gcc/testsuite/g++.dg/cpp0x/vt-34314.C
+index b37cac532..704a975cc 100644
+--- a/gcc/testsuite/g++.dg/cpp0x/vt-34314.C
++++ b/gcc/testsuite/g++.dg/cpp0x/vt-34314.C
+@@ -3,8 +3,8 @@
+ template<typename Fun, typename... Args> // { dg-error "template parameter" }
+ struct call;
+ 
+-template<typename Fun, typename Arg0>
+-struct call // { dg-message "note: redeclared here" }
++template<typename Fun, typename Arg0> // { dg-message "note: redeclared here" }
++struct call
+ {
+     template<typename Sig>
+     struct result;
+@@ -20,8 +20,8 @@ struct call // { dg-message "note: redeclared here" }
+ template<typename Fun, int... N> // { dg-error "template parameter" }
+ struct call2;
+ 
+-template<typename Fun, int N>
+-struct call2 // { dg-message "note: redeclared here" }
++template<typename Fun, int N> // { dg-message "note: redeclared here" }
++struct call2
+ {
+     template<typename Sig>
+     struct result;
+@@ -36,8 +36,8 @@ struct call2 // { dg-message "note: redeclared here" }
+ template<typename Fun, template<typename> class... TT> // { dg-error "template parameter" }
+ struct call3;
+ 
+-template<typename Fun, template<typename> class TT>
+-struct call3 // { dg-message "note: redeclared here" }
++template<typename Fun, template<typename> class TT> // { dg-message "note: redeclared here" }
++struct call3
+ {
+     template<typename Sig>
+     struct result;
+diff --git a/gcc/testsuite/g++.dg/template/defarg23.C b/gcc/testsuite/g++.dg/template/defarg23.C
+new file mode 100644
+index 000000000..443d02656
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/template/defarg23.C
+@@ -0,0 +1,21 @@
++// PR c++/65396
++// { dg-do compile { target c++11 } }
++
++template<class T>     void f();
++template<class T=int> void f();
++
++template<class T=int> void g(); // { dg-message "original definition" }
++template<class T=int> void g(); // { dg-error "redefinition of default" }
++
++template<class T, class U=bool> void h();
++template<class T=char, class U>
++void h() {
++  static_assert(__is_same(T, char), "");
++  static_assert(__is_same(U, bool), "");
++}
++
++int main() {
++  f();
++  g();
++  h();
++}
+diff --git a/gcc/testsuite/g++.dg/template/defarg23a.C b/gcc/testsuite/g++.dg/template/defarg23a.C
+new file mode 100644
+index 000000000..3de030611
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/template/defarg23a.C
+@@ -0,0 +1,24 @@
++// PR c++/65396
++// { dg-do compile { target c++11 } }
++// Like defarg23.C, but for member functions.
++
++struct A {
++  template<class T> void f();
++  template<class T=int> void g(); // { dg-message "original definition" }
++  template<class T=char, class U> void h();
++};
++
++template<class T=int> void A::f() { }
++template<class T=int> void A::g() { } // { dg-error "redefinition of default" }
++template<class T, class U=bool>
++void A::h() {
++  static_assert(__is_same(T, char), "");
++  static_assert(__is_same(U, bool), "");
++}
++
++int main() {
++  A a;
++  a.f();
++  a.g();
++  a.h();
++}
+diff --git a/gcc/testsuite/g++.dg/template/pr92440.C b/gcc/testsuite/g++.dg/template/pr92440.C
+index 20db5f105..f1e9281ab 100644
+--- a/gcc/testsuite/g++.dg/template/pr92440.C
++++ b/gcc/testsuite/g++.dg/template/pr92440.C
+@@ -3,8 +3,8 @@
+ 
+ template <int T> // { dg-error "template parameter" }
+ struct S {
+-    template <class U>
+-    friend struct S;  // { dg-message "note: redeclared here as" }
++    template <class U> // { dg-message "note: redeclared here as" }
++    friend struct S;
+ };
+ 
+ S<0> s;
+diff --git a/gcc/testsuite/g++.old-deja/g++.pt/redecl1.C b/gcc/testsuite/g++.old-deja/g++.pt/redecl1.C
+index 48517f5d1..7596513ac 100644
+--- a/gcc/testsuite/g++.old-deja/g++.pt/redecl1.C
++++ b/gcc/testsuite/g++.old-deja/g++.pt/redecl1.C
+@@ -9,14 +9,14 @@ struct S1 {}; // { dg-error "redeclared" } used 1 template parameter
+ template <class T = int> // { dg-message "original definition" }
+ struct S2; 
+ 
+-template <class T = int>
+-struct S2; // { dg-error "redefinition of default" } 
++template <class T = int> // { dg-error "redefinition of default" } 
++struct S2;
+ 
+ template <class T> // { dg-error "template parameter" } 
+ struct S3;
+ 
+-template <int I>
+-struct S3; // { dg-message "note: redeclared here" } 
++template <int I> // { dg-message "note: redeclared here" } 
++struct S3;
+ 
+-template <template <class T> class C>
+-struct S3; // { dg-message "note: redeclared here" } 
++template <template <class T> class C> // { dg-message "note: redeclared here" } 
++struct S3;

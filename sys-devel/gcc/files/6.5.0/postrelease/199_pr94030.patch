@@ -1,0 +1,80 @@
+diff --git a/gcc/fortran/resolve.c b/gcc/fortran/resolve.c
+index 21b6f30f4..5ebd8aab5 100644
+--- a/gcc/fortran/resolve.c
++++ b/gcc/fortran/resolve.c
+@@ -15502,7 +15502,8 @@ resolve_equivalence (gfc_equiv *eq)
+ 	  && !gfc_notify_std (GFC_STD_GNU, msg, sym->name, &e->where))
+ 		continue;
+ 
+-  identical_types:
++identical_types:
++
+       last_ts =&sym->ts;
+       last_where = &e->where;
+ 
+@@ -15510,8 +15511,7 @@ resolve_equivalence (gfc_equiv *eq)
+ 	continue;
+ 
+       /* Shall not be an automatic array.  */
+-      if (e->ref->type == REF_ARRAY
+-	  && !gfc_resolve_array_spec (e->ref->u.ar.as, 1))
++      if (e->ref->type == REF_ARRAY && is_non_constant_shape_array (sym))
+ 	{
+ 	  gfc_error ("Array %qs at %L with non-constant bounds cannot be "
+ 		     "an EQUIVALENCE object", sym->name, &e->where);
+diff --git a/gcc/testsuite/gfortran.dg/pr94030_1.f90 b/gcc/testsuite/gfortran.dg/pr94030_1.f90
+new file mode 100644
+index 000000000..e63d3cc8d
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/pr94030_1.f90
+@@ -0,0 +1,11 @@
++! { dg-do compile }
++!
++
++subroutine f(n)
++  integer :: n
++  integer :: arr(n)
++  integer :: i
++  equivalence (i, arr(1))
++end
++
++! { dg-error "Array 'arr' at .1. with non-constant bounds cannot be an EQUIVALENCE object" " " { target *-*-* } 8 }
+diff --git a/gcc/testsuite/gfortran.dg/pr94030_2.f90 b/gcc/testsuite/gfortran.dg/pr94030_2.f90
+new file mode 100644
+index 000000000..84bfdeaa8
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/pr94030_2.f90
+@@ -0,0 +1,33 @@
++! { dg-do compile }
++!
++! Provided by Steve Kargl.
++
++subroutine foo(n,m)
++  integer, intent(in) :: n, m
++  integer a(n)
++  real b(n)
++  equivalence(a,b)
++  if (m /= 2) then
++      a = 1
++      print *, a(1)
++  else
++      b = 42.
++      print *, b(1)
++   end if
++end subroutine 
++
++subroutine bar(m)
++  integer, intent(in) :: m
++  integer x(8)
++  real y(8)
++  equivalence(x,y)
++  if (m /= 2) then
++      x = 1
++      print *, x(1)
++  else
++      y = 42.
++      print *, y(1)
++   end if
++end subroutine 
++
++! { dg-error "Array '.' at .1. with non-constant bounds cannot be an EQUIVALENCE object" " " { target *-*-* } 9 }

@@ -1,0 +1,70 @@
+diff --git a/gcc/c-family/c-common.c b/gcc/c-family/c-common.c
+index 5d588c359..74242060a 100644
+--- a/gcc/c-family/c-common.c
++++ b/gcc/c-family/c-common.c
+@@ -7748,6 +7748,7 @@ convert_vector_to_array_for_subscript (location_t loc,
+   if (VECTOR_TYPE_P (TREE_TYPE (*vecp)))
+     {
+       tree type = TREE_TYPE (*vecp);
++      tree newitype;
+ 
+       ret = !lvalue_p (*vecp);
+ 
+@@ -7761,8 +7762,12 @@ convert_vector_to_array_for_subscript (location_t loc,
+ 	 for function parameters.  */
+       c_common_mark_addressable_vec (*vecp);
+ 
++      /* Make sure qualifiers are copied from the vector type to the new element
++	 of the array type.  */
++      newitype = build_qualified_type (TREE_TYPE (type), TYPE_QUALS (type));
++
+       *vecp = build1 (VIEW_CONVERT_EXPR,
+-		      build_array_type_nelts (TREE_TYPE (type),
++		      build_array_type_nelts (newitype,
+ 					      TYPE_VECTOR_SUBPARTS (type)),
+ 		      *vecp);
+     }
+diff --git a/gcc/cp/constexpr.c b/gcc/cp/constexpr.c
+index 67c92f506..71501c1e0 100644
+--- a/gcc/cp/constexpr.c
++++ b/gcc/cp/constexpr.c
+@@ -2298,7 +2298,8 @@ cxx_eval_array_reference (const constexpr_ctx *ctx, tree t,
+       elem_type = TREE_TYPE (TREE_TYPE (ary));
+       if (TREE_CODE (ary) == VIEW_CONVERT_EXPR
+ 	  && VECTOR_TYPE_P (TREE_TYPE (TREE_OPERAND (ary, 0)))
+-	  && TREE_TYPE (t) == TREE_TYPE (TREE_TYPE (TREE_OPERAND (ary, 0))))
++      && (TYPE_MAIN_VARIANT (TREE_TYPE (t))
++	  == TYPE_MAIN_VARIANT (TREE_TYPE (TREE_TYPE (TREE_OPERAND (ary, 0))))))
+ 	ary = TREE_OPERAND (ary, 0);
+       if (TREE_CODE (ary) == CONSTRUCTOR)
+ 	len = CONSTRUCTOR_NELTS (ary);
+diff --git a/gcc/testsuite/g++.dg/torture/vector-subaccess-1.C b/gcc/testsuite/g++.dg/torture/vector-subaccess-1.C
+new file mode 100644
+index 000000000..4b909dae4
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/torture/vector-subaccess-1.C
+@@ -0,0 +1,24 @@
++/* PR c++/89224 */
++/* { dg-additional-options "-Wno-psabi" } */
++
++/* The access of `vector[i]` has the same qualifiers as the original
++   vector which was missing. */
++
++typedef __attribute__((vector_size(16))) unsigned char  Int8x8_t;
++
++template <class T>
++void g(T &x) {
++    __builtin_abort();
++}
++template <class T>
++void g(const T &x) {
++  __builtin_exit(0);
++}
++void f(const Int8x8_t x) {
++  g(x[0]);
++}
++int main(void)
++{
++    Int8x8_t x ={};
++    f(x);
++}

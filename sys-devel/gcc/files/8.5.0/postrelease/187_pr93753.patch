@@ -1,0 +1,142 @@
+diff --git a/gcc/cp/class.c b/gcc/cp/class.c
+index baf3bbed2..0e82ce3b8 100644
+--- a/gcc/cp/class.c
++++ b/gcc/cp/class.c
+@@ -6820,6 +6820,8 @@ check_flexarrays (tree t, flexmems_t *fmem /* = NULL */,
+   /* Is the type unnamed (and therefore a member of it potentially
+      an anonymous struct or union)?  */
+   bool maybe_anon_p = TYPE_UNNAMED_P (t);
++  if (tree ctx = maybe_anon_p ? TYPE_CONTEXT (t) : NULL_TREE)
++    maybe_anon_p = RECORD_OR_UNION_TYPE_P (ctx);
+ 
+   /* Search the members of the current (possibly derived) class, skipping
+      unnamed structs and unions since those could be anonymous.  */
+diff --git a/gcc/testsuite/g++.dg/ext/flexary36.C b/gcc/testsuite/g++.dg/ext/flexary36.C
+new file mode 100644
+index 000000000..bf23de277
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/ext/flexary36.C
+@@ -0,0 +1,123 @@
++/* PR c++/93753 - ICE on a flexible array followed by a member in
++   an anonymous struct with an initializer
++   { dg-do compile }
++   { dg-options "-Wall -Wno-unused-variable" } */
++
++struct {
++  int a[];          // { dg-error "flexible array member '<unnamed struct>::a' not at end of 'struct<unnamed>'" }
++  int b;
++} ax;
++
++struct {
++  int a[];          // { dg-error "flexible array member '<unnamed struct>::a' not at end of 'struct<unnamed>'" }
++  int b;
++} bx = { };
++
++struct {
++  int a[];          // { dg-error "flexible array member '<unnamed struct>::a' not at end of 'struct<unnamed>'" }
++  int b;
++} cx = { 0 };
++
++struct {
++  int a[];          // { dg-error "flexible array member '<unnamed struct>::a' not at end of 'struct<unnamed>'" }
++  int b;
++} dx = { 1 };
++
++
++union {
++  int a[];          // { dg-error "flexible array member in union" }
++  int b;
++} du = { 1 };
++
++
++struct A {
++  int a[];          // { dg-error "flexible array member 'A::a' not at end of 'struct A'" }
++  int b;
++} a;
++
++struct B {
++  int a[];          // { dg-error "flexible array member 'B::a' not at end of 'struct B'" }
++  int b;
++} b = { };
++
++struct C {
++  int a[];          // { dg-error "flexible array member 'C::a' not at end of 'struct C'" }
++  int b;
++} c = { 0 };
++
++struct D {
++  int a[];          // { dg-error "flexible array member 'D::a' not at end of 'struct D'" }
++  int b;
++} d = { 1 };
++
++
++struct E {
++  struct {
++    int a[];        // { dg-error " not at end " }
++    int b;
++  } e = { 1 };
++};
++
++struct G {
++  struct {
++    int a[];        // { dg-error " not at end " }
++    int b;
++  };
++} g = { 1 };        // { dg-error "initialization of flexible array member in a nested context" }
++
++struct H {
++  int i;
++  struct {
++    int a[];        // { dg-error " not at end " }
++    int b;
++  };
++} h = { 1 };
++
++namespace {
++
++struct {
++  int a[];          // { dg-error " not at end of " }
++  int b;
++} ax;
++
++struct {
++  int a[];          // { dg-error " not at end " }
++  int b;
++} bx = { };
++
++struct {
++  int a[];          // { dg-error " not at end " }
++  int b;
++} cx = { 0 };
++
++struct {
++  int a[];          // { dg-error " not at end " }
++  int b;
++} dx = { 1 };
++
++
++struct A {
++  int a[];          // { dg-error " not at end of 'struct {anonymous}::A'" }
++  int b;
++} a;
++
++struct B {
++  int a[];          // { dg-error " not at end of 'struct {anonymous}::B'" }
++  int b;
++} b = { };
++
++struct C {
++  int a[];          // { dg-error " not at end of 'struct {anonymous}::C'" }
++  int b;
++} c = { 0 };
++
++struct D {
++  int a[];          // { dg-error " not at end of 'struct {anonymous}::D'" }
++  int b;
++} d = { 1 };
++
++}
++
++// { dg-prune-output "unnamed type with no linkage used to declare variable" }
++// { dg-prune-output "non-static data member initializers" }
++// { dg-prune-output "extended initializer lists" }

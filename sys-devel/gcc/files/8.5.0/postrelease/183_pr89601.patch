@@ -1,0 +1,73 @@
+diff --git a/gcc/fortran/decl.c b/gcc/fortran/decl.c
+index 08324f607..be683895a 100644
+--- a/gcc/fortran/decl.c
++++ b/gcc/fortran/decl.c
+@@ -6258,7 +6258,16 @@ gfc_match_formal_arglist (gfc_symbol *progname, int st_flag,
+     }
+ 
+   if (gfc_match_char (')') == MATCH_YES)
+-    goto ok;
++  {        
++    if (typeparam)
++      {
++	gfc_error_now ("A type parameter list is required at %C");
++	m = MATCH_ERROR;
++	goto cleanup;
++      }
++    else
++      goto ok;
++  }
+ 
+   for (;;)
+     {
+@@ -10195,13 +10204,14 @@ gfc_match_derived_decl (void)
+       m = gfc_match_formal_arglist (sym, 0, 0, true);
+       if (m != MATCH_YES)
+ 	gfc_error_recovery ();
++      else
++	sym->attr.pdt_template = 1;
+       m = gfc_match_eos ();
+       if (m != MATCH_YES)
+ 	{
+ 	  gfc_error_recovery ();
+ 	  gfc_error_now ("Garbage after PARAMETERIZED TYPE declaration at %C");
+ 	}
+-      sym->attr.pdt_template = 1;
+     }
+ 
+   if (extended && !sym->components)
+diff --git a/gcc/testsuite/gfortran.dg/pdt_16.f03 b/gcc/testsuite/gfortran.dg/pdt_16.f03
+index 067d87d66..22c6b83a0 100644
+--- a/gcc/testsuite/gfortran.dg/pdt_16.f03
++++ b/gcc/testsuite/gfortran.dg/pdt_16.f03
+@@ -12,7 +12,6 @@ end
+ program p
+    type t(a                  ! { dg-error "Expected parameter list" }
+       integer, kind :: a
+-      real(a) :: x
+    end type
+    type u(a, a)              ! { dg-error "Duplicate name" }
+       integer, kind :: a     ! { dg-error "already declared" }
+diff --git a/gcc/testsuite/gfortran.dg/pdt_30.f90 b/gcc/testsuite/gfortran.dg/pdt_30.f90
+new file mode 100644
+index 000000000..47f7c7754
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/pdt_30.f90
+@@ -0,0 +1,17 @@
++! { dg-do compile }
++!
++! PR 89601: [8/9 Regression] [PDT] ICE: Segmentation fault (in resolve_component)
++!
++! Contributed by Arseny Solokha <asolokha@gmx.com>
++
++program vw
++  interface
++     real function ul (ki)
++       real :: ki
++     end function ul
++  end interface
++  type :: q8 ()  ! { dg-error "A type parameter list is required" }
++     procedure (ul), pointer, nopass :: pj
++  end type q8
++  type (q8) :: ki
++end program vw

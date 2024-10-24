@@ -1,0 +1,100 @@
+diff --git a/gcc/fortran/expr.c b/gcc/fortran/expr.c
+index 0459eac6e..a2de03623 100644
+--- a/gcc/fortran/expr.c
++++ b/gcc/fortran/expr.c
+@@ -4189,6 +4189,20 @@ gfc_check_assign_symbol (gfc_symbol *sym, gfc_component *comp, gfc_expr *rvalue)
+ 		     "may not be a procedure pointer", &rvalue->where);
+ 	  return false;
+ 	}
++      if (attr.proc == PROC_INTERNAL)
++	{
++	  gfc_error ("Internal procedure %qs is invalid in "
++		     "procedure pointer initialization at %L",
++		     rvalue->symtree->name, &rvalue->where);
++	  return false;
++	}
++      if (attr.dummy)
++	{
++	  gfc_error ("Dummy procedure %qs is invalid in "
++		     "procedure pointer initialization at %L",
++		     rvalue->symtree->name, &rvalue->where);
++	  return false;
++	}
+     }
+ 
+   return true;
+diff --git a/gcc/testsuite/gfortran.dg/dummy_procedure_11.f90 b/gcc/testsuite/gfortran.dg/dummy_procedure_11.f90
+index f51c5455c..3e4b2b1d6 100644
+--- a/gcc/testsuite/gfortran.dg/dummy_procedure_11.f90
++++ b/gcc/testsuite/gfortran.dg/dummy_procedure_11.f90
+@@ -5,16 +5,18 @@
+ ! Contributed by Vladimir Fuka <vladimir.fuka@gmail.com>
+ 
+ type :: t
+-  procedure(g), pointer, nopass :: ppc => g
++  procedure(g), pointer, nopass :: ppc
+ end type
+ 
+-procedure(g), pointer :: pp => g
++procedure(g), pointer :: pp
+ type(t)::x
+ 
+ print *, f(g)
+ print *, f(g())      ! { dg-error "Expected a procedure for argument" }
++pp => g
+ print *, f(pp)
+ print *, f(pp())     ! { dg-error "Expected a procedure for argument" }
++x%ppc => g
+ print *, f(x%ppc)
+ print *, f(x%ppc())  ! { dg-error "Expected a procedure for argument" }
+ 
+diff --git a/gcc/testsuite/gfortran.dg/pointer_init_11.f90 b/gcc/testsuite/gfortran.dg/pointer_init_11.f90
+new file mode 100644
+index 000000000..f18ba82ee
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/pointer_init_11.f90
+@@ -0,0 +1,44 @@
++! { dg-do compile }
++!
++! PR 85537: [F08] Invalid memory reference at runtime when calling subroutine through procedure pointer
++!
++! Contributed by Tiziano MÃ¼ller <dev-zero@gentoo.org>
++
++module m1
++    implicit none
++contains
++    subroutine foo()
++      integer :: a
++
++      abstract interface
++        subroutine ibar()
++        end subroutine
++      end interface
++
++      procedure(ibar), pointer :: bar_ptr => bar_impl  ! { dg-error "invalid in procedure pointer initialization" }
++
++    contains
++      subroutine bar_impl()
++        write (*,*) "foo"
++        a = a + 1
++      end subroutine
++
++    end subroutine
++end module
++
++
++module m2
++    implicit none
++contains
++    subroutine foo(dbar)
++      interface
++        subroutine dbar()
++        end subroutine
++      end interface
++
++      procedure(dbar), pointer :: bar_ptr => dbar  ! { dg-error "invalid in procedure pointer initialization" }
++
++      call bar_ptr()
++
++    end subroutine
++end module
