@@ -1,0 +1,45 @@
+diff --git a/gcc/cp/decl.c b/gcc/cp/decl.c
+index 9efe8d967..9d1f2a534 100644
+--- a/gcc/cp/decl.c
++++ b/gcc/cp/decl.c
+@@ -5288,7 +5288,12 @@ reshape_init_class (tree type, reshape_iter *d, bool first_initializer_p,
+ 	  if (d->cur->index == error_mark_node)
+ 	    return error_mark_node;
+ 
+-	  if (TREE_CODE (d->cur->index) == INTEGER_CST)
++	  if (TREE_CODE (d->cur->index) == FIELD_DECL)
++	    /* We already reshaped this.  */
++	    gcc_assert (d->cur->index == field);
++	  else if (TREE_CODE (d->cur->index) == IDENTIFIER_NODE)
++	    field = lookup_field_1 (type, d->cur->index, /*want_type=*/false);
++	  else
+ 	    {
+ 	      if (complain & tf_error)
+ 		error ("%<[%E] =%> used in a GNU-style designated initializer"
+@@ -5296,12 +5301,6 @@ reshape_init_class (tree type, reshape_iter *d, bool first_initializer_p,
+ 	      return error_mark_node;
+ 	    }
+ 
+-	  if (TREE_CODE (d->cur->index) == FIELD_DECL)
+-	    /* We already reshaped this.  */
+-	    gcc_assert (d->cur->index == field);
+-	  else
+-	    field = lookup_field_1 (type, d->cur->index, /*want_type=*/false);
+-
+ 	  if (!field || TREE_CODE (field) != FIELD_DECL)
+ 	    {
+ 	      if (complain & tf_error)
+diff --git a/gcc/testsuite/g++.dg/ext/desig7.C b/gcc/testsuite/g++.dg/ext/desig7.C
+new file mode 100644
+index 000000000..44358eccd
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/ext/desig7.C
+@@ -0,0 +1,8 @@
++// PR c++/61046
++
++struct A
++{
++  int ary[4];
++};
++const int i = 0;
++A bar = { [i] = 0 }; // { dg-error "designated" }

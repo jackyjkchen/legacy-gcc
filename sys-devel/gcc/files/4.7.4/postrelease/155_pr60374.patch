@@ -1,0 +1,55 @@
+diff --git a/gcc/cp/pt.c b/gcc/cp/pt.c
+index 5f5cd988d..90b787efa 100644
+--- a/gcc/cp/pt.c
++++ b/gcc/cp/pt.c
+@@ -6621,6 +6621,26 @@ coerce_template_parms (tree parms,
+ 	{
+           if (PACK_EXPANSION_P (arg))
+             {
++	      /* "If every valid specialization of a variadic template
++		 requires an empty template parameter pack, the template is
++		 ill-formed, no diagnostic required."  So check that the
++		 pattern works with this parameter.  */
++	      tree pattern = PACK_EXPANSION_PATTERN (arg);
++	      tree conv = convert_template_argument (TREE_VALUE (parm),
++						     pattern, new_args,
++						     complain, parm_idx,
++						     in_decl);
++	      if (conv == error_mark_node)
++		{
++		  inform (input_location, "so any instantiation with a "
++			 "non-empty parameter pack would be ill-formed");
++		  ++lost;
++		}
++	      else if (TYPE_P (conv) && !TYPE_P (pattern))
++		/* Recover from missing typename.  */
++		TREE_VEC_ELT (inner_args, arg_idx)
++		  = make_pack_expansion (conv);
++
+               /* We don't know how many args we have yet, just
+                  use the unconverted ones for now.  */
+               new_inner_args = inner_args;
+diff --git a/gcc/testsuite/g++.dg/cpp0x/variadic154.C b/gcc/testsuite/g++.dg/cpp0x/variadic154.C
+new file mode 100644
+index 000000000..198f9c5ba
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/variadic154.C
+@@ -0,0 +1,8 @@
++// PR c++/60374
++// { dg-do compile { target c++11 } }
++
++template<typename> struct A {};
++
++template<typename...T> struct A<T::T...> {}; // { dg-error "typename|partial|T" }
++
++A<int> a;
+diff --git a/gcc/testsuite/g++.dg/cpp0x/variadic155.C b/gcc/testsuite/g++.dg/cpp0x/variadic155.C
+new file mode 100644
+index 000000000..d912317bd
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/variadic155.C
+@@ -0,0 +1,4 @@
++// { dg-do compile { target c++11 } }
++
++template <typename T> struct A {};
++template <int... I> struct B: A<I...> {}; // { dg-error "type" }

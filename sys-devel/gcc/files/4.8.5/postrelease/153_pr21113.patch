@@ -1,0 +1,49 @@
+diff --git a/gcc/cp/decl.c b/gcc/cp/decl.c
+index 32db6357b..4c89f49af 100644
+--- a/gcc/cp/decl.c
++++ b/gcc/cp/decl.c
+@@ -2736,12 +2736,11 @@ decl_jump_unsafe (tree decl)
+       || type == error_mark_node)
+     return 0;
+ 
+-  type = strip_array_types (type);
+-
+-  if (DECL_NONTRIVIALLY_INITIALIZED_P (decl))
++  if (DECL_NONTRIVIALLY_INITIALIZED_P (decl)
++      || variably_modified_type_p (type, NULL_TREE))
+     return 2;
+ 
+-  if (TYPE_HAS_NONTRIVIAL_DESTRUCTOR (TREE_TYPE (decl)))
++  if (TYPE_HAS_NONTRIVIAL_DESTRUCTOR (type))
+     return 1;
+ 
+   return 0;
+diff --git a/gcc/testsuite/g++.dg/ext/vla14.C b/gcc/testsuite/g++.dg/ext/vla14.C
+new file mode 100644
+index 000000000..278cb63b9
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/ext/vla14.C
+@@ -0,0 +1,23 @@
++// PR c++/21113
++// { dg-options "" }
++
++void
++f (int n)
++{
++  goto label; // { dg-error "from here" }
++  int a[n]; // { dg-error "crosses initialization" }
++label: // { dg-error "jump to label" }
++  ;
++}
++
++void
++g (int n)
++{
++  switch (1)
++  {
++  case 1:
++    int (*a)[n]; // { dg-error "crosses initialization" }
++  default: // { dg-error "jump to case label" }
++    ;
++  }
++}

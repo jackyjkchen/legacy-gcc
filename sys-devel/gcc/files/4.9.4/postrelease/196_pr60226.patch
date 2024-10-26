@@ -1,0 +1,66 @@
+diff --git a/gcc/fold-const.c b/gcc/fold-const.c
+index 6cab53b84..4d8556822 100644
+--- a/gcc/fold-const.c
++++ b/gcc/fold-const.c
+@@ -16685,11 +16685,10 @@ fold_ignored_result (tree t)
+    This can only be applied to objects of a sizetype.  */
+ 
+ tree
+-round_up_loc (location_t loc, tree value, int divisor)
++round_up_loc (location_t loc, tree value, unsigned int divisor)
+ {
+   tree div = NULL_TREE;
+ 
+-  gcc_assert (divisor > 0);
+   if (divisor == 1)
+     return value;
+ 
+diff --git a/gcc/fold-const.h b/gcc/fold-const.h
+index c6203d9c0..9640a47ed 100644
+--- a/gcc/fold-const.h
++++ b/gcc/fold-const.h
+@@ -146,7 +146,7 @@ extern tree combine_comparisons (location_t, enum tree_code, enum tree_code,
+ extern void debug_fold_checksum (const_tree);
+ extern bool may_negate_without_overflow_p (const_tree);
+ #define round_up(T,N) round_up_loc (UNKNOWN_LOCATION, T, N)
+-extern tree round_up_loc (location_t, tree, int);
++extern tree round_up_loc (location_t, tree, unsigned int);
+ #define round_down(T,N) round_down_loc (UNKNOWN_LOCATION, T, N)
+ extern tree round_down_loc (location_t, tree, int);
+ extern tree size_int_kind (HOST_WIDE_INT, enum size_type_kind);
+diff --git a/gcc/stor-layout.c b/gcc/stor-layout.c
+index 9b76888ac..3e06430d5 100644
+--- a/gcc/stor-layout.c
++++ b/gcc/stor-layout.c
+@@ -1536,6 +1536,11 @@ finalize_record_size (record_layout_info rli)
+     unpadded_size_unit
+       = size_binop (PLUS_EXPR, unpadded_size_unit, size_one_node);
+ 
++  if (TREE_CODE (unpadded_size_unit) == INTEGER_CST
++      && !TREE_OVERFLOW (unpadded_size_unit)
++      && !valid_constant_size_p (unpadded_size_unit))
++    error ("type %qT is too large", rli->t);
++
+   /* Round the size up to be a multiple of the required alignment.  */
+   TYPE_SIZE (rli->t) = round_up (unpadded_size, TYPE_ALIGN (rli->t));
+   TYPE_SIZE_UNIT (rli->t)
+diff --git a/gcc/testsuite/c-c++-common/pr60226.c b/gcc/testsuite/c-c++-common/pr60226.c
+new file mode 100644
+index 000000000..3a1c261fa
+--- /dev/null
++++ b/gcc/testsuite/c-c++-common/pr60226.c
+@@ -0,0 +1,14 @@
++/* PR c/60226 */
++/* { dg-do compile } */
++/* { dg-options "-Wno-c++-compat" { target c } } */
++
++typedef int __attribute__ ((aligned (1 << 28))) int28;
++int28 foo[4] = {}; /* { dg-error "alignment of array elements is greater than element size" } */
++typedef int __attribute__ ((aligned (1 << 29))) int29; /* { dg-error "requested alignment is too large" } */
++
++void
++f (void)
++{
++  struct { __attribute__((aligned (1 << 28))) double a; } x1;
++  struct { __attribute__((aligned (1 << 29))) double a; } x2; /* { dg-error "requested alignment is too large" } */
++}

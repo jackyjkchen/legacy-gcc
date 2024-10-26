@@ -1,0 +1,134 @@
+diff --git a/gcc/fortran/symbol.c b/gcc/fortran/symbol.c
+index a3fe721ee..e698b7110 100644
+--- a/gcc/fortran/symbol.c
++++ b/gcc/fortran/symbol.c
+@@ -3106,49 +3106,49 @@ gfc_restore_last_undo_checkpoint (void)
+ 
+   FOR_EACH_VEC_ELT (latest_undo_chgset->syms, i, p)
+     {
+-      if (p->gfc_new)
++      /* Symbol was new. Or was old and just put in common */
++      if ((p->gfc_new
++	   || (p->attr.in_common && !p->old_symbol->attr.in_common ))
++	  && p->attr.in_common && p->common_block && p->common_block->head)
+ 	{
+-	  /* Symbol was new.  */
+-	  if (p->attr.in_common && p->common_block && p->common_block->head)
+-	    {
+-	      /* If the symbol was added to any common block, it
+-		 needs to be removed to stop the resolver looking
+-		 for a (possibly) dead symbol.  */
++	  /* If the symbol was added to any common block, it
++	     needs to be removed to stop the resolver looking
++	     for a (possibly) dead symbol.  */
+ 
+-	      if (p->common_block->head == p && !p->common_next)
++	  if (p->common_block->head == p && !p->common_next)
++	    {
++	      gfc_symtree st, *st0;
++	      st0 = find_common_symtree (p->ns->common_root,
++					 p->common_block);
++	      if (st0)
+ 		{
+-		  gfc_symtree st, *st0;
+-		  st0 = find_common_symtree (p->ns->common_root,
+-					     p->common_block);
+-		  if (st0)
+-		    {
+-		      st.name = st0->name;
+-		      gfc_delete_bbt (&p->ns->common_root, &st, compare_symtree);
+-		      free (st0);
+-		    }
++		  st.name = st0->name;
++		  gfc_delete_bbt (&p->ns->common_root, &st, compare_symtree);
++		  free (st0);
+ 		}
++	    }
+ 
+-	      if (p->common_block->head == p)
+-	        p->common_block->head = p->common_next;
+-	      else
+-		{
+-		  gfc_symbol *cparent, *csym;
+-
+-		  cparent = p->common_block->head;
+-		  csym = cparent->common_next;
+-
+-		  while (csym != p)
+-		    {
+-		      cparent = csym;
+-		      csym = csym->common_next;
+-		    }
++	  if (p->common_block->head == p)
++	    p->common_block->head = p->common_next;
++	  else
++	    {
++	      gfc_symbol *cparent, *csym;
+ 
+-		  gcc_assert(cparent->common_next == p);
++	      cparent = p->common_block->head;
++	      csym = cparent->common_next;
+ 
+-		  cparent->common_next = csym->common_next;
++	      while (csym != p)
++		{
++		  cparent = csym;
++		  csym = csym->common_next;
+ 		}
+-	    }
+ 
++	      gcc_assert(cparent->common_next == p);
++	      cparent->common_next = csym->common_next;
++	    }
++	}
++      if (p->gfc_new)
++	{
+ 	  /* The derived type is saved in the symtree with the first
+ 	     letter capitalized; the all lower-case version to the
+ 	     derived type contains its associated generic function.  */
+diff --git a/gcc/testsuite/gfortran.dg/common_22.f90 b/gcc/testsuite/gfortran.dg/common_22.f90
+new file mode 100644
+index 000000000..e2254099d
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/common_22.f90
+@@ -0,0 +1,24 @@
++! { dg-do compile }
++!
++! PR fortran/59746
++! Check that symbols present in common block are properly cleaned up
++! upon error.
++!
++! Contributed by Bud Davis  <jmdavis@link.com>
++
++      CALL RCCFL (NVE,IR,NU3,VE (1,1,1,I))
++      COMMON /CCFILE/ INTG,NT1,NT2,NT3,NVM,NVE,NFRLE,NRESF,NRESL !{ dg-error "Unexpected COMMON" }
++      COMMON /CCFILE/ INTG,NT1,NT2,NT3,NVM,NVE,NFRLE,NRESF,NRESL !{ dg-error "Unexpected COMMON" }
++!  the PR only contained the two above.
++!  success is no segfaults or infinite loops.
++!  let's check some combinations
++     CALL ABC (INTG)
++     COMMON /CCFILE/ INTG,NT1,NT2,NT3,NVM,NVE,NFRLE,NRESF,NRESL !{ dg-error "Unexpected COMMON" }
++     COMMON /CCFILE/ INTG,NT1,NT2,NT3,NVM,NVE,NFRLE,NRESF,NRESL !{ dg-error "Unexpected COMMON" }
++     CALL DEF (NT1)
++     COMMON /CCFILE/ INTG,NT1,NT2,NT3,NVM,NVE,NFRLE,NRESF,NRESL !{ dg-error "Unexpected COMMON" }
++     COMMON /CCFILE/ INTG,NT1,NT2,NT3,NVM,NVE,NFRLE,NRESF,NRESL !{ dg-error "Unexpected COMMON" }
++     CALL GHI (NRESL)
++     COMMON /CCFILE/ INTG,NT1,NT2,NT3,NVM,NVE,NFRLE,NRESF,NRESL !{ dg-error "Unexpected COMMON" }
++     COMMON /CCFILE/ INTG,NT1,NT2,NT3,NVM,NVE,NFRLE,NRESF,NRESL !{ dg-error "Unexpected COMMON" }
++     END
+diff --git a/gcc/testsuite/gfortran.dg/common_23.f90 b/gcc/testsuite/gfortran.dg/common_23.f90
+new file mode 100644
+index 000000000..3f1f005db
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/common_23.f90
+@@ -0,0 +1,10 @@
++! { dg-do compile }
++!
++! PR fortran/66707
++! Check the compilation on wrong usage of common
++! Contributed by Gerhard Steinmetz <gerhard.steinmetz.fortran@t-online.de>
++program p
++   integer, pointer :: a
++   common a, a ! { dg-error "is already in a COMMON block" }
++   common a
++end

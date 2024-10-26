@@ -1,0 +1,46 @@
+diff --git a/gcc/cp/parser.c b/gcc/cp/parser.c
+index 6e9103ea2..6e779ebcf 100644
+--- a/gcc/cp/parser.c
++++ b/gcc/cp/parser.c
+@@ -14800,9 +14800,18 @@ cp_parser_enum_specifier (cp_parser* parser)
+ 	    error_at (type_start_token->location, "cannot add an enumerator "
+ 		      "list to a template instantiation");
+ 
++	  if (TREE_CODE (nested_name_specifier) == TYPENAME_TYPE)
++	    {
++	      error_at (type_start_token->location,
++			"%<%T::%E%> has not been declared",
++			TYPE_CONTEXT (nested_name_specifier),
++			nested_name_specifier);
++	      type = error_mark_node;
++	    }
+ 	  /* If that scope does not contain the scope in which the
+ 	     class was originally declared, the program is invalid.  */
+-	  if (prev_scope && !is_ancestor (prev_scope, nested_name_specifier))
++	  else if (prev_scope && !is_ancestor (prev_scope,
++					       nested_name_specifier))
+ 	    {
+ 	      if (at_namespace_scope_p ())
+ 		error_at (type_start_token->location,
+@@ -14811,7 +14820,8 @@ cp_parser_enum_specifier (cp_parser* parser)
+ 			  type, prev_scope, nested_name_specifier);
+ 	      else
+ 		error_at (type_start_token->location,
+-			  "declaration of %qD in %qD which does not enclose %qD",
++			  "declaration of %qD in %qD which does not "
++			  "enclose %qD",
+ 			  type, prev_scope, nested_name_specifier);
+ 	      type = error_mark_node;
+ 	    }
+diff --git a/gcc/testsuite/g++.dg/parse/enum11.C b/gcc/testsuite/g++.dg/parse/enum11.C
+new file mode 100644
+index 000000000..68ddedbee
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/parse/enum11.C
+@@ -0,0 +1,6 @@
++// PR c++/58980
++
++template<typename> struct A
++{ 
++  enum A::B::C {};   // { dg-error "has not been declared" }
++};

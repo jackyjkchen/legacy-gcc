@@ -1,0 +1,77 @@
+diff --git a/libcpp/errors.c b/libcpp/errors.c
+index 0a1200d79..6593abfaf 100644
+--- a/libcpp/errors.c
++++ b/libcpp/errors.c
+@@ -230,8 +230,18 @@ cpp_warning_with_line_syshdr (cpp_reader *pfile, int reason,
+ bool
+ cpp_errno (cpp_reader *pfile, int level, const char *msgid)
+ {
+-  if (msgid[0] == '\0')
+-    msgid = _("stdout");
++  return cpp_error (pfile, level, "%s: %s", _(msgid), xstrerror (errno));
++}
++
++/* Print a warning or error, depending on the value of LEVEL.  Include
++   information from errno.  Unlike cpp_errno, the argument is a filename
++   that is not localized, but "" is replaced with localized "stdout".  */
++
++bool
++cpp_errno_filename (cpp_reader *pfile, int level, const char *filename)
++{
++  if (filename[0] == '\0')
++    filename = _("stdout");
+ 
+-  return cpp_error (pfile, level, "%s: %s", msgid, xstrerror (errno));
++  return cpp_error (pfile, level, "%s: %s", filename, xstrerror (errno));
+ }
+diff --git a/libcpp/files.c b/libcpp/files.c
+index f4b425645..bf9966ee5 100644
+--- a/libcpp/files.c
++++ b/libcpp/files.c
+@@ -709,7 +709,7 @@ read_file_guts (cpp_reader *pfile, _cpp_file *file)
+ 
+   if (count < 0)
+     {
+-      cpp_errno (pfile, CPP_DL_ERROR, file->path);
++      cpp_errno_filename (pfile, CPP_DL_ERROR, file->path);
+       free (buf);
+       return false;
+     }
+@@ -1032,7 +1032,8 @@ open_file_failed (cpp_reader *pfile, _cpp_file *file, int angle_brackets)
+       /* If the preprocessor output (other than dependency information) is
+          being used, we must also flag an error.  */
+       if (CPP_OPTION (pfile, deps.need_preprocessor_output))
+-	cpp_errno (pfile, CPP_DL_FATAL, file->path);
++	cpp_errno_filename (pfile, CPP_DL_FATAL,
++			    file->path ? file->path : file->name);
+     }
+   else
+     {
+@@ -1046,9 +1047,11 @@ open_file_failed (cpp_reader *pfile, _cpp_file *file, int angle_brackets)
+       if (CPP_OPTION (pfile, deps.style) == DEPS_NONE
+           || print_dep
+           || CPP_OPTION (pfile, deps.need_preprocessor_output))
+-	cpp_errno (pfile, CPP_DL_FATAL, file->path);
++	cpp_errno_filename (pfile, CPP_DL_FATAL,
++			    file->path ? file->path : file->name);
+       else
+-	cpp_errno (pfile, CPP_DL_WARNING, file->path);
++	cpp_errno_filename (pfile, CPP_DL_WARNING,
++			    file->path ? file->path : file->name);
+     }
+ }
+ 
+diff --git a/libcpp/include/cpplib.h b/libcpp/include/cpplib.h
+index a48ac877e..f47500b0b 100644
+--- a/libcpp/include/cpplib.h
++++ b/libcpp/include/cpplib.h
+@@ -934,6 +934,9 @@ extern bool cpp_warning_syshdr (cpp_reader *, int, const char *msgid, ...)
+ /* Output a diagnostic with "MSGID: " preceding the
+    error string of errno.  No location is printed.  */
+ extern bool cpp_errno (cpp_reader *, int, const char *msgid);
++/* Similarly, but with "FILENAME: " instead of "MSGID: ", where
++   the filename is not localized.  */
++extern bool cpp_errno_filename (cpp_reader *, int, const char *filename);
+ 
+ /* Same as cpp_error, except additionally specifies a position as a
+    (translation unit) physical line and physical column.  If the line is

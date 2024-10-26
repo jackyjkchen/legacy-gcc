@@ -1,0 +1,31 @@
+diff --git a/gcc/cp/call.c b/gcc/cp/call.c
+index 79ab78f75..c0b0ec101 100644
+--- a/gcc/cp/call.c
++++ b/gcc/cp/call.c
+@@ -4422,6 +4422,12 @@ build_conditional_expr_1 (tree arg1, tree arg2, tree arg3,
+       arg2 = force_rvalue (arg2, complain);
+       arg3 = force_rvalue (arg3, complain);
+ 
++      /* force_rvalue can return error_mark on valid arguments.  */
++      if (error_operand_p (arg1)
++	  || error_operand_p (arg2)
++	  || error_operand_p (arg3))
++	return error_mark_node;
++
+       tree arg1_type = TREE_TYPE (arg1);
+       arg2_type = TREE_TYPE (arg2);
+       arg3_type = TREE_TYPE (arg3);
+diff --git a/gcc/testsuite/g++.dg/cpp0x/pr59641.C b/gcc/testsuite/g++.dg/cpp0x/pr59641.C
+new file mode 100644
+index 000000000..12e8f9286
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/pr59641.C
+@@ -0,0 +1,8 @@
++// { dg-options "-std=gnu++11" }
++typedef int T __attribute__((vector_size(2*sizeof(int))));
++
++void foo(T& r, const T& a, const T& b)
++{
++  constexpr T c = a < b; // { dg-error "constant" }
++  r = c ? a : b;
++}

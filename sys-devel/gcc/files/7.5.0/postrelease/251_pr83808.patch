@@ -1,0 +1,41 @@
+diff --git a/gcc/cp/typeck2.c b/gcc/cp/typeck2.c
+index 1f24a7b14..baf252e5a 100644
+--- a/gcc/cp/typeck2.c
++++ b/gcc/cp/typeck2.c
+@@ -1311,9 +1311,11 @@ process_init_constructor_array (tree type, tree init,
+       gcc_assert (ce->value);
+       ce->value = massage_init_elt (TREE_TYPE (type), ce->value, complain);
+ 
+-      if (ce->value != error_mark_node)
+-	gcc_assert (same_type_ignoring_top_level_qualifiers_p
+-		      (TREE_TYPE (type), TREE_TYPE (ce->value)));
++      gcc_checking_assert
++	(ce->value == error_mark_node
++	 || (same_type_ignoring_top_level_qualifiers_p
++	     (strip_array_types (TREE_TYPE (type)),
++	      strip_array_types (TREE_TYPE (ce->value)))));
+ 
+       flags |= picflag_from_initializer (ce->value);
+     }
+diff --git a/gcc/testsuite/g++.dg/ext/vla19.C b/gcc/testsuite/g++.dg/ext/vla19.C
+new file mode 100644
+index 000000000..287a0d5a3
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/ext/vla19.C
+@@ -0,0 +1,16 @@
++// PR c++/83808
++// { dg-additional-options "-Wno-vla" }
++
++struct R { int r; };
++void baz (char *, char *, char *, char *);
++
++void
++foo ()
++{
++  const R a = { 12 };
++  char b[1][a.r] = { { "12345678901" } };
++  char c[a.r] = { "12345678901" };
++  char d[1][a.r] = { { '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '1', '\0' } };
++  char e[a.r] = { '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '1', '\0' };
++  baz (b[0], c, d[0], e);
++}

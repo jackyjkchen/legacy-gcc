@@ -1,0 +1,126 @@
+diff --git a/gcc/cp/cp-tree.h b/gcc/cp/cp-tree.h
+index a0c371d47..ccfbc4692 100644
+--- a/gcc/cp/cp-tree.h
++++ b/gcc/cp/cp-tree.h
+@@ -6126,6 +6126,7 @@ extern int processing_template_parmlist;
+ extern bool dependent_type_p			(tree);
+ extern bool dependent_scope_p			(tree);
+ extern bool any_dependent_template_arguments_p  (const_tree);
++extern bool any_erroneous_template_args_p       (const_tree);
+ extern bool dependent_template_p		(tree);
+ extern bool dependent_template_id_p		(tree, tree);
+ extern bool type_dependent_expression_p		(tree);
+diff --git a/gcc/cp/parser.c b/gcc/cp/parser.c
+index 87f3b380e..5a0380bc4 100644
+--- a/gcc/cp/parser.c
++++ b/gcc/cp/parser.c
+@@ -21570,6 +21570,16 @@ cp_parser_class_specifier_1 (cp_parser* parser)
+       cp_default_arg_entry *e;
+       tree save_ccp, save_ccr;
+ 
++      if (any_erroneous_template_args_p (type))
++	{
++	  /* Skip default arguments, NSDMIs, etc, in order to improve
++	     error recovery (c++/71169, c++/71832).  */
++	  vec_safe_truncate (unparsed_funs_with_default_args, 0);
++	  vec_safe_truncate (unparsed_nsdmis, 0);
++	  vec_safe_truncate (unparsed_classes, 0);
++	  vec_safe_truncate (unparsed_funs_with_definitions, 0);
++	}
++
+       /* In a first pass, parse default arguments to the functions.
+ 	 Then, in a second pass, parse the bodies of the functions.
+ 	 This two-phased approach handles cases like:
+diff --git a/gcc/cp/pt.c b/gcc/cp/pt.c
+index cdb7a6f87..f853c19a9 100644
+--- a/gcc/cp/pt.c
++++ b/gcc/cp/pt.c
+@@ -24899,4 +24899,37 @@ print_template_statistics (void)
+ 	   type_specializations->collisions ());
+ }
+ 
++/* Returns true if ARGS contains any errors.  */
++
++bool
++any_erroneous_template_args_p (const_tree args)
++{
++  int i;
++  int j;
++
++  if (args == error_mark_node)
++    return true;
++
++  if (args && TREE_CODE (args) != TREE_VEC)
++    {
++      if (tree ti = get_template_info (args))
++	args = TI_ARGS (ti);
++      else
++	args = NULL_TREE;
++    }
++
++  if (!args)
++    return false;
++
++  for (i = 0; i < TMPL_ARGS_DEPTH (args); ++i)
++    {
++      const_tree level = TMPL_ARGS_LEVEL (args, i + 1);
++      for (j = 0; j < TREE_VEC_LENGTH (level); ++j)
++	if (error_operand_p (TREE_VEC_ELT (level, j)))
++	  return true;
++    }
++
++  return false;
++}
++
+ #include "gt-cp-pt.h"
+diff --git a/gcc/testsuite/g++.dg/cpp0x/pr71169-2.C b/gcc/testsuite/g++.dg/cpp0x/pr71169-2.C
+new file mode 100644
+index 000000000..fa29e95d5
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/pr71169-2.C
+@@ -0,0 +1,19 @@
++// { dg-do compile { target c++11 } }
++
++template <Preconditioner> class A {  // { dg-error "declared" }
++  template <class = int> void m_fn1() {
++    m_fn1();
++    }
++};
++
++template<typename>
++struct B
++{
++  int f(int = 0) { return 0; }
++};
++
++int main()
++{
++  B<int> b;
++  return b.f();
++}
+diff --git a/gcc/testsuite/g++.dg/cpp0x/pr71169.C b/gcc/testsuite/g++.dg/cpp0x/pr71169.C
+new file mode 100644
+index 000000000..44690a917
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/pr71169.C
+@@ -0,0 +1,7 @@
++// { dg-do compile { target c++11 } }
++
++template <Preconditioner> class A {  // { dg-error "declared" }
++  template <class = int> void m_fn1() {
++    m_fn1();
++    }
++};
+diff --git a/gcc/testsuite/g++.dg/cpp0x/pr71832.C b/gcc/testsuite/g++.dg/cpp0x/pr71832.C
+new file mode 100644
+index 000000000..3b851110f
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/pr71832.C
+@@ -0,0 +1,7 @@
++// { dg-do compile { target c++11 } }
++
++template < typename decltype (0) > struct A  // { dg-error "expected|two or more" }
++{ 
++  void foo () { baz (); }
++  template < typename ... S > void baz () {}
++};

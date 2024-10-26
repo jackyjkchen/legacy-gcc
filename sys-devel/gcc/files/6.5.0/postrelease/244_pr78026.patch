@@ -1,0 +1,209 @@
+diff --git a/gcc/fortran/match.c b/gcc/fortran/match.c
+index 516abc5ba..a7319ed50 100644
+--- a/gcc/fortran/match.c
++++ b/gcc/fortran/match.c
+@@ -5779,6 +5779,7 @@ gfc_match_select_type (void)
+   char name[GFC_MAX_SYMBOL_LEN];
+   bool class_array;
+   gfc_symbol *sym;
++  gfc_namespace *ns = gfc_current_ns;
+ 
+   m = gfc_match_label ();
+   if (m == MATCH_ERROR)
+@@ -5788,10 +5789,11 @@ gfc_match_select_type (void)
+   if (m != MATCH_YES)
+     return m;
+ 
++  gfc_current_ns = gfc_build_block_ns (ns);
+   m = gfc_match (" %n => %e", name, &expr2);
+   if (m == MATCH_YES)
+     {
+-      expr1 = gfc_get_expr();
++      expr1 = gfc_get_expr ();
+       expr1->expr_type = EXPR_VARIABLE;
+       if (gfc_get_sym_tree (name, NULL, &expr1->symtree, false))
+ 	{
+@@ -5813,7 +5815,11 @@ gfc_match_select_type (void)
+     {
+       m = gfc_match (" %e ", &expr1);
+       if (m != MATCH_YES)
+-	return m;
++	{
++	  std::swap (ns, gfc_current_ns);
++	  gfc_free_namespace (ns);
++	  return m;
++	}
+     }
+ 
+   m = gfc_match (" )%t");
+@@ -5829,19 +5835,19 @@ gfc_match_select_type (void)
+      allowed by the standard.
+      TODO: see if it is sufficient to exclude component and substring
+      references.  */
+-  class_array = expr1->expr_type == EXPR_VARIABLE
+-		  && expr1->ts.type == BT_CLASS
+-		  && CLASS_DATA (expr1)
+-		  && (strcmp (CLASS_DATA (expr1)->name, "_data") == 0)
+-		  && (CLASS_DATA (expr1)->attr.dimension
+-		      || CLASS_DATA (expr1)->attr.codimension)
+-		  && expr1->ref
+-		  && expr1->ref->type == REF_ARRAY
+-		  && expr1->ref->next == NULL;
++  class_array = (expr1->expr_type == EXPR_VARIABLE
++		 && expr1->ts.type == BT_CLASS
++		 && CLASS_DATA (expr1)
++		 && (strcmp (CLASS_DATA (expr1)->name, "_data") == 0)
++		 && (CLASS_DATA (expr1)->attr.dimension
++		     || CLASS_DATA (expr1)->attr.codimension)
++		 && expr1->ref
++		 && expr1->ref->type == REF_ARRAY
++		 && expr1->ref->next == NULL);
+ 
+   /* Check for F03:C811.  */
+   if (!expr2 && (expr1->expr_type != EXPR_VARIABLE
+-		  || (!class_array && expr1->ref != NULL)))
++		 || (!class_array && expr1->ref != NULL)))
+     {
+       gfc_error ("Selector in SELECT TYPE at %C is not a named variable; "
+ 		 "use associate-name=>");
+@@ -5855,12 +5861,16 @@ gfc_match_select_type (void)
+   new_st.ext.block.ns = gfc_current_ns;
+ 
+   select_type_push (expr1->symtree->n.sym);
++  gfc_current_ns = ns;
+ 
+   return MATCH_YES;
+ 
+ cleanup:
+   gfc_free_expr (expr1);
+   gfc_free_expr (expr2);
++  gfc_undo_symbols ();
++  std::swap (ns, gfc_current_ns);
++  gfc_free_namespace (ns);
+   return m;
+ }
+ 
+diff --git a/gcc/fortran/parse.c b/gcc/fortran/parse.c
+index fd5f9cd2b..ea877a02c 100644
+--- a/gcc/fortran/parse.c
++++ b/gcc/fortran/parse.c
+@@ -293,7 +293,6 @@ static bool in_specification_block;
+ static gfc_statement
+ decode_statement (void)
+ {
+-  gfc_namespace *ns;
+   gfc_statement st;
+   locus old_locus;
+   match m = MATCH_NO;
+@@ -416,12 +415,7 @@ decode_statement (void)
+   match (NULL, gfc_match_associate, ST_ASSOCIATE);
+   match (NULL, gfc_match_critical, ST_CRITICAL);
+   match (NULL, gfc_match_select, ST_SELECT_CASE);
+-
+-  gfc_current_ns = gfc_build_block_ns (gfc_current_ns);
+   match (NULL, gfc_match_select_type, ST_SELECT_TYPE);
+-  ns = gfc_current_ns;
+-  gfc_current_ns = gfc_current_ns->parent;
+-  gfc_free_namespace (ns);
+ 
+   /* General statement matching: Instead of testing every possible
+      statement, we eliminate most possibilities by peeking at the
+@@ -4069,6 +4063,7 @@ parse_select_type_block (void)
+   gfc_code *cp;
+   gfc_state_data s;
+ 
++  gfc_current_ns = new_st.ext.block.ns;
+   accept_statement (ST_SELECT_TYPE);
+ 
+   cp = gfc_state_stack->tail;
+@@ -5154,7 +5149,7 @@ parse_executable (gfc_statement st)
+ 	  break;
+ 
+ 	case ST_SELECT_TYPE:
+-	  parse_select_type_block();
++	  parse_select_type_block ();
+ 	  break;
+ 
+ 	case ST_DO:
+@@ -6010,12 +6005,11 @@ loop:
+       prog_locus = gfc_current_locus;
+ 
+       push_state (&s, COMP_PROGRAM, gfc_new_block);
+-      main_program_symbol(gfc_current_ns, gfc_new_block->name);
++      main_program_symbol (gfc_current_ns, gfc_new_block->name);
+       accept_statement (st);
+       add_global_program ();
+       parse_progunit (ST_NONE);
+       goto prog_units;
+-      break;
+ 
+     case ST_SUBROUTINE:
+       add_global_procedure (true);
+@@ -6023,7 +6017,6 @@ loop:
+       accept_statement (st);
+       parse_progunit (ST_NONE);
+       goto prog_units;
+-      break;
+ 
+     case ST_FUNCTION:
+       add_global_procedure (false);
+@@ -6031,7 +6024,6 @@ loop:
+       accept_statement (st);
+       parse_progunit (ST_NONE);
+       goto prog_units;
+-      break;
+ 
+     case ST_BLOCK_DATA:
+       push_state (&s, COMP_BLOCK_DATA, gfc_new_block);
+@@ -6066,7 +6058,6 @@ loop:
+       main_program_symbol (gfc_current_ns, "MAIN__");
+       parse_progunit (st);
+       goto prog_units;
+-      break;
+     }
+ 
+   /* Handle the non-program units.  */
+@@ -6115,14 +6106,12 @@ prog_units:
+   pop_state ();
+   goto loop;
+ 
+-  done:
+-
++done:
+   /* Do the resolution.  */
+   resolve_all_program_units (gfc_global_ns_list);
+ 
+   /* Do the parse tree dump.  */
+-  gfc_current_ns
+-	= flag_dump_fortran_original ? gfc_global_ns_list : NULL;
++  gfc_current_ns = flag_dump_fortran_original ? gfc_global_ns_list : NULL;
+ 
+   for (; gfc_current_ns; gfc_current_ns = gfc_current_ns->sibling)
+     if (!gfc_current_ns->proc_name
+diff --git a/gcc/testsuite/gfortran.dg/gomp/pr78026.f03 b/gcc/testsuite/gfortran.dg/gomp/pr78026.f03
+new file mode 100644
+index 000000000..61f945886
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/gomp/pr78026.f03
+@@ -0,0 +1,5 @@
++! PR fortran/78026
++select type (a)		! { dg-error "Selector shall be polymorphic in SELECT TYPE statement" }
++end select
++!$omp declare simd(b)	! { dg-error "Unexpected !.OMP DECLARE SIMD statement" }
++end			! { dg-error "should refer to containing procedure" "" { target *-*-* } .-1 }
+diff --git a/gcc/testsuite/gfortran.dg/select_type_38.f03 b/gcc/testsuite/gfortran.dg/select_type_38.f03
+new file mode 100644
+index 000000000..a643e99f0
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/select_type_38.f03
+@@ -0,0 +1,10 @@
++  type :: t1
++  end type
++  type, extends(t1) :: t2
++  end type
++  class(t1), pointer :: a
++lab1: select type (a)
++  end select lab1
++lab1: select type (a)		! { dg-error "Duplicate construct label" }
++  end select lab1		! { dg-error "Expecting END PROGRAM statement" }
++end

@@ -1,0 +1,207 @@
+diff --git a/gcc/cp/init.c b/gcc/cp/init.c
+index 659fce40e..2b42fc9b0 100644
+--- a/gcc/cp/init.c
++++ b/gcc/cp/init.c
+@@ -593,6 +593,33 @@ get_nsdmi (tree member, bool in_ctor)
+   return init;
+ }
+ 
++/* Diagnose the flexible array MEMBER if its INITializer is non-null
++   and return true if so.  Otherwise return false.  */
++
++static bool
++maybe_reject_flexarray_init (tree member, tree init)
++{
++  tree type = TREE_TYPE (member);
++
++  if (!init
++      || TREE_CODE (type) != ARRAY_TYPE
++      || TYPE_DOMAIN (type))
++    return false;
++
++  /* Point at the flexible array member declaration if it's initialized
++     in-class, and at the ctor if it's initialized in a ctor member
++     initializer list.  */
++  location_t loc;
++  if (DECL_INITIAL (member) == init
++      || DECL_DEFAULTED_FN (current_function_decl))
++    loc = DECL_SOURCE_LOCATION (member);
++  else
++    loc = DECL_SOURCE_LOCATION (current_function_decl);
++
++  error_at (loc, "initializer for flexible array member %q#D", member);
++  return true;
++}
++
+ /* Initialize MEMBER, a FIELD_DECL, with INIT, a TREE_LIST of
+    arguments.  If TREE_LIST is void_type_node, an empty initializer
+    list was given; if NULL_TREE no initializer was given.  */
+@@ -718,10 +745,18 @@ perform_member_init (tree member, tree init)
+ 	{
+ 	  if (init)
+ 	    {
+-	      if (TREE_CHAIN (init))
++	      /* Check to make sure the member initializer is valid and
++		 something like a CONSTRUCTOR in: T a[] = { 1, 2 } and
++		 if it isn't, return early to avoid triggering another
++		 error below.  */
++	      if (maybe_reject_flexarray_init (member, init))
++		return;
++
++	      if (TREE_CODE (init) != TREE_LIST || TREE_CHAIN (init))
+ 		init = error_mark_node;
+ 	      else
+ 		init = TREE_VALUE (init);
++
+ 	      if (BRACE_ENCLOSED_INITIALIZER_P (init))
+ 		init = digest_init (type, init, tf_warning_or_error);
+ 	    }
+@@ -796,16 +831,8 @@ perform_member_init (tree member, tree init)
+ 	   in that case.  */
+ 	init = build_x_compound_expr_from_list (init, ELK_MEM_INIT,
+ 						tf_warning_or_error);
+-      if (TREE_CODE (type) == ARRAY_TYPE
+-	  && TYPE_DOMAIN (type) == NULL_TREE
+-	  && init != NULL_TREE)
+-	{
+-	  error_at (DECL_SOURCE_LOCATION (current_function_decl),
+-		    "member initializer for flexible array member");
+-	  inform (DECL_SOURCE_LOCATION (member), "%q#D initialized", member);
+-	}
+-
+-      if (init)
++      /* Reject a member initializer for a flexible array member.  */
++      if (init && !maybe_reject_flexarray_init (member, init))
+ 	finish_expr_stmt (cp_build_modify_expr (decl, INIT_EXPR, init,
+ 						tf_warning_or_error));
+     }
+diff --git a/gcc/testsuite/g++.dg/ext/flexary12.C b/gcc/testsuite/g++.dg/ext/flexary12.C
+index db80bf408..61726f63f 100644
+--- a/gcc/testsuite/g++.dg/ext/flexary12.C
++++ b/gcc/testsuite/g++.dg/ext/flexary12.C
+@@ -44,8 +44,9 @@ struct D {
+   D ();
+ };
+ 
+-D::D ():    // { dg-error "member initializer for flexible array member" }
+-  a ("c")   // { dg-error "incompatible types in assignment of .const char \\\[2\\\]. to .int \\\[\\\]." }
++D::D ():    // { dg-error "initializer for flexible array member" }
++  a ("c")   // the initializer also has an invalid type but emitting
++	    // just the error above is sufficient
+ { }
+ 
+ 
+diff --git a/gcc/testsuite/g++.dg/ext/flexary20.C b/gcc/testsuite/g++.dg/ext/flexary20.C
+index 2c8ab2960..10a06b499 100644
+--- a/gcc/testsuite/g++.dg/ext/flexary20.C
++++ b/gcc/testsuite/g++.dg/ext/flexary20.C
+@@ -4,22 +4,22 @@
+ 
+ struct S {
+   int i;
+-  char a[] = "foo";
+-  S () {} // { dg-error "member initializer for flexible array member" }
++  char a[] = "foo";   // { dg-error "initializer for flexible array member" }
++  S () {}
+ };
+ 
+-struct T { // { dg-error "member initializer for flexible array member" }
++struct T {
+   int i;
+-  char a[] = "foo";
++  char a[] = "foo";   // { dg-error "initializer for flexible array member" }
+ };
+ 
+ struct U {
+   int i;
+-  char a[] = "foo";
++  char a[] = "foo";   // { dg-error "initializer for flexible array member" }
+   U ();
+ };
+ 
+-U::U() {} // { dg-error "member initializer for flexible array member" }
++U::U() {}
+ 
+ int
+ main ()
+@@ -29,17 +29,17 @@ main ()
+ 
+ struct V {
+   int i;
+-  struct W { // { dg-error "member initializer for flexible array member" }
++  struct W {
+     int j;
+-    char a[] = "foo";
++    char a[] = "foo";   // { dg-error "initializer for flexible array member" }
+   } w;
+   V () {}
+ };
+ 
+ template <class T>
+-struct X { // { dg-error "member initializer for flexible array member" }
++struct X {
+   int i;
+-  T a[] = "foo";
++  T a[] = "foo";   // { dg-error "initializer for flexible array member" }
+ };
+ 
+ void
+diff --git a/gcc/testsuite/g++.dg/ext/flexary21.C b/gcc/testsuite/g++.dg/ext/flexary21.C
+index 5675bf6f0..24d330a42 100644
+--- a/gcc/testsuite/g++.dg/ext/flexary21.C
++++ b/gcc/testsuite/g++.dg/ext/flexary21.C
+@@ -5,11 +5,16 @@
+ struct S {
+   int i;
+   char a[];
+-  S () : a("bob") {} // { dg-error "member initializer for flexible array member" }
++  S () : a("bob") {} // { dg-error "initializer for flexible array member" }
+ };
+ 
+ struct T {
+   int i;
+-  char a[] = "bob";
+-  T () : a("bob") {} // { dg-error "member initializer for flexible array member" }
++  char b[] = "bob";      // { dg-error "initializer for flexible array member" }
++  T () {
++    // the presence of this ctor definition elicits the error above
++    // without it the flexible array initializer would be ignored
++    // and so (unfortunately) not diagnosed
++  }
++  T (int) : b("bob") {}  // { dg-error "initializer for flexible array member" }
+ };
+diff --git a/gcc/testsuite/g++.dg/ext/flexary22.C b/gcc/testsuite/g++.dg/ext/flexary22.C
+new file mode 100644
+index 000000000..041f0242d
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/ext/flexary22.C
+@@ -0,0 +1,29 @@
++// PR c++/79363 - ICE with NSDMI and array
++// { dg-do compile { target c++11 } }
++// { dg-options -Wno-pedantic }
++
++struct A
++{
++  int i;
++  int a[] = { };   // { dg-error "initializer for flexible array member" }
++} a;
++
++struct B
++{
++  int i;
++  char a[] { "abc" };   // { dg-error "initializer for flexible array member" }
++} b;
++
++struct C
++{
++  int i;
++  char a[];
++  C (): a ("def") { }   // { dg-error "initializer for flexible array member" }
++} c;
++
++struct D
++{
++  struct X { };
++  int i;
++  X x[] = { };   // { dg-error "initializer for flexible array member" }
++} d;

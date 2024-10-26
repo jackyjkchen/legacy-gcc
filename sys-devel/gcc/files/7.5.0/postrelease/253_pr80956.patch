@@ -1,0 +1,64 @@
+diff --git a/gcc/cp/call.c b/gcc/cp/call.c
+index f995cba4d..61dca5742 100644
+--- a/gcc/cp/call.c
++++ b/gcc/cp/call.c
+@@ -6863,8 +6863,12 @@ convert_like_real (conversion *convs, tree expr, tree fn, int argnum,
+ 	if (array == error_mark_node)
+ 	  return error_mark_node;
+ 
+-	/* Build up the initializer_list object.  */
+-	totype = complete_type (totype);
++	/* Build up the initializer_list object.  Note: fail gracefully
++	   if the object cannot be completed because, for example, no
++	   definition is provided (c++/80956).  */
++	totype = complete_type_or_maybe_complain (totype, NULL_TREE, complain);
++	if (!totype)
++	  return error_mark_node;
+ 	field = next_initializable_field (TYPE_FIELDS (totype));
+ 	CONSTRUCTOR_APPEND_ELT (vec, field, array);
+ 	field = next_initializable_field (DECL_CHAIN (field));
+diff --git a/gcc/cp/name-lookup.c b/gcc/cp/name-lookup.c
+index 6ccfdbfdb..ed2b9e144 100644
+--- a/gcc/cp/name-lookup.c
++++ b/gcc/cp/name-lookup.c
+@@ -6214,8 +6214,8 @@ pushtag_1 (tree name, tree type, tag_scope scope)
+ 	      && strcmp (TYPE_NAME_STRING (type), "initializer_list") == 0
+ 	      && !CLASSTYPE_TEMPLATE_INFO (type))
+ 	    {
+-	      error ("declaration of std::initializer_list does not match "
+-		     "#include <initializer_list>, isn't a template");
++	      error ("declaration of %<std::initializer_list%> does not match "
++		     "%<#include <initializer_list>%>, isn't a template");
+ 	      return error_mark_node;
+ 	    }
+ 	}
+diff --git a/gcc/testsuite/g++.dg/cpp0x/initlist100.C b/gcc/testsuite/g++.dg/cpp0x/initlist100.C
+new file mode 100644
+index 000000000..9d80a004c
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/initlist100.C
+@@ -0,0 +1,10 @@
++// PR c++/80956
++// { dg-do compile { target c++11 } }
++
++namespace std {
++template <class> class initializer_list;  // { dg-message "declaration" }
++}
++
++template <typename T> struct B { B (std::initializer_list<T>); };
++struct C { virtual int foo (); };
++struct D : C {} d { B<C> { D {} } };  // { dg-error "incomplete|no matching" }
+diff --git a/gcc/testsuite/g++.dg/cpp0x/initlist101.C b/gcc/testsuite/g++.dg/cpp0x/initlist101.C
+new file mode 100644
+index 000000000..a0f355220
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/initlist101.C
+@@ -0,0 +1,8 @@
++// PR c++/80956
++// { dg-do compile { target c++11 } }
++
++#include <initializer_list>
++
++template <typename T> struct B { B (std::initializer_list<T>); };
++struct C { virtual int foo (); };
++struct D : C {} d { B<C> { D {} } };  // { dg-error "no matching" }

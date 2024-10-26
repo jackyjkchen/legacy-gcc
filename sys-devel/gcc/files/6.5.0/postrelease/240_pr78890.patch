@@ -1,0 +1,180 @@
+diff --git a/gcc/cp/class.c b/gcc/cp/class.c
+index cf51231e3..af466f378 100644
+--- a/gcc/cp/class.c
++++ b/gcc/cp/class.c
+@@ -3708,25 +3708,27 @@ check_field_decls (tree t, tree *access_decls,
+       /* When this goes into scope, it will be a non-local reference.  */
+       DECL_NONLOCAL (x) = 1;
+ 
+-      if (TREE_CODE (t) == UNION_TYPE
+-	  && cxx_dialect < cxx11)
++      if (TREE_CODE (t) == UNION_TYPE)
+ 	{
+ 	  /* [class.union] (C++98)
+ 
+ 	     If a union contains a static data member, or a member of
+ 	     reference type, the program is ill-formed.
+ 
+-	     In C++11 this limitation doesn't exist anymore.  */
+-	  if (VAR_P (x))
++	     In C++11 [class.union] says:
++	     If a union contains a non-static data member of reference type
++	     the program is ill-formed.  */
++	  if (VAR_P (x) && cxx_dialect < cxx11)
+ 	    {
+ 	      error ("in C++98 %q+D may not be static because it is "
+ 		     "a member of a union", x);
+ 	      continue;
+ 	    }
+-	  if (TREE_CODE (type) == REFERENCE_TYPE)
++	  if (TREE_CODE (type) == REFERENCE_TYPE
++	      && TREE_CODE (x) == FIELD_DECL)
+ 	    {
+-	      error ("in C++98 %q+D may not have reference type %qT "
+-		     "because it is a member of a union", x, type);
++	      error ("non-static data member %q+D in a union may not "
++		     "have reference type %qT", x, type);
+ 	      continue;
+ 	    }
+ 	}
+diff --git a/gcc/testsuite/g++.dg/cpp0x/pr78890-1.C b/gcc/testsuite/g++.dg/cpp0x/pr78890-1.C
+new file mode 100644
+index 000000000..6fccc4fbe
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/pr78890-1.C
+@@ -0,0 +1,13 @@
++// PR c++/78890
++// { dg-do compile { target c++11 } }
++
++int
++main()
++{
++  union {
++    int a;
++    int &b = a;		// { dg-error "may not have reference type" }
++  };
++  a = 1;
++  auto c = b + 1;
++}
+diff --git a/gcc/testsuite/g++.dg/cpp0x/pr78890-2.C b/gcc/testsuite/g++.dg/cpp0x/pr78890-2.C
+new file mode 100644
+index 000000000..0a11bf4bc
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/pr78890-2.C
+@@ -0,0 +1,44 @@
++// PR c++/78890
++// { dg-do compile { target c++11 } }
++
++template <typename T>
++int
++foo ()
++{
++  union {
++    int a;
++    int &b = a;			// { dg-error "may not have reference type" }
++  };
++  a = 1;
++  auto c = b + 1;
++  return c;
++}
++
++template <typename T>
++T
++bar ()
++{
++  union {
++    T a;
++    T &b = a;			// { dg-error "may not have reference type" }
++  };
++  a = 1;
++  auto c = b + 1;
++  return c;
++}
++
++template <typename T, typename U>
++T baz()
++{
++  union {
++    T a;
++    U b = a;			// { dg-error "may not have reference type" }
++  };
++  a = 1;
++  auto c = b + 1;
++  return c;
++}
++
++int a = foo<int> ();
++int b = bar<int> ();
++int c = baz<int, int &> ();
+diff --git a/gcc/testsuite/g++.dg/cpp0x/union6.C b/gcc/testsuite/g++.dg/cpp0x/union6.C
+index 1706da9db..408755e31 100644
+--- a/gcc/testsuite/g++.dg/cpp0x/union6.C
++++ b/gcc/testsuite/g++.dg/cpp0x/union6.C
+@@ -12,9 +12,9 @@ union Test2 {
+ const int Test2::kConstant = 10;
+ 
+ union Test3 {
+-  int& kConstant;
++  int& kConstant;	// { dg-error "may not have reference type" }
+ };
+ 
+ union Test4 {
+-  const int& kConstant = 10;
++  const int& kConstant = 10;	// { dg-error "may not have reference type" }
+ };
+diff --git a/gcc/testsuite/g++.dg/cpp0x/union8.C b/gcc/testsuite/g++.dg/cpp0x/union8.C
+new file mode 100644
+index 000000000..11b9656f7
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/union8.C
+@@ -0,0 +1,26 @@
++// PR c++/78890
++// { dg-do compile { target c++11 } }
++
++union Test1 {
++  static int kConstant;
++};
++
++union Test2 {
++  static const int kConstant;
++};
++
++const int Test2::kConstant = 10;
++
++int k;
++
++union Test3 {
++  static int& kRef;
++};
++
++int& Test3::kRef = k;
++
++union Test4 {
++  static const int& kRef;
++};
++
++const int& Test4::kRef = 10;
+diff --git a/gcc/testsuite/g++.dg/init/ref14.C b/gcc/testsuite/g++.dg/init/ref14.C
+index 2e522c195..6ac42415b 100644
+--- a/gcc/testsuite/g++.dg/init/ref14.C
++++ b/gcc/testsuite/g++.dg/init/ref14.C
+@@ -4,7 +4,7 @@
+ 
+ union A
+ {
+-  int &i; // { dg-error "may not have reference type" "" { target { ! c++11 } } }
++  int &i; // { dg-error "may not have reference type" }
+ };
+ 
+ void foo()
+diff --git a/gcc/testsuite/g++.dg/init/union1.C b/gcc/testsuite/g++.dg/init/union1.C
+index ea88346eb..ccae3786b 100644
+--- a/gcc/testsuite/g++.dg/init/union1.C
++++ b/gcc/testsuite/g++.dg/init/union1.C
+@@ -1,5 +1,5 @@
+ // PR c++/14401
+ 
+ union U {
+-  int& i; // { dg-error "reference type" "" { target { ! c++11 } } }
++  int& i; // { dg-error "reference type" }
+ };

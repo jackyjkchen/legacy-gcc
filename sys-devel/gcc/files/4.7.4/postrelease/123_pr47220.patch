@@ -1,0 +1,66 @@
+diff --git a/gcc/cp/pt.c b/gcc/cp/pt.c
+index 00885d82d..a651d0e71 100644
+--- a/gcc/cp/pt.c
++++ b/gcc/cp/pt.c
+@@ -6431,7 +6431,12 @@ coerce_template_parameter_pack (tree parms,
+             TREE_VEC_ELT (packed_types, arg_idx - parm_idx);
+         }
+ 
+-      if (arg != error_mark_node)
++      if (arg == error_mark_node)
++	{
++	  if (complain & tf_error)
++	    error ("template argument %d is invalid", arg_idx + 1);
++	}
++      else
+ 	arg = convert_template_argument (actual_parm, 
+ 					 arg, new_args, complain, parm_idx,
+ 					 in_decl);
+diff --git a/gcc/testsuite/g++.dg/cpp0x/pr39639.C b/gcc/testsuite/g++.dg/cpp0x/pr39639.C
+index 4fd8b56fd..0838a0ba2 100644
+--- a/gcc/testsuite/g++.dg/cpp0x/pr39639.C
++++ b/gcc/testsuite/g++.dg/cpp0x/pr39639.C
+@@ -2,6 +2,7 @@
+ // Origin: PR c++/39639
+ // { dg-do compile }
+ // { dg-options "-std=c++0x" }
++// { dg-prune-output "template argument 1 is invalid" }
+ 
+ template <class... Types>
+ struct S
+diff --git a/gcc/testsuite/g++.dg/cpp0x/variadic126.C b/gcc/testsuite/g++.dg/cpp0x/variadic126.C
+new file mode 100644
+index 000000000..513c7e54a
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/variadic126.C
+@@ -0,0 +1,8 @@
++// PR c++/47220
++// { dg-do compile { target c++11 } }
++
++template < typename ... > struct A;
++
++struct B : A <			// { dg-error "invalid" }
++{
++};
+diff --git a/gcc/testsuite/g++.dg/debug/dwarf2/pr52260.C b/gcc/testsuite/g++.dg/debug/dwarf2/pr52260.C
+index 9ab2589ce..024afc8bc 100644
+--- a/gcc/testsuite/g++.dg/debug/dwarf2/pr52260.C
++++ b/gcc/testsuite/g++.dg/debug/dwarf2/pr52260.C
+@@ -22,7 +22,7 @@ namespace A
+ {
+   template <typename T>
+   struct I : H <T> {};
+-  template <typename ...> struct J;
++  template <typename ...> struct J {};
+   template <typename> struct K;
+   struct L
+   {
+@@ -36,7 +36,7 @@ namespace A
+   template <typename T, typename B2, typename ... B4>
+   struct N <T (B4 ...), B2> : L::M <B2> {};
+   template <typename T, typename ... B4>
+-  struct K <T (B4 ...)> :J <,>, L
++  struct K <T (B4 ...)> :J <>, L
+   {
+     typedef T O (B4 ...);
+     struct P {};

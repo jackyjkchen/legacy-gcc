@@ -1,0 +1,44 @@
+diff --git a/gcc/fortran/target-memory.c b/gcc/fortran/target-memory.c
+index f4890aa06..110fcf71e 100644
+--- a/gcc/fortran/target-memory.c
++++ b/gcc/fortran/target-memory.c
+@@ -552,6 +552,7 @@ gfc_interpret_derived (unsigned char *buffer, size_t buffer_size, gfc_expr *resu
+       gcc_assert (ptr % 8 == 0);
+       ptr = ptr/8 + TREE_INT_CST_LOW (DECL_FIELD_OFFSET (cmp->backend_decl));
+ 
++      gcc_assert (e->ts.type != BT_VOID || cmp->attr.caf_token);
+       gfc_target_interpret_expr (&buffer[ptr], buffer_size - ptr, e, true);
+     }
+ 
+@@ -607,6 +608,13 @@ gfc_target_interpret_expr (unsigned char *buffer, size_t buffer_size,
+       gcc_assert (result->representation.length >= 0);
+       break;
+ 
++    case BT_VOID:
++      /* This deals with caf_tokens.  */
++      result->representation.length =
++        gfc_interpret_integer (result->ts.kind, buffer, buffer_size,
++			       result->value.integer);
++      break;
++
+     default:
+       gfc_internal_error ("Invalid expression in gfc_target_interpret_expr.");
+       break;
+diff --git a/gcc/testsuite/gfortran.dg/coarray_47.f90 b/gcc/testsuite/gfortran.dg/coarray_47.f90
+new file mode 100644
+index 000000000..ad83920fc
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/coarray_47.f90
+@@ -0,0 +1,12 @@
++! { dg-do compile }
++! { dg-options "-fcoarray=single" }
++!
++! Contributed by G Steinmetz  <gscfq@t-online.de>
++!
++program p
++   type t
++      integer, allocatable :: t
++   end type
++   type(t) :: x
++   print *, transfer(1, x) ! { dg-error "cannot have ALLOCATABLE components" }
++end

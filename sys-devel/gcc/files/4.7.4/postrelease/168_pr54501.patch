@@ -1,0 +1,52 @@
+diff --git a/gcc/cp/decl.c b/gcc/cp/decl.c
+index cf579c5a9..70773bb4e 100644
+--- a/gcc/cp/decl.c
++++ b/gcc/cp/decl.c
+@@ -5008,6 +5008,7 @@ reshape_init_array_1 (tree elt_type, tree max_index, reshape_iter *d,
+        ++index)
+     {
+       tree elt_init;
++      constructor_elt *old_cur = d->cur;
+ 
+       check_array_designated_initializer (d->cur, index);
+       elt_init = reshape_init_r (elt_type, d, /*first_initializer_p=*/false,
+@@ -5018,6 +5019,10 @@ reshape_init_array_1 (tree elt_type, tree max_index, reshape_iter *d,
+ 			      size_int (index), elt_init);
+       if (!TREE_CONSTANT (elt_init))
+ 	TREE_CONSTANT (new_init) = false;
++
++      /* This can happen with an invalid initializer (c++/54501).  */
++      if (d->cur == old_cur && !sized_array_p)
++	break;
+     }
+ 
+   return new_init;
+diff --git a/gcc/testsuite/g++.dg/init/array30.C b/gcc/testsuite/g++.dg/init/array30.C
+new file mode 100644
+index 000000000..696d9bf99
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/init/array30.C
+@@ -0,0 +1,7 @@
++// PR c++/54501
++// { dg-options "" }
++
++int main()
++{
++  int a[][0] = {0};  // { dg-error "too many" }
++}
+diff --git a/gcc/testsuite/g++.dg/init/array31.C b/gcc/testsuite/g++.dg/init/array31.C
+new file mode 100644
+index 000000000..9bb66a595
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/init/array31.C
+@@ -0,0 +1,10 @@
++// PR c++/54501
++// { dg-options "" }
++
++struct A
++{
++  int i[0];
++  int j;
++};
++
++struct A a = { 1 };

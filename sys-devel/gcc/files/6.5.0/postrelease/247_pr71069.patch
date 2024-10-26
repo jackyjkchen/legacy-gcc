@@ -1,0 +1,46 @@
+diff --git a/gcc/fortran/resolve.c b/gcc/fortran/resolve.c
+index 5ebd8aab5..42788132c 100644
+--- a/gcc/fortran/resolve.c
++++ b/gcc/fortran/resolve.c
+@@ -2925,6 +2925,13 @@ resolve_function (gfc_expr *expr)
+   if (gfc_is_proc_ptr_comp (expr))
+     return true;
+ 
++  /* Avoid re-resolving the arguments of caf_get, which can lead to inserting
++     another caf_get.  */
++  if (sym && sym->attr.intrinsic
++      && (sym->intmod_sym_id == GFC_ISYM_CAF_GET
++	  || sym->intmod_sym_id == GFC_ISYM_CAF_SEND))
++    return true;
++
+   if (sym && sym->attr.intrinsic
+       && !gfc_resolve_intrinsic (sym, &expr->where))
+     return false;
+@@ -14666,6 +14673,10 @@ check_data_variable (gfc_data_variable *var, locus *where)
+   mpz_init_set_si (offset, 0);
+   e = var->expr;
+ 
++  if (e->expr_type == EXPR_FUNCTION && e->value.function.isym
++      && e->value.function.isym->id == GFC_ISYM_CAF_GET)
++    e = e->value.function.actual->expr;
++
+   if (e->expr_type != EXPR_VARIABLE)
+     gfc_internal_error ("check_data_variable(): Bad expression");
+ 
+diff --git a/gcc/testsuite/gfortran.dg/coarray/data_1.f90 b/gcc/testsuite/gfortran.dg/coarray/data_1.f90
+new file mode 100644
+index 000000000..d68ac14bc
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/coarray/data_1.f90
+@@ -0,0 +1,11 @@
++! { dg-do compile }
++!
++! PR fortran/71068
++!
++! Contributed by Gerhard Steinmetz
++!
++program p
++   integer :: a(2)[*]
++   data a(1)[1] /1/  ! { dg-error "cannot have a coindex" }
++   data a(2)[1] /2/  ! { dg-error "cannot have a coindex" }
++end

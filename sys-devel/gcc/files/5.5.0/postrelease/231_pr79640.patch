@@ -1,0 +1,35 @@
+diff --git a/gcc/cp/pt.c b/gcc/cp/pt.c
+index 5bbf11d7a..bbd5bf43d 100644
+--- a/gcc/cp/pt.c
++++ b/gcc/cp/pt.c
+@@ -13210,6 +13210,9 @@ tsubst_copy (tree t, tree args, tsubst_flags_t complain, tree in_decl)
+ 		     local static or constant.  Building a new VAR_DECL
+ 		     should be OK in all those cases.  */
+ 		  r = tsubst_decl (t, args, complain);
++		  if (local_specializations)
++		    /* Avoid infinite recursion (79640).  */
++		    register_local_specialization (r, t);
+ 		  if (decl_maybe_constant_var_p (r))
+ 		    {
+ 		      /* We can't call cp_finish_decl, so handle the
+diff --git a/gcc/testsuite/g++.dg/cpp1y/lambda-generic-const3.C b/gcc/testsuite/g++.dg/cpp1y/lambda-generic-const3.C
+new file mode 100644
+index 000000000..9c9dbac70
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp1y/lambda-generic-const3.C
+@@ -0,0 +1,15 @@
++// PR c++/79640
++// { dg-do compile { target c++14 } }
++
++template<typename F> void foo(F f)
++{
++  f(1);
++}
++
++template<int> void bar()
++{
++  const int i = i;
++  foo([] (auto) { sizeof(i); });
++}
++
++void baz() { bar<1>(); }

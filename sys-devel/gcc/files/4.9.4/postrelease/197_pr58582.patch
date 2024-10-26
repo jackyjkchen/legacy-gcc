@@ -1,0 +1,102 @@
+diff --git a/gcc/cp/decl.c b/gcc/cp/decl.c
+index 6002012d1..9efe8d967 100644
+--- a/gcc/cp/decl.c
++++ b/gcc/cp/decl.c
+@@ -7859,6 +7859,8 @@ grokfndecl (tree ctype,
+ 		     decl, ctype);
+ 	      return NULL_TREE;
+ 	    }
++	  if (ok == error_mark_node)
++	    return NULL_TREE;
+ 	  return old_decl;
+ 	}
+     }
+diff --git a/gcc/cp/pt.c b/gcc/cp/pt.c
+index f332026f6..b47b7d8c6 100644
+--- a/gcc/cp/pt.c
++++ b/gcc/cp/pt.c
+@@ -19762,7 +19762,8 @@ instantiate_decl (tree d, int defer_ok,
+ 
+   if (TREE_CODE (d) == FUNCTION_DECL)
+     pattern_defined = (DECL_SAVED_TREE (code_pattern) != NULL_TREE
+-		       || DECL_DEFAULTED_OUTSIDE_CLASS_P (code_pattern));
++		       || DECL_DEFAULTED_OUTSIDE_CLASS_P (code_pattern)
++		       || DECL_DELETED_FN (code_pattern));
+   else
+     pattern_defined = ! DECL_IN_AGGR_P (code_pattern);
+ 
+@@ -20029,14 +20030,17 @@ instantiate_decl (tree d, int defer_ok,
+ 		       tf_warning_or_error, tmpl,
+ 		       /*integral_constant_expression_p=*/false);
+ 
+-	  /* Set the current input_location to the end of the function
+-	     so that finish_function knows where we are.  */
+-	  input_location
+-	    = DECL_STRUCT_FUNCTION (code_pattern)->function_end_locus;
+-
+-	  /* Remember if we saw an infinite loop in the template.  */
+-	  current_function_infinite_loop
+-	    = DECL_STRUCT_FUNCTION (code_pattern)->language->infinite_loop;
++	  if (DECL_STRUCT_FUNCTION (code_pattern))
++	    {
++	      /* Set the current input_location to the end of the function
++		 so that finish_function knows where we are.  */
++	      input_location
++		= DECL_STRUCT_FUNCTION (code_pattern)->function_end_locus;
++
++	      /* Remember if we saw an infinite loop in the template.  */
++	      current_function_infinite_loop
++		= DECL_STRUCT_FUNCTION (code_pattern)->language->infinite_loop;
++	    }
+ 	}
+ 
+       /* We don't need the local specializations any more.  */
+diff --git a/gcc/testsuite/g++.dg/cpp0x/deleted4.C b/gcc/testsuite/g++.dg/cpp0x/deleted4.C
+new file mode 100644
+index 000000000..22439d457
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/deleted4.C
+@@ -0,0 +1,11 @@
++// PR c++/58582
++// { dg-do compile { target c++11 } }
++
++struct A
++{
++  template<int> void foo() = delete;
++};
++
++template<int> void A::foo() { int i; } // { dg-error "redefinition" }
++
++template void A::foo<0>();
+diff --git a/gcc/testsuite/g++.dg/cpp0x/deleted5.C b/gcc/testsuite/g++.dg/cpp0x/deleted5.C
+new file mode 100644
+index 000000000..51010efda
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/deleted5.C
+@@ -0,0 +1,11 @@
++// PR c++/58582
++// { dg-do compile { target c++11 } }
++
++struct A
++{
++  template<int> void foo() = delete;
++};
++
++template<int> void A::foo() {} // { dg-error "redefinition" }
++
++template void A::foo<0>();
+diff --git a/gcc/testsuite/g++.dg/cpp0x/deleted6.C b/gcc/testsuite/g++.dg/cpp0x/deleted6.C
+new file mode 100644
+index 000000000..af25b505d
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/deleted6.C
+@@ -0,0 +1,9 @@
++// PR c++/58582
++// { dg-do compile { target c++11 } }
++
++struct A
++{
++  template<int> void foo() = delete;
++};
++
++template void A::foo<0>();

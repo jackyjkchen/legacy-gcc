@@ -1,0 +1,105 @@
+diff --git a/gcc/cp/parser.c b/gcc/cp/parser.c
+index 7b3b63574..83d3b1181 100644
+--- a/gcc/cp/parser.c
++++ b/gcc/cp/parser.c
+@@ -1987,7 +1987,7 @@ static cp_parameter_declarator *cp_parser_parameter_declaration
+ static tree cp_parser_default_argument 
+   (cp_parser *, bool);
+ static void cp_parser_function_body
+-  (cp_parser *);
++  (cp_parser *, bool);
+ static tree cp_parser_initializer
+   (cp_parser *, bool *, bool *);
+ static tree cp_parser_initializer_clause
+@@ -1998,7 +1998,7 @@ static VEC(constructor_elt,gc) *cp_parser_initializer_list
+   (cp_parser *, bool *);
+ 
+ static bool cp_parser_ctor_initializer_opt_and_function_body
+-  (cp_parser *);
++  (cp_parser *, bool);
+ 
+ /* Classes [gram.class] */
+ 
+@@ -17426,16 +17426,18 @@ cp_parser_default_argument (cp_parser *parser, bool template_parm_p)
+      compound_statement  */
+ 
+ static void
+-cp_parser_function_body (cp_parser *parser)
++cp_parser_function_body (cp_parser *parser, bool in_function_try_block)
+ {
+-  cp_parser_compound_statement (parser, NULL, false, true);
++  cp_parser_compound_statement (parser, NULL, in_function_try_block, true);
+ }
+ 
+ /* Parse a ctor-initializer-opt followed by a function-body.  Return
+-   true if a ctor-initializer was present.  */
++   true if a ctor-initializer was present.  When IN_FUNCTION_TRY_BLOCK
++   is true we are parsing a function-try-block.  */
+ 
+ static bool
+-cp_parser_ctor_initializer_opt_and_function_body (cp_parser *parser)
++cp_parser_ctor_initializer_opt_and_function_body (cp_parser *parser,
++						  bool in_function_try_block)
+ {
+   tree body, list;
+   bool ctor_initializer_p;
+@@ -17462,7 +17464,7 @@ cp_parser_ctor_initializer_opt_and_function_body (cp_parser *parser)
+ 	last = STATEMENT_LIST_TAIL (list)->stmt;
+     }
+   /* Parse the function-body.  */
+-  cp_parser_function_body (parser);
++  cp_parser_function_body (parser, in_function_try_block);
+   if (check_body_p)
+     check_constexpr_ctor_body (last, list);
+   /* Finish the function body.  */
+@@ -19752,8 +19754,8 @@ cp_parser_function_try_block (cp_parser* parser)
+   /* Let the rest of the front end know where we are.  */
+   try_block = begin_function_try_block (&compound_stmt);
+   /* Parse the function-body.  */
+-  ctor_initializer_p
+-    = cp_parser_ctor_initializer_opt_and_function_body (parser);
++  ctor_initializer_p = cp_parser_ctor_initializer_opt_and_function_body
++    (parser, /*in_function_try_block=*/true);
+   /* We're done with the `try' part.  */
+   finish_function_try_block (try_block);
+   /* Parse the handlers.  */
+@@ -21104,8 +21106,8 @@ cp_parser_function_definition_after_declarator (cp_parser* parser,
+   else if (cp_lexer_next_token_is_keyword (parser->lexer, RID_TRY))
+     ctor_initializer_p = cp_parser_function_try_block (parser);
+   else
+-    ctor_initializer_p
+-      = cp_parser_ctor_initializer_opt_and_function_body (parser);
++    ctor_initializer_p = cp_parser_ctor_initializer_opt_and_function_body
++      (parser, /*in_function_try_block=*/false);
+ 
+   finish_lambda_scope ();
+ 
+@@ -27185,8 +27187,8 @@ cp_parser_function_transaction (cp_parser *parser, enum rid keyword)
+   if (cp_lexer_next_token_is_keyword (parser->lexer, RID_TRY))
+     ctor_initializer_p = cp_parser_function_try_block (parser);
+   else
+-    ctor_initializer_p
+-      = cp_parser_ctor_initializer_opt_and_function_body (parser);
++    ctor_initializer_p = cp_parser_ctor_initializer_opt_and_function_body
++      (parser, /*in_function_try_block=*/false);
+ 
+   parser->in_transaction = old_in;
+ 
+diff --git a/gcc/testsuite/g++.dg/eh/goto2.C b/gcc/testsuite/g++.dg/eh/goto2.C
+new file mode 100644
+index 000000000..de06d50b6
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/eh/goto2.C
+@@ -0,0 +1,12 @@
++// PR c++/32080
++
++void f()
++try
++  {
++    goto l2;       // { dg-error "from here" }
++  l1: ;            // { dg-error "jump to label 'l1'" }
++  } catch (...)
++  {
++  l2: ;            // { dg-error "jump to label 'l2'|enters catch block" }
++    goto l1;       // { dg-error "from here|enters try block" }
++  }

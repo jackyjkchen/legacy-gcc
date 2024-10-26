@@ -1,0 +1,29 @@
+diff --git a/gcc/cp/parser.c b/gcc/cp/parser.c
+index b057b5b75..f9d31b465 100644
+--- a/gcc/cp/parser.c
++++ b/gcc/cp/parser.c
+@@ -20666,7 +20666,10 @@ cp_parser_member_declaration (cp_parser* parser)
+ 	  if (decl)
+ 	    {
+ 	      /* Add DECL to the list of members.  */
+-	      if (!friend_p)
++	      if (!friend_p
++		  /* Explicitly include, eg, NSDMIs, for better error
++		     recovery (c++/58650).  */
++		  || !DECL_DECLARES_FUNCTION_P (decl))
+ 		finish_member_declaration (decl);
+ 
+ 	      if (TREE_CODE (decl) == FUNCTION_DECL)
+diff --git a/gcc/testsuite/g++.dg/parse/friend12.C b/gcc/testsuite/g++.dg/parse/friend12.C
+new file mode 100644
+index 000000000..f0e28a852
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/parse/friend12.C
+@@ -0,0 +1,7 @@
++// PR c++/58650
++
++struct A
++{
++  friend int i = 0;  // { dg-error "cannot be declared friend" }
++// { dg-error "non-static data member" "" { target { ! c++11 } } 5 }
++};

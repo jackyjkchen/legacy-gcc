@@ -1,0 +1,33 @@
+diff --git a/gcc/c-family/c-common.c b/gcc/c-family/c-common.c
+index 629cc6c01..def7239e1 100644
+--- a/gcc/c-family/c-common.c
++++ b/gcc/c-family/c-common.c
+@@ -9622,7 +9622,7 @@ fold_offsetof_1 (tree expr)
+     case COMPOUND_EXPR:
+       /* Handle static members of volatile structs.  */
+       t = TREE_OPERAND (expr, 1);
+-      gcc_assert (TREE_CODE (t) == VAR_DECL);
++      gcc_checking_assert (VAR_P (get_base_address (t)));
+       return fold_offsetof_1 (t);
+ 
+     default:
+diff --git a/gcc/testsuite/g++.dg/ext/builtin-offsetof3.C b/gcc/testsuite/g++.dg/ext/builtin-offsetof3.C
+new file mode 100644
+index 000000000..79c358b6a
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/ext/builtin-offsetof3.C
+@@ -0,0 +1,14 @@
++// PR c++/85061
++// { dg-do compile }
++
++struct B { int a, b; };
++struct A
++{
++  static int x[2];
++  static int y;
++  static B z;
++};
++
++int i = __builtin_offsetof (volatile A, x[0]);	// { dg-error "cannot apply 'offsetof' to static data member 'A::x'" }
++int j = __builtin_offsetof (volatile A, y);	// { dg-error "cannot apply 'offsetof' to static data member 'A::y'" }
++int k = __builtin_offsetof (volatile A, z.a);	// { dg-error "cannot apply 'offsetof' to a non constant address" }

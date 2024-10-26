@@ -1,0 +1,38 @@
+diff --git a/gcc/cp/class.c b/gcc/cp/class.c
+index 01400eed8..2b82e2ecd 100644
+--- a/gcc/cp/class.c
++++ b/gcc/cp/class.c
+@@ -6145,7 +6145,7 @@ finish_struct_1 (tree t)
+       tree field = first_field (t);
+       if (field == NULL_TREE || error_operand_p (field))
+ 	{
+-	  error ("type transparent class %qT does not have any fields", t);
++	  error ("type transparent %q#T does not have any fields", t);
+ 	  TYPE_TRANSPARENT_AGGR (t) = 0;
+ 	}
+       else if (DECL_ARTIFICIAL (field))
+@@ -6159,6 +6159,13 @@ finish_struct_1 (tree t)
+ 	    }
+ 	  TYPE_TRANSPARENT_AGGR (t) = 0;
+ 	}
++      else if (TYPE_MODE (t) != DECL_MODE (field))
++	{
++	  error ("type transparent %q#T cannot be made transparent because "
++		 "the type of the first field has a different ABI from the "
++		 "class overall", t);
++	  TYPE_TRANSPARENT_AGGR (t) = 0;
++	}
+     }
+ }
+ 
+diff --git a/gcc/testsuite/g++.dg/ext/transparent-union.C b/gcc/testsuite/g++.dg/ext/transparent-union.C
+new file mode 100644
+index 000000000..123156361
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/ext/transparent-union.C
+@@ -0,0 +1,5 @@
++// PR c++/53761
++
++typedef union {    // { dg-error "type transparent" }
++   double x;
++} __attribute__(( __transparent_union__ )) example_t;

@@ -1,0 +1,53 @@
+diff --git a/gcc/cp/parser.c b/gcc/cp/parser.c
+index ac23fc951..a39417d9f 100644
+--- a/gcc/cp/parser.c
++++ b/gcc/cp/parser.c
+@@ -8794,16 +8794,17 @@ cp_parser_label_for_labeled_statement (cp_parser* parser)
+ 	expr = cp_parser_constant_expression (parser,
+ 					      /*allow_non_constant_p=*/false,
+ 					      NULL);
++	if (check_for_bare_parameter_packs (expr))
++	  expr = error_mark_node;
+ 
+ 	ellipsis = cp_lexer_peek_token (parser->lexer);
+ 	if (ellipsis->type == CPP_ELLIPSIS)
+ 	  {
+ 	    /* Consume the `...' token.  */
+ 	    cp_lexer_consume_token (parser->lexer);
+-	    expr_hi =
+-	      cp_parser_constant_expression (parser,
+-					     /*allow_non_constant_p=*/false,
+-					     NULL);
++	    expr_hi = cp_parser_constant_expression (parser, false, NULL);
++	    if (check_for_bare_parameter_packs (expr_hi))
++	      expr_hi = error_mark_node;
+ 	    /* We don't need to emit warnings here, as the common code
+ 	       will do this for us.  */
+ 	  }
+diff --git a/gcc/testsuite/g++.dg/cpp0x/variadic163.C b/gcc/testsuite/g++.dg/cpp0x/variadic163.C
+new file mode 100644
+index 000000000..1f3d90956
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/variadic163.C
+@@ -0,0 +1,21 @@
++// PR c++/63786
++// { dg-do compile { target c++11 } }
++// { dg-options "" }
++
++template <int... Is>
++int f(int i) {
++    switch (i) {
++        case Is:       // { dg-error "not expanded" }
++            return 0;
++    }
++
++    switch (i) {
++        case 0 ...Is:  // { dg-error "not expanded" }
++            return 0;
++    }
++    return 0;
++}
++
++int main() {
++    f<1,2,3>(1);
++}

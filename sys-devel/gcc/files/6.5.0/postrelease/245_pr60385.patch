@@ -1,0 +1,100 @@
+diff --git a/gcc/cp/name-lookup.c b/gcc/cp/name-lookup.c
+index 9e77f04b1..c6193a8c4 100644
+--- a/gcc/cp/name-lookup.c
++++ b/gcc/cp/name-lookup.c
+@@ -3704,9 +3704,10 @@ handle_namespace_attrs (tree ns, tree attributes)
+ }
+   
+ /* Push into the scope of the NAME namespace.  If NAME is NULL_TREE, then we
+-   select a name that is unique to this compilation unit.  */
++   select a name that is unique to this compilation unit.  Returns FALSE if
++   pushdecl fails, TRUE otherwise.  */
+ 
+-void
++bool
+ push_namespace (tree name)
+ {
+   tree d = NULL_TREE;
+@@ -3780,7 +3781,11 @@ push_namespace (tree name)
+ 	TREE_PUBLIC (d) = 0;
+       else
+ 	TREE_PUBLIC (d) = 1;
+-      pushdecl (d);
++      if (pushdecl (d) == error_mark_node)
++	{
++	  timevar_cond_stop (TV_NAME_LOOKUP, subtime);
++	  return false;
++	}
+       if (anon)
+ 	{
+ 	  /* Clear DECL_NAME for the benefit of debugging back ends.  */
+@@ -3798,6 +3803,7 @@ push_namespace (tree name)
+   current_namespace = d;
+ 
+   timevar_cond_stop (TV_NAME_LOOKUP, subtime);
++  return true;
+ }
+ 
+ /* Pop from the scope of the current namespace.  */
+diff --git a/gcc/cp/name-lookup.h b/gcc/cp/name-lookup.h
+index 2f8447a64..2cb129caa 100644
+--- a/gcc/cp/name-lookup.h
++++ b/gcc/cp/name-lookup.h
+@@ -312,7 +312,7 @@ extern tree push_inner_scope (tree);
+ extern void pop_inner_scope (tree, tree);
+ extern void push_binding_level (cp_binding_level *);
+ 
+-extern void push_namespace (tree);
++extern bool push_namespace (tree);
+ extern void pop_namespace (void);
+ extern void push_nested_namespace (tree);
+ extern void pop_nested_namespace (tree);
+diff --git a/gcc/cp/parser.c b/gcc/cp/parser.c
+index 5a0380bc4..9b427644a 100644
+--- a/gcc/cp/parser.c
++++ b/gcc/cp/parser.c
+@@ -17611,7 +17611,7 @@ cp_parser_namespace_definition (cp_parser* parser)
+     }
+ 
+   /* Start the namespace.  */
+-  push_namespace (identifier);
++  bool ok = push_namespace (identifier);
+ 
+   /* Parse any nested namespace definition. */
+   if (cp_lexer_next_token_is (parser->lexer, CPP_SCOPE))
+@@ -17644,7 +17644,7 @@ cp_parser_namespace_definition (cp_parser* parser)
+ 
+   /* "inline namespace" is equivalent to a stub namespace definition
+      followed by a strong using directive.  */
+-  if (is_inline)
++  if (is_inline && ok)
+     {
+       tree name_space = current_namespace;
+       /* Set up namespace association.  */
+@@ -17672,7 +17672,8 @@ cp_parser_namespace_definition (cp_parser* parser)
+     pop_namespace ();
+ 
+   /* Finish the namespace.  */
+-  pop_namespace ();
++  if (ok)
++    pop_namespace ();
+   /* Look for the final `}'.  */
+   cp_parser_require (parser, CPP_CLOSE_BRACE, RT_CLOSE_BRACE);
+ }
+diff --git a/gcc/testsuite/g++.dg/parse/namespace13.C b/gcc/testsuite/g++.dg/parse/namespace13.C
+new file mode 100644
+index 000000000..5a0538464
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/parse/namespace13.C
+@@ -0,0 +1,11 @@
++// PR c++/60385
++
++float foo4();   // { dg-message "previous declaration" }
++
++namespace foo4  // { dg-error "redeclared" }
++{
++  struct bar6
++    {
++      friend wchar_t bar1();
++    };
++}

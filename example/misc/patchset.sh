@@ -1,4 +1,5 @@
 #!/bin/sh
+git clean -dfx
 for i in /var/lib/layman/legacy-gcc/sys-devel/gcc/files/$1/postrelease/*_pr*.patch
 do
 	patch -p1 < $i
@@ -6,5 +7,5 @@ do
 		echo "patch failed!"
 		exit -1
 	fi
-	git add . && git diff HEAD > $i && git clean -dfx && git commit -m "$(basename $i)"
+	git add . && git diff HEAD > $i && git commit -m "$(basename $i)"
 done
