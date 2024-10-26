@@ -154,7 +154,7 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/134_pr58560.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/135_pr71251.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/136_pr82872.patch
-	eapply "${FILESDIR}"/${PV}/postrelease/137_pr51631.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/137_pr54501.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/138_pr60628.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/139_pr53761.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/140_pr85068.patch
@@ -185,7 +185,6 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/165_pr58705.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/166_pr32080.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/167_pr53055.patch
-	eapply "${FILESDIR}"/${PV}/postrelease/168_pr54501.patch
 
 	if use test ; then
 		rm -rf gcc/testsuite/gcc.c-torture/execute/vfprintf-chk-1.c gcc/testsuite/gcc.c-torture/execute/vprintf-chk-1.c gcc/testsuite/gcc.dg/format/opt-*.c
