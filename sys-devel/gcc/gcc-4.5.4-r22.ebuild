@@ -151,7 +151,6 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/128_pr45665.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/129_pr43082.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/130_pr45117.patch
-	eapply "${FILESDIR}"/${PV}/postrelease/131_pr44086.patch
 
 	if use test ; then
 		eapply "${FILESDIR}"/${PV}/postrelease/900_fix-known-test-fail.patch
