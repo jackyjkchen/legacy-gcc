@@ -1,0 +1,87 @@
+diff --git a/gcc/cp/cp-tree.h b/gcc/cp/cp-tree.h
+index a5398b59..1fa8fcad 100644
+--- a/gcc/cp/cp-tree.h
++++ b/gcc/cp/cp-tree.h
+@@ -3990,7 +3990,7 @@ extern void check_member_template		(tree);
+ extern tree grokfield (const cp_declarator *, cp_decl_specifier_seq *,
+ 		       tree, bool, tree, tree);
+ extern tree grokbitfield (const cp_declarator *, cp_decl_specifier_seq *,
+-			  tree);
++			  tree, tree);
+ extern void cplus_decl_attributes		(tree *, tree, int);
+ extern void finish_anon_union			(tree);
+ extern void cp_finish_file			(void);
+diff --git a/gcc/cp/decl2.c b/gcc/cp/decl2.c
+index 7ec6f5a7..5796f54f 100644
+--- a/gcc/cp/decl2.c
++++ b/gcc/cp/decl2.c
+@@ -929,9 +929,10 @@ grokfield (const cp_declarator *declarator,
+ 
+ tree
+ grokbitfield (const cp_declarator *declarator,
+-	      cp_decl_specifier_seq *declspecs, tree width)
++	      cp_decl_specifier_seq *declspecs, tree width,
++	      tree attrlist)
+ {
+-  tree value = grokdeclarator (declarator, declspecs, BITFIELD, 0, NULL);
++  tree value = grokdeclarator (declarator, declspecs, BITFIELD, 0, &attrlist);
+ 
+   if (value == error_mark_node) 
+     return NULL_TREE; /* friends went bad.  */
+@@ -987,6 +988,10 @@ grokbitfield (const cp_declarator *declarator,
+     }
+ 
+   DECL_IN_AGGR_P (value) = 1;
++
++  if (attrlist)
++    cplus_decl_attributes (&value, attrlist, /*flags=*/0);
++
+   return value;
+ }
+ 
+diff --git a/gcc/cp/parser.c b/gcc/cp/parser.c
+index f69ec434..7ed7c3c1 100644
+--- a/gcc/cp/parser.c
++++ b/gcc/cp/parser.c
+@@ -14054,9 +14054,8 @@ cp_parser_member_declaration (cp_parser* parser)
+ 							 sfk_none)
+ 				   : NULL,
+ 				   &decl_specifiers,
+-				   width);
+-	      /* Apply the attributes.  */
+-	      cplus_decl_attributes (&decl, attributes, /*flags=*/0);
++				   width,
++				   attributes);
+ 	    }
+ 	  else
+ 	    {
+@@ -17855,11 +17854,10 @@ cp_parser_objc_class_ivars (cp_parser* parser)
+ 	  attributes = chainon (prefix_attributes, attributes);
+ 
+ 	  if (width)
+-	    {
+ 	      /* Create the bitfield declaration.  */
+-	      decl = grokbitfield (declarator, &declspecs, width);
+-	      cplus_decl_attributes (&decl, attributes, /*flags=*/0);
+-	    }
++	      decl = grokbitfield (declarator, &declspecs,
++				   width,
++				   attributes);
+ 	  else
+ 	    decl = grokfield (declarator, &declspecs,
+ 			      NULL_TREE, /*init_const_expr_p=*/false,
+diff --git a/gcc/testsuite/g++.dg/parse/bitfield3.C b/gcc/testsuite/g++.dg/parse/bitfield3.C
+new file mode 100644
+index 00000000..d907dcdd
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/parse/bitfield3.C
+@@ -0,0 +1,9 @@
++/* PR c++/35320 */
++/* { dg-do "compile" } */
++
++typedef void (func_type)();
++
++struct A
++{
++  friend func_type f : 2; /* { dg-error "with non-integral type" } */
++};

@@ -1,0 +1,58 @@
+diff --git a/gcc/fortran/array.c b/gcc/fortran/array.c
+index 915f1f59..422fc0f7 100644
+--- a/gcc/fortran/array.c
++++ b/gcc/fortran/array.c
+@@ -1727,7 +1727,9 @@ spec_dimen_size (gfc_array_spec * as, int dimen, mpz_t * result)
+ 
+   if (as->type != AS_EXPLICIT
+       || as->lower[dimen]->expr_type != EXPR_CONSTANT
+-      || as->upper[dimen]->expr_type != EXPR_CONSTANT)
++      || as->upper[dimen]->expr_type != EXPR_CONSTANT
++      || as->lower[dimen]->ts.type != BT_INTEGER
++      || as->upper[dimen]->ts.type != BT_INTEGER)
+     return FAILURE;
+ 
+   mpz_init (*result);
+diff --git a/gcc/fortran/decl.c b/gcc/fortran/decl.c
+index ad4f14c6..701edfc5 100644
+--- a/gcc/fortran/decl.c
++++ b/gcc/fortran/decl.c
+@@ -1633,14 +1633,23 @@ rparen:
+ syntax:
+   gfc_error ("Syntax error in CHARACTER declaration at %C");
+   m = MATCH_ERROR;
++  gfc_free_expr (len);
++  return m;
+ 
+ done:
+-  if (m == MATCH_YES && gfc_validate_kind (BT_CHARACTER, kind, true) < 0)
++  if (gfc_validate_kind (BT_CHARACTER, kind, true) < 0)
+     {
+       gfc_error ("Kind %d is not a CHARACTER kind at %C", kind);
+       m = MATCH_ERROR;
+     }
+ 
++  if (seen_length == 1 && len != NULL
++      && len->ts.type != BT_INTEGER && len->ts.type != BT_UNKNOWN)
++    {
++      gfc_error ("Expression at %C must be of INTEGER type");
++      m = MATCH_ERROR;
++    }
++
+   if (m != MATCH_YES)
+     {
+       gfc_free_expr (len);
+diff --git a/gcc/testsuite/gfortran.dg/char_type_len_2.f90 b/gcc/testsuite/gfortran.dg/char_type_len_2.f90
+new file mode 100644
+index 00000000..a5cb835b
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/char_type_len_2.f90
+@@ -0,0 +1,8 @@
++! { dg-do compile }
++! PR31251 Non-integer character length leads to segfault
++! Submitted by Jerry DeLisle  <jvdelisle@gcc.gnu.org>
++  character(len=2.3) :: s ! { dg-error "must be of INTEGER type" }
++  character(kind=1,len=4.3) : t ! { dg-error "must be of INTEGER type" }
++  character(len=,,7.2,kind=1) : u ! { dg-error "Syntax error in CHARACTER declaration" }
++  character(len=7,kind=2) : v ! ! { dg-error "Kind 2 is not a CHARACTER kind" }
++  end

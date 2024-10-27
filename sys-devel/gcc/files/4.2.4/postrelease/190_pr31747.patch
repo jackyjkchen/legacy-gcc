@@ -1,0 +1,46 @@
+diff --git a/gcc/cp/decl.c b/gcc/cp/decl.c
+index a30a1974..6877791d 100644
+--- a/gcc/cp/decl.c
++++ b/gcc/cp/decl.c
+@@ -7312,6 +7312,12 @@ grokdeclarator (const cp_declarator *declarator,
+       return error_mark_node;
+     }
+ 
++  if (declspecs->conflicting_specifiers_p)
++    {
++      error ("conflicting specifiers in declaration of %qs", name);
++      return error_mark_node;
++    }
++
+   /* Extract the basic type from the decl-specifier-seq.  */
+   type = declspecs->type;
+   if (type == error_mark_node)
+@@ -7602,15 +7608,10 @@ grokdeclarator (const cp_declarator *declarator,
+       error ("multiple storage classes in declaration of %qs", name);
+       thread_p = false;
+     }
+-  if (declspecs->conflicting_specifiers_p)
+-    {
+-      error ("conflicting specifiers in declaration of %qs", name);
+-      storage_class = sc_none;
+-    }
+-  else if (decl_context != NORMAL
+-	   && ((storage_class != sc_none
+-		&& storage_class != sc_mutable)
+-	       || thread_p))
++  if (decl_context != NORMAL
++      && ((storage_class != sc_none
++	   && storage_class != sc_mutable)
++	  || thread_p))
+     {
+       if ((decl_context == PARM || decl_context == CATCHPARM)
+ 	  && (storage_class == sc_register
+diff --git a/gcc/testsuite/g++.dg/parse/crash39.C b/gcc/testsuite/g++.dg/parse/crash39.C
+new file mode 100644
+index 00000000..2f39c10e
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/parse/crash39.C
+@@ -0,0 +1,3 @@
++// PR c++/31747
++
++static extern int i; // { dg-error "conflicting specifiers" }

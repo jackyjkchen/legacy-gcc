@@ -1,0 +1,32 @@
+diff --git a/gcc/cp/parser.c b/gcc/cp/parser.c
+index 005a4bc0..24cf4d38 100644
+--- a/gcc/cp/parser.c
++++ b/gcc/cp/parser.c
+@@ -5259,10 +5259,17 @@ cp_parser_new_expression (cp_parser* parser)
+      type-id.  */
+   if (cp_lexer_next_token_is (parser->lexer, CPP_OPEN_PAREN))
+     {
++      const char *saved_message = parser->type_definition_forbidden_message;
++
+       /* Consume the `('.  */
+       cp_lexer_consume_token (parser->lexer);
++
+       /* Parse the type-id.  */
++      parser->type_definition_forbidden_message
++	= "types may not be defined in a new-expression";
+       type = cp_parser_type_id (parser);
++      parser->type_definition_forbidden_message = saved_message;
++
+       /* Look for the closing `)'.  */
+       cp_parser_require (parser, CPP_CLOSE_PAREN, "`)'");
+       /* There should not be a direct-new-declarator in this production,
+diff --git a/gcc/testsuite/g++.dg/parse/new5.C b/gcc/testsuite/g++.dg/parse/new5.C
+new file mode 100644
+index 00000000..83937c6e
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/parse/new5.C
+@@ -0,0 +1,4 @@
++// PR c++/47450
++
++struct A { };
++A* ap = new(struct: A { });	// { dg-error "types may not be defined" }

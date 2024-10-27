@@ -1,0 +1,127 @@
+diff --git a/gcc/cp/name-lookup.c b/gcc/cp/name-lookup.c
+index b7f2e503..e43153e2 100644
+--- a/gcc/cp/name-lookup.c
++++ b/gcc/cp/name-lookup.c
+@@ -4032,16 +4032,25 @@ lookup_name_real (tree name, int prefer_type, int nonclass, bool block_p,
+ 	  {
+ 	    if (hidden_name_p (binding))
+ 	      {
+-		/* A non namespace-scope binding can only be hidden if
+-		   we are in a local class, due to friend declarations.
++		/* A non namespace-scope binding can only be hidden in the
++		   presence of a local class, due to friend declarations.
++
+ 		   In particular, consider:
+ 
++		   struct C;
+ 		   void f() {
+ 		     struct A {
+ 		       friend struct B;
+-		       void g() { B* b; } // error: B is hidden
+-		     }
++		       friend struct C;
++		       void g() {
++		         B* b; // error: B is hidden
++			 C* c; // OK, finds ::C
++		       } 
++		     };
++		     B *b;  // error: B is hidden
++		     C *c;  // OK, finds ::C
+ 		     struct B {};
++		     B *bb; // OK
+ 		   }
+ 
+ 		   The standard says that "B" is a local class in "f"
+@@ -4057,21 +4066,19 @@ lookup_name_real (tree name, int prefer_type, int nonclass, bool block_p,
+ 		   the name specified is an unqualified name, a prior
+ 		   declaration is looked up without considering scopes
+ 		   that are outside the innermost enclosing non-class
+-		   scope. For a friend class declaration, if there is no
+-		   prior declaration, the class that is specified 
+-		   belongs to the innermost enclosing non-class scope,
+-		   but if it is subsequently referenced, its name is not
+-		   found by name lookup until a matching declaration is
+-		   provided in the innermost enclosing nonclass scope.
++		   scope. For a friend function declaration, if there is
++		   no prior declaration, the program is ill-formed. For a
++		   friend class declaration, if there is no prior
++		   declaration, the class that is specified belongs to the
++		   innermost enclosing non-class scope, but if it is
++		   subsequently referenced, its name is not found by name
++		   lookup until a matching declaration is provided in the
++		   innermost enclosing nonclass scope.
++
++		   So just keep looking for a non-hidden binding.
+ 		*/
+-		gcc_assert (current_class_type &&
+-			    LOCAL_CLASS_P (current_class_type));
+-
+-		/* This binding comes from a friend declaration in the local
+-		   class. The standard (11.4.8) states that the lookup can
+-		   only succeed if there is a non-hidden declaration in the
+-		   current scope, which is not the case here.  */
+-		POP_TIMEVAR_AND_RETURN (TV_NAME_LOOKUP, NULL_TREE);
++		gcc_assert (TREE_CODE (binding) == TYPE_DECL);
++		continue;
+ 	      }
+ 	    val = binding;
+ 	    break;
+diff --git a/gcc/testsuite/g++.dg/lookup/friend11.C b/gcc/testsuite/g++.dg/lookup/friend11.C
+index ab8a9e50..cd112ca8 100644
+--- a/gcc/testsuite/g++.dg/lookup/friend11.C
++++ b/gcc/testsuite/g++.dg/lookup/friend11.C
+@@ -3,12 +3,11 @@
+ /* { dg-do "compile" } */
+ 
+ 
+-// This is invalid: QGList must only be looked up in count.
+ class QGList;
+ unsigned count() {
+   class QGListIterator {
+     friend class QGList;
+-    QGListIterator( const QGList & ); /* { dg-error "expected|with no type" } */
++    QGListIterator( const QGList & ); // OK, finds ::QGList.
+   };
+   return 0;
+ }
+diff --git a/gcc/testsuite/g++.dg/lookup/friend14.C b/gcc/testsuite/g++.dg/lookup/friend14.C
+new file mode 100644
+index 00000000..5c244112
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/lookup/friend14.C
+@@ -0,0 +1,17 @@
++// PR c++/35109
++
++struct C;
++void f() {
++  struct A {
++    friend struct B;
++    friend struct C;
++    void g()
++    {
++      B *b;			// { dg-error "not declared" }
++      C* c;			// OK, finds ::C
++    } 
++  };
++  C *c; // OK, finds ::C
++  struct B {};
++  B *b; // OK, now it isn't hidden
++}
+diff --git a/gcc/testsuite/g++.dg/lookup/friend15.C b/gcc/testsuite/g++.dg/lookup/friend15.C
+new file mode 100644
+index 00000000..1e271fc3
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/lookup/friend15.C
+@@ -0,0 +1,12 @@
++// Origin: PR c++/35109
++// { dg-do compile }
++
++void foo()
++{
++  struct A
++  {
++    friend class B;
++  };
++  B::B() {} // { dg-error "has not been declared" }
++// { dg-error "expected" "expected" { target *-*-* } 10 }
++}

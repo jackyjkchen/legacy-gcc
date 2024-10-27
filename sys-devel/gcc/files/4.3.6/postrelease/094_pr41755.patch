@@ -1,0 +1,42 @@
+diff --git a/gcc/fortran/match.c b/gcc/fortran/match.c
+index a57f3564..c25dd356 100644
+--- a/gcc/fortran/match.c
++++ b/gcc/fortran/match.c
+@@ -3185,7 +3185,10 @@ gfc_match_equivalence (void)
+       if (gfc_match_eos () == MATCH_YES)
+ 	break;
+       if (gfc_match_char (',') != MATCH_YES)
+-	goto syntax;
++	{
++	  gfc_error ("Expecting a comma in EQUIVALENCE at %C");
++	  goto cleanup;
++	}
+     }
+ 
+   return MATCH_YES;
+diff --git a/gcc/fortran/symbol.c b/gcc/fortran/symbol.c
+index f82657f3..2895fae8 100644
+--- a/gcc/fortran/symbol.c
++++ b/gcc/fortran/symbol.c
+@@ -2559,7 +2559,7 @@ gfc_undo_symbols (void)
+       if (p->new)
+ 	{
+ 	  /* Symbol was new.  */
+-	  if (p->attr.in_common && p->common_block->head)
++	  if (p->attr.in_common && p->common_block && p->common_block->head)
+ 	    {
+ 	      /* If the symbol was added to any common block, it
+ 		 needs to be removed to stop the resolver looking
+diff --git a/gcc/testsuite/gfortran.dg/equiv_8.f90 b/gcc/testsuite/gfortran.dg/equiv_8.f90
+new file mode 100644
+index 00000000..a2ed7f03
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/equiv_8.f90
+@@ -0,0 +1,7 @@
++! { dg-do compile }
++!
++! PR fortran/41755
++!
++      common /uno/ aa
++      equivalence (aa,aaaaa)   (bb,cc) ! { dg-error "Expecting a comma in EQUIVALENCE" }
++      end

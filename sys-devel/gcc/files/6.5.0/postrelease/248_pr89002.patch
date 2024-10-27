@@ -1,0 +1,72 @@
+diff --git a/gcc/gimplify.c b/gcc/gimplify.c
+index f23002709..582360d55 100644
+--- a/gcc/gimplify.c
++++ b/gcc/gimplify.c
+@@ -9339,8 +9339,17 @@ gimplify_omp_for (tree *expr_p, gimple_seq *pre_p)
+ 		  seq = &OMP_CLAUSE_LASTPRIVATE_GIMPLE_SEQ (c);
+ 		else
+ 		  seq = &OMP_CLAUSE_LINEAR_GIMPLE_SEQ (c);
++		push_gimplify_context ();
+ 		gimplify_assign (decl, t, seq);
+-	    }
++		gimple *bind = NULL;
++		if (gimplify_ctxp->temps)
++		  {
++		    bind = gimple_build_bind (NULL_TREE, *seq, NULL_TREE);
++		    *seq = NULL;
++		    gimplify_seq_add_stmt (seq, bind);
++		  }
++		pop_gimplify_context (bind);
++	      }
+ 	}
+     }
+ 
+diff --git a/libgomp/testsuite/libgomp.c/pr89002.c b/libgomp/testsuite/libgomp.c/pr89002.c
+new file mode 100644
+index 000000000..6d1b16405
+--- /dev/null
++++ b/libgomp/testsuite/libgomp.c/pr89002.c
+@@ -0,0 +1,43 @@
++/* PR middle-end/89002 */
++
++extern void abort (void);
++
++int
++foo (int x)
++{
++  int a;
++  int *p = &a;
++
++#pragma omp taskloop lastprivate (a)
++  for (a = 0; a < x; ++a)
++    ;
++  return *p;
++}
++
++int
++bar (int x)
++{
++  int a;
++  int *p = &a;
++
++#pragma omp parallel
++#pragma omp single
++#pragma omp taskloop lastprivate (a)
++  for (a = 0; a < x; ++a)
++    ;
++  return *p;
++}
++
++int
++main ()
++{
++#pragma omp parallel
++#pragma omp single
++  {
++    if (foo (4) != 4)
++      abort ();
++  }
++  if (bar (6) != 6)
++    abort ();
++  return 0;
++}

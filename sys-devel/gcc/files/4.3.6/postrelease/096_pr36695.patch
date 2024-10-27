@@ -1,0 +1,95 @@
+diff --git a/gcc/cp/typeck2.c b/gcc/cp/typeck2.c
+index 8ac7678d..d6591129 100644
+--- a/gcc/cp/typeck2.c
++++ b/gcc/cp/typeck2.c
+@@ -1331,6 +1331,12 @@ build_functional_cast (tree exp, tree parms)
+   else
+     type = exp;
+ 
++  if (TREE_CODE (type) == REFERENCE_TYPE && !parms)
++    {
++      error ("invalid value-initialization of reference types");
++      return error_mark_node;
++    }
++
+   if (processing_template_decl)
+     {
+       tree t = build_min (CAST_EXPR, type, parms);
+diff --git a/gcc/testsuite/g++.dg/ext/complex4.C b/gcc/testsuite/g++.dg/ext/complex4.C
+new file mode 100644
+index 00000000..78b93567
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/ext/complex4.C
+@@ -0,0 +1,5 @@
++// { dg-do compile }
++// This code used to be rejected as there was no conversion from int to float __complex__
++ #include <vector>
++ typedef float __complex__ fcomplex;
++ std::vector<fcomplex> vfc(10);
+diff --git a/gcc/testsuite/g++.dg/ext/complex5.C b/gcc/testsuite/g++.dg/ext/complex5.C
+new file mode 100644
+index 00000000..4a29960f
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/ext/complex5.C
+@@ -0,0 +1,6 @@
++/* PR c++/21210 */
++/* { dg-do compile } */
++/* { dg-options "-O2" } */
++
++typedef float __complex__ fcomplex;
++fcomplex cplx = fcomplex(0);
+diff --git a/gcc/testsuite/g++.dg/init/reference1.C b/gcc/testsuite/g++.dg/init/reference1.C
+new file mode 100644
+index 00000000..7ce5f90f
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/init/reference1.C
+@@ -0,0 +1,11 @@
++// { dg-do compile }
++// This code used to be accepted but it is invalid as there is no
++// value initialization of a reference type.
++// PR c++/36695
++
++int main()
++{
++  typedef int& T;
++  T a = T();  // { dg-error "value-initialization of reference" }
++}
++
+diff --git a/gcc/testsuite/g++.dg/init/reference2.C b/gcc/testsuite/g++.dg/init/reference2.C
+new file mode 100644
+index 00000000..42f53742
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/init/reference2.C
+@@ -0,0 +1,13 @@
++// { dg-do compile }
++// This code used to be accepted but it is invalid as there is no
++// value initialization of a reference type.
++// PR c++/36695
++
++// We should we able to diagnostic this without instantiating the template
++template <int a1>
++int f()
++{
++  typedef int& T;
++  T a = T();  // { dg-error "value-initialization of reference" }
++}
++
+diff --git a/gcc/testsuite/g++.dg/init/reference3.C b/gcc/testsuite/g++.dg/init/reference3.C
+new file mode 100644
+index 00000000..344e94e1
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/init/reference3.C
+@@ -0,0 +1,13 @@
++// { dg-do compile }
++// This code used to be accepted but it is invalid as there is no
++// value initialization of a reference type.
++// PR c++/36695
++
++template <typename T>
++T f()
++{
++  T a = T();  // { dg-error "value-initialization of reference" }
++}
++
++int &a = f<int&>(); // { dg-message "instantiated from here" }
++

@@ -1,0 +1,105 @@
+diff --git a/gcc/cp/typeck.c b/gcc/cp/typeck.c
+index a8e9da524..568d0d61e 100644
+--- a/gcc/cp/typeck.c
++++ b/gcc/cp/typeck.c
+@@ -8419,12 +8419,19 @@ check_return_expr (tree retval, bool *no_warning)
+       return NULL_TREE;
+     }
+ 
++  const tree saved_retval = retval;
++
+   if (processing_template_decl)
+     {
+       current_function_returns_value = 1;
++
+       if (check_for_bare_parameter_packs (retval))
+-        retval = error_mark_node;
+-      return retval;
++	return error_mark_node;
++
++      if (WILDCARD_TYPE_P (TREE_TYPE (DECL_RESULT (current_function_decl)))
++	  || (retval != NULL_TREE
++	      && type_dependent_expression_p (retval)))
++        return retval;
+     }
+ 
+   functype = TREE_TYPE (TREE_TYPE (current_function_decl));
+@@ -8468,14 +8475,10 @@ check_return_expr (tree retval, bool *no_warning)
+       functype = type;
+     }
+ 
+-  /* When no explicit return-value is given in a function with a named
+-     return value, the named return value is used.  */
+   result = DECL_RESULT (current_function_decl);
+   valtype = TREE_TYPE (result);
+   gcc_assert (valtype != NULL_TREE);
+   fn_returns_value_p = !VOID_TYPE_P (valtype);
+-  if (!retval && DECL_NAME (result) && fn_returns_value_p)
+-    retval = result;
+ 
+   /* Check for a return statement with no return value in a function
+      that's supposed to return a value.  */
+@@ -8560,6 +8563,13 @@ check_return_expr (tree retval, bool *no_warning)
+ 	warning (OPT_Weffc__, "%<operator=%> should return a reference to %<*this%>");
+     }
+ 
++  if (processing_template_decl)
++    {
++      /* We should not have changed the return value.  */
++      gcc_assert (retval == saved_retval);
++      return retval;
++    }
++
+   /* The fabled Named Return Value optimization, as per [class.copy]/15:
+ 
+      [...]      For  a function with a class return type, if the expression
+diff --git a/gcc/testsuite/g++.dg/template/pr18969-2.C b/gcc/testsuite/g++.dg/template/pr18969-2.C
+new file mode 100644
+index 000000000..7b8655de9
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/template/pr18969-2.C
+@@ -0,0 +1,11 @@
++// PR c++/18969
++// { dg-do compile { target c++1y } }
++
++template <typename T>
++struct A
++{
++    auto *f1 () { return; } // { dg-error "return-statement" }
++    auto &f2 () { return; } // { dg-error "return-statement" }
++
++    auto f3 () { return; } // { dg-bogus "return-statement" }
++};
+diff --git a/gcc/testsuite/g++.dg/template/pr18969.C b/gcc/testsuite/g++.dg/template/pr18969.C
+new file mode 100644
+index 000000000..dba5eb92e
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/template/pr18969.C
+@@ -0,0 +1,14 @@
++// PR c++/18969
++
++template <typename T>
++struct A
++{
++    int f1 () { return; } // { dg-error "return-statement" }
++    void f2 () { return 5; } // { dg-error "return-statement" }
++    T *f3 () { return; } // { dg-error "return-statement" }
++    typename T::f &f4 () { return; } // { dg-error "return-statement" }
++
++    T f5 () { return; } // { dg-bogus "return-statement" }
++    void f6 () { return (T)true; } // { dg-bogus "return-statement" }
++    typename T::f f7 () { return; } // { dg-bogus "return-statement" }
++};
+diff --git a/gcc/testsuite/g++.old-deja/g++.jason/overload.C b/gcc/testsuite/g++.old-deja/g++.jason/overload.C
+index 6a747ff96..28b029f48 100644
+--- a/gcc/testsuite/g++.old-deja/g++.jason/overload.C
++++ b/gcc/testsuite/g++.old-deja/g++.jason/overload.C
+@@ -5,7 +5,7 @@ enum bar {};
+ void operator+ (int, int);// { dg-error "" } .*
+ void operator+ (bar&, int);
+ 
+-template <class T> void operator+ (int b, T& t) { return b; }
++template <class T> void operator+ (int b, T& t) { return; }
+ void operator+ (int, bar&);
+ 
+ template <class T> class foo

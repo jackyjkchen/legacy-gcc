@@ -1,0 +1,130 @@
+diff --git a/gcc/cp/decl.c b/gcc/cp/decl.c
+index 233783fa..a30a1974 100644
+--- a/gcc/cp/decl.c
++++ b/gcc/cp/decl.c
+@@ -3974,8 +3974,9 @@ start_decl (const cp_declarator *declarator,
+ 				       > template_class_depth (context))
+ 				      ? current_template_parms
+ 				      : NULL_TREE);
+-	  if (field && duplicate_decls (decl, field,
+-					/*newdecl_is_friend=*/false))
++	  if (field && field != error_mark_node
++	      && duplicate_decls (decl, field,
++				 /*newdecl_is_friend=*/false))
+ 	    decl = field;
+ 	}
+ 
+@@ -6349,13 +6350,15 @@ grokfndecl (tree ctype,
+       && (! TYPE_FOR_JAVA (ctype) || check_java_method (decl))
+       && check)
+     {
+-      tree old_decl;
++      tree old_decl = check_classfn (ctype, decl,
++				     (processing_template_decl
++				      > template_class_depth (ctype))
++				     ? current_template_parms
++				     : NULL_TREE);
++
++      if (old_decl == error_mark_node)
++	return NULL_TREE;
+ 
+-      old_decl = check_classfn (ctype, decl,
+-				(processing_template_decl
+-				 > template_class_depth (ctype))
+-				? current_template_parms
+-				: NULL_TREE);
+       if (old_decl)
+ 	{
+ 	  tree ok;
+diff --git a/gcc/cp/decl2.c b/gcc/cp/decl2.c
+index 5796f54f..7b0eace1 100644
+--- a/gcc/cp/decl2.c
++++ b/gcc/cp/decl2.c
+@@ -539,8 +539,8 @@ check_java_method (tree method)
+    TEMPLATE_DECL, it can be NULL since the parameters can be extracted
+    from the declaration. If the function is not a function template, it
+    must be NULL.
+-   It returns the original declaration for the function, or NULL_TREE
+-   if no declaration was found (and an error was emitted).  */
++   It returns the original declaration for the function, NULL_TREE if
++   no declaration was found, error_mark_node if an error was emitted.  */
+ 
+ tree
+ check_classfn (tree ctype, tree function, tree template_parms)
+@@ -676,16 +676,9 @@ check_classfn (tree ctype, tree function, tree template_parms)
+     error ("no %q#D member function declared in class %qT",
+ 	   function, ctype);
+ 
+-  /* If we did not find the method in the class, add it to avoid
+-     spurious errors (unless the CTYPE is not yet defined, in which
+-     case we'll only confuse ourselves when the function is declared
+-     properly within the class.  */
+-  if (COMPLETE_TYPE_P (ctype))
+-    add_method (ctype, function, NULL_TREE);
+-  
+   if (pushed_scope)
+     pop_scope (pushed_scope);
+-  return NULL_TREE;
++  return error_mark_node;
+ }
+ 
+ /* DECL is a function with vague linkage.  Remember it so that at the
+diff --git a/gcc/cp/pt.c b/gcc/cp/pt.c
+index b464c383..72c49f30 100644
+--- a/gcc/cp/pt.c
++++ b/gcc/cp/pt.c
+@@ -5687,7 +5687,7 @@ tsubst_friend_function (tree decl, tree args)
+ 	  tree fn = check_classfn (context,
+ 				   new_friend, NULL_TREE);
+ 
+-	  if (fn)
++	  if (fn && fn != error_mark_node)
+ 	    new_friend = fn;
+ 	}
+     }
+diff --git a/gcc/testsuite/g++.dg/other/pr28304.C b/gcc/testsuite/g++.dg/other/pr28304.C
+index c86efd48..9a0e9cdd 100644
+--- a/gcc/testsuite/g++.dg/other/pr28304.C
++++ b/gcc/testsuite/g++.dg/other/pr28304.C
+@@ -7,5 +7,5 @@ template<typename T> void A::foo(T) {}  // { dg-error "" }
+ 
+ void bar()
+ {
+-    A::foo(1); // { dg-error "no matching function for call" }
++    A::foo(1); // { dg-error "not a member" }
+ }
+diff --git a/gcc/testsuite/g++.dg/template/error27.C b/gcc/testsuite/g++.dg/template/error27.C
+new file mode 100644
+index 00000000..8d41d024
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/template/error27.C
+@@ -0,0 +1,5 @@
++// PR c++/27211
++
++struct A {};
++
++template<int> void A::foo() {} // { dg-error "member function" }
+diff --git a/gcc/testsuite/g++.dg/template/error28.C b/gcc/testsuite/g++.dg/template/error28.C
+new file mode 100644
+index 00000000..e87d542d
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/template/error28.C
+@@ -0,0 +1,5 @@
++// PR c++/27211
++
++struct A {};
++
++template<int> void A::foo(); // { dg-error "member function" }
+diff --git a/gcc/testsuite/g++.old-deja/g++.mike/p811.C b/gcc/testsuite/g++.old-deja/g++.mike/p811.C
+index 7097eeec..260c6459 100644
+--- a/gcc/testsuite/g++.old-deja/g++.mike/p811.C
++++ b/gcc/testsuite/g++.old-deja/g++.mike/p811.C
+@@ -525,7 +525,7 @@ public:
+ char *
+ X::stringify() const  // { dg-error "does not match" }
+ {
+-    return "stringify";         // { dg-warning "deprecated" }
++    return "stringify";
+ }
+ 
+ const char *

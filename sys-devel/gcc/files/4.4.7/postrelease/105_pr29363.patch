@@ -1,0 +1,59 @@
+diff --git a/gcc/cp/decl.c b/gcc/cp/decl.c
+index 697d85f3b..f29a539e5 100644
+--- a/gcc/cp/decl.c
++++ b/gcc/cp/decl.c
+@@ -862,6 +862,7 @@ create_implicit_typedef (tree name, tree type)
+      amongst these.  */
+   SET_DECL_IMPLICIT_TYPEDEF_P (decl);
+   TYPE_NAME (type) = decl;
++  TYPE_STUB_DECL (type) = decl;
+ 
+   return decl;
+ }
+@@ -3443,7 +3444,6 @@ cxx_init_decl_processing (void)
+     bad_alloc_decl
+       = create_implicit_typedef (bad_alloc_id, bad_alloc_type_node);
+     DECL_CONTEXT (bad_alloc_decl) = current_namespace;
+-    TYPE_STUB_DECL (bad_alloc_type_node) = bad_alloc_decl;
+     pop_namespace ();
+ 
+     ptr_ftype_sizetype
+diff --git a/gcc/cp/name-lookup.c b/gcc/cp/name-lookup.c
+index 894f9b6f1..d646772e8 100644
+--- a/gcc/cp/name-lookup.c
++++ b/gcc/cp/name-lookup.c
+@@ -5208,7 +5208,6 @@ pushtag (tree name, tree type, tag_scope scope)
+ 
+   decl = TYPE_NAME (type);
+   gcc_assert (TREE_CODE (decl) == TYPE_DECL);
+-  TYPE_STUB_DECL (type) = decl;
+ 
+   /* Set type visibility now if this is a forward declaration.  */
+   TREE_PUBLIC (decl) = 1;
+diff --git a/gcc/cp/pt.c b/gcc/cp/pt.c
+index c17d88a5b..76e039968 100644
+--- a/gcc/cp/pt.c
++++ b/gcc/cp/pt.c
+@@ -6077,7 +6077,6 @@ lookup_template_class (tree d1,
+ 
+ 	  type_decl = create_implicit_typedef (DECL_NAME (templ), t);
+ 	  DECL_CONTEXT (type_decl) = TYPE_CONTEXT (t);
+-	  TYPE_STUB_DECL (t) = type_decl;
+ 	  DECL_SOURCE_LOCATION (type_decl)
+ 	    = DECL_SOURCE_LOCATION (TYPE_STUB_DECL (template_type));
+ 	}
+diff --git a/gcc/testsuite/g++.dg/template/error43.C b/gcc/testsuite/g++.dg/template/error43.C
+new file mode 100644
+index 000000000..876e0181a
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/template/error43.C
+@@ -0,0 +1,9 @@
++// PR c++/29363
++
++template<int> void foo()
++{
++  throw A();			// { dg-message "declar" }
++  struct A {} a;
++}
++
++template void foo<0>();		// { dg-message "instantiated" }

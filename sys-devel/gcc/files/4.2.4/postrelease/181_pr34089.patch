@@ -1,0 +1,37 @@
+diff --git a/gcc/cp/parser.c b/gcc/cp/parser.c
+index 7ed7c3c1..1a51e9e7 100644
+--- a/gcc/cp/parser.c
++++ b/gcc/cp/parser.c
+@@ -13629,8 +13629,18 @@ cp_parser_class_head (cp_parser* parser,
+   /* Look up the type.  */
+   if (template_id_p)
+     {
+-      type = TREE_TYPE (id);
+-      type = maybe_process_partial_specialization (type);
++      if (TREE_CODE (id) == TEMPLATE_ID_EXPR
++	  && (DECL_FUNCTION_TEMPLATE_P (TREE_OPERAND (id, 0))
++	      || TREE_CODE (TREE_OPERAND (id, 0)) == OVERLOAD))
++	{
++	  error ("function template %qD redeclared as a class template", id);
++	  type = error_mark_node;
++	}
++      else
++	{
++	  type = TREE_TYPE (id);
++	  type = maybe_process_partial_specialization (type);
++	}
+       if (nested_name_specifier)
+ 	pushed_scope = push_scope (nested_name_specifier);
+     }
+diff --git a/gcc/testsuite/g++.dg/template/crash74.C b/gcc/testsuite/g++.dg/template/crash74.C
+new file mode 100644
+index 00000000..9f2e415c
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/template/crash74.C
+@@ -0,0 +1,6 @@
++// PR c++/34089
++// { dg-do compile }
++// { dg-options "" }
++
++template<typename F> void foo () { }
++template<typename F> struct foo<F> { };	// { dg-error "redeclared as" }

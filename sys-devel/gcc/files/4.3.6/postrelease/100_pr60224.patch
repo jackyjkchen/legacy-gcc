@@ -1,0 +1,39 @@
+diff --git a/gcc/cp/decl.c b/gcc/cp/decl.c
+index 9f4cf940..6579f573 100644
+--- a/gcc/cp/decl.c
++++ b/gcc/cp/decl.c
+@@ -4347,7 +4347,7 @@ maybe_deduce_size_from_array_init (tree decl, tree init)
+ 	 those are not supported in GNU C++, and as the middle-end
+ 	 will crash if presented with a non-numeric designated
+ 	 initializer.  */
+-      if (initializer && TREE_CODE (initializer) == CONSTRUCTOR)
++      if (initializer && BRACE_ENCLOSED_INITIALIZER_P (initializer))
+ 	{
+ 	  VEC(constructor_elt,gc) *v = CONSTRUCTOR_ELTS (initializer);
+ 	  constructor_elt *ce;
+@@ -6187,6 +6187,11 @@ cp_complete_array_type (tree *ptype, tree initial_value, bool do_default)
+   int failure;
+   tree type, elt_type;
+ 
++  /* Don't get confused by a CONSTRUCTOR for some other type.  */
++  if (initial_value && TREE_CODE (initial_value) == CONSTRUCTOR
++      && !BRACE_ENCLOSED_INITIALIZER_P (initial_value))
++    return 1;
++
+   if (initial_value)
+     {
+       unsigned HOST_WIDE_INT i;
+diff --git a/gcc/testsuite/g++.dg/init/array36.C b/gcc/testsuite/g++.dg/init/array36.C
+new file mode 100644
+index 00000000..77e4f909
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/init/array36.C
+@@ -0,0 +1,8 @@
++// PR c++/60224
++
++struct A {};
++
++void foo()
++{
++  bool b[] = (int (A::*)())0;	// { dg-error "" }
++}

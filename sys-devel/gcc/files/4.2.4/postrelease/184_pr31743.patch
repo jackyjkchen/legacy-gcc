@@ -1,0 +1,53 @@
+diff --git a/gcc/cp/init.c b/gcc/cp/init.c
+index fd4838b4..d7c4dacb 100644
+--- a/gcc/cp/init.c
++++ b/gcc/cp/init.c
+@@ -1663,9 +1663,6 @@ build_new_1 (tree placement, tree type, tree nelts, tree init,
+ 	}
+     }
+ 
+-  if (!complete_type_or_else (type, NULL_TREE))
+-    return error_mark_node;
+-
+   /* If our base type is an array, then make sure we know how many elements
+      it has.  */
+   for (elt_type = type;
+@@ -2144,6 +2141,10 @@ build_new (tree placement, tree type, tree nelts, tree init,
+       return error_mark_node;
+     }
+ 
++  /* PR 31743: Make sure the array type has a known size.  */
++  if (!complete_type_or_else (type, NULL_TREE))
++    return error_mark_node;
++
+   rval = build_new_1 (placement, type, nelts, init, use_global_new);
+   if (rval == error_mark_node)
+     return error_mark_node;
+diff --git a/gcc/cp/parser.c b/gcc/cp/parser.c
+index 1a51e9e7..389c54e2 100644
+--- a/gcc/cp/parser.c
++++ b/gcc/cp/parser.c
+@@ -5413,11 +5413,6 @@ cp_parser_new_type_id (cp_parser* parser, tree *nelts)
+     }
+ 
+   type = groktypename (&type_specifier_seq, new_declarator);
+-  if (TREE_CODE (type) == ARRAY_TYPE && *nelts == NULL_TREE)
+-    {
+-      *nelts = array_type_nelts_top (type);
+-      type = TREE_TYPE (type);
+-    }
+   return type;
+ }
+ 
+diff --git a/gcc/testsuite/g++.dg/init/new20.C b/gcc/testsuite/g++.dg/init/new20.C
+new file mode 100755
+index 00000000..ce4824e7
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/init/new20.C
+@@ -0,0 +1,6 @@
++// PR c++/31743
++typedef int A[];
++A* p = new A;   // { dg-error "invalid use of array with unspecified bounds" }
++A* q = new (A); // { dg-error "invalid use of array with unspecified bounds" }
++
++

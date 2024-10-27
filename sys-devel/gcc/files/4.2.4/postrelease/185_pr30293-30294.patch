@@ -1,0 +1,171 @@
+diff --git a/gcc/cp/decl.c b/gcc/cp/decl.c
+index c9e2e388..233783fa 100644
+--- a/gcc/cp/decl.c
++++ b/gcc/cp/decl.c
+@@ -5319,6 +5319,20 @@ cp_finish_decl (tree decl, tree init, bool init_const_expr_p,
+ 	     is *not* defined.  */
+ 	  && (!DECL_EXTERNAL (decl) || init))
+ 	{
++	  if (TYPE_FOR_JAVA (type) && IS_AGGR_TYPE (type))
++	    {
++	      tree jclass
++		= IDENTIFIER_GLOBAL_VALUE (get_identifier ("jclass"));
++	      /* Allow libjava/prims.cc define primitive classes.  */
++	      if (init != NULL_TREE
++		  || jclass == NULL_TREE
++		  || TREE_CODE (jclass) != TYPE_DECL
++		  || !POINTER_TYPE_P (TREE_TYPE (jclass))
++		  || !same_type_ignoring_top_level_qualifiers_p
++					(type, TREE_TYPE (TREE_TYPE (jclass))))
++		error ("Java object %qD not allocated with %<new%>", decl);
++	      init = NULL_TREE;
++	    }
+ 	  if (init)
+ 	    {
+ 	      DECL_NONTRIVIALLY_INITIALIZED_P (decl) = 1;
+@@ -5389,6 +5403,9 @@ cp_finish_decl (tree decl, tree init, bool init_const_expr_p,
+       else if (TREE_CODE (type) == ARRAY_TYPE)
+ 	layout_type (type);
+     }
++  else if (TREE_CODE (decl) == FIELD_DECL
++	   && TYPE_FOR_JAVA (type) && IS_AGGR_TYPE (type))
++    error ("non-static data member %qD has Java class type", decl);
+ 
+   /* Add this declaration to the statement-tree.  This needs to happen
+      after the call to check_initializer so that the DECL_EXPR for a
+@@ -9040,6 +9057,16 @@ grokparms (cp_parameter_declarator *first_parm, tree *parms)
+ 	  TREE_TYPE (decl) = error_mark_node;
+ 	}
+ 
++      if (type != error_mark_node
++	  && TYPE_FOR_JAVA (type)
++	  && IS_AGGR_TYPE (type))
++	{
++	  error ("parameter %qD has Java class type", decl);
++	  type = error_mark_node;
++	  TREE_TYPE (decl) = error_mark_node;
++	  init = NULL_TREE;
++	}
++
+       if (type != error_mark_node)
+ 	{
+ 	  /* Top-level qualifiers on the parameters are
+@@ -10552,11 +10579,15 @@ check_function_type (tree decl, tree current_function_parms)
+ 
+   if (dependent_type_p (return_type))
+     return;
+-  if (!COMPLETE_OR_VOID_TYPE_P (return_type))
++  if (!COMPLETE_OR_VOID_TYPE_P (return_type)
++      || (TYPE_FOR_JAVA (return_type) && IS_AGGR_TYPE (return_type)))
+     {
+       tree args = TYPE_ARG_TYPES (fntype);
+ 
+-      error ("return type %q#T is incomplete", return_type);
++      if (!COMPLETE_OR_VOID_TYPE_P (return_type))
++	error ("return type %q#T is incomplete", return_type);
++      else
++	error ("return type has Java class type %q#T", return_type);
+ 
+       /* Make it return void instead.  */
+       if (TREE_CODE (fntype) == METHOD_TYPE)
+diff --git a/gcc/cp/init.c b/gcc/cp/init.c
+index d7c4dacb..53cb6f8d 100644
+--- a/gcc/cp/init.c
++++ b/gcc/cp/init.c
+@@ -1735,6 +1735,11 @@ build_new_1 (tree placement, tree type, tree nelts, tree init,
+ 		    (alloc_fn,
+ 		     build_tree_list (NULL_TREE, class_addr)));
+     }
++  else if (TYPE_FOR_JAVA (elt_type))
++    {
++      error ("Java class %q#T object allocated using placement new", elt_type);
++      return error_mark_node;
++    }
+   else
+     {
+       tree fnname;
+diff --git a/gcc/testsuite/g++.dg/ext/java-2.C b/gcc/testsuite/g++.dg/ext/java-2.C
+new file mode 100644
+index 00000000..4015f00e
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/ext/java-2.C
+@@ -0,0 +1,79 @@
++// PR c++/30293
++// PR c++/30294
++// { dg-do compile }
++// { dg-options "" }
++
++extern "Java" {
++typedef __java_byte jbyte;
++namespace java {
++namespace lang {
++  class Object {};
++  class Class {};
++}
++}
++typedef struct java::lang::Object* jobject;
++typedef java::lang::Class *jclass;
++}
++extern "C" jobject _Jv_AllocObject (jclass);
++
++extern "Java" {
++  struct A { static java::lang::Class class$; };
++}
++
++struct B {
++  A a;		// { dg-error "has Java class type" }
++};
++
++void* operator new (__SIZE_TYPE__, void*) throw();
++char buf[1024];
++
++A a;		// { dg-error "not allocated with" }
++A b = A ();	// { dg-error "not allocated with" }
++A *c = new ((void *) buf) A ();	// { dg-error "using placement new" }
++A *d = new A ();
++jbyte e = 6;
++
++const A fn1 ()	// { dg-error "return type has Java class type" }
++{
++  A a;		// { dg-error "not allocated with" }
++  return a;
++}
++
++A fn2 ()	// { dg-error "return type has Java class type" }
++{
++  A a;		// { dg-error "not allocated with" }
++  return a;
++}
++
++A *fn3 ()
++{
++  return new A ();
++}
++
++A &fn4 ()
++{
++  return *c;
++}
++
++jbyte fn5 ()
++{
++  return 7;
++}
++
++void fn6 (A x)	// { dg-error "has Java class type" }
++{
++}
++
++void fn7 (const A x)	// { dg-error "has Java class type" }
++{
++}
++
++void fn8 (A *x)
++{
++  (void) x;
++}
++
++void fn9 (jbyte x)
++{
++  (void) x;
++}

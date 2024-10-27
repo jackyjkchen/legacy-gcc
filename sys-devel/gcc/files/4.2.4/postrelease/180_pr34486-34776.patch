@@ -1,0 +1,64 @@
+diff --git a/gcc/cp/name-lookup.c b/gcc/cp/name-lookup.c
+index 7212e42a..bea5ca20 100644
+--- a/gcc/cp/name-lookup.c
++++ b/gcc/cp/name-lookup.c
+@@ -1715,13 +1715,16 @@ constructor_name (tree type)
+   return name;
+ }
+ 
+-/* Returns TRUE if NAME is the name for the constructor for TYPE.  */
++/* Returns TRUE if NAME is the name for the constructor for TYPE,
++   which must be a class type.  */
+ 
+ bool
+ constructor_name_p (tree name, tree type)
+ {
+   tree ctor_name;
+ 
++  gcc_assert (IS_AGGR_TYPE (type));
++
+   if (!name)
+     return false;
+ 
+@@ -2781,7 +2784,7 @@ do_class_using_decl (tree scope, tree name)
+       error ("%<%T::%D%> names destructor", scope, name);
+       return NULL_TREE;
+     }
+-  if (constructor_name_p (name, scope))
++  if (IS_AGGR_TYPE (scope) && constructor_name_p (name, scope))
+     {
+       error ("%<%T::%D%> names constructor", scope, name);
+       return NULL_TREE;
+diff --git a/gcc/testsuite/g++.dg/template/crash75.C b/gcc/testsuite/g++.dg/template/crash75.C
+new file mode 100644
+index 00000000..462be95b
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/template/crash75.C
+@@ -0,0 +1,8 @@
++// PR c++/34776
++
++template<typename T> struct A
++{
++  T::X<0> x; // { dg-error "non-template|T::template|base type" }
++};
++
++A<int*> a;
+diff --git a/gcc/testsuite/g++.dg/template/crash76.C b/gcc/testsuite/g++.dg/template/crash76.C
+new file mode 100644
+index 00000000..851cdd8c
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/template/crash76.C
+@@ -0,0 +1,13 @@
++// PR c++/34486
++
++template<typename> struct A
++{
++  typedef A* X;
++};
++
++template<typename T> struct B
++{
++  using A<T>::X::Y; // { dg-error "not a base type" }
++};
++
++B<int> b;

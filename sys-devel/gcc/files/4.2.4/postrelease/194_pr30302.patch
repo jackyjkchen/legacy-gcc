@@ -1,0 +1,78 @@
+diff --git a/gcc/cp/class.c b/gcc/cp/class.c
+index 22183ba7..a6c88de9 100644
+--- a/gcc/cp/class.c
++++ b/gcc/cp/class.c
+@@ -2473,6 +2473,7 @@ finish_struct_anon (tree t)
+       if (DECL_NAME (field) == NULL_TREE
+ 	  && ANON_AGGR_TYPE_P (TREE_TYPE (field)))
+ 	{
++	  bool is_union = TREE_CODE (TREE_TYPE (field)) == UNION_TYPE;
+ 	  tree elt = TYPE_FIELDS (TREE_TYPE (field));
+ 	  for (; elt; elt = TREE_CHAIN (elt))
+ 	    {
+@@ -2490,15 +2491,29 @@ finish_struct_anon (tree t)
+ 
+ 	      if (TREE_CODE (elt) != FIELD_DECL)
+ 		{
+-		  pedwarn ("%q+#D invalid; an anonymous union can "
+-			   "only have non-static data members", elt);
++		  if (is_union)
++		    pedwarn ("%q+#D invalid; an anonymous union can "
++			     "only have non-static data members", elt);
++		  else
++		    pedwarn ("%q+#D invalid; an anonymous struct can "
++			     "only have non-static data members", elt);
+ 		  continue;
+ 		}
+ 
+ 	      if (TREE_PRIVATE (elt))
+-		pedwarn ("private member %q+#D in anonymous union", elt);
++		{
++		  if (is_union)
++		    pedwarn ("private member %q+#D in anonymous union", elt);
++		  else
++		    pedwarn ("private member %q+#D in anonymous struct", elt);
++		}
+ 	      else if (TREE_PROTECTED (elt))
+-		pedwarn ("protected member %q+#D in anonymous union", elt);
++		{
++		  if (is_union)
++		    pedwarn ("protected member %q+#D in anonymous union", elt);
++		  else
++		    pedwarn ("protected member %q+#D in anonymous struct", elt);
++		}
+ 
+ 	      TREE_PRIVATE (elt) = TREE_PRIVATE (field);
+ 	      TREE_PROTECTED (elt) = TREE_PROTECTED (field);
+diff --git a/gcc/cp/semantics.c b/gcc/cp/semantics.c
+index 89627a33..a9873355 100644
+--- a/gcc/cp/semantics.c
++++ b/gcc/cp/semantics.c
+@@ -2847,7 +2847,7 @@ finish_id_expression (tree id_expression,
+ 	{
+ 	  if (DECL_P (decl) && DECL_NONLOCAL (decl)
+ 	      && DECL_CLASS_SCOPE_P (decl)
+-	      && DECL_CONTEXT (decl) != current_class_type)
++	      && context_for_name_lookup (decl) != current_class_type)
+ 	    {
+ 	      tree path;
+ 
+diff --git a/gcc/testsuite/g++.dg/ext/anon-struct5.C b/gcc/testsuite/g++.dg/ext/anon-struct5.C
+new file mode 100644
+index 00000000..8b697ccb
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/ext/anon-struct5.C
+@@ -0,0 +1,13 @@
++// PR c++/30302
++
++struct A
++{
++  struct { static int i; }; // { dg-error "prohibits anonymous structs|an anonymous struct" }
++  void foo() { i; }
++};
++
++struct B
++{
++  union { static int i; }; // { dg-error "an anonymous union|member of a union" }
++  void foo() { i; }
++};

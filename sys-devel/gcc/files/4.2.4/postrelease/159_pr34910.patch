@@ -1,0 +1,47 @@
+diff --git a/gcc/fortran/expr.c b/gcc/fortran/expr.c
+index 4a351814..0acf0ac7 100644
+--- a/gcc/fortran/expr.c
++++ b/gcc/fortran/expr.c
+@@ -2368,6 +2368,15 @@ gfc_check_assign (gfc_expr * lvalue, gfc_expr * rvalue, int conform)
+ 	    bad_proc = true;
+ 	}
+ 
++      /* (iv) Host associated and not the function symbol or the
++	      parent result.  This picks up sibling references, which
++	      cannot be entries.  */
++      if (!sym->attr.entry
++	    && sym->ns == gfc_current_ns->parent
++	    && sym != gfc_current_ns->proc_name
++	    && sym != gfc_current_ns->parent->proc_name->result)
++	bad_proc = true;
++
+       if (bad_proc)
+ 	{
+ 	  gfc_error ("'%s' at %L is not a VALUE", sym->name, &lvalue->where);
+diff --git a/gcc/testsuite/gfortran.dg/proc_assign_2.f90 b/gcc/testsuite/gfortran.dg/proc_assign_2.f90
+new file mode 100644
+index 00000000..5a92be5c
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/proc_assign_2.f90
+@@ -0,0 +1,21 @@
++! { dg-do compile }
++! This checks the fix for PR34910, in which the invalid reference
++! below caused an ICE.
++!
++! Contributed by Daniel Franke <dfranke@gcc.gnu.org>
++!
++MODULE foo
++CONTAINS
++  INTEGER FUNCTION f()
++  f = 42
++  CONTAINS
++    LOGICAL FUNCTION f1()
++      f1 = .TRUE.
++    END FUNCTION
++
++    LOGICAL FUNCTION f2()
++      f1 = .FALSE.  ! { dg-error "not a VALUE" }
++    END FUNCTION
++  END FUNCTION
++END MODULE
++! { dg-final { cleanup-modules "foo" } }

@@ -1,0 +1,92 @@
+diff --git a/gcc/gimplify.c b/gcc/gimplify.c
+index 04cabf6d5..f23002709 100644
+--- a/gcc/gimplify.c
++++ b/gcc/gimplify.c
+@@ -6563,7 +6563,13 @@ omp_check_private (struct gimplify_omp_ctx *ctx, tree decl, bool copyprivate)
+ 
+       if ((ctx->region_type & (ORT_TARGET | ORT_TARGET_DATA)) != 0
+ 	  && (n == NULL || (n->value & GOVD_DATA_SHARE_CLASS) == 0))
+-	continue;
++	{
++	  if ((ctx->region_type & ORT_TARGET_DATA) != 0
++	      || n == NULL
++	      || (n->value & GOVD_MAP) == 0)
++	    continue;
++	  return false;
++	}
+ 
+       if (n != NULL)
+ 	{
+@@ -6572,10 +6578,15 @@ omp_check_private (struct gimplify_omp_ctx *ctx, tree decl, bool copyprivate)
+ 	    return false;
+ 	  return (n->value & GOVD_SHARED) == 0;
+ 	}
++
++      if (ctx->region_type == ORT_WORKSHARE
++	  || ctx->region_type == ORT_SIMD
++	  || ctx->region_type == ORT_ACC)
++	continue;
++
++      break;
+     }
+-  while (ctx->region_type == ORT_WORKSHARE
+-	 || ctx->region_type == ORT_SIMD
+-	 || ctx->region_type == ORT_ACC);
++  while (1);
+   return false;
+ }
+ 
+diff --git a/gcc/testsuite/c-c++-common/gomp/pr101535-1.c b/gcc/testsuite/c-c++-common/gomp/pr101535-1.c
+new file mode 100644
+index 000000000..8285ce011
+--- /dev/null
++++ b/gcc/testsuite/c-c++-common/gomp/pr101535-1.c
+@@ -0,0 +1,31 @@
++/* PR middle-end/101535 */
++
++void
++foo (void)
++{
++  int a = 1, i;
++  #pragma omp target data map(to:a)
++  #pragma omp for lastprivate(i)	/* { dg-error "lastprivate variable 'i' is private in outer context" } */
++  for (i = 1; i < 2; i++)
++    ;
++}
++
++void
++bar (void)
++{
++  int a = 1, i;
++  #pragma omp target private(i)
++  #pragma omp for lastprivate(i)	/* { dg-error "lastprivate variable 'i' is private in outer context" } */
++  for (i = 1; i < 2; i++)
++    ;
++}
++
++void
++baz (void)
++{
++  int a = 1, i;
++  #pragma omp target firstprivate(i)
++  #pragma omp for lastprivate(i)	/* { dg-error "lastprivate variable 'i' is private in outer context" } */
++  for (i = 1; i < 2; i++)
++    ;
++}
+diff --git a/gcc/testsuite/c-c++-common/gomp/pr101535-2.c b/gcc/testsuite/c-c++-common/gomp/pr101535-2.c
+new file mode 100644
+index 000000000..23c84af48
+--- /dev/null
++++ b/gcc/testsuite/c-c++-common/gomp/pr101535-2.c
+@@ -0,0 +1,11 @@
++/* PR middle-end/101535 */
++
++void
++foo (void)
++{
++  int a = 1, i;
++  #pragma omp target map(tofrom:i)
++  #pragma omp for lastprivate(i)
++  for (i = 1; i < 2; i++)
++    ;
++}

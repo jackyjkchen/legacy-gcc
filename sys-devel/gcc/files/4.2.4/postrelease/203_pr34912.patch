@@ -1,0 +1,109 @@
+diff --git a/gcc/cp/friend.c b/gcc/cp/friend.c
+index 0b536892..365b3e55 100644
+--- a/gcc/cp/friend.c
++++ b/gcc/cp/friend.c
+@@ -529,11 +529,25 @@ do_friend (tree ctype, tree declarator, tree decl,
+ 	       is instantiated.  */
+ 	    decl = push_template_decl_real (decl, /*is_friend=*/true);
+ 	  else if (current_function_decl)
+-	    /* This must be a local class, so pushdecl will be ok, and
+-	       insert an unqualified friend into the local scope
+-	       (rather than the containing namespace scope, which the
+-	       next choice will do).  */
+-	    decl = pushdecl_maybe_friend (decl, /*is_friend=*/true);
++	    {
++	      /* This must be a local class.  11.5p11:
++
++		 If a friend declaration appears in a local class (9.8) and
++		 the name specified is an unqualified name, a prior
++		 declaration is looked up without considering scopes that
++		 are outside the innermost enclosing non-class scope. For a
++		 friend function declaration, if there is no prior
++		 declaration, the program is ill-formed.  */
++	      tree t = lookup_name_innermost_nonclass_level (DECL_NAME (decl));
++	      if (t)
++		decl = pushdecl_maybe_friend (decl, /*is_friend=*/true);
++	      else
++		{
++		  error ("friend declaration %qD in local class without "
++			 "prior declaration", decl);
++		  return error_mark_node;
++		}
++	    }
+ 	  else
+ 	    {
+ 	      /* We can't use pushdecl, as we might be in a template
+diff --git a/gcc/cp/name-lookup.c b/gcc/cp/name-lookup.c
+index bea5ca20..566052b5 100644
+--- a/gcc/cp/name-lookup.c
++++ b/gcc/cp/name-lookup.c
+@@ -44,7 +44,6 @@ struct scope_binding {
+ static cxx_scope *innermost_nonclass_level (void);
+ static tree select_decl (const struct scope_binding *, int);
+ static cxx_binding *binding_for_name (cxx_scope *, tree);
+-static tree lookup_name_innermost_nonclass_level (tree);
+ static tree push_overloaded_decl (tree, int, bool);
+ static bool lookup_using_namespace (tree, struct scope_binding *, tree,
+ 				    tree, int);
+@@ -4246,7 +4245,7 @@ lookup_type_scope (tree name, tag_scope scope)
+ /* Similar to `lookup_name' but look only in the innermost non-class
+    binding level.  */
+ 
+-static tree
++tree
+ lookup_name_innermost_nonclass_level (tree name)
+ {
+   struct cp_binding_level *b;
+diff --git a/gcc/cp/name-lookup.h b/gcc/cp/name-lookup.h
+index f4c05899..f4a446ba 100644
+--- a/gcc/cp/name-lookup.h
++++ b/gcc/cp/name-lookup.h
+@@ -322,6 +322,7 @@ extern bool hidden_name_p (tree);
+ extern tree remove_hidden_names (tree);
+ extern tree lookup_qualified_name (tree, tree, bool, bool);
+ extern tree lookup_name_nonclass (tree);
++extern tree lookup_name_innermost_nonclass_level (tree);
+ extern tree lookup_function_nonclass (tree, tree, bool);
+ extern void push_local_binding (tree, tree, int);
+ extern bool pushdecl_class_level (tree);
+diff --git a/gcc/testsuite/g++.dg/lookup/friend12.C b/gcc/testsuite/g++.dg/lookup/friend12.C
+new file mode 100644
+index 00000000..95cfd5fb
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/lookup/friend12.C
+@@ -0,0 +1,10 @@
++// PR c++/34912
++
++void foo()
++{
++  struct A
++  {
++    friend void bar();		// { dg-error "without prior declaration" }
++  };
++  bar();			// { dg-error "not declared" }
++}
+diff --git a/gcc/testsuite/g++.dg/parse/local-class1.C b/gcc/testsuite/g++.dg/parse/local-class1.C
+index 4fc7e6eb..518dd7ab 100644
+--- a/gcc/testsuite/g++.dg/parse/local-class1.C
++++ b/gcc/testsuite/g++.dg/parse/local-class1.C
+@@ -9,6 +9,6 @@ void f ()
+ {
+   class c
+     {
+-      friend void g () { } // { dg-error "local class definition" "" }
++      friend void g () { } // { dg-error "local class" "" }
+     };
+ }
+diff --git a/gcc/testsuite/g++.old-deja/g++.jason/scoping12.C b/gcc/testsuite/g++.old-deja/g++.jason/scoping12.C
+index 3a1060ad..a7834163 100644
+--- a/gcc/testsuite/g++.old-deja/g++.jason/scoping12.C
++++ b/gcc/testsuite/g++.old-deja/g++.jason/scoping12.C
+@@ -2,7 +2,7 @@
+ void f ()
+ {
+   struct A {
+-    friend void g ();
++    friend void g ();		// { dg-error "without prior declaration" }
+   };
+ }
+ void h () {

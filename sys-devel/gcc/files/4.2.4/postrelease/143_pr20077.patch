@@ -1,0 +1,78 @@
+diff --git a/gcc/testsuite/gcc.dg/cpp/paste15.c b/gcc/testsuite/gcc.dg/cpp/paste15.c
+new file mode 100644
+index 00000000..9d4ec363
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/cpp/paste15.c
+@@ -0,0 +1,15 @@
++/* PR preprocessor/20077 */
++/* { dg-do preprocess } */
++
++#define a   a ## ## /* { dg-error "end of a macro expansion" } */
++#define b() b ## ## /* { dg-error "end of a macro expansion" } */
++#define c   c ##    /* { dg-error "end of a macro expansion" } */
++#define d() d ##    /* { dg-error "end of a macro expansion" } */
++
++
++#define e   ## ## e /* { dg-error "end of a macro expansion" } */
++#define f() ## ## f /* { dg-error "end of a macro expansion" } */
++#define g   ## g    /* { dg-error "end of a macro expansion" } */
++#define h() ## h    /* { dg-error "end of a macro expansion" } */
++#define i   ##      /* { dg-error "end of a macro expansion" } */
++#define j() ##      /* { dg-error "end of a macro expansion" } */
+diff --git a/libcpp/macro.c b/libcpp/macro.c
+index 18eb75dd..84007020 100644
+--- a/libcpp/macro.c
++++ b/libcpp/macro.c
+@@ -1425,6 +1425,9 @@ create_iso_definition (cpp_reader *pfile, cpp_macro *macro)
+ {
+   cpp_token *token;
+   const cpp_token *ctoken;
++  bool following_paste_op = false;
++  const char *paste_op_error_msg =
++    N_("'##' cannot appear at either end of a macro expansion");
+ 
+   /* Get the first token of the expansion (or the '(' of a
+      function-like macro).  */
+@@ -1518,26 +1521,34 @@ create_iso_definition (cpp_reader *pfile, cpp_macro *macro)
+ 	}
+ 
+       if (token->type == CPP_EOF)
+-	break;
++	{
++	  /* Paste operator constraint 6.10.3.3.1:
++	     Token-paste ##, can appear in both object-like and
++	     function-like macros, but not at the end.  */
++	  if (following_paste_op)
++	    {
++	      cpp_error (pfile, CPP_DL_ERROR, paste_op_error_msg);
++	      return false;
++	    }
++	  break;
++	}
+ 
+       /* Paste operator constraint 6.10.3.3.1.  */
+       if (token->type == CPP_PASTE)
+ 	{
+ 	  /* Token-paste ##, can appear in both object-like and
+-	     function-like macros, but not at the ends.  */
+-	  if (--macro->count > 0)
+-	    token = lex_expansion_token (pfile, macro);
+-
+-	  if (macro->count == 0 || token->type == CPP_EOF)
++	     function-like macros, but not at the beginning.  */
++	  if (macro->count == 1)
+ 	    {
+-	      cpp_error (pfile, CPP_DL_ERROR,
+-		 "'##' cannot appear at either end of a macro expansion");
++	      cpp_error (pfile, CPP_DL_ERROR, paste_op_error_msg);
+ 	      return false;
+ 	    }
+ 
++	  --macro->count;
+ 	  token[-1].flags |= PASTE_LEFT;
+ 	}
+ 
++      following_paste_op = (token->type == CPP_PASTE);
+       token = lex_expansion_token (pfile, macro);
+     }
+ 

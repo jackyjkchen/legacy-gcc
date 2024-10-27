@@ -1,0 +1,35 @@
+diff --git a/gcc/fortran/trans-openmp.c b/gcc/fortran/trans-openmp.c
+index 124130490..16dc19e86 100644
+--- a/gcc/fortran/trans-openmp.c
++++ b/gcc/fortran/trans-openmp.c
+@@ -609,6 +609,7 @@ gfc_trans_omp_array_reduction (tree c, gfc_symbol *sym, locus where)
+       intrinsic_sym.attr.referenced = 1;
+       intrinsic_sym.attr.intrinsic = 1;
+       intrinsic_sym.attr.function = 1;
++      intrinsic_sym.attr.implicit_type = 1;
+       intrinsic_sym.result = &intrinsic_sym;
+       intrinsic_sym.declared_at = where;
+ 
+diff --git a/libgomp/testsuite/libgomp.fortran/pr81304.f90 b/libgomp/testsuite/libgomp.fortran/pr81304.f90
+new file mode 100644
+index 000000000..460a2a04f
+--- /dev/null
++++ b/libgomp/testsuite/libgomp.fortran/pr81304.f90
+@@ -0,0 +1,17 @@
++! PR fortran/81304
++! { dg-do run }
++! { dg-options "-Wsurprising" }
++
++program pr81304
++   integer :: i
++   real, dimension(1:3) :: a, b, c
++   a = 128
++   b = 0
++!$omp parallel do reduction(min: a) reduction(max: b) private (c)	! { dg-bogus "Type specified for intrinsic function" }
++   do i = 1, 16
++     c = (/ i, i - 5, i + 5 /)
++     a = min (a, c)
++     b = max (b, c)
++   end do
++   if (any (a /= (/ 1, -4, 6 /)) .or. any (b /= (/ 16, 11, 21 /))) call abort
++end

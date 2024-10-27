@@ -1,0 +1,39 @@
+diff --git a/gcc/cp/pt.c b/gcc/cp/pt.c
+index 69e3bd86..f175d4d0 100644
+--- a/gcc/cp/pt.c
++++ b/gcc/cp/pt.c
+@@ -2782,6 +2782,8 @@ expand_template_argument_pack (tree args)
+   for (in_arg = 0; in_arg < nargs; ++in_arg)
+     {
+       tree arg = TREE_VEC_ELT (args, in_arg);
++      if (arg == NULL_TREE)
++	return args;
+       if (ARGUMENT_PACK_P (arg))
+         {
+           int num_packed = TREE_VEC_LENGTH (ARGUMENT_PACK_ARGS (arg));
+@@ -5016,7 +5018,7 @@ convert_template_argument (tree parm,
+ 		      error ("type/value mismatch at argument %d in "
+ 			     "template parameter list for %qD",
+ 			     i + 1, in_decl);
+-		      error ("  expected a template of type %qD, got %qD",
++		      error ("  expected a template of type %qD, got %qT",
+ 			     parm, orig_arg);
+ 		    }
+ 
+diff --git a/gcc/testsuite/g++.dg/template/arg7.C b/gcc/testsuite/g++.dg/template/arg7.C
+new file mode 100644
+index 00000000..a9333b26
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/template/arg7.C
+@@ -0,0 +1,11 @@
++// PR c++/27425, 34274
++
++template<typename T> struct A
++{
++  template<template<T> class> struct B {}; // { dg-error "void|mismatch|expected" }
++  // { dg-bogus "not supported" "" { target *-*-* } 5 }
++  template<T> struct C;			   // { dg-error "void" }
++  B<C> b;
++};
++
++A<void> a;			// { dg-message "instantiated" }

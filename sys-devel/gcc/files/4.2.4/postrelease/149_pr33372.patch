@@ -1,0 +1,101 @@
+diff --git a/gcc/cp/semantics.c b/gcc/cp/semantics.c
+index 40359349..89627a33 100644
+--- a/gcc/cp/semantics.c
++++ b/gcc/cp/semantics.c
+@@ -3402,8 +3402,8 @@ finish_omp_clauses (tree clauses)
+ 	  t = OMP_CLAUSE_NUM_THREADS_EXPR (c);
+ 	  if (t == error_mark_node)
+ 	    remove = true;
+-	  else if (!INTEGRAL_TYPE_P (TREE_TYPE (t))
+-		   && !type_dependent_expression_p (t))
++	  else if (!type_dependent_expression_p (t)
++		   && !INTEGRAL_TYPE_P (TREE_TYPE (t)))
+ 	    {
+ 	      error ("num_threads expression must be integral");
+ 	      remove = true;
+@@ -3416,8 +3416,8 @@ finish_omp_clauses (tree clauses)
+ 	    ;
+ 	  else if (t == error_mark_node)
+ 	    remove = true;
+-	  else if (!INTEGRAL_TYPE_P (TREE_TYPE (t))
+-		   && !type_dependent_expression_p (t))
++	  else if (!type_dependent_expression_p (t)
++		   && !INTEGRAL_TYPE_P (TREE_TYPE (t)))
+ 	    {
+ 	      error ("schedule chunk size expression must be integral");
+ 	      remove = true;
+diff --git a/gcc/testsuite/g++.dg/gomp/pr33372-1.C b/gcc/testsuite/g++.dg/gomp/pr33372-1.C
+new file mode 100644
+index 00000000..62900bf6
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/gomp/pr33372-1.C
+@@ -0,0 +1,19 @@
++// PR c++/33372
++// { dg-do compile }
++// { dg-options "-fopenmp" }
++
++template <typename T>
++void f ()
++{
++  extern T n ();
++#pragma omp parallel num_threads(n)	// { dg-error "num_threads expression must be integral" }
++  ;
++#pragma omp parallel for schedule(static, n)
++  for (int i = 0; i < 10; i++)		// { dg-error "chunk size expression must be integral" }
++    ;
++}
++
++void g ()
++{
++  f<int> ();
++}
+diff --git a/gcc/testsuite/g++.dg/gomp/pr33372-2.C b/gcc/testsuite/g++.dg/gomp/pr33372-2.C
+new file mode 100644
+index 00000000..cce7ecc7
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/gomp/pr33372-2.C
+@@ -0,0 +1,19 @@
++// PR c++/33372
++// { dg-do compile }
++// { dg-options "-fopenmp" }
++
++template <typename T>
++void f ()
++{
++  T n = 6;
++#pragma omp parallel num_threads(n)
++  ;
++#pragma omp parallel for schedule(static, n)
++  for (int i = 0; i < 10; i++)
++    ;
++}
++
++void g ()
++{
++  f<int> ();
++}
+diff --git a/gcc/testsuite/g++.dg/gomp/pr33372-3.C b/gcc/testsuite/g++.dg/gomp/pr33372-3.C
+new file mode 100644
+index 00000000..8220f3c5
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/gomp/pr33372-3.C
+@@ -0,0 +1,19 @@
++// PR c++/33372
++// { dg-do compile }
++// { dg-options "-fopenmp" }
++
++template <typename T>
++void f ()
++{
++  T n = 6;
++#pragma omp parallel num_threads(n)	// { dg-error "num_threads expression must be integral" }
++  ;
++#pragma omp parallel for schedule(static, n)
++  for (int i = 0; i < 10; i++)		// { dg-error "chunk size expression must be integral" }
++    ;
++}
++
++void g ()
++{
++  f<double> ();
++}

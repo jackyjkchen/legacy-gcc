@@ -1,0 +1,64 @@
+diff --git a/gcc/omp-low.c b/gcc/omp-low.c
+index 3af5017d..fdc397c1 100644
+--- a/gcc/omp-low.c
++++ b/gcc/omp-low.c
+@@ -2627,6 +2627,14 @@ expand_omp_parallel (struct omp_region *region)
+       /* Declare local variables needed in CHILD_CFUN.  */
+       block = DECL_INITIAL (child_fn);
+       BLOCK_VARS (block) = list2chain (child_cfun->unexpanded_var_list);
++      /* The gimplifier could record temporaries in parallel/task block
++	 rather than in containing function's local_decls chain,
++	 which would mean cgraph missed finalizing them.  Do it now.  */
++      for (t = BLOCK_VARS (block); t; t = TREE_CHAIN (t))
++	if (TREE_CODE (t) == VAR_DECL
++	    && TREE_STATIC (t)
++	    && !DECL_EXTERNAL (t))
++	  varpool_finalize_decl (t);
+       DECL_SAVED_TREE (child_fn) = bb_stmt_list (single_succ (entry_bb));
+ 
+       /* Reset DECL_CONTEXT on function arguments.  */
+diff --git a/libgomp/testsuite/libgomp.c++/pr39573.C b/libgomp/testsuite/libgomp.c++/pr39573.C
+new file mode 100644
+index 00000000..0167222b
+--- /dev/null
++++ b/libgomp/testsuite/libgomp.c++/pr39573.C
+@@ -0,0 +1,39 @@
++// PR middle-end/39573
++// { dg-do run }
++
++int z;
++
++void __attribute__((noinline))
++bar (int *x)
++{
++  #pragma omp atomic
++    z += x[2];
++  x[2] += x[3];
++}
++
++int
++main ()
++{
++  int i;
++#pragma omp parallel for
++  for (i = 0; i < 65536; i++)
++    {
++      int x[] =
++	{
++	  0, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1, 0, 1, 0, 1, 1, 0, 1, 1, 1, 0, 1, 1,
++	  0, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1, 0, 1, 0, 1, 1, 0, 1, 1, 1, 0, 1, 1,
++	  0, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1, 0, 1, 0, 1, 1, 0, 1, 1, 1, 0, 1, 1,
++	  0, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1, 0, 1, 0, 1, 1, 0, 1, 1, 1, 0, 1, 1,
++	  0, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1, 0, 1, 0, 1, 1, 0, 1, 1, 1, 0, 1, 1,
++	  0, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1, 0, 1, 0, 1, 1, 0, 1, 1, 1, 0, 1, 1,
++	  0, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1, 0, 1, 0, 1, 1, 0, 1, 1, 1, 0, 1, 1,
++	  0, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1, 0, 1, 0, 1, 1, 0, 1, 1, 1, 0, 1, 1,
++	  0, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1, 0, 1, 0, 1, 1, 0, 1, 1, 1, 0, 1, 1,
++	  0, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1, 0, 1, 0, 1, 1, 0, 1, 1, 1, 0, 1, 1,
++	  0, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1, 0, 1, 0, 1, 1, 0, 1, 1, 1, 0, 1, 1,
++	  0, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1, 0, 1, 0, 1, 1, 0, 1, 1, 1, 0, 1, 1,
++	  0, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1, 0, 1, 0, 1, 1, 0, 1, 1, 1, 0, 1, 1,
++	};
++      bar (x);
++    }
++}

@@ -1,0 +1,86 @@
+diff --git a/gcc/cp/pt.c b/gcc/cp/pt.c
+index f486e87f..b464c383 100644
+--- a/gcc/cp/pt.c
++++ b/gcc/cp/pt.c
+@@ -9462,15 +9462,23 @@ tsubst_copy_and_build (tree t,
+ 
+ 	if (object_type && !CLASS_TYPE_P (object_type))
+ 	  {
+-	    if (TREE_CODE (member) == BIT_NOT_EXPR)
+-	      return finish_pseudo_destructor_expr (object,
+-						    NULL_TREE,
+-						    object_type);
+-	    else if (TREE_CODE (member) == SCOPE_REF
+-		     && (TREE_CODE (TREE_OPERAND (member, 1)) == BIT_NOT_EXPR))
+-	      return finish_pseudo_destructor_expr (object,
+-						    object,
+-						    object_type);
++	    if (SCALAR_TYPE_P (object_type))
++	      {
++		tree s = NULL_TREE;
++		tree dtor = member;
++
++		if (TREE_CODE (dtor) == SCOPE_REF)
++		  {
++		    s = TREE_OPERAND (dtor, 0);
++		    dtor = TREE_OPERAND (dtor, 1);
++		  }
++		if (TREE_CODE (dtor) == BIT_NOT_EXPR)
++		  {
++		    dtor = TREE_OPERAND (dtor, 0);
++		    if (TYPE_P (dtor))
++		      return finish_pseudo_destructor_expr (object, s, dtor);
++		  }
++	      }
+ 	  }
+ 	else if (TREE_CODE (member) == SCOPE_REF
+ 		 && TREE_CODE (TREE_OPERAND (member, 1)) == TEMPLATE_ID_EXPR)
+diff --git a/gcc/testsuite/g++.dg/template/pseudodtor3.C b/gcc/testsuite/g++.dg/template/pseudodtor3.C
+new file mode 100644
+index 00000000..5f392f4e
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/template/pseudodtor3.C
+@@ -0,0 +1,43 @@
++// PR c++/32241
++// { dg-do compile }
++
++struct A
++{
++  typedef int T;
++  T &foo ();
++  A () { foo.~T (); }	// { dg-error "does not have class type|expected" }
++};
++
++template <typename T> struct B
++{
++  T &foo ();
++  B () { foo.~T (); }	// { dg-error "invalid use of member" }
++};
++
++B<int> b;
++
++template <typename T, typename S> struct C
++{
++  T t;
++  C () { t.~S (); }	// { dg-error "is not of type" }
++};
++
++C<int, long int> c;
++
++template <typename T> struct D
++{
++  T t;
++  typedef long int U;
++  D () { t.~U (); }	// { dg-error "is not of type" }
++};
++
++D<int> d;
++
++template <typename T> struct E
++{
++  T &foo ();
++  typedef long int U;
++  E () { foo.~U (); }	// { dg-error "is not of type" }
++};
++
++E<int> e;

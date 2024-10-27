@@ -1,0 +1,233 @@
+diff --git a/gcc/fortran/primary.c b/gcc/fortran/primary.c
+index f12385c6..a4a9e485 100644
+--- a/gcc/fortran/primary.c
++++ b/gcc/fortran/primary.c
+@@ -2565,8 +2565,18 @@ match_variable (gfc_expr **result, int equiv_flag, int host_flag)
+       break;
+ 
+     case FL_PROCEDURE:
+-      /* Check for a nonrecursive function result */
+-      if (sym->attr.function && sym->result == sym && !sym->attr.external)
++      /* Check for a nonrecursive function result variable.  */
++      if (sym->attr.function
++          && !sym->attr.external
++          && sym->result == sym
++          && ((sym == gfc_current_ns->proc_name
++               && sym == gfc_current_ns->proc_name->result)
++              || (gfc_current_ns->parent
++                  && sym == gfc_current_ns->parent->proc_name->result)
++              || (sym->attr.entry
++                  && sym->ns == gfc_current_ns)
++              || (sym->attr.entry
++                  && sym->ns == gfc_current_ns->parent)))
+ 	{
+ 	  /* If a function result is a derived type, then the derived
+ 	     type may still have to be resolved.  */
+diff --git a/gcc/fortran/resolve.c b/gcc/fortran/resolve.c
+index 141ec682..af99e3ef 100644
+--- a/gcc/fortran/resolve.c
++++ b/gcc/fortran/resolve.c
+@@ -4971,7 +4971,6 @@ resolve_allocate_deallocate (gfc_code *code, const char *fcn)
+ {
+   gfc_symbol *s = NULL;
+   gfc_alloc *a;
+-  bool is_variable;
+ 
+   if (code->expr)
+     s = code->expr->symtree->n.sym;
+@@ -4985,45 +4984,6 @@ resolve_allocate_deallocate (gfc_code *code, const char *fcn)
+       if (gfc_pure (NULL) && gfc_impure_variable (s))
+ 	gfc_error ("Illegal STAT variable in %s statement at %C "
+ 		   "for a PURE procedure", fcn);
+-
+-      is_variable = false;
+-      if (s->attr.flavor == FL_VARIABLE)
+-	is_variable = true;
+-      else if (s->attr.function && s->result == s
+-		 && (gfc_current_ns->proc_name == s
+-			||
+-		    (gfc_current_ns->parent
+-		       && gfc_current_ns->parent->proc_name == s)))
+-	is_variable = true;
+-      else if (gfc_current_ns->entries && s->result == s)
+-	{
+-	  gfc_entry_list *el;
+-	  for (el = gfc_current_ns->entries; el; el = el->next)
+-	    if (el->sym == s)
+-	      {
+-		is_variable = true;
+-	      }
+-	}
+-      else if (gfc_current_ns->parent && gfc_current_ns->parent->entries
+-	         && s->result == s)
+-	{
+-	  gfc_entry_list *el;
+-	  for (el = gfc_current_ns->parent->entries; el; el = el->next)
+-	    if (el->sym == s)
+-	      {
+-		is_variable = true;
+-	      }
+-	}
+-
+-      if (s->attr.flavor == FL_UNKNOWN
+-	    && gfc_add_flavor (&s->attr, FL_VARIABLE,
+-			       s->name, NULL) == SUCCESS)
+-	is_variable = true;
+-
+-      if (!is_variable)
+-	gfc_error ("STAT tag in %s statement at %L must be "
+-		   "a variable", fcn, &code->expr->where);
+-
+     }
+ 
+   if (s && code->expr->ts.type != BT_INTEGER)
+diff --git a/gcc/testsuite/gfortran.dg/alloc_alloc_expr_3.f90 b/gcc/testsuite/gfortran.dg/alloc_alloc_expr_3.f90
+new file mode 100644
+index 00000000..13b2230c
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/alloc_alloc_expr_3.f90
+@@ -0,0 +1,25 @@
++! { dg-do compile }
++!
++! PR fortran/34714 - ICE on invalid
++! Testcase contributed by Martin Reinecke <martin AT mpa-garching DOT mpg DOT de>
++!
++
++module foo
++  type bar
++    logical, pointer, dimension(:) :: baz
++  end type
++contains
++
++function func1()
++  type(bar) func1
++  allocate(func1%baz(1))
++end function
++
++function func2()
++  type(bar) func2
++  allocate(func1%baz(1))      ! { dg-error "is not a variable" }
++end function
++
++end module foo
++
++! { dg-final { cleanup-modules "foo" } }
+diff --git a/gcc/testsuite/gfortran.dg/allocate_stat.f90 b/gcc/testsuite/gfortran.dg/allocate_stat.f90
+index 76626f82..7f9eaf58 100644
+--- a/gcc/testsuite/gfortran.dg/allocate_stat.f90
++++ b/gcc/testsuite/gfortran.dg/allocate_stat.f90
+@@ -51,7 +51,7 @@ subroutine sub()
+   end interface
+   real, pointer :: gain 
+   integer, parameter :: res = 2
+-  allocate (gain,STAT=func2) ! { dg-error "STAT tag in ALLOCATE statement at .1. must be a variable" }
++  allocate (gain,STAT=func2) ! { dg-error "is not a variable" }
+   deallocate(gain)
+ end subroutine sub
+ 
+@@ -68,9 +68,9 @@ contains
+  end function one
+  subroutine sub()
+    integer, pointer :: p
+-   allocate(p, stat=one) ! { dg-error "STAT tag in ALLOCATE statement at .1. must be a variable" }
++   allocate(p, stat=one) ! { dg-error "is not a variable" }
+    if(associated(p)) deallocate(p)
+-   allocate(p, stat=two) ! { dg-error "STAT tag in ALLOCATE statement at .1. must be a variable" }
++   allocate(p, stat=two) ! { dg-error "is not a variable" }
+    if(associated(p)) deallocate(p)
+  end subroutine sub
+ end module test
+diff --git a/gcc/testsuite/gfortran.dg/func_assign.f90 b/gcc/testsuite/gfortran.dg/func_assign.f90
+index 1f7407c7..7ecf3294 100644
+--- a/gcc/testsuite/gfortran.dg/func_assign.f90
++++ b/gcc/testsuite/gfortran.dg/func_assign.f90
+@@ -25,8 +25,8 @@ contains
+    end interface
+    sub = 'a'  ! { dg-error "is not a variable" }
+    fun = 4.4  ! { dg-error "is not a variable" }
+-   funget = 4 ! { dg-error "is not a VALUE" }
+-   bar = 5    ! { dg-error "is not a VALUE" }
++   funget = 4 ! { dg-error "is not a variable" }
++   bar = 5    ! { dg-error "is not a variable" }
+   end subroutine a
+ end module mod
+ 
+diff --git a/gcc/testsuite/gfortran.dg/implicit_11.f90 b/gcc/testsuite/gfortran.dg/implicit_11.f90
+index 26cf5ae8..d33acd10 100644
+--- a/gcc/testsuite/gfortran.dg/implicit_11.f90
++++ b/gcc/testsuite/gfortran.dg/implicit_11.f90
+@@ -31,7 +31,7 @@
+      SUBROUTINE AD0001
+        REAL RLA1(:)
+        ALLOCATABLE RLA1
+-       ALLOCATE (RLA1(NF10), STAT = ISTAT2) ! { dg-error "must be a variable" }
++       ALLOCATE (RLA1(NF10), STAT = ISTAT2) ! { dg-error "is not a variable" }
+      END SUBROUTINE
+      END MODULE tests2
+ 
+diff --git a/gcc/testsuite/gfortran.dg/proc_assign_1.f90 b/gcc/testsuite/gfortran.dg/proc_assign_1.f90
+index 9f2952b5..919089ac 100644
+--- a/gcc/testsuite/gfortran.dg/proc_assign_1.f90
++++ b/gcc/testsuite/gfortran.dg/proc_assign_1.f90
+@@ -30,11 +30,11 @@ contains
+         end subroutine foobar
+     end function foo
+     subroutine bar()         ! This was the original bug.
+-        foo = 10             ! { dg-error "is not a VALUE" }
++        foo = 10             ! { dg-error "is not a variable" }
+     end subroutine bar
+     integer function oh_no ()
+         oh_no = 1
+-        foo = 5              ! { dg-error "is not a VALUE" }
++        foo = 5              ! { dg-error "is not a variable" }
+     end function oh_no
+ end module simple
+ 
+@@ -59,16 +59,16 @@ end module simpler
+     stmt_fcn (w) = sin (w)     
+     call x (y ())
+     x = 10                   ! { dg-error "is not a variable" }
+-    y = 20                   ! { dg-error "is not a VALUE" }
+-    foo_er = 8               ! { dg-error "is not a VALUE" }
+-    ext1 = 99                ! { dg-error "is not a VALUE" }
+-    ext2 = 99                ! { dg-error "is not a VALUE" }
++    y = 20                   ! { dg-error "is not a variable" }
++    foo_er = 8               ! { dg-error "is not a variable" }
++    ext1 = 99                ! { dg-error "is not a variable" }
++    ext2 = 99                ! { dg-error "is not a variable" }
+     stmt_fcn = 1.0           ! { dg-error "is not a variable" }
+     w = stmt_fcn (1.0)
+ contains
+     subroutine x (i)
+         integer i
+-        y = i                ! { dg-error "is not a VALUE" }
++        y = i                ! { dg-error "is not a variable" }
+     end subroutine x
+     function y ()
+         integer y
+diff --git a/gcc/testsuite/gfortran.dg/proc_assign_2.f90 b/gcc/testsuite/gfortran.dg/proc_assign_2.f90
+index 5a92be5c..8f313c58 100644
+--- a/gcc/testsuite/gfortran.dg/proc_assign_2.f90
++++ b/gcc/testsuite/gfortran.dg/proc_assign_2.f90
+@@ -14,7 +14,7 @@ CONTAINS
+     END FUNCTION
+ 
+     LOGICAL FUNCTION f2()
+-      f1 = .FALSE.  ! { dg-error "not a VALUE" }
++      f1 = .FALSE.  ! { dg-error "is not a variable" }
+     END FUNCTION
+   END FUNCTION
+ END MODULE
+diff --git a/gcc/testsuite/gfortran.dg/procedure_lvalue.f90 b/gcc/testsuite/gfortran.dg/procedure_lvalue.f90
+index 634eaca0..741dc8c3 100644
+--- a/gcc/testsuite/gfortran.dg/procedure_lvalue.f90
++++ b/gcc/testsuite/gfortran.dg/procedure_lvalue.f90
+@@ -14,7 +14,7 @@ end module t
+ 
+ subroutine r
+   use t
+-  b = 1.       ! { dg-error "is not a VALUE" }
++  b = 1.       ! { dg-error "is not a variable" }
+   y = a(1.)
+ end subroutine r
+ 

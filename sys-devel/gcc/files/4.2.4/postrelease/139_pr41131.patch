@@ -1,0 +1,34 @@
+diff --git a/gcc/cp/tree.c b/gcc/cp/tree.c
+index d69346a3..120be69e 100644
+--- a/gcc/cp/tree.c
++++ b/gcc/cp/tree.c
+@@ -110,6 +110,12 @@ lvalue_p_1 (tree ref,
+       return clk_ordinary;
+ 
+     case CONST_DECL:
++      /* CONST_DECL without TREE_STATIC are enumeration values and
++	 thus not lvalues.  With TREE_STATIC they are used by ObjC++
++	 in objc_build_string_object and need to be considered as
++	 lvalues.  */
++      if (! TREE_STATIC (ref))
++	return clk_none;
+     case VAR_DECL:
+       if (TREE_READONLY (ref) && ! TREE_STATIC (ref)
+ 	  && DECL_LANG_SPECIFIC (ref)
+diff --git a/gcc/testsuite/g++.dg/expr/unary3.C b/gcc/testsuite/g++.dg/expr/unary3.C
+new file mode 100644
+index 00000000..abca0322
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/expr/unary3.C
+@@ -0,0 +1,11 @@
++// PR c++/41131
++// { dg-do compile }
++
++struct X { enum E { a = 100 }; };
++
++int
++main ()
++{
++  X x;
++  (void) &x.a;    // { dg-error "lvalue required" }
++}

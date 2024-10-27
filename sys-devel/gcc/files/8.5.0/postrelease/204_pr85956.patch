@@ -1,0 +1,167 @@
+diff --git a/gcc/fortran/trans-openmp.c b/gcc/fortran/trans-openmp.c
+index 6f82239a4..ef4cf004e 100644
+--- a/gcc/fortran/trans-openmp.c
++++ b/gcc/fortran/trans-openmp.c
+@@ -43,6 +43,7 @@ along with GCC; see the file COPYING3.  If not see
+ #include "diagnostic-core.h"
+ #undef GCC_DIAG_STYLE
+ #define GCC_DIAG_STYLE __gcc_gfc__
++#include "attribs.h"
+ 
+ int ompws_flags;
+ 
+@@ -297,10 +298,19 @@ gfc_walk_alloc_comps (tree decl, tree dest, tree var,
+ 	}
+       else
+ 	{
++	  bool compute_nelts = false;
+ 	  if (!TYPE_DOMAIN (type)
+ 	      || TYPE_MAX_VALUE (TYPE_DOMAIN (type)) == NULL_TREE
+ 	      || TYPE_MIN_VALUE (TYPE_DOMAIN (type)) == error_mark_node
+ 	      || TYPE_MAX_VALUE (TYPE_DOMAIN (type)) == error_mark_node)
++	    compute_nelts = true;
++	  else if (VAR_P (TYPE_MAX_VALUE (TYPE_DOMAIN (type))))
++	    {
++	      tree a = DECL_ATTRIBUTES (TYPE_MAX_VALUE (TYPE_DOMAIN (type)));
++	      if (lookup_attribute ("omp dummy var", a))
++		compute_nelts = true;
++	    }
++	  if (compute_nelts)
+ 	    {
+ 	      tem = fold_build2 (EXACT_DIV_EXPR, sizetype,
+ 				 TYPE_SIZE_UNIT (type),
+@@ -918,11 +928,20 @@ gfc_omp_clause_linear_ctor (tree clause, tree dest, tree src, tree add)
+       && (!GFC_DECL_GET_SCALAR_ALLOCATABLE (OMP_CLAUSE_DECL (clause))
+ 	  || !POINTER_TYPE_P (type)))
+     {
++      bool compute_nelts = false;
+       gcc_assert (TREE_CODE (type) == ARRAY_TYPE);
+       if (!TYPE_DOMAIN (type)
+ 	  || TYPE_MAX_VALUE (TYPE_DOMAIN (type)) == NULL_TREE
+ 	  || TYPE_MIN_VALUE (TYPE_DOMAIN (type)) == error_mark_node
+ 	  || TYPE_MAX_VALUE (TYPE_DOMAIN (type)) == error_mark_node)
++	compute_nelts = true;
++      else if (VAR_P (TYPE_MAX_VALUE (TYPE_DOMAIN (type))))
++	{
++	  tree a = DECL_ATTRIBUTES (TYPE_MAX_VALUE (TYPE_DOMAIN (type)));
++	  if (lookup_attribute ("omp dummy var", a))
++	    compute_nelts = true;
++	}
++      if (compute_nelts)
+ 	{
+ 	  nelems = fold_build2 (EXACT_DIV_EXPR, sizetype,
+ 				TYPE_SIZE_UNIT (type),
+diff --git a/gcc/omp-low.c b/gcc/omp-low.c
+index 2ccf61293..fd2a3806e 100644
+--- a/gcc/omp-low.c
++++ b/gcc/omp-low.c
+@@ -868,6 +868,7 @@ new_omp_context (gimple *stmt, omp_context *outer_ctx)
+     }
+ 
+   ctx->cb.decl_map = new hash_map<tree, tree>;
++  ctx->cb.adjust_array_error_bounds = true;
+ 
+   return ctx;
+ }
+diff --git a/gcc/testsuite/c-c++-common/gomp/pr85956.c b/gcc/testsuite/c-c++-common/gomp/pr85956.c
+new file mode 100644
+index 000000000..bfbf1e302
+--- /dev/null
++++ b/gcc/testsuite/c-c++-common/gomp/pr85956.c
+@@ -0,0 +1,12 @@
++/* PR middle-end/85956 */
++/* { dg-do compile } */
++/* { dg-additional-options "-O2 -Wall" } */
++
++void
++foo (int n, void *p)
++{
++  int (*a)[n] = (int (*)[n]) p;
++  #pragma omp parallel shared(a) default(none)
++  #pragma omp master
++    a[-1][-1] = 42;	/* { dg-warning "array subscript -1 is below array bounds" } */
++}
+diff --git a/gcc/testsuite/g++.dg/gomp/pr88733.C b/gcc/testsuite/g++.dg/gomp/pr88733.C
+new file mode 100644
+index 000000000..f80de7ec4
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/gomp/pr88733.C
+@@ -0,0 +1,29 @@
++// PR lto/88733
++// { dg-do compile }
++// { dg-additional-options "-flto -ffat-lto-objects" { target lto } }
++
++struct A { int f; } a;
++
++__attribute__((noipa)) void
++bar (A **x, int)
++{
++  x[0] = &a;
++}
++
++int
++foo (int n)
++{
++  int g;
++  A *j[n];
++  bar (j, n);
++#pragma omp parallel
++#pragma omp single
++  g = j[0]->f;
++  return g;
++}
++
++int
++main ()
++{
++  foo (0);
++}
+diff --git a/gcc/tree-inline.c b/gcc/tree-inline.c
+index 9e7fa4b29..52421af3b 100644
+--- a/gcc/tree-inline.c
++++ b/gcc/tree-inline.c
+@@ -519,11 +519,27 @@ remap_type_1 (tree type, copy_body_data *id)
+ 
+       if (TYPE_MAIN_VARIANT (new_tree) != new_tree)
+ 	{
+-	  gcc_checking_assert (TYPE_DOMAIN (type) == TYPE_DOMAIN (TYPE_MAIN_VARIANT (type)));
++	  gcc_checking_assert (TYPE_DOMAIN (type)
++			       == TYPE_DOMAIN (TYPE_MAIN_VARIANT (type)));
+ 	  TYPE_DOMAIN (new_tree) = TYPE_DOMAIN (TYPE_MAIN_VARIANT (new_tree));
+ 	}
+       else
+-	TYPE_DOMAIN (new_tree) = remap_type (TYPE_DOMAIN (new_tree), id);
++        {
++	  TYPE_DOMAIN (new_tree) = remap_type (TYPE_DOMAIN (new_tree), id);
++	  /* For array bounds where we have decided not to copy over the bounds
++	     variable which isn't used in OpenMP/OpenACC region, change them to
++	     an uninitialized VAR_DECL temporary.  */
++	  if (TYPE_MAX_VALUE (TYPE_DOMAIN (new_tree)) == error_mark_node
++	      && id->adjust_array_error_bounds
++	      && TYPE_MAX_VALUE (TYPE_DOMAIN (type)) != error_mark_node)
++	    {
++	      tree v = create_tmp_var (TREE_TYPE (TYPE_DOMAIN (new_tree)));
++	      DECL_ATTRIBUTES (v)
++		= tree_cons (get_identifier ("omp dummy var"), NULL_TREE,
++			     DECL_ATTRIBUTES (v));
++	      TYPE_MAX_VALUE (TYPE_DOMAIN (new_tree)) = v;
++	    }
++        }
+       break;
+ 
+     case RECORD_TYPE:
+diff --git a/gcc/tree-inline.h b/gcc/tree-inline.h
+index 773ef9679..6b622f4da 100644
+--- a/gcc/tree-inline.h
++++ b/gcc/tree-inline.h
+@@ -126,6 +126,10 @@ struct copy_body_data
+      and only in that case will actually remap the type.  */
+   bool dont_remap_vla_if_no_change;
+ 
++  /* Replace error_mark_node as upper bound of array types with
++     an uninitialized VAR_DECL temporary.  */
++  bool adjust_array_error_bounds;
++
+   /* A function to be called when duplicating BLOCK nodes.  */
+   void (*transform_lang_insert_block) (tree);
+ 

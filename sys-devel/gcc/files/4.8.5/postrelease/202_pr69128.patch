@@ -1,0 +1,140 @@
+diff --git a/gcc/fortran/trans-array.c b/gcc/fortran/trans-array.c
+index a223a17bc..24c95f10a 100644
+--- a/gcc/fortran/trans-array.c
++++ b/gcc/fortran/trans-array.c
+@@ -3442,7 +3442,8 @@ gfc_trans_scalarized_loop_end (gfc_loopinfo * loop, int n,
+   tree init;
+   tree incr;
+ 
+-  if ((ompws_flags & (OMPWS_WORKSHARE_FLAG | OMPWS_SCALARIZER_WS))
++  if ((ompws_flags & (OMPWS_WORKSHARE_FLAG | OMPWS_SCALARIZER_WS
++		      | OMPWS_SCALARIZER_BODY))
+       == (OMPWS_WORKSHARE_FLAG | OMPWS_SCALARIZER_WS)
+       && n == loop->dimen - 1)
+     {
+diff --git a/gcc/fortran/trans-expr.c b/gcc/fortran/trans-expr.c
+index 1531fc256..85eb04ae8 100644
+--- a/gcc/fortran/trans-expr.c
++++ b/gcc/fortran/trans-expr.c
+@@ -7722,6 +7722,7 @@ gfc_trans_assignment_1 (gfc_expr * expr1, gfc_expr * expr2, bool init_flag,
+   bool scalar_to_array;
+   tree string_length;
+   int n;
++  bool maybe_workshare = false;
+ 
+   /* Assignment of the form lhs = rhs.  */
+   gfc_start_block (&block);
+@@ -7790,8 +7791,13 @@ gfc_trans_assignment_1 (gfc_expr * expr1, gfc_expr * expr2, bool init_flag,
+ 	}
+ 
+       /* Allow the scalarizer to workshare array assignments.  */
+-      if ((ompws_flags & OMPWS_WORKSHARE_FLAG) && loop.temp_ss == NULL)
+-	ompws_flags |= OMPWS_SCALARIZER_WS;
++      if ((ompws_flags & (OMPWS_WORKSHARE_FLAG | OMPWS_SCALARIZER_BODY))
++	  == OMPWS_WORKSHARE_FLAG
++	  && loop.temp_ss == NULL)
++	{
++	  maybe_workshare = true;
++	  ompws_flags |= OMPWS_SCALARIZER_WS | OMPWS_SCALARIZER_BODY;
++	}
+ 
+       /* Start the scalarized loop body.  */
+       gfc_start_scalarized_body (&loop, &body);
+@@ -7905,6 +7911,9 @@ gfc_trans_assignment_1 (gfc_expr * expr1, gfc_expr * expr2, bool init_flag,
+ 	    gfc_add_expr_to_block (&loop.code[expr1->rank - 1], tmp);
+ 	}
+ 
++      if (maybe_workshare)
++	ompws_flags &= ~OMPWS_SCALARIZER_BODY;
++
+       /* Generate the copying loops.  */
+       gfc_trans_scalarizing_loops (&loop, &body);
+ 
+diff --git a/gcc/fortran/trans-openmp.c b/gcc/fortran/trans-openmp.c
+index 5cd7b726c..1302486f3 100644
+--- a/gcc/fortran/trans-openmp.c
++++ b/gcc/fortran/trans-openmp.c
+@@ -1809,7 +1809,7 @@ gfc_trans_omp_workshare (gfc_code *code, gfc_omp_clauses *clauses)
+ 
+       /* By default, every gfc_code is a single unit of work.  */
+       ompws_flags |= OMPWS_CURR_SINGLEUNIT;
+-      ompws_flags &= ~OMPWS_SCALARIZER_WS;
++      ompws_flags &= ~(OMPWS_SCALARIZER_WS | OMPWS_SCALARIZER_BODY);
+ 
+       switch (code->op)
+ 	{
+diff --git a/gcc/fortran/trans-stmt.c b/gcc/fortran/trans-stmt.c
+index 1d8588d60..9de9b34ac 100644
+--- a/gcc/fortran/trans-stmt.c
++++ b/gcc/fortran/trans-stmt.c
+@@ -4602,10 +4602,15 @@ gfc_trans_where_3 (gfc_code * cblock, gfc_code * eblock)
+   gfc_loopinfo loop;
+   gfc_ss *edss = 0;
+   gfc_ss *esss = 0;
++  bool maybe_workshare = false;
+ 
+   /* Allow the scalarizer to workshare simple where loops.  */
+-  if (ompws_flags & OMPWS_WORKSHARE_FLAG)
+-    ompws_flags |= OMPWS_SCALARIZER_WS;
++  if ((ompws_flags & (OMPWS_WORKSHARE_FLAG | OMPWS_SCALARIZER_BODY))
++      == OMPWS_WORKSHARE_FLAG)
++    {
++      maybe_workshare = true;
++      ompws_flags |= OMPWS_SCALARIZER_WS | OMPWS_SCALARIZER_BODY;
++    }
+ 
+   cond = cblock->expr1;
+   tdst = cblock->next->expr1;
+@@ -4705,6 +4710,8 @@ gfc_trans_where_3 (gfc_code * cblock, gfc_code * eblock)
+   gfc_add_expr_to_block (&body, tmp);
+   gfc_add_block_to_block (&body, &cse.post);
+ 
++  if (maybe_workshare)
++    ompws_flags &= ~OMPWS_SCALARIZER_BODY;
+   gfc_trans_scalarizing_loops (&loop, &body);
+   gfc_add_block_to_block (&block, &loop.pre);
+   gfc_add_block_to_block (&block, &loop.post);
+diff --git a/gcc/fortran/trans.h b/gcc/fortran/trans.h
+index 03adfddc5..b2503e1b6 100644
+--- a/gcc/fortran/trans.h
++++ b/gcc/fortran/trans.h
+@@ -954,7 +954,9 @@ extern const char gfc_msg_wrong_return[];
+ 					   construct is not workshared.  */
+ #define OMPWS_SCALARIZER_WS	4	/* Set if scalarizer should attempt
+ 					   to create parallel loops.  */
+-#define OMPWS_NOWAIT		8	/* Use NOWAIT on OMP_FOR.  */
++#define OMPWS_SCALARIZER_BODY	8	/* Set if handling body of potential
++					   parallel loop.  */
++#define OMPWS_NOWAIT		16	/* Use NOWAIT on OMP_FOR.  */
+ extern int ompws_flags;
+ 
+ #endif /* GFC_TRANS_H */
+diff --git a/gcc/testsuite/gfortran.dg/gomp/pr69128.f90 b/gcc/testsuite/gfortran.dg/gomp/pr69128.f90
+new file mode 100644
+index 000000000..248c404ad
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/gomp/pr69128.f90
+@@ -0,0 +1,23 @@
++! PR fortran/69128
++! { dg-do compile }
++
++program test
++  implicit none
++  interface
++    subroutine use(b, c)
++      real, allocatable :: b(:), c(:)
++    end subroutine
++  end interface
++  real, allocatable :: a(:,:), b(:), c(:)
++  integer :: dim1, dim2, i,j
++  dim1=10000
++  dim2=500
++  allocate(a(dim1,dim2),b(dim1),c(dim1))
++  call random_number(a)
++
++!$omp parallel workshare
++  b(:) = maxval(a(:,:), dim=2)
++  c(:) = sum(a(:,:), dim=2)
++!$omp end parallel workshare
++  call use(b, c)
++end program

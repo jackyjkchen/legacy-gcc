@@ -1,0 +1,67 @@
+diff --git a/gcc/fortran/trans-openmp.c b/gcc/fortran/trans-openmp.c
+index 79ce1e9ef..9c2d8ffdd 100644
+--- a/gcc/fortran/trans-openmp.c
++++ b/gcc/fortran/trans-openmp.c
+@@ -1219,6 +1219,18 @@ gfc_trans_omp_atomic (gfc_code *code)
+     }
+ 
+   lhsaddr = save_expr (lhsaddr);
++  if (TREE_CODE (lhsaddr) != SAVE_EXPR
++      && (TREE_CODE (lhsaddr) != ADDR_EXPR
++	  || TREE_CODE (TREE_OPERAND (lhsaddr, 0)) != VAR_DECL))
++    {
++      /* Make sure LHS is simple enough so that goa_lhs_expr_p can recognize
++	 it even after unsharing function body.  */
++      tree var = create_tmp_var_raw (TREE_TYPE (lhsaddr), NULL);
++      DECL_CONTEXT (var) = current_function_decl;
++      lhsaddr = build4 (TARGET_EXPR, TREE_TYPE (lhsaddr), var, lhsaddr,
++			NULL_TREE, NULL_TREE);
++    }
++
+   rhs = gfc_evaluate_now (rse.expr, &block);
+ 
+   if (atomic_code->ext.omp_atomic == GFC_OMP_ATOMIC_WRITE)
+diff --git a/libgomp/testsuite/libgomp.fortran/pr63938-1.f90 b/libgomp/testsuite/libgomp.fortran/pr63938-1.f90
+new file mode 100644
+index 000000000..27501b2f8
+--- /dev/null
++++ b/libgomp/testsuite/libgomp.fortran/pr63938-1.f90
+@@ -0,0 +1,14 @@
++! PR fortran/63938
++! { dg-do run }
++
++program pr63938_1
++  integer :: i, x(1)
++  x(1) = 0
++!$omp parallel do
++  do i = 1, 1000
++    !$omp atomic
++    x(1) = x(1) + 1
++  end do
++!$omp end parallel do
++  if (x(1) .ne. 1000) call abort
++end program pr63938_1
+diff --git a/libgomp/testsuite/libgomp.fortran/pr63938-2.f90 b/libgomp/testsuite/libgomp.fortran/pr63938-2.f90
+new file mode 100644
+index 000000000..e5f37ba76
+--- /dev/null
++++ b/libgomp/testsuite/libgomp.fortran/pr63938-2.f90
+@@ -0,0 +1,18 @@
++! PR fortran/63938
++! { dg-do run }
++
++program pr63938_2
++  type t
++    integer :: x
++  end type
++  integer :: i
++  type(t) :: x
++  x%x = 0
++!$omp parallel do
++  do i = 1, 1000
++    !$omp atomic
++    x%x = x%x + 1
++  end do
++!$omp end parallel do
++  if (x%x .ne. 1000) call abort
++end program pr63938_2

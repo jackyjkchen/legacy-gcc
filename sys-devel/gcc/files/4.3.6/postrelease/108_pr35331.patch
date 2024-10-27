@@ -1,0 +1,134 @@
+diff --git a/gcc/cp/semantics.c b/gcc/cp/semantics.c
+index 41d7c938..1ca245ac 100644
+--- a/gcc/cp/semantics.c
++++ b/gcc/cp/semantics.c
+@@ -2206,7 +2206,7 @@ check_template_template_default_arg (tree argument)
+ tree
+ begin_class_definition (tree t, tree attributes)
+ {
+-  if (t == error_mark_node)
++  if (error_operand_p (t) || error_operand_p (TYPE_MAIN_DECL (t)))
+     return error_mark_node;
+ 
+   if (processing_template_parmlist)
+diff --git a/gcc/testsuite/g++.dg/cpp0x/pr31438.C b/gcc/testsuite/g++.dg/cpp0x/pr31438.C
+index 4763918b..74738830 100644
+--- a/gcc/testsuite/g++.dg/cpp0x/pr31438.C
++++ b/gcc/testsuite/g++.dg/cpp0x/pr31438.C
+@@ -2,8 +2,8 @@
+ 
+ template<typename> struct A;
+ template<typename T, typename... U> struct A<T(U)> // { dg-error "parameter packs|U" }
+-{     // { dg-error "parameter packs|U" }
+- template<typename X> A(X); // { dg-error "parameter packs|U" }
++{
++ template<typename X> A(X);
+ };
+ 
+ A<void(int)> a(0); // { dg-error "incomplete type" }
+diff --git a/gcc/testsuite/g++.dg/cpp0x/pr32125.C b/gcc/testsuite/g++.dg/cpp0x/pr32125.C
+index 048cf454..210a29c0 100644
+--- a/gcc/testsuite/g++.dg/cpp0x/pr32125.C
++++ b/gcc/testsuite/g++.dg/cpp0x/pr32125.C
+@@ -2,7 +2,7 @@
+ template<typename...> struct A;
+ 
+ template<typename...T> struct A<T*> // { dg-error "not expanded|T" }
+-{       // { dg-error "not expanded|T" }
+-  A();  // { dg-error "not expanded|T" }
+-  A(T); // { dg-error "not expanded|T" }
++{
++  A();
++  A(T);
+ };
+diff --git a/gcc/testsuite/g++.dg/cpp0x/pr32126.C b/gcc/testsuite/g++.dg/cpp0x/pr32126.C
+index a344567d..c525cca6 100644
+--- a/gcc/testsuite/g++.dg/cpp0x/pr32126.C
++++ b/gcc/testsuite/g++.dg/cpp0x/pr32126.C
+@@ -2,7 +2,7 @@
+ template<typename...> struct A;
+ 
+ template<typename...T> struct A<T> // { dg-error "not expanded|T|" }
+-{ // { dg-error "not expanded|T|" }
++{
+  static int i;
+ };
+ 
+diff --git a/gcc/testsuite/g++.dg/cpp0x/variadic81.C b/gcc/testsuite/g++.dg/cpp0x/variadic81.C
+index c5673789..cce61b31 100644
+--- a/gcc/testsuite/g++.dg/cpp0x/variadic81.C
++++ b/gcc/testsuite/g++.dg/cpp0x/variadic81.C
+@@ -4,7 +4,7 @@
+ template<typename> struct A;
+ 
+ template<typename... T> struct A<T*>  // { dg-error "not expanded|T|not used|T" }
+-{                                     // { dg-error "not expanded|T|not used|T" }
++{
+   struct B;
+ };
+ 
+diff --git a/gcc/testsuite/g++.dg/cpp0x/vt-34055.C b/gcc/testsuite/g++.dg/cpp0x/vt-34055.C
+index 29066b50..c5077843 100644
+--- a/gcc/testsuite/g++.dg/cpp0x/vt-34055.C
++++ b/gcc/testsuite/g++.dg/cpp0x/vt-34055.C
+@@ -3,8 +3,8 @@
+ template<typename...> struct A;
+ 
+ template<typename...T> struct A<T*> // { dg-error "parameter packs|T" }
+-{   // { dg-error "parameter packs|T" }
+-  void foo();  // { dg-error "parameter packs|T|candidate" }
++{
++  void foo();
+ };
+ 
+ template<typename...T> void A<T*>::foo() {} // { dg-error "invalid declarator" }
+@@ -14,8 +14,8 @@ template<typename...T> void A<T*>::foo() {} // { dg-error "invalid declarator" }
+ template<typename...> struct B;
+ 
+ template<typename...T> struct B<T&> // { dg-error "parameter packs|T" }
+-{ // { dg-error "parameter packs|T" }
+-  void foo(); // { dg-error "parameter packs|T" }
++{
++  void foo();
+ };
+ 
+ template<typename...T> void B<T&>::foo() {} // { dg-error "invalid declarator" }
+@@ -24,8 +24,8 @@ template<typename...T> void B<T&>::foo() {} // { dg-error "invalid declarator" }
+ template<typename...> struct C;
+ 
+ template<typename...T> struct C<T()> // { dg-error "parameter packs|T" }
+-{ // { dg-error "parameter packs|T" }
+-  void foo(); // { dg-error "parameter packs|T" }
++{
++  void foo();
+ };
+ 
+ template<typename...T> void C<T()>::foo() {} // { dg-error "invalid declarator" }
+diff --git a/gcc/testsuite/g++.dg/cpp0x/vt-34606.C b/gcc/testsuite/g++.dg/cpp0x/vt-34606.C
+index f62e2d54..46794335 100644
+--- a/gcc/testsuite/g++.dg/cpp0x/vt-34606.C
++++ b/gcc/testsuite/g++.dg/cpp0x/vt-34606.C
+@@ -2,8 +2,8 @@
+ template<typename...> struct A;
+ 
+ template<typename T, typename... U> struct A<T, U> // { dg-error "parameter packs|U" }
+-{  // { dg-error "parameter packs|U" }
++{
+   template<typename> struct B;
+ 
+-  template<typename X> struct B<X*> {};  // { dg-error "parameter packs|U" }
++  template<typename X> struct B<X*> {};
+ };
+diff --git a/gcc/testsuite/g++.dg/cpp0x/vt-35331.C b/gcc/testsuite/g++.dg/cpp0x/vt-35331.C
+new file mode 100644
+index 00000000..0add9819
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/vt-35331.C
+@@ -0,0 +1,7 @@
++// { dg-options "-std=c++0x" }
++template<typename...> struct A;
++
++template<typename...T> struct A<T*> // { dg-error "not expanded|T" }
++{
++  friend void foo();
++};

@@ -1,0 +1,49 @@
+diff --git a/gcc/cp/parser.c b/gcc/cp/parser.c
+index 67c7ca95..5094ede7 100644
+--- a/gcc/cp/parser.c
++++ b/gcc/cp/parser.c
+@@ -14715,7 +14715,13 @@ cp_parser_class_head (cp_parser* parser,
+ 	    }
+ 	}
+ 
+-      maybe_process_partial_specialization (TREE_TYPE (type));
++      if (maybe_process_partial_specialization (TREE_TYPE (type))
++	  == error_mark_node)
++	{
++	  type = NULL_TREE;
++	  goto done;
++	}
++
+       class_type = current_class_type;
+       /* Enter the scope indicated by the nested-name-specifier.  */
+       pushed_scope = push_scope (nested_name_specifier);
+diff --git a/gcc/cp/pt.c b/gcc/cp/pt.c
+index 2aca46bb..8abb66a8 100644
+--- a/gcc/cp/pt.c
++++ b/gcc/cp/pt.c
+@@ -782,7 +782,11 @@ maybe_process_partial_specialization (tree type)
+ 	  check_specialization_namespace (CLASSTYPE_TI_TEMPLATE (type));
+ 	  SET_CLASSTYPE_TEMPLATE_SPECIALIZATION (type);
+ 	  if (processing_template_decl)
+-	    push_template_decl (TYPE_MAIN_DECL (type));
++	    {
++	      if (push_template_decl (TYPE_MAIN_DECL (type))
++		  == error_mark_node)
++		return error_mark_node;
++	    }
+ 	}
+       else if (CLASSTYPE_TEMPLATE_INSTANTIATION (type))
+ 	error ("specialization of %qT after instantiation", type);
+diff --git a/gcc/testsuite/g++.dg/cpp0x/vt-35242.C b/gcc/testsuite/g++.dg/cpp0x/vt-35242.C
+new file mode 100644
+index 00000000..9cc859b8
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/vt-35242.C
+@@ -0,0 +1,7 @@
++// { dg-options "-std=c++0x" }
++struct A
++{
++  template<typename... T> struct B;
++};
++
++template<typename... T> struct A::B<T*> {}; // { dg-error "parameter packs|T" }

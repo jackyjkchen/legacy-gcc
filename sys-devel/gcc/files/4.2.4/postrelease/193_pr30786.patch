@@ -1,0 +1,101 @@
+diff --git a/gcc/testsuite/gcc.dg/cpp/pr30786.c b/gcc/testsuite/gcc.dg/cpp/pr30786.c
+new file mode 100644
+index 00000000..f39f83cc
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/cpp/pr30786.c
+@@ -0,0 +1,9 @@
++/* PR preprocessor/30786 - _Pragma at end of file should not ICE */
++/* { dg-do compile } */
++
++/* { dg-error "parenthesized" "" { target *-*-* } 9 } */
++/* { dg-error "expected" "" { target *-*-* } 9 } */
++
++int x;
++
++_Pragma
+diff --git a/libcpp/directives.c b/libcpp/directives.c
+index 7fb142e4..37b4aa23 100644
+--- a/libcpp/directives.c
++++ b/libcpp/directives.c
+@@ -1457,15 +1457,24 @@ static const cpp_token *
+ get__Pragma_string (cpp_reader *pfile)
+ {
+   const cpp_token *string;
++  const cpp_token *paren;
+ 
+-  if (get_token_no_padding (pfile)->type != CPP_OPEN_PAREN)
++  paren = get_token_no_padding (pfile);
++  if (paren->type == CPP_EOF)
++    _cpp_backup_tokens (pfile, 1);
++  if (paren->type != CPP_OPEN_PAREN)
+     return NULL;
+ 
+   string = get_token_no_padding (pfile);
++  if (string->type == CPP_EOF)
++    _cpp_backup_tokens (pfile, 1);
+   if (string->type != CPP_STRING && string->type != CPP_WSTRING)
+     return NULL;
+ 
+-  if (get_token_no_padding (pfile)->type != CPP_CLOSE_PAREN)
++  paren = get_token_no_padding (pfile);
++  if (paren->type == CPP_EOF)
++    _cpp_backup_tokens (pfile, 1);
++  if (paren->type != CPP_CLOSE_PAREN)
+     return NULL;
+ 
+   return string;
+@@ -1585,18 +1594,21 @@ destringize_and_run (cpp_reader *pfile, const cpp_string *in)
+   _cpp_push_token_context (pfile, NULL, toks, count);
+ }
+ 
+-/* Handle the _Pragma operator.  */
+-void
++/* Handle the _Pragma operator.  Return 0 on error, 1 if ok.  */
++int
+ _cpp_do__Pragma (cpp_reader *pfile)
+ {
+   const cpp_token *string = get__Pragma_string (pfile);
+   pfile->directive_result.type = CPP_PADDING;
+ 
+   if (string)
+-    destringize_and_run (pfile, &string->val.str);
+-  else
+-    cpp_error (pfile, CPP_DL_ERROR,
+-	       "_Pragma takes a parenthesized string literal");
++    {
++      destringize_and_run (pfile, &string->val.str);
++      return 1;
++    }
++  cpp_error (pfile, CPP_DL_ERROR,
++	     "_Pragma takes a parenthesized string literal");
++  return 0;
+ }
+ 
+ /* Handle #ifdef.  */
+diff --git a/libcpp/internal.h b/libcpp/internal.h
+index 857bfe1d..6cef3366 100644
+--- a/libcpp/internal.h
++++ b/libcpp/internal.h
+@@ -554,7 +554,7 @@ extern int _cpp_handle_directive (cpp_reader *, int);
+ extern void _cpp_define_builtin (cpp_reader *, const char *);
+ extern char ** _cpp_save_pragma_names (cpp_reader *);
+ extern void _cpp_restore_pragma_names (cpp_reader *, char **);
+-extern void _cpp_do__Pragma (cpp_reader *);
++extern int _cpp_do__Pragma (cpp_reader *);
+ extern void _cpp_init_directives (cpp_reader *);
+ extern void _cpp_init_internal_pragmas (cpp_reader *);
+ extern void _cpp_do_file_change (cpp_reader *, enum lc_reason, const char *,
+diff --git a/libcpp/macro.c b/libcpp/macro.c
+index 84007020..68c9de21 100644
+--- a/libcpp/macro.c
++++ b/libcpp/macro.c
+@@ -292,8 +292,7 @@ builtin_macro (cpp_reader *pfile, cpp_hashnode *node)
+       if (pfile->state.in_directive)
+ 	return 0;
+ 
+-      _cpp_do__Pragma (pfile);
+-      return 1;
++      return _cpp_do__Pragma (pfile);
+     }
+ 
+   buf = _cpp_builtin_macro_text (pfile, node);

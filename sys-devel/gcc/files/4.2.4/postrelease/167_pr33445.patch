@@ -1,0 +1,85 @@
+diff --git a/gcc/fortran/scanner.c b/gcc/fortran/scanner.c
+index edc6578c..ee1c6616 100644
+--- a/gcc/fortran/scanner.c
++++ b/gcc/fortran/scanner.c
+@@ -373,18 +373,25 @@ skip_free_comments (void)
+ 		  if (c == 'o' || c == 'O')
+ 		    {
+ 		      if (((c = next_char ()) == 'm' || c == 'M')
+-			  && ((c = next_char ()) == 'p' || c == 'P')
+-			  && ((c = next_char ()) == ' ' || continue_flag))
++			  && ((c = next_char ()) == 'p' || c == 'P'))
+ 			{
+-			  while (gfc_is_whitespace (c))
+-			    c = next_char ();
+-			  if (c != '\n' && c != '!')
++			  if ((c = next_char ()) == ' ' || continue_flag)
+ 			    {
+-			      openmp_flag = 1;
+-			      openmp_locus = old_loc;
+-			      gfc_current_locus = start;
+-			      return false;
++			      while (gfc_is_whitespace (c))
++				c = next_char ();
++			      if (c != '\n' && c != '!')
++				{
++				  openmp_flag = 1;
++				  openmp_locus = old_loc;
++				  gfc_current_locus = start;
++				  return false;
++				}
+ 			    }
++			  else
++			    gfc_warning_now ("!$OMP at %C starts a commented "
++					     "line as it neither is followed "
++					     "by a space nor is a "
++					     "continuation line");
+ 			}
+ 		      gfc_current_locus = old_loc;
+ 		      next_char ();
+diff --git a/gcc/testsuite/gfortran.dg/gomp/appendix-a/a.31.1.f90 b/gcc/testsuite/gfortran.dg/gomp/appendix-a/a.31.1.f90
+index 294926bf..7459897e 100644
+--- a/gcc/testsuite/gfortran.dg/gomp/appendix-a/a.31.1.f90
++++ b/gcc/testsuite/gfortran.dg/gomp/appendix-a/a.31.1.f90
+@@ -3,7 +3,7 @@
+       SUBROUTINE A31_1(A, B, X, Y, N)
+         INTEGER N
+         REAL X(*), Y(*), A, B
+-!$OMP PARALLEL DO PRIVATE(I) SHARED(X, N) REDUCTION(+:A)
++!$OMP PARALLEL DO PRIVATE(I) SHARED(X, N) REDUCTION(+:A) &
+ !$OMP& REDUCTION(MIN:B)
+         DO I=1,N
+            A = A + X(I)
+diff --git a/gcc/testsuite/gfortran.dg/gomp/free-2.f90 b/gcc/testsuite/gfortran.dg/gomp/free-2.f90
+new file mode 100644
+index 00000000..60bac66b
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/gomp/free-2.f90
+@@ -0,0 +1,14 @@
++! { dg-do compile }
++!
++! PR fortran/33445
++!
++!$OMP&foo ! { dg-warning "starts a commented line" }
++!
++!$OMP parallel 
++!$OMP& default(shared) ! { dg-warning "starts a commented line" }
++!$OMP end parallel
++!
++!$OMP parallel 
++!$OMP+ default(shared) ! { dg-warning "starts a commented line" }
++!$OMP end parallel
++       end
+diff --git a/gcc/testsuite/gfortran.dg/gomp/omp_parse1.f90 b/gcc/testsuite/gfortran.dg/gomp/omp_parse1.f90
+index 9cd5ebf5..d4137cd1 100644
+--- a/gcc/testsuite/gfortran.dg/gomp/omp_parse1.f90
++++ b/gcc/testsuite/gfortran.dg/gomp/omp_parse1.f90
+@@ -17,7 +17,7 @@ call bar
+ ! Non-continuation !$omp must be followed by space, and my reading
+ ! doesn't seem to allow tab there.  So such lines should be completely
+ ! ignored.
+-!$omp	strange
++!$omp	strange  !  { dg-warning "starts a commented line" }
+ end
+ 
+ ! { dg-final { scan-tree-dump-times "pragma omp parallel" 3 "omplower" } }

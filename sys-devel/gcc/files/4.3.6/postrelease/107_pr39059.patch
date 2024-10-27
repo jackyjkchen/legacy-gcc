@@ -1,0 +1,181 @@
+diff --git a/gcc/c-decl.c b/gcc/c-decl.c
+index ba566082..7126df2d 100644
+--- a/gcc/c-decl.c
++++ b/gcc/c-decl.c
+@@ -7791,6 +7791,8 @@ finish_declspecs (struct c_declspecs *specs)
+       if (specs->saturating_p)
+ 	{
+ 	  error ("%<_Sat%> is used without %<_Fract%> or %<_Accum%>");
++	  if (!targetm.fixed_point_supported_p ())
++	    error ("fixed-point types not supported for this target");
+ 	  specs->typespec_word = cts_fract;
+ 	}
+       else if (specs->long_p || specs->short_p
+@@ -7913,8 +7915,10 @@ finish_declspecs (struct c_declspecs *specs)
+ 	specs->type = dfloat128_type_node;
+       break;
+     case cts_fract:
+-       gcc_assert (!specs->complex_p);
+-       if (specs->saturating_p)
++      gcc_assert (!specs->complex_p);
++      if (!targetm.fixed_point_supported_p ())
++	specs->type = integer_type_node;
++      else if (specs->saturating_p)
+ 	{
+ 	  if (specs->long_long_p)
+ 	    specs->type = specs->unsigned_p
+@@ -7932,7 +7936,7 @@ finish_declspecs (struct c_declspecs *specs)
+ 	    specs->type = specs->unsigned_p
+ 			  ? sat_unsigned_fract_type_node
+ 			  : sat_fract_type_node;
+-          }
++	}
+       else
+ 	{
+ 	  if (specs->long_long_p)
+@@ -7951,11 +7955,13 @@ finish_declspecs (struct c_declspecs *specs)
+ 	    specs->type = specs->unsigned_p
+ 			  ? unsigned_fract_type_node
+ 			  : fract_type_node;
+-          }
++	}
+       break;
+     case cts_accum:
+-       gcc_assert (!specs->complex_p);
+-       if (specs->saturating_p)
++      gcc_assert (!specs->complex_p);
++      if (!targetm.fixed_point_supported_p ())
++	specs->type = integer_type_node;
++      else if (specs->saturating_p)
+ 	{
+ 	  if (specs->long_long_p)
+ 	    specs->type = specs->unsigned_p
+@@ -7973,7 +7979,7 @@ finish_declspecs (struct c_declspecs *specs)
+ 	    specs->type = specs->unsigned_p
+ 			  ? sat_unsigned_accum_type_node
+ 			  : sat_accum_type_node;
+-          }
++	}
+       else
+ 	{
+ 	  if (specs->long_long_p)
+@@ -7992,7 +7998,7 @@ finish_declspecs (struct c_declspecs *specs)
+ 	    specs->type = specs->unsigned_p
+ 			  ? unsigned_accum_type_node
+ 			  : accum_type_node;
+-          }
++	}
+       break;
+     default:
+       gcc_unreachable ();
+diff --git a/gcc/c-parser.c b/gcc/c-parser.c
+index 573bd059..86157cf4 100644
+--- a/gcc/c-parser.c
++++ b/gcc/c-parser.c
+@@ -5170,6 +5170,17 @@ c_parser_postfix_expression (c_parser *parser)
+   switch (c_parser_peek_token (parser)->type)
+     {
+     case CPP_NUMBER:
++      expr.value = c_parser_peek_token (parser)->value;
++      expr.original_code = ERROR_MARK;
++      loc = c_parser_peek_token (parser)->location;
++      c_parser_consume_token (parser);
++      if (TREE_CODE (expr.value) == FIXED_CST
++	  && !targetm.fixed_point_supported_p ())
++	{
++	  error ("fixed-point types not supported for this target");
++	  expr.value = error_mark_node;
++	}
++      break;
+     case CPP_CHAR:
+     case CPP_WCHAR:
+       expr.value = c_parser_peek_token (parser)->value;
+diff --git a/gcc/cp/parser.c b/gcc/cp/parser.c
+index d12cf208..67c7ca95 100644
+--- a/gcc/cp/parser.c
++++ b/gcc/cp/parser.c
+@@ -3088,6 +3088,12 @@ cp_parser_primary_expression (cp_parser *parser,
+     case CPP_WCHAR:
+     case CPP_NUMBER:
+       token = cp_lexer_consume_token (parser->lexer);
++      if (TREE_CODE (token->u.value) == FIXED_CST)
++	{
++	  error ("%Hfixed-point types not supported in C++",
++		 &token->location);
++	  return error_mark_node;
++	}
+       /* Floating-point literals are only allowed in an integral
+ 	 constant expression if they are cast to an integral or
+ 	 enumeration type.  */
+diff --git a/gcc/testsuite/g++.dg/ext/fixed1.C b/gcc/testsuite/g++.dg/ext/fixed1.C
+index 9ee27808..5a479d68 100644
+--- a/gcc/testsuite/g++.dg/ext/fixed1.C
++++ b/gcc/testsuite/g++.dg/ext/fixed1.C
+@@ -3,6 +3,6 @@
+ 
+ template<int> struct A {};
+ 
+-template<typename> struct B : A<sizeof(0=0r)> {};
++template<typename> struct B : A<sizeof(0=0r)> {};	// { dg-error "not supported" }
+ 
+-template<typename> struct C : A<sizeof(0=0r)> {};
++template<typename> struct C : A<sizeof(0=0r)> {};	// { dg-error "not supported" }
+diff --git a/gcc/testsuite/g++.dg/lookup/crash7.C b/gcc/testsuite/g++.dg/lookup/crash7.C
+index 11176677..a3389a01 100644
+--- a/gcc/testsuite/g++.dg/lookup/crash7.C
++++ b/gcc/testsuite/g++.dg/lookup/crash7.C
+@@ -5,5 +5,5 @@ void foo(int);
+ 
+ void bar()
+ {
+-  foo(1r); // { dg-error "unnamed-fixed" }
++  foo(1r); // { dg-error "not supported" }
+ }
+diff --git a/gcc/testsuite/g++.dg/other/error25.C b/gcc/testsuite/g++.dg/other/error25.C
+index 3bd9842c..b5b665a2 100644
+--- a/gcc/testsuite/g++.dg/other/error25.C
++++ b/gcc/testsuite/g++.dg/other/error25.C
+@@ -1,5 +1,5 @@
+ // PR c++/35338
+ // { dg-options "" }
+ 
+-int i = 0r; // { dg-error "unnamed-fixed" }
+-bool b = !0r; // { dg-error "0.0|argument" }
++int i = 0r; // { dg-error "not supported" }
++bool b = !0r; // { dg-error "not supported" }
+diff --git a/gcc/testsuite/gcc.dg/nofixed-point-2.c b/gcc/testsuite/gcc.dg/nofixed-point-2.c
+new file mode 100644
+index 00000000..97bbf702
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/nofixed-point-2.c
+@@ -0,0 +1,30 @@
++/* PR inline-asm/39059 */
++/* { dg-do compile { target {! fixed_point} } } */
++/* { dg-options "-std=gnu99" } */
++
++void
++f1 (void)
++{
++  asm ("" : : "r" (0r));       /* { dg-error "not supported" "reject fixed-point" } */
++}
++
++__typeof (0r)		       /* { dg-error "not supported" "reject fixed-point" } */
++b2 (void)
++{
++  return 0r;		       /* { dg-error "not supported" "reject fixed-point" } */
++}
++
++_Accum			       /* { dg-error "not supported" "reject fixed-point" } */
++f3 (void)
++{
++  return 0k;			/* { dg-error "not supported" "reject fixed-point" } */
++}
++
++_Sat
++f4 (void)			/* { dg-error "not supported" "reject fixed-point" } */
++{
++  return 0k;			/* { dg-error "not supported" "reject fixed-point" } */
++}
++
++/* { dg-warning "defaults to" "" { target *-*-* } 13 } */
++/* { dg-error "is used without" "" { target *-*-* } 24 } */

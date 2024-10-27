@@ -1,0 +1,38 @@
+diff --git a/gcc/fortran/resolve.c b/gcc/fortran/resolve.c
+index 86ce4b95..d28cd845 100644
+--- a/gcc/fortran/resolve.c
++++ b/gcc/fortran/resolve.c
+@@ -8292,9 +8292,12 @@ values;
+ static try
+ next_data_value (void)
+ {
+-
+   while (mpz_cmp_ui (values.left, 0) == 0)
+     {
++      if (!gfc_is_constant_expr (values.vnode->expr))
++	gfc_error ("non-constant DATA value at %L",
++		   &values.vnode->expr->where);
++
+       if (values.vnode->next == NULL)
+ 	return FAILURE;
+ 
+diff --git a/gcc/testsuite/gfortran.dg/data_value_1.f90 b/gcc/testsuite/gfortran.dg/data_value_1.f90
+new file mode 100644
+index 00000000..ea05a91d
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/data_value_1.f90
+@@ -0,0 +1,14 @@
++! { dg-do compile }
++! Test the fix for PR40402, in which it was not detected that X
++! is not a constant and so the DATA statement did not have
++! a constant value expression.
++!
++! Contributed by Philippe Marguinaud <philippe.marguinaud@meteo.fr>
++!
++      TYPE POINT
++        REAL :: X 
++      ENDTYPE
++      TYPE(POINT) :: P
++      DATA P / POINT(1.+X) / ! { dg-error "non-constant DATA value" }
++      print *, p
++      END
