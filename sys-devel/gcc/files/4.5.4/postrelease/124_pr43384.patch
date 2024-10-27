@@ -1,0 +1,43 @@
+diff --git a/gcc/c-decl.c b/gcc/c-decl.c
+index 3fb2f173e..fe6d18948 100644
+--- a/gcc/c-decl.c
++++ b/gcc/c-decl.c
+@@ -2999,7 +2999,7 @@ lookup_label (tree name)
+   tree label;
+   struct c_label_vars *label_vars;
+ 
+-  if (current_function_decl == 0)
++  if (current_function_scope == 0)
+     {
+       error ("label %qE referenced outside of any function", name);
+       return 0;
+@@ -7674,6 +7674,9 @@ store_parm_decls_oldstyle (tree fndecl, const struct c_arg_info *arg_info)
+       if (b && B_IN_CURRENT_SCOPE (b))
+ 	{
+ 	  decl = b->decl;
++	  /* Skip erroneous parameters.  */
++	  if (decl == error_mark_node)
++	    continue;
+ 	  /* If we got something other than a PARM_DECL it is an error.  */
+ 	  if (TREE_CODE (decl) != PARM_DECL)
+ 	    error_at (DECL_SOURCE_LOCATION (decl),
+diff --git a/gcc/testsuite/gcc.dg/parse-error-3.c b/gcc/testsuite/gcc.dg/parse-error-3.c
+new file mode 100644
+index 000000000..1a463b5dd
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/parse-error-3.c
+@@ -0,0 +1,14 @@
++/* PR c/43384 */
++/* { dg-do "compile" } */
++
++void c_direct(par)
++     void *par = &&lab; /* { dg-error "is initialized|non-standard|outside of" } */
++{}
++
++void foo(p, q)
++     int *p = &q; /* { dg-error "initialized|undeclared" } */
++{}
++
++void bar(i)
++     int j = i; /* { dg-error "initialized|undeclared|no such parameter" } */
++{}

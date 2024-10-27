@@ -1,0 +1,54 @@
+diff --git a/gcc/testsuite/gcc.c-torture/execute/pr58209.c b/gcc/testsuite/gcc.c-torture/execute/pr58209.c
+new file mode 100644
+index 000000000..78743bfb9
+--- /dev/null
++++ b/gcc/testsuite/gcc.c-torture/execute/pr58209.c
+@@ -0,0 +1,32 @@
++/* PR tree-optimization/58209 */
++
++extern void abort (void);
++typedef __INTPTR_TYPE__ T;
++T buf[1024];
++
++T *
++foo (T n)
++{
++  if (n == 0)
++    return (T *) buf;
++  T s = (T) foo (n - 1);
++  return (T *) (s + sizeof (T));
++}
++
++T *
++bar (T n)
++{
++  if (n == 0)
++    return buf;
++  return foo (n - 1) + 1;
++}
++
++int
++main ()
++{
++  int i;
++  for (i = 0; i < 27; i++)
++    if (foo (i) != buf + i || bar (i) != buf + i)
++      abort ();
++  return 0;
++}
+diff --git a/gcc/tree-tailcall.c b/gcc/tree-tailcall.c
+index 1fc3cd6e1..51a87015a 100644
+--- a/gcc/tree-tailcall.c
++++ b/gcc/tree-tailcall.c
+@@ -565,6 +565,11 @@ find_tail_calls (basic_block bb, struct tailcall **ret)
+   if (!tail_recursion && (m || a))
+     return;
+ 
++  /* For pointers don't allow additions or multiplications.  */
++  if ((m || a)
++      && POINTER_TYPE_P (TREE_TYPE (DECL_RESULT (current_function_decl))))
++    return;
++
+   nw = XNEW (struct tailcall);
+ 
+   nw->call_gsi = gsi;

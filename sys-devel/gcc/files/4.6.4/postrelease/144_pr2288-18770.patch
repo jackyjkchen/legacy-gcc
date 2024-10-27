@@ -1,0 +1,318 @@
+diff --git a/gcc/cp/name-lookup.c b/gcc/cp/name-lookup.c
+index 11ff65cbd..4dfe26367 100644
+--- a/gcc/cp/name-lookup.c
++++ b/gcc/cp/name-lookup.c
+@@ -952,8 +952,15 @@ pushdecl_maybe_friend (tree x, bool is_friend)
+       else
+ 	{
+ 	  /* Here to install a non-global value.  */
+-	  tree oldlocal = innermost_non_namespace_value (name);
+ 	  tree oldglobal = IDENTIFIER_NAMESPACE_VALUE (name);
++	  tree oldlocal = NULL_TREE;
++	  cxx_scope *oldscope = NULL;
++	  cxx_binding *oldbinding = outer_binding (name, NULL, true);
++	  if (oldbinding)
++	    {
++	      oldlocal = oldbinding->value;
++	      oldscope = oldbinding->scope;
++	    }
+ 
+ 	  if (need_new_binding)
+ 	    {
+@@ -1082,6 +1089,20 @@ pushdecl_maybe_friend (tree x, bool is_friend)
+ 		       }
+ 		   }
+ 		}
++	      /* Error if redeclaring a local declared in a
++		 for-init-statement or in the condition of an if or
++		 switch statement when the new declaration is in the
++		 outermost block of the controlled statement.
++		 Redeclaring a variable from a for or while condition is
++		 detected elsewhere.  */
++	      else if (TREE_CODE (oldlocal) == VAR_DECL
++		       && oldscope == current_binding_level->level_chain
++		       && (oldscope->kind == sk_cond
++			   || oldscope->kind == sk_for))
++		{
++		  error ("redeclaration of %q#D", x);
++		  error ("%q+#D previously declared here", oldlocal);
++		}
+ 
+ 	      if (warn_shadow && !nowarn)
+ 		{
+@@ -1429,6 +1450,7 @@ begin_scope (scope_kind kind, tree entity)
+     case sk_try:
+     case sk_catch:
+     case sk_for:
++    case sk_cond:
+     case sk_class:
+     case sk_scoped_enum:
+     case sk_function_parms:
+diff --git a/gcc/cp/name-lookup.h b/gcc/cp/name-lookup.h
+index bfcac69c1..d269b202e 100644
+--- a/gcc/cp/name-lookup.h
++++ b/gcc/cp/name-lookup.h
+@@ -109,6 +109,8 @@ typedef enum scope_kind {
+   sk_catch,	     /* A catch-block.  */
+   sk_for,	     /* The scope of the variable declared in a
+ 			for-init-statement.  */
++  sk_cond,	     /* The scope of the variable declared in the condition
++			of an if or switch statement.  */
+   sk_function_parms, /* The scope containing function parameters.  */
+   sk_class,	     /* The scope containing the members of a class.  */
+   sk_scoped_enum,    /* The scope containing the enumertors of a C++0x
+diff --git a/gcc/cp/semantics.c b/gcc/cp/semantics.c
+index fdb1b7bdd..2c9c5c5ef 100644
+--- a/gcc/cp/semantics.c
++++ b/gcc/cp/semantics.c
+@@ -661,7 +661,7 @@ tree
+ begin_if_stmt (void)
+ {
+   tree r, scope;
+-  scope = do_pushlevel (sk_block);
++  scope = do_pushlevel (sk_cond);
+   r = build_stmt (input_location, IF_STMT, NULL_TREE, NULL_TREE, NULL_TREE);
+   TREE_CHAIN (r) = scope;
+   begin_cond (&IF_COND (r));
+@@ -1014,9 +1014,9 @@ begin_switch_stmt (void)
+ {
+   tree r, scope;
+ 
++  scope = do_pushlevel (sk_cond);
+   r = build_stmt (input_location, SWITCH_STMT, NULL_TREE, NULL_TREE, NULL_TREE);
+ 
+-  scope = do_pushlevel (sk_block);
+   TREE_CHAIN (r) = scope;
+   begin_cond (&SWITCH_STMT_COND (r));
+ 
+diff --git a/gcc/testsuite/g++.dg/cpp0x/range-for5.C b/gcc/testsuite/g++.dg/cpp0x/range-for5.C
+index 9c97ad5fa..fd6f7618f 100644
+--- a/gcc/testsuite/g++.dg/cpp0x/range-for5.C
++++ b/gcc/testsuite/g++.dg/cpp0x/range-for5.C
+@@ -47,8 +47,8 @@ void test1()
+ 
+   //Check the correct scopes
+   int i;
+-  for (int i : a)
++  for (int i : a)		// { dg-error "previously declared" }
+   {
+-    int i;
++    int i;			// { dg-error "redeclaration" }
+   }
+ }
+diff --git a/gcc/testsuite/g++.dg/parse/pr18770.C b/gcc/testsuite/g++.dg/parse/pr18770.C
+new file mode 100644
+index 000000000..df57be4b2
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/parse/pr18770.C
+@@ -0,0 +1,175 @@
++/* { dg-do compile } */
++
++/* The ISO C++ standard says, in Section 3.3.2 sentence 4, that a name
++   declared in the for-init-statement or in the condition of an if, for
++   while, or switch statement can't be redeclared in the outermost block
++   of the controlled statement.  (Note, this is not an error in C.)  */
++
++extern void foo (int);
++extern int j;
++
++void
++e0 (void)
++{
++  for (int i = 0;	// { dg-error "previously declared here" "prev" }
++       i < 10; ++i)
++    {
++      int i = 2;	// { dg-error "redeclaration" "redecl" }
++      foo (i);
++    }
++}
++
++void
++e1 (void)
++{
++  int i;
++  for (i = 0;
++       int k = j; i++)	// { dg-error "previously declared here" "prev" }
++    {
++      int k = 2;	// { dg-error "redeclaration" "redecl" }
++      foo (k);
++    }
++}
++
++void
++e2 (void)
++{
++  if (int i = 1)	// { dg-error "previously declared here" "prev" }
++    {
++      int i = 2;	// { dg-error "redeclaration" "redecl" }
++      foo (i);
++    }
++}
++
++void
++e3 (void)
++{
++  if (int i = 1)	// { dg-error "previously declared here" "prev" }
++    {
++      foo (i);
++    }
++  else
++    {
++      int i = 2;	// { dg-error "redeclaration" "redecl" }
++      foo (i);
++    }
++}
++
++void
++e4 (void)
++{
++  while (int i = 1)	// { dg-error "previously declared here" "prev" }
++    {
++      int i = 2;	// { dg-error "redeclaration" "redecl" }
++      foo (i);
++    }
++}
++
++void
++e5 (void)
++{
++  switch (int i = j)	// { dg-error "previously declared here" "prev" }
++    {
++    int i;		// { dg-error "redeclaration" "redecl" }
++    default:
++      {
++        i = 2;
++        foo (i);
++      }
++    }
++}
++
++void
++f0 (void)
++{
++  for (int i = 0; i < 10; ++i)
++    {
++      foo (i);
++      {
++        int i = 2;	// OK, not outermost block.
++        foo (i);
++      }
++    }
++}
++
++void
++f1 (void)
++{
++  int i;
++  for (i = 0; int k = j; i++)
++    {
++      foo (k);
++      {
++	int k = 2;	// OK, not outermost block.
++	foo (k);
++      }
++    }
++}
++
++void
++f2 (void)
++{
++  if (int i = 1)
++    {
++      foo (i);
++      {
++	int i = 2;	// OK, not outermost block.
++	foo (i);
++      }
++    }
++}
++
++void
++f3 (void)
++{
++  if (int i = 1)
++    {
++      foo (i);
++    }
++  else
++    {
++      foo (i+2);
++      {
++	int i = 2;	// OK, not outermost block.
++	foo (i);
++      }
++    }
++}
++
++void
++f4 (void)
++{
++  while (int i = 1)
++    {
++      foo (i);
++      {
++	int i = 2;	// OK, not outermost block.
++	foo (i);
++      }
++    }
++}
++
++void
++f5 (void)
++{
++  switch (int i = j)
++    {
++    default:
++      {
++        int i = 2;	// OK, not outermost block.
++        foo (i);
++      }
++    }
++}
++
++void
++f6 (void)
++{
++  int i = 1;
++
++  for (int j = 0; j < 10; j++)
++    {
++      int i = 2;	// OK, not variable from for-init.
++      foo (i);
++    }
++}
+diff --git a/gcc/testsuite/g++.old-deja/g++.jason/cond.C b/gcc/testsuite/g++.old-deja/g++.jason/cond.C
+index d0616e4be..a6e5ba0db 100644
+--- a/gcc/testsuite/g++.old-deja/g++.jason/cond.C
++++ b/gcc/testsuite/g++.old-deja/g++.jason/cond.C
+@@ -6,14 +6,14 @@ int main()
+ {
+   float i;
+   
+-  if (int i = 1)		// { dg-error "" "" { xfail *-*-* } } , 
++  if (int i = 1)		// { dg-error "previously" }
+     {
+-      char i;			// { dg-error "" "" { xfail *-*-* } } , 
++      char i;			// { dg-error "redeclaration" } 
+       char j;
+     }
+   else
+     {
+-      short i;			// { dg-error "" "" { xfail *-*-* } } , 
++      short i;			// { dg-error "redeclaration" }
+       char j;
+     }
+ 
+@@ -27,10 +27,10 @@ int main()
+       int i;			// { dg-error "redeclaration" }
+     }
+ 
+-  switch (int i = 0)		// { dg-error "" "" { xfail *-*-* } } 
++  switch (int i = 0)		// { dg-error "previously" }
+     {
+     default:
+-      int i;			// { dg-error "" "" { xfail *-*-* } } 
++      int i;			// { dg-error "redeclaration" } 
+     }
+ 
+   if (struct A { operator int () { return 1; } } *foo = new A) // { dg-error "defined" } 

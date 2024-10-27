@@ -106,6 +106,24 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/082_pr34180.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/083_pr35075.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/084_pr72809.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/085_pr38089.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/086_pr57895.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/087_pr85068.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/088_pr50163.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/089_pr50070.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/090_pr59082.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/091_pr60224.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/092_pr53492.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/093_pr47220.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/094_pr35996.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/095_pr41985.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/096_pr47450.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/097_pr43076.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/098_pr42061.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/099_pr45665.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/100_pr43082.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/101_pr45117.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/102_pr38709.patch
 
 	if use test ; then
 		eapply "${FILESDIR}"/${PV}/postrelease/900_fix-known-test-fail.patch

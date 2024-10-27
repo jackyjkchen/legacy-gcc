@@ -1,0 +1,39 @@
+diff --git a/gcc/cp/decl.c b/gcc/cp/decl.c
+index 6d2b3b6a8..42bd3eeef 100644
+--- a/gcc/cp/decl.c
++++ b/gcc/cp/decl.c
+@@ -7586,6 +7586,17 @@ compute_array_index_type (tree name, tree size, tsubst_flags_t complain)
+ 	      && CLASSTYPE_LITERAL_P (type))
+ 	    {
+ 	      size = build_expr_type_conversion (WANT_INT, size, true);
++	      if (!size)
++		{
++		  if (!(complain & tf_error))
++		    return error_mark_node;
++		  if (name)
++		    error ("size of array %qD has non-integral type %qT",
++			   name, type);
++		  else
++		    error ("size of array has non-integral type %qT", type);
++		  size = integer_one_node;
++		}
+ 	      if (size == error_mark_node)
+ 		return error_mark_node;
+ 	      type = TREE_TYPE (size);
+diff --git a/gcc/testsuite/g++.dg/cpp0x/constexpr-47969.C b/gcc/testsuite/g++.dg/cpp0x/constexpr-47969.C
+new file mode 100644
+index 000000000..c950a3642
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/constexpr-47969.C
+@@ -0,0 +1,11 @@
++// PR c++/47969
++// { dg-options -std=c++0x }
++
++struct A
++{
++  // constexpr operator int () { return 1; }
++};
++
++constexpr A a = A();
++
++int ar[a]; // { dg-error "has non-integral type" }

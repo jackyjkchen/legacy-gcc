@@ -1,0 +1,57 @@
+diff --git a/gcc/fortran/match.c b/gcc/fortran/match.c
+index 3a47df1ad..cc66f01d7 100644
+--- a/gcc/fortran/match.c
++++ b/gcc/fortran/match.c
+@@ -550,8 +550,8 @@ gfc_match_name (char *buffer)
+ 
+   if (c == '$' && !gfc_option.flag_dollar_ok)
+     {
+-      gfc_error ("Invalid character '$' at %C. Use -fdollar-ok to allow it "
+-		 "as an extension");
++      gfc_fatal_error ("Invalid character '$' at %L. Use -fdollar-ok to allow "
++		       "it as an extension", &old_loc);
+       return MATCH_ERROR;
+     }
+ 
+@@ -2982,10 +2982,6 @@ syntax:
+   gfc_syntax_error (ST_COMMON);
+ 
+ cleanup:
+-  if (old_blank_common)
+-    old_blank_common->common_next = NULL;
+-  else
+-    gfc_current_ns->blank_common.head = NULL;
+   gfc_free_array_spec (as);
+   return MATCH_ERROR;
+ }
+diff --git a/gcc/testsuite/gfortran.dg/dollar_sym_1.f90 b/gcc/testsuite/gfortran.dg/dollar_sym_1.f90
+index 37f0f888d..6c0dfcb24 100644
+--- a/gcc/testsuite/gfortran.dg/dollar_sym_1.f90
++++ b/gcc/testsuite/gfortran.dg/dollar_sym_1.f90
+@@ -3,7 +3,7 @@
+ ! Variable names containing $ signs
+ ! 
+       REAL*4 PLT$C_HOUSTPIX   ! { dg-error "Invalid character '\\$'" }
+-      INTEGER PLT$C_COMMAND   ! { dg-error "Invalid character '\\$'" }
+-      PARAMETER (PLT$B_OPC=0) ! { dg-error "Invalid character '\\$'" }
+-      common /abc$def/ PLT$C_HOUSTPIX, PLT$C_COMMAND ! { dg-error "Invalid character '\\$'" }
++      INTEGER PLT$C_COMMAND   ! Unreachable as the error above is now fatal
++      PARAMETER (PLT$B_OPC=0) !  Unreachable as the error above is now fatal
++      common /abc$def/ PLT$C_HOUSTPIX, PLT$C_COMMAND !  Unreachable as the error above is now fatal
+       end
+diff --git a/gcc/testsuite/gfortran.dg/dollar_sym_3.f b/gcc/testsuite/gfortran.dg/dollar_sym_3.f
+new file mode 100644
+index 000000000..7cf2047ed
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/dollar_sym_3.f
+@@ -0,0 +1,10 @@
++! { dg-do compile }
++!
++! PR fortran/57895
++!
++! Contributed by Vittorio Zecca
++!
++c Segmentation fault in gfc_restore_last_undo_checkpoint
++      COMMON RADE3155V62$JUTMU9L9E(3,3,3), LADE314JUTMP9         ! { dg-error "Invalid character '\\$' at .1.. Use -fdollar-ok to allow it as an extension" }
++     +LHEDDJNTMP9L(3,3,3)                                                       
++      end

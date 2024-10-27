@@ -1,0 +1,67 @@
+diff --git a/gcc/cp/class.c b/gcc/cp/class.c
+index cba28f525..15d58cd27 100644
+--- a/gcc/cp/class.c
++++ b/gcc/cp/class.c
+@@ -3088,6 +3088,14 @@ check_field_decls (tree t, tree *access_decls,
+       if (! zero_init_p (type))
+ 	CLASSTYPE_NON_ZERO_INIT_P (t) = 1;
+ 
++      /* We set DECL_C_BIT_FIELD in grokbitfield.
++	 If the type and width are valid, we'll also set DECL_BIT_FIELD.  */
++      if (! DECL_C_BIT_FIELD (x) || ! check_bitfield_decl (x))
++	check_field_decl (x, t,
++			  cant_have_const_ctor_p,
++			  no_const_asn_ref_p,
++			  &any_default_members);
++
+       /* If any field is const, the structure type is pseudo-const.  */
+       if (CP_TYPE_CONST_P (type))
+ 	{
+@@ -3116,14 +3124,6 @@ check_field_decls (tree t, tree *access_decls,
+       if (constructor_name_p (DECL_NAME (x), t)
+ 	  && TYPE_HAS_USER_CONSTRUCTOR (t))
+ 	permerror (input_location, "field %q+#D with same name as class", x);
+-
+-      /* We set DECL_C_BIT_FIELD in grokbitfield.
+-	 If the type and width are valid, we'll also set DECL_BIT_FIELD.  */
+-      if (! DECL_C_BIT_FIELD (x) || ! check_bitfield_decl (x))
+-	check_field_decl (x, t,
+-			  cant_have_const_ctor_p,
+-			  no_const_asn_ref_p,
+-			  &any_default_members);
+     }
+ 
+   /* Effective C++ rule 11: if a class has dynamic memory held by pointers,
+diff --git a/gcc/testsuite/g++.dg/cpp0x/decltype4.C b/gcc/testsuite/g++.dg/cpp0x/decltype4.C
+index 23a34344e..32fbc2b2e 100644
+--- a/gcc/testsuite/g++.dg/cpp0x/decltype4.C
++++ b/gcc/testsuite/g++.dg/cpp0x/decltype4.C
+@@ -62,6 +62,7 @@ void wibble() {
+ }
+ 
+ struct B {
++  B () : bit(), cbit() {} 
+   int bit : 2;
+   const int cbit : 3;
+ 
+diff --git a/gcc/testsuite/g++.dg/init/pr44086.C b/gcc/testsuite/g++.dg/init/pr44086.C
+new file mode 100644
+index 000000000..e3304f4a2
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/init/pr44086.C
+@@ -0,0 +1,15 @@
++// PR c++/44086
++// { dg-do compile }
++
++struct A
++{
++    int const i : 2; // { dg-message "should be initialized" }
++};
++
++void f()
++{
++    A a;    // { dg-error "uninitialized const" }
++    new A;  // { dg-error "uninitialized const" }
++    A();
++    new A();
++}

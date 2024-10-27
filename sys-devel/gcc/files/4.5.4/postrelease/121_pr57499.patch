@@ -1,0 +1,38 @@
+diff --git a/gcc/testsuite/g++.dg/torture/pr57499.C b/gcc/testsuite/g++.dg/torture/pr57499.C
+new file mode 100644
+index 000000000..fd985a199
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/torture/pr57499.C
+@@ -0,0 +1,14 @@
++// PR middle-end/57499
++// { dg-do compile }
++
++struct S
++{
++  ~S () __attribute__ ((noreturn)) {} // { dg-warning "function does return" }
++};
++
++void
++foo ()
++{
++  S s;
++  throw 1;
++}
+diff --git a/gcc/tree-eh.c b/gcc/tree-eh.c
+index 62884f397..c21e9cf70 100644
+--- a/gcc/tree-eh.c
++++ b/gcc/tree-eh.c
+@@ -3762,8 +3762,11 @@ cleanup_empty_eh (eh_landing_pad lp)
+   /* If the block is totally empty, look for more unsplitting cases.  */
+   if (gsi_end_p (gsi))
+     {
+-      /* For the degenerate case of an infinite loop bail out.  */
+-      if (infinite_empty_loop_p (e_out))
++      /* For the degenerate case of an infinite loop bail out.
++	 If bb has no successors and is totally empty, which can happen e.g.
++	 because of incorrect noreturn attribute, bail out too.  */
++      if (e_out == NULL
++	  || infinite_empty_loop_p (e_out))
+ 	return false;
+ 
+       return cleanup_empty_eh_unsplit (bb, e_out, lp);

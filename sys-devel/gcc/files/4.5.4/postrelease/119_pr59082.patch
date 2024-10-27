@@ -1,0 +1,41 @@
+diff --git a/gcc/cp/class.c b/gcc/cp/class.c
+index 27340d2d9..cba28f525 100644
+--- a/gcc/cp/class.c
++++ b/gcc/cp/class.c
+@@ -375,6 +375,9 @@ build_base_path (enum tree_code code,
+ 	v_offset = build_vfield_ref (cp_build_indirect_ref (expr, RO_NULL,
+                                                             tf_warning_or_error),
+ 				     TREE_TYPE (TREE_TYPE (expr)));
++      
++      if (v_offset == error_mark_node)
++	return error_mark_node;
+ 
+       v_offset = build2 (POINTER_PLUS_EXPR, TREE_TYPE (v_offset),
+ 			 v_offset, fold_convert (sizetype, BINFO_VPTR_FIELD (v_binfo)));
+@@ -569,7 +572,9 @@ build_vfield_ref (tree datum, tree type)
+ {
+   tree vfield, vcontext;
+ 
+-  if (datum == error_mark_node)
++  if (datum == error_mark_node
++      /* Can happen in case of duplicate base types (c++/59082).  */
++      || !TYPE_VFIELD (type))
+     return error_mark_node;
+ 
+   /* First, convert to the requested type.  */
+diff --git a/gcc/testsuite/g++.dg/inherit/crash4.C b/gcc/testsuite/g++.dg/inherit/crash4.C
+new file mode 100644
+index 000000000..b5b02f101
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/inherit/crash4.C
+@@ -0,0 +1,10 @@
++// PR c++/59082
++
++struct A {};
++
++struct B : virtual A, A {};  // { dg-error "duplicate base type" }
++
++A foo(const B &b)
++{
++  return b;
++}

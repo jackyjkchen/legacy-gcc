@@ -1,0 +1,60 @@
+diff --git a/gcc/fortran/array.c b/gcc/fortran/array.c
+index a5ad7507e..ba99e8244 100644
+--- a/gcc/fortran/array.c
++++ b/gcc/fortran/array.c
+@@ -1085,6 +1085,35 @@ done:
+     {
+       expr = gfc_get_array_expr (ts.type, ts.kind, &where);
+       expr->ts = ts;
++
++      /* If the typespec is CHARACTER, check that array elements can
++	 be converted.  See PR fortran/67803.  */
++      if (ts.type == BT_CHARACTER)
++	{
++	  gfc_constructor *c;
++
++	  c = gfc_constructor_first (head);
++	  for (; c; c = gfc_constructor_next (c))
++	    {
++	      if (gfc_numeric_ts (&c->expr->ts)
++		  || c->expr->ts.type == BT_LOGICAL)
++		{
++		  gfc_error ("Incompatiable typespec for array element at %L",
++			     &c->expr->where);
++		  return MATCH_ERROR;
++		}
++
++	      /* Special case null().  */
++	      if (c->expr->expr_type == EXPR_FUNCTION
++		  && c->expr->ts.type == BT_UNKNOWN
++		  && strcmp (c->expr->symtree->name, "null") == 0)
++		{
++		  gfc_error ("Incompatiable typespec for array element at %L",
++			     &c->expr->where);
++		  return MATCH_ERROR;
++		}
++	    }
++	}
+     }
+   else
+     expr = gfc_get_array_expr (BT_UNKNOWN, 0, &where);
+diff --git a/gcc/testsuite/gfortran.dg/pr67803.f90 b/gcc/testsuite/gfortran.dg/pr67803.f90
+new file mode 100644
+index 000000000..b9a0a9e5c
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/pr67803.f90
+@@ -0,0 +1,14 @@
++! { dg-do compile }
++! PR fortran/67803
++! Original code submitted by Gerhard Steinmetz
++! <gerhard dot steinmetz dot fortran at t-online dot de >
++!
++program p
++  character(2) :: x(1)
++  x = '0' // [character :: 1]       ! { dg-error "Incompatiable typespec for" }
++  x = '0' // [character :: 1.]      ! { dg-error "Incompatiable typespec for" }
++  x = '0' // [character :: 1d1]     ! { dg-error "Incompatiable typespec for" }
++  x = '0' // [character :: (0.,1.)] ! { dg-error "Incompatiable typespec for" }
++  x = '0' // [character :: .true.]  ! { dg-error "Incompatiable typespec for" }
++  x = '0' // [character :: null()]  ! { dg-error "Incompatiable typespec for" }
++end

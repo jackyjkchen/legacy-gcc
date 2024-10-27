@@ -1,0 +1,54 @@
+diff --git a/gcc/c-family/c-common.h b/gcc/c-family/c-common.h
+index 456c7e582..da0ccab8c 100644
+--- a/gcc/c-family/c-common.h
++++ b/gcc/c-family/c-common.h
+@@ -445,7 +445,9 @@ typedef enum ref_operator {
+   /* -> */
+   RO_ARROW,
+   /* implicit conversion */
+-  RO_IMPLICIT_CONVERSION
++  RO_IMPLICIT_CONVERSION,
++  /* ->* */
++  RO_ARROW_STAR
+ } ref_operator;
+ 
+ /* Information about a statement tree.  */
+diff --git a/gcc/cp/call.c b/gcc/cp/call.c
+index e9996aed0..d09b0bb67 100644
+--- a/gcc/cp/call.c
++++ b/gcc/cp/call.c
+@@ -5012,7 +5012,7 @@ build_new_op (enum tree_code code, int flags, tree arg1, tree arg2, tree arg3,
+       return cp_build_array_ref (input_location, arg1, arg2, complain);
+ 
+     case MEMBER_REF:
+-      return build_m_component_ref (cp_build_indirect_ref (arg1, RO_NULL, 
++      return build_m_component_ref (cp_build_indirect_ref (arg1, RO_ARROW_STAR, 
+                                                            complain), 
+                                     arg2);
+ 
+diff --git a/gcc/cp/typeck.c b/gcc/cp/typeck.c
+index abc2bec3a..6a009c4db 100644
+--- a/gcc/cp/typeck.c
++++ b/gcc/cp/typeck.c
+@@ -2782,6 +2782,10 @@ cp_build_indirect_ref (tree ptr, ref_operator errorstring,
+          case RO_IMPLICIT_CONVERSION:
+            error ("invalid use of implicit conversion on pointer to member");
+            break;
++         case RO_ARROW_STAR:
++           error ("left hand operand of %<->*%> must be a pointer to class, "
++		  "but is a pointer to member of type %qT", type);
++           break;
+          default:
+            gcc_unreachable ();
+       }
+diff --git a/gcc/testsuite/g++.dg/pr53055.C b/gcc/testsuite/g++.dg/pr53055.C
+new file mode 100644
+index 000000000..787af9d15
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/pr53055.C
+@@ -0,0 +1,5 @@
++// PR c++/53055
++// { dg-do compile }
++
++struct A A :: * p ;
++int i = p ->* p ; // { dg-error "" }

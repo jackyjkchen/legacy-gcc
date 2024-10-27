@@ -1,0 +1,90 @@
+diff --git a/gcc/cp/name-lookup.c b/gcc/cp/name-lookup.c
+index af1cf34f4..21053063d 100644
+--- a/gcc/cp/name-lookup.c
++++ b/gcc/cp/name-lookup.c
+@@ -463,7 +463,8 @@ supplement_binding_1 (cxx_binding *binding, tree decl)
+ 	     template in order to handle late matching of underlying
+ 	     type on an opaque-enum-declaration followed by an
+ 	     enum-specifier.  */
+-	  || (TREE_CODE (TREE_TYPE (target_decl)) == ENUMERAL_TYPE
++	  || (processing_template_decl
++	      && TREE_CODE (TREE_TYPE (target_decl)) == ENUMERAL_TYPE
+ 	      && TREE_CODE (TREE_TYPE (target_bval)) == ENUMERAL_TYPE
+ 	      && (dependent_type_p (ENUM_UNDERLYING_TYPE
+ 				    (TREE_TYPE (target_decl)))
+@@ -2443,7 +2444,15 @@ validate_nonmember_using_decl (tree decl, tree scope, tree name)
+   gcc_assert (DECL_P (decl));
+ 
+   /* Make a USING_DECL.  */
+-  return push_using_decl (scope, name);
++  tree using_decl = push_using_decl (scope, name);
++
++  if (using_decl == NULL_TREE
++      && at_function_scope_p ()
++      && TREE_CODE (decl) == VAR_DECL)
++    /* C++11 7.3.3/10.  */
++    error ("%qD is already declared in this scope", name);
++  
++  return using_decl;
+ }
+ 
+ /* Process local and global using-declarations.  */
+diff --git a/gcc/testsuite/g++.dg/lookup/using53.C b/gcc/testsuite/g++.dg/lookup/using53.C
+new file mode 100644
+index 000000000..a108b50ef
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/lookup/using53.C
+@@ -0,0 +1,53 @@
++// PR c++/20420
++
++class B
++{
++protected:
++  enum E { E1, E2, E3 };
++  struct S { int i; E e; };
++};
++
++class D : private B
++{
++public:
++  using B::E;       // { dg-message "previous" }
++  using B::S;       // { dg-message "previous" }
++
++private:
++  enum E {};        // { dg-error "conflicts" }
++  struct S {};      // { dg-error "conflicts" }
++};
++
++template<typename T>
++class BT
++{
++protected:
++  enum E { E1, E2, E3 };
++  struct S { int i; E e; };
++};
++
++template<typename T>
++class DT : private BT<T>
++{
++public:
++  using BT<T>::E;   // { dg-message "previous" }
++  using BT<T>::S;   // { dg-message "previous" }
++
++private:
++  enum E {};        // { dg-error "conflicts" }
++  struct S {};      // { dg-error "conflicts" }
++};
++
++template class DT<int>;
++
++namespace N
++{
++  int i;
++}
++
++void
++f ()
++{
++  using N::i;
++  using N::i;       // { dg-error "declared" }
++}

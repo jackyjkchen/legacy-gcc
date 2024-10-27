@@ -1,0 +1,53 @@
+diff --git a/gcc/fortran/resolve.c b/gcc/fortran/resolve.c
+index cde25afa4..5ab7c94ca 100644
+--- a/gcc/fortran/resolve.c
++++ b/gcc/fortran/resolve.c
+@@ -9232,15 +9232,22 @@ resolve_fl_variable (gfc_symbol *sym, int mp_flag)
+ 
+       if (!gfc_is_constant_expr (e)
+ 	  && !(e->expr_type == EXPR_VARIABLE
+-	       && e->symtree->n.sym->attr.flavor == FL_PARAMETER)
+-	  && sym->ns->proc_name
+-	  && (sym->ns->proc_name->attr.flavor == FL_MODULE
+-	      || sym->ns->proc_name->attr.is_main_program)
+-	  && !sym->attr.use_assoc)
+-	{
+-	  gfc_error ("'%s' at %L must have constant character length "
+-		     "in this context", sym->name, &sym->declared_at);
+-	  return FAILURE;
++	       && e->symtree->n.sym->attr.flavor == FL_PARAMETER))
++	{
++	  if (!sym->attr.use_assoc && sym->ns->proc_name
++	      && (sym->ns->proc_name->attr.flavor == FL_MODULE
++		  || sym->ns->proc_name->attr.is_main_program))
++	    {
++	      gfc_error ("'%s' at %L must have constant character length "
++			"in this context", sym->name, &sym->declared_at);
++	      return FAILURE;
++	    }
++	  if (sym->attr.in_common)
++	    {
++	      gfc_error ("COMMON variable '%s' at %L must have constant "
++			 "character length", sym->name, &sym->declared_at);
++	      return FAILURE;
++	    }
+ 	}
+     }
+ 
+diff --git a/gcc/testsuite/gfortran.dg/common_13.f90 b/gcc/testsuite/gfortran.dg/common_13.f90
+new file mode 100644
+index 000000000..07c78f1a7
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/common_13.f90
+@@ -0,0 +1,11 @@
++! { dg-do compile }
++!
++! PR 50070: Segmentation fault at size_binop_loc in fold-const.c
++!
++! Contributed by Vittorio Zecca <zeccav@gmail.com>
++
++subroutine sub
++  common n,z             ! { dg-error "must have constant character length" }
++  integer :: n
++  character(len=n) :: z
++end
