@@ -1,0 +1,78 @@
+diff --git a/gcc/cp/cp-tree.h b/gcc/cp/cp-tree.h
+index 1fa8fcad..36eb4532 100644
+--- a/gcc/cp/cp-tree.h
++++ b/gcc/cp/cp-tree.h
+@@ -4317,6 +4317,7 @@ extern tree finish_non_static_data_member       (tree, tree, tree);
+ extern tree begin_stmt_expr			(void);
+ extern tree finish_stmt_expr_expr		(tree, tree);
+ extern tree finish_stmt_expr			(tree, bool);
++extern tree stmt_expr_value_expr		(tree);
+ extern tree perform_koenig_lookup		(tree, tree);
+ extern tree finish_call_expr			(tree, tree, bool, bool);
+ extern tree finish_increment_expr		(tree, enum tree_code);
+diff --git a/gcc/cp/pt.c b/gcc/cp/pt.c
+index 1ff51577..71011d8a 100644
+--- a/gcc/cp/pt.c
++++ b/gcc/cp/pt.c
+@@ -13319,6 +13319,9 @@ type_dependent_expression_p (tree expression)
+       && !DECL_TEMPLATE_TEMPLATE_PARM_P (expression))
+     return false;
+ 
++  if (TREE_CODE (expression) == STMT_EXPR)
++    expression = stmt_expr_value_expr (expression);
++
+   if (TREE_TYPE (expression) == unknown_type_node)
+     {
+       if (TREE_CODE (expression) == ADDR_EXPR)
+@@ -13602,6 +13605,8 @@ build_non_dependent_expr (tree expr)
+   /* Preserve OVERLOADs; the functions must be available to resolve
+      types.  */
+   inner_expr = expr;
++  if (TREE_CODE (inner_expr) == STMT_EXPR)
++    inner_expr = stmt_expr_value_expr (inner_expr);
+   if (TREE_CODE (inner_expr) == ADDR_EXPR)
+     inner_expr = TREE_OPERAND (inner_expr, 0);
+   if (TREE_CODE (inner_expr) == COMPONENT_REF)
+diff --git a/gcc/cp/semantics.c b/gcc/cp/semantics.c
+index a9873355..156b1883 100644
+--- a/gcc/cp/semantics.c
++++ b/gcc/cp/semantics.c
+@@ -1696,6 +1696,25 @@ finish_stmt_expr (tree stmt_expr, bool has_no_scope)
+   return result;
+ }
+ 
++/* Returns the expression which provides the value of STMT_EXPR.  */
++
++tree
++stmt_expr_value_expr (tree stmt_expr)
++{
++  tree t = STMT_EXPR_STMT (stmt_expr);
++
++  if (TREE_CODE (t) == BIND_EXPR)
++    t = BIND_EXPR_BODY (t);
++
++  if (TREE_CODE (t) == STATEMENT_LIST)
++    t = STATEMENT_LIST_TAIL (t)->stmt;
++
++  if (TREE_CODE (t) == EXPR_STMT)
++    t = EXPR_STMT_EXPR (t);
++
++  return t;
++}
++
+ /* Perform Koenig lookup.  FN is the postfix-expression representing
+    the function (or functions) to call; ARGS are the arguments to the
+    call.  Returns the functions to be considered by overload
+diff --git a/gcc/testsuite/g++.dg/ext/stmtexpr12.C b/gcc/testsuite/g++.dg/ext/stmtexpr12.C
+new file mode 100644
+index 00000000..c35f41b0
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/ext/stmtexpr12.C
+@@ -0,0 +1,7 @@
++// PR c++/29000
++// { dg-options "" }
++
++template<int> int foo()
++{
++  return ({foo;})==0;		// { dg-error "insufficient context" }
++}

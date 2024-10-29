@@ -1,0 +1,87 @@
+diff --git a/gcc/fortran/module.c b/gcc/fortran/module.c
+index c3ac0567..f60fb4f4 100644
+--- a/gcc/fortran/module.c
++++ b/gcc/fortran/module.c
+@@ -562,6 +562,14 @@ gfc_match_use (void)
+ 		goto cleanup;
+ 	    }
+ 
++	  if (strcmp (new->use_name, module_name) == 0
++	      || strcmp (new->local_name, module_name) == 0)
++	    {
++	      gfc_error ("The name '%s' at %C has already been used as "
++			 "an external module name.", module_name);
++	      goto cleanup;
++	    }
++
+ 	  break;
+ 
+ 	case INTERFACE_USER_OP:
+@@ -3398,6 +3406,9 @@ read_module (void)
+ 	  /* Get the jth local name for this symbol.  */
+ 	  p = find_use_name_n (name, &j);
+ 
++	  if (p == NULL && strcmp (name, module_name) == 0)
++	    p = name;
++
+ 	  /* Skip symtree nodes not in an ONLY clause, unless there
+ 	     is an existing symtree loaded from another USE
+ 	     statement.  */
+diff --git a/gcc/testsuite/gfortran.dg/use_4.f90 b/gcc/testsuite/gfortran.dg/use_4.f90
+new file mode 100644
+index 00000000..43d94bc2
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/use_4.f90
+@@ -0,0 +1,33 @@
++! { dg-do "compile" }
++! PR fortran/30973
++! Using symbols with the name of the module
++
++module foo
++  integer :: i
++end module foo
++
++module bar
++  integer :: j
++end module bar
++
++module test
++  use foo, only:
++  integer :: foo ! { dg-error "cannot have a type" }
++end module test
++
++module test2
++  use bar, only: foo => j
++  use foo ! ok, unless foo is accessed
++end module test2
++
++module test3
++  use bar, only: foo => j
++  use foo ! ok, unless foo is accessed
++  foo = 5 ! { dg-error "is an ambiguous reference to 'j'" }
++end module test3
++
++program test_foo
++  use foo, only: foo  ! { dg-error "been used as an external module name" }
++  use foo, only: i => foo! { dg-error "been used as an external module name" }
++  use foo, only: foo => i! { dg-error "been used as an external module name" }
++end program
+diff --git a/gcc/testsuite/gfortran.dg/used_dummy_types_7.f90 b/gcc/testsuite/gfortran.dg/used_dummy_types_7.f90
+index 9e591b23..b0acc514 100644
+--- a/gcc/testsuite/gfortran.dg/used_dummy_types_7.f90
++++ b/gcc/testsuite/gfortran.dg/used_dummy_types_7.f90
+@@ -33,12 +33,12 @@ END MODULE
+ 
+ MODULE list
+ INTERFACE
+-  SUBROUTINE dummy_atom_list_insert(this, atom)
++  SUBROUTINE dummy_atom_list_insert(this, atom2)
+     USE types, ONLY: dummy_atom_list
+     USE atom, ONLY: dummy_atom
+ 
+     TYPE(dummy_atom_list), INTENT(inout) :: this
+-    TYPE(dummy_atom), INTENT(in)         :: atom
++    TYPE(dummy_atom), INTENT(in)         :: atom2
+   END SUBROUTINE
+ END INTERFACE
+ END MODULE

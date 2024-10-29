@@ -1,0 +1,48 @@
+diff --git a/gcc/config/i386/i386.c b/gcc/config/i386/i386.c
+index e3079b36..3ed65f03 100644
+--- a/gcc/config/i386/i386.c
++++ b/gcc/config/i386/i386.c
+@@ -7055,7 +7055,7 @@ get_some_local_dynamic_name (void)
+ 	&& for_each_rtx (&PATTERN (insn), get_some_local_dynamic_name_1, 0))
+       return cfun->machine->some_ld_name;
+ 
+-  gcc_unreachable ();
++  return NULL;
+ }
+ 
+ static int
+@@ -7114,8 +7114,15 @@ print_operand (FILE *file, rtx x, int code)
+ 	  return;
+ 
+ 	case '&':
+-	  assemble_name (file, get_some_local_dynamic_name ());
+-	  return;
++	  {
++	    const char *name = get_some_local_dynamic_name ();
++	    if (name == NULL)
++	      output_operand_lossage ("'%%&' used without any "
++				      "local dynamic TLS references");
++	    else
++	      assemble_name (file, name);
++	    return;
++	  }
+ 
+ 	case 'A':
+ 	  switch (ASSEMBLER_DIALECT)
+diff --git a/gcc/testsuite/gcc.target/i386/pr41985.c b/gcc/testsuite/gcc.target/i386/pr41985.c
+new file mode 100644
+index 00000000..b38b6dc4
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/i386/pr41985.c
+@@ -0,0 +1,11 @@
++/* PR target/41985 */
++/* { dg-do compile } */
++/* { dg-options "" } */
++
++int
++main ()
++{
++  int i;
++  asm volatile ("# %&": : "g" (i));	/* { dg-error "used without any local dynamic TLS references" } */
++  return 0;
++}

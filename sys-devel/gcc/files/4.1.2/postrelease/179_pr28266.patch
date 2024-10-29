@@ -1,0 +1,36 @@
+diff --git a/gcc/gimplify.c b/gcc/gimplify.c
+index e0334bb9..419192ca 100644
+--- a/gcc/gimplify.c
++++ b/gcc/gimplify.c
+@@ -4032,7 +4032,11 @@ gimplify_target_expr (tree *expr_p, tree *pre_p, tree *post_p)
+ 	    }
+ 	}
+       if (ret == GS_ERROR)
+-	return GS_ERROR;
++	{
++	  /* PR c++/28266 Make sure this is expanded only once. */
++	  TARGET_EXPR_INITIAL (targ) = NULL_TREE;
++	  return GS_ERROR;
++	}
+       append_to_statement_list (init, pre_p);
+ 
+       /* If needed, push the cleanup for the temp.  */
+diff --git a/gcc/testsuite/g++.dg/parse/defarg12.C b/gcc/testsuite/g++.dg/parse/defarg12.C
+new file mode 100644
+index 00000000..3717ad5d
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/parse/defarg12.C
+@@ -0,0 +1,13 @@
++/* PR28266 This used to ICE in gimple_add_tmp_var */
++/* { dg-do "compile" } */
++
++struct A
++{
++  int i;
++  A(int = X); /* { dg-error "was not declared in this scope" }*/
++};
++
++void foo()
++{
++  A().i;
++}

@@ -1,0 +1,82 @@
+diff --git a/gcc/cp/class.c b/gcc/cp/class.c
+index 90e48448..ada7db33 100644
+--- a/gcc/cp/class.c
++++ b/gcc/cp/class.c
+@@ -5070,6 +5070,7 @@ finish_struct_1 (tree t)
+      working on.  */
+   for (x = TYPE_FIELDS (t); x; x = TREE_CHAIN (x))
+     if (TREE_CODE (x) == VAR_DECL && TREE_STATIC (x)
++        && TREE_TYPE (x) != error_mark_node
+ 	&& same_type_p (TYPE_MAIN_VARIANT (TREE_TYPE (x)), t))
+       DECL_MODE (x) = TYPE_MODE (t);
+ 
+diff --git a/gcc/cp/decl.c b/gcc/cp/decl.c
+index b7dd098b..89873fb2 100644
+--- a/gcc/cp/decl.c
++++ b/gcc/cp/decl.c
+@@ -3736,8 +3736,7 @@ start_decl (const cp_declarator *declarator,
+ 
+       case FUNCTION_DECL:
+ 	error ("function %q#D is initialized like a variable", decl);
+-	initialized = 0;
+-	break;
++	return error_mark_node;
+ 
+       default:
+ 	break;
+@@ -6739,7 +6738,7 @@ check_var_type (tree identifier, tree type)
+ 	}
+       else
+ 	error ("variable or field declared void");
+-      type = integer_type_node;
++      type = error_mark_node;
+     }
+ 
+   return type;
+@@ -8157,7 +8156,11 @@ grokdeclarator (const cp_declarator *declarator,
+   /* We don't check parameter types here because we can emit a better
+      error message later.  */
+   if (decl_context != PARM)
+-    type = check_var_type (unqualified_id, type);
++    {
++      type = check_var_type (unqualified_id, type);
++      if (type == error_mark_node)
++        return error_mark_node;
++    }
+ 
+   /* Now create the decl, which may be a VAR_DECL, a PARM_DECL
+      or a FUNCTION_DECL, depending on DECL_CONTEXT and TYPE.  */
+diff --git a/gcc/testsuite/g++.dg/other/large-size-array.C b/gcc/testsuite/g++.dg/other/large-size-array.C
+index 900c5033..1385878d 100644
+--- a/gcc/testsuite/g++.dg/other/large-size-array.C
++++ b/gcc/testsuite/g++.dg/other/large-size-array.C
+@@ -17,7 +17,7 @@ int
+ main (void)
+ {
+   int a[DIM][DIM];  /* { dg-error "size of array 'a' is too large" } */
+-  return sub (&a[0][0]);
++  return sub (&a[0][0]);  /* { dg-error "declared" } */
+ }
+ 
+ 
+diff --git a/gcc/testsuite/g++.dg/parse/crash27.C b/gcc/testsuite/g++.dg/parse/crash27.C
+index 4d9ab06e..06943666 100644
+--- a/gcc/testsuite/g++.dg/parse/crash27.C
++++ b/gcc/testsuite/g++.dg/parse/crash27.C
+@@ -3,5 +3,3 @@
+ void Dispatcher()
+ 	 (__builtin_offsetof (ArgsType, largeMsgLen))
+ 	/* { dg-error "function " "function" { target *-*-* } 4 } */
+-	/* { dg-error "initializer" "expected 1" { target *-*-* } 4 } */
+-	/* { dg-error "expected ',' or" "expected 2" { target *-*-* } 4 } */
+diff --git a/gcc/testsuite/g++.dg/template/crash1.C b/gcc/testsuite/g++.dg/template/crash1.C
+index 16d584e0..a500da18 100644
+--- a/gcc/testsuite/g++.dg/template/crash1.C
++++ b/gcc/testsuite/g++.dg/template/crash1.C
+@@ -13,5 +13,5 @@ class S
+ 
+ template <class I>
+ void S::Foo(int (*f)(TYPO&o) ) // { dg-error "Foo|f|TYPO|o" }
+-{ // { dg-error "expected `;'" }
++{ 
+ }

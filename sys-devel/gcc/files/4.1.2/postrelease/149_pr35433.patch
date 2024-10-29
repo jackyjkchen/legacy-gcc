@@ -1,0 +1,101 @@
+diff --git a/gcc/cp/decl.c b/gcc/cp/decl.c
+index c193c67e..32c01e72 100644
+--- a/gcc/cp/decl.c
++++ b/gcc/cp/decl.c
+@@ -1236,30 +1236,36 @@ duplicate_decls (tree newdecl, tree olddecl, bool newdecl_is_friend)
+     }
+   else if (TREE_CODE (olddecl) != TREE_CODE (newdecl))
+     {
+-      if ((TREE_CODE (olddecl) == TYPE_DECL && DECL_ARTIFICIAL (olddecl)
+-	   && TREE_CODE (newdecl) != TYPE_DECL
+-	   && ! (TREE_CODE (newdecl) == TEMPLATE_DECL
+-		 && TREE_CODE (DECL_TEMPLATE_RESULT (newdecl)) == TYPE_DECL))
+-	  || (TREE_CODE (newdecl) == TYPE_DECL && DECL_ARTIFICIAL (newdecl)
+-	      && TREE_CODE (olddecl) != TYPE_DECL
+-	      && ! (TREE_CODE (olddecl) == TEMPLATE_DECL
+-		    && (TREE_CODE (DECL_TEMPLATE_RESULT (olddecl))
+-			== TYPE_DECL))))
+-	{
+-	  /* We do nothing special here, because C++ does such nasty
+-	     things with TYPE_DECLs.  Instead, just let the TYPE_DECL
+-	     get shadowed, and know that if we need to find a TYPE_DECL
+-	     for a given name, we can look in the IDENTIFIER_TYPE_VALUE
+-	     slot of the identifier.  */
+-	  return NULL_TREE;
++      /* C++ Standard, 3.3, clause 4:
++	 "[Note: a namespace name or a class template name must be unique
++	 in its declarative region (7.3.2, clause 14). ]"  */
++      if (TREE_CODE (olddecl) != NAMESPACE_DECL
++	  && TREE_CODE (newdecl) != NAMESPACE_DECL
++	  && (TREE_CODE (olddecl) != TEMPLATE_DECL
++	      || TREE_CODE (DECL_TEMPLATE_RESULT (olddecl)) != TYPE_DECL)
++	  && (TREE_CODE (newdecl) != TEMPLATE_DECL
++	      || TREE_CODE (DECL_TEMPLATE_RESULT (newdecl)) != TYPE_DECL))
++	{
++	  if ((TREE_CODE (olddecl) == TYPE_DECL && DECL_ARTIFICIAL (olddecl)
++	       && TREE_CODE (newdecl) != TYPE_DECL)
++	      || (TREE_CODE (newdecl) == TYPE_DECL && DECL_ARTIFICIAL (newdecl)
++		  && TREE_CODE (olddecl) != TYPE_DECL))
++	    {
++	      /* We do nothing special here, because C++ does such nasty
++		 things with TYPE_DECLs.  Instead, just let the TYPE_DECL
++		 get shadowed, and know that if we need to find a TYPE_DECL
++		 for a given name, we can look in the IDENTIFIER_TYPE_VALUE
++		 slot of the identifier.  */
++	      return NULL_TREE;
++	    }
++	    
++	    if ((TREE_CODE (newdecl) == FUNCTION_DECL
++		 && DECL_FUNCTION_TEMPLATE_P (olddecl))
++		|| (TREE_CODE (olddecl) == FUNCTION_DECL
++		    && DECL_FUNCTION_TEMPLATE_P (newdecl)))
++	      return NULL_TREE;
+ 	}
+ 
+-      if ((TREE_CODE (newdecl) == FUNCTION_DECL
+-	   && DECL_FUNCTION_TEMPLATE_P (olddecl))
+-	  || (TREE_CODE (olddecl) == FUNCTION_DECL
+-	      && DECL_FUNCTION_TEMPLATE_P (newdecl)))
+-	return NULL_TREE;
+-
+       error ("%q#D redeclared as different kind of symbol", newdecl);
+       if (TREE_CODE (olddecl) == TREE_LIST)
+ 	olddecl = TREE_VALUE (olddecl);
+diff --git a/gcc/testsuite/g++.dg/lookup/name-clash5.C b/gcc/testsuite/g++.dg/lookup/name-clash5.C
+new file mode 100644
+index 00000000..7f220d88
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/lookup/name-clash5.C
+@@ -0,0 +1,13 @@
++// Copyright (C) 2007 Free Software Foundation
++// Contributed by Ollie Wild <aaw@google.com>
++// { dg-do compile }
++
++// C++ Standard, 3.3, clause 4:
++// "[Note: a namespace name or a class template name must be unique in its
++// declarative region (7.3.2, clause 14). ]"
++
++namespace N
++{ // { dg-error "previous declaration" }
++}
++
++class N; // { dg-error "redeclared" }
+diff --git a/gcc/testsuite/g++.dg/lookup/name-clash6.C b/gcc/testsuite/g++.dg/lookup/name-clash6.C
+new file mode 100644
+index 00000000..63a0b15b
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/lookup/name-clash6.C
+@@ -0,0 +1,13 @@
++// Copyright (C) 2007 Free Software Foundation
++// Contributed by Ollie Wild <aaw@google.com>
++// { dg-do compile }
++
++// C++ Standard, 3.3, clause 4:
++// "[Note: a namespace name or a class template name must be unique in its
++// declarative region (7.3.2, clause 14). ]"
++
++class N; // { dg-error "previous declaration" }
++
++namespace N
++{ // { dg-error "redeclared" }
++}

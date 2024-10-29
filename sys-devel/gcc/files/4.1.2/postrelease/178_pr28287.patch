@@ -1,0 +1,53 @@
+diff --git a/gcc/c-common.c b/gcc/c-common.c
+index 4f278932..0f12496d 100644
+--- a/gcc/c-common.c
++++ b/gcc/c-common.c
+@@ -4750,12 +4750,17 @@ handle_aligned_attribute (tree *node, tree ARG_UNUSED (name), tree args,
+    struct attribute_spec.handler.  */
+ 
+ static tree
+-handle_weak_attribute (tree *node, tree ARG_UNUSED (name),
++handle_weak_attribute (tree *node, tree name,
+ 		       tree ARG_UNUSED (args),
+ 		       int ARG_UNUSED (flags),
+ 		       bool * ARG_UNUSED (no_add_attrs))
+ {
+-  declare_weak (*node);
++  if (TREE_CODE (*node) == FUNCTION_DECL
++      || TREE_CODE (*node) == VAR_DECL)
++    declare_weak (*node);
++  else
++    warning (OPT_Wattributes, "%qE attribute ignored", name);
++    	
+ 
+   return NULL_TREE;
+ }
+diff --git a/gcc/testsuite/gcc.dg/attr-invalid.c b/gcc/testsuite/gcc.dg/attr-invalid.c
+index 9cb64541..c6c437d0 100644
+--- a/gcc/testsuite/gcc.dg/attr-invalid.c
++++ b/gcc/testsuite/gcc.dg/attr-invalid.c
+@@ -56,3 +56,24 @@ int ATSYM(fn_vars) (void) {
+   auto int lvar ATTR; /* { dg-warning "attribute ignored" "" } */
+   return 0;
+ }
++
++
++/* PR 28287 */
++/* These are invalid on all targets.  Applying to PARM_ or FIELD_DECL
++   also caused a tree checking ice on targets that support weak,  */
++#undef AT
++#define AT weak
++
++typedef int ATSYM(type) ATTR; /* { dg-warning "attribute ignored" "" } */
++
++typedef int (*ATSYM(fntype))(void) ATTR; /* { dg-warning "attribute ignored" "" } */
++
++struct ATSYM(struct) {
++  char dummy ATTR; /* { dg-warning "attribute ignored" "" } */
++};
++
++int ATSYM(fn_knrarg) (arg)
++  int arg ATTR; /* { dg-warning "attribute ignored" "" } */
++{ return 0; }
++
++int ATSYM(fn_isoarg) (int arg ATTR) { return 0; } /* { dg-warning "attribute ignored" "" } */

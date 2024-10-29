@@ -1,0 +1,63 @@
+diff --git a/gcc/cp/parser.c b/gcc/cp/parser.c
+index 103f3c54..4ce6c18d 100644
+--- a/gcc/cp/parser.c
++++ b/gcc/cp/parser.c
+@@ -13331,11 +13331,17 @@ cp_parser_class_head (cp_parser* parser,
+   cp_parser_commit_to_tentative_parse (parser);
+   /* Issue the error about the overly-qualified name now.  */
+   if (qualified_p)
+-    cp_parser_error (parser,
+-		     "global qualification of class name is invalid");
++    {
++      cp_parser_error (parser,
++		       "global qualification of class name is invalid");
++      return error_mark_node;
++    }
+   else if (invalid_nested_name_p)
+-    cp_parser_error (parser,
+-		     "qualified name does not name a class");
++    {
++      cp_parser_error (parser,
++		       "qualified name does not name a class");
++      return error_mark_node;
++    }
+   else if (nested_name_specifier)
+     {
+       tree scope;
+diff --git a/gcc/testsuite/g++.dg/template/crash80.C b/gcc/testsuite/g++.dg/template/crash80.C
+new file mode 100644
+index 00000000..ed462ac9
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/template/crash80.C
+@@ -0,0 +1,9 @@
++// PR c++/37087
++
++namespace a {
++  template <typename T> class Foo;
++}
++
++namespace b {
++  template <> class ::a::Foo<double> {}; // { dg-error "error: global qualification of class name is invalid" }
++}
+diff --git a/gcc/testsuite/g++.old-deja/g++.other/decl5.C b/gcc/testsuite/g++.old-deja/g++.other/decl5.C
+index f8c447c0..62a18e58 100644
+--- a/gcc/testsuite/g++.old-deja/g++.other/decl5.C
++++ b/gcc/testsuite/g++.old-deja/g++.other/decl5.C
+@@ -16,7 +16,7 @@ struct A {
+   int m;
+   };
+   struct Z;
+-  expand me;
++  expand me;          // { dg-error "" } not name a type
+   void foo(struct A::e);
+   void foo(struct A::z);  // { dg-warning "" } extra qualification
+ };
+@@ -71,7 +71,7 @@ namespace NMS
+   };
+ }
+ 
+-NMS::D thing;
++NMS::D thing;         // { dg-error "" } not name a type
+ void NMS::fn()
+ {
+   i = 3;

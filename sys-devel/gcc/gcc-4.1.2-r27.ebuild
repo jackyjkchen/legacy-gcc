@@ -147,6 +147,65 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/120_pr15759.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/121_pr30917.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/122_pr24879.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/123_pr35744.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/124_pr46538.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/125_pr43076.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/126_pr29966.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/127_pr41985.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/128_pr30659.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/129_pr28050.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/130_pr35996.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/131_pr35405.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/132_pr38579.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/133_pr20077.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/134_pr29295.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/135_pr53492.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/136_pr47450.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/137_pr37650.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/138_pr34485.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/139_pr32519.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/140_pr37087.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/141_pr30427.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/142_pr35109.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/143_pr35447.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/144_pr34911.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/145_pr28768.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/146_pr35435.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/147_pr35433.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/148_pr32839.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/149_pr35433.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/150_pr27667-26938-27329.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/151_pr32295.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/152_pr26155.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/153_pr28501.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/154_pr28513.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/155_pr37555.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/156_pr30863.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/157_pr34486-34776.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/158_pr34089.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/159_pr32241.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/160_pr35436.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/161_pr52290.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/162_pr28301.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/163_pr33836.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/164_pr30302.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/165_pr29573.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/166_pr28253.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/167_pr4784.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/168_pr28861.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/169_pr32121.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/170_pr28989.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/171_pr29470.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/172_pr34912.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/173_pr27492.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/174_pr25309.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/175_pr28420.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/176_pr28419.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/177_pr28303.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/178_pr28287.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/179_pr28266.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/180_pr27961.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/181_pr27398.patch
 
 	if use test ; then
 		eapply "${FILESDIR}"/${PV}/postrelease/900_fix-known-test-fail.patch

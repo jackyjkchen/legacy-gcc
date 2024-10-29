@@ -1,0 +1,160 @@
+diff --git a/gcc/c-typeck.c b/gcc/c-typeck.c
+index cb4a0d3f..c4ccaf86 100644
+--- a/gcc/c-typeck.c
++++ b/gcc/c-typeck.c
+@@ -1627,14 +1627,19 @@ default_conversion (tree exp)
+   if (TREE_NO_WARNING (orig_exp))
+     TREE_NO_WARNING (exp) = 1;
+ 
+-  if (INTEGRAL_TYPE_P (type))
+-    return perform_integral_promotions (exp);
+-
+   if (code == VOID_TYPE)
+     {
+       error ("void value not ignored as it ought to be");
+       return error_mark_node;
+     }
++
++  exp = require_complete_type (exp);
++  if (exp == error_mark_node)
++    return error_mark_node;
++
++  if (INTEGRAL_TYPE_P (type))
++    return perform_integral_promotions (exp);
++
+   return exp;
+ }
+ 
+@@ -2695,11 +2700,15 @@ build_unary_op (enum tree_code code, tree xarg, int flag)
+   /* No default_conversion here.  It causes trouble for ADDR_EXPR.  */
+   tree arg = xarg;
+   tree argtype = 0;
+-  enum tree_code typecode = TREE_CODE (TREE_TYPE (arg));
++  enum tree_code typecode;
+   tree val;
+   int noconvert = flag;
+   const char *invalid_op_diag;
+ 
++  if (code != ADDR_EXPR)
++    arg = require_complete_type (arg);
++
++  typecode = TREE_CODE (TREE_TYPE (arg));
+   if (typecode == ERROR_MARK)
+     return error_mark_node;
+   if (typecode == ENUMERAL_TYPE || typecode == BOOLEAN_TYPE)
+@@ -3383,6 +3392,13 @@ build_c_cast (tree type, tree expr)
+       return error_mark_node;
+     }
+ 
++  if (!VOID_TYPE_P (type))
++    {
++      value = require_complete_type (value);
++      if (value == error_mark_node)
++	return error_mark_node;
++    }
++
+   if (type == TYPE_MAIN_VARIANT (TREE_TYPE (value)))
+     {
+       if (pedantic)
+@@ -3788,6 +3804,9 @@ convert_for_assignment (tree type, tree rhs, enum impl_conv errtype,
+       error ("void value not ignored as it ought to be");
+       return error_mark_node;
+     }
++  rhs = require_complete_type (rhs);
++  if (rhs == error_mark_node)
++    return error_mark_node;
+   /* A type converts to a reference to it.
+      This code doesn't fully support references, it's just for the
+      special case of va_start and va_copy.  */
+diff --git a/gcc/testsuite/gcc.dg/enum-incomplete-1.c b/gcc/testsuite/gcc.dg/enum-incomplete-1.c
+new file mode 100644
+index 00000000..06c247c2
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/enum-incomplete-1.c
+@@ -0,0 +1,86 @@
++/* Test for uses of incomplete enum variables: should be allowed just
++   when incomplete structs are allowed.  PR 32295.  */
++/* Origin: Joseph Myers <joseph@codesourcery.com> */
++/* { dg-do compile } */
++/* { dg-options "" } */
++
++extern enum e ve;
++extern struct s vs;
++void *p;
++
++int
++f0 (int i)
++{
++  ve; /* { dg-error "incomplete" } */
++  vs; /* { dg-error "incomplete" } */
++  (void) ve;
++  (void) vs;
++  (void) (i ? ve : ve); /* { dg-error "incomplete" } */
++  (void) (i ? vs : vs); /* { dg-error "incomplete" } */
++  (void) (ve = ve); /* { dg-error "incomplete" } */
++  (void) (vs = vs); /* { dg-error "incomplete" } */
++  (void) ve, (void) ve;
++  (void) vs, (void) vs;
++  p = &ve;
++  p = &vs;
++  (void) sizeof (ve); /* { dg-error "incomplete" } */
++  (void) sizeof (vs); /* { dg-error "incomplete" } */
++  typeof (ve) *pe;
++  typeof (vs) *ps;
++  /* ??? alignof should probably not be accepted here.  */
++  (void) __alignof (ve);
++  (void) __alignof (vs);
++  (void) (ve + i); /* { dg-error "incomplete" } */
++  (void) (i * ve); /* { dg-error "incomplete" } */
++  (void) (i / ve); /* { dg-error "incomplete" } */
++  (void) (ve - i); /* { dg-error "incomplete" } */
++  (void) (ve << i); /* { dg-error "incomplete" } */
++  (void) (i >> ve); /* { dg-error "incomplete" } */
++  (void) (ve < i); /* { dg-error "incomplete" } */
++  (void) (ve <= i); /* { dg-error "incomplete" } */
++  (void) (i > ve); /* { dg-error "incomplete" } */
++  (void) (i >= ve); /* { dg-error "incomplete" } */
++  (void) (ve == i); /* { dg-error "incomplete" } */
++  (void) (i != ve); /* { dg-error "incomplete" } */
++  (void) (ve & i); /* { dg-error "incomplete" } */
++  (void) (ve ^ i); /* { dg-error "incomplete" } */
++  (void) (i | ve); /* { dg-error "incomplete" } */
++  (void) (i && ve); /* { dg-error "incomplete" } */
++  (void) (ve || i); /* { dg-error "incomplete" } */
++  (void) -ve; /* { dg-error "incomplete" } */
++  (void) +ve; /* { dg-error "incomplete" } */
++  (void) ~ve; /* { dg-error "incomplete" } */
++  (void) !ve; /* { dg-error "incomplete" } */
++  (void) --ve; /* { dg-error "incomplete" } */
++  (void) ++ve; /* { dg-error "incomplete" } */
++  (void) ve--; /* { dg-error "incomplete" } */
++  (void) ve++; /* { dg-error "incomplete" } */
++  i = ve; /* { dg-error "incomplete" } */
++  i *= ve; /* { dg-error "incomplete" } */
++  i /= ve; /* { dg-error "incomplete" } */
++  i %= ve; /* { dg-error "incomplete" } */
++  i += ve; /* { dg-error "incomplete" } */
++  i -= ve; /* { dg-error "incomplete" } */
++  i <<= ve; /* { dg-error "incomplete" } */
++  i >>= ve; /* { dg-error "incomplete" } */
++  i &= ve; /* { dg-error "incomplete" } */
++  i ^= ve; /* { dg-error "incomplete" } */
++  i |= ve; /* { dg-error "incomplete" } */
++  (void) (ve ? 1 : 1); /* { dg-error "incomplete" } */
++  (void) (int) ve; /* { dg-error "incomplete" } */
++  f0 (ve); /* { dg-error "incomplete" } */
++  if (ve) /* { dg-error "incomplete" } */
++    ;
++  do
++    ;
++  while (ve); /* { dg-error "incomplete" } */
++  while (ve) /* { dg-error "incomplete" } */
++    ;
++  _Bool b = ve; /* { dg-error "incomplete" } */
++  float f = ve; /* { dg-error "incomplete" } */
++  switch (ve) /* { dg-error "incomplete" } */
++    ;
++  for (; ve;) /* { dg-error "incomplete" } */
++    ;
++  return ve; /* { dg-error "incomplete" } */
++}

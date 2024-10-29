@@ -1,0 +1,226 @@
+diff --git a/gcc/config/arm/neon-testgen.ml b/gcc/config/arm/neon-testgen.ml
+index 00a8e533..3be13974 100644
+--- a/gcc/config/arm/neon-testgen.ml
++++ b/gcc/config/arm/neon-testgen.ml
+@@ -1,5 +1,5 @@
+ (* Auto-generate ARM Neon intrinsics tests.
+-   Copyright (C) 2006, 2007 Free Software Foundation, Inc.
++   Copyright (C) 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
+    Contributed by CodeSourcery.
+ 
+    This file is part of GCC.
+@@ -58,7 +58,7 @@ let emit_prologue chan test_name =
+ 
+ (* Emit declarations of local variables that are going to be passed
+    to an intrinsic, together with one to take a returned value if needed.  *)
+-let emit_automatics chan c_types =
++let emit_automatics chan c_types features =
+   let emit () =
+     ignore (
+       List.fold_left (fun arg_number -> fun (flags, ty) ->
+@@ -75,11 +75,17 @@ let emit_automatics chan c_types =
+   in
+     match c_types with
+       (_, return_ty) :: tys ->
+-        if return_ty <> "void" then
+-          (* The intrinsic returns a value.  *)
+-          (Printf.fprintf chan "  %s out_%s;\n" return_ty return_ty;
+-           emit ())
+-        else
++        if return_ty <> "void" then begin
++          (* The intrinsic returns a value.  We need to do explict register
++             allocation for vget_low tests or they fail because of copy
++             elimination.  *)
++          ((if List.mem Fixed_return_reg features then
++              Printf.fprintf chan "  register %s out_%s asm (\"d18\");\n"
++                             return_ty return_ty
++            else
++              Printf.fprintf chan "  %s out_%s;\n" return_ty return_ty);
++	   emit ())
++        end else
+           (* The intrinsic does not return a value.  *)
+           emit ()
+     | _ -> assert false
+@@ -256,7 +262,7 @@ let test_intrinsic dir opcode features shape name munge elt_ty =
+     (* Emit file and function prologues.  *)
+     emit_prologue chan test_name;
+     (* Emit local variable declarations.  *)
+-    emit_automatics chan c_types;
++    emit_automatics chan c_types features;
+     Printf.fprintf chan "\n";
+     (* Emit the call to the intrinsic.  *)
+     emit_call chan const_valuator c_types name elt_ty;
+diff --git a/gcc/config/arm/neon.ml b/gcc/config/arm/neon.ml
+index 10393b33..80cc4f14 100644
+--- a/gcc/config/arm/neon.ml
++++ b/gcc/config/arm/neon.ml
+@@ -1,7 +1,7 @@
+ (* Common code for ARM NEON header file, documentation and test case
+    generators.
+ 
+-   Copyright (C) 2006, 2007 Free Software Foundation, Inc.
++   Copyright (C) 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
+    Contributed by CodeSourcery.
+ 
+    This file is part of GCC.
+@@ -233,6 +233,7 @@ type features =
+        cases.  The function supplied must return the integer to be written
+        into the testcase for the argument number (0-based) supplied to it.  *)
+   | Const_valuator of (int -> int)
++  | Fixed_return_reg
+ 
+ exception MixedMode of elts * elts
+ 
+@@ -1076,9 +1077,13 @@ let ops =
+       Use_operands [| Dreg; Qreg |], "vget_high",
+       notype_1, pf_su_8_64;
+     Vget_low, [Instruction_name ["vmov"];
+-               Disassembles_as [Use_operands [| Dreg; Dreg |]]],
++               Disassembles_as [Use_operands [| Dreg; Dreg |]];
++	       Fixed_return_reg],
+       Use_operands [| Dreg; Qreg |], "vget_low",
+-      notype_1, pf_su_8_64;
++      notype_1, pf_su_8_32;
++     Vget_low, [No_op],
++      Use_operands [| Dreg; Qreg |], "vget_low",
++      notype_1, [S64; U64];
+ 
+     (* Conversions.  *)
+     Vcvt, [InfoWord], All (2, Dreg), "vcvt", conv_1,
+diff --git a/gcc/testsuite/gcc.target/arm/neon/vget_lowf32.c b/gcc/testsuite/gcc.target/arm/neon/vget_lowf32.c
+index ae63430f..a14a5763 100644
+--- a/gcc/testsuite/gcc.target/arm/neon/vget_lowf32.c
++++ b/gcc/testsuite/gcc.target/arm/neon/vget_lowf32.c
+@@ -9,7 +9,7 @@
+ 
+ void test_vget_lowf32 (void)
+ {
+-  float32x2_t out_float32x2_t;
++  register float32x2_t out_float32x2_t asm ("d18");
+   float32x4_t arg0_float32x4_t;
+ 
+   out_float32x2_t = vget_low_f32 (arg0_float32x4_t);
+diff --git a/gcc/testsuite/gcc.target/arm/neon/vget_lowp16.c b/gcc/testsuite/gcc.target/arm/neon/vget_lowp16.c
+index c24ac0cf..5c130f0b 100644
+--- a/gcc/testsuite/gcc.target/arm/neon/vget_lowp16.c
++++ b/gcc/testsuite/gcc.target/arm/neon/vget_lowp16.c
+@@ -9,7 +9,7 @@
+ 
+ void test_vget_lowp16 (void)
+ {
+-  poly16x4_t out_poly16x4_t;
++  register poly16x4_t out_poly16x4_t asm ("d18");
+   poly16x8_t arg0_poly16x8_t;
+ 
+   out_poly16x4_t = vget_low_p16 (arg0_poly16x8_t);
+diff --git a/gcc/testsuite/gcc.target/arm/neon/vget_lowp8.c b/gcc/testsuite/gcc.target/arm/neon/vget_lowp8.c
+index 45d65bca..4b4f599f 100644
+--- a/gcc/testsuite/gcc.target/arm/neon/vget_lowp8.c
++++ b/gcc/testsuite/gcc.target/arm/neon/vget_lowp8.c
+@@ -9,7 +9,7 @@
+ 
+ void test_vget_lowp8 (void)
+ {
+-  poly8x8_t out_poly8x8_t;
++  register poly8x8_t out_poly8x8_t asm ("d18");
+   poly8x16_t arg0_poly8x16_t;
+ 
+   out_poly8x8_t = vget_low_p8 (arg0_poly8x16_t);
+diff --git a/gcc/testsuite/gcc.target/arm/neon/vget_lows16.c b/gcc/testsuite/gcc.target/arm/neon/vget_lows16.c
+index 8e6c29aa..ee6e9904 100644
+--- a/gcc/testsuite/gcc.target/arm/neon/vget_lows16.c
++++ b/gcc/testsuite/gcc.target/arm/neon/vget_lows16.c
+@@ -9,7 +9,7 @@
+ 
+ void test_vget_lows16 (void)
+ {
+-  int16x4_t out_int16x4_t;
++  register int16x4_t out_int16x4_t asm ("d18");
+   int16x8_t arg0_int16x8_t;
+ 
+   out_int16x4_t = vget_low_s16 (arg0_int16x8_t);
+diff --git a/gcc/testsuite/gcc.target/arm/neon/vget_lows32.c b/gcc/testsuite/gcc.target/arm/neon/vget_lows32.c
+index e018afd7..08315286 100644
+--- a/gcc/testsuite/gcc.target/arm/neon/vget_lows32.c
++++ b/gcc/testsuite/gcc.target/arm/neon/vget_lows32.c
+@@ -9,7 +9,7 @@
+ 
+ void test_vget_lows32 (void)
+ {
+-  int32x2_t out_int32x2_t;
++  register int32x2_t out_int32x2_t asm ("d18");
+   int32x4_t arg0_int32x4_t;
+ 
+   out_int32x2_t = vget_low_s32 (arg0_int32x4_t);
+diff --git a/gcc/testsuite/gcc.target/arm/neon/vget_lows64.c b/gcc/testsuite/gcc.target/arm/neon/vget_lows64.c
+index e2e2bd66..9c1440ce 100644
+--- a/gcc/testsuite/gcc.target/arm/neon/vget_lows64.c
++++ b/gcc/testsuite/gcc.target/arm/neon/vget_lows64.c
+@@ -15,5 +15,4 @@ void test_vget_lows64 (void)
+   out_int64x1_t = vget_low_s64 (arg0_int64x2_t);
+ }
+ 
+-/* { dg-final { scan-assembler "vmov\[ 	\]+\[dD\]\[0-9\]+, \[dD\]\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
+ /* { dg-final { cleanup-saved-temps } } */
+diff --git a/gcc/testsuite/gcc.target/arm/neon/vget_lows8.c b/gcc/testsuite/gcc.target/arm/neon/vget_lows8.c
+index 0be24de3..7d324f33 100644
+--- a/gcc/testsuite/gcc.target/arm/neon/vget_lows8.c
++++ b/gcc/testsuite/gcc.target/arm/neon/vget_lows8.c
+@@ -9,7 +9,7 @@
+ 
+ void test_vget_lows8 (void)
+ {
+-  int8x8_t out_int8x8_t;
++  register int8x8_t out_int8x8_t asm ("d18");
+   int8x16_t arg0_int8x16_t;
+ 
+   out_int8x8_t = vget_low_s8 (arg0_int8x16_t);
+diff --git a/gcc/testsuite/gcc.target/arm/neon/vget_lowu16.c b/gcc/testsuite/gcc.target/arm/neon/vget_lowu16.c
+index 67bcd509..b0c43845 100644
+--- a/gcc/testsuite/gcc.target/arm/neon/vget_lowu16.c
++++ b/gcc/testsuite/gcc.target/arm/neon/vget_lowu16.c
+@@ -9,7 +9,7 @@
+ 
+ void test_vget_lowu16 (void)
+ {
+-  uint16x4_t out_uint16x4_t;
++  register uint16x4_t out_uint16x4_t asm ("d18");
+   uint16x8_t arg0_uint16x8_t;
+ 
+   out_uint16x4_t = vget_low_u16 (arg0_uint16x8_t);
+diff --git a/gcc/testsuite/gcc.target/arm/neon/vget_lowu32.c b/gcc/testsuite/gcc.target/arm/neon/vget_lowu32.c
+index d21d97ac..fdd8e79e 100644
+--- a/gcc/testsuite/gcc.target/arm/neon/vget_lowu32.c
++++ b/gcc/testsuite/gcc.target/arm/neon/vget_lowu32.c
+@@ -9,7 +9,7 @@
+ 
+ void test_vget_lowu32 (void)
+ {
+-  uint32x2_t out_uint32x2_t;
++  register uint32x2_t out_uint32x2_t asm ("d18");
+   uint32x4_t arg0_uint32x4_t;
+ 
+   out_uint32x2_t = vget_low_u32 (arg0_uint32x4_t);
+diff --git a/gcc/testsuite/gcc.target/arm/neon/vget_lowu64.c b/gcc/testsuite/gcc.target/arm/neon/vget_lowu64.c
+index 79cf1c53..e6f7627c 100644
+--- a/gcc/testsuite/gcc.target/arm/neon/vget_lowu64.c
++++ b/gcc/testsuite/gcc.target/arm/neon/vget_lowu64.c
+@@ -15,5 +15,4 @@ void test_vget_lowu64 (void)
+   out_uint64x1_t = vget_low_u64 (arg0_uint64x2_t);
+ }
+ 
+-/* { dg-final { scan-assembler "vmov\[ 	\]+\[dD\]\[0-9\]+, \[dD\]\[0-9\]+!?\(\[ 	\]+@\[a-zA-Z0-9 \]+\)?\n" } } */
+ /* { dg-final { cleanup-saved-temps } } */
+diff --git a/gcc/testsuite/gcc.target/arm/neon/vget_lowu8.c b/gcc/testsuite/gcc.target/arm/neon/vget_lowu8.c
+index 03996493..d4e3c714 100644
+--- a/gcc/testsuite/gcc.target/arm/neon/vget_lowu8.c
++++ b/gcc/testsuite/gcc.target/arm/neon/vget_lowu8.c
+@@ -9,7 +9,7 @@
+ 
+ void test_vget_lowu8 (void)
+ {
+-  uint8x8_t out_uint8x8_t;
++  register uint8x8_t out_uint8x8_t asm ("d18");
+   uint8x16_t arg0_uint8x16_t;
+ 
+   out_uint8x8_t = vget_low_u8 (arg0_uint8x16_t);

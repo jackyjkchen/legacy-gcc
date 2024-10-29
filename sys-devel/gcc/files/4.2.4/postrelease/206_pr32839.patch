@@ -1,0 +1,79 @@
+diff --git a/gcc/cp/typeck.c b/gcc/cp/typeck.c
+index 24dac241..30522730 100644
+--- a/gcc/cp/typeck.c
++++ b/gcc/cp/typeck.c
+@@ -2893,8 +2893,14 @@ convert_arguments (tree typelist, tree values, tree fndecl, int flags)
+ 
+   if (typetail != 0 && typetail != void_list_node)
+     {
+-      /* See if there are default arguments that can be used.  */
+-      if (TREE_PURPOSE (typetail)
++      /* See if there are default arguments that can be used.  Because
++	 we hold default arguments in the FUNCTION_TYPE (which is so
++	 wrong), we can see default parameters here from deduced
++	 contexts (and via typeof) for indirect function calls.
++	 Fortunately we know whether we have a function decl to
++	 provide default arguments in a language conformant
++	 manner.  */
++      if (fndecl && TREE_PURPOSE (typetail)
+ 	  && TREE_CODE (TREE_PURPOSE (typetail)) != DEFAULT_ARG)
+ 	{
+ 	  for (; typetail != void_list_node; ++i)
+diff --git a/gcc/testsuite/g++.dg/expr/call4.C b/gcc/testsuite/g++.dg/expr/call4.C
+new file mode 100644
+index 00000000..b4f2d60b
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/expr/call4.C
+@@ -0,0 +1,27 @@
++// { dg-do compile }
++
++// Copyright (C) 2007 Free Software Foundation, Inc.
++// Contributed by Nathan Sidwell 22 Jul 2007 <nathan@codesourcery.com>
++
++// Origin: Danny Boelens <danny.boelens@artwork-systems.com>
++// PR 32839.  Default arguments propagated through the type system to
++// an indirect call.
++
++template<typename T>
++struct TPL
++{
++  enum Whatever {e1, e2};
++ 
++  static void Quux (int i = e1 | e2);
++};
++
++template <typename F>
++void DoIt (F fun)
++{
++  fun (); // { dg-error "too few arguments" }
++}
++
++void Foo ()
++{
++  DoIt (&TPL<int>::Quux);
++}
+diff --git a/gcc/testsuite/g++.dg/expr/call5.C b/gcc/testsuite/g++.dg/expr/call5.C
+new file mode 100644
+index 00000000..023ad81f
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/expr/call5.C
+@@ -0,0 +1,19 @@
++// { dg-do compile }
++
++// Copyright (C) 2007 Free Software Foundation, Inc.
++// Contributed by Nathan Sidwell 22 Jul 2007 <nathan@codesourcery.com>
++
++// PR 32839.  Default arguments propagated through the type system to
++// an indirect call.
++
++void Quux (int i = 0);
++void Baz (int i);
++
++void Foo ()
++{
++  __typeof (Quux) *q = Baz;
++
++  q (); // { dg-error "too few arguments" }
++}
++
++  

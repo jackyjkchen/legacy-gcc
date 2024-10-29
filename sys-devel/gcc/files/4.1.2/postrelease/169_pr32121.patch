@@ -1,0 +1,131 @@
+diff --git a/gcc/cp/parser.c b/gcc/cp/parser.c
+index 67e89a45..d78d1914 100644
+--- a/gcc/cp/parser.c
++++ b/gcc/cp/parser.c
+@@ -6456,6 +6456,15 @@ cp_parser_expression_statement (cp_parser* parser, tree in_statement_expr)
+    compound-statement:
+      { statement-seq [opt] }
+ 
++   GNU extension:
++
++   compound-statement:
++     { label-declaration-seq [opt] statement-seq [opt] }
++
++   label-declaration-seq:
++     label-declaration
++     label-declaration-seq label-declaration
++
+    Returns a tree representing the statement.  */
+ 
+ static tree
+@@ -6469,6 +6478,9 @@ cp_parser_compound_statement (cp_parser *parser, tree in_statement_expr,
+     return error_mark_node;
+   /* Begin the compound-statement.  */
+   compound_stmt = begin_compound_stmt (in_try ? BCS_TRY_BLOCK : 0);
++  /* If the next keyword is `__label__' we have a label declaration.  */
++  while (cp_lexer_next_token_is_keyword (parser->lexer, RID_LABEL))
++    cp_parser_label_declaration (parser);
+   /* Parse an (optional) statement-seq.  */
+   cp_parser_statement_seq_opt (parser, in_statement_expr);
+   /* Finish the compound-statement.  */
+@@ -7207,7 +7219,6 @@ cp_parser_declaration (cp_parser* parser)
+ 
+    block-declaration:
+      __extension__ block-declaration
+-     label-declaration
+ 
+    If STATEMENT_P is TRUE, then this block-declaration is occurring as
+    part of a declaration-statement.  */
+@@ -7263,12 +7274,16 @@ cp_parser_block_declaration (cp_parser *parser,
+ 	cp_parser_using_declaration (parser,
+ 				     /*access_declaration_p=*/false);
+     }
+-  /* If the next keyword is `__label__' we have a label declaration.  */
++  /* If the next keyword is `__label__' we have a misplaced label
++     declaration.  */
+   else if (token1->keyword == RID_LABEL)
+     {
+-      if (statement_p)
+-	cp_parser_commit_to_tentative_parse (parser);
+-      cp_parser_label_declaration (parser);
++      cp_lexer_consume_token (parser->lexer);
++      error ("%<__label__%> not at the beginning of a block");
++      cp_parser_skip_to_end_of_statement (parser);
++      /* If the next token is now a `;', consume it.  */
++      if (cp_lexer_next_token_is (parser->lexer, CPP_SEMICOLON))
++	cp_lexer_consume_token (parser->lexer);
+     }
+   /* Anything else must be a simple-declaration.  */
+   else
+diff --git a/gcc/testsuite/g++.dg/ext/label4.C b/gcc/testsuite/g++.dg/ext/label4.C
+index 80b50a79..93f140f3 100644
+--- a/gcc/testsuite/g++.dg/ext/label4.C
++++ b/gcc/testsuite/g++.dg/ext/label4.C
+@@ -3,4 +3,4 @@
+ 
+ // { dg-do compile }
+ 
+-__label__ *l;  // { dg-error "before" }
++__label__ *l;  // { dg-error "not at the beginning of" }
+diff --git a/gcc/testsuite/g++.dg/ext/label7.C b/gcc/testsuite/g++.dg/ext/label7.C
+new file mode 100644
+index 00000000..e92dccf5
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/ext/label7.C
+@@ -0,0 +1,12 @@
++// PR c++/32121
++// { dg-do compile }
++
++int f (void)
++{
++  a:;
++  __label__ a;	// { dg-error "not at the beginning" }
++  int b;
++  __label__ c;	// { dg-error "not at the beginning" }
++  a:;		// { dg-error "duplicate label" }
++  c:;
++}
+diff --git a/gcc/testsuite/g++.dg/ext/label8.C b/gcc/testsuite/g++.dg/ext/label8.C
+new file mode 100644
+index 00000000..1f6175df
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/ext/label8.C
+@@ -0,0 +1,22 @@
++// PR c++/32121
++// { dg-do compile }
++
++int f (void)
++{
++  __label__ a, b;
++  __label__ c;
++  a:;
++  b:;
++  c:;
++  {
++    __label__ d;
++    d:;
++    if (0)
++      {
++	__label__ e;
++	__label__ f;
++	f:;
++	e:;
++      }
++  }
++}
+diff --git a/gcc/testsuite/g++.dg/ext/label9.C b/gcc/testsuite/g++.dg/ext/label9.C
+new file mode 100644
+index 00000000..81b385ff
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/ext/label9.C
+@@ -0,0 +1,10 @@
++// PR c++/32121
++// { dg-do compile }
++
++int f (void)
++{
++  while (1)
++    __label__ a;	// { dg-error "not at the beginning" }
++  for (;;)
++    __label__ b;	// { dg-error "not at the beginning" }
++}
