@@ -17,6 +17,7 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/02_fix-werror.patch
 	eapply "${FILESDIR}"/${PV}/03_backport-static-libstdc++-option.patch
 	eapply "${FILESDIR}"/${PV}/04_support-__builtin_isinf_sign.patch
+	eapply "${FILESDIR}"/${PV}/05_enable-libobjc-in-arm-eabi.patch
 
 	use vanilla && return 0
 
@@ -152,6 +153,7 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/129_pr52290.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/130_pr29470.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/131_pr4784.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/132_pr35996.patch
 
 	if use test ; then
 		eapply "${FILESDIR}"/${PV}/postrelease/900_fix-known-test-fail.patch

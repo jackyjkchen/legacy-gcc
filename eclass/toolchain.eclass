@@ -307,22 +307,38 @@ case $(tc-arch) in
 	alpha)
 		tc_version_is_at_least 2.8 && IUSE+=" +cxx"
 		tc_version_is_at_least 2.9 && IUSE+=" objc"
+		tc_version_is_at_least 4.0 && IUSE+=" objc-gc" TC_FEATURES+=( objc-gc )
+		tc_version_is_at_least 4.1 && IUSE+=" objc++"
+		;;
+	arm)
+		tc_version_is_at_least 2.1 && IUSE+=" +cxx"
+		tc_version_is_at_least 4.3 && IUSE+=" objc"
+		tc_version_is_at_least 4.3 && IUSE+=" objc-gc" TC_FEATURES+=( objc-gc )
+		tc_version_is_at_least 4.3 && IUSE+=" objc++"
 		;;
 	ppc64)
 		tc_version_is_at_least 3.2 && IUSE+=" +cxx"
 		tc_version_is_at_least 3.1 && IUSE+=" objc"
+		tc_version_is_at_least 4.0 && IUSE+=" objc-gc" TC_FEATURES+=( objc-gc )
+		tc_version_is_at_least 4.1 && IUSE+=" objc++"
 		;;
 	sparc)
 		tc_version_is_at_least 2.9 && IUSE+=" +cxx"
 		tc_version_is_at_least 2.8 && IUSE+=" objc"
+		tc_version_is_at_least 4.0 && IUSE+=" objc-gc" TC_FEATURES+=( objc-gc )
+		tc_version_is_at_least 4.1 && IUSE+=" objc++"
 		;;
 	m68k)
 		tc_version_is_at_least 2.1 && IUSE+=" +cxx"
 		tc_version_is_at_least 2.4 && IUSE+=" objc"
+		tc_version_is_at_least 4.0 && IUSE+=" objc-gc" TC_FEATURES+=( objc-gc )
+		tc_version_is_at_least 4.1 && IUSE+=" objc++"
 		;;
 	*)
 		tc_version_is_at_least 2.1 && IUSE+=" +cxx"
 		tc_version_is_at_least 2.1 && IUSE+=" objc"
+		tc_version_is_at_least 4.0 && IUSE+=" objc-gc" TC_FEATURES+=( objc-gc )
+		tc_version_is_at_least 4.1 && IUSE+=" objc++"
 		;;
 esac
 tc_version_is_between 2.9 4.0 && IUSE+=" f77"
@@ -330,8 +346,7 @@ tc_version_is_at_least 4.0 && IUSE+=" +fortran" TC_FEATURES+=( fortran )
 tc_version_is_at_least 3.0 && IUSE+=" doc"
 tc_version_is_at_least 3.1 && IUSE+=" multilib"
 tc_version_is_at_least 4.2 && IUSE+=" pgo"
-tc_version_is_at_least 4.0 && IUSE+=" objc-gc" TC_FEATURES+=( objc-gc )
-tc_version_is_at_least 4.1 && IUSE+=" libssp objc++"
+tc_version_is_at_least 4.1 && IUSE+=" libssp"
 tc_version_is_at_least 4.2 && IUSE+=" +openmp"
 
 tc_version_is_at_least 4.3 && IUSE+=" fixed-point"
