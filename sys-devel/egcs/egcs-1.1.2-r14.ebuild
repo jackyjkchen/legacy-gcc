@@ -13,6 +13,7 @@ src_prepare() {
 
 	eapply "${FILESDIR}"/${PV}/01_workaround-for-new-glibc.patch
 	eapply "${FILESDIR}"/${PV}/02_sjlj-exception-default.patch
+	eapply "${FILESDIR}"/${PV}/03_add-gxxdg-exp.patch
 
 	if ! _tc_use_if_iuse cxx; then
 		rm -r libstdc++ libio gcc/cp || die
@@ -26,7 +27,6 @@ src_prepare() {
 	touch -r gcc/README gcc/configure.in || die
 
 	use vanilla && return 0
-	eapply "${FILESDIR}"/${PV}/03_add-gxxdg-exp.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/00_pr45262.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/01_pr42466.patch
 }

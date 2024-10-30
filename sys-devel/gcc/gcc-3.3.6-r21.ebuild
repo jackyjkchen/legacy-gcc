@@ -3,16 +3,32 @@
 
 EAPI=8
 
-inherit toolchain-oldlibc
+inherit toolchain
 
-KEYWORDS="amd64 x86"
+# ia64 - broken static handling; USE=static emerge busybox
+KEYWORDS="alpha amd64 hppa m68k mips ppc ppc64 s390 sh sparc x86"
 
 src_prepare() {
 	eapply "${FILESDIR}"/${PV}/00_gentoo-patchset.patch
-	toolchain-oldlibc_src_prepare
+	toolchain_src_prepare
 
-	eapply "${FILESDIR}"/${PV}/01_workaround-for-legacy-glibc-in-non-system-dir.patch
-	eapply "${FILESDIR}"/${PV}/10_fix-for-libc5.patch
+	! is_crosscompile && eapply "${FILESDIR}"/${PV}/01_workaround-for-legacy-glibc-in-non-system-dir.patch
+	case $(tc-arch) in
+		mips)
+			eapply "${FILESDIR}"/${PV}/02_support-mips64.patch
+			# c++ coredump on n64 and more testcase fail on n32
+			# [[ ${DEFAULT_ABI} == "n64" || ${DEFAULT_ABI} == "n32" ]] && eapply "${FILESDIR}"/${PV}/02_mips64-default-n32-abi.patch
+			;;
+		ppc64|ppc)
+			eapply "${FILESDIR}"/${PV}/04_workaround-for-ppc64-ppc.patch
+			;;
+		hppa)
+			eapply "${FILESDIR}"/${PV}/05_hppa-fix-build.patch
+			;;
+		sh)
+			eapply "${FILESDIR}"/${PV}/06_fix-for-sh4.patch
+			;;
+	esac
 
 	use vanilla && return 0
 	eapply "${FILESDIR}"/${PV}/postrelease/000_pr13685.patch
@@ -33,10 +49,11 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/015_pr24315.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/016_pr15759.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/017_pr24103.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/018_pr24278.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/019_pr29295.patch
 
 	if use test ; then
 		eapply "${FILESDIR}"/${PV}/postrelease/900_fix-known-test-fail.patch
-		rm -rf libstdc++-v3/testsuite/27_io/filebuf_members.cc
+		rm -rf libstdc++-v3/testsuite/27_io/{filebuf_members.cc,filebuf_virtuals.cc,ostream_inserter_arith.cc,streambuf_members.cc,stringbuf_virtuals.cc}
 	fi
 }
-

@@ -1,0 +1,37 @@
+diff --git a/gcc/c-typeck.c b/gcc/c-typeck.c
+index 35a57a9c..ca145d12 100644
+--- a/gcc/c-typeck.c
++++ b/gcc/c-typeck.c
+@@ -2530,7 +2530,10 @@ build_unary_op (enum tree_code code, tree xarg, int flag)
+       break;
+ 
+     case BIT_NOT_EXPR:
+-      if (typecode == INTEGER_TYPE || typecode == VECTOR_TYPE)
++      /* ~ works on integer types and non float vectors. */
++      if (typecode == INTEGER_TYPE
++	  || (typecode == VECTOR_TYPE
++	      && !VECTOR_FLOAT_TYPE_P (TREE_TYPE (arg))))
+ 	{
+ 	  if (!noconvert)
+ 	    arg = default_conversion (arg);
+diff --git a/gcc/testsuite/gcc.dg/vector-1.c b/gcc/testsuite/gcc.dg/vector-1.c
+new file mode 100644
+index 00000000..288dd1e9
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/vector-1.c
+@@ -0,0 +1,15 @@
++/* { dg-do compile } */
++/* { dg-options "" } */
++
++/* Check for application of ~ on vector types.  */
++
++#define vector __attribute__((vector_size(16) ))
++
++vector float a;
++vector int a1;
++
++int f(void)
++{
++ a =  ~a; /* { dg-error "" } */
++ a1 =  ~a1;
++}

@@ -1,0 +1,123 @@
+diff --git a/gcc/cp/cp-tree.h b/gcc/cp/cp-tree.h
+index 8e0a0e21..2509b707 100644
+--- a/gcc/cp/cp-tree.h
++++ b/gcc/cp/cp-tree.h
+@@ -3891,7 +3891,7 @@ extern void maybe_begin_member_template_processing (tree);
+ extern void maybe_end_member_template_processing (void);
+ extern tree finish_member_template_decl         (tree);
+ extern void begin_template_parm_list		(void);
+-extern void begin_specialization                (void);
++extern bool begin_specialization                (void);
+ extern void reset_specialization                (void);
+ extern void end_specialization                  (void);
+ extern void begin_explicit_instantiation        (void);
+diff --git a/gcc/cp/parser.c b/gcc/cp/parser.c
+index bd4ccd5c..bcb20511 100644
+--- a/gcc/cp/parser.c
++++ b/gcc/cp/parser.c
+@@ -8672,7 +8672,12 @@ cp_parser_explicit_specialization (cp_parser* parser)
+   /* We have processed another parameter list.  */
+   ++parser->num_template_parameter_lists;
+   /* Let the front end know that we are beginning a specialization.  */
+-  begin_specialization ();
++  if (!begin_specialization ())
++    {
++      end_specialization ();
++      cp_parser_skip_to_end_of_block_or_statement (parser);
++      return;
++    }
+ 
+   /* If the next keyword is `template', we need to figure out whether
+      or not we're looking a template-declaration.  */
+diff --git a/gcc/cp/pt.c b/gcc/cp/pt.c
+index a0e21bb5..ea029640 100644
+--- a/gcc/cp/pt.c
++++ b/gcc/cp/pt.c
+@@ -144,7 +144,7 @@ static tree tsubst_aggr_type (tree, tree, tsubst_flags_t, tree, int);
+ static tree tsubst_decl (tree, tree, tree, tsubst_flags_t);
+ static tree tsubst_arg_types (tree, tree, tsubst_flags_t, tree);
+ static tree tsubst_function_type (tree, tree, tsubst_flags_t, tree);
+-static void check_specialization_scope (void);
++static bool check_specialization_scope (void);
+ static tree process_partial_specialization (tree);
+ static void set_current_access_from_decl (tree);
+ static void check_default_tmpl_args (tree, tree, int, int);
+@@ -619,9 +619,10 @@ begin_template_parm_list (void)
+ }
+ 
+ /* This routine is called when a specialization is declared.  If it is
+-   invalid to declare a specialization here, an error is reported.  */
++   invalid to declare a specialization here, an error is reported and
++   false is returned, otherwise this routine will return true.  */
+ 
+-static void
++static bool
+ check_specialization_scope (void)
+ {
+   tree scope = current_scope ();
+@@ -636,8 +637,11 @@ check_specialization_scope (void)
+      shall be declared in the namespace of which the class template
+      is a member.  */
+   if (scope && TREE_CODE (scope) != NAMESPACE_DECL)
+-    error ("explicit specialization in non-namespace scope `%D'",
++	{
++      error ("explicit specialization in non-namespace scope `%D'",
+ 	      scope);
++      return false;
++    }
+ 
+   /* [temp.expl.spec] 
+ 
+@@ -648,17 +652,22 @@ check_specialization_scope (void)
+      explicitly specialize a class member template if its enclosing
+      class templates are not explicitly specialized as well.  */
+   if (current_template_parms) 
+-    error ("enclosing class templates are not explicitly specialized");
++    {
++      error ("enclosing class templates are not explicitly specialized");
++      return false;
++    }
++
++  return true;
+ }
+ 
+ /* We've just seen template <>.  */
+ 
+-void
++bool
+ begin_specialization (void)
+ {
+   begin_scope (sk_template_spec, NULL);
+   note_template_header (1);
+-  check_specialization_scope ();
++  return check_specialization_scope ();
+ }
+ 
+ /* Called at then end of processing a declaration preceded by
+diff --git a/gcc/testsuite/g++.dg/template/spec33.C b/gcc/testsuite/g++.dg/template/spec33.C
+new file mode 100644
+index 00000000..809d4f01
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/template/spec33.C
+@@ -0,0 +1,7 @@
++//PR c++/27667
++
++struct A
++{
++    template<int> static void foo   () {}
++    template<>    static void foo<0>() {}  // { dg-error "explicit" }
++}; 
+diff --git a/gcc/testsuite/g++.old-deja/g++.pt/spec20.C b/gcc/testsuite/g++.old-deja/g++.pt/spec20.C
+index 064ce142..b6148e5d 100644
+--- a/gcc/testsuite/g++.old-deja/g++.pt/spec20.C
++++ b/gcc/testsuite/g++.old-deja/g++.pt/spec20.C
+@@ -10,7 +10,7 @@ struct S {
+   template <class U> void f(U);
+   template <> void f<int>(int); // { dg-error "" } invalid specialization
+ 
+-  template <class V> struct I {};
+-  template <class V> struct I<V*> {};
++  template <class V> struct I {};      // { dg-error "template" }
++  template <class V> struct I<V*> {};  // { dg-error "template" }
+   template <> struct I<int>; // { dg-error "" } invalid specialization
+ };

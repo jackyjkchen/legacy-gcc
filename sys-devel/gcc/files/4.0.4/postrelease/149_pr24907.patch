@@ -1,0 +1,56 @@
+diff --git a/gcc/cp/parser.c b/gcc/cp/parser.c
+index ec853a6e..ef3f0d9c 100644
+--- a/gcc/cp/parser.c
++++ b/gcc/cp/parser.c
+@@ -7200,7 +7200,16 @@ cp_parser_simple_declaration (cp_parser* parser,
+       bool function_definition_p;
+       tree decl;
+ 
+-      saw_declarator = true;
++      if (saw_declarator)
++	{
++	  /* If we are processing next declarator, coma is expected */
++	  token = cp_lexer_peek_token (parser->lexer);
++	  gcc_assert (token->type == CPP_COMMA);
++	  cp_lexer_consume_token (parser->lexer);
++	}
++      else
++	saw_declarator = true;
++
+       /* Parse the init-declarator.  */
+       decl = cp_parser_init_declarator (parser, &decl_specifiers,
+ 					function_definition_allowed_p,
+@@ -7235,7 +7244,7 @@ cp_parser_simple_declaration (cp_parser* parser,
+       token = cp_lexer_peek_token (parser->lexer);
+       /* If it's a `,', there are more declarators to come.  */
+       if (token->type == CPP_COMMA)
+-	cp_lexer_consume_token (parser->lexer);
++	/* will be consumed next time around */;
+       /* If it's a `;', we are done.  */
+       else if (token->type == CPP_SEMICOLON)
+ 	break;
+diff --git a/gcc/testsuite/g++.dg/parse/comma2.C b/gcc/testsuite/g++.dg/parse/comma2.C
+new file mode 100644
+index 00000000..0f405876
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/parse/comma2.C
+@@ -0,0 +1,19 @@
++// { dg-do compile }
++
++// Copyright (C) 2005 Free Software Foundation, Inc.
++
++// PR c++/24907 [3.4/4.0/4.1/4.2 Regression] "int x, ;" accepted
++
++int x;
++int y,; /* { dg-error "expected" } */
++
++int main()
++{
++  int a;
++  int b,;    /* { dg-error "expected" } */
++  int c,d;
++  int e,f,;  /* { dg-error "expected" } */
++  int g,h,i;
++  int j,k,l,;/* { dg-error "expected" } */
++  int m,,,n; /* { dg-error "expected" } */
++}

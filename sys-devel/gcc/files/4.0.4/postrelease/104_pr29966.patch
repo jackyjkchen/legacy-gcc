@@ -1,0 +1,133 @@
+diff --git a/gcc/cp/parser.c b/gcc/cp/parser.c
+index dd10d0fd..31e5dc39 100644
+--- a/gcc/cp/parser.c
++++ b/gcc/cp/parser.c
+@@ -10572,6 +10572,8 @@ cp_parser_asm_definition (cp_parser* parser)
+   tree asm_stmt;
+   bool volatile_p = false;
+   bool extended_p = false;
++  bool invalid_inputs_p = false;
++  bool invalid_outputs_p = false;
+ 
+   /* Look for the `asm' keyword.  */
+   cp_parser_require_keyword (parser, RID_ASM, "`asm'");
+@@ -10625,6 +10627,9 @@ cp_parser_asm_definition (cp_parser* parser)
+ 	      && cp_lexer_next_token_is_not (parser->lexer,
+ 					     CPP_CLOSE_PAREN))
+ 	    outputs = cp_parser_asm_operand_list (parser);
++
++	    if (outputs == error_mark_node)
++	      invalid_outputs_p = true;
+ 	}
+       /* If the next token is `::', there are no outputs, and the
+ 	 next token is the beginning of the inputs.  */
+@@ -10644,6 +10649,9 @@ cp_parser_asm_definition (cp_parser* parser)
+ 	      && cp_lexer_next_token_is_not (parser->lexer,
+ 					     CPP_CLOSE_PAREN))
+ 	    inputs = cp_parser_asm_operand_list (parser);
++
++	    if (inputs == error_mark_node)
++	      invalid_inputs_p = true;
+ 	}
+       else if (cp_lexer_next_token_is (parser->lexer, CPP_SCOPE))
+ 	/* The clobbers are coming next.  */
+@@ -14191,12 +14199,14 @@ cp_parser_asm_specification_opt (cp_parser* parser)
+    each node is the expression.  The TREE_PURPOSE is itself a
+    TREE_LIST whose TREE_PURPOSE is a STRING_CST for the bracketed
+    string-literal (or NULL_TREE if not present) and whose TREE_VALUE
+-   is a STRING_CST for the string literal before the parenthesis.  */
++   is a STRING_CST for the string literal before the parenthesis. Returns
++   ERROR_MARK_NODE if any of the operands are invalid.  */
+ 
+ static tree
+ cp_parser_asm_operand_list (cp_parser* parser)
+ {
+   tree asm_operands = NULL_TREE;
++  bool invalid_operands = false;
+ 
+   while (true)
+     {
+@@ -14228,6 +14238,11 @@ cp_parser_asm_operand_list (cp_parser* parser)
+       /* Look for the `)'.  */
+       cp_parser_require (parser, CPP_CLOSE_PAREN, "`)'");
+ 
++      if (name == error_mark_node 
++	  || string_literal == error_mark_node 
++	  || expression == error_mark_node)
++        invalid_operands = true;
++
+       /* Add this operand to the list.  */
+       asm_operands = tree_cons (build_tree_list (name, string_literal),
+ 				expression,
+@@ -14240,7 +14255,7 @@ cp_parser_asm_operand_list (cp_parser* parser)
+       cp_lexer_consume_token (parser->lexer);
+     }
+ 
+-  return nreverse (asm_operands);
++  return invalid_operands ? error_mark_node : nreverse (asm_operands);
+ }
+ 
+ /* Parse an asm-clobber-list.
+diff --git a/libcpp/lex.c b/libcpp/lex.c
+index 62a28f81..11ca5c71 100644
+--- a/libcpp/lex.c
++++ b/libcpp/lex.c
+@@ -717,6 +717,11 @@ _cpp_lex_token (cpp_reader *pfile)
+ 	  pfile->cur_run = next_tokenrun (pfile->cur_run);
+ 	  pfile->cur_token = pfile->cur_run->base;
+ 	}
++      /* We assume that the current token is somewhere in the current
++	 run.  */
++      if (pfile->cur_token < pfile->cur_run->base
++	  || pfile->cur_token >= pfile->cur_run->limit)
++	abort ();
+ 
+       if (pfile->lookaheads)
+ 	{
+diff --git a/libcpp/macro.c b/libcpp/macro.c
+index f25fddee..1b9d21fd 100644
+--- a/libcpp/macro.c
++++ b/libcpp/macro.c
+@@ -1,6 +1,7 @@
+ /* Part of CPP library.  (Macro and #define handling.)
+    Copyright (C) 1986, 1987, 1989, 1992, 1993, 1994, 1995, 1996, 1998,
+-   1999, 2000, 2001, 2002, 2003, 2004, 2005 Free Software Foundation, Inc.
++   1999, 2000, 2001, 2002, 2003, 2004, 2005,
++   2006 Free Software Foundation, Inc.
+    Written by Per Bothner, 1994.
+    Based on CCCP program by Paul Rubin, June 1986
+    Adapted to ANSI C, Richard Stallman, Jan 1987
+@@ -1374,10 +1375,12 @@ alloc_expansion_token (cpp_reader *pfile, cpp_macro *macro)
+ static cpp_token *
+ lex_expansion_token (cpp_reader *pfile, cpp_macro *macro)
+ {
+-  cpp_token *token;
++  cpp_token *token, *saved_cur_token;
+ 
++  saved_cur_token = pfile->cur_token;
+   pfile->cur_token = alloc_expansion_token (pfile, macro);
+   token = _cpp_lex_direct (pfile);
++  pfile->cur_token = saved_cur_token;
+ 
+   /* Is this a parameter?  */
+   if (token->type == CPP_NAME
+@@ -1563,18 +1566,12 @@ _cpp_create_definition (cpp_reader *pfile, cpp_hashnode *node)
+     ok = _cpp_create_trad_definition (pfile, macro);
+   else
+     {
+-      cpp_token *saved_cur_token = pfile->cur_token;
+-
+       ok = create_iso_definition (pfile, macro);
+ 
+-      /* Restore lexer position because of games lex_expansion_token()
+-	 plays lexing the macro.  We set the type for SEEN_EOL() in
+-	 directives.c.
++      /* We set the type for SEEN_EOL() in directives.c.
+ 
+ 	 Longer term we should lex the whole line before coming here,
+ 	 and just copy the expansion.  */
+-      saved_cur_token[-1].type = pfile->cur_token[-1].type;
+-      pfile->cur_token = saved_cur_token;
+ 
+       /* Stop the lexer accepting __VA_ARGS__.  */
+       pfile->state.va_args_ok = 0;

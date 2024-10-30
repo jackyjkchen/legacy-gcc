@@ -1,0 +1,33 @@
+diff --git a/gcc/cp/pt.c b/gcc/cp/pt.c
+index 56101057..fdf468f2 100644
+--- a/gcc/cp/pt.c
++++ b/gcc/cp/pt.c
+@@ -7826,7 +7826,11 @@ tsubst_qualified_id (tree qualified_id, tree args,
+       expr = finish_qualified_id_expr (scope, expr, done, address_p);
+     }
+ 
+-  if (TREE_CODE (expr) != SCOPE_REF)
++  /* Expressions do not generally have reference type.  */
++  if (TREE_CODE (expr) != SCOPE_REF
++      /* However, if we're about to form a pointer-to-member, we just
++	 want the referenced member referenced.  */
++      && TREE_CODE (expr) != OFFSET_REF)
+     expr = convert_from_reference (expr);
+ 
+   return expr;
+diff --git a/gcc/testsuite/g++.dg/template/ptrmem17.C b/gcc/testsuite/g++.dg/template/ptrmem17.C
+new file mode 100644
+index 00000000..154f17a8
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/template/ptrmem17.C
+@@ -0,0 +1,10 @@
++// PR c++/28346
++
++template<int> struct A
++{
++  int& i;
++  A();
++  ~A() { &A::i; } // { dg-error "reference" }
++};
++
++A<0> a; // { dg-error "instantiated" }

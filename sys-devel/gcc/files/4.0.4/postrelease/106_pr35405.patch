@@ -1,0 +1,57 @@
+diff --git a/gcc/cp/error.c b/gcc/cp/error.c
+index 9e5a7b2d..e2bb6122 100644
+--- a/gcc/cp/error.c
++++ b/gcc/cp/error.c
+@@ -947,11 +947,13 @@ dump_template_decl (tree t, int flags)
+ 	pp_cxx_identifier (cxx_pp, "class");
+     }
+ 
+-  if (TREE_CODE (DECL_TEMPLATE_RESULT (t)) == TYPE_DECL)
++  if (DECL_TEMPLATE_RESULT (t)
++      && TREE_CODE (DECL_TEMPLATE_RESULT (t)) == TYPE_DECL)
+     dump_type (TREE_TYPE (t),
+                ((flags & ~TFF_CLASS_KEY_OR_ENUM) | TFF_TEMPLATE_NAME
+                 | (flags & TFF_DECL_SPECIFIERS ? TFF_CLASS_KEY_OR_ENUM : 0)));
+-  else if (TREE_CODE (DECL_TEMPLATE_RESULT (t)) == VAR_DECL)
++  else if (DECL_TEMPLATE_RESULT (t)
++           && TREE_CODE (DECL_TEMPLATE_RESULT (t)) == VAR_DECL)
+     dump_decl (DECL_TEMPLATE_RESULT (t), flags | TFF_TEMPLATE_NAME);
+   else
+     {
+diff --git a/gcc/cp/pt.c b/gcc/cp/pt.c
+index 236aa50f..26d7d0d0 100644
+--- a/gcc/cp/pt.c
++++ b/gcc/cp/pt.c
+@@ -4439,6 +4439,7 @@ lookup_template_class (tree d1,
+       d1 = DECL_NAME (template);
+     }
+   else if (TREE_CODE (d1) == TEMPLATE_DECL
++           && DECL_TEMPLATE_RESULT (d1)
+ 	   && TREE_CODE (DECL_TEMPLATE_RESULT (d1)) == TYPE_DECL)
+     {
+       template = d1;
+diff --git a/gcc/testsuite/g++.dg/template/crash84.C b/gcc/testsuite/g++.dg/template/crash84.C
+new file mode 100644
+index 00000000..20efdfa0
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/template/crash84.C
+@@ -0,0 +1,19 @@
++// Contributed by Dodji Seketeli <dodji@redhat.com>
++// Origin PR c++/35405
++// { dg-do compile }
++
++template<typename T> struct a
++{
++    template <template <typename> class C, typename X, C<X>* =0>
++    struct b // { dg-error "class C' is not a template|is not a valid type" }
++    {
++    };
++};
++
++void
++foo ()
++{
++    a<int> v; // { dg-error "instantiated from here" }
++}
++
++

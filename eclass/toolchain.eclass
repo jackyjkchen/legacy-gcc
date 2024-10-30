@@ -1256,7 +1256,6 @@ toolchain_src_configure() {
 
 	### general options
 
-	tc_version_is_between 3.1 3.3 && confgcc+=( --enable-obsolete )
 	tc_version_is_at_least 4.0 && confgcc+=( --enable-secureplt )
 	tc_version_is_at_least 3.0 && confgcc+=( --with-system-zlib )
 

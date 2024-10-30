@@ -1,0 +1,41 @@
+diff --git a/gcc/cp/class.c b/gcc/cp/class.c
+index bc4297d7..70a89484 100644
+--- a/gcc/cp/class.c
++++ b/gcc/cp/class.c
+@@ -299,7 +299,18 @@ build_base_path (enum tree_code code,
+ 	 field, because other parts of the compiler know that such
+ 	 expressions are always non-NULL.  */
+       if (!virtual_access && integer_zerop (offset))
+-	return build_nop (build_pointer_type (target_type), expr);
++	{
++	  tree class_type;
++	  /* TARGET_TYPE has been extracted from BINFO, and, is
++	     therefore always cv-unqualified.  Extract the
++	     cv-qualifiers from EXPR so that the expression returned
++	     matches the input.  */
++	  class_type = TREE_TYPE (TREE_TYPE (expr));
++	  target_type
++	    = cp_build_qualified_type (target_type,
++				       cp_type_quals (class_type));
++	  return build_nop (build_pointer_type (target_type), expr);
++	}
+       null_test = error_mark_node;
+     }
+ 
+diff --git a/gcc/testsuite/g++.dg/init/const5.C b/gcc/testsuite/g++.dg/init/const5.C
+new file mode 100644
+index 00000000..fa8d8fc2
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/init/const5.C
+@@ -0,0 +1,11 @@
++// PR c++/31449
++
++class Foo {};
++class Bar : public Foo {};
++static const Foo *foo = 0;
++
++static Bar *bar = static_cast<const Bar*>(foo); // { dg-error "conversion" }
++
++void func(const Foo *foo) {
++  Bar *bar = static_cast<const Bar*>(foo);  // { dg-error "conversion" }
++}

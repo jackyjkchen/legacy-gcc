@@ -1,0 +1,52 @@
+diff --git a/gcc/cp/pt.c b/gcc/cp/pt.c
+index fdf468f2..94b2716b 100644
+--- a/gcc/cp/pt.c
++++ b/gcc/cp/pt.c
+@@ -11255,6 +11255,13 @@ do_decl_instantiation (tree decl, tree storage)
+ 	  error ("no matching template for %qD found", decl);
+ 	  return;
+ 	}
++      if (!same_type_p (TREE_TYPE (result), TREE_TYPE (decl)))
++	{
++	  error ("type %qT for explicit instantiation %qD does not match "
++		 "declared type %qT", TREE_TYPE (result), decl,
++		 TREE_TYPE (decl));
++	  return;
++	}
+     }
+   else if (TREE_CODE (decl) != FUNCTION_DECL)
+     {
+diff --git a/gcc/testsuite/g++.dg/template/instantiate9.C b/gcc/testsuite/g++.dg/template/instantiate9.C
+new file mode 100644
+index 00000000..20fefaf2
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/template/instantiate9.C
+@@ -0,0 +1,15 @@
++/* PR c++/14622. The invalid explicit instantiation was not reported. */
++/* { dg-do "compile" } */
++template<class T>
++class A
++{
++  static T a;
++};
++
++template<class T>
++T A<T>::a;
++
++struct B {};
++
++template B A<int>::a; /* { dg-error "does not match declared type" } */
++template float A<float>::a;
+diff --git a/gcc/testsuite/g++.old-deja/g++.pt/instantiate12.C b/gcc/testsuite/g++.old-deja/g++.pt/instantiate12.C
+index ef5572f9..9596bfbf 100644
+--- a/gcc/testsuite/g++.old-deja/g++.pt/instantiate12.C
++++ b/gcc/testsuite/g++.old-deja/g++.pt/instantiate12.C
+@@ -56,6 +56,6 @@ int main ()
+ // const-ness should allow the compiler to elide references to the
+ // actual variables.
+ template const bool X<int>::cflag;
+-template const bool X<int>::flag;
++template bool X<int>::flag;
+ template const bool X<float>::cflag;
+-template const bool X<float>::flag;
++template bool X<float>::flag;

@@ -1,0 +1,58 @@
+diff --git a/gcc/cp/decl2.c b/gcc/cp/decl2.c
+index 624ea363..abc97962 100644
+--- a/gcc/cp/decl2.c
++++ b/gcc/cp/decl2.c
+@@ -476,13 +476,8 @@ check_member_template (tree tmpl)
+       || (TREE_CODE (decl) == TYPE_DECL
+ 	  && IS_AGGR_TYPE (TREE_TYPE (decl))))
+     {
+-      if (current_function_decl)
+-	/* 14.5.2.2 [temp.mem]
+-	   
+-	   A local class shall not have member templates.  */
+-	error ("invalid declaration of member template %q#D in local class",
+-               decl);
+-      
++      /* The parser rejects template declarations in local classes.  */
++      gcc_assert (!current_function_decl);
+       if (TREE_CODE (decl) == FUNCTION_DECL && DECL_VIRTUAL_P (decl))
+ 	{
+ 	  /* 14.5.2.3 [temp.mem]
+diff --git a/gcc/cp/parser.c b/gcc/cp/parser.c
+index 95bfd300..3753b882 100644
+--- a/gcc/cp/parser.c
++++ b/gcc/cp/parser.c
+@@ -15243,6 +15243,15 @@ cp_parser_template_declaration_after_export (cp_parser* parser, bool member_p)
+   /* And the `<'.  */
+   if (!cp_parser_require (parser, CPP_LESS, "`<'"))
+     return;
++  if (at_class_scope_p () && current_function_decl)
++    {
++      /* 14.5.2.2 [temp.mem]
++
++         A local class shall not have member templates.  */
++      error ("invalid declaration of member template in local class");
++      cp_parser_skip_to_end_of_block_or_statement (parser);
++      return;
++    }
+   /* [temp]
+    
+      A template ... shall not have C linkage.  */
+diff --git a/gcc/testsuite/g++.dg/template/crash63.C b/gcc/testsuite/g++.dg/template/crash63.C
+new file mode 100644
+index 00000000..b7056e8d
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/template/crash63.C
+@@ -0,0 +1,12 @@
++// PR c++/29729
++
++template<typename T> void foo(T)
++{
++  struct A
++  {
++    template<int> struct B // { dg-error "local class" }
++    {
++      typedef B<0> C;
++    }
++  };
++}

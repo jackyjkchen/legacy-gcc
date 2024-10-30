@@ -1,0 +1,54 @@
+diff --git a/gcc/cp/typeck.c b/gcc/cp/typeck.c
+index 1be0e033..4c9bd0c0 100644
+--- a/gcc/cp/typeck.c
++++ b/gcc/cp/typeck.c
+@@ -1954,16 +1954,11 @@ finish_class_member_access_expr (tree object, tree name)
+ 
+       if (TREE_CODE (name) == SCOPE_REF)
+ 	{
+-	  /* A qualified name.  The qualifying class or namespace `S' has
+-	     already been looked up; it is either a TYPE or a
+-	     NAMESPACE_DECL.  The member name is either an IDENTIFIER_NODE
+-	     or a BIT_NOT_EXPR.  */
++	  /* A qualified name.  The qualifying class or namespace `S'
++	     has already been looked up; it is either a TYPE or a
++	     NAMESPACE_DECL.  */
+ 	  scope = TREE_OPERAND (name, 0);
+ 	  name = TREE_OPERAND (name, 1);
+-	  gcc_assert (CLASS_TYPE_P (scope)
+-		      || TREE_CODE (scope) == NAMESPACE_DECL);
+-	  gcc_assert (TREE_CODE (name) == IDENTIFIER_NODE
+-		      || TREE_CODE (name) == BIT_NOT_EXPR);
+ 
+ 	  /* If SCOPE is a namespace, then the qualified name does not
+ 	     name a member of OBJECT_TYPE.  */
+@@ -1974,6 +1969,10 @@ finish_class_member_access_expr (tree object, tree name)
+ 	      return error_mark_node;
+ 	    }
+ 
++	  gcc_assert (CLASS_TYPE_P (scope));
++	  gcc_assert (TREE_CODE (name) == IDENTIFIER_NODE
++		      || TREE_CODE (name) == BIT_NOT_EXPR);
++
+ 	  /* Find the base of OBJECT_TYPE corresponding to SCOPE.  */
+ 	  access_path = lookup_base (object_type, scope, ba_check, NULL);
+ 	  if (access_path == error_mark_node)
+diff --git a/gcc/testsuite/g++.dg/template/crash45.C b/gcc/testsuite/g++.dg/template/crash45.C
+new file mode 100644
+index 00000000..f138e3d6
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/template/crash45.C
+@@ -0,0 +1,13 @@
++// PR c++/26365
++
++struct A {};
++
++namespace N
++{
++  template<int> void foo();
++}
++
++void bar(A *p)
++{
++  p->N::foo<0>; // { dg-error "not a member" } 
++}

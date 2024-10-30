@@ -1,0 +1,50 @@
+diff --git a/gcc/cp/call.c b/gcc/cp/call.c
+index 7bf7f551..3bd057d8 100644
+--- a/gcc/cp/call.c
++++ b/gcc/cp/call.c
+@@ -1648,14 +1648,19 @@ add_builtin_candidate (struct z_candidate **candidates, enum tree_code code,
+         break;
+       if (TYPE_PTR_P (type1) && TYPE_PTR_P (type2))
+ 	break;
+-      if (TREE_CODE (type1) == ENUMERAL_TYPE && TREE_CODE (type2) == ENUMERAL_TYPE)
++      if (TREE_CODE (type1) == ENUMERAL_TYPE 
++	  && TREE_CODE (type2) == ENUMERAL_TYPE)
+         break;
+-      if (TYPE_PTR_P (type1) && null_ptr_cst_p (args[1]))
++      if (TYPE_PTR_P (type1) 
++	  && null_ptr_cst_p (args[1])
++	  && !uses_template_parms (type1))
+ 	{
+ 	  type2 = type1;
+ 	  break;
+ 	}
+-      if (null_ptr_cst_p (args[0]) && TYPE_PTR_P (type2))
++      if (null_ptr_cst_p (args[0]) 
++	  && TYPE_PTR_P (type2)
++	  && !uses_template_parms (type2))
+ 	{
+ 	  type1 = type2;
+ 	  break;
+diff --git a/gcc/testsuite/g++.dg/template/error23.C b/gcc/testsuite/g++.dg/template/error23.C
+new file mode 100644
+index 00000000..8e5dee76
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/template/error23.C
+@@ -0,0 +1,17 @@
++// PR c++/29632
++
++struct nullptr_type {
++
++  nullptr_type ( void ) {}
++
++  template < typename T >
++  operator T* ( void ) const {
++    return ( 0 );
++  }
++} const nullptr;
++
++int main ( void ) {
++  0 == nullptr; // { dg-error "match" }
++}
++
++

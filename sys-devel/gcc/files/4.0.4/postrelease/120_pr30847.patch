@@ -1,0 +1,38 @@
+diff --git a/gcc/cp/typeck.c b/gcc/cp/typeck.c
+index c147d1f1..357e104c 100644
+--- a/gcc/cp/typeck.c
++++ b/gcc/cp/typeck.c
+@@ -5375,6 +5375,12 @@ build_modify_expr (tree lhs, enum tree_code modifycode, tree rhs)
+ 	tree cond;
+ 	tree preeval = NULL_TREE;
+ 
++	if (VOID_TYPE_P (TREE_TYPE (rhs)))
++	  {
++	    error ("void value not ignored as it ought to be");
++	    return error_mark_node;
++	  }
++
+ 	rhs = stabilize_expr (rhs, &preeval);
+ 	
+ 	/* Check this here to avoid odd errors when trying to convert
+diff --git a/gcc/testsuite/g++.dg/parse/cond3.C b/gcc/testsuite/g++.dg/parse/cond3.C
+new file mode 100644
+index 00000000..96d9c1e3
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/parse/cond3.C
+@@ -0,0 +1,15 @@
++// PR c++/30847
++// { dg-do compile }
++// { dg-options "" }
++
++int j, k, l;
++extern void baz ();
++
++void
++foo (int i)
++{
++  (i ? j : k) = ({ l++; (void) l; });	// { dg-error "void value not ignored" }
++  (i ? j : k) += ({ l++; (void) l; });	// { dg-error "void value not ignored" }
++  (i ? j : k) = baz ();			// { dg-error "void value not ignored" }
++  (i ? j : k) *= baz ();		// { dg-error "void value not ignored" }
++}

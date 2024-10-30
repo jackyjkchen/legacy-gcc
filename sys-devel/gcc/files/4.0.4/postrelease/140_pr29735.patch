@@ -1,0 +1,53 @@
+diff --git a/gcc/cp/decl.c b/gcc/cp/decl.c
+index 24c0d2b7..f44031a3 100644
+--- a/gcc/cp/decl.c
++++ b/gcc/cp/decl.c
+@@ -5626,16 +5626,6 @@ grokfndecl (tree ctype,
+ 	error ("cannot declare %<::main%> to be inline");
+       if (!publicp)
+ 	error ("cannot declare %<::main%> to be static");
+-      if (!same_type_p (TREE_TYPE (TREE_TYPE (decl)),
+-			integer_type_node))
+-	{
+-	  tree oldtypeargs = TYPE_ARG_TYPES (TREE_TYPE (decl));
+-	  tree newtype;
+-	  error ("%<::main%> must return %<int%>");
+-	  newtype =  build_function_type (integer_type_node,
+-			  		  oldtypeargs);
+-	  TREE_TYPE (decl) = newtype;
+-	}
+       inlinep = 0;
+       publicp = 1;
+     }
+@@ -5806,6 +5796,18 @@ grokfndecl (tree ctype,
+       *attrlist = NULL_TREE;
+     }
+ 
++  /* Check main's type after attributes have been applied.  */
++  if (ctype == NULL_TREE && DECL_MAIN_P (decl)
++      && !same_type_p (TREE_TYPE (TREE_TYPE (decl)),
++		       integer_type_node))
++    {
++      tree oldtypeargs = TYPE_ARG_TYPES (TREE_TYPE (decl));
++      tree newtype;
++      error ("%<::main%> must return %<int%>");
++      newtype = build_function_type (integer_type_node, oldtypeargs);
++      TREE_TYPE (decl) = newtype;
++    }
++
+   if (ctype != NULL_TREE
+       && (! TYPE_FOR_JAVA (ctype) || check_java_method (decl))
+       && check)
+diff --git a/gcc/testsuite/g++.dg/warn/main-3.C b/gcc/testsuite/g++.dg/warn/main-3.C
+new file mode 100644
+index 00000000..eb462f4b
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/warn/main-3.C
+@@ -0,0 +1,7 @@
++// PR c++/29735
++// { dg-do compile }
++
++int __attribute__ ((vector_size (8))) main () // { dg-error "must return" }
++{
++  return 0;
++}
