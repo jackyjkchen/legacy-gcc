@@ -288,7 +288,6 @@ toolchain-binutils_src_configure() {
 
 	if ! is_djgpp ; then
 		myconf+=( 
-			--enable-obsolete
 			--enable-shared
 			--enable-threads
 			# Newer versions (>=2.27) offer a configure flag now.

@@ -219,6 +219,10 @@ tc_use_major_version_only() {
 	fi
 }
 
+is_glibc217() {
+	[[ ${CHOST} == *-glibc217-* ]]
+}
+
 # @ECLASS_VARIABLE: GCC_CONFIG_VER
 # @INTERNAL
 # @DESCRIPTION:
@@ -441,7 +445,11 @@ case $(tc-arch) in
 		;;
 	*)
 		if tc_version_is_between 4.0 12 ; then
-			BDEPEND+=" ${CATEGORY}/binutils:2.38"
+			if is_glibc217 ; then
+				BDEPEND+=" ${CATEGORY}/binutils:2.30"
+			else
+				BDEPEND+=" ${CATEGORY}/binutils:2.38"
+			fi
 		else
 			BDEPEND+=" ${CATEGORY}/binutils"
 		fi
@@ -486,13 +494,13 @@ if ! is_crosscompile ; then
 			CXX="g++-${SLOT}"
 		fi
 	elif tc_version_is_between 4.9 10 ; then
-		if [[ $(tc-arch) != "loong" ]] ; then
+		if [[ $(tc-arch) != "loong" ]] && ! is_glibc217 ; then
 			BDEPEND+=" sys-devel/gcc:10"
 		fi
 		if [[ -f /usr/bin/gcc-${SLOT} ]] ;then
 			CC="gcc-${SLOT}"
 			CXX="g++-${SLOT}"
-		elif [[ $(tc-arch) != "loong" ]] ; then
+		elif [[ $(tc-arch) != "loong" ]] && ! is_glibc217 ; then
 			CC="gcc-10"
 			CXX="g++-10"
 		fi
@@ -1895,7 +1903,7 @@ toolchain_src_configure() {
 	# killing the 32bit builds which want /usr/lib.
 	export ac_cv_have_x='have_x=yes ac_x_includes= ac_x_libraries='
 
-	if ! is_crosscompile ; then
+	if ! is_crosscompile && [[ ${CBUILD} == ${CHOST} ]] ; then
 		case $(tc-arch) in
 			loong)
 				if tc_version_is_between 8 10 ; then
@@ -1904,7 +1912,11 @@ toolchain_src_configure() {
 				;;
 			*)
 				if tc_version_is_between 4.0 12 ; then
-					confgcc+=( --with-as=/usr/$CHOST/binutils-bin/2.38/as --with-ld=/usr/$CHOST/binutils-bin/2.38/ld )
+					if is_glibc217 ; then
+						confgcc+=( --with-as=/usr/$CHOST/binutils-bin/2.30/as --with-ld=/usr/$CHOST/binutils-bin/2.30/ld )
+					else
+						confgcc+=( --with-as=/usr/$CHOST/binutils-bin/2.38/as --with-ld=/usr/$CHOST/binutils-bin/2.38/ld )
+					fi
 				fi
 				;;
 		esac
