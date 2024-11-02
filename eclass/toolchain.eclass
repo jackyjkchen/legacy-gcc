@@ -2625,7 +2625,7 @@ toolchain_src_install() {
 		)
 	fi
 
-	if ! tc_version_is_at_least 4.0 && ! is_crosscompile && [[ ${TOOL_PREFIX} != "" ]] ; then
+	if tc_version_is_between 2.7 4.0 && ! is_crosscompile && [[ ${TOOL_PREFIX} != "" ]] ; then
 		declare -A GCC_INDEX
 		local GCC_INDEX=(
 			["3.4.6"]="06"
