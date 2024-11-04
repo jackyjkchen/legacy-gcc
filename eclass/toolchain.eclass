@@ -110,6 +110,12 @@ GCCMICRO=$(ver_cut 3 ${GCC_PV})
 # Controls whether fixincludes should be used.
 GCC_RUN_FIXINCLUDES=0
 
+[[ ${CHOST} == *-glibc217-* ]] && glibc217=1
+
+is_glibc217() {
+	[[ ${glibc217} == 1 ]]
+}
+
 if ! tc_version_is_at_least 4.0 ; then
 	TOOL_PREFIX=""
 	case $(tc-arch) in
@@ -217,10 +223,6 @@ tc_use_major_version_only() {
 	else
 		return 1
 	fi
-}
-
-is_glibc217() {
-	[[ ${CHOST} == *-glibc217-* ]]
 }
 
 # @ECLASS_VARIABLE: GCC_CONFIG_VER
@@ -450,8 +452,6 @@ case $(tc-arch) in
 			else
 				BDEPEND+=" ${CATEGORY}/binutils:2.38"
 			fi
-		else
-			BDEPEND+=" ${CATEGORY}/binutils"
 		fi
 		;;
 esac

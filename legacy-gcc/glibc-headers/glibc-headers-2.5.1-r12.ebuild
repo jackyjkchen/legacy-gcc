@@ -14,6 +14,7 @@ LICENSE=""
 KEYWORDS="alpha amd64 hppa m68k mips ppc ppc64 s390 sh sparc x86"
 CC="gcc-4.4.7"
 CXX="g++-4.4.7"
+IUSE="multilib"
 case ${ARCH} in
 	amd64)
 		TOOL_PREFIX="x86_64-legacy"
@@ -30,7 +31,7 @@ case ${ARCH} in
 		;;
 	mips|sparc)
 		TOOL_PREFIX="${PROFILE_ARCH}-legacy"
-		TOOL32_PREFIX="${PROFILE_ARCH/64/}-legacy"
+		[[ ${PROFILE_ARCH} == *64* ]] && TOOL32_PREFIX="${PROFILE_ARCH/64/}-legacy"
 		;;
 	ppc)
 		TOOL_PREFIX="powerpc-legacy"
@@ -117,7 +118,7 @@ src_install() {
 	touch  ${ED}/usr/${CHOST}/include/gnu/stubs.h || die
 	cp -v bits/stdio_lim.h ${ED}/usr/${CHOST}/include/bits || die
 	rm -rv ${ED}/usr/${CHOST}/include/scsi || die
-	if [[ ${TOOL32_PREFIX} != "" ]] && [[ ${TOOL32_PREFIX} != ${TOOL_PREFIX} ]] ; then
+	if [[ ${TOOL32_PREFIX} != "" ]] && use multilib ; then
 		TARGET32_PREFIX="${TOOL32_PREFIX}-linux-gnu"
 		mkdir -p ${ED}/usr/${TARGET32_PREFIX} || die
 		ln -sv ../${CHOST}/include ${ED}/usr/${TARGET32_PREFIX}/include || die

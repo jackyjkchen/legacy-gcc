@@ -8,7 +8,8 @@ HOMEPAGE=""
 SRC_URI=""
 
 LICENSE=""
-KEYWORDS="alpha amd64 hppa m68k mips ppc ppc64 s390 sh sparc x86"
+KEYWORDS="amd64"
+IUSE="multilib"
 case ${ARCH} in
 	amd64)
 		TOOL_PREFIX="x86_64-legacy"
@@ -16,50 +17,12 @@ case ${ARCH} in
 		AS_PARAMS="--32"
 		LD_PARAMS="-m elf_i386"
 		;;
-	x86)
-		TOOL_PREFIX="i686-legacy"
-		;;
-	alpha|m68k)
-		TOOL_PREFIX="${ARCH}-legacy"
-		;;
-	hppa)
-		TOOL_PREFIX="hppa1.1-legacy"
-		;;
-	mips)
-		TOOL_PREFIX="${PROFILE_ARCH}-legacy"
-		TOOL32_PREFIX="${PROFILE_ARCH/64/}-legacy"
-		if [[ ${TOOL32_PREFIX} == mipsel-legacy ]] ; then
-			AS_PARAMS="-EL -mabi=32"
-			LD_PARAMS="-EL -melf32ltsmip"
-		elif [[ ${TOOL32_PREFIX} == mips-legacy ]] ; then
-			AS_PARAMS="-EB -mabi=32"
-			LD_PARAMS="-EB -melf32btsmip"
-		fi
-		;;
-	ppc)
-		TOOL_PREFIX="powerpc-legacy"
-		;;
-	ppc64)
-		TOOL_PREFIX="powerpc64-legacy"
-		;;
-	s390)
-		TOOL_PREFIX="s390x-legacy"
-		;;
-	sh)
-		TOOL_PREFIX="sh4-legacy"
-		;;
-	sparc)
-		TOOL_PREFIX="${PROFILE_ARCH}-legacy"
-		TOOL32_PREFIX="${PROFILE_ARCH/64/}-legacy"
-		AS_PARAMS="-32"
-		LD_PARAMS="-m elf32_sparc"
-		;;
 	*)
 		;;
 esac
 SLOT="0"
 
-BINUTILS_SLOT="2.38"
+BINUTILS_SLOT="2.30"
 DEPEND="sys-devel/binutils:${BINUTILS_SLOT}"
 RDEPEND="${DEPEND}"
 BDEPEND=""
@@ -107,7 +70,7 @@ src_install() {
 	ln -sv ../../bin/${TARGET_PREFIX}-strings "${ED}"${UNIX_PREFIX}/${TARGET_PREFIX}/bin/strings || die
 	ln -sv ../../bin/${TARGET_PREFIX}-strip "${ED}"${UNIX_PREFIX}/${TARGET_PREFIX}/bin/strip || die
 
-	if [[ ${TOOL32_PREFIX} != "" ]] && [[ ${TOOL32_PREFIX} != ${TOOL_PREFIX} ]] ; then
+	if [[ ${TOOL32_PREFIX} != "" ]] && use multilib ; then
 		TARGET32_PREFIX="${TOOL32_PREFIX}-linux-gnu"
 		mkdir -p "${ED}"${UNIX_PREFIX}/${TARGET32_PREFIX}/bin || die
 		ln -sv ../${HOST_PREFIX}/binutils-bin/${BINUTILS_SLOT}/addr2line "${ED}"${UNIX_PREFIX}/bin/${TARGET32_PREFIX}-addr2line || die
