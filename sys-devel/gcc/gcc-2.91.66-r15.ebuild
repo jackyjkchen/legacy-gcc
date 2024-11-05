@@ -7,8 +7,11 @@ inherit toolchain
 
 KEYWORDS="alpha amd64 m68k ppc sparc x86"
 
+DEPEND="${DEPEND}
+	!sys-devel/egcs"
+
 src_prepare() {
-	eapply "${FILESDIR}"/${PV}/00_egcs-${PV}.patch
+	eapply "${FILESDIR}"/${PV}/00_gcc-${PV}.patch
 	toolchain_src_prepare
 
 	eapply "${FILESDIR}"/${PV}/01_workaround-for-new-glibc.patch

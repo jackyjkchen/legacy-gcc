@@ -13,11 +13,11 @@ LICENSE=""
 SLOT="$(ver_cut 1-3 ${PV})"
 KEYWORDS="amd64 x86"
 
-IUSE="+gcc295 +egcs112 +gcc281 +gcc272"
+IUSE="+gcc295 +gcc291 +gcc281 +gcc272"
 
 DEPEND="
 	gcc295? ( ${CATEGORY}/gcc:2.95.3[cxx] )
-	egcs112? ( ${CATEGORY}/egcs:1.1.2[cxx] )
+	gcc291? ( ${CATEGORY}/gcc:2.91.66[cxx] )
 	gcc281? ( ${CATEGORY}/gcc:2.8.1[cxx] ${CATEGORY}/libstdc++:2.8.1 )
 	gcc272? ( ${CATEGORY}/gcc:2.7.2[cxx] ${CATEGORY}/libg++:2.7.2 )"
 RDEPEND="${DEPEND}"
@@ -41,7 +41,7 @@ src_configure() {
 		CC="${CHOST}-gcc-2.95.3" CXX="${CHOST}-g++-2.95.3" sh ./stl/config/configure || die
 		mv stlconf.h stlconf.h_gcc295 || die
 	fi
-	if use egcs112; then
+	if use gcc291; then
 		downgrade_arch_flags 2.91.66
 		CC="${CHOST}-gcc-2.91.66" CXX="${CHOST}-g++-2.91.66" sh ./stl/config/configure || die
 		mv stlconf.h stlconf.h_gcc291 || die
@@ -71,7 +71,7 @@ src_install() {
 		cp -ax stl "${ED}"/usr/lib/gcc-lib/${CHOST}/2.95.3/include/stlport || die
 		cp -ax stlconf.h_gcc295 "${ED}"/usr/lib/gcc-lib/${CHOST}/2.95.3/include/stlport/config/stlconf.h || die
 	fi
-	if use egcs112; then
+	if use gcc291; then
 		mkdir -p "${ED}"/usr/lib/gcc-lib/${CHOST}/2.91.66/include/ || die
 		cp -ax stl "${ED}"/usr/lib/gcc-lib/${CHOST}/2.91.66/include/stlport || die
 		cp -ax stlconf.h_gcc291 "${ED}"/usr/lib/gcc-lib/${CHOST}/2.91.66/include/stlport/config/stlconf.h || die

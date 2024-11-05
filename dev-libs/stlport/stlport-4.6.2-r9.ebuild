@@ -27,7 +27,7 @@ case ${ARCH} in
 		;;
 esac
 
-DEPEND="sys-devel/egcs:1.1.2[cxx]"
+DEPEND="sys-devel/gcc:2.91.66[cxx]"
 RDEPEND="${DEPEND}"
 BDEPEND=""
 

@@ -13,11 +13,11 @@ LICENSE=""
 SLOT="$(ver_cut 1-3 ${PV})"
 KEYWORDS="amd64 x86"
 
-IUSE="+gcc295 +egcs112 +gcc281 +gcc272"
+IUSE="+gcc295 +gcc291 +gcc281 +gcc272"
 
 DEPEND="
 	gcc295? ( ${CATEGORY}/gcc:2.95.3[cxx] )
-	egcs112? ( ${CATEGORY}/egcs:1.1.2[cxx] )
+	gcc291? ( ${CATEGORY}/gcc:2.91.66[cxx] )
 	gcc281? ( ${CATEGORY}/gcc:2.8.1[cxx] ${CATEGORY}/libio:2.8.1 )
 	gcc272? ( ${CATEGORY}/gcc:2.7.2[cxx] ${CATEGORY}/libio:2.7.2 )"
 RDEPEND="${DEPEND}"
@@ -51,7 +51,7 @@ src_install() {
 		cp -ax stl "${ED}"/usr/lib/gcc-lib/${CHOST}/2.95.3/include/g++-v2 || die
 		cp ${FILESDIR}/${PV}/stlconf.h_gcc295 "${ED}"/usr/lib/gcc-lib/${CHOST}/2.95.3/include/g++-v2/config/stlconf.h || die
 	fi
-	if use egcs112; then
+	if use gcc291; then
 		mkdir -p "${ED}"/usr/lib/gcc-lib/${CHOST}/2.91.66/include/ || die
 		cp -ax stl "${ED}"/usr/lib/gcc-lib/${CHOST}/2.91.66/include/g++-v2 || die
 		cp ${FILESDIR}/${PV}/stlconf.h_gcc291 "${ED}"/usr/lib/gcc-lib/${CHOST}/2.91.66/include/g++-v2/config/stlconf.h || die

@@ -74,9 +74,6 @@ GCC_PVR=${GCC_PV}
 # It's an internal representation of gcc version used for:
 # - versioned paths on disk
 # - 'gcc -dumpversion' output. Must always match <digit>.<digit>.<digit>.
-if [[ ${PN} == "egcs" ]] ; then
-	GCC_PV=2.91.66
-fi
 GCC_RELEASE_VER=$(ver_cut 1-3 ${GCC_PV})
 
 GCC_BRANCH_VER=$(ver_cut 1-2 ${GCC_PV})
@@ -133,16 +130,12 @@ tc_has_feature() {
 	has "$1" "${TC_FEATURES[@]}"
 }
 
-tc_version_is_at_least 2.9 && IUSE+=" debug"
+tc_version_is_at_least 2.95 && IUSE+=" debug"
 tc_version_is_at_least 2.1 && IUSE+=" +cxx"
 tc_version_is_at_least 2.1 && IUSE+=" objc"
 tc_version_is_between 2.9 4.0 && IUSE+=" f77"
 
-if [[ ${PN} == "egcs" ]] ; then
-	SLOT="${PV}"
-else
-	SLOT="${GCC_CONFIG_VER}"
-fi
+SLOT="${GCC_CONFIG_VER}"
 
 #---->> DEPEND <<----
 
@@ -156,9 +149,9 @@ PDEPEND="sys-devel/gcc-config"
 DEPEND+=" ${CATEGORY}/binutils ${CATEGORY}/libc"
 if tc_version_is_at_least 3.4 ; then
 	BDEPEND+=" sys-devel/gcc:3.4.6"
-	if [[ -f /usr/bin/${CTARGET}-gcc-${GCC_PV} ]] ;then
-		CC="${CTARGET}-gcc-${GCC_PV}"
-		CXX="${CTARGET}-g++-${GCC_PV}"
+	if [[ -f /usr/bin/${CTARGET}-gcc-${GCC_CONFIG_VER} ]] ;then
+		CC="${CTARGET}-gcc-${GCC_CONFIG_VER}"
+		CXX="${CTARGET}-g++-${GCC_CONFIG_VER}"
 	else
 		STAGE1='yes'
 		CC="gcc-3.4.6 -m32"
@@ -166,9 +159,9 @@ if tc_version_is_at_least 3.4 ; then
 	fi
 elif tc_version_is_between 2.95 3.4 ; then
 	if [[ ${GCC_PV} == "2.95.3" ]] && [[ ${CATEGORY} == "dev-libc4" ]] ; then 
-		if [[ -f /usr/bin/${CTARGET}-gcc-${GCC_PV} ]] ; then
-			CC="${CTARGET}-gcc-${GCC_PV}"
-			CXX="${CTARGET}-g++-${GCC_PV}"
+		if [[ -f /usr/bin/${CTARGET}-gcc-${GCC_CONFIG_VER} ]] ; then
+			CC="${CTARGET}-gcc-${GCC_CONFIG_VER}"
+			CXX="${CTARGET}-g++-${GCC_CONFIG_VER}"
 		else
 			STAGE1='yes'
 			CC="gcc-2.95.3"
@@ -176,9 +169,9 @@ elif tc_version_is_between 2.95 3.4 ; then
 		fi
 	else
 		BDEPEND+=" ${CATEGORY}/gcc:3.4.6"
-		if [[ -f /usr/bin/${CTARGET}-gcc-${GCC_PV} ]] ;then
-			CC="${CTARGET}-gcc-${GCC_PV}"
-			CXX="${CTARGET}-g++-${GCC_PV}"
+		if [[ -f /usr/bin/${CTARGET}-gcc-${GCC_CONFIG_VER} ]] ;then
+			CC="${CTARGET}-gcc-${GCC_CONFIG_VER}"
+			CXX="${CTARGET}-g++-${GCC_CONFIG_VER}"
 		else
 			CC="${CTARGET}-gcc-3.4.6"
 			CXX="${CTARGET}-g++-3.4.6"
@@ -186,9 +179,9 @@ elif tc_version_is_between 2.95 3.4 ; then
 	fi
 elif tc_version_is_between 2.2 2.95 ; then
 	BDEPEND+=" ${CATEGORY}/gcc:2.95.3"
-	if [[ -f /usr/bin/${CTARGET}-gcc-${GCC_PV} ]] ; then
-		CC="${CTARGET}-gcc-${GCC_PV}"
-		CXX="${CTARGET}-g++-${GCC_PV}"
+	if [[ -f /usr/bin/${CTARGET}-gcc-${GCC_CONFIG_VER} ]] ; then
+		CC="${CTARGET}-gcc-${GCC_CONFIG_VER}"
+		CXX="${CTARGET}-g++-${GCC_CONFIG_VER}"
 	else
 		CC="${CTARGET}-gcc-2.95.3"
 		CXX="${CTARGET}-g++-2.95.3"
@@ -202,8 +195,8 @@ fi
 #---->> S + SRC_URI essentials <<----
 
 S=$(
-	if [[ ${PN} == "egcs" ]] ; then
-		echo ${WORKDIR}/${P}
+	if [[ ${P} == "gcc-2.91.66" ]] ; then
+		echo ${WORKDIR}/egcs-1.1.2
 	else
 		echo ${WORKDIR}/gcc-${GCC_PV}
 	fi
@@ -227,8 +220,8 @@ get_gcc_src_uri() {
 		GCC_SRC_URI="http://mirrors.ustc.edu.cn/gnu/gcc/gcc-${GCC_PV}/gcc-${GCC_RELEASE_VER}.tar.bz2"
 	elif tc_version_is_between 3.0 3.2 ; then
 		GCC_SRC_URI="http://mirrors.ustc.edu.cn/gnu/gcc/gcc-${GCC_PV}/gcc-${GCC_RELEASE_VER}.tar.gz"
-	elif [[ ${PN} == "egcs" ]] ; then
-		GCC_SRC_URI="http://gcc.gnu.org/pub/gcc/old-releases/egcs/${P}.tar.bz2"
+	elif [[ ${P} == "gcc-2.91.66" ]] ; then
+		GCC_SRC_URI="http://gcc.gnu.org/pub/gcc/old-releases/egcs/egcs-1.1.2.tar.bz2"
 	elif tc_version_is_between 2.0 3.0 ; then
 		GCC_SRC_URI="http://gcc.gnu.org/pub/gcc/old-releases/gcc-2/gcc-${GCC_PV}.tar.bz2"
 	elif tc_version_is_between 1.0 2.0 ; then

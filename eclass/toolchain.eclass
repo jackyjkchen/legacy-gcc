@@ -24,10 +24,6 @@ HOMEPAGE="https://gcc.gnu.org/"
 
 inherit edo fixheadtails flag-o-matic gnuconfig libtool multilib pax-utils toolchain-funcs prefix downgrade-arch-flags
 
-tc_is_live() {
-	[[ ${PV} == *9999* ]]
-}
-
 FEATURES=${FEATURES/multilib-strict/}
 
 # @FUNCTION: tc_version_is_at_least
@@ -71,9 +67,6 @@ GCC_PVR=${GCC_PV}
 # It's an internal representation of gcc version used for:
 # - versioned paths on disk
 # - 'gcc -dumpversion' output. Must always match <digit>.<digit>.<digit>.
-if [[ ${PN} == "egcs" ]] ; then
-	GCC_PV=2.91.66
-fi
 
 # @ECLASS_VARIABLE: GCC_RELEASE_VER
 # @INTERNAL
@@ -239,18 +232,10 @@ else
 fi
 
 # Pre-release support. Versioning schema:
-# 1.0.0_pre9999: live ebuild
 # 1.2.3_pYYYYMMDD (or 1.2.3_preYYYYMMDD for unreleased major versions): weekly snapshots
-# 1.2.3_rcYYYYMMDD: release candidates
-if [[ ${GCC_PV} == *_pre* ]] ; then
-	# Weekly snapshots
-	SNAPSHOT=${GCCMAJOR}-${GCC_PV##*_pre}
-elif [[ ${GCC_PV} == *_p* ]] ; then
+if [[ ${GCC_PV} == *_p* ]] ; then
 	# Weekly snapshots
 	SNAPSHOT=${GCCMAJOR}-${GCC_PV##*_p}
-elif [[ ${GCC_PV} == *_rc* ]] ; then
-	# Release candidates
-	SNAPSHOT=${GCC_PV%_rc*}-RC-${GCC_PV##*_rc}
 fi
 
 PREFIX=${TOOLCHAIN_PREFIX:-${EPREFIX}/usr}
@@ -308,7 +293,7 @@ tc_has_feature() {
 
 tc_version_is_at_least 2.8 && IUSE+=" vanilla"
 tc_version_is_at_least 2.9 && IUSE+=" +nls"
-tc_version_is_at_least 2.9 && IUSE+=" debug"
+tc_version_is_at_least 2.95 && IUSE+=" debug"
 case $(tc-arch) in
 	alpha)
 		tc_version_is_at_least 2.8 && IUSE+=" +cxx"
@@ -394,15 +379,7 @@ tc_version_is_at_least 10 && IUSE+=" zstd" TC_FEATURES+=( zstd )
 tc_version_is_at_least 11 && IUSE+=" valgrind" TC_FEATURES+=( valgrind )
 tc_version_is_at_least 11 && IUSE+=" custom-cflags"
 
-if tc_version_is_at_least 10; then
-	# Note: currently we pull in releases, snapshots and
-	# git versions into the same SLOT.
-	SLOT="${GCCMAJOR}"
-elif [[ ${PN} == "egcs" ]] ; then
-	SLOT="${PV}"
-else
-	SLOT="${GCC_CONFIG_VER}"
-fi
+SLOT="${GCC_CONFIG_VER}"
 
 #---->> DEPEND <<----
 
@@ -489,35 +466,35 @@ PDEPEND="sys-devel/gcc-config"
 
 if ! is_crosscompile ; then
 	if tc_version_is_at_least 10 ; then
-		if [[ -f /usr/bin/gcc-${SLOT} ]] ;then
-			CC="gcc-${SLOT}"
-			CXX="g++-${SLOT}"
+		if [[ -f /usr/bin/gcc-${GCC_CONFIG_VER} ]] ;then
+			CC="gcc-${GCC_CONFIG_VER}"
+			CXX="g++-${GCC_CONFIG_VER}"
 		fi
 	elif tc_version_is_between 4.9 10 ; then
 		if [[ $(tc-arch) != "loong" ]] && ! is_glibc217 ; then
 			BDEPEND+=" sys-devel/gcc:10"
 		fi
-		if [[ -f /usr/bin/gcc-${SLOT} ]] ;then
-			CC="gcc-${SLOT}"
-			CXX="g++-${SLOT}"
+		if [[ -f /usr/bin/gcc-${GCC_CONFIG_VER} ]] ;then
+			CC="gcc-${GCC_CONFIG_VER}"
+			CXX="g++-${GCC_CONFIG_VER}"
 		elif [[ $(tc-arch) != "loong" ]] && ! is_glibc217 ; then
 			CC="gcc-10"
 			CXX="g++-10"
 		fi
 	elif tc_version_is_between 4.4 4.9 ; then
 		BDEPEND+=" sys-devel/gcc:4.9.4"
-		if [[ -f /usr/bin/gcc-${GCC_PV} ]] ;then
-			CC="gcc-${GCC_PV}"
-			CXX="g++-${GCC_PV}"
+		if [[ -f /usr/bin/gcc-${GCC_CONFIG_VER} ]] ;then
+			CC="gcc-${GCC_CONFIG_VER}"
+			CXX="g++-${GCC_CONFIG_VER}"
 		else
 			CC="gcc-4.9.4"
 			CXX="g++-4.9.4"
 		fi
 	elif tc_version_is_between 4.0 4.4 ; then
 		BDEPEND+=" sys-devel/gcc:4.4.7"
-		if [[ -f /usr/bin/gcc-${GCC_PV} ]] ;then
-			CC="gcc-${GCC_PV}"
-			CXX="g++-${GCC_PV}"
+		if [[ -f /usr/bin/gcc-${GCC_CONFIG_VER} ]] ;then
+			CC="gcc-${GCC_CONFIG_VER}"
+			CXX="g++-${GCC_CONFIG_VER}"
 		else
 			CC="gcc-4.4.7"
 			CXX="g++-4.4.7"
@@ -526,18 +503,18 @@ if ! is_crosscompile ; then
 		DEPEND="${DEPEND} ${LEGACY_DEPEND}"
 		if [[ $(tc-arch) == "sh" ]] ; then
 			BDEPEND+=" sys-devel/gcc:4.1.2"
-			if [[ -f /usr/bin/gcc-${GCC_PV} ]] ;then
-				CC="gcc-${GCC_PV}"
-				CXX="g++-${GCC_PV}"
+			if [[ -f /usr/bin/gcc-${GCC_CONFIG_VER} ]] ;then
+				CC="gcc-${GCC_CONFIG_VER}"
+				CXX="g++-${GCC_CONFIG_VER}"
 			else
 				CC="gcc-4.1.2"
 				CXX="g++-4.1.2"
 			fi
 		else
 			BDEPEND+=" sys-devel/gcc:4.4.7"
-			if [[ -f /usr/bin/gcc-${GCC_PV} ]] ;then
-				CC="gcc-${GCC_PV}"
-				CXX="g++-${GCC_PV}"
+			if [[ -f /usr/bin/gcc-${GCC_CONFIG_VER} ]] ;then
+				CC="gcc-${GCC_CONFIG_VER}"
+				CXX="g++-${GCC_CONFIG_VER}"
 			else
 				CC="gcc-4.4.7"
 				CXX="g++-4.4.7"
@@ -546,9 +523,9 @@ if ! is_crosscompile ; then
 	elif tc_version_is_between 2.95 3.4 ; then
 		DEPEND="${DEPEND} ${LEGACY_DEPEND}"
 		BDEPEND+=" sys-devel/gcc:3.4.6"
-		if [[ -f /usr/bin/gcc-${GCC_PV} ]] ;then
-			CC="gcc-${GCC_PV}"
-			CXX="g++-${GCC_PV}"
+		if [[ -f /usr/bin/gcc-${GCC_CONFIG_VER} ]] ;then
+			CC="gcc-${GCC_CONFIG_VER}"
+			CXX="g++-${GCC_CONFIG_VER}"
 		else
 			CC="gcc-3.4.6"
 			CXX="g++-3.4.6"
@@ -566,9 +543,9 @@ if ! is_crosscompile ; then
 	elif tc_version_is_between 2.2 2.95 ; then
 		DEPEND="${DEPEND} ${LEGACY_DEPEND}"
 		BDEPEND+=" sys-devel/gcc:2.95.3"
-		if [[ -f /usr/bin/gcc-${GCC_PV} ]] ; then
-			CC="gcc-${GCC_PV}"
-			CXX="g++-${GCC_PV}"
+		if [[ -f /usr/bin/gcc-${GCC_CONFIG_VER} ]] ; then
+			CC="gcc-${GCC_CONFIG_VER}"
+			CXX="g++-${GCC_CONFIG_VER}"
 		else
 			CC="gcc-2.95.3"
 			CXX="g++-2.95.3"
@@ -581,8 +558,8 @@ if ! is_crosscompile ; then
 	fi
 else
 	BDEPEND="sys-devel/gcc:${SLOT}"
-	CC="gcc-${SLOT}"
-	CXX="g++-${SLOT}"
+	CC="gcc-${GCC_CONFIG_VER}"
+	CXX="g++-${GCC_CONFIG_VER}"
 fi
 
 #---->> S + SRC_URI essentials <<----
@@ -610,8 +587,8 @@ if [[ ${TOOLCHAIN_SET_S} == yes ]] ; then
 	S=$(
 		if [[ -n ${SNAPSHOT} ]] ; then
 			echo ${WORKDIR}/gcc-${SNAPSHOT}
-		elif [[ ${PN} == "egcs" ]] ; then
-			echo ${WORKDIR}/${P}
+		elif [[ ${P} == "gcc-2.91.66" ]] ; then
+			echo ${WORKDIR}/egcs-1.1.2
 		else
 			echo ${WORKDIR}/gcc-${GCC_PV}
 		fi
@@ -686,8 +663,8 @@ get_gcc_src_uri() {
 		GCC_SRC_URI="http://mirrors.ustc.edu.cn/gnu/gcc/gcc-${GCC_PV}/gcc-${GCC_RELEASE_VER}.tar.bz2"
 	elif tc_version_is_between 3.0 3.2 ; then
 		GCC_SRC_URI="http://mirrors.ustc.edu.cn/gnu/gcc/gcc-${GCC_PV}/gcc-${GCC_RELEASE_VER}.tar.gz"
-	elif [[ ${PN} == "egcs" ]] ; then
-		GCC_SRC_URI="http://gcc.gnu.org/pub/gcc/old-releases/egcs/${P}.tar.bz2"
+	elif [[ ${P} == "gcc-2.91.66" ]] ; then
+		GCC_SRC_URI="http://gcc.gnu.org/pub/gcc/old-releases/egcs/egcs-1.1.2.tar.bz2"
 	elif tc_version_is_between 2.0 3.0 ; then
 		GCC_SRC_URI="http://gcc.gnu.org/pub/gcc/old-releases/gcc-2/gcc-${GCC_PV}.tar.bz2"
 	elif tc_version_is_between 1.0 2.0 ; then
