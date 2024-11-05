@@ -80,7 +80,7 @@ gcc 2.2.2 - 2.8.1不自带c++库，安装libg++和libstdc++的独立包，标准
 
 dev-libs/stlport:5.2.1用于sys-devel/gcc:2.95.3。
 
-dev-libs/stlport:4.6.2用于sys-devel/egcs:1.1.2。
+dev-libs/stlport:4.6.2用于sys-devel/gcc:2.91.66。
 
 dev-libs/stlport:3.12.3用于sys-devel/gcc:2.8.1和sys-devel/gcc:2.7.2。
 
