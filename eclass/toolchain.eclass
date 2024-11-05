@@ -110,10 +110,10 @@ GCCMICRO=$(ver_cut 3 ${GCC_PV})
 # Controls whether fixincludes should be used.
 GCC_RUN_FIXINCLUDES=0
 
-[[ ${CHOST} == *-glibc217-* ]] && glibc217=1
+CHOST_ORIG=${CHOST}
 
 is_glibc217() {
-	[[ ${glibc217} == 1 ]]
+	[[ ${CHOST_ORIG} == *-glibc217-* ]]
 }
 
 if ! tc_version_is_at_least 4.0 ; then
@@ -2666,6 +2666,38 @@ _EOF_
 ${LIBPATH}
 _EOF_
 				;;
+		esac
+	fi
+
+	# workaround -static for new glibc built with new libgcc
+	if tc_version_is_between 4.1 4.4 && ! is_glibc217 ; then
+		case $(tc-arch) in
+		amd64)
+			local libc_a="${ED}/${LIBPATH}/libc.a"
+			cat <<-_EOF_ > ${libc_a} || die
+OUTPUT_FORMAT(elf64-x86-64)
+GROUP ( /usr/lib64/libc.a ${LIBPATH}/libgcc.a ${LIBPATH}/../../${CHOST_ORIG}/4.4.7/libgcc.a )
+_EOF_
+			ln -s /usr/lib64/libc.so "${ED}/${LIBPATH}/"
+			if _tc_use_if_iuse multilib ; then
+				libc_a="${ED}/${LIBPATH}/32/libc.a"
+				cat <<-_EOF_ > ${libc_a} || die
+OUTPUT_FORMAT(elf32-i386)
+GROUP ( /usr/lib/libc.a ${LIBPATH}/32/libgcc.a ${LIBPATH}/../../${CHOST_ORIG}/4.4.7/32/libgcc.a )
+_EOF_
+				ln -s /usr/lib/libc.so "${ED}/${LIBPATH}/32/"
+			fi
+			;;
+		x86)
+			local libc_a="${ED}/${LIBPATH}/libc.a"
+			cat <<-_EOF_ > ${libc_a} || die
+OUTPUT_FORMAT(elf32-i386)
+GROUP ( /usr/lib/libc.a ${LIBPATH}/libgcc.a ${LIBPATH}/../../${CHOST_ORIG}/4.4.7/libgcc.a )
+_EOF_
+			ln -s /usr/lib/libc.so "${ED}/${LIBPATH}/"
+			;;
+		*)
+			;;
 		esac
 	fi
 }
