@@ -177,19 +177,10 @@ elif tc_version_is_between 2.95 3.4 ; then
 			CXX="${CTARGET}-g++-3.4.6"
 		fi
 	fi
-elif tc_version_is_between 2.2 2.95 ; then
+elif tc_version_is_between 1.0 2.95 ; then
 	BDEPEND+=" ${CATEGORY}/gcc:2.95.3"
-	if [[ -f /usr/bin/${CTARGET}-gcc-${GCC_CONFIG_VER} ]] ; then
-		CC="${CTARGET}-gcc-${GCC_CONFIG_VER}"
-		CXX="${CTARGET}-g++-${GCC_CONFIG_VER}"
-	else
-		CC="${CTARGET}-gcc-2.95.3"
-		CXX="${CTARGET}-g++-2.95.3"
-	fi
-elif tc_version_is_between 1.0 2.2 ; then
-	BDEPEND+=" ${CATEGORY}/gcc:2.2.2"
-	CC="${CTARGET}-gcc-2.2.2"
-	CXX="${CTARGET}-g++-2.2.2"
+	CC="${CTARGET}-gcc-2.95.3"
+	CXX="${CTARGET}-g++-2.95.3"
 fi
 
 #---->> S + SRC_URI essentials <<----
@@ -573,11 +564,7 @@ gcc_do_make() {
 		GCC_MAKE_TARGET=${GCC_MAKE_TARGET-bootstrap}
 	fi
 
-	if [[ ${GCC_BRANCH_VER} == "3.0" ]] ; then
-		STAGE1_CFLAGS=
-	else
-		STAGE1_CFLAGS=${STAGE1_CFLAGS-"${CFLAGS}"}
-	fi
+	STAGE1_CFLAGS="-O1 -pipe"
 
 	BOOT_CFLAGS=${BOOT_CFLAGS-"${CFLAGS}"}
 
@@ -585,8 +572,10 @@ gcc_do_make() {
 
 	pushd "${WORKDIR}"/build >/dev/null
 
+	local cpunum=$((`cat /sys/devices/system/cpu/online |awk -F '-' '{print$2}'` + 1))
+	[[ $cpunum -gt 8 ]] && cpunum=8
 	if tc_version_is_at_least 2.9 ; then
-		PATH=${PREFIX}/${CHOST}/bin:${PATH} emake \
+		PATH=${PREFIX}/${CHOST}/bin:${PATH} emake -j$cpunum \
 			LDFLAGS="${LDFLAGS}" \
 			STAGE1_CFLAGS="${STAGE1_CFLAGS}" \
 			LIBPATH="${LIBPATH}" \
@@ -598,7 +587,7 @@ gcc_do_make() {
 		tc_version_is_at_least 2.8 && LANGUAGES+=" gcov"
 		_tc_use_if_iuse cxx && LANGUAGES+=" c++"
 		_tc_use_if_iuse objc && LANGUAGES+=" objective-c"
-		PATH=${PREFIX}/${CHOST}/bin:${PATH} emake \
+		PATH=${PREFIX}/${CHOST}/bin:${PATH} emake -j$cpunum \
 			CC="${CC}" \
 			CXX="${CXX}" \
 			LANGUAGES="${LANGUAGES}" \
