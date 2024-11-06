@@ -1,0 +1,94 @@
+diff --git a/gcc/expr.c b/gcc/expr.c
+index e49b22b5..97731f40 100644
+--- a/gcc/expr.c
++++ b/gcc/expr.c
+@@ -585,7 +585,26 @@ convert_move (rtx to, rtx from, int unsignedp)
+   if (VECTOR_MODE_P (to_mode) || VECTOR_MODE_P (from_mode))
+     {
+       if (GET_MODE_BITSIZE (from_mode) != GET_MODE_BITSIZE (to_mode))
+-	abort ();
++        {
++          if (VECTOR_MODE_P (from_mode))
++            {
++              enum machine_mode new_mode;
++
++              new_mode = mode_for_size (GET_MODE_BITSIZE (from_mode),
++                                        MODE_INT, 0);
++              from = simplify_gen_subreg (new_mode, from, from_mode, 0);
++            }
++          if (VECTOR_MODE_P (to_mode))
++            {
++              enum machine_mode new_mode;
++
++              new_mode = mode_for_size (GET_MODE_BITSIZE (to_mode),
++                                        MODE_INT, 0);
++              to = simplify_gen_subreg (new_mode, to, to_mode, 0);
++            }
++          convert_move (to, from, unsignedp);
++          return;
++        }
+ 
+       if (VECTOR_MODE_P (to_mode))
+ 	from = simplify_gen_subreg (to_mode, from, GET_MODE (from), 0);
+diff --git a/gcc/testsuite/gcc.c-torture/execute/20050113-1.c b/gcc/testsuite/gcc.c-torture/execute/20050113-1.c
+new file mode 100644
+index 00000000..e4bbf09b
+--- /dev/null
++++ b/gcc/testsuite/gcc.c-torture/execute/20050113-1.c
+@@ -0,0 +1,56 @@
++/* PR rtl-optimization/16104 */
++
++extern void abort (void);
++
++typedef int V2SI __attribute__ ((vector_size (8)));
++typedef short V2HI __attribute__ ((vector_size (4)));
++
++int
++test1 (void)
++{
++  return (long long) (V2SI) 0LL;
++}
++
++int
++test2 (V2SI x)
++{
++  return (long long) x;
++}
++
++V2SI
++test3 (void)
++{
++  return (V2SI) (long long) (int) (V2HI) 0;
++}
++
++V2SI
++test4 (V2HI x)
++{
++  return (V2SI) (long long) (int) x;
++}
++
++int
++main (void)
++{
++  if (sizeof (short) != 2 || sizeof (int) != 4 || sizeof (long long) != 8)
++    return 0;
++
++  if (test1 () != 0)
++    abort ();
++
++  V2SI x = { 2, 2 };
++  if (test2 (x) != 2)
++    abort ();
++
++  union { V2SI x; int y[2]; } u;
++  u.x = test3 ();
++  if (u.y[0] != 0 || u.y[1] != 0)
++    abort ();
++
++  V2HI y = { 4, 4 };
++  union { V2SI x; long long y; } v;
++  v.x = test4 (y);
++  if (v.y != 0x40004)
++    abort ();
++  return 0;
++}

@@ -24,6 +24,10 @@ HOMEPAGE="https://gcc.gnu.org/"
 
 inherit edo fixheadtails flag-o-matic gnuconfig libtool multilib pax-utils toolchain-funcs prefix downgrade-arch-flags
 
+tc_is_live() {
+	[[ ${PV} == *9999* ]]
+}
+
 FEATURES=${FEATURES/multilib-strict/}
 
 # @FUNCTION: tc_version_is_at_least

@@ -1,0 +1,1438 @@
+diff --git a/gcc/c-pch.c b/gcc/c-pch.c
+index 45898642..0ba3f8ce 100644
+--- a/gcc/c-pch.c
++++ b/gcc/c-pch.c
+@@ -386,6 +386,7 @@ c_common_read_pch (cpp_reader *pfile, const char *name,
+   if (f == NULL)
+     {
+       cpp_errno (pfile, CPP_DL_ERROR, "calling fdopen");
++      close (fd);
+       return;
+     }
+ 
+@@ -394,6 +395,7 @@ c_common_read_pch (cpp_reader *pfile, const char *name,
+   if (fread (&h, sizeof (h), 1, f) != 1)
+     {
+       cpp_errno (pfile, CPP_DL_ERROR, "reading");
++      fclose (f);
+       return;
+     }
+ 
+@@ -415,7 +417,10 @@ c_common_read_pch (cpp_reader *pfile, const char *name,
+   gt_pch_restore (f);
+ 
+   if (cpp_read_state (pfile, name, f, smd) != 0)
+-    return;
++    {
++      fclose (f);
++      return;
++    }
+ 
+   fclose (f);
+ }
+diff --git a/gcc/config/i386/i386.md b/gcc/config/i386/i386.md
+index ee933267..1722b234 100644
+--- a/gcc/config/i386/i386.md
++++ b/gcc/config/i386/i386.md
+@@ -1771,7 +1771,11 @@
+ 			 (const_int 8))
+ 	(match_operand:SI 1 "general_operand" "Qmn"))]
+   "!TARGET_64BIT"
+-  "mov{b}\t{%b1, %h0|%h0, %b1}"
++{
++  if (GET_CODE (operands[1]) == CONST_INT)
++    operands[1] = GEN_INT (INTVAL (operands[1]) & 255);
++  return "mov{b}\t{%b1, %h0|%h0, %b1}";
++}
+   [(set_attr "type" "imov")
+    (set_attr "mode" "QI")])
+ 
+@@ -1781,7 +1785,11 @@
+ 			 (const_int 8))
+ 	(match_operand:DI 1 "nonmemory_operand" "Qn"))]
+   "TARGET_64BIT"
+-  "mov{b}\t{%b1, %h0|%h0, %b1}"
++{
++  if (GET_CODE (operands[1]) == CONST_INT)
++    operands[1] = GEN_INT (INTVAL (operands[1]) & 255);
++  return "mov{b}\t{%b1, %h0|%h0, %b1}";
++}
+   [(set_attr "type" "imov")
+    (set_attr "mode" "QI")])
+ 
+@@ -5600,6 +5608,8 @@
+     }
+   operands[0] = gen_lowpart (SImode, operands[0]);
+   pat = gen_rtx_PLUS (Pmode, operands[1], operands[2]);
++  if (!no_seg_address_operand (pat, Pmode))
++    FAIL;
+   if (Pmode != SImode)
+     pat = gen_rtx_SUBREG (SImode, pat, 0);
+   emit_insn (gen_rtx_SET (VOIDmode, operands[0], pat));
+diff --git a/gcc/cp/error.c b/gcc/cp/error.c
+index 381b5bec..fd54109f 100644
+--- a/gcc/cp/error.c
++++ b/gcc/cp/error.c
+@@ -302,7 +302,7 @@ dump_type (tree t, int flags)
+   switch (TREE_CODE (t))
+     {
+     case UNKNOWN_TYPE:
+-      pp_identifier (cxx_pp, "<unknown type>");
++      pp_identifier (cxx_pp, "<unresolved overloaded function type>");
+       break;
+ 
+     case TREE_LIST:
+diff --git a/gcc/cp/typeck.c b/gcc/cp/typeck.c
+index f93322a3..5ca4189a 100644
+--- a/gcc/cp/typeck.c
++++ b/gcc/cp/typeck.c
+@@ -6441,7 +6441,7 @@ casts_away_constness (tree t1, tree t2)
+ tree
+ non_reference (tree t)
+ {
+-  if (TREE_CODE (t) == REFERENCE_TYPE)
++  if (t != NULL_TREE && TREE_CODE (t) == REFERENCE_TYPE)
+     t = TREE_TYPE (t);
+   return t;
+ }
+diff --git a/gcc/cppfiles.c b/gcc/cppfiles.c
+index 04f1a166..b96808b3 100644
+--- a/gcc/cppfiles.c
++++ b/gcc/cppfiles.c
+@@ -107,12 +107,6 @@ struct _cpp_file
+ 
+   /* If BUFFER above contains the true contents of the file.  */
+   bool buffer_valid;
+-
+-  /* 0: file not known to be a PCH.
+-     1: file is a PCH (on return from find_include_file).
+-     2: file is not and never will be a valid precompiled header.
+-     3: file is always a valid precompiled header.  */
+-  uchar pch;
+ };
+ 
+ /* A singly-linked list for all searches for a given file name, with
+@@ -292,9 +286,7 @@ pch_open_file (cpp_reader *pfile, _cpp_file *file, bool *invalid_pch)
+ 	    }
+ 	  closedir (pchdir);
+ 	}
+-      if (valid)
+-	file->pch = true;
+-      else
++      if (!valid)
+ 	*invalid_pch = true;
+     }
+ 
+@@ -576,8 +568,9 @@ should_stack_file (cpp_reader *pfile, _cpp_file *file, bool import)
+   if (include_pch_p (file))
+     {
+       pfile->cb.read_pch (pfile, file->path, file->fd, file->pchname);
+-      close (file->fd);
+       file->fd = -1;
++      free ((void *) file->pchname);
++      file->pchname = NULL;
+       return false;
+     }
+ 
+@@ -1250,7 +1243,7 @@ remap_filename (cpp_reader *pfile, _cpp_file *file)
+ static bool
+ include_pch_p (_cpp_file *file)
+ {
+-  return file->pch & 1;
++  return file->pchname != NULL;
+ }
+ 
+ /* Returns true if PCHNAME is a valid PCH file for FILE.  */
+diff --git a/gcc/dwarf2out.c b/gcc/dwarf2out.c
+index d59cc1d3..69e68401 100644
+--- a/gcc/dwarf2out.c
++++ b/gcc/dwarf2out.c
+@@ -1064,26 +1064,6 @@ dwarf2out_stack_adjust (rtx insn)
+   if (prologue_epilogue_contains (insn) || sibcall_epilogue_contains (insn))
+     return;
+ 
+-  if (!flag_asynchronous_unwind_tables && GET_CODE (insn) == CALL_INSN)
+-    {
+-      /* Extract the size of the args from the CALL rtx itself.  */
+-      insn = PATTERN (insn);
+-      if (GET_CODE (insn) == PARALLEL)
+-	insn = XVECEXP (insn, 0, 0);
+-      if (GET_CODE (insn) == SET)
+-	insn = SET_SRC (insn);
+-      if (GET_CODE (insn) != CALL)
+-	abort ();
+-
+-      dwarf2out_args_size ("", INTVAL (XEXP (insn, 1)));
+-      return;
+-    }
+-
+-  /* If only calls can throw, and we have a frame pointer,
+-     save up adjustments until we see the CALL_INSN.  */
+-  else if (!flag_asynchronous_unwind_tables && cfa.reg != STACK_POINTER_REGNUM)
+-    return;
+-
+   if (GET_CODE (insn) == BARRIER)
+     {
+       /* When we see a BARRIER, we know to reset args_size to 0.  Usually
+@@ -1106,9 +1086,20 @@ dwarf2out_stack_adjust (rtx insn)
+ 	if (GET_CODE (XVECEXP (PATTERN (insn), 0, i)) == SET)
+ 	  offset += stack_adjust_offset (XVECEXP (PATTERN (insn), 0, i));
+     }
++  else if (GET_CODE (insn) == CALL_INSN)
++    offset = 0;
+   else
+     return;
+ 
++  /* We handle this separately because we want stack adjustments in a
++     CALL_INSN to be handled.  */;
++  if (GET_CODE (insn) == CALL_INSN)
++    {
++      /* If only calls can throw, adjust args_size only at call sites.  */
++      if (!flag_asynchronous_unwind_tables)
++	dwarf2out_args_size ("", args_size);
++    }
++
+   if (offset == 0)
+     return;
+ 
+@@ -1123,6 +1114,16 @@ dwarf2out_stack_adjust (rtx insn)
+   if (args_size < 0)
+     args_size = 0;
+ 
++  /* If only calls can throw and we have a frame pointer, we'll save
++     up adjustments until we see the CALL_INSN.  We used to return
++     early and derive args_size from NARGS in the CALL_INSN itself,
++     but that doesn't compute the right value if we have nested call
++     expansions, e.g., stack adjustments for a call have already been
++     emitted, and then we issue another call to compute an argument
++     for the enclosing call (i.e., bar (foo ())).  */
++  if (!flag_asynchronous_unwind_tables && cfa.reg != STACK_POINTER_REGNUM)
++    return;
++
+   label = dwarf2out_cfi_label ();
+   def_cfa_1 (label, &cfa);
+   dwarf2out_args_size (label, args_size);
+@@ -11220,41 +11221,49 @@ gen_label_die (tree decl, dw_die_ref context_die)
+     }
+ }
+ 
+-/* Generate a DIE for a lexical block.  */
++/* A helper function for gen_lexical_block_die and gen_inlined_subroutine_die.
++   Add low_pc and high_pc attributes to the DIE for a block STMT.  */
+ 
+-static void
+-gen_lexical_block_die (tree stmt, dw_die_ref context_die, int depth)
++static inline void
++add_high_low_attributes (tree stmt, dw_die_ref die)
+ {
+-  dw_die_ref stmt_die = new_die (DW_TAG_lexical_block, context_die, stmt);
+   char label[MAX_ARTIFICIAL_LABEL_BYTES];
+ 
+-  if (! BLOCK_ABSTRACT (stmt))
++  if (BLOCK_FRAGMENT_CHAIN (stmt))
+     {
+-      if (BLOCK_FRAGMENT_CHAIN (stmt))
+-	{
+-	  tree chain;
++      tree chain;
+ 
+-	  add_AT_range_list (stmt_die, DW_AT_ranges, add_ranges (stmt));
++      add_AT_range_list (die, DW_AT_ranges, add_ranges (stmt));
+ 
+-	  chain = BLOCK_FRAGMENT_CHAIN (stmt);
+-	  do
+-	    {
+-	      add_ranges (chain);
+-	      chain = BLOCK_FRAGMENT_CHAIN (chain);
+-	    }
+-	  while (chain);
+-	  add_ranges (NULL);
+-	}
+-      else
++      chain = BLOCK_FRAGMENT_CHAIN (stmt);
++      do
+ 	{
+-	  ASM_GENERATE_INTERNAL_LABEL (label, BLOCK_BEGIN_LABEL,
+-				       BLOCK_NUMBER (stmt));
+-	  add_AT_lbl_id (stmt_die, DW_AT_low_pc, label);
+-	  ASM_GENERATE_INTERNAL_LABEL (label, BLOCK_END_LABEL,
+-				       BLOCK_NUMBER (stmt));
+-	  add_AT_lbl_id (stmt_die, DW_AT_high_pc, label);
++	  add_ranges (chain);
++	  chain = BLOCK_FRAGMENT_CHAIN (chain);
+ 	}
++      while (chain);
++      add_ranges (NULL);
++    }
++  else
++    {
++      ASM_GENERATE_INTERNAL_LABEL (label, BLOCK_BEGIN_LABEL,
++				   BLOCK_NUMBER (stmt));
++      add_AT_lbl_id (die, DW_AT_low_pc, label);
++      ASM_GENERATE_INTERNAL_LABEL (label, BLOCK_END_LABEL,
++				   BLOCK_NUMBER (stmt));
++      add_AT_lbl_id (die, DW_AT_high_pc, label);
+     }
++}
++
++/* Generate a DIE for a lexical block.  */
++
++static void
++gen_lexical_block_die (tree stmt, dw_die_ref context_die, int depth)
++{
++  dw_die_ref stmt_die = new_die (DW_TAG_lexical_block, context_die, stmt);
++
++  if (! BLOCK_ABSTRACT (stmt))
++    add_high_low_attributes (stmt, stmt_die);
+ 
+   decls_for_scope (stmt, stmt_die, depth);
+ }
+@@ -11276,15 +11285,10 @@ gen_inlined_subroutine_die (tree stmt, dw_die_ref context_die, int depth)
+     {
+       dw_die_ref subr_die
+ 	= new_die (DW_TAG_inlined_subroutine, context_die, stmt);
+-      char label[MAX_ARTIFICIAL_LABEL_BYTES];
+ 
+       add_abstract_origin_attribute (subr_die, decl);
+-      ASM_GENERATE_INTERNAL_LABEL (label, BLOCK_BEGIN_LABEL,
+-				   BLOCK_NUMBER (stmt));
+-      add_AT_lbl_id (subr_die, DW_AT_low_pc, label);
+-      ASM_GENERATE_INTERNAL_LABEL (label, BLOCK_END_LABEL,
+-				   BLOCK_NUMBER (stmt));
+-      add_AT_lbl_id (subr_die, DW_AT_high_pc, label);
++      add_high_low_attributes (stmt, subr_die);
++
+       decls_for_scope (stmt, subr_die, depth);
+       current_function_has_inlines = 1;
+     }
+diff --git a/gcc/emit-rtl.c b/gcc/emit-rtl.c
+index 9df2d6c4..3d8d3dc6 100644
+--- a/gcc/emit-rtl.c
++++ b/gcc/emit-rtl.c
+@@ -861,13 +861,96 @@ gen_reg_rtx (enum machine_mode mode)
+   return val;
+ }
+ 
+-/* Generate a register with same attributes as REG,
+-   but offsetted by OFFSET.  */
++/* Generate a register with same attributes as REG, but offsetted by OFFSET.
++   Do the big endian correction if needed.  */
+ 
+ rtx
+ gen_rtx_REG_offset (rtx reg, enum machine_mode mode, unsigned int regno, int offset)
+ {
+   rtx new = gen_rtx_REG (mode, regno);
++  tree decl;
++  HOST_WIDE_INT var_size;
++
++  /* PR middle-end/14084
++     The problem appears when a variable is stored in a larger register
++     and later it is used in the original mode or some mode in between
++     or some part of variable is accessed.
++
++     On little endian machines there is no problem because
++     the REG_OFFSET of the start of the variable is the same when
++     accessed in any mode (it is 0).
++
++     However, this is not true on big endian machines.
++     The offset of the start of the variable is different when accessed
++     in different modes.
++     When we are taking a part of the REG we have to change the OFFSET
++     from offset WRT size of mode of REG to offset WRT size of variable.
++
++     If we would not do the big endian correction the resulting REG_OFFSET
++     would be larger than the size of the DECL.
++
++     Examples of correction, for BYTES_BIG_ENDIAN WORDS_BIG_ENDIAN machine:
++
++     REG.mode  MODE  DECL size  old offset  new offset  description
++     DI        SI    4          4           0           int32 in SImode
++     DI        SI    1          4           0           char in SImode
++     DI        QI    1          7           0           char in QImode
++     DI        QI    4          5           1           1st element in QImode
++                                                        of char[4]
++     DI        HI    4          6           2           1st element in HImode
++                                                        of int16[2]
++
++     If the size of DECL is equal or greater than the size of REG
++     we can't do this correction because the register holds the
++     whole variable or a part of the variable and thus the REG_OFFSET
++     is already correct.  */
++
++  decl = REG_EXPR (reg);
++  if ((BYTES_BIG_ENDIAN || WORDS_BIG_ENDIAN)
++      && decl != NULL
++      && offset > 0
++      && GET_MODE_SIZE (GET_MODE (reg)) > GET_MODE_SIZE (mode)
++      && ((var_size = int_size_in_bytes (TREE_TYPE (decl))) > 0
++	  && var_size < GET_MODE_SIZE (GET_MODE (reg))))
++    {
++      int offset_le;
++
++      /* Convert machine endian to little endian WRT size of mode of REG.  */
++      if (WORDS_BIG_ENDIAN)
++	offset_le = ((GET_MODE_SIZE (GET_MODE (reg)) - 1 - offset)
++		     / UNITS_PER_WORD) * UNITS_PER_WORD;
++      else
++	offset_le = (offset / UNITS_PER_WORD) * UNITS_PER_WORD;
++
++      if (BYTES_BIG_ENDIAN)
++	offset_le += ((GET_MODE_SIZE (GET_MODE (reg)) - 1 - offset)
++		      % UNITS_PER_WORD);
++      else
++	offset_le += offset % UNITS_PER_WORD;
++
++      if (offset_le >= var_size)
++	{
++	  /* MODE is wider than the variable so the new reg will cover
++	     the whole variable so the resulting OFFSET should be 0.  */
++	  offset = 0;
++	}
++      else
++	{
++	  /* Convert little endian to machine endian WRT size of variable.  */
++	  if (WORDS_BIG_ENDIAN)
++	    offset = ((var_size - 1 - offset_le)
++		      / UNITS_PER_WORD) * UNITS_PER_WORD;
++	  else
++	    offset = (offset_le / UNITS_PER_WORD) * UNITS_PER_WORD;
++
++	  if (BYTES_BIG_ENDIAN)
++	    offset += ((var_size - 1 - offset_le)
++		       % UNITS_PER_WORD);
++	  else
++	    offset += offset_le % UNITS_PER_WORD;
++	}
++    }
++
+   REG_ATTRS (new) = get_reg_attrs (REG_EXPR (reg),
+ 				   REG_OFFSET (reg) + offset);
+   return new;
+diff --git a/gcc/expr.c b/gcc/expr.c
+index fcb5b0c7..e49b22b5 100644
+--- a/gcc/expr.c
++++ b/gcc/expr.c
+@@ -8949,6 +8949,9 @@ expand_expr_real (tree exp, rtx target, enum machine_mode tmode,
+ 
+ 	if (! target)
+ 	  target = gen_reg_rtx (TYPE_MODE (TREE_TYPE (exp)));
++	else if (GET_CODE (target) == MEM
++		 && reg_overlap_mentioned_p (target, op1))
++	  op1 = force_reg (mode, op1);
+ 
+ 	start_sequence ();
+ 
+diff --git a/gcc/gcc.c b/gcc/gcc.c
+index 997c37c3..212fdbcf 100644
+--- a/gcc/gcc.c
++++ b/gcc/gcc.c
+@@ -2373,7 +2373,7 @@ static char *
+ find_a_file (struct path_prefix *pprefix, const char *name, int mode,
+ 	     int multilib)
+ {
+-  char *temp;
++  char *temp, *temp2;
+   const char *const file_suffix =
+     ((mode & X_OK) != 0 ? HOST_EXECUTABLE_SUFFIX : "");
+   struct prefix_list *pl;
+@@ -2409,19 +2409,18 @@ find_a_file (struct path_prefix *pprefix, const char *name, int mode,
+ 				    NULL));
+     }
+ 
+-  temp = xmalloc (len);
+-
+   /* Determine the filename to execute (special case for absolute paths).  */
+ 
+   if (IS_ABSOLUTE_PATH (name))
+     {
+-      if (access (name, mode) == 0)
+-	{
+-	  strcpy (temp, name);
+-	  return temp;
+-	}
++      /* IS_ABSOLUTE_PATHNAME lets anything through that starts with '/'  */
++      temp = update_path (name, NULL);
++      if (access (temp, mode) == 0)
++	return temp;
+     }
+   else
++  {
++    temp = xmalloc (len);
+     for (pl = pprefix->plist; pl; pl = pl->next)
+       {
+ 	const char *this_name
+@@ -2437,24 +2436,30 @@ find_a_file (struct path_prefix *pprefix, const char *name, int mode,
+ 		strcat (temp, machine_suffix);
+ 		strcat (temp, multilib_name);
+ 		strcat (temp, file_suffix);
+-		if (access_check (temp, mode) == 0)
++		temp2 = update_path (temp, NULL);
++		if (access_check (temp2, mode) == 0)
+ 		  {
+ 		    if (pl->used_flag_ptr != 0)
+ 		      *pl->used_flag_ptr = 1;
+-		    return temp;
++		    free (temp);
++		    return temp2;
+ 		  }
++		free (temp2);
+ 	      }
+ 
+ 	    /* Now try just the multilib_name.  */
+ 	    strcpy (temp, pl->prefix);
+ 	    strcat (temp, machine_suffix);
+ 	    strcat (temp, multilib_name);
+-	    if (access_check (temp, mode) == 0)
++	    temp2 = update_path (temp, NULL);
++	    if (access_check (temp2, mode) == 0)
+ 	      {
+ 		if (pl->used_flag_ptr != 0)
+ 		  *pl->used_flag_ptr = 1;
+-		return temp;
++		free (temp);
++		return temp2;
+ 	      }
++	    free (temp2);
+ 	  }
+ 
+ 	/* Certain prefixes are tried with just the machine type,
+@@ -2469,23 +2474,29 @@ find_a_file (struct path_prefix *pprefix, const char *name, int mode,
+ 		strcat (temp, just_machine_suffix);
+ 		strcat (temp, multilib_name);
+ 		strcat (temp, file_suffix);
+-		if (access_check (temp, mode) == 0)
++		temp2 = update_path (temp, NULL);
++		if (access_check (temp2, mode) == 0)
+ 		  {
+ 		    if (pl->used_flag_ptr != 0)
+ 		      *pl->used_flag_ptr = 1;
+-		    return temp;
++		    free (temp);
++		    return temp2;
+ 		  }
++		free (temp2);
+ 	      }
+ 
+ 	    strcpy (temp, pl->prefix);
+ 	    strcat (temp, just_machine_suffix);
+ 	    strcat (temp, multilib_name);
+-	    if (access_check (temp, mode) == 0)
++	    temp2 = update_path (temp, NULL);
++	    if (access_check (temp2, mode) == 0)
+ 	      {
+ 		if (pl->used_flag_ptr != 0)
+ 		  *pl->used_flag_ptr = 1;
+-		return temp;
++		free (temp);
++		return temp2;
+ 	      }
++	    free (temp2);
+ 	  }
+ 
+ 	/* Certain prefixes can't be used without the machine suffix
+@@ -2499,24 +2510,31 @@ find_a_file (struct path_prefix *pprefix, const char *name, int mode,
+ 		strcpy (temp, pl->prefix);
+ 		strcat (temp, this_name);
+ 		strcat (temp, file_suffix);
+-		if (access_check (temp, mode) == 0)
++		temp2 = update_path (temp, NULL);
++		if (access_check (temp2, mode) == 0)
+ 		  {
+ 		    if (pl->used_flag_ptr != 0)
+ 		      *pl->used_flag_ptr = 1;
+-		    return temp;
++		    free (temp);
++		    return temp2;
+ 		  }
++		free (temp2);
+ 	      }
+ 
+ 	    strcpy (temp, pl->prefix);
+ 	    strcat (temp, this_name);
+-	    if (access_check (temp, mode) == 0)
++	    temp2 = update_path (temp, NULL);
++	    if (access_check (temp2, mode) == 0)
+ 	      {
+ 		if (pl->used_flag_ptr != 0)
+ 		  *pl->used_flag_ptr = 1;
+-		return temp;
++		free (temp);
++		return temp2;
+ 	      }
++	    free (temp2);
+ 	  }
+       }
++  }
+ 
+   free (temp);
+   return 0;
+diff --git a/gcc/gcse.c b/gcc/gcse.c
+index d785c7e3..599a4ef3 100644
+--- a/gcc/gcse.c
++++ b/gcc/gcse.c
+@@ -7427,6 +7427,40 @@ find_loads (rtx x, rtx store_pattern, int after)
+   return ret;
+ }
+ 
++static inline bool
++store_killed_in_pat (rtx x, rtx pat, int after)
++{
++  if (GET_CODE (pat) == SET)
++    {
++      rtx dest = SET_DEST (pat);
++
++      if (GET_CODE (dest) == SIGN_EXTRACT
++	  || GET_CODE (dest) == ZERO_EXTRACT)
++	dest = XEXP (dest, 0);
++
++      /* Check for memory stores to aliased objects.  */
++      if (GET_CODE (dest) == MEM
++	  && !expr_equiv_p (dest, x))
++	{
++	  if (after)
++	    {
++	      if (output_dependence (dest, x))
++		return true;
++	    }
++	  else
++	    {
++	      if (output_dependence (x, dest))
++		return true;
++	    }
++	}
++    }
++
++  if (find_loads (pat, x, after))
++    return true;
++
++  return false;
++}
++
+ /* Check if INSN kills the store pattern X (is aliased with it).
+    AFTER is true if we are checking the case when store X occurs
+    after the insn.  Return true if it it does.  */
+@@ -7434,7 +7468,7 @@ find_loads (rtx x, rtx store_pattern, int after)
+ static bool
+ store_killed_in_insn (rtx x, rtx x_regs, rtx insn, int after)
+ {
+-  rtx reg, base, note;
++  rtx reg, base, note, pat;
+ 
+   if (!INSN_P (insn))
+     return false;
+@@ -7461,33 +7495,20 @@ store_killed_in_insn (rtx x, rtx x_regs, rtx insn, int after)
+       return false;
+     }
+ 
+-  if (GET_CODE (PATTERN (insn)) == SET)
++  pat = PATTERN (insn);
++  if (GET_CODE (pat) == SET)
+     {
+-      rtx pat = PATTERN (insn);
+-      rtx dest = SET_DEST (pat);
+-
+-      if (GET_CODE (dest) == SIGN_EXTRACT
+-	  || GET_CODE (dest) == ZERO_EXTRACT)
+-	dest = XEXP (dest, 0);
+-
+-      /* Check for memory stores to aliased objects.  */
+-      if (GET_CODE (dest) == MEM
+-	  && !expr_equiv_p (dest, x))
+-	{
+-	  if (after)
+-	    {
+-	      if (output_dependence (dest, x))
+-		return true;
+-	    }
+-	  else
+-	    {
+-	      if (output_dependence (x, dest))
+-		return true;
+-	    }
+-	}
+-      if (find_loads (SET_SRC (pat), x, after))
++      if (store_killed_in_pat (x, pat, after))
+ 	return true;
+     }
++  else if (GET_CODE (pat) == PARALLEL)
++    {
++      int i;
++
++      for (i = 0; i < XVECLEN (pat, 0); i++)
++	if (store_killed_in_pat (x, XVECEXP (pat, 0, i), after))
++	  return true;
++    }
+   else if (find_loads (PATTERN (insn), x, after))
+     return true;
+ 
+diff --git a/gcc/ifcvt.c b/gcc/ifcvt.c
+index b9a50387..642b9949 100644
+--- a/gcc/ifcvt.c
++++ b/gcc/ifcvt.c
+@@ -1406,7 +1406,7 @@ noce_get_alt_condition (struct noce_if_info *if_info, rtx target,
+       rtx prev_insn;
+ 
+       /* First, look to see if we put a constant in a register.  */
+-      prev_insn = PREV_INSN (if_info->cond_earliest);
++      prev_insn = prev_nonnote_insn (if_info->cond_earliest);
+       if (prev_insn
+ 	  && INSN_P (prev_insn)
+ 	  && GET_CODE (PATTERN (prev_insn)) == SET)
+@@ -1642,25 +1642,30 @@ noce_try_abs (struct noce_if_info *if_info)
+   if (rtx_equal_p (XEXP (cond, 0), b))
+     c = XEXP (cond, 1);
+   else if (rtx_equal_p (XEXP (cond, 1), b))
+-    c = XEXP (cond, 0);
++    {
++      c = XEXP (cond, 0);
++      negate = !negate;
++    }
+   else
+     return FALSE;
+ 
+-  /* Verify that C is zero.  Search backward through the block for
+-     a REG_EQUAL note if necessary.  */
++  /* Verify that C is zero.  Search one step backward for a
++     REG_EQUAL note or a simple source if necessary.  */
+   if (REG_P (c))
+     {
+-      rtx insn, note = NULL;
+-      for (insn = earliest;
+-	   insn != BB_HEAD (if_info->test_bb);
+-	   insn = PREV_INSN (insn))
+-	if (INSN_P (insn)
+-	    && ((note = find_reg_note (insn, REG_EQUAL, c))
+-		|| (note = find_reg_note (insn, REG_EQUIV, c))))
+-	  break;
+-      if (! note)
++      rtx set, insn = prev_nonnote_insn (earliest);
++      if (insn
++	  && (set = single_set (insn))
++	  && rtx_equal_p (SET_DEST (set), c))
++	{
++	  rtx note = find_reg_equal_equiv_note (insn);
++	  if (note)
++	    c = XEXP (note, 0);
++	  else
++	    c = SET_SRC (set);
++	}
++      else
+ 	return FALSE;
+-      c = XEXP (note, 0);
+     }
+   if (GET_CODE (c) == MEM
+       && GET_CODE (XEXP (c, 0)) == SYMBOL_REF
+diff --git a/gcc/mklibgcc.in b/gcc/mklibgcc.in
+index 7ac15d8c..1e70ad40 100644
+--- a/gcc/mklibgcc.in
++++ b/gcc/mklibgcc.in
+@@ -491,10 +491,26 @@ EOF
+ 
+   if [ "$SHLIB_LINK" ]; then
+ 
++    if [ "@libgcc_visibility@" = yes ]; then
++      libgcc_eh_static_objS=
++      echo ""
++      for o in $libgcc_eh_static_objs; do
++      # .oS objects will have all non-local symbol definitions .hidden
++      oS=`echo ${o} | sed s~${objext}'$~.oS~g'`
++      echo "${oS}: stmp-dirs libgcc/${dir}/stacknote.s ${o}"
++      # non-GNU nm emits three fields even for undefined and typeless symbols,
++      # so explicitly omit them
++      echo '	( $(NM_FOR_TARGET) '${SHLIB_NM_FLAGS} ${o}' | $(AWK) '\''NF == 3 && $$2 !~ /^[UN]$$/ { print "\t.hidden", $$3 }'\''; cat libgcc/${dir}/stacknote.s ) | $(GCC_FOR_TARGET) $(LIBGCC2_CFLAGS) '${flags}' -r -nostdinc -nostdlib -o $@ '${o}' -xassembler -'
++      libgcc_eh_static_objS="${libgcc_eh_static_objS} ${oS}"
++    done
++    else
++      libgcc_eh_static_objS="$libgcc_eh_static_objs"
++    fi
++
+     echo ""
+-    echo "${dir}/libgcc_eh.a: stmp-dirs $libgcc_eh_static_objs"
++    echo "${dir}/libgcc_eh.a: stmp-dirs $libgcc_eh_static_objS"
+     echo "	-rm -rf ${dir}/libgcc_eh.a"
+-    echo '	$(AR_CREATE_FOR_TARGET)' ${dir}/libgcc_eh.a $libgcc_eh_static_objs
++    echo '	$(AR_CREATE_FOR_TARGET)' ${dir}/libgcc_eh.a $libgcc_eh_static_objS
+     echo '	$(RANLIB_FOR_TARGET)' ${dir}/libgcc_eh.a
+ 
+     if [ -z "$SHLIB_MULTILIB" ]; then
+diff --git a/gcc/optabs.c b/gcc/optabs.c
+index 536b1da3..42f3eca9 100644
+--- a/gcc/optabs.c
++++ b/gcc/optabs.c
+@@ -1920,16 +1920,19 @@ expand_vector_binop (enum machine_mode mode, optab binoptab, rtx op0,
+ 
+       for (i = 0; i < elts; ++i)
+ 	{
+-	  /* If this is part of a register, and not the first item in the
+-	     word, we can't store using a SUBREG - that would clobber
+-	     previous results.
++	  /* If this is part of a register, and not the first item in
++	     the word, we can't store using a SUBREG - that would
++	     clobber previous results, or even the input operands, if
++	     target matches any of them.
+ 	     And storing with a SUBREG is only possible for the least
+ 	     significant part, hence we can't do it for big endian
+ 	     (unless we want to permute the evaluation order.  */
+ 	  if (GET_CODE (target) == REG
+ 	      && (BYTES_BIG_ENDIAN
+ 		  ? subsize < UNITS_PER_WORD
+-		  : ((i * subsize) % UNITS_PER_WORD) != 0))
++		  : (((i * subsize) % UNITS_PER_WORD) != 0
++		     || (subsize < UNITS_PER_WORD
++			 && (target == op0 || target == op1)))))
+ 	    t = NULL_RTX;
+ 	  else
+ 	    t = simplify_gen_subreg (submode, target, mode, i * subsize);
+diff --git a/gcc/prefix.c b/gcc/prefix.c
+index df556aaa..c0bfaca5 100644
+--- a/gcc/prefix.c
++++ b/gcc/prefix.c
+@@ -238,6 +238,105 @@ tr (char *string, int c1, int c2)
+   while (*string++);
+ }
+ 
++/* Strip dir/.. from a pathname when it makes sense, e.g., when this
++   would turn an inaccessible pathname into an accessible one.
++
++   We short-circuit dir/.. when dir does not exist, and when
++   some/dir/../thing does not exist but some/thing does.  In case
++   there are multiple possible dir/../ stripping possibilities that
++   would turn an inaccessible pathname into an accessible one, the one
++   closer to the end of the pathname is preferred.
++
++   RESULT is the pathname that might contain such dotdot sequences to
++   be stripped.  P points into RESULT, and indicates the location
++   where we should start looking for ../ sequences.
++
++   Even though RESULT is const, P is not, and that's because
++   characters in it may be temporarily overwritten, so RESULT must not
++   be in read-only storage.
++
++   The returned value is either a newly-allocated memory area, holding
++   a string that is the result of dotdot-stripping from the original
++   input strip, or RESULT itself, in which case any modifications made
++   to the string will have been undone.  */
++
++static const char *
++maybe_strip_dotdots (const char *result, char *p)
++{
++  char *temp;
++  const char *path, *before, *after;
++  size_t len;
++
++  while (1)
++    {
++      p = strchr (p, '.');
++      if (p == NULL)
++	return result;
++      /* Look for `/../'  */
++      if (p[1] == '.'
++	  && IS_DIR_SEPARATOR (p[2])
++	  && (p != result && IS_DIR_SEPARATOR (p[-1])))
++	break;
++      else
++	++p;
++    }
++
++  *p = 0;
++  if (access (result, X_OK) == 0)
++    {
++      *p = '.';
++
++      path = maybe_strip_dotdots (result, p + 3);
++      if (access (path, F_OK) == 0)
++	return path;
++      if (path != result)
++	free ((char *) path);
++    }
++  else
++    *p = '.';
++
++  /* If we couldn't access the dir, or if recursion resulted in a
++     non-accessible pathname, we try stripping out dir/../.  If `dir'
++     turns out to be `.', strip one more path component.  */
++  before = p;
++  do
++    {
++      --before;
++      while (before != result && IS_DIR_SEPARATOR (*before))
++	--before;
++      while (before != result && !IS_DIR_SEPARATOR (before[-1]))
++	--before;
++    }
++  while (before != result && *before == '.'
++	 && IS_DIR_SEPARATOR (*(before + 1)));
++  /* If we have something like `./..' or `/..', don't
++     strip anything more.  */
++  if (*before == '.' || IS_DIR_SEPARATOR (*before))
++    return result;
++
++  after = p + 3;
++  while (IS_DIR_SEPARATOR (*after))
++    ++after;
++
++  len = (after - result) + strlen (after);
++
++  temp = xmalloc (len + 1 - (after - before));
++  memcpy (temp, result, before - result);
++  memcpy (temp + (before - result), after, len + 1 - (after - result));
++
++  path = maybe_strip_dotdots (temp, temp + (before - result));
++
++  if (path != temp)
++    free (temp);
++
++  if (access (path, F_OK) == 0)
++    result = path;
++  else if (path != result)
++    free ((char *) path);
++
++  return result;
++}
++
+ /* Update PATH using KEY if PATH starts with PREFIX.  The returned
+    string is always malloc-ed, and the caller is responsible for
+    freeing it.  */
+@@ -245,7 +344,7 @@ tr (char *string, int c1, int c2)
+ char *
+ update_path (const char *path, const char *key)
+ {
+-  char *result, *p;
++  char *result, *temp;
+ 
+   if (! strncmp (path, std_prefix, strlen (std_prefix)) && key != 0)
+     {
+@@ -265,62 +364,11 @@ update_path (const char *path, const char *key)
+   else
+     result = xstrdup (path);
+ 
+-#ifndef ALWAYS_STRIP_DOTDOT
+-#define ALWAYS_STRIP_DOTDOT 0
+-#endif
+-
+-  p = result;
+-  while (1)
+-    {
+-      char *src, *dest;
++  temp = result;
++  result = (char *) maybe_strip_dotdots (temp, temp);
+ 
+-      p = strchr (p, '.');
+-      if (p == NULL)
+-	break;
+-      /* Look for `/../'  */
+-      if (p[1] == '.'
+-	  && IS_DIR_SEPARATOR (p[2])
+-	  && (p != result && IS_DIR_SEPARATOR (p[-1])))
+-	{
+-	  *p = 0;
+-	  if (!ALWAYS_STRIP_DOTDOT && access (result, X_OK) == 0)
+-	    {
+-	      *p = '.';
+-	      break;
+-	    }
+-	  else
+-	    {
+-	      /* We can't access the dir, so we won't be able to
+-		 access dir/.. either.  Strip out `dir/../'.  If `dir'
+-		 turns out to be `.', strip one more path component.  */
+-	      dest = p;
+-	      do
+-		{
+-		  --dest;
+-		  while (dest != result && IS_DIR_SEPARATOR (*dest))
+-		    --dest;
+-		  while (dest != result && !IS_DIR_SEPARATOR (dest[-1]))
+-		    --dest;
+-		}
+-	      while (dest != result && *dest == '.');
+-	      /* If we have something like `./..' or `/..', don't
+-		 strip anything more.  */
+-	      if (*dest == '.' || IS_DIR_SEPARATOR (*dest))
+-		{
+-		  *p = '.';
+-		  break;
+-		}
+-	      src = p + 3;
+-	      while (IS_DIR_SEPARATOR (*src))
+-		++src;
+-	      p = dest;
+-	      while ((*dest++ = *src++) != 0)
+-		;
+-	    }
+-	}
+-      else
+-	++p;
+-    }
++  if (result != temp)
++    free (temp);
+ 
+ #ifdef UPDATE_PATH_HOST_CANONICALIZE
+   /* Perform host dependent canonicalization when needed.  */
+diff --git a/gcc/testsuite/g++.dg/opt/ifcvt1.C b/gcc/testsuite/g++.dg/opt/ifcvt1.C
+new file mode 100644
+index 00000000..8fcbf461
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/opt/ifcvt1.C
+@@ -0,0 +1,17 @@
++// { dg-do compile }
++// { dg-options "-O2 -fnon-call-exceptions" }
++
++struct S { ~S () throw () {} };
++double bar ();
++
++int
++foo ()
++{
++  S a;
++  int i = 0;
++  double c = bar ();
++  c = c < 0 ? -c : c;
++  if (c <= 1.e-8)
++    i += 24;
++  return i;
++}
+diff --git a/gcc/testsuite/g++.dg/overload/unknown1.C b/gcc/testsuite/g++.dg/overload/unknown1.C
+new file mode 100644
+index 00000000..f34d79ff
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/overload/unknown1.C
+@@ -0,0 +1,9 @@
++// { dg-do compile }
++
++void foo(void);
++int foo(int);
++template <typename T> void bar(T f);
++
++void baz() {
++  bar(foo); // { dg-error "<unresolved overloaded function type>" }
++}
+diff --git a/gcc/testsuite/g++.dg/template/array17.C b/gcc/testsuite/g++.dg/template/array17.C
+new file mode 100644
+index 00000000..12a5c472
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/template/array17.C
+@@ -0,0 +1,23 @@
++// { dg-do compile }
++
++template <typename T>
++struct V {
++  T& operator[](int);
++};
++
++struct S {
++  S operator +(int);
++  template <typename T> T value();
++};
++
++template <typename T>
++void R (T v)
++{
++  v[(S() + 0).template value<int>()][0] = 0;
++}
++
++int
++main ()
++{
++  R(V<V<int> >());
++}
+diff --git a/gcc/testsuite/g77.f-torture/execute/20070402.f b/gcc/testsuite/g77.f-torture/execute/20070402.f
+new file mode 100644
+index 00000000..e6e6aedc
+--- /dev/null
++++ b/gcc/testsuite/g77.f-torture/execute/20070402.f
+@@ -0,0 +1,21 @@
++      program rh233941
++      implicit none
++      complex*16 z
++      z = dcmplx(1.0, 2.0)
++      call sub(z)
++      stop
++      end program rh233941
++
++      subroutine sub(z)
++      implicit none
++      complex*16 z
++      z = dcmplx(-dimag(z), dreal(z))
++      call sub2(z)
++      return
++      end subroutine sub
++
++      subroutine sub2(z)
++      implicit none
++      complex*16 z
++      if (dreal(z).ne.-2.0.or.dimag(z).ne.1.0) call abort
++      end subroutine sub2
+diff --git a/gcc/testsuite/gcc.c-torture/compile/20090126-1.c b/gcc/testsuite/gcc.c-torture/compile/20090126-1.c
+new file mode 100644
+index 00000000..33f4cd04
+--- /dev/null
++++ b/gcc/testsuite/gcc.c-torture/compile/20090126-1.c
+@@ -0,0 +1,21 @@
++/* http://bugzilla.redhat.com/405961 */
++
++static inline int foo (volatile unsigned int *x, unsigned int y)
++{
++  __asm__ volatile ("" : "+r" (y), "+m" (*x));
++  return y;
++}
++
++volatile unsigned int v;
++
++void
++bar (void *z)
++{
++  int m = (*(int *)z) / 2, x;
++  for (x = (int)(long)&m; m; m--)
++    {
++      x = (x * m + 0x87654321) & 0x7FFFFFFFL;
++      foo (&v, x);
++      foo (&v, -x);
++    }
++}
+diff --git a/gcc/testsuite/gcc.c-torture/execute/20060420-1.c b/gcc/testsuite/gcc.c-torture/execute/20060420-1.c
+new file mode 100644
+index 00000000..fe62f6bf
+--- /dev/null
++++ b/gcc/testsuite/gcc.c-torture/execute/20060420-1.c
+@@ -0,0 +1,71 @@
++extern void abort (void);
++
++typedef float v4flt __attribute__ ((vector_size (16)));
++
++void __attribute__ ((noinline)) foo (float *dst, float **src, int a, int n)
++{
++  int i, j;
++  int z = sizeof (v4flt) / sizeof (float);
++  unsigned m = sizeof (v4flt) - 1;
++
++  for (j = 0; j < n && (((unsigned long) dst + j) & m); ++j)
++    {
++      float t = src[0][j];
++      for (i = 1; i < a; ++i)
++	t += src[i][j];
++      dst[j] = t;
++    }
++
++  for (; j < (n - (4 * z - 1)); j += 4 * z)
++    {
++      v4flt t0 = *(v4flt *) (src[0] + j + 0 * z);
++      v4flt t1 = *(v4flt *) (src[0] + j + 1 * z);
++      v4flt t2 = *(v4flt *) (src[0] + j + 2 * z);
++      v4flt t3 = *(v4flt *) (src[0] + j + 3 * z);
++      for (i = 1; i < a; ++i)
++	{
++	  t0 += *(v4flt *) (src[i] + j + 0 * z);
++	  t1 += *(v4flt *) (src[i] + j + 1 * z);
++	  t2 += *(v4flt *) (src[i] + j + 2 * z);
++	  t3 += *(v4flt *) (src[i] + j + 3 * z);
++	}
++      *(v4flt *) (dst + j + 0 * z) = t0;
++      *(v4flt *) (dst + j + 1 * z) = t1;
++      *(v4flt *) (dst + j + 2 * z) = t2;
++      *(v4flt *) (dst + j + 3 * z) = t3;
++    }
++  for (; j < n; ++j)
++    {
++      float t = src[0][j];
++      for (i = 1; i < a; ++i)
++	t += src[i][j];
++      dst[j] = t;
++    }
++}
++
++float buffer[64];
++
++int
++main (void)
++{
++  int i;
++  float *dst, *src[2];
++
++  dst = buffer;
++  dst += (-(long int) buffer & (16 * sizeof (float) - 1)) / sizeof (float);
++  src[0] = dst + 16;
++  src[1] = dst + 32;
++  for (i = 0; i < 16; ++i)
++    {
++      src[0][i] = (float) i + 11 * (float) i;
++      src[1][i] = (float) i + 12 * (float) i;
++    }
++  foo (dst, src, 2, 16);
++  for (i = 0; i < 16; ++i)
++    {
++      float e = (float) i + 11 * (float) i + (float) i + 12 * (float) i;
++      if (dst[i] != e)
++	abort ();
++    }
++  return 0;
++}
+diff --git a/gcc/testsuite/gcc.dg/20050510-2.c b/gcc/testsuite/gcc.dg/20050510-2.c
+new file mode 100644
+index 00000000..23cdf4b5
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/20050510-2.c
+@@ -0,0 +1,26 @@
++/* { dg-options run } */
++/* { dg-options "-O2" } */
++
++extern void abort (void);
++
++__attribute__((noinline)) int
++foo (unsigned char *x)
++{
++  if (x[0] != 1 || x[1] != 0x15)
++    abort ();
++  return 0;
++}
++
++static inline void
++bar (unsigned short x)
++{
++  unsigned char s[2] = { x >> 8, x & 0xff };
++  foo (s);
++}
++
++int
++main (void)
++{
++  bar (0x115);
++  return 0;
++}
+diff --git a/gcc/testsuite/gcc.dg/altivec-23.c b/gcc/testsuite/gcc.dg/altivec-23.c
+new file mode 100644
+index 00000000..3e39a532
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/altivec-23.c
+@@ -0,0 +1,25 @@
++/* Verify that it is possible to define variables of composite types
++   containing vector types.  We used to crash handling the
++   initializer of automatic ones.  */
++
++/* { dg-do compile { target powerpc*-*-* } } */
++/* { dg-xfail-if "" { "powerpc-ibm-aix*" } { "-maltivec" } { "" } } */
++/* { dg-options "-maltivec -mabi=altivec" } */
++
++#include <altivec.h>
++
++typedef int bt;
++typedef vector bt vt;
++typedef struct { vt x; bt y[sizeof(vt) / sizeof (bt)]; } st;
++#define INIT { 1, 2, 3, 4 }
++
++void f ()
++{
++  vt x = INIT;
++  vt y[1] = { INIT };
++  st s = { INIT, INIT };
++}
++
++vt x = INIT;
++vt y[1] = { INIT };
++st s = { INIT, INIT };
+diff --git a/gcc/testsuite/gcc.dg/ifcvt-fabs-1.c b/gcc/testsuite/gcc.dg/ifcvt-fabs-1.c
+new file mode 100644
+index 00000000..6808a8f5
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/ifcvt-fabs-1.c
+@@ -0,0 +1,21 @@
++/* { dg-do run } */
++/* { dg-options "-O" } */
++/* { dg-options "-O -march=i686" { target i686-*-* } } */
++
++extern void abort(void);
++
++float foo(float f)
++{
++  if (f < 0.0f)
++    f = -f;
++
++  return f;
++}
++
++int main(void)
++{
++  if (foo (-1.0f) != 1.0f)
++    abort ();
++
++  return 0;
++}
+diff --git a/gcc/testsuite/gcc.dg/movsi-sm-1.c b/gcc/testsuite/gcc.dg/movsi-sm-1.c
+new file mode 100644
+index 00000000..65a24573
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/movsi-sm-1.c
+@@ -0,0 +1,35 @@
++/* { dg-do run } */
++/* { dg-options "-O2" } */
++/* { dg-options "-O2 -mtune=i386" { target { { i?86-*-* x86_64-*-* } && ilp32 } } } */
++
++int ret = 1;
++char buf[128];
++
++void
++__attribute__((noinline))
++bug (int arg)
++{
++  char str[28];
++
++  __builtin_memcpy (str, "Bugged!", 8);
++
++  if (arg & 0200)
++    {
++      __builtin_memcpy (str, "This is what we should get!", 28);
++      ret = 0;
++    }
++
++  if (arg & 0100)
++    __builtin_memcpy (str, "Broken!", 8);
++
++  __builtin_sprintf (buf, "%s\n", str);
++}
++
++int
++main ()
++{
++  bug (0200);
++  if (ret)
++    return ret;
++  return __builtin_strcmp (buf, "This is what we should get!\n") != 0;
++}
+diff --git a/gcc/varasm.c b/gcc/varasm.c
+index 56cc5a74..8247ccaa 100644
+--- a/gcc/varasm.c
++++ b/gcc/varasm.c
+@@ -2456,6 +2456,19 @@ copy_constant (tree exp)
+ 	return copy;
+       }
+ 
++    case VECTOR_CST:
++      {
++	tree copy = copy_node (exp);
++	tree list = copy_list (TREE_VECTOR_CST_ELTS (exp));
++	tree tail;
++
++	TREE_VECTOR_CST_ELTS (copy) = list;
++	for (tail = list; tail; tail = TREE_CHAIN (tail))
++	  TREE_VALUE (tail) = copy_constant (TREE_VALUE (tail));
++
++	return copy;
++      }
++
+     default:
+       {
+ 	tree t;
+diff --git a/libstdc++-v3/config/locale/ieee_1003.1-2001/codecvt_specializations.h b/libstdc++-v3/config/locale/ieee_1003.1-2001/codecvt_specializations.h
+index 79a033d1..cf10c687 100644
+--- a/libstdc++-v3/config/locale/ieee_1003.1-2001/codecvt_specializations.h
++++ b/libstdc++-v3/config/locale/ieee_1003.1-2001/codecvt_specializations.h
+@@ -83,8 +83,10 @@
+ 			  int __ibom = 0, int __ebom = 0)
+     : _M_in_desc(0), _M_out_desc(0), _M_ext_bom(__ebom), _M_int_bom(__ibom)
+     {
+-      strncpy(_M_int_enc, __int, _S_max_size);
+-      strncpy(_M_ext_enc, __ext, _S_max_size);
++      strncpy(_M_int_enc, __int, _S_max_size - 1);
++      strncpy(_M_ext_enc, __ext, _S_max_size - 1);
++      _M_int_enc[_S_max_size - 1] = '\0';
++      _M_ext_enc[_S_max_size - 1] = '\0';
+       _M_init();
+     }
+ 
+@@ -98,8 +100,10 @@
+     // information.
+     __enc_traits(const __enc_traits& __obj): _M_in_desc(0), _M_out_desc(0)
+     {
+-      strncpy(_M_int_enc, __obj._M_int_enc, _S_max_size);
+-      strncpy(_M_ext_enc, __obj._M_ext_enc, _S_max_size);
++      strncpy(_M_int_enc, __obj._M_int_enc, _S_max_size - 1);
++      strncpy(_M_ext_enc, __obj._M_ext_enc, _S_max_size - 1);
++      _M_int_enc[_S_max_size - 1] = '\0';
++      _M_ext_enc[_S_max_size - 1] = '\0';
+       _M_ext_bom = __obj._M_ext_bom;
+       _M_int_bom = __obj._M_int_bom;
+       _M_destroy();
+@@ -110,8 +114,10 @@
+     __enc_traits&
+     operator=(const __enc_traits& __obj)
+     {
+-      strncpy(_M_int_enc, __obj._M_int_enc, _S_max_size);
+-      strncpy(_M_ext_enc, __obj._M_ext_enc, _S_max_size);
++      strncpy(_M_int_enc, __obj._M_int_enc, _S_max_size - 1);
++      strncpy(_M_ext_enc, __obj._M_ext_enc, _S_max_size - 1);
++      _M_int_enc[_S_max_size - 1] = '\0';
++      _M_ext_enc[_S_max_size - 1] = '\0';
+       _M_ext_bom = __obj._M_ext_bom;
+       _M_int_bom = __obj._M_int_bom;
+       _M_destroy();
+diff --git a/libstdc++-v3/include/bits/deque.tcc b/libstdc++-v3/include/bits/deque.tcc
+index e8e04388..697f8fee 100644
+--- a/libstdc++-v3/include/bits/deque.tcc
++++ b/libstdc++-v3/include/bits/deque.tcc
+@@ -140,7 +140,7 @@ namespace _GLIBCXX_STD
+ 	{
+ 	  const difference_type __n = __last - __first;
+ 	  const difference_type __elems_before = __first - this->_M_impl._M_start;
+-	  if (static_cast<size_type>(__elems_before) < (size() - __n) / 2)
++	  if (static_cast<size_type>(__elems_before) <= (size() - __n) / 2)
+ 	    {
+ 	      std::copy_backward(this->_M_impl._M_start, __first, __last);
+ 	      iterator __new_start = this->_M_impl._M_start + __n;
+diff --git a/libstdc++-v3/testsuite/23_containers/deque/modifiers/erase/3.cc b/libstdc++-v3/testsuite/23_containers/deque/modifiers/erase/3.cc
+new file mode 100644
+index 00000000..c975f287
+--- /dev/null
++++ b/libstdc++-v3/testsuite/23_containers/deque/modifiers/erase/3.cc
+@@ -0,0 +1,52 @@
++// Copyright (C) 2007 Free Software Foundation, Inc.
++//
++// This file is part of the GNU ISO C++ Library.  This library is free
++// software; you can redistribute it and/or modify it under the
++// terms of the GNU General Public License as published by the
++// Free Software Foundation; either version 2, or (at your option)
++// any later version.
++
++// This library is distributed in the hope that it will be useful,
++// but WITHOUT ANY WARRANTY; without even the implied warranty of
++// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++// GNU General Public License for more details.
++
++// You should have received a copy of the GNU General Public License along
++// with this library; see the file COPYING.  If not, write to the Free
++// Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
++// USA.
++
++// 23.2.1.3 deque modifiers
++
++#include <deque>
++#include <testsuite_hooks.h>
++
++void erase(size_t num_elm, size_t elm_strt, size_t elm_end)
++{
++  bool test __attribute__((unused)) = true;
++  using __gnu_test::copy_tracker;
++  using __gnu_test::assignment_operator;
++
++  std::deque<copy_tracker> x(num_elm);
++  copy_tracker::reset();
++  
++  x.erase(x.begin() + elm_strt, x.begin() + elm_end);
++  
++  const size_t min_num_cpy = std::min(elm_strt, num_elm - elm_end);
++  VERIFY( assignment_operator::count() == min_num_cpy );
++}
++
++// http://gcc.gnu.org/ml/libstdc++/2007-01/msg00098.html
++void test01()
++{
++  for (size_t num_elm = 0; num_elm <= 10; ++num_elm)
++    for (size_t elm_strt = 0; elm_strt <= num_elm; ++elm_strt)
++      for (size_t elm_end = elm_strt; elm_end <= num_elm; ++elm_end)
++	erase(num_elm, elm_strt, elm_end);
++}
++
++int main()
++{
++  test01();
++  return 0;
++}
