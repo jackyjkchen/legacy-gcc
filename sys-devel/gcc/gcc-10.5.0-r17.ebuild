@@ -46,7 +46,7 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/019_pr100119.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/020_pr100394.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/021_pr100061-105142.patch
-	eapply "${FILESDIR}"/${PV}/postrelease/022_pr99531-100623.patch
+	[[ $(tc-arch) != "sh" ]] && eapply "${FILESDIR}"/${PV}/postrelease/022_pr99531-100623.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/023_pr53164-105848.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/024_pr101260.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/025_pr101419.patch

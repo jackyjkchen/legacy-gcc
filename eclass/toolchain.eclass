@@ -2294,17 +2294,21 @@ toolchain_src_test() {
 	# "asan needs a whole shadow address space"
 	ulimit -v unlimited
 
+	local RUNTESTFLAGS=
+	[[ $(tc-arch) == "amd64" ]] && is_multilib && RUNTESTFLAGS="--target_board=unix\{,-m32\}"
 	# 'asan' wants to be preloaded first, so does 'sandbox'.
 	# To make asan tests work disable sandbox for all of test suite.
 	# 'backtrace' tests also does not like 'libsandbox.so' presence.
 	if tc_version_is_at_least 3.4 ; then
-		if tc_version_is_between 4.9 8 && [[ $(tc-arch) == "x86" || $(tc-arch) == "arm" ]] ; then
-			OMP_NUM_THREADS=8 SANDBOX_ON=0 LD_PRELOAD= emake -k check
+		if tc_version_is_between 4.9 9 && [[ is_multilib || $(tc-arch) == "x86" || $(tc-arch) == "arm" ]] ; then
+			local cpunum=$((`cat /sys/devices/system/cpu/online |awk -F '-' '{print$2}'` + 1))
+			[[ $cpunum -gt 16 ]] && cpunum=16
+			OMP_NUM_THREADS=$cpunum SANDBOX_ON=0 LD_PRELOAD= emake -k check RUNTESTFLAGS=$RUNTESTFLAGS
 		else
-			SANDBOX_ON=0 LD_PRELOAD= emake -k check
+			SANDBOX_ON=0 LD_PRELOAD= emake -k check RUNTESTFLAGS=$RUNTESTFLAGS
 		fi
 	else
-		SANDBOX_ON=0 LD_PRELOAD= emake -k check -j4
+		SANDBOX_ON=0 LD_PRELOAD= emake -k check -j4 RUNTESTFLAGS=$RUNTESTFLAGS
 	fi
 	local success_tests=$?
 
