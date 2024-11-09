@@ -1,0 +1,40 @@
+diff --git a/gcc/c/c-decl.c b/gcc/c/c-decl.c
+index 0751a526d..c5c52cba5 100644
+--- a/gcc/c/c-decl.c
++++ b/gcc/c/c-decl.c
+@@ -7538,6 +7538,10 @@ start_enum (location_t loc, struct c_enum_contents *the_enum, tree name)
+       enumtype = make_node (ENUMERAL_TYPE);
+       pushtag (loc, name, enumtype);
+     }
++  /* Update type location to the one of the definition, instead of e.g.
++     a forward declaration.  */
++  else if (TYPE_STUB_DECL (enumtype))
++    DECL_SOURCE_LOCATION (TYPE_STUB_DECL (enumtype)) = loc;
+ 
+   if (C_TYPE_BEING_DEFINED (enumtype))
+     error_at (loc, "nested redefinition of %<enum %E%>", name);
+diff --git a/gcc/testsuite/gcc.dg/debug/dwarf2/enum-loc1.c b/gcc/testsuite/gcc.dg/debug/dwarf2/enum-loc1.c
+new file mode 100644
+index 000000000..17b0da503
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/debug/dwarf2/enum-loc1.c
+@@ -0,0 +1,19 @@
++/* PR c/79969 */
++/* { dg-do compile } */
++/* { dg-options "-gdwarf-2 -dA -fno-merge-debug-strings" } */
++
++enum ENUMTAG;
++
++enum ENUMTAG
++{
++  B = 1,
++  C = 2
++};
++
++void
++bar (void)
++{
++  enum ENUMTAG a = C;
++}
++
++/* { dg-final { scan-assembler "DW_TAG_enumeration_type\[^\\r\\n\]*\[\\r\\n\]+\[^\\r\\n\]*\"ENUMTAG\[^\\r\\n\]*DW_AT_name(\[^\\r\\n\]*\[\\r\\n\]+\[^\\r\\n\]*DW_AT_)*\[^\\r\\n\]*\[\\r\\n\]+\[^\\r\\n\]*\[^0-9a-fA-FxX](0x)?7\[^0-9a-fA-FxX]\[^\\r\\n\]*DW_AT_decl_line" } } */

@@ -1,0 +1,43 @@
+diff --git a/gcc/fortran/decl.c b/gcc/fortran/decl.c
+index b015e9782..a3c16b28f 100644
+--- a/gcc/fortran/decl.c
++++ b/gcc/fortran/decl.c
+@@ -1922,8 +1922,9 @@ variable_decl (int elem)
+     }
+ 
+   /*  If this symbol has already shown up in a Cray Pointer declaration,
++      and this is not a component declaration,
+       then we want to set the type & bail out.  */
+-  if (gfc_option.flag_cray_pointer)
++  if (gfc_option.flag_cray_pointer && gfc_current_state () != COMP_DERIVED)
+     {
+       gfc_find_symbol (name, gfc_current_ns, 1, &sym);
+       if (sym != NULL && sym->attr.cray_pointee)
+diff --git a/gcc/testsuite/gfortran.dg/cray_pointers_11.f90 b/gcc/testsuite/gfortran.dg/cray_pointers_11.f90
+new file mode 100644
+index 000000000..d847676d8
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/cray_pointers_11.f90
+@@ -0,0 +1,22 @@
++! { dg-do compile }
++! { dg-options "-fcray-pointer" }
++!
++! PR fortran/62174
++! Component declarations within derived types would overwrite the typespec of
++! variables with the same name who were Cray pointees.
++implicit none
++
++type t1
++  integer i
++end type t1
++type(t1) x
++
++pointer (x_ptr, x)
++
++type t2
++  real x ! should not overwrite x's type
++end type t2
++
++x%i = 0 ! should see no error here
++
++end

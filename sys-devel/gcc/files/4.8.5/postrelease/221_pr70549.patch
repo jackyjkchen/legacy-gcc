@@ -1,0 +1,58 @@
+diff --git a/gcc/config/aarch64/aarch64.c b/gcc/config/aarch64/aarch64.c
+index 6ae03e74c..ee427060c 100644
+--- a/gcc/config/aarch64/aarch64.c
++++ b/gcc/config/aarch64/aarch64.c
+@@ -3860,8 +3860,13 @@ aarch64_secondary_reload (bool in_p ATTRIBUTE_UNUSED, rtx x,
+       && GET_MODE_SIZE (mode) == 16 && MEM_P (x))
+     return FP_REGS;
+ 
++  if (rclass == CORE_REGS
++      && (mode == SFmode || mode == DFmode)
++      && CONSTANT_P (x))
++    return FP_REGS;
++
+   if (rclass == FP_REGS && (mode == TImode || mode == TFmode) && CONSTANT_P(x))
+-      return CORE_REGS;
++    return CORE_REGS;
+ 
+   return NO_REGS;
+ }
+diff --git a/gcc/testsuite/g++.dg/opt/pr70549.C b/gcc/testsuite/g++.dg/opt/pr70549.C
+new file mode 100644
+index 000000000..d90ee2b1a
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/opt/pr70549.C
+@@ -0,0 +1,33 @@
++// PR target/70549
++// { dg-do compile }
++// { dg-options "-O2" }
++// { dg-additional-options "-fPIC" { target fpic } }
++
++struct A { float x; float y; };
++A a, b, c;
++int d, e;
++A bar ();
++void foo (A, A);
++inline A operator/ (A, A p2) { if (p2.x) return a; }
++struct B { A dval; };
++int baz (A, B, A, int);
++
++void
++test ()
++{
++  B q;
++  A f, g, h, k;
++  h.x = 1.0;
++  f = h;
++  struct A i, j = f;
++  do {
++    i = bar ();
++    g = i / j;
++    foo (g, c);
++    int l = baz (k, q, b, e);
++    if (l)
++      goto cleanup;
++    j = i;
++  } while (d);
++cleanup:;
++}

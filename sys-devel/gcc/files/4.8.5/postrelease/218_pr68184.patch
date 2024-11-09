@@ -1,0 +1,54 @@
+diff --git a/gcc/cgraphunit.c b/gcc/cgraphunit.c
+index 11deaa0c5..d2f08bb70 100644
+--- a/gcc/cgraphunit.c
++++ b/gcc/cgraphunit.c
+@@ -626,8 +626,10 @@ cgraph_analyze_function (struct cgraph_node *node)
+     }
+   else if (node->thunk.thunk_p)
+     {
+-      cgraph_create_edge (node, cgraph_get_node (node->thunk.alias),
+-			  NULL, 0, CGRAPH_FREQ_BASE);
++      struct cgraph_node *t = cgraph_get_node (node->thunk.alias);
++      cgraph_create_edge (node, t, NULL, 0,
++			  CGRAPH_FREQ_BASE)->can_throw_external
++	= !TREE_NOTHROW (t->symbol.decl);
+     }
+   else if (node->dispatcher_function)
+     {
+diff --git a/gcc/testsuite/g++.dg/torture/pr68184.C b/gcc/testsuite/g++.dg/torture/pr68184.C
+new file mode 100644
+index 000000000..d0c7c8491
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/torture/pr68184.C
+@@ -0,0 +1,31 @@
++// { dg-do run }
++namespace {
++struct IFoo { virtual void foo() = 0; };
++struct IBar { virtual void bar() = 0; };
++
++struct FooBar : private IBar, private IFoo
++{
++    void call_foo()
++    {
++        try
++        {
++            static_cast<IFoo*>(this)->foo();
++        }
++        catch( ... ) {}
++    }
++    void foo() { throw 1; }
++    void bar()  {}
++};
++
++void test()
++{
++    FooBar foobar;
++    foobar.call_foo();
++}
++}
++int main()
++{
++    test();
++    return 0;
++}
++

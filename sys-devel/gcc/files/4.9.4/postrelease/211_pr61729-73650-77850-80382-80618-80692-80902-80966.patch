@@ -1,0 +1,218 @@
+diff --git a/gcc/builtins.c b/gcc/builtins.c
+index 08caa19ab..87f858beb 100644
+--- a/gcc/builtins.c
++++ b/gcc/builtins.c
+@@ -5472,6 +5472,12 @@ expand_builtin_atomic_fetch_op (enum machine_mode mode, tree exp, rtx target,
+   gcc_assert (TREE_OPERAND (addr, 0) == fndecl);
+   TREE_OPERAND (addr, 0) = builtin_decl_explicit (ext_call);
+ 
++  /* If we will emit code after the call, the call can not be a tail call.
++     If it is emitted as a tail call, a barrier is emitted after it, and
++     then all trailing code is removed.  */
++  if (!ignore)
++    CALL_EXPR_TAILCALL (exp) = 0;
++
+   /* Expand the call here so we can emit trailing code.  */
+   ret = expand_call (exp, target, ignore);
+ 
+diff --git a/gcc/config/rs6000/rs6000.c b/gcc/config/rs6000/rs6000.c
+index 79d3f0e16..e63e72bc7 100644
+--- a/gcc/config/rs6000/rs6000.c
++++ b/gcc/config/rs6000/rs6000.c
+@@ -11272,6 +11272,7 @@ rs6000_gimplify_va_arg (tree valist, tree type, gimple_seq *pre_p,
+ 
+   size = int_size_in_bytes (type);
+   rsize = (size + 3) / 4;
++  int pad = 4 * rsize - size;
+   align = 1;
+ 
+   if (TARGET_HARD_FLOAT && TARGET_FPRS
+@@ -11359,6 +11360,10 @@ rs6000_gimplify_va_arg (tree valist, tree type, gimple_seq *pre_p,
+ 	  && TYPE_MODE (type) == SDmode)
+ 	t = fold_build_pointer_plus_hwi (t, size);
+ 
++      /* Args are right-aligned.  */
++      if (BYTES_BIG_ENDIAN)
++	t = fold_build_pointer_plus_hwi (t, pad);
++
+       gimplify_assign (addr, t, pre_p);
+ 
+       gimple_seq_add_stmt (pre_p, gimple_build_goto (lab_over));
+@@ -11384,6 +11389,11 @@ rs6000_gimplify_va_arg (tree valist, tree type, gimple_seq *pre_p,
+       t = build2 (BIT_AND_EXPR, TREE_TYPE (t), t,
+ 		  build_int_cst (TREE_TYPE (t), -align));
+     }
++
++  /* Args are right-aligned.  */
++  if (BYTES_BIG_ENDIAN)
++    t = fold_build_pointer_plus_hwi (t, pad);
++
+   gimplify_expr (&t, pre_p, NULL, is_gimple_val, fb_rvalue);
+ 
+   gimplify_assign (unshare_expr (addr), t, pre_p);
+@@ -22250,9 +22260,11 @@ rs6000_emit_allocate_stack (HOST_WIDE_INT size, rtx copy_reg, int copy_off)
+ 	  && REGNO (stack_limit_rtx) > 1
+ 	  && REGNO (stack_limit_rtx) <= 31)
+ 	{
+-	  emit_insn (gen_add3_insn (tmp_reg, stack_limit_rtx, GEN_INT (size)));
+-	  emit_insn (gen_cond_trap (LTU, stack_reg, tmp_reg,
+-				    const0_rtx));
++	  rtx_insn *insn
++	    = gen_add3_insn (tmp_reg, stack_limit_rtx, GEN_INT (size));
++	  gcc_assert (insn);
++	  emit_insn (insn);
++	  emit_insn (gen_cond_trap (LTU, stack_reg, tmp_reg, const0_rtx));
+ 	}
+       else if (GET_CODE (stack_limit_rtx) == SYMBOL_REF
+ 	       && TARGET_32BIT
+diff --git a/gcc/config/rs6000/rs6000.md b/gcc/config/rs6000/rs6000.md
+index a3efbbc00..accc462b0 100644
+--- a/gcc/config/rs6000/rs6000.md
++++ b/gcc/config/rs6000/rs6000.md
+@@ -1833,6 +1833,17 @@
+ 		  || rtx_equal_p (operands[0], operands[1]))
+ 		 ? operands[0] : gen_reg_rtx (<MODE>mode));
+ 
++      /* Adding a constant to r0 is not a valid insn, so use a different
++	 strategy in that case.  */
++      if (REGNO (operands[1]) == 0 || REGNO (tmp) == 0)
++	{
++	  if (operands[0] == operands[1])
++	    FAIL;
++	  rs6000_emit_move (operands[0], operands[2], <MODE>mode);
++	  emit_insn (gen_add<mode>3 (operands[0], operands[1], operands[0]));
++	  DONE;
++	}
++
+       HOST_WIDE_INT val = INTVAL (operands[2]);
+       HOST_WIDE_INT low = ((val & 0xffff) ^ 0x8000) - 0x8000;
+       HOST_WIDE_INT rest = trunc_int_for_mode (val - low, <MODE>mode);
+diff --git a/gcc/config/rs6000/sync.md b/gcc/config/rs6000/sync.md
+index 63152ed04..94baa98aa 100644
+--- a/gcc/config/rs6000/sync.md
++++ b/gcc/config/rs6000/sync.md
+@@ -157,8 +157,7 @@
+       rtx op1 = operands[1];
+       rtx pti_reg = gen_reg_rtx (PTImode);
+ 
+-      // Can't have indexed address for 'lq'
+-      if (indexed_address (XEXP (op1, 0), TImode))
++      if (!quad_address_p (XEXP (op1, 0), TImode, false))
+ 	{
+ 	  rtx old_addr = XEXP (op1, 0);
+ 	  rtx new_addr = force_reg (Pmode, old_addr);
+@@ -231,8 +230,7 @@
+       rtx op1 = operands[1];
+       rtx pti_reg = gen_reg_rtx (PTImode);
+ 
+-      // Can't have indexed address for 'stq'
+-      if (indexed_address (XEXP (op0, 0), TImode))
++      if (!quad_address_p (XEXP (op0, 0), TImode, false))
+ 	{
+ 	  rtx old_addr = XEXP (op0, 0);
+ 	  rtx new_addr = force_reg (Pmode, old_addr);
+diff --git a/gcc/config/rs6000/vector.md b/gcc/config/rs6000/vector.md
+index d81cccdf7..f2e9fecfd 100644
+--- a/gcc/config/rs6000/vector.md
++++ b/gcc/config/rs6000/vector.md
+@@ -543,13 +543,12 @@
+ 	(gt:VEC_F (match_dup 2)
+ 		  (match_dup 1)))
+    (set (match_dup 0)
+-	(not:VEC_F (ior:VEC_F (match_dup 3)
+-			      (match_dup 4))))]
+-  "
++	(and:VEC_F (not:VEC_F (match_dup 3))
++		   (not:VEC_F (match_dup 4))))]
+ {
+   operands[3] = gen_reg_rtx (<MODE>mode);
+   operands[4] = gen_reg_rtx (<MODE>mode);
+-}")
++})
+ 
+ (define_insn_and_split "*vector_ltgt<mode>"
+   [(set (match_operand:VEC_F 0 "vfloat_operand" "")
+diff --git a/gcc/lra-constraints.c b/gcc/lra-constraints.c
+index 2e076b16f..a915cc6b2 100644
+--- a/gcc/lra-constraints.c
++++ b/gcc/lra-constraints.c
+@@ -3193,6 +3193,13 @@ simple_move_p (void)
+   lra_assert (curr_insn_set != NULL_RTX);
+   dest = SET_DEST (curr_insn_set);
+   src = SET_SRC (curr_insn_set);
++
++  /* If the instruction has multiple sets we need to process it even if it
++     is single_set.  This can happen if one or more of the SETs are dead.
++     See PR73650.  */
++  if (multiple_sets (curr_insn))
++    return false;
++
+   return ((dclass = get_op_class (dest)) != NO_REGS
+ 	  && (sclass = get_op_class (src)) != NO_REGS
+ 	  /* The backend guarantees that register moves of cost 2
+diff --git a/gcc/real.c b/gcc/real.c
+index 5cf2525b9..f15c12440 100644
+--- a/gcc/real.c
++++ b/gcc/real.c
+@@ -938,12 +938,12 @@ do_compare (const REAL_VALUE_TYPE *a, const REAL_VALUE_TYPE *b,
+       gcc_unreachable ();
+     }
+ 
+-  if (a->sign != b->sign)
+-    return -a->sign - -b->sign;
+-
+   if (a->decimal || b->decimal)
+     return decimal_do_compare (a, b, nan_result);
+ 
++  if (a->sign != b->sign)
++    return -a->sign - -b->sign;
++
+   if (REAL_EXP (a) > REAL_EXP (b))
+     ret = 1;
+   else if (REAL_EXP (a) < REAL_EXP (b))
+diff --git a/gcc/testsuite/gcc.c-torture/execute/pr80692.c b/gcc/testsuite/gcc.c-torture/execute/pr80692.c
+new file mode 100644
+index 000000000..5bd35d092
+--- /dev/null
++++ b/gcc/testsuite/gcc.c-torture/execute/pr80692.c
+@@ -0,0 +1,11 @@
++int main () {
++	_Decimal64 d64 = -0.DD;
++
++	if (d64 != 0.DD)
++		__builtin_abort ();
++
++	if (d64 != -0.DD)
++		__builtin_abort ();
++
++	return 0;
++}
+diff --git a/gcc/testsuite/gcc.c-torture/execute/pr80692.x b/gcc/testsuite/gcc.c-torture/execute/pr80692.x
+new file mode 100644
+index 000000000..e410bfa7b
+--- /dev/null
++++ b/gcc/testsuite/gcc.c-torture/execute/pr80692.x
+@@ -0,0 +1,7 @@
++load_lib target-supports.exp
++
++if { ! [check_effective_target_dfp] } {
++        return 1
++}
++
++return 0
+diff --git a/gcc/testsuite/gcc.target/powerpc/stack-limit.c b/gcc/testsuite/gcc.target/powerpc/stack-limit.c
+new file mode 100644
+index 000000000..e676c96eb
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/powerpc/stack-limit.c
+@@ -0,0 +1,10 @@
++/* { dg-options "-O0 -fstack-limit-register=r14" } */
++
++// PR80966
++
++int foo (int i)
++{
++  char arr[135000];
++
++  arr[i] = 0;
++}

@@ -1,0 +1,45 @@
+diff --git a/gcc/c/c-typeck.c b/gcc/c/c-typeck.c
+index 3108936b2..b9a0e5aec 100644
+--- a/gcc/c/c-typeck.c
++++ b/gcc/c/c-typeck.c
+@@ -6819,6 +6819,9 @@ push_init_level (int implicit, struct obstack * braced_init_obstack)
+ 	  push_member_name (constructor_fields);
+ 	  constructor_depth++;
+ 	}
++      /* If upper initializer is designated, then mark this as
++	 designated too to prevent bogus warnings.  */
++      constructor_designated = p->designated;
+     }
+   else if (TREE_CODE (constructor_type) == ARRAY_TYPE)
+     {
+diff --git a/gcc/testsuite/gcc.dg/pr60784.c b/gcc/testsuite/gcc.dg/pr60784.c
+new file mode 100644
+index 000000000..82b512f7c
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr60784.c
+@@ -0,0 +1,25 @@
++/* PR c/60784 */
++/* { dg-do compile } */
++/* { dg-options "-Wextra -std=c99" } */
++
++struct A { int i, j; };
++struct B { struct A a; } b1 = { .a.i = 1, .a.j = 1 };
++struct B b2 = { .a.i = 1 };
++
++struct C { struct { int a, b; }; } c1 = { .a = 4, .b = 2 };
++struct C c2 = { .a = 4, .b = 2 };
++
++struct D { struct A a; };
++struct E { struct D d; };
++struct F { struct E e; } f1 = { .e.d.a.i = 8 };
++struct F f2 = { .e.d.a.i = 8, .e.d.a.j = 3 };
++
++struct G {
++  struct {
++    struct {
++      struct {
++        int a, b, c, d, e, f;
++      };
++    };
++  };
++} g = { .b = 2 };

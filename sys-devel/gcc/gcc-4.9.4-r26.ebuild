@@ -230,6 +230,24 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/206_pr59628.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/207_pr18969.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/208_pr81304.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/209_pr93272.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/210_pr82274.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/211_pr61729-73650-77850-80382-80618-80692-80902-80966.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/212_pr80362.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/213_pr80129.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/214_pr79969.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/215_pr79439.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/216_pr78796.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/217_pr78416.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/218_pr78064.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/219_pr77767.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/220_pr77375.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/221_pr72863.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/222_pr72747.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/223_pr68184.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/224_pr63567.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/225_pr38757.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/226_pr62174.patch
 
 	if use test ; then
 		rm -rf gcc/testsuite/gcc.c-torture/execute/vfprintf-chk-1.c gcc/testsuite/gcc.c-torture/execute/vprintf-chk-1.c

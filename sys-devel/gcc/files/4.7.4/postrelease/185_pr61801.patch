@@ -1,0 +1,41 @@
+diff --git a/gcc/sched-deps.c b/gcc/sched-deps.c
+index e4aa52002..2f50ed795 100644
+--- a/gcc/sched-deps.c
++++ b/gcc/sched-deps.c
+@@ -2705,7 +2705,8 @@ sched_analyze_2 (struct deps_desc *deps, rtx x, rtx insn)
+ 	   Consider for instance a volatile asm that changes the fpu rounding
+ 	   mode.  An insn should not be moved across this even if it only uses
+ 	   pseudo-regs because it might give an incorrectly rounded result.  */
+-	if (code != ASM_OPERANDS || MEM_VOLATILE_P (x))
++	if ((code != ASM_OPERANDS || MEM_VOLATILE_P (x))
++	    && !DEBUG_INSN_P (insn))
+ 	  reg_pending_barrier = TRUE_BARRIER;
+ 
+ 	/* For all ASM_OPERANDS, we must traverse the vector of input operands.
+diff --git a/gcc/testsuite/gcc.target/i386/pr61801.c b/gcc/testsuite/gcc.target/i386/pr61801.c
+new file mode 100644
+index 000000000..d0d08ccb4
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/i386/pr61801.c
+@@ -0,0 +1,21 @@
++/* PR rtl-optimization/61801 */
++/* { dg-do compile } */
++/* { dg-options "-Os -fcompare-debug" } */
++
++int a, c;
++int bar (void);
++void baz (void);
++
++void
++foo (void)
++{
++  int d;
++  if (bar ())
++    {
++      int e;
++      baz ();
++      asm volatile ("" : "=a" (e) : "0" (a), "i" (0));
++      d = e;
++    }
++  c = d;
++}

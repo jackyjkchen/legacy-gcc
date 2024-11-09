@@ -1,0 +1,95 @@
+diff --git a/gcc/c/c-typeck.c b/gcc/c/c-typeck.c
+index 0b38bbdba..404e387a0 100644
+--- a/gcc/c/c-typeck.c
++++ b/gcc/c/c-typeck.c
+@@ -6688,13 +6688,15 @@ digest_init (location_t init_loc, tree type, tree init, tree origtype,
+ 	inside_init = convert (type, inside_init);
+ 
+       if (require_constant
+-	  && (code == VECTOR_TYPE || !flag_isoc99)
+ 	  && TREE_CODE (inside_init) == COMPOUND_LITERAL_EXPR)
+ 	{
+ 	  /* As an extension, allow initializing objects with static storage
+ 	     duration with compound literals (which are then treated just as
+ 	     the brace enclosed list they contain).  Also allow this for
+ 	     vectors, as we can only assign them with compound literals.  */
++	  if (flag_isoc99 && code != VECTOR_TYPE)
++	    pedwarn_init (init_loc, OPT_Wpedantic, "initializer element "
++			  "is not constant");
+ 	  tree decl = COMPOUND_LITERAL_EXPR_DECL (inside_init);
+ 	  inside_init = DECL_INITIAL (decl);
+ 	}
+@@ -8220,11 +8222,14 @@ output_init_element (tree value, tree origtype, bool strict_string, tree type,
+     value = array_to_pointer_conversion (input_location, value);
+ 
+   if (TREE_CODE (value) == COMPOUND_LITERAL_EXPR
+-      && require_constant_value && !flag_isoc99 && pending)
++      && require_constant_value && pending)
+     {
+       /* As an extension, allow initializing objects with static storage
+ 	 duration with compound literals (which are then treated just as
+ 	 the brace enclosed list they contain).  */
++      if (flag_isoc99)
++	pedwarn_init (input_location, OPT_Wpedantic, "initializer element is not "
++		      "constant");
+       tree decl = COMPOUND_LITERAL_EXPR_DECL (value);
+       value = DECL_INITIAL (decl);
+     }
+diff --git a/gcc/testsuite/gcc.dg/pr63567-1.c b/gcc/testsuite/gcc.dg/pr63567-1.c
+new file mode 100644
+index 000000000..97da17156
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr63567-1.c
+@@ -0,0 +1,10 @@
++/* PR c/63567 */
++/* { dg-do compile } */
++/* { dg-options "" } */
++
++/* Allow initializing objects with static storage duration with
++   compound literals even.  This is being used in Linux kernel.  */
++
++struct T { int i; };
++struct S { struct T t; };
++static struct S s = (struct S) { .t = { 42 } };
+diff --git a/gcc/testsuite/gcc.dg/pr63567-2.c b/gcc/testsuite/gcc.dg/pr63567-2.c
+new file mode 100644
+index 000000000..0b668efbc
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr63567-2.c
+@@ -0,0 +1,10 @@
++/* PR c/63567 */
++/* { dg-do compile } */
++/* { dg-options "-pedantic -std=gnu99" } */
++
++/* Allow initializing objects with static storage duration with
++   compound literals.  This is being used in Linux kernel.  */
++
++struct T { int i; };
++struct S { struct T t; };
++static struct S s = (struct S) { .t = { 42 } }; /* { dg-warning "initializer element is not constant" } */
+diff --git a/gcc/testsuite/gcc.dg/pr63567-3.c b/gcc/testsuite/gcc.dg/pr63567-3.c
+new file mode 100644
+index 000000000..d62640677
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr63567-3.c
+@@ -0,0 +1,7 @@
++/* PR c/63567 */
++/* { dg-do compile } */
++/* { dg-options "" } */
++
++struct T { int i; };
++struct S { struct T t; };
++struct S s = { .t = { (int) { 1 } } };
+diff --git a/gcc/testsuite/gcc.dg/pr63567-4.c b/gcc/testsuite/gcc.dg/pr63567-4.c
+new file mode 100644
+index 000000000..ca01dbdaa
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr63567-4.c
+@@ -0,0 +1,7 @@
++/* PR c/63567 */
++/* { dg-do compile } */
++/* { dg-options "-Wpedantic -std=gnu99" } */
++
++struct T { int i; };
++struct S { struct T t; };
++struct S s = { .t = { (int) { 1 } } }; /* { dg-warning "initializer element is not constant|initialization" } */

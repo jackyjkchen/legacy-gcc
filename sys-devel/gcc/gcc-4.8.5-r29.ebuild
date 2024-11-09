@@ -220,6 +220,39 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/201_pr81304.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/202_pr69128.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/203_pr18969.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/204_pr28865.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/205_pr38757.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/206_pr52714.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/207_pr53477.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/208_pr53658.patch
+	[[ $(tc-arch) != "arm" ]] && eapply "${FILESDIR}"/${PV}/postrelease/209_pr56564.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/210_pr60010.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/211_pr60784.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/212_pr63442.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/213_pr63567.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/214_pr65142.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/215_pr66731.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/216_pr66840.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/217_pr67281.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/218_pr68184.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/219_pr68680.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/220_pr69644.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/221_pr70549.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/222_pr72747.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/223_pr72863.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/224_pr77375.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/225_pr77767.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/226_pr78064.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/227_pr78416.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/228_pr78796.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/229_pr93272.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/230_pr79439.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/231_pr79969.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/232_pr80129.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/233_pr80362.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/234_pr80692.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/235_pr82274.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/236_pr62174.patch
 
 	if use test ; then
 		rm -rf gcc/testsuite/gcc.c-torture/execute/vfprintf-chk-1.c gcc/testsuite/gcc.c-torture/execute/vprintf-chk-1.c

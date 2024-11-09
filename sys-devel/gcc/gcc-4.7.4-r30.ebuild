@@ -193,6 +193,17 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/173_pr56883.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/174_pr63938.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/175_pr18969.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/176_pr80362.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/177_pr68680.patch
+	[[ $(tc-arch) != "arm" ]] && eapply "${FILESDIR}"/${PV}/postrelease/178_pr56564.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/179_pr49146.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/180_pr52714.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/181_pr38757.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/182_pr28865.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/183_pr64979.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/184_pr62174.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/185_pr61801.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/186_pr54653.patch
 
 	if use test ; then
 		rm -rf gcc/testsuite/gcc.c-torture/execute/vfprintf-chk-1.c gcc/testsuite/gcc.c-torture/execute/vprintf-chk-1.c gcc/testsuite/gcc.dg/format/opt-*.c

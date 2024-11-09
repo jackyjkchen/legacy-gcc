@@ -1,0 +1,71 @@
+diff --git a/gcc/combine.c b/gcc/combine.c
+index 126feb98b..d4c463824 100644
+--- a/gcc/combine.c
++++ b/gcc/combine.c
+@@ -3860,6 +3860,9 @@ try_combine (rtx i3, rtx i2, rtx i1, rtx i0, int *new_direct_jump_p,
+ #ifdef HAVE_cc0
+ 	  && !reg_referenced_p (cc0_rtx, XVECEXP (newpat, 0, 0))
+ #endif
++	  /* If I3 is a jump, ensure that set0 is a jump so that
++	     we do not create invalid RTL.  */
++	  && (!JUMP_P (i3) || SET_DEST (XVECEXP (newpat, 0, 0)) == pc_rtx)
+ 	 )
+ 	{
+ 	  newi2pat = XVECEXP (newpat, 0, 1);
+@@ -3870,6 +3873,9 @@ try_combine (rtx i3, rtx i2, rtx i1, rtx i0, int *new_direct_jump_p,
+ #ifdef HAVE_cc0
+ 	       && !reg_referenced_p (cc0_rtx, XVECEXP (newpat, 0, 1))
+ #endif
++	       /* If I3 is a jump, ensure that set1 is a jump so that
++		  we do not create invalid RTL.  */
++	       && (!JUMP_P (i3) || SET_DEST (XVECEXP (newpat, 0, 1)) == pc_rtx)
+ 	      )
+ 	{
+ 	  newi2pat = XVECEXP (newpat, 0, 0);
+diff --git a/gcc/testsuite/gcc.c-torture/compile/20160615-1.c b/gcc/testsuite/gcc.c-torture/compile/20160615-1.c
+new file mode 100644
+index 000000000..1865a77ed
+--- /dev/null
++++ b/gcc/testsuite/gcc.c-torture/compile/20160615-1.c
+@@ -0,0 +1,10 @@
++int a;
++void bar (int, unsigned, unsigned);
++
++void
++foo (unsigned x)
++{
++  unsigned b = a ? x : 0;
++  if (x || b)
++    bar (0, x, b);
++}
+diff --git a/gcc/testsuite/gcc.c-torture/compile/pr52714.c b/gcc/testsuite/gcc.c-torture/compile/pr52714.c
+new file mode 100644
+index 000000000..03d499089
+--- /dev/null
++++ b/gcc/testsuite/gcc.c-torture/compile/pr52714.c
+@@ -0,0 +1,25 @@
++
++int __re_compile_fastmap(unsigned char *p)
++{
++    unsigned char **stack;
++    unsigned size;
++    unsigned avail;
++
++    stack = __builtin_alloca(5 * sizeof(unsigned char*));
++    if (stack == 0)
++	return -2;
++    size = 5;
++    avail = 0;
++
++    for (;;) {
++	switch (*p++) {
++	case 0:
++	    if (avail == size)
++		return -2;
++	    stack[avail++] = p;
++	}
++    }
++
++    return 0;
++}
++

@@ -1,0 +1,67 @@
+diff --git a/gcc/config/rs6000/vsx.md b/gcc/config/rs6000/vsx.md
+index 0d85ccab1..fa5ea94f4 100644
+--- a/gcc/config/rs6000/vsx.md
++++ b/gcc/config/rs6000/vsx.md
+@@ -715,13 +715,27 @@
+   [(set (match_operand:VSX_M 0 "vsx_register_operand" "")
+ 	(match_operand:VSX_M 1 "memory_operand" ""))]
+   "VECTOR_MEM_VSX_P (<MODE>mode)"
+-  "")
++{
++  /* Expand to swaps if needed, prior to swap optimization.  */
++  if (!BYTES_BIG_ENDIAN)
++    {
++      rs6000_emit_le_vsx_move (operands[0], operands[1], <MODE>mode);
++      DONE;
++    }
++})
+ 
+ (define_expand "vsx_store_<mode>"
+   [(set (match_operand:VSX_M 0 "memory_operand" "")
+ 	(match_operand:VSX_M 1 "vsx_register_operand" ""))]
+   "VECTOR_MEM_VSX_P (<MODE>mode)"
+-  "")
++{
++  /* Expand to swaps if needed, prior to swap optimization.  */
++  if (!BYTES_BIG_ENDIAN)
++    {
++      rs6000_emit_le_vsx_move (operands[0], operands[1], <MODE>mode);
++      DONE;
++    }
++})
+ 
+ 
+ ;; VSX vector floating point arithmetic instructions.  The VSX scalar
+diff --git a/gcc/testsuite/gcc.target/powerpc/pr72863.c b/gcc/testsuite/gcc.target/powerpc/pr72863.c
+new file mode 100644
+index 000000000..26328f20a
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/powerpc/pr72863.c
+@@ -0,0 +1,27 @@
++/* { dg-do compile { target { powerpc64le-*-* } } } */
++/* { dg-skip-if "do not override -mcpu" { powerpc*-*-* } { "-mcpu=*" } { "-mcpu=power8" } } */
++/* { dg-options "-mcpu=power8 -O3" } */
++/* { dg-final { scan-assembler "lxvd2x" } } */
++/* { dg-final { scan-assembler "stxvd2x" } } */
++/* { dg-final { scan-assembler-not "xxpermdi" } } */
++
++#include <altivec.h>
++
++extern unsigned char *src, *dst;
++
++void b(void)
++{
++  int i;
++
++  unsigned char *s8 = src;
++  unsigned char *d8 = dst;
++
++  for (i = 0; i < 100; i++) {
++    vector unsigned char vs = vec_vsx_ld(0, s8);
++    vector unsigned char vd = vec_vsx_ld(0, d8);
++    vector unsigned char vr = vec_xor(vs, vd);
++    vec_vsx_st(vr, 0, d8);
++    s8 += 16;
++    d8 += 16;
++  }
++}

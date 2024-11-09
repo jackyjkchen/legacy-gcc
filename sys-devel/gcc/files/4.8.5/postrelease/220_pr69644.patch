@@ -1,0 +1,44 @@
+diff --git a/gcc/config/rs6000/rs6000.c b/gcc/config/rs6000/rs6000.c
+index 6651d9497..ada2e4c50 100644
+--- a/gcc/config/rs6000/rs6000.c
++++ b/gcc/config/rs6000/rs6000.c
+@@ -20327,6 +20327,9 @@ rs6000_expand_atomic_compare_and_swap (rtx operands[])
+   else if (reg_overlap_mentioned_p (retval, oldval))
+     oldval = copy_to_reg (oldval);
+ 
++  if (mode != TImode && !reg_or_short_operand (oldval, mode))
++    oldval = copy_to_mode_reg (mode, oldval);
++
+   mem = rs6000_pre_atomic_barrier (mem, mod_s);
+ 
+   label1 = NULL_RTX;
+@@ -20341,10 +20344,8 @@ rs6000_expand_atomic_compare_and_swap (rtx operands[])
+ 
+   x = retval;
+   if (mask)
+-    {
+-      x = expand_simple_binop (SImode, AND, retval, mask,
+-			       NULL_RTX, 1, OPTAB_LIB_WIDEN);
+-    }
++    x = expand_simple_binop (SImode, AND, retval, mask,
++			     NULL_RTX, 1, OPTAB_LIB_WIDEN);
+ 
+   cond = gen_reg_rtx (CCmode);
+   /* If we have TImode, synthesize a comparison.  */
+diff --git a/gcc/testsuite/gcc.dg/pr69644.c b/gcc/testsuite/gcc.dg/pr69644.c
+new file mode 100644
+index 000000000..c60b19170
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr69644.c
+@@ -0,0 +1,11 @@
++/* PR target/69644 */
++/* { dg-do compile } */
++
++int
++main ()
++{
++  unsigned short x = 0x8000;
++  if (!__sync_bool_compare_and_swap (&x, 0x8000, 0) || x)
++    __builtin_abort ();
++  return 0;
++}

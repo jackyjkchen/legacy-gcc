@@ -1,0 +1,43 @@
+diff --git a/gcc/calls.c b/gcc/calls.c
+index 93c02b430..651eb28fc 100644
+--- a/gcc/calls.c
++++ b/gcc/calls.c
+@@ -564,6 +564,17 @@ special_function_p (const_tree fndecl, int flags)
+ 	flags |= ECF_NORETURN;
+     }
+ 
++  if (DECL_BUILT_IN_CLASS (fndecl) == BUILT_IN_NORMAL)
++    switch (DECL_FUNCTION_CODE (fndecl))
++      {
++      case BUILT_IN_ALLOCA:
++      case BUILT_IN_ALLOCA_WITH_ALIGN:
++	flags |= ECF_MAY_BE_ALLOCA;
++	break;
++      default:
++	break;
++      }
++
+   return flags;
+ }
+ 
+diff --git a/gcc/testsuite/gcc.target/i386/pr68680.c b/gcc/testsuite/gcc.target/i386/pr68680.c
+new file mode 100644
+index 000000000..8075c987c
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/i386/pr68680.c
+@@ -0,0 +1,15 @@
++/* PR tree-optimization/68680 */
++/* { dg-do compile } */
++/* { dg-options "-O2 -fstack-protector" } */
++
++int foo (char *);
++
++int
++bar (unsigned long x)
++{
++  char a[x];
++  return foo (a);
++}
++
++/* Verify that this function is stack protected.  */
++/* { dg-final { scan-assembler "stack_chk_fail" } } */

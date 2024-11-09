@@ -1,0 +1,97 @@
+diff --git a/gcc/calls.c b/gcc/calls.c
+index 19b2bfad8..6fcba2612 100644
+--- a/gcc/calls.c
++++ b/gcc/calls.c
+@@ -571,6 +571,17 @@ special_function_p (const_tree fndecl, int flags)
+ 	flags |= ECF_NORETURN;
+     }
+ 
++  if (DECL_BUILT_IN_CLASS (fndecl) == BUILT_IN_NORMAL)
++    switch (DECL_FUNCTION_CODE (fndecl))
++      {
++      case BUILT_IN_ALLOCA:
++      case BUILT_IN_ALLOCA_WITH_ALIGN:
++	flags |= ECF_MAY_BE_ALLOCA;
++	break;
++      default:
++	break;
++      }
++
+   return flags;
+ }
+ 
+diff --git a/gcc/expmed.c b/gcc/expmed.c
+index 689507428..352247c76 100644
+--- a/gcc/expmed.c
++++ b/gcc/expmed.c
+@@ -3874,7 +3874,15 @@ expand_divmod (int rem_flag, enum tree_code code, enum machine_mode mode,
+       if (unsignedp)
+ 	ext_op1 &= GET_MODE_MASK (mode);
+       op1_is_pow2 = ((EXACT_POWER_OF_2_OR_ZERO_P (ext_op1)
+-		     || (! unsignedp && EXACT_POWER_OF_2_OR_ZERO_P (-ext_op1))));
++		      /* If mode is wider than HWI and op1 has msb set,
++			 then it has there extra implicit 1 bits above it.  */
++		      && (GET_MODE_PRECISION (mode) <= HOST_BITS_PER_WIDE_INT
++			  || INTVAL (op1) >= 0))
++		     || (! unsignedp
++			 && EXACT_POWER_OF_2_OR_ZERO_P (-ext_op1)
++			 && (GET_MODE_PRECISION (mode)
++			     <= HOST_BITS_PER_WIDE_INT
++			     || INTVAL (op1) < 0)));
+     }
+ 
+   /*
+@@ -4059,7 +4067,8 @@ expand_divmod (int rem_flag, enum tree_code code, enum machine_mode mode,
+ 		unsigned HOST_WIDE_INT d = (INTVAL (op1)
+ 					    & GET_MODE_MASK (compute_mode));
+ 
+-		if (EXACT_POWER_OF_2_OR_ZERO_P (d))
++		if (EXACT_POWER_OF_2_OR_ZERO_P (d)
++		    && (INTVAL (op1) >= 0 || size <= HOST_BITS_PER_WIDE_INT))
+ 		  {
+ 		    pre_shift = floor_log2 (d);
+ 		    if (rem_flag)
+@@ -4217,7 +4226,9 @@ expand_divmod (int rem_flag, enum tree_code code, enum machine_mode mode,
+ 						compute_mode)
+ 				 != CODE_FOR_nothing)))
+ 		  ;
+-		else if (EXACT_POWER_OF_2_OR_ZERO_P (abs_d))
++		else if (EXACT_POWER_OF_2_OR_ZERO_P (abs_d)
++			 && (size <= HOST_BITS_PER_WIDE_INT
++			     || abs_d != (unsigned HOST_WIDE_INT) d))
+ 		  {
+ 		    if (rem_flag)
+ 		      {
+@@ -4531,7 +4542,10 @@ expand_divmod (int rem_flag, enum tree_code code, enum machine_mode mode,
+       case CEIL_MOD_EXPR:
+ 	if (unsignedp)
+ 	  {
+-	    if (op1_is_constant && EXACT_POWER_OF_2_OR_ZERO_P (INTVAL (op1)))
++	    if (op1_is_constant
++		&& EXACT_POWER_OF_2_OR_ZERO_P (INTVAL (op1))
++		&& (size <= HOST_BITS_PER_WIDE_INT
++		    || INTVAL (op1) >= 0))
+ 	      {
+ 		rtx t1, t2, t3;
+ 		unsigned HOST_WIDE_INT d = INTVAL (op1);
+diff --git a/gcc/testsuite/gcc.target/i386/pr68680.c b/gcc/testsuite/gcc.target/i386/pr68680.c
+new file mode 100644
+index 000000000..8075c987c
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/i386/pr68680.c
+@@ -0,0 +1,15 @@
++/* PR tree-optimization/68680 */
++/* { dg-do compile } */
++/* { dg-options "-O2 -fstack-protector" } */
++
++int foo (char *);
++
++int
++bar (unsigned long x)
++{
++  char a[x];
++  return foo (a);
++}
++
++/* Verify that this function is stack protected.  */
++/* { dg-final { scan-assembler "stack_chk_fail" } } */

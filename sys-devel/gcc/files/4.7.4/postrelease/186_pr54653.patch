@@ -1,0 +1,52 @@
+diff --git a/gcc/cp/parser.c b/gcc/cp/parser.c
+index 83d3b1181..127d35ad6 100644
+--- a/gcc/cp/parser.c
++++ b/gcc/cp/parser.c
+@@ -18358,7 +18358,8 @@ cp_parser_class_head (cp_parser* parser,
+ 		&& CLASS_TYPE_P (scope)
+ 		&& CLASSTYPE_TEMPLATE_INFO (scope)
+ 		&& PRIMARY_TEMPLATE_P (CLASSTYPE_TI_TEMPLATE (scope))
+-		&& !CLASSTYPE_TEMPLATE_SPECIALIZATION (scope))
++		&& (!CLASSTYPE_TEMPLATE_SPECIALIZATION (scope)
++		    || uses_template_parms (CLASSTYPE_TI_ARGS (scope))))
+ 	      ++num_templates;
+ 	}
+     }
+diff --git a/gcc/cp/pt.c b/gcc/cp/pt.c
+index 2d5f1cc1a..1a7669acf 100644
+--- a/gcc/cp/pt.c
++++ b/gcc/cp/pt.c
+@@ -9532,7 +9532,7 @@ tsubst_template_parms (tree parms, tree args, tsubst_flags_t complain)
+   ++processing_template_decl;
+ 
+   for (new_parms = &r;
+-       TMPL_PARMS_DEPTH (parms) > TMPL_ARGS_DEPTH (args);
++       parms && TMPL_PARMS_DEPTH (parms) > TMPL_ARGS_DEPTH (args);
+        new_parms = &(TREE_CHAIN (*new_parms)),
+ 	 parms = TREE_CHAIN (parms))
+     {
+@@ -9806,6 +9806,10 @@ tsubst_decl (tree t, tree args, tsubst_flags_t complain)
+ 	    tree new_type = tsubst (TREE_TYPE (t), args, complain, in_decl);
+ 	    if (new_type == error_mark_node)
+ 	      RETURN (error_mark_node);
++	    /* If we get a real template back, return it.  This can happen in
++	       the context of most_specialized_class.  */
++	    if (TREE_CODE (new_type) == TEMPLATE_DECL)
++	      return new_type;
+ 
+ 	    r = copy_decl (t);
+ 	    DECL_CHAIN (r) = NULL_TREE;
+diff --git a/gcc/testsuite/g++.dg/template/partial-specialization2.C b/gcc/testsuite/g++.dg/template/partial-specialization2.C
+new file mode 100644
+index 000000000..c22d73989
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/template/partial-specialization2.C
+@@ -0,0 +1,8 @@
++// PR c++/54653
++
++template <class T> struct A;
++template <class T> struct A<T*> {
++  template <class U> struct B;
++};
++
++template <class T> struct A<T*>::B<T*> { }; // { dg-error "too few template-parameter-lists" }

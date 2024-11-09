@@ -1,0 +1,50 @@
+diff --git a/gcc/c/c-decl.c b/gcc/c/c-decl.c
+index c5c52cba5..b77562d62 100644
+--- a/gcc/c/c-decl.c
++++ b/gcc/c/c-decl.c
+@@ -5002,11 +5002,21 @@ grokdeclarator (const struct c_declarator *declarator,
+   if (TREE_CODE (type) == ERROR_MARK)
+     return error_mark_node;
+   if (expr == NULL)
+-    expr = &expr_dummy;
++    {
++      expr = &expr_dummy;
++      expr_dummy = NULL_TREE;
++    }
+   if (expr_const_operands == NULL)
+     expr_const_operands = &expr_const_operands_dummy;
+ 
+-  *expr = declspecs->expr;
++  if (declspecs->expr)
++    {
++      if (*expr)
++	*expr = build2 (COMPOUND_EXPR, TREE_TYPE (declspecs->expr), *expr,
++			declspecs->expr);
++      else
++	*expr = declspecs->expr;
++    }
+   *expr_const_operands = declspecs->expr_const_operands;
+ 
+   if (decl_context == FUNCDEF)
+diff --git a/gcc/testsuite/gcc.c-torture/execute/pr77767.c b/gcc/testsuite/gcc.c-torture/execute/pr77767.c
+new file mode 100644
+index 000000000..21725a56b
+--- /dev/null
++++ b/gcc/testsuite/gcc.c-torture/execute/pr77767.c
+@@ -0,0 +1,16 @@
++/* PR c/77767 */
++
++void
++foo (int a, int b[a++], int c, int d[c++])
++{
++  if (a != 2 || c != 2)
++    __builtin_abort ();
++}
++
++int
++main ()
++{
++  int e[10];
++  foo (1, e, 1, e);
++  return 0;
++}
