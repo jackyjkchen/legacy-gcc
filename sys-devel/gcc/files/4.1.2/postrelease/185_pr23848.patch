@@ -1,0 +1,227 @@
+diff --git a/gcc/testsuite/gcc.dg/tree-ssa/pr23848-1.c b/gcc/testsuite/gcc.dg/tree-ssa/pr23848-1.c
+new file mode 100644
+index 00000000..08916e4e
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/tree-ssa/pr23848-1.c
+@@ -0,0 +1,32 @@
++/* PR middle-end/23848 */
++/* { dg-do compile } */
++/* { dg-options "-O2 -fdump-tree-optimized" } */
++
++void bar1 (char *, int);
++void foo1 (int size)
++{
++  char temp[size];
++  temp[size-1] = '\0';
++  bar1 (temp, size);
++}
++
++void bar2 (char *, char *, char *, char *, int);
++void foo2 (int size)
++{
++  char temp[size];
++  temp[size-1] = '\0';
++  {
++    char temp2[size];
++    {
++      char temp3[size];
++      {
++	char temp4[size];
++	bar2 (temp, temp2, temp3, temp4, size);
++      }
++    }
++  }
++}
++
++/* { dg-final { scan-tree-dump-not "__builtin_stack_save" "optimized"} } */
++/* { dg-final { scan-tree-dump-not "__builtin_stack_restore" "optimized"} } */
++/* { dg-final { cleanup-tree-dump "optimized" } } */
+diff --git a/gcc/testsuite/gcc.dg/tree-ssa/pr23848-2.c b/gcc/testsuite/gcc.dg/tree-ssa/pr23848-2.c
+new file mode 100644
+index 00000000..c9691469
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/tree-ssa/pr23848-2.c
+@@ -0,0 +1,25 @@
++/* PR middle-end/23848 */
++/* { dg-do compile } */
++/* { dg-options "-O2 -fdump-tree-optimized" } */
++
++void bar (char *, char *, char *, char *, int);
++void foo (int size)
++{
++  char temp[size];
++  temp[size-1] = '\0';
++  {
++    char temp2[size];
++    {
++      char temp3[size];
++      {
++	char temp4[size];
++	bar (temp, temp2, temp3, temp4, size);
++      }
++    }
++    bar (temp, temp2, (char *) 0, (char *) 0, size);
++  }
++}
++
++/* { dg-final { scan-tree-dump-times "__builtin_stack_save" 1 "optimized"} } */
++/* { dg-final { scan-tree-dump-times "__builtin_stack_restore" 1 "optimized"} } */
++/* { dg-final { cleanup-tree-dump "optimized" } } */
+diff --git a/gcc/testsuite/gcc.dg/tree-ssa/pr23848-3.c b/gcc/testsuite/gcc.dg/tree-ssa/pr23848-3.c
+new file mode 100644
+index 00000000..d2555049
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/tree-ssa/pr23848-3.c
+@@ -0,0 +1,28 @@
++/* PR middle-end/23848 */
++/* { dg-do compile } */
++/* { dg-options "-O2 -fdump-tree-optimized" } */
++
++void bar (int, char *, char *, char *, char *, int);
++void foo (int size)
++{
++  int i;
++  for (i = 0; i < size; i++)
++    {
++      char temp[size];
++      temp[size-1] = '\0';
++      {
++	char temp2[size];
++	{
++	  char temp3[size];
++	  {
++	    char temp4[size];
++	    bar (i, temp, temp2, temp3, temp4, size);
++	  }
++	}
++      }
++    }
++}
++
++/* { dg-final { scan-tree-dump-times "__builtin_stack_save" 1 "optimized"} } */
++/* { dg-final { scan-tree-dump-times "__builtin_stack_restore" 1 "optimized"} } */
++/* { dg-final { cleanup-tree-dump "optimized" } } */
+diff --git a/gcc/testsuite/gcc.dg/tree-ssa/pr23848-4.c b/gcc/testsuite/gcc.dg/tree-ssa/pr23848-4.c
+new file mode 100644
+index 00000000..66b21b81
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/tree-ssa/pr23848-4.c
+@@ -0,0 +1,25 @@
++/* PR middle-end/23848 */
++/* { dg-do compile } */
++/* { dg-options "-O2 -fdump-tree-optimized" } */
++
++void bar (char *, char *, char *, char *, int);
++void foo (int size)
++{
++  char temp[size];
++  temp[size-1] = '\0';
++  {
++    char temp2[size];
++    {
++      char temp3[size];
++      {
++	char temp4[size];
++	bar (temp, temp2, temp3, temp4, size);
++      }
++    }
++    __asm __volatile ("" : : "r" (&temp[0]), "r" (&temp2[0]) : "memory");
++  }
++}
++
++/* { dg-final { scan-tree-dump-times "__builtin_stack_save" 1 "optimized"} } */
++/* { dg-final { scan-tree-dump-times "__builtin_stack_restore" 1 "optimized"} } */
++/* { dg-final { cleanup-tree-dump "optimized" } } */
+diff --git a/gcc/tree-ssa-ccp.c b/gcc/tree-ssa-ccp.c
+index c091d443..f224acf1 100644
+--- a/gcc/tree-ssa-ccp.c
++++ b/gcc/tree-ssa-ccp.c
+@@ -2392,6 +2392,75 @@ fold_stmt_inplace (tree stmt)
+   return changed;
+ }
+ 
++/* Try to optimize out __builtin_stack_restore.  Optimize it out
++   if there is another __builtin_stack_restore in the same basic
++   block and no calls or ASM_EXPRs are in between, or if this block's
++   only outgoing edge is to EXIT_BLOCK and there are no calls or
++   ASM_EXPRs after this __builtin_stack_restore.  */
++
++static tree
++optimize_stack_restore (basic_block bb, tree call, block_stmt_iterator i)
++{
++  tree stack_save, stmt, callee;
++
++  if (TREE_CODE (call) != CALL_EXPR
++      || TREE_OPERAND (call, 1) == NULL_TREE
++      || TREE_CHAIN (TREE_OPERAND (call, 1)) != NULL_TREE
++      || TREE_CODE (TREE_VALUE (TREE_OPERAND (call, 1))) != SSA_NAME
++      || !POINTER_TYPE_P (TREE_TYPE (TREE_VALUE (TREE_OPERAND (call, 1)))))
++    return NULL_TREE;
++
++  for (bsi_next (&i); !bsi_end_p (i); bsi_next (&i))
++    {
++      tree call;
++
++      stmt = bsi_stmt (i);
++      if (TREE_CODE (stmt) == ASM_EXPR)
++	return NULL_TREE;
++      call = get_call_expr_in (stmt);
++      if (call == NULL)
++	continue;
++
++      callee = get_callee_fndecl (call);
++      if (!callee || DECL_BUILT_IN_CLASS (callee) != BUILT_IN_NORMAL)
++	return NULL_TREE;
++
++      if (DECL_FUNCTION_CODE (callee) == BUILT_IN_STACK_RESTORE)
++	break;
++    }
++
++  if (bsi_end_p (i)
++      && (! single_succ_p (bb)
++	  || single_succ_edge (bb)->dest != EXIT_BLOCK_PTR))
++    return NULL_TREE;
++
++  stack_save = SSA_NAME_DEF_STMT (TREE_VALUE (TREE_OPERAND (call, 1)));
++  if (TREE_CODE (stack_save) != MODIFY_EXPR
++      || TREE_OPERAND (stack_save, 0)
++	 != TREE_VALUE (TREE_OPERAND (call, 1))
++      || TREE_CODE (TREE_OPERAND (stack_save, 1)) != CALL_EXPR
++      || tree_could_throw_p (stack_save)
++      || !has_single_use (TREE_VALUE (TREE_OPERAND (call, 1))))
++    return NULL_TREE;
++
++  callee = get_callee_fndecl (TREE_OPERAND (stack_save, 1));
++  if (!callee
++      || DECL_BUILT_IN_CLASS (callee) != BUILT_IN_NORMAL
++      || DECL_FUNCTION_CODE (callee) != BUILT_IN_STACK_SAVE
++      || TREE_OPERAND (TREE_OPERAND (stack_save, 1), 1) != NULL_TREE)
++    return NULL_TREE;
++
++  stmt = stack_save;
++  if (!set_rhs (&stmt,
++		build_int_cst (TREE_TYPE (TREE_VALUE (TREE_OPERAND (call,
++								    1))), 0)))
++    return NULL_TREE;
++  gcc_assert (stmt == stack_save);
++  mark_new_vars_to_rename (stmt);
++
++  return integer_zero_node;
++}
++
+ /* Convert EXPR into a GIMPLE value suitable for substitution on the
+    RHS of an assignment.  Insert the necessary statements before
+    iterator *SI_P.  */
+@@ -2467,6 +2536,12 @@ execute_fold_all_builtins (void)
+ 		result = integer_zero_node;
+ 		break;
+ 
++	      case BUILT_IN_STACK_RESTORE:
++		result = optimize_stack_restore (bb, *stmtp, i);
++		if (result)
++		  break;
++		/* FALLTHRU */
++
+ 	      default:
+ 		bsi_next (&i);
+ 		continue;

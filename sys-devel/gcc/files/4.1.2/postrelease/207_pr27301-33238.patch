@@ -1,0 +1,192 @@
+diff --git a/gcc/gimplify.c b/gcc/gimplify.c
+index 419192ca..ad62bf61 100644
+--- a/gcc/gimplify.c
++++ b/gcc/gimplify.c
+@@ -1052,6 +1052,42 @@ gimplify_return_expr (tree stmt, tree *pre_p)
+   return GS_ALL_DONE;
+ }
+ 
++static void
++gimplify_vla_decl (tree decl, tree *stmt_p)
++{
++  /* This is a variable-sized decl.  Simplify its size and mark it
++     for deferred expansion.  Note that mudflap depends on the format
++     of the emitted code: see mx_register_decls().  */
++  tree t, args, addr, ptr_type;
++
++  gimplify_one_sizepos (&DECL_SIZE (decl), stmt_p);
++  gimplify_one_sizepos (&DECL_SIZE_UNIT (decl), stmt_p);
++
++  /* All occurrences of this decl in final gimplified code will be
++     replaced by indirection.  Setting DECL_VALUE_EXPR does two
++     things: First, it lets the rest of the gimplifier know what
++     replacement to use.  Second, it lets the debug info know
++     where to find the value.  */
++  ptr_type = build_pointer_type (TREE_TYPE (decl));
++  addr = create_tmp_var (ptr_type, get_name (decl));
++  DECL_IGNORED_P (addr) = 0;
++  t = build_fold_indirect_ref (addr);
++  SET_DECL_VALUE_EXPR (decl, t);
++  DECL_HAS_VALUE_EXPR_P (decl) = 1;
++
++  args = tree_cons (NULL, DECL_SIZE_UNIT (decl), NULL);
++  t = built_in_decls[BUILT_IN_ALLOCA];
++  t = build_function_call_expr (t, args);
++  t = fold_convert (ptr_type, t);
++  t = build2 (MODIFY_EXPR, void_type_node, addr, t);
++
++  gimplify_and_add (t, stmt_p);
++
++  /* Indicate that we need to restore the stack level when the
++     enclosing BIND_EXPR is exited.  */
++  gimplify_ctxp->save_stack = true;
++}
++
+ /* Gimplifies a DECL_EXPR node *STMT_P by making any necessary allocation
+    and initialization explicit.  */
+ 
+@@ -1076,39 +1112,7 @@ gimplify_decl_expr (tree *stmt_p)
+       tree init = DECL_INITIAL (decl);
+ 
+       if (TREE_CODE (DECL_SIZE (decl)) != INTEGER_CST)
+-	{
+-	  /* This is a variable-sized decl.  Simplify its size and mark it
+-	     for deferred expansion.  Note that mudflap depends on the format
+-	     of the emitted code: see mx_register_decls().  */
+-	  tree t, args, addr, ptr_type;
+-
+-	  gimplify_one_sizepos (&DECL_SIZE (decl), stmt_p);
+-	  gimplify_one_sizepos (&DECL_SIZE_UNIT (decl), stmt_p);
+-
+-	  /* All occurrences of this decl in final gimplified code will be
+-	     replaced by indirection.  Setting DECL_VALUE_EXPR does two
+-	     things: First, it lets the rest of the gimplifier know what
+-	     replacement to use.  Second, it lets the debug info know
+-	     where to find the value.  */
+-	  ptr_type = build_pointer_type (TREE_TYPE (decl));
+-	  addr = create_tmp_var (ptr_type, get_name (decl));
+-	  DECL_IGNORED_P (addr) = 0;
+-	  t = build_fold_indirect_ref (addr);
+-	  SET_DECL_VALUE_EXPR (decl, t);
+-	  DECL_HAS_VALUE_EXPR_P (decl) = 1;
+-
+-	  args = tree_cons (NULL, DECL_SIZE_UNIT (decl), NULL);
+-	  t = built_in_decls[BUILT_IN_ALLOCA];
+-	  t = build_function_call_expr (t, args);
+-	  t = fold_convert (ptr_type, t);
+-	  t = build2 (MODIFY_EXPR, void_type_node, addr, t);
+-
+-	  gimplify_and_add (t, stmt_p);
+-
+-	  /* Indicate that we need to restore the stack level when the
+-	     enclosing BIND_EXPR is exited.  */
+-	  gimplify_ctxp->save_stack = true;
+-	}
++	gimplify_vla_decl (decl, stmt_p);
+ 
+       if (init && init != error_mark_node)
+ 	{
+@@ -4011,8 +4015,15 @@ gimplify_target_expr (tree *expr_p, tree *pre_p, tree *post_p)
+   if (init)
+     {
+       /* TARGET_EXPR temps aren't part of the enclosing block, so add it
+-	 to the temps list.  */
+-      gimple_add_tmp_var (temp);
++	 to the temps list.  Handle also variable length TARGET_EXPRs.  */
++      if (TREE_CODE (DECL_SIZE (temp)) != INTEGER_CST)
++	{
++	  if (!TYPE_SIZES_GIMPLIFIED (TREE_TYPE (temp)))
++	    gimplify_type_sizes (TREE_TYPE (temp), pre_p);
++	  gimplify_vla_decl (temp, pre_p);
++	}
++      else
++	gimple_add_tmp_var (temp);
+ 
+       /* If TARGET_EXPR_INITIAL is void, then the mere evaluation of the
+ 	 expression is supposed to initialize the slot.  */
+diff --git a/gcc/testsuite/gcc.c-torture/execute/20070919-1.c b/gcc/testsuite/gcc.c-torture/execute/20070919-1.c
+new file mode 100644
+index 00000000..ade3d7e8
+--- /dev/null
++++ b/gcc/testsuite/gcc.c-torture/execute/20070919-1.c
+@@ -0,0 +1,41 @@
++/* PR c/33238 */
++
++typedef __SIZE_TYPE__ size_t;
++int memcmp (const void *, const void *, size_t);
++void abort (void);
++
++void
++__attribute__((noinline))
++bar (void *x, void *y)
++{
++  struct S { char w[8]; } *p = x, *q = y;
++  if (memcmp (p->w, "zyxwvut", 8) != 0)
++    abort ();
++  if (memcmp (q[0].w, "abcdefg", 8) != 0)
++    abort ();
++  if (memcmp (q[1].w, "ABCDEFG", 8) != 0)
++    abort ();
++  if (memcmp (q[2].w, "zyxwvut", 8) != 0)
++    abort ();
++  if (memcmp (q[3].w, "zyxwvut", 8) != 0)
++    abort ();
++}
++
++void
++__attribute__((noinline))
++foo (void *x, int y)
++{
++  struct S { char w[y]; } *p = x, a;
++  int i;
++  a = ({ struct S b; b = p[2]; p[3] = b; });
++  bar (&a, x);
++}
++
++int
++main (void)
++{
++  struct S { char w[8]; } p[4]
++    = { "abcdefg", "ABCDEFG", "zyxwvut", "ZYXWVUT" };
++  foo (p, 8);
++  return 0;
++}
+diff --git a/gcc/testsuite/gcc.dg/pr27301.c b/gcc/testsuite/gcc.dg/pr27301.c
+new file mode 100644
+index 00000000..3b5a8f55
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr27301.c
+@@ -0,0 +1,15 @@
++/* PR c/27301 */
++/* { dg-do compile } */
++/* { dg-options "-O2 -std=gnu89" } */
++
++void
++foo (void *ptr, long n)
++{
++  __asm__ __volatile__ ("" :: "m" (({ struct { char x[n]; } *p = ptr; *p; })));
++}
++
++void
++bar (void *ptr, long n)
++{
++  __asm__ __volatile__ ("" :: "m" (*({ struct { char x[n]; } *p = ptr; p; })));
++}
+diff --git a/gcc/testsuite/gcc.dg/pr33238.c b/gcc/testsuite/gcc.dg/pr33238.c
+new file mode 100644
+index 00000000..0b399041
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr33238.c
+@@ -0,0 +1,12 @@
++/* PR c/33238 */
++/* { dg-do compile } */
++/* { dg-options "-std=gnu89" } */
++
++void
++reverse (void *x, int y, int z)
++{
++  struct { char w[z]; } *p = x, a;
++  int i, j;
++  for (i = y - 1, j = 0; j < y / 2; i--, j++)
++    ({ a = p[i]; p[i] = p[j]; p[j] = a; });
++}

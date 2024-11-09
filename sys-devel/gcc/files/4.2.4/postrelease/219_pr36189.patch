@@ -1,0 +1,94 @@
+diff --git a/gcc/config/i386/i386.c b/gcc/config/i386/i386.c
+index 3724b241..e45e89f8 100644
+--- a/gcc/config/i386/i386.c
++++ b/gcc/config/i386/i386.c
+@@ -6047,6 +6047,8 @@ darwin_local_data_pic (rtx disp)
+ bool
+ legitimate_constant_p (rtx x)
+ {
++  rtx off = NULL_RTX;
++
+   switch (GET_CODE (x))
+     {
+     case CONST:
+@@ -6056,6 +6058,7 @@ legitimate_constant_p (rtx x)
+ 	{
+ 	  if (GET_CODE (XEXP (x, 1)) != CONST_INT)
+ 	    return false;
++	  off = XEXP (x, 1);
+ 	  x = XEXP (x, 0);
+ 	}
+ 
+@@ -6071,10 +6074,24 @@ legitimate_constant_p (rtx x)
+ 	  case UNSPEC_TPOFF:
+ 	  case UNSPEC_NTPOFF:
+ 	    x = XVECEXP (x, 0, 0);
++	    /* GNU ld only handles 32-bit @TPOFF relocation on input.  */
++	    if (TARGET_64BIT
++		&& off
++		&& (INTVAL (off) < 0
++		    || trunc_int_for_mode (INTVAL (off),
++					   SImode) != INTVAL (off)))
++	      return false;
+ 	    return (GET_CODE (x) == SYMBOL_REF
+ 		    && SYMBOL_REF_TLS_MODEL (x) == TLS_MODEL_LOCAL_EXEC);
+ 	  case UNSPEC_DTPOFF:
+ 	    x = XVECEXP (x, 0, 0);
++	    /* GNU ld only handles 32-bit @DTPOFF relocation on input.  */
++	    if (TARGET_64BIT
++		&& off
++		&& (INTVAL (off) < 0
++		    || trunc_int_for_mode (INTVAL (off),
++					   SImode) != INTVAL (off)))
++	      return false;
+ 	    return (GET_CODE (x) == SYMBOL_REF
+ 		    && SYMBOL_REF_TLS_MODEL (x) == TLS_MODEL_LOCAL_DYNAMIC);
+ 	  default:
+@@ -8973,6 +8990,22 @@ ix86_expand_move (enum machine_mode mode, rtx operands[])
+ 	    return;
+ 	}
+     }
++  else if (GET_CODE (op1) == CONST
++	   && GET_CODE (XEXP (op1, 0)) == PLUS
++	   && GET_CODE (XEXP (XEXP (op1, 0), 0)) == UNSPEC
++	   && TARGET_64BIT
++	   && (XINT (XEXP (XEXP (op1, 0), 0), 1) == UNSPEC_NTPOFF
++	       || XINT (XEXP (XEXP (op1, 0), 0), 1) == UNSPEC_DTPOFF)
++	   && !legitimate_constant_p (op1))
++    {
++      op1 = expand_simple_binop (Pmode, PLUS,
++				 gen_rtx_CONST (Pmode,
++						XEXP (XEXP (op1, 0), 0)),
++				 XEXP (XEXP (op1, 0), 1),
++				 op0, 1, OPTAB_DIRECT);
++      if (op1 == op0)
++	return;
++    }
+ 
+   if (flag_pic && mode == Pmode && symbolic_operand (op1, Pmode))
+     {
+diff --git a/libgomp/testsuite/libgomp.fortran/pr36189.f90 b/libgomp/testsuite/libgomp.fortran/pr36189.f90
+new file mode 100644
+index 00000000..6223b9fa
+--- /dev/null
++++ b/libgomp/testsuite/libgomp.fortran/pr36189.f90
+@@ -0,0 +1,19 @@
++! PR target/36189
++program foo
++  implicit none
++  common /mycom/ arr(2)
++  common /mycom2/ arr2(1000000000_8:1000000002_8)
++!$omp threadprivate (/mycom/)
++  integer i
++  integer*8 j
++  real*8 arr
++  real*8 arr2
++  do i=1,2
++    write(*,*) i
++    arr(i)=0.0d0
++  enddo
++  do j=1000000000_8,1000000002_8
++    write(*,*) j
++    arr2(j)=0.0d0
++  end do
++end program

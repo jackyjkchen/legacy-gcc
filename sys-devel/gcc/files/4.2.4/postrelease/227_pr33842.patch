@@ -1,0 +1,126 @@
+diff --git a/gcc/cp/cxx-pretty-print.c b/gcc/cp/cxx-pretty-print.c
+index 56502f45..04306f31 100644
+--- a/gcc/cp/cxx-pretty-print.c
++++ b/gcc/cp/cxx-pretty-print.c
+@@ -394,6 +394,10 @@ pp_cxx_primary_expression (cxx_pretty_printer *pp, tree t)
+       pp_cxx_va_arg_expression (pp, t);
+       break;
+ 
++    case OFFSETOF_EXPR:
++      pp_cxx_offsetof_expression (pp, t);
++      break;
++
+     default:
+       pp_c_primary_expression (pp_c_base (pp), t);
+       break;
+@@ -2004,6 +2008,49 @@ typedef c_pretty_print_fn pp_fun;
+ 
+ /* Initialization of a C++ pretty-printer object.  */
+ 
++static bool
++pp_cxx_offsetof_expression_1 (cxx_pretty_printer *pp, tree t)
++{
++  switch (TREE_CODE (t))
++    {
++    case ARROW_EXPR:
++      if (TREE_CODE (TREE_OPERAND (t, 0)) == STATIC_CAST_EXPR
++	  && POINTER_TYPE_P (TREE_TYPE (TREE_OPERAND (t, 0))))
++	{
++	  pp_cxx_type_id (pp, TREE_TYPE (TREE_TYPE (TREE_OPERAND (t, 0))));
++	  pp_cxx_separate_with (pp, ',');
++	  return true;
++	}
++      return false;
++    case COMPONENT_REF:
++      if (!pp_cxx_offsetof_expression_1 (pp, TREE_OPERAND (t, 0)))
++	return false;
++      if (TREE_CODE (TREE_OPERAND (t, 0)) != ARROW_EXPR)
++	pp_cxx_dot (pp);
++      pp_cxx_expression (pp, TREE_OPERAND (t, 1));
++      return true;
++    case ARRAY_REF:
++      if (!pp_cxx_offsetof_expression_1 (pp, TREE_OPERAND (t, 0)))
++	return false;
++      pp_left_bracket (pp);
++      pp_cxx_expression (pp, TREE_OPERAND (t, 1));
++      pp_right_bracket (pp);
++      return true;
++    default:
++      return false;
++    }
++}
++
++void
++pp_cxx_offsetof_expression (cxx_pretty_printer *pp, tree t)
++{
++  pp_cxx_identifier (pp, "offsetof");
++  pp_cxx_left_paren (pp);
++  if (!pp_cxx_offsetof_expression_1 (pp, TREE_OPERAND (t, 0)))
++    pp_cxx_expression (pp, TREE_OPERAND (t, 0));
++  pp_cxx_right_paren (pp);
++}
++
+ void
+ pp_cxx_pretty_printer_init (cxx_pretty_printer *pp)
+ {
+diff --git a/gcc/cp/cxx-pretty-print.h b/gcc/cp/cxx-pretty-print.h
+index c3aa3026..1328ac57 100644
+--- a/gcc/cp/cxx-pretty-print.h
++++ b/gcc/cp/cxx-pretty-print.h
+@@ -71,5 +71,5 @@ void pp_cxx_declaration (cxx_pretty_printer *, tree);
+ void pp_cxx_canonical_template_parameter (cxx_pretty_printer *, tree);
+ void pp_cxx_va_arg_expression (cxx_pretty_printer *, tree);
+ 
+-
++void pp_cxx_offsetof_expression (cxx_pretty_printer *, tree);
+ #endif /* GCC_CXX_PRETTY_PRINT_H */
+diff --git a/gcc/cp/error.c b/gcc/cp/error.c
+index cf7d9acc..64a84fd3 100644
+--- a/gcc/cp/error.c
++++ b/gcc/cp/error.c
+@@ -1918,6 +1918,10 @@ dump_expr (tree t, int flags)
+       pp_multiplicative_expression (cxx_pp, t);
+       break;
+ 
++    case OFFSETOF_EXPR:
++      pp_cxx_offsetof_expression (cxx_pp, t);
++      break;
++
+       /*  This list is incomplete, but should suffice for now.
+ 	  It is very important that `sorry' does not call
+ 	  `report_error_function'.  That could cause an infinite loop.  */
+diff --git a/gcc/testsuite/g++.dg/template/error34.C b/gcc/testsuite/g++.dg/template/error34.C
+new file mode 100644
+index 00000000..d0cbcaef
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/template/error34.C
+@@ -0,0 +1,29 @@
++// PR c++/33842
++// { dg-do compile }
++
++template<typename T> struct A
++{
++  A<__builtin_offsetof(T, x)>();	// { dg-error "type/value mismatch|offsetof\\(T, x\\)" }
++};
++
++template<typename T> struct B
++{
++  B<__builtin_offsetof(T, x.y)>();	// { dg-error "type/value mismatch|offsetof\\(T, x.y\\)" }
++};
++
++template<typename T> struct C
++{
++  C<__builtin_offsetof(T, x[6])>();	// { dg-error "type/value mismatch|offsetof\\(T, x\\\[6\\\]\\)" }
++};
++
++template<typename T> struct D
++{
++  D<__builtin_offsetof(T, x.y[6].z)>();	// { dg-error "type/value mismatch|offsetof\\(T, x.y\\\[6\\\].z\\)" }
++};
++
++struct E { int x; };
++
++template<typename T> struct F
++{
++  F<__builtin_offsetof(E, x)>();	// { dg-error "type/value mismatch|offsetof\\(E, x\\)" }
++};

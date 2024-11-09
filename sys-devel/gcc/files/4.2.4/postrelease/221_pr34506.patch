@@ -1,0 +1,110 @@
+diff --git a/gcc/c-parser.c b/gcc/c-parser.c
+index 1e955d01..e46e04ea 100644
+--- a/gcc/c-parser.c
++++ b/gcc/c-parser.c
+@@ -7132,13 +7132,20 @@ c_parser_omp_all_clauses (c_parser *parser, unsigned int mask,
+ 			  const char *where)
+ {
+   tree clauses = NULL;
++  bool first = true;
+ 
+   while (c_parser_next_token_is_not (parser, CPP_PRAGMA_EOL))
+     {
+-      const pragma_omp_clause c_kind = c_parser_omp_clause_name (parser);
++      pragma_omp_clause c_kind;
+       const char *c_name;
+       tree prev = clauses;
+ 
++      if (!first && c_parser_next_token_is (parser, CPP_COMMA))
++	c_parser_consume_token (parser);
++
++      first = false;
++      c_kind = c_parser_omp_clause_name (parser);
++
+       switch (c_kind)
+ 	{
+ 	case PRAGMA_OMP_CLAUSE_COPYIN:
+diff --git a/gcc/cp/parser.c b/gcc/cp/parser.c
+index d54738ef..ef1ce922 100644
+--- a/gcc/cp/parser.c
++++ b/gcc/cp/parser.c
+@@ -18684,13 +18684,20 @@ cp_parser_omp_all_clauses (cp_parser *parser, unsigned int mask,
+ 			   const char *where, cp_token *pragma_tok)
+ {
+   tree clauses = NULL;
++  bool first = true;
+ 
+   while (cp_lexer_next_token_is_not (parser->lexer, CPP_PRAGMA_EOL))
+     {
+-      pragma_omp_clause c_kind = cp_parser_omp_clause_name (parser);
++      pragma_omp_clause c_kind;
+       const char *c_name;
+       tree prev = clauses;
+ 
++      if (!first && cp_lexer_next_token_is (parser->lexer, CPP_COMMA))
++	cp_lexer_consume_token (parser->lexer);
++
++      c_kind = cp_parser_omp_clause_name (parser);
++      first = false;
++
+       switch (c_kind)
+ 	{
+ 	case PRAGMA_OMP_CLAUSE_COPYIN:
+diff --git a/gcc/testsuite/g++.dg/gomp/clause-4.C b/gcc/testsuite/g++.dg/gomp/clause-4.C
+new file mode 100644
+index 00000000..06b91e8a
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/gomp/clause-4.C
+@@ -0,0 +1,23 @@
++// PR c/34506
++// { dg-do compile }
++
++#define p parallel
++
++void
++foo (int x)
++{
++#pragma omp p num_threads (4) if (1) private (x)
++    ;
++#pragma omp p num_threads(4)if(1)private(x)
++    ;
++#pragma omp p num_threads (4), if (1) , private (x)
++    ;
++#pragma omp p num_threads(4),if(1),private(x)
++    ;
++#pragma omp p, num_threads (4), if (1), private (x)	// { dg-error "clause before" }
++    ;
++#pragma omp p num_threads (4), if (1), private (x),	// { dg-error "clause before" }
++    ;
++#pragma omp p num_threads (4), , if (1), private (x)	// { dg-error "clause before" }
++    ;
++}
+diff --git a/gcc/testsuite/gcc.dg/gomp/clause-2.c b/gcc/testsuite/gcc.dg/gomp/clause-2.c
+new file mode 100644
+index 00000000..4b12fc8f
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/gomp/clause-2.c
+@@ -0,0 +1,23 @@
++/* PR c/34506 */
++/* { dg-do compile } */
++
++#define p parallel
++
++void
++foo (int x)
++{
++#pragma omp p num_threads (4) if (1) private (x)
++    ;
++#pragma omp p num_threads(4)if(1)private(x)
++    ;
++#pragma omp p num_threads (4), if (1) , private (x)
++    ;
++#pragma omp p num_threads(4),if(1),private(x)
++    ;
++#pragma omp p, num_threads (4), if (1), private (x)	/* { dg-error "clause before" } */
++    ;
++#pragma omp p num_threads (4), if (1), private (x),	/* { dg-error "clause before" } */
++    ;
++#pragma omp p num_threads (4), , if (1), private (x)	/* { dg-error "clause before" } */
++    ;
++}

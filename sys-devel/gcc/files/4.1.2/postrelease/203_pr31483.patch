@@ -1,0 +1,71 @@
+diff --git a/gcc/fortran/trans-expr.c b/gcc/fortran/trans-expr.c
+index 83523aa5..0f003ac0 100644
+--- a/gcc/fortran/trans-expr.c
++++ b/gcc/fortran/trans-expr.c
+@@ -2171,17 +2171,23 @@ gfc_conv_function_call (gfc_se * se, gfc_symbol * sym,
+ 
+   /* Generate the actual call.  */
+   gfc_conv_function_val (se, sym);
++
+   /* If there are alternate return labels, function type should be
+      integer.  Can't modify the type in place though, since it can be shared
+-     with other functions.  */
++     with other functions.  For dummy arguments, the typing is done to
++     this result, even if it has to be repeated for each call.  */
+   if (has_alternate_specifier
+       && TREE_TYPE (TREE_TYPE (TREE_TYPE (se->expr))) != integer_type_node)
+     {
+-      gcc_assert (! sym->attr.dummy);
+-      TREE_TYPE (sym->backend_decl)
+-        = build_function_type (integer_type_node,
+-                               TYPE_ARG_TYPES (TREE_TYPE (sym->backend_decl)));
+-      se->expr = gfc_build_addr_expr (NULL, sym->backend_decl);
++      if (!sym->attr.dummy)
++	{      
++	  TREE_TYPE (sym->backend_decl)
++	    = build_function_type (integer_type_node,
++			     TYPE_ARG_TYPES (TREE_TYPE (sym->backend_decl)));
++	  se->expr = gfc_build_addr_expr (NULL, sym->backend_decl);
++	}
++      else
++	TREE_TYPE (TREE_TYPE (TREE_TYPE (se->expr))) = integer_type_node;
+     }
+ 
+   fntype = TREE_TYPE (TREE_TYPE (se->expr));
+diff --git a/gcc/testsuite/gfortran.dg/altreturn_5.f90 b/gcc/testsuite/gfortran.dg/altreturn_5.f90
+new file mode 100644
+index 00000000..3e482071
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/altreturn_5.f90
+@@ -0,0 +1,31 @@
++! { dg-do run }
++! Tests the fix for PR31483, in which dummy argument procedures
++! produced an ICE if they had an alternate return.
++!
++! Contributed by Mathias Fröhlich <M.Froehlich@science-computing.de>
++
++      SUBROUTINE R (i, *, *)
++      INTEGER i
++      RETURN i
++      END
++
++      SUBROUTINE PHLOAD (READER, i, res)
++      IMPLICIT NONE
++      EXTERNAL         READER
++      integer i
++      character(3) res
++      CALL READER (i, *1, *2)
++ 1    res = "one"
++      return
++ 2    res = "two"
++      return
++      END
++
++      EXTERNAL R
++      character(3) res
++      call PHLOAD (R, 1, res)
++      if (res .ne. "one") call abort ()
++      CALL PHLOAD (R, 2, res)
++      if (res .ne. "two") call abort ()
++      END
++

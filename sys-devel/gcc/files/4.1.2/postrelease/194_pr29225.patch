@@ -1,0 +1,47 @@
+diff --git a/gcc/cp/call.c b/gcc/cp/call.c
+index a3953804..d0a78462 100644
+--- a/gcc/cp/call.c
++++ b/gcc/cp/call.c
+@@ -3820,7 +3820,10 @@ build_new_op (enum tree_code code, int flags, tree arg1, tree arg2, tree arg3,
+ 	  if (overloaded_p)
+ 	    *overloaded_p = true;
+ 
+-	  result = build_over_call (cand, LOOKUP_NORMAL);
++	  if (resolve_args (arglist) == error_mark_node)
++	    result = error_mark_node;
++	  else
++	    result = build_over_call (cand, LOOKUP_NORMAL);
+ 	}
+       else
+ 	{
+diff --git a/gcc/testsuite/g++.dg/template/crash72.C b/gcc/testsuite/g++.dg/template/crash72.C
+new file mode 100644
+index 00000000..5ab53656
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/template/crash72.C
+@@ -0,0 +1,25 @@
++// PR c++/29225
++// { dg-do compile }
++
++template <typename L, typename R> bool operator< (L x, R y);
++struct T { int t (); };
++class S {};
++
++struct U
++{
++   typedef int (T::* M) ();
++   M m;
++
++   bool operator() (S &x)
++   {
++     T a;
++     return (a.*m) < x;	// { dg-error "invalid use of non-static member" }
++   }
++};
++
++void foo (S &x)
++{
++  U m;
++  m.m = &T::t;
++  m (x);
++}

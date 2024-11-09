@@ -1,0 +1,105 @@
+diff --git a/gcc/cp/semantics.c b/gcc/cp/semantics.c
+index 1fd89dd7..25b695be 100644
+--- a/gcc/cp/semantics.c
++++ b/gcc/cp/semantics.c
+@@ -1776,6 +1776,20 @@ finish_call_expr (tree fn, tree args, bool disallow_virtual, bool koenig_p)
+ 	{
+ 	  result = build_nt (CALL_EXPR, fn, args, NULL_TREE);
+ 	  KOENIG_LOOKUP_P (result) = koenig_p;
++	  if (cfun)
++	    {
++	      do
++		{
++		  tree fndecl = OVL_CURRENT (fn);
++		  if (TREE_CODE (fndecl) != FUNCTION_DECL
++		      || !TREE_THIS_VOLATILE (fndecl))
++		    break;
++		  fn = OVL_NEXT (fn);
++		}
++	      while (fn);
++	      if (!fn)
++		current_function_returns_abnormally = 1;
++	    }
+ 	  return result;
+ 	}
+       if (!BASELINK_P (fn)
+diff --git a/gcc/testsuite/g++.dg/warn/noreturn-4.C b/gcc/testsuite/g++.dg/warn/noreturn-4.C
+new file mode 100644
+index 00000000..7ef76cc5
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/warn/noreturn-4.C
+@@ -0,0 +1,13 @@
++// PR c++/30988
++// { dg-do compile }
++// { dg-options "-O2 -Wall" }
++
++void f (const char *) __attribute__ ((noreturn));
++
++template <typename T> struct A
++{
++  int g ()
++  {
++    f (__FUNCTION__);
++  }
++};
+diff --git a/gcc/testsuite/g++.dg/warn/noreturn-5.C b/gcc/testsuite/g++.dg/warn/noreturn-5.C
+new file mode 100644
+index 00000000..77d4890d
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/warn/noreturn-5.C
+@@ -0,0 +1,15 @@
++// PR c++/30988
++// { dg-do compile }
++// { dg-options "-O2 -Wall" }
++
++void f (const char *) __attribute__ ((noreturn));
++void f (int) __attribute__ ((noreturn));
++void f (double) __attribute__ ((noreturn));
++
++template <typename T> struct A
++{
++  int g ()
++  {
++    f ((T) 0);
++  }
++};
+diff --git a/gcc/testsuite/g++.dg/warn/noreturn-6.C b/gcc/testsuite/g++.dg/warn/noreturn-6.C
+new file mode 100644
+index 00000000..fdbc4251
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/warn/noreturn-6.C
+@@ -0,0 +1,13 @@
++// PR c++/30988
++// { dg-do compile }
++// { dg-options "-O2 -Wall" }
++
++void f (const char *);
++
++template <typename T> struct A
++{
++  int g ()
++  {
++    f (__FUNCTION__);
++  }	// { dg-warning "no return statement in function returning non-void" }
++};
+diff --git a/gcc/testsuite/g++.dg/warn/noreturn-7.C b/gcc/testsuite/g++.dg/warn/noreturn-7.C
+new file mode 100644
+index 00000000..a869b701
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/warn/noreturn-7.C
+@@ -0,0 +1,15 @@
++// PR c++/30988
++// { dg-do compile }
++// { dg-options "-O2 -Wall" }
++
++void f (const char *) __attribute__ ((noreturn));
++void f (int);
++void f (double) __attribute__ ((noreturn));
++
++template <typename T> struct A
++{
++  int g ()
++  {
++    f ((T) 0);
++  }	// { dg-warning "no return statement in function returning non-void" }
++};

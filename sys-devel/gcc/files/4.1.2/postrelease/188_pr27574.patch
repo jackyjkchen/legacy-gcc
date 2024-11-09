@@ -1,0 +1,120 @@
+diff --git a/gcc/cgraph.c b/gcc/cgraph.c
+index 199c6390..3d211909 100644
+--- a/gcc/cgraph.c
++++ b/gcc/cgraph.c
+@@ -479,6 +479,14 @@ cgraph_remove_node (struct cgraph_node *node)
+ 	kill_body = true;
+     }
+ 
++  /* We don't release the body of abstract functions, because they may
++     be needed when emitting debugging information.  In particular
++     this will happen for C++ constructors/destructors.  FIXME:
++     Ideally we would check to see whether there are any reachable
++     functions whose DECL_ABSTRACT_ORIGIN points to this decl.  */
++  if (DECL_ABSTRACT (node->decl))
++    kill_body = false;
++
+   if (kill_body && !dump_enabled_p (TDI_tree_all) && flag_unit_at_a_time)
+     {
+       DECL_SAVED_TREE (node->decl) = NULL;
+diff --git a/gcc/cgraphunit.c b/gcc/cgraphunit.c
+index 65a8651c..2381aa19 100644
+--- a/gcc/cgraphunit.c
++++ b/gcc/cgraphunit.c
+@@ -1391,7 +1391,10 @@ cgraph_optimize (void)
+       for (node = cgraph_nodes; node; node = node->next)
+ 	if (node->analyzed
+ 	    && (node->global.inlined_to
+-	        || DECL_SAVED_TREE (node->decl)))
++		|| DECL_SAVED_TREE (node->decl))
++	    /* Abstract functions are needed to output debug info,
++	       so don't complain about them if they are still around.  */
++	    && !DECL_ABSTRACT (node->decl))
+ 	  {
+ 	    error_found = true;
+ 	    dump_cgraph_node (stderr, node);
+diff --git a/gcc/testsuite/g++.dg/debug/dwarf2/dwarf2.exp b/gcc/testsuite/g++.dg/debug/dwarf2/dwarf2.exp
+new file mode 100644
+index 00000000..1255d063
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/debug/dwarf2/dwarf2.exp
+@@ -0,0 +1,43 @@
++#   Copyright (C) 2007, 2007 Free Software Foundation, Inc.
++
++# This program is free software; you can redistribute it and/or modify
++# it under the terms of the GNU General Public License as published by
++# the Free Software Foundation; either version 3 of the License, or
++# (at your option) any later version.
++# 
++# This program is distributed in the hope that it will be useful,
++# but WITHOUT ANY WARRANTY; without even the implied warranty of
++# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++# GNU General Public License for more details.
++# 
++# You should have received a copy of the GNU General Public License
++# along with GCC; see the file COPYING3.  If not see
++# <http://www.gnu.org/licenses/>.
++
++# G++ testsuite that uses the `dg.exp' driver.
++
++# Load support procs.
++load_lib g++-dg.exp
++
++# If a testcase doesn't have special options, use these.
++global DEFAULT_CFLAGS
++if ![info exists DEFAULT_CFLAGS] then {
++    set DEFAULT_CFLAGS " -gdwarf-2"
++}
++
++# Initialize `dg'.
++dg-init
++
++# Main loop.
++set comp_output [g++_target_compile \
++    "$srcdir/$subdir/../trivial.C" "trivial.S" assembly \
++    "additional_flags=-gdwarf-2"]
++if { ! [string match "*: target system does not support the * debug format*" \
++    $comp_output] } {
++    remove-build-file "trivial.S"
++    dg-runtest [lsort [glob -nocomplain $srcdir/$subdir/*.\[C\]]] \
++	    "" $DEFAULT_CFLAGS
++}
++
++# All done.
++dg-finish
+diff --git a/gcc/testsuite/g++.dg/debug/dwarf2/local-var-in-contructor.C b/gcc/testsuite/g++.dg/debug/dwarf2/local-var-in-contructor.C
+new file mode 100644
+index 00000000..d61d27fe
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/debug/dwarf2/local-var-in-contructor.C
+@@ -0,0 +1,30 @@
++// Contributed by Dodji Seketeli <dodji@redhat.com>
++// Origin PR27574
++// { dg-do compile }
++// { dg-options "-O0 -g" }
++// { dg-final { scan-assembler "problem" } }
++
++void f (int *)
++{
++}
++
++class A
++{
++public:
++ A(int i);
++};
++
++A::A(int i)
++{
++ int *problem = new int(i);
++ f (problem);
++}
++
++int
++main (void)
++{
++  A a (0);
++
++  return 0;
++}
++

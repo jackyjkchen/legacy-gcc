@@ -1,0 +1,56 @@
+diff --git a/gcc/fortran/parse.c b/gcc/fortran/parse.c
+index 252f7b09..3ff778dc 100644
+--- a/gcc/fortran/parse.c
++++ b/gcc/fortran/parse.c
+@@ -1420,6 +1420,7 @@ parse_interface (void)
+   gfc_interface_info save;
+   gfc_state_data s1, s2;
+   gfc_statement st;
++  locus proc_locus;
+ 
+   accept_statement (ST_INTERFACE);
+ 
+@@ -1507,6 +1508,7 @@ loop:
+   accept_statement (st);
+   prog_unit = gfc_new_block;
+   prog_unit->formal_ns = gfc_current_ns;
++  proc_locus = gfc_current_locus;
+ 
+ decl:
+   /* Read data declaration statements.  */
+@@ -1522,8 +1524,15 @@ decl:
+ 
+   current_interface = save;
+   gfc_add_interface (prog_unit);
+-
+   pop_state ();
++
++  if (current_interface.ns
++	&& current_interface.ns->proc_name
++	&& strcmp (current_interface.ns->proc_name->name,
++		   prog_unit->name) == 0)
++    gfc_error ("INTERFACE procedure '%s' at %L has the same name as the "
++	       "enclosing procedure", prog_unit->name, &proc_locus);
++
+   goto loop;
+ 
+ done:
+diff --git a/gcc/testsuite/gfortran.dg/interface_3a.f90 b/gcc/testsuite/gfortran.dg/interface_3a.f90
+new file mode 100644
+index 00000000..d47f7a53
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/interface_3a.f90
+@@ -0,0 +1,13 @@
++! { dg-do compile }
++! Contributed by Joost VandeVondele  <jv244@cam.ac.uk>
++!
++! This was found whilst investigating => segfault
++subroutine thy_sub (a)
++  interface 
++    subroutine thy_sub (a) ! { dg-error "enclosing procedure" }
++      real a
++    end subroutine
++  end interface
++  real a
++  print *, a
++end subroutine

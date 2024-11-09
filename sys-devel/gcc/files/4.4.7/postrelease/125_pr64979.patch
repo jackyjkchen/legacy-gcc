@@ -1,0 +1,149 @@
+diff --git a/gcc/testsuite/gcc.c-torture/execute/pr64979.c b/gcc/testsuite/gcc.c-torture/execute/pr64979.c
+new file mode 100644
+index 000000000..ccb46087e
+--- /dev/null
++++ b/gcc/testsuite/gcc.c-torture/execute/pr64979.c
+@@ -0,0 +1,36 @@
++/* PR target/64979 */
++
++#include <stdarg.h>
++
++void __attribute__((noinline, noclone))
++bar (int x, va_list *ap)
++{
++  if (ap)
++    {
++      int i;
++      for (i = 0; i < 10; i++)
++	if (i != va_arg (*ap, int))
++	  __builtin_abort ();
++      if (va_arg (*ap, double) != 0.5)
++	__builtin_abort ();
++    }
++}
++
++void __attribute__((noinline, noclone))
++foo (int x, ...)
++{
++  va_list ap;
++  int n;
++
++  va_start (ap, x);
++  n = va_arg (ap, int);
++  bar (x, (va_list *) ((n == 0) ? ((void *) 0) : &ap));
++  va_end (ap);
++}
++
++int
++main ()
++{
++  foo (100, 1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0.5);
++  return 0;
++}
+diff --git a/gcc/testsuite/gcc.dg/tree-ssa/stdarg-7.c b/gcc/testsuite/gcc.dg/tree-ssa/stdarg-7.c
+new file mode 100644
+index 000000000..9b497c072
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/tree-ssa/stdarg-7.c
+@@ -0,0 +1,22 @@
++/* PR target/64979 */
++/* { dg-do compile } */
++/* { dg-options "-O2 -fdump-tree-stdarg" } */
++
++#include <stdarg.h>
++
++void bar (int x, va_list *ap);
++
++void
++foo (int x, ...)
++{
++  va_list ap;
++  int n;
++
++  va_start (ap, x);
++  n = va_arg (ap, int);
++  bar (x, (va_list *) ((n == 0) ? ((void *) 0) : &ap));
++  va_end (ap);
++}
++
++/* { dg-final { scan-tree-dump "foo: va_list escapes 1, needs to save all GPR units and all FPR units" "stdarg" } } */
++/* { dg-final { cleanup-tree-dump "stdarg" } } */
+diff --git a/gcc/tree-stdarg.c b/gcc/tree-stdarg.c
+index 00fce82e7..41e86d14e 100644
+--- a/gcc/tree-stdarg.c
++++ b/gcc/tree-stdarg.c
+@@ -722,6 +722,9 @@ execute_optimize_stdarg (void)
+   FOR_EACH_BB (bb)
+     {
+       gimple_stmt_iterator i;
++      tree lhs, rhs;
++      use_operand_p uop;
++      ssa_op_iter soi;
+ 
+       si.compute_sizes = -1;
+       si.bb = bb;
+@@ -729,21 +732,19 @@ execute_optimize_stdarg (void)
+       /* For va_list_simple_ptr, we have to check PHI nodes too.  We treat
+ 	 them as assignments for the purpose of escape analysis.  This is
+ 	 not needed for non-simple va_list because virtual phis don't perform
+-	 any real data movement.  */
+-      if (va_list_simple_ptr)
++	 any real data movement.  Also, check PHI nodes for taking address of
++	 the va_list vars.  */
++      for (i = gsi_start_phis (bb); !gsi_end_p (i); gsi_next (&i))
+ 	{
+-	  tree lhs, rhs;
+-	  use_operand_p uop;
+-	  ssa_op_iter soi;
++	  unsigned int j;
++	  gimple phi = gsi_stmt (i);
++	  lhs = PHI_RESULT (phi);
+ 
+-	  for (i = gsi_start_phis (bb); !gsi_end_p (i); gsi_next (&i))
+-	    {
+-	      gimple phi = gsi_stmt (i);
+-	      lhs = PHI_RESULT (phi);
+-
+-	      if (!is_gimple_reg (lhs))
+-		continue;
++	  if (!is_gimple_reg (lhs))
++	    continue;
+ 
++	  if (va_list_simple_ptr)
++	    {
+ 	      FOR_EACH_PHI_ARG (uop, phi, soi, SSA_OP_USE)
+ 		{
+ 		  rhs = USE_FROM_PTR (uop);
+@@ -766,6 +767,21 @@ execute_optimize_stdarg (void)
+ 		    }
+ 		}
+ 	    }
++
++	  for (j = 0; !va_list_escapes && j < gimple_phi_num_args (phi); ++j)
++	    if ((!va_list_simple_ptr
++		 || TREE_CODE (gimple_phi_arg_def (phi, j)) != SSA_NAME)
++		&& walk_tree (gimple_phi_arg_def_ptr (phi, j),
++			      find_va_list_reference, &wi, NULL))
++	      {
++		if (dump_file && (dump_flags & TDF_DETAILS))
++		  {
++		    fputs ("va_list escapes in ", dump_file);
++		    print_gimple_stmt (dump_file, phi, 0, dump_flags);
++		    fputc ('\n', dump_file);
++		  }
++		va_list_escapes = true;
++	      }
+ 	}
+ 
+       for (i = gsi_start_bb (bb);
+@@ -788,8 +804,8 @@ execute_optimize_stdarg (void)
+ 
+ 	  if (is_gimple_assign (stmt))
+ 	    {
+-	      tree lhs = gimple_assign_lhs (stmt);
+-	      tree rhs = gimple_assign_rhs1 (stmt);
++	      lhs = gimple_assign_lhs (stmt);
++	      rhs = gimple_assign_rhs1 (stmt);
+ 
+ 	      if (va_list_simple_ptr)
+ 		{

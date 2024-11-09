@@ -1,0 +1,98 @@
+diff --git a/gcc/c-lang.c b/gcc/c-lang.c
+index 42004f5f9..17c716612 100644
+--- a/gcc/c-lang.c
++++ b/gcc/c-lang.c
+@@ -37,6 +37,12 @@ along with GCC; see the file COPYING3.  If not see
+ 
+ enum c_language_kind c_language = clk_c;
+ 
++static int
++c_source_language (void)
++{
++  return flag_isoc99 ? 1999 : 1989;
++}
++
+ /* Lang hooks common to C and ObjC are declared in c-objc-common.h;
+    consequently, there should be very few hooks below.  */
+ 
+@@ -44,6 +50,8 @@ enum c_language_kind c_language = clk_c;
+ #define LANG_HOOKS_NAME "GNU C"
+ #undef LANG_HOOKS_INIT
+ #define LANG_HOOKS_INIT c_objc_common_init
++#undef LANG_HOOKS_SOURCE_LANGUAGE
++#define LANG_HOOKS_SOURCE_LANGUAGE c_source_language
+ 
+ /* Each front end provides its own lang hook initializer.  */
+ const struct lang_hooks lang_hooks = LANG_HOOKS_INITIALIZER;
+diff --git a/gcc/dwarf2out.c b/gcc/dwarf2out.c
+index db31f7574..c555dfb67 100644
+--- a/gcc/dwarf2out.c
++++ b/gcc/dwarf2out.c
+@@ -12546,9 +12546,18 @@ add_bit_size_attribute (dw_die_ref die, tree decl)
+ static inline void
+ add_prototyped_attribute (dw_die_ref die, tree func_type)
+ {
+-  if (get_AT_unsigned (comp_unit_die, DW_AT_language) == DW_LANG_C89
+-      && TYPE_ARG_TYPES (func_type) != NULL)
+-    add_AT_flag (die, DW_AT_prototyped, 1);
++  switch (get_AT_unsigned (comp_unit_die, DW_AT_language))
++    {
++    case DW_LANG_C:
++    case DW_LANG_C89:
++    case DW_LANG_C99:
++    case DW_LANG_ObjC:
++      if (TYPE_ARG_TYPES (func_type) != NULL)
++	add_AT_flag (die, DW_AT_prototyped, 1);
++      break;
++    default:
++      break;
++    }
+ }
+ 
+ /* Add an 'abstract_origin' attribute below a given DIE.  The DIE is found
+@@ -14506,6 +14515,10 @@ gen_compile_unit_die (const char *filename)
+     language = DW_LANG_ObjC;
+   else if (strcmp (language_string, "GNU Objective-C++") == 0)
+     language = DW_LANG_ObjC_plus_plus;
++  else if (strcmp (language_string, "GNU C") == 0
++	   && lang_hooks.source_language
++	   && lang_hooks.source_language () >= 1999)
++	language = DW_LANG_C99;
+   else
+     language = DW_LANG_C89;
+ 
+diff --git a/gcc/langhooks-def.h b/gcc/langhooks-def.h
+index fffdf1a84..94398ace7 100644
+--- a/gcc/langhooks-def.h
++++ b/gcc/langhooks-def.h
+@@ -114,6 +114,7 @@ extern void lhd_omp_firstprivatize_type_sizes (struct gimplify_omp_ctx *,
+ #define LANG_HOOKS_EXPR_TO_DECL		lhd_expr_to_decl
+ #define LANG_HOOKS_TO_TARGET_CHARSET	lhd_to_target_charset
+ #define LANG_HOOKS_INIT_TS		lhd_do_nothing
++#define LANG_HOOKS_SOURCE_LANGUAGE	NULL
+ 
+ /* Attribute hooks.  */
+ #define LANG_HOOKS_ATTRIBUTE_TABLE		NULL
+@@ -273,6 +274,7 @@ extern tree lhd_make_node (enum tree_code);
+   LANG_HOOKS_BUILTIN_FUNCTION_EXT_SCOPE, \
+   LANG_HOOKS_INIT_TS,          \
+   LANG_HOOKS_EXPR_TO_DECL, \
++  LANG_HOOKS_SOURCE_LANGUAGE, \
+ }
+ 
+ #endif /* GCC_LANG_HOOKS_DEF_H */
+diff --git a/gcc/langhooks.h b/gcc/langhooks.h
+index 6b4b0ed46..61de3ab8a 100644
+--- a/gcc/langhooks.h
++++ b/gcc/langhooks.h
+@@ -418,6 +418,10 @@ struct lang_hooks
+      if in the process TREE_CONSTANT or TREE_SIDE_EFFECTS need updating.  */
+   tree (*expr_to_decl) (tree expr, bool *tc, bool *se);
+ 
++  /* Return year of the source language standard version if the FE supports
++     multiple versions of the standard.  */
++  int (*source_language) (void);
++
+   /* Whenever you add entries here, make sure you adjust langhooks-def.h
+      and langhooks.c accordingly.  */
+ };

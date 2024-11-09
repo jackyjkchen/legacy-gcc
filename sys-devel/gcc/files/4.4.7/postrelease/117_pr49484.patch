@@ -1,0 +1,109 @@
+diff --git a/gcc/gthr-posix.h b/gcc/gthr-posix.h
+index 4264bcc02..f344265b7 100644
+--- a/gcc/gthr-posix.h
++++ b/gcc/gthr-posix.h
+@@ -54,6 +54,7 @@ typedef struct timespec __gthread_time_t;
+ #define __GTHREAD_HAS_COND	1	
+ 
+ #define __GTHREAD_MUTEX_INIT PTHREAD_MUTEX_INITIALIZER
++#define __GTHREAD_MUTEX_INIT_FUNCTION2 __gthread_mutex_init_function2
+ #define __GTHREAD_ONCE_INIT PTHREAD_ONCE_INIT
+ #if defined(PTHREAD_RECURSIVE_MUTEX_INITIALIZER)
+ #define __GTHREAD_RECURSIVE_MUTEX_INIT PTHREAD_RECURSIVE_MUTEX_INITIALIZER
+@@ -715,6 +716,13 @@ __gthread_setspecific (__gthread_key_t __key, const void *__ptr)
+   return __gthrw_(pthread_setspecific) (__key, __ptr);
+ }
+ 
++static inline void
++__gthread_mutex_init_function2 (__gthread_mutex_t *__mutex)
++{
++  if (__gthread_active_p ())
++    __gthrw_(pthread_mutex_init) (__mutex, NULL);
++}
++
+ static inline int
+ __gthread_mutex_destroy (__gthread_mutex_t *__mutex)
+ {
+diff --git a/gcc/libgcov.c b/gcc/libgcov.c
+index 6b13940e4..bfdb6bc58 100644
+--- a/gcc/libgcov.c
++++ b/gcc/libgcov.c
+@@ -29,12 +29,11 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+ #include "tsystem.h"
+ #include "coretypes.h"
+ #include "tm.h"
++#include "gthr.h"
+ 
+ #if defined(inhibit_libc)
+ #define IN_LIBGCOV (-1)
+ #else
+-#undef NULL /* Avoid errors if stdio.h and our stddef.h mismatch.  */
+-#include <stdio.h>
+ #define IN_LIBGCOV 1
+ #if defined(L_gcov)
+ #define GCOV_LINKAGE /* nothing */
+@@ -572,6 +571,25 @@ __gcov_init (struct gcov_info *info)
+   info->version = 0;
+ }
+ 
++#ifdef __GTHREAD_MUTEX_INIT
++ATTRIBUTE_HIDDEN __gthread_mutex_t __gcov_flush_mx = __GTHREAD_MUTEX_INIT;
++#define init_mx_once()
++#else
++__gthread_mutex_t __gcov_flush_mx ATTRIBUTE_HIDDEN;
++
++static void
++init_mx (void)
++{
++  __GTHREAD_MUTEX_INIT_FUNCTION (&__gcov_flush_mx);
++}
++static void
++init_mx_once (void)
++{
++  static __gthread_once_t once = __GTHREAD_ONCE_INIT;
++  __gthread_once (&once, init_mx);
++}
++#endif
++
+ /* Called before fork or exec - write out profile information gathered so
+    far and reset it to zero.  This avoids duplication or loss of the
+    profile information gathered so far.  */
+@@ -581,6 +599,9 @@ __gcov_flush (void)
+ {
+   const struct gcov_info *gi_ptr;
+ 
++  init_mx_once ();
++  __gthread_mutex_lock (&__gcov_flush_mx);
++
+   gcov_exit ();
+   for (gi_ptr = gcov_list; gi_ptr; gi_ptr = gi_ptr->next)
+     {
+@@ -594,6 +615,8 @@ __gcov_flush (void)
+ 	    ci_ptr++;
+ 	  }
+     }
++
++  __gthread_mutex_unlock (&__gcov_flush_mx);
+ }
+ 
+ #endif /* L_gcov */
+@@ -814,8 +837,18 @@ __gcov_ior_profiler (gcov_type *counters, gcov_type value)
+ pid_t
+ __gcov_fork (void)
+ {
++  pid_t pid;
++  extern __gthread_mutex_t __gcov_flush_mx;
+   __gcov_flush ();
+-  return fork ();
++  pid = fork ();
++#ifdef __GTHREAD_MUTEX_INIT_FUNCTION2
++  if (pid == 0)
++    __GTHREAD_MUTEX_INIT_FUNCTION2 (&__gcov_flush_mx);
++#elif defined(__GTHREAD_MUTEX_INIT_FUNCTION)
++  if (pid == 0)
++    __GTHREAD_MUTEX_INIT_FUNCTION (&__gcov_flush_mx);
++#endif
++  return pid;
+ }
+ #endif
+ 

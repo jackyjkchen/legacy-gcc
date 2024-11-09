@@ -1,0 +1,78 @@
+diff --git a/gcc/cp/call.c b/gcc/cp/call.c
+index d0a78462..e6e39618 100644
+--- a/gcc/cp/call.c
++++ b/gcc/cp/call.c
+@@ -4843,7 +4843,8 @@ build_over_call (struct z_candidate *cand, int flags)
+ 
+       /* Don't make a copy here if build_call is going to.  */
+       if (conv->kind == ck_rvalue
+-	  && !TREE_ADDRESSABLE (complete_type (type)))
++	  && COMPLETE_TYPE_P (complete_type (type))
++	  && !TREE_ADDRESSABLE (type))
+ 	conv = conv->u.next;
+ 
+       val = convert_like_with_context
+diff --git a/gcc/testsuite/g++.dg/template/incomplete4.C b/gcc/testsuite/g++.dg/template/incomplete4.C
+new file mode 100644
+index 00000000..f6dbfa8c
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/template/incomplete4.C
+@@ -0,0 +1,16 @@
++// PR c++/33501
++// { dg-do compile }
++
++class A;	// { dg-error "forward declaration" }
++
++template <typename T> struct X
++{
++  static int f (T);
++  static const T &make ();
++};
++
++int
++main ()
++{
++  return X<A>::f (X<A>::make ());	// { dg-error "invalid use of undefined type|initializing argument" }
++}
+diff --git a/gcc/testsuite/g++.dg/template/incomplete5.C b/gcc/testsuite/g++.dg/template/incomplete5.C
+new file mode 100644
+index 00000000..7bf8d780
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/template/incomplete5.C
+@@ -0,0 +1,17 @@
++// PR c++/33501
++// { dg-do compile }
++
++class A;	// { dg-error "forward declaration" }
++
++template <typename T> struct X
++{
++  static int f (T);
++  static const T &make ();
++  static const bool value = sizeof (f (make ())) == sizeof (int);	// { dg-error "invalid use of undefined type|initializing argument" }
++};
++
++int
++main ()
++{
++  return X <A>::value;
++}
+diff --git a/gcc/testsuite/g++.dg/warn/incomplete2.C b/gcc/testsuite/g++.dg/warn/incomplete2.C
+new file mode 100644
+index 00000000..71e1ba0a
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/warn/incomplete2.C
+@@ -0,0 +1,13 @@
++// PR c++/33501
++// { dg-do compile }
++
++class A;	// { dg-error "forward declaration" }
++
++int f (A);
++const A &make ();
++
++int
++main ()
++{
++  return f (make ());	// { dg-error "invalid use of undefined type|initializing argument" }
++}

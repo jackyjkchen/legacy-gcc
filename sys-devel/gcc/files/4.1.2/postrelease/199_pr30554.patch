@@ -1,0 +1,204 @@
+diff --git a/gcc/fortran/module.c b/gcc/fortran/module.c
+index 2fc381c6..e5ee6e93 100644
+--- a/gcc/fortran/module.c
++++ b/gcc/fortran/module.c
+@@ -3189,6 +3189,31 @@ read_cleanup (pointer_info * p)
+ }
+ 
+ 
++/* Given a root symtree node and a symbol, try to find a symtree that
++   references the symbol that is not a unique name.  */
++
++static gfc_symtree *
++find_symtree_for_symbol (gfc_symtree *st, gfc_symbol *sym)
++{
++  gfc_symtree *s = NULL;
++
++  if (st == NULL)
++    return s;
++
++  s = find_symtree_for_symbol (st->right, sym);
++  if (s != NULL)
++    return s;
++  s = find_symtree_for_symbol (st->left, sym);
++  if (s != NULL)
++    return s;
++
++  if (st->n.sym == sym && !check_unique_name (st->name))
++    return st;
++
++  return s;
++}
++
++
+ /* Read a module file.  */
+ 
+ static void
+@@ -3199,7 +3224,7 @@ read_module (void)
+   char name[GFC_MAX_SYMBOL_LEN + 1];
+   gfc_intrinsic_op i;
+   int ambiguous, j, nuse, symbol;
+-  pointer_info *info;
++  pointer_info *info, *q;
+   gfc_use_rename *u;
+   gfc_symtree *st;
+   gfc_symbol *sym;
+@@ -3255,8 +3280,27 @@ read_module (void)
+ 	continue;
+ 
+       info->u.rsym.state = USED;
+-      info->u.rsym.referenced = 1;
+       info->u.rsym.sym = sym;
++
++      /* Some symbols do not have a namespace (eg. formal arguments),
++	 so the automatic "unique symtree" mechanism must be suppressed
++	 by marking them as referenced.  */
++      q = get_integer (info->u.rsym.ns);
++      if (q->u.pointer == NULL)
++	{
++	  info->u.rsym.referenced = 1;
++	  continue;
++	}
++
++      /* If possible recycle the symtree that references the symbol.
++	 If a symtree is not found and the module does not import one,
++	 a unique-name symtree is found by read_cleanup.  */
++      st = find_symtree_for_symbol (gfc_current_ns->sym_root, sym);
++      if (st != NULL)
++	{
++	  info->u.rsym.symtree = st;
++	  info->u.rsym.referenced = 1;
++	}
+     }
+ 
+   mio_rparen ();
+@@ -3286,15 +3330,22 @@ read_module (void)
+ 	  /* Get the jth local name for this symbol.  */
+ 	  p = find_use_name_n (name, &j);
+ 
+-	  /* Skip symtree nodes not in an ONLY clause.  */
++	  /* Skip symtree nodes not in an ONLY clause, unless there
++	     is an existing symtree loaded from another USE
++	     statement.  */
+ 	  if (p == NULL)
+-	    continue;
++	    {
++	      st = gfc_find_symtree (gfc_current_ns->sym_root, name);
++	      if (st != NULL)
++		info->u.rsym.symtree = st;
++	      continue;
++	    }
+ 
+-	  /* Check for ambiguous symbols.  */
+ 	  st = gfc_find_symtree (gfc_current_ns->sym_root, p);
+ 
+ 	  if (st != NULL)
+ 	    {
++	      /* Check for ambiguous symbols.  */
+ 	      if (st->n.sym != info->u.rsym.sym)
+ 		st->ambiguous = 1;
+ 	      info->u.rsym.symtree = st;
+diff --git a/gcc/testsuite/gfortran.dg/used_dummy_types_6.f90 b/gcc/testsuite/gfortran.dg/used_dummy_types_6.f90
+new file mode 100644
+index 00000000..ea390512
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/used_dummy_types_6.f90
+@@ -0,0 +1,47 @@
++! { dg-do compile }
++! Tests the fix for PR30554, the USE statements in potential_energy
++! would cause a segfault because the pointer_info for nfree coming
++! from constraint would not find the existing symtree coming directly
++! from atom.
++!
++! The last two modules came up subsequently to the original fix.  The
++! PRIVATE statement caused a revival of the original problem.  This
++! was tracked down to an interaction between the symbols being set
++! referenced during module read and the application of the access
++! attribute.
++!
++! Contributed by Tobias Burnus <burnus@gcc.gnu.org>
++
++MODULE ATOMS
++INTEGER :: NFREE = 0
++END MODULE ATOMS
++
++MODULE CONSTRAINT
++USE ATOMS, ONLY: NFREE
++CONTAINS
++   SUBROUTINE ENERGY_CONSTRAINT ( HESSIAN )
++   REAL , DIMENSION(1:(3*NFREE*(3*NFREE+1))/2):: HESSIAN
++   END SUBROUTINE ENERGY_CONSTRAINT
++END MODULE CONSTRAINT
++
++MODULE POTENTIAL_ENERGY
++USE ATOMS
++USE CONSTRAINT,         ONLY : ENERGY_CONSTRAINT
++END MODULE POTENTIAL_ENERGY
++
++MODULE P_CONSTRAINT
++USE ATOMS, ONLY: NFREE
++PRIVATE
++PUBLIC :: ENERGY_CONSTRAINT
++CONTAINS
++   SUBROUTINE ENERGY_CONSTRAINT ( HESSIAN )
++   REAL , DIMENSION(1:(3*NFREE*(3*NFREE+1))/2):: HESSIAN
++   END SUBROUTINE ENERGY_CONSTRAINT
++END MODULE P_CONSTRAINT
++
++MODULE P_POTENTIAL_ENERGY
++USE ATOMS
++USE CONSTRAINT,         ONLY : ENERGY_CONSTRAINT
++END MODULE P_POTENTIAL_ENERGY
++
++! { dg-final { cleanup-modules "atoms constraint potential_energy p_constraint p_potential_energy" } }
+diff --git a/gcc/testsuite/gfortran.dg/used_dummy_types_7.f90 b/gcc/testsuite/gfortran.dg/used_dummy_types_7.f90
+new file mode 100644
+index 00000000..9e591b23
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/used_dummy_types_7.f90
+@@ -0,0 +1,45 @@
++! { dg-do compile }
++! This tests a patch for a regression caused by the second part of
++! the fix for PR30554.  The linked derived types dummy_atom and
++! dummy_atom_list caused a segment fault because they do not have
++! a namespace.
++!
++! Contributed by Daniel Franke <franke.daniel@gmail.com>
++! 
++MODULE types
++TYPE :: dummy_atom_list
++  TYPE(dummy_atom), DIMENSION(:), POINTER :: table => null()
++END TYPE
++
++TYPE :: dummy_atom
++  TYPE(dummy_atom_private), POINTER :: p => null()
++END TYPE
++
++TYPE :: dummy_atom_private
++  INTEGER                     :: id
++END TYPE
++END MODULE
++
++MODULE atom
++USE types, ONLY: dummy_atom
++INTERFACE
++  SUBROUTINE dummy_atom_insert_symmetry_mate(this, other)
++    USE types, ONLY: dummy_atom
++    TYPE(dummy_atom), INTENT(inout) :: this
++    TYPE(dummy_atom), INTENT(in)    :: other
++  END SUBROUTINE
++END INTERFACE
++END MODULE
++
++MODULE list
++INTERFACE
++  SUBROUTINE dummy_atom_list_insert(this, atom)
++    USE types, ONLY: dummy_atom_list
++    USE atom, ONLY: dummy_atom
++
++    TYPE(dummy_atom_list), INTENT(inout) :: this
++    TYPE(dummy_atom), INTENT(in)         :: atom
++  END SUBROUTINE
++END INTERFACE
++END MODULE
++! { dg-final { cleanup-modules "atom types list" } }

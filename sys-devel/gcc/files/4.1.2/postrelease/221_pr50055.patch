@@ -1,0 +1,51 @@
+diff --git a/gcc/cp/except.c b/gcc/cp/except.c
+index b4bad02e..b0b88933 100644
+--- a/gcc/cp/except.c
++++ b/gcc/cp/except.c
+@@ -499,7 +499,11 @@ expand_end_catch_block (void)
+ tree
+ begin_eh_spec_block (void)
+ {
+-  tree r = build_stmt (EH_SPEC_BLOCK, NULL_TREE, NULL_TREE);
++  tree r;
++  location_t saved_loc = input_location;
++  input_location = DECL_SOURCE_LOCATION (current_function_decl);
++  r = build_stmt (EH_SPEC_BLOCK, NULL_TREE, NULL_TREE);
++  input_location = saved_loc;
+   add_stmt (r);
+   EH_SPEC_STMTS (r) = push_stmt_list ();
+   return r;
+diff --git a/gcc/testsuite/g++.dg/gcov/gcov-7.C b/gcc/testsuite/g++.dg/gcov/gcov-7.C
+new file mode 100644
+index 00000000..db3e95a0
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/gcov/gcov-7.C
+@@ -0,0 +1,28 @@
++/* Check that Exception handler specification is not
++   mapped to the curly braces below the function
++   declaration.  */
++
++/* { dg-options "-fprofile-arcs -ftest-coverage" } */
++/* { dg-do run { target native } } */
++
++struct foo
++{
++  foo () throw (int)
++    {			/* count (-) */
++      throw (1);
++    }
++};
++
++int main ()
++{
++  try
++    {
++      foo f;
++    }
++  catch ( ...)
++    {
++      return 0;
++    }
++}
++
++/* { dg-final { run-gcov gcov-7.C } } */

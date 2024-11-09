@@ -1,0 +1,59 @@
+diff --git a/gcc/cp/cp-gimplify.c b/gcc/cp/cp-gimplify.c
+index f67399703..7ead72338 100644
+--- a/gcc/cp/cp-gimplify.c
++++ b/gcc/cp/cp-gimplify.c
+@@ -955,6 +955,23 @@ cp_genericize (tree fndecl)
+       DECL_BY_REFERENCE (t) = 1;
+       TREE_ADDRESSABLE (t) = 0;
+       relayout_decl (t);
++      if (DECL_NAME (t))
++	{
++	  /* Adjust DECL_VALUE_EXPR of the original var.  */
++	  tree outer = outer_curly_brace_block (current_function_decl);
++	  tree var;
++
++	  if (outer)
++	    for (var = BLOCK_VARS (outer); var; var = TREE_CHAIN (var))
++	      if (DECL_NAME (t) == DECL_NAME (var)
++		  && DECL_HAS_VALUE_EXPR_P (var)
++		  && DECL_VALUE_EXPR (var) == t)
++		{
++		  tree val = convert_from_reference (t);
++		  SET_DECL_VALUE_EXPR (var, val);
++		  break;
++		}
++	}
+     }
+ 
+   /* If we're a clone, the body is already GIMPLE.  */
+diff --git a/gcc/testsuite/g++.dg/guality/pr46815.C b/gcc/testsuite/g++.dg/guality/pr46815.C
+new file mode 100644
+index 000000000..41b921995
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/guality/pr46815.C
+@@ -0,0 +1,25 @@
++// PR debug/46815
++// { dg-do run }
++// { dg-options "-g" }
++// { dg-skip-if "" { *-*-* }  { "*" } { "-O0" } }
++
++struct S
++{
++  int i;
++  S () { i = 42; }
++  virtual void foo (void) {}
++};
++
++S
++bar ()
++{
++  S s;
++  return s;	// { dg-final { gdb-test 17 "s.i" "42" } }
++}
++
++int
++main ()
++{
++  S s = bar ();
++  return s.i - 42;
++}

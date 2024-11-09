@@ -1,0 +1,51 @@
+diff --git a/gcc/fortran/resolve.c b/gcc/fortran/resolve.c
+index 4b814d8d..7af2ded3 100644
+--- a/gcc/fortran/resolve.c
++++ b/gcc/fortran/resolve.c
+@@ -1483,10 +1483,16 @@ resolve_function (gfc_expr * expr)
+ 	    
+       for (arg = expr->value.function.actual; arg; arg = arg->next)
+ 	{
+-	  if (inquiry && arg->next != NULL && arg->next->expr
+-		&& arg->next->expr->expr_type != EXPR_CONSTANT)
+-	    break;
+-	  
++	  if (inquiry && arg->next != NULL && arg->next->expr)
++	    {
++	      if (arg->next->expr->expr_type != EXPR_CONSTANT)
++		break;
++
++	      if ((int)mpz_get_si (arg->next->expr->value.integer)
++			< arg->expr->rank)
++		break;
++	    }
++
+ 	  if (arg->expr != NULL
+ 		&& arg->expr->rank > 0
+ 		&& resolve_assumed_size_actual (arg->expr))
+diff --git a/gcc/testsuite/gfortran.dg/bound_2.f90 b/gcc/testsuite/gfortran.dg/bound_2.f90
+index 0e4dda76..0b92607e 100644
+--- a/gcc/testsuite/gfortran.dg/bound_2.f90
++++ b/gcc/testsuite/gfortran.dg/bound_2.f90
+@@ -194,7 +194,7 @@ contains
+   subroutine foo (x,n)
+     integer :: x(7,n,2,*), n
+ 
+-    !if (ubound(x,1) /= 7 .or. ubound(x,2) /= 4 .or. ubound(x,3) /= 2) call abort
++    if (ubound(x,1) /= 7 .or. ubound(x,2) /= 4 .or. ubound(x,3) /= 2) call abort
+   end subroutine foo
+ 
+   subroutine jackal (b, c)
+diff --git a/gcc/testsuite/gfortran.dg/initialization_1.f90 b/gcc/testsuite/gfortran.dg/initialization_1.f90
+index d2cf6638..1088de9c 100644
+--- a/gcc/testsuite/gfortran.dg/initialization_1.f90
++++ b/gcc/testsuite/gfortran.dg/initialization_1.f90
+@@ -30,7 +30,7 @@ contains
+     integer :: m2(2) = shape (x)  ! { dg-error "assumed size array" }
+ 
+ ! These are warnings because they are gfortran extensions.
+-    integer :: m3 = size (x, 1)   ! { dg-warning "upper bound in the last dimension" }
++    integer :: m3 = size (x, 1)   ! { dg-warning "Evaluation of nonstandard initialization" }
+     integer :: m4(2) = shape (z)  ! { dg-warning "Evaluation of nonstandard initialization" }
+ 
+ ! This does not depend on non-constant properties.

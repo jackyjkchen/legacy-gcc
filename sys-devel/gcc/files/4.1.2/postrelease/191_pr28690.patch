@@ -1,0 +1,141 @@
+diff --git a/gcc/config/rs6000/rs6000.h b/gcc/config/rs6000/rs6000.h
+index 16ab3483..7878abf6 100644
+--- a/gcc/config/rs6000/rs6000.h
++++ b/gcc/config/rs6000/rs6000.h
+@@ -57,6 +57,8 @@
+ #define PPC405_ERRATUM77 0
+ #endif
+ 
++#define TARGET_INDEX_OPERAND_FIRST (rs6000_cpu == PROCESSOR_POWER6)
++
+ /* Common ASM definitions used by ASM_SPEC among the various targets
+    for handling -mcpu=xxx switches.  */
+ #define ASM_CPU_SPEC \
+diff --git a/gcc/defaults.h b/gcc/defaults.h
+index abb681f8..2c5a105e 100644
+--- a/gcc/defaults.h
++++ b/gcc/defaults.h
+@@ -773,6 +773,10 @@ Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
+ #define TARGET_C99_FUNCTIONS 0
+ #endif
+ 
++#ifndef TARGET_INDEX_OPERAND_FIRST
++#define TARGET_INDEX_OPERAND_FIRST 0
++#endif
++
+ /* Indicate that CLZ and CTZ are undefined at zero.  */
+ #ifndef CLZ_DEFINED_VALUE_AT_ZERO
+ #define CLZ_DEFINED_VALUE_AT_ZERO(MODE, VALUE)  0
+diff --git a/gcc/optabs.c b/gcc/optabs.c
+index c68af4c5..2266bc08 100644
+--- a/gcc/optabs.c
++++ b/gcc/optabs.c
+@@ -3673,12 +3673,16 @@ emit_cmp_and_jump_insns (rtx x, rtx y, enum rtx_code comparison, rtx size,
+   /* Swap operands and condition to ensure canonical RTL.  */
+   if (swap_commutative_operands_p (x, y))
+     {
+-      /* If we're not emitting a branch, this means some caller
+-         is out of sync.  */
+-      gcc_assert (label);
++      enum rtx_code swapped_comparison = swap_condition (comparison);
++
++      /* If we're not emitting a branch, callers are required to pass
++	 operands in an order conforming to canonical RTL.  We relax this
++	 for commutative comparsions so callers using EQ don't need to do
++	 swapping by hand.  */
++      gcc_assert (label || swapped_comparison == comparison);
+ 
+       op0 = y, op1 = x;
+-      comparison = swap_condition (comparison);
++      comparison = swapped_comparison;
+     }
+ 
+ #ifdef HAVE_cc0
+diff --git a/gcc/rtlanal.c b/gcc/rtlanal.c
+index da2cd9b0..db7dbebc 100644
+--- a/gcc/rtlanal.c
++++ b/gcc/rtlanal.c
+@@ -2890,9 +2890,9 @@ commutative_operand_precedence (rtx op)
+   
+   /* Constants always come the second operand.  Prefer "nice" constants.  */
+   if (code == CONST_INT)
+-    return -7;
++    return -10;
+   if (code == CONST_DOUBLE)
+-    return -6;
++    return -9;
+   op = avoid_constant_pool_reference (op);
+   code = GET_CODE (op);
+ 
+@@ -2900,26 +2900,31 @@ commutative_operand_precedence (rtx op)
+     {
+     case RTX_CONST_OBJ:
+       if (code == CONST_INT)
+-        return -5;
++	return -8;
+       if (code == CONST_DOUBLE)
+-        return -4;
+-      return -3;
++	return -7;
++      return -6;
+ 
+     case RTX_EXTRA:
+       /* SUBREGs of objects should come second.  */
+       if (code == SUBREG && OBJECT_P (SUBREG_REG (op)))
+-        return -2;
++	return -5;
+ 
+       if (!CONSTANT_P (op))
+         return 0;
+       else
+ 	/* As for RTX_CONST_OBJ.  */
+-	return -3;
++	return -6;
+ 
+     case RTX_OBJ:
+       /* Complex expressions should be the first, so decrease priority
+          of objects.  */
+-      return -1;
++      if (!TARGET_INDEX_OPERAND_FIRST)
++	return -1;
++      if (REG_P (op))
++	return (REG_POINTER (op)) ? -1 : -3;
++      else
++	return (MEM_P (op) && MEM_POINTER (op)) ? -2 : -4;
+ 
+     case RTX_COMM_ARITH:
+       /* Prefer operands that are themselves commutative to be first.
+@@ -2949,8 +2954,16 @@ commutative_operand_precedence (rtx op)
+ int
+ swap_commutative_operands_p (rtx x, rtx y)
+ {
+-  return (commutative_operand_precedence (x)
+-	  < commutative_operand_precedence (y));
++  int result = (commutative_operand_precedence (x)
++		- commutative_operand_precedence (y));
++  if (!TARGET_INDEX_OPERAND_FIRST || result)
++    return result < 0;
++
++  /* Group together equal REGs to do more simplification.  */
++  if (REG_P (x) && REG_P (y))
++    return REGNO (x) > REGNO (y);
++
++  return 0;
+ }
+ 
+ /* Return 1 if X is an autoincrement side effect and the register is
+diff --git a/gcc/tree-ssa-address.c b/gcc/tree-ssa-address.c
+index 9dbc399d..bb93e651 100644
+--- a/gcc/tree-ssa-address.c
++++ b/gcc/tree-ssa-address.c
+@@ -124,7 +124,9 @@ gen_addr_rtx (rtx symbol, rtx base, rtx index, rtx step, rtx offset,
+   if (base)
+     {
+       if (*addr)
+-	*addr = gen_rtx_PLUS (Pmode, *addr, base);
++	*addr = (TARGET_INDEX_OPERAND_FIRST
++		 ? simplify_gen_binary (PLUS, Pmode, base, *addr)
++		 : gen_rtx_PLUS (Pmode, *addr, base));
+       else
+ 	*addr = base;
+     }

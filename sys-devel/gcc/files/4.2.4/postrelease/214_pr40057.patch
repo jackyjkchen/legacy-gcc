@@ -1,0 +1,77 @@
+diff --git a/gcc/dojump.c b/gcc/dojump.c
+index 3cad7f52..00efa122 100644
+--- a/gcc/dojump.c
++++ b/gcc/dojump.c
+@@ -141,7 +141,8 @@ prefer_and_bit_test (enum machine_mode mode, int bitnum)
+     }
+ 
+   /* Fill in the integers.  */
+-  XEXP (and_test, 1) = GEN_INT ((unsigned HOST_WIDE_INT) 1 << bitnum);
++  XEXP (and_test, 1)
++    = immed_double_const ((unsigned HOST_WIDE_INT) 1 << bitnum, 0, mode);
+   XEXP (XEXP (shift_test, 0), 1) = GEN_INT (bitnum);
+ 
+   return (rtx_cost (and_test, IF_THEN_ELSE)
+@@ -251,10 +252,15 @@ do_jump (tree exp, rtx if_false_label, rtx if_true_label)
+ 		  && prefer_and_bit_test (TYPE_MODE (argtype),
+ 					  TREE_INT_CST_LOW (shift)))
+ 		{
+-		  HOST_WIDE_INT mask = (HOST_WIDE_INT) 1
+-				       << TREE_INT_CST_LOW (shift);
+-		  do_jump (build2 (BIT_AND_EXPR, argtype, arg,
+-				   build_int_cst_type (argtype, mask)),
++		  unsigned HOST_WIDE_INT mask
++		    = (unsigned HOST_WIDE_INT) 1 << TREE_INT_CST_LOW (shift);
++		  tree maskt;
++
++		  if (TYPE_PRECISION (argtype) <= HOST_BITS_PER_WIDE_INT)
++		    maskt = build_int_cst_type (argtype, mask);
++		  else
++		    maskt = build_int_cstu (argtype, mask);
++		  do_jump (build2 (BIT_AND_EXPR, argtype, arg, maskt),
+ 			   clr_label, set_label);
+ 		  break;
+ 		}
+diff --git a/gcc/testsuite/gcc.c-torture/execute/pr40057.c b/gcc/testsuite/gcc.c-torture/execute/pr40057.c
+new file mode 100644
+index 00000000..9d5c4e31
+--- /dev/null
++++ b/gcc/testsuite/gcc.c-torture/execute/pr40057.c
+@@ -0,0 +1,37 @@
++/* PR middle-end/40057 */
++
++extern void abort (void);
++
++__attribute__((noinline)) int
++foo (unsigned long long x)
++{
++  unsigned long long y = (x >> 31ULL) & 1ULL;
++  if (y == 0ULL)
++    return 0;
++  return -1;
++}
++
++__attribute__((noinline)) int
++bar (long long x)
++{
++  long long y = (x >> 31LL) & 1LL;
++  if (y == 0LL)
++    return 0;
++  return -1;
++}
++
++int
++main (void)
++{
++  if (sizeof (long long) != 8)
++    return 0;
++  if (foo (0x1682a9aaaULL))
++    abort ();
++  if (!foo (0x1882a9aaaULL))
++    abort ();
++  if (bar (0x1682a9aaaLL))
++    abort ();
++  if (!bar (0x1882a9aaaLL))
++    abort ();
++  return 0;
++}

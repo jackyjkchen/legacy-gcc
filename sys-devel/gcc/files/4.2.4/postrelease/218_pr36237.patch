@@ -1,0 +1,55 @@
+diff --git a/gcc/cp/cp-gimplify.c b/gcc/cp/cp-gimplify.c
+index 2f10d241..6ac4d6aa 100644
+--- a/gcc/cp/cp-gimplify.c
++++ b/gcc/cp/cp-gimplify.c
+@@ -845,6 +845,8 @@ cxx_omp_clause_apply_fn (tree fn, tree arg1, tree arg2)
+ 						  TREE_PURPOSE (parm),
+ 						  fn, i++), t);
+       t = build_call (fn, nreverse (t));
++      t = fold_convert (void_type_node, t);
++      t = fold_build_cleanup_point_expr (TREE_TYPE (t), t);
+       append_to_statement_list (t, &ret);
+ 
+       t = fold_convert (TREE_TYPE (p1), TYPE_SIZE_UNIT (inner_type));
+@@ -877,7 +879,9 @@ cxx_omp_clause_apply_fn (tree fn, tree arg1, tree arg2)
+ 	t = tree_cons (NULL, convert_default_arg (TREE_VALUE (parm),
+ 						  TREE_PURPOSE (parm),
+ 						  fn, i++), t);
+-      return build_call (fn, nreverse (t));
++      t = build_call (fn, nreverse (t));
++      t = fold_convert (void_type_node, t);
++      return fold_build_cleanup_point_expr (TREE_TYPE (t), t);
+     }
+ }
+ 
+diff --git a/gcc/testsuite/g++.dg/gomp/pr36237.C b/gcc/testsuite/g++.dg/gomp/pr36237.C
+new file mode 100644
+index 00000000..29c7adc8
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/gomp/pr36237.C
+@@ -0,0 +1,25 @@
++// PR c++/36237
++// { dg-do compile }
++// { dg-options "-fopenmp" }
++
++struct A
++{
++  ~A ();
++};
++
++struct B
++{
++  B (const A &x = A ()) : a (x) { }
++  A a;
++};
++
++B var;
++
++void bar ();
++
++void
++foo ()
++{
++  #pragma omp parallel private (var)
++    bar ();
++}

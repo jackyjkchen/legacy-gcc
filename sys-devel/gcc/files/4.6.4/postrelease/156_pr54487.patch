@@ -1,0 +1,125 @@
+diff --git a/gcc/config.in b/gcc/config.in
+index 584ec65b2..23f7181fc 100644
+--- a/gcc/config.in
++++ b/gcc/config.in
+@@ -1547,6 +1547,12 @@
+ #endif
+ 
+ 
++/* Define if F_SETLKW supported by fcntl. */
++#ifndef USED_FOR_TARGET
++#undef HOST_HAS_F_SETLKW
++#endif
++
++
+ /* Define as const if the declaration of iconv() needs const. */
+ #ifndef USED_FOR_TARGET
+ #undef ICONV_CONST
+diff --git a/gcc/configure b/gcc/configure
+index e93cf3674..21093511d 100755
+--- a/gcc/configure
++++ b/gcc/configure
+@@ -10461,6 +10461,76 @@ $as_echo "#define HAVE_CLOCK_T 1" >>confdefs.h
+ 
+ fi
+ 
++# Check if F_SETLKW is supported by fcntl.
++echo "$as_me:$LINENO: checking for F_SETLKW" >&5
++echo $ECHO_N "checking for F_SETLKW... $ECHO_C" >&6
++if test "${ac_cv_f_setlkw+set}" = set; then
++  echo $ECHO_N "(cached) $ECHO_C" >&6
++else
++
++cat >conftest.$ac_ext <<_ACEOF
++/* confdefs.h.  */
++_ACEOF
++cat confdefs.h >>conftest.$ac_ext
++cat >>conftest.$ac_ext <<_ACEOF
++/* end confdefs.h.  */
++
++#include <fcntl.h>
++int
++main ()
++{
++
++struct flock fl;
++fl.l_whence = 0;
++fl.l_start = 0;
++fl.l_len = 0;
++fl.l_pid = 0;
++return fcntl (1, F_SETLKW, &fl);
++  ;
++  return 0;
++}
++_ACEOF
++rm -f conftest.$ac_objext
++if { (eval echo "$as_me:$LINENO: \"$ac_compile\"") >&5
++  (eval $ac_compile) 2>conftest.er1
++  ac_status=$?
++  grep -v '^ *+' conftest.er1 >conftest.err
++  rm -f conftest.er1
++  cat conftest.err >&5
++  echo "$as_me:$LINENO: \$? = $ac_status" >&5
++  (exit $ac_status); } &&
++	 { ac_try='test -z "$ac_c_werror_flag"
++			 || test ! -s conftest.err'
++  { (eval echo "$as_me:$LINENO: \"$ac_try\"") >&5
++  (eval $ac_try) 2>&5
++  ac_status=$?
++  echo "$as_me:$LINENO: \$? = $ac_status" >&5
++  (exit $ac_status); }; } &&
++	 { ac_try='test -s conftest.$ac_objext'
++  { (eval echo "$as_me:$LINENO: \"$ac_try\"") >&5
++  (eval $ac_try) 2>&5
++  ac_status=$?
++  echo "$as_me:$LINENO: \$? = $ac_status" >&5
++  (exit $ac_status); }; }; then
++  ac_cv_f_setlkw=yes
++else
++  echo "$as_me: failed program was:" >&5
++sed 's/^/| /' conftest.$ac_ext >&5
++
++ac_cv_f_setlkw=no
++fi
++rm -f conftest.err conftest.$ac_objext conftest.$ac_ext
++fi
++echo "$as_me:$LINENO: result: $ac_cv_f_setlkw" >&5
++echo "${ECHO_T}$ac_cv_f_setlkw" >&6
++if test $ac_cv_f_setlkw = yes; then
++
++cat >>confdefs.h <<\_ACEOF
++#define HOST_HAS_F_SETLKW 1
++_ACEOF
++
++fi
++
+ # Restore CFLAGS from before the gcc_AC_NEED_DECLARATIONS tests.
+ CFLAGS="$saved_CFLAGS"
+ 
+diff --git a/gcc/configure.ac b/gcc/configure.ac
+index 953f206bc..9d79cd544 100644
+--- a/gcc/configure.ac
++++ b/gcc/configure.ac
+@@ -1134,6 +1134,22 @@ if test $gcc_cv_type_clock_t = yes; then
+   [Define if <time.h> defines clock_t.])
+ fi
+ 
++# Check if F_SETLKW is supported by fcntl.
++AC_CACHE_CHECK(for F_SETLKW, ac_cv_f_setlkw, [
++AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
++#include <fcntl.h>]], [[
++struct flock fl;
++fl.l_whence = 0;
++fl.l_start = 0;
++fl.l_len = 0;
++fl.l_pid = 0;
++return fcntl (1, F_SETLKW, &fl);]])],
++[ac_cv_f_setlkw=yes],[ac_cv_f_setlkw=no])])
++if test $ac_cv_f_setlkw = yes; then
++  AC_DEFINE(HOST_HAS_F_SETLKW, 1,
++  [Define if F_SETLKW supported by fcntl.])
++fi
++
+ # Restore CFLAGS from before the gcc_AC_NEED_DECLARATIONS tests.
+ CFLAGS="$saved_CFLAGS"
+ 

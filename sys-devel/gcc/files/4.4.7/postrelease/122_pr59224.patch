@@ -1,0 +1,92 @@
+diff --git a/gcc/testsuite/g++.dg/eh/uncaught1.C b/gcc/testsuite/g++.dg/eh/uncaught1.C
+index afbf5af4d..e96af334a 100644
+--- a/gcc/testsuite/g++.dg/eh/uncaught1.C
++++ b/gcc/testsuite/g++.dg/eh/uncaught1.C
+@@ -13,7 +13,7 @@ struct Check {
+ 
+ static Check const data[] = {
+   { 0, 0, false },	// construct [0]
+-  { 1, 0, true  },	// [1] = [0]
++  { 1, 0, false  },	// [1] = [0]
+   { 0, 0, true  },	// destruct [0]
+   { 2, 1, true  },	// [2] = [1]
+   { 2, 2, true  },      // destruct [2]
+diff --git a/gcc/testsuite/g++.dg/eh/uncaught4.C b/gcc/testsuite/g++.dg/eh/uncaught4.C
+new file mode 100644
+index 000000000..227d11b33
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/eh/uncaught4.C
+@@ -0,0 +1,29 @@
++// PR c++/41174
++// { dg-do run }
++
++#include <exception>
++
++#define assert(E) if (!(E)) __builtin_abort();
++
++struct e {
++  e()
++  {
++    assert( !std::uncaught_exception() );
++    try {
++      throw 1;
++    } catch (int i) {
++      assert( !std::uncaught_exception() );
++      throw;
++    }
++  }
++};
++
++int main()
++{
++  try {
++    throw e();
++  } catch (int i) {
++    assert( !std::uncaught_exception() );
++  }
++  assert( !std::uncaught_exception() );
++}
+diff --git a/libstdc++-v3/libsupc++/eh_alloc.cc b/libstdc++-v3/libsupc++/eh_alloc.cc
+index 818af0fe1..2850d8961 100644
+--- a/libstdc++-v3/libsupc++/eh_alloc.cc
++++ b/libstdc++-v3/libsupc++/eh_alloc.cc
+@@ -126,12 +126,6 @@ __cxxabiv1::__cxa_allocate_exception(std::size_t thrown_size) throw()
+ 	std::terminate ();
+     }
+ 
+-  // We have an uncaught exception as soon as we allocate memory.  This
+-  // yields uncaught_exception() true during the copy-constructor that
+-  // initializes the exception object.  See Issue 475.
+-  __cxa_eh_globals *globals = __cxa_get_globals ();
+-  globals->uncaughtExceptions += 1;
+-
+   memset (ret, 0, sizeof (__cxa_refcounted_exception));
+ 
+   return (void *)((char *)ret + sizeof (__cxa_refcounted_exception));
+@@ -188,12 +182,6 @@ __cxxabiv1::__cxa_allocate_dependent_exception() throw()
+ 	std::terminate ();
+     }
+ 
+-  // We have an uncaught exception as soon as we allocate memory.  This
+-  // yields uncaught_exception() true during the copy-constructor that
+-  // initializes the exception object.  See Issue 475.
+-  __cxa_eh_globals *globals = __cxa_get_globals ();
+-  globals->uncaughtExceptions += 1;
+-
+   memset (ret, 0, sizeof (__cxa_dependent_exception));
+ 
+   return ret;
+diff --git a/libstdc++-v3/libsupc++/eh_throw.cc b/libstdc++-v3/libsupc++/eh_throw.cc
+index 78cfc1395..4dad837b0 100644
+--- a/libstdc++-v3/libsupc++/eh_throw.cc
++++ b/libstdc++-v3/libsupc++/eh_throw.cc
+@@ -61,6 +61,9 @@ extern "C" void
+ __cxxabiv1::__cxa_throw (void *obj, std::type_info *tinfo, 
+ 			 void (*dest) (void *))
+ {
++  __cxa_eh_globals *globals = __cxa_get_globals ();
++  globals->uncaughtExceptions += 1;
++
+   // Definitely a primary.
+   __cxa_refcounted_exception *header
+     = __get_refcounted_exception_header_from_obj (obj);

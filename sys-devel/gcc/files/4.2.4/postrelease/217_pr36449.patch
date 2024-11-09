@@ -1,0 +1,109 @@
+diff --git a/gcc/fold-const.c b/gcc/fold-const.c
+index bf10d23b..948ec99f 100644
+--- a/gcc/fold-const.c
++++ b/gcc/fold-const.c
+@@ -104,7 +104,7 @@ static int twoval_comparison_p (tree, tree *, tree *, int *);
+ static tree eval_subst (tree, tree, tree, tree, tree);
+ static tree pedantic_omit_one_operand (tree, tree, tree);
+ static tree distribute_bit_expr (enum tree_code, tree, tree, tree);
+-static tree make_bit_field_ref (tree, tree, int, int, int);
++static tree make_bit_field_ref (tree, tree, HOST_WIDE_INT, HOST_WIDE_INT, int);
+ static tree optimize_bit_field_compare (enum tree_code, tree, tree, tree);
+ static tree decode_field_reference (tree, HOST_WIDE_INT *, HOST_WIDE_INT *,
+ 				    enum machine_mode *, int *, int *,
+@@ -3433,8 +3433,8 @@ distribute_real_division (enum tree_code code, tree type, tree arg0, tree arg1)
+    starting at BITPOS.  The field is unsigned if UNSIGNEDP is nonzero.  */
+ 
+ static tree
+-make_bit_field_ref (tree inner, tree type, int bitsize, int bitpos,
+-		    int unsignedp)
++make_bit_field_ref (tree inner, tree type, HOST_WIDE_INT bitsize,
++		    HOST_WIDE_INT bitpos, int unsignedp)
+ {
+   tree result;
+ 
+@@ -5040,7 +5040,7 @@ fold_truthop (enum tree_code code, tree truth_type, tree lhs, tree rhs)
+   tree ll_and_mask, lr_and_mask, rl_and_mask, rr_and_mask;
+   tree l_const, r_const;
+   tree lntype, rntype, result;
+-  int first_bit, end_bit;
++  HOST_WIDE_INT first_bit, end_bit;
+   int volatilep;
+   tree orig_lhs = lhs, orig_rhs = rhs;
+   enum tree_code orig_code = code;
+diff --git a/gcc/testsuite/g++.dg/opt/pr36449.C b/gcc/testsuite/g++.dg/opt/pr36449.C
+new file mode 100644
+index 00000000..f6659804
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/opt/pr36449.C
+@@ -0,0 +1,70 @@
++// PR middle-end/36449
++// { dg-do run }
++// { dg-options "-O3" }
++
++extern "C" void exit (int);
++extern "C" void abort ();
++
++struct R
++{
++  short a;
++  short b;
++};
++
++struct S
++{
++  R e;
++  long f;
++  long g;
++};
++
++struct T
++{
++  short c;
++  short d;
++};
++
++struct U
++{
++  long h[0x1ffffff + 1];
++  T i;
++};
++
++U *j;
++
++void __attribute__((noinline))
++bar ()
++{
++  exit (0);
++}
++
++void __attribute__((noinline))
++foo ()
++{
++  S s;
++
++  s.e.a = 36;
++  s.e.b = 38;
++  if (s.e.a == j->i.c && s.e.b == j->i.d)
++    bar ();
++}
++
++int
++main ()
++{
++  try
++    {
++      j = new U;
++    }
++  catch (...)
++    {
++      return 0;
++    }
++  j->i.c = 36;
++  j->i.d = 38;
++  j->h[0] = 1;
++  j->h[1] = 2;
++  j->h[2] = 3;
++  foo ();
++  abort ();
++}

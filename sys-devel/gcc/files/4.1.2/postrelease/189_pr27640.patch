@@ -1,0 +1,85 @@
+diff --git a/gcc/cp/pt.c b/gcc/cp/pt.c
+index 58cd4050..f31c0c27 100644
+--- a/gcc/cp/pt.c
++++ b/gcc/cp/pt.c
+@@ -9415,6 +9415,7 @@ instantiate_template (tree tmpl, tree targ_ptr, tsubst_flags_t complain)
+   tree fndecl;
+   tree gen_tmpl;
+   tree spec;
++  HOST_WIDE_INT saved_processing_template_decl;
+ 
+   if (tmpl == error_mark_node)
+     return error_mark_node;
+@@ -9474,9 +9475,17 @@ instantiate_template (tree tmpl, tree targ_ptr, tsubst_flags_t complain)
+      deferring all checks until we have the FUNCTION_DECL.  */
+   push_deferring_access_checks (dk_deferred);
+ 
+-  /* Substitute template parameters.  */
++  /* Although PROCESSING_TEMPLATE_DECL may be true at this point
++     (because, for example, we have encountered a non-dependent
++     function call in the body of a template function must determine
++     which of several overloaded functions will be called), within the
++     instantiation itself we are not processing a template.  */  
++  saved_processing_template_decl = processing_template_decl;
++  processing_template_decl = 0;
++  /* Substitute template parameters to obtain the specialization.  */
+   fndecl = tsubst (DECL_TEMPLATE_RESULT (gen_tmpl),
+ 		   targ_ptr, complain, gen_tmpl);
++  processing_template_decl = saved_processing_template_decl;
+   if (fndecl == error_mark_node)
+     return error_mark_node;
+ 
+diff --git a/gcc/testsuite/g++.dg/template/ctor7.C b/gcc/testsuite/g++.dg/template/ctor7.C
+new file mode 100644
+index 00000000..ee65172f
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/template/ctor7.C
+@@ -0,0 +1,19 @@
++// PR c++/27640
++
++template < class T > struct refcounted : 
++virtual T
++{
++  template < class A1 > refcounted (const A1 & a1) : T () { }
++};
++struct nfsserv {};
++template < class T >
++void
++sfsserver_cache_alloc (int *ns)
++{
++  new refcounted < nfsserv > (*ns);
++}
++void
++usage ()
++{
++  sfsserver_cache_alloc < int > ( 0);
++}
+diff --git a/gcc/testsuite/g++.dg/template/ctor99.C b/gcc/testsuite/g++.dg/template/ctor99.C
+new file mode 100644
+index 00000000..529ad3f2
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/template/ctor99.C
+@@ -0,0 +1,23 @@
++// { dg-do compile }
++// { dg-options "-fabi-version=1" }
++
++template<int N>
++int f (char (&)[N])
++{
++  return N;
++}
++
++char str[12];
++
++struct S
++{
++  int i;
++  template <typename U>
++  S (U) : i (f (str)) {}
++};
++
++int
++main ()
++{
++  S s (1);
++} 

@@ -1,0 +1,186 @@
+diff --git a/libstdc++-v3/include/std/condition_variable b/libstdc++-v3/include/std/condition_variable
+index 64f2bb771..8bda72b08 100644
+--- a/libstdc++-v3/include/std/condition_variable
++++ b/libstdc++-v3/include/std/condition_variable
+@@ -50,6 +50,9 @@ namespace std
+    * @{
+    */
+ 
++  /// cv_status
++  enum class cv_status { no_timeout, timeout };
++  
+   /// condition_variable
+   class condition_variable
+   {
+@@ -84,13 +87,13 @@ namespace std
+       }
+ 
+     template<typename _Duration>
+-      bool
++      cv_status
+       wait_until(unique_lock<mutex>& __lock,
+ 		 const chrono::time_point<__clock_t, _Duration>& __atime)
+       { return __wait_until_impl(__lock, __atime); }
+ 
+     template<typename _Clock, typename _Duration>
+-      bool
++      cv_status
+       wait_until(unique_lock<mutex>& __lock,
+ 		 const chrono::time_point<_Clock, _Duration>& __atime)
+       {
+@@ -110,14 +113,14 @@ namespace std
+ 		 _Predicate __p)
+       {
+ 	while (!__p())
+-	  if (!wait_until(__lock, __atime))
++	  if (wait_until(__lock, __atime) == cv_status::timeout)
+ 	    return __p();
+ 
+ 	return true;
+       }
+ 
+     template<typename _Rep, typename _Period>
+-      bool
++      cv_status
+       wait_for(unique_lock<mutex>& __lock,
+ 	       const chrono::duration<_Rep, _Period>& __rtime)
+       { return wait_until(__lock, __clock_t::now() + __rtime); }
+@@ -135,7 +138,7 @@ namespace std
+ 
+   private:
+     template<typename _Clock, typename _Duration>
+-      bool
++      cv_status
+       __wait_until_impl(unique_lock<mutex>& __lock,
+ 			const chrono::time_point<_Clock, _Duration>& __atime)
+       {
+@@ -154,7 +157,8 @@ namespace std
+ 	__gthread_cond_timedwait(&_M_cond, __lock.mutex()->native_handle(),
+ 				 &__ts);
+ 
+-	return _Clock::now() < __atime;
++	return (_Clock::now() < __atime
++		? cv_status::no_timeout : cv_status::timeout);
+       }
+   };
+ 
+@@ -189,7 +193,7 @@ namespace std
+       wait(_Lock& __lock, _Predicate __p);
+ 
+     template<typename _Lock, typename _Clock, typename _Duration>
+-      bool
++      cv_status
+       wait_until(_Lock& __lock,
+ 		 const chrono::time_point<_Clock, _Duration>& __atime);
+ 
+@@ -201,7 +205,7 @@ namespace std
+ 		 _Predicate __p);
+ 
+     template<typename _Lock, typename _Rep, typename _Period>
+-      bool
++      cv_status
+       wait_for(_Lock& __lock, const chrono::duration<_Rep, _Period>& __rtime);
+ 
+     template<typename _Lock, typename _Rep,
+diff --git a/libstdc++-v3/src/locale_init.cc b/libstdc++-v3/src/locale_init.cc
+index 1a4797425..893b6063d 100644
+--- a/libstdc++-v3/src/locale_init.cc
++++ b/libstdc++-v3/src/locale_init.cc
+@@ -208,9 +208,25 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
+   locale::locale() throw() : _M_impl(0)
+   { 
+     _S_initialize();
+-    __gnu_cxx::__scoped_lock sentry(get_locale_mutex());
+-    _S_global->_M_add_reference();
++
++    // Checked locking to optimize the common case where _S_global
++    // still points to _S_classic (locale::_S_initialize_once()):
++    // - If they are the same, just increment the reference count and
++    //   we are done.  This effectively constructs a C locale object
++    //   identical to the static c_locale.
++    // - Otherwise, _S_global can and may be destroyed due to
++    //   locale::global() call on another thread, in which case we
++    //   fall back to lock protected access to both _S_global and
++    //   its reference count.
+     _M_impl = _S_global;
++    if (_M_impl == _S_classic)
++      _M_impl->_M_add_reference();
++    else
++      {
++        __gnu_cxx::__scoped_lock sentry(get_locale_mutex());
++        _S_global->_M_add_reference();
++        _M_impl = _S_global;
++      }
+   }
+ 
+   locale
+diff --git a/libstdc++-v3/testsuite/30_threads/condition_variable/cons/assign_neg.cc b/libstdc++-v3/testsuite/30_threads/condition_variable/cons/assign_neg.cc
+index 04e492b3f..9e9ad8a7b 100644
+--- a/libstdc++-v3/testsuite/30_threads/condition_variable/cons/assign_neg.cc
++++ b/libstdc++-v3/testsuite/30_threads/condition_variable/cons/assign_neg.cc
+@@ -32,4 +32,4 @@ void test01()
+ }
+ 
+ // { dg-error "used here" "" { target *-*-* } 31 }
+-// { dg-error "deleted function" "" { target *-*-* } 67 }
++// { dg-error "deleted function" "" { target *-*-* } 70 }
+diff --git a/libstdc++-v3/testsuite/30_threads/condition_variable/cons/copy_neg.cc b/libstdc++-v3/testsuite/30_threads/condition_variable/cons/copy_neg.cc
+index 0d066282f..576535155 100644
+--- a/libstdc++-v3/testsuite/30_threads/condition_variable/cons/copy_neg.cc
++++ b/libstdc++-v3/testsuite/30_threads/condition_variable/cons/copy_neg.cc
+@@ -31,4 +31,4 @@ void test01()
+ }
+ 
+ // { dg-error "used here" "" { target *-*-* } 30 }
+-// { dg-error "deleted function" "" { target *-*-* } 66 }
++// { dg-error "deleted function" "" { target *-*-* } 69 }
+diff --git a/libstdc++-v3/testsuite/30_threads/condition_variable/members/1.cc b/libstdc++-v3/testsuite/30_threads/condition_variable/members/1.cc
+index 4dea13706..127960a62 100644
+--- a/libstdc++-v3/testsuite/30_threads/condition_variable/members/1.cc
++++ b/libstdc++-v3/testsuite/30_threads/condition_variable/members/1.cc
+@@ -40,8 +40,8 @@ int main()
+       std::unique_lock<std::mutex> l(m);
+ 
+       auto then = std::chrono::system_clock::now();
+-      bool result = c1.wait_for(l, ms);
+-      VERIFY( !result );
++      std::cv_status result = c1.wait_for(l, ms);
++      VERIFY( result == std::cv_status::timeout );
+       VERIFY( (std::chrono::system_clock::now() - then) >= ms );
+       VERIFY( l.owns_lock() );
+     }
+diff --git a/libstdc++-v3/testsuite/30_threads/condition_variable/members/2.cc b/libstdc++-v3/testsuite/30_threads/condition_variable/members/2.cc
+index fe176668a..ab2e8776b 100644
+--- a/libstdc++-v3/testsuite/30_threads/condition_variable/members/2.cc
++++ b/libstdc++-v3/testsuite/30_threads/condition_variable/members/2.cc
+@@ -40,8 +40,8 @@ int main()
+       std::unique_lock<std::mutex> l(m);
+ 
+       auto then = std::chrono::monotonic_clock::now();
+-      bool result = c1.wait_until(l, then + ms);
+-      VERIFY( !result );
++      std::cv_status result = c1.wait_until(l, then + ms);
++      VERIFY( result == std::cv_status::timeout );
+       VERIFY( (std::chrono::monotonic_clock::now() - then) >= ms );
+       VERIFY( l.owns_lock() );
+     }
+diff --git a/libstdc++-v3/testsuite/30_threads/condition_variable_any/cons/assign_neg.cc b/libstdc++-v3/testsuite/30_threads/condition_variable_any/cons/assign_neg.cc
+index 473f32639..14990a292 100644
+--- a/libstdc++-v3/testsuite/30_threads/condition_variable_any/cons/assign_neg.cc
++++ b/libstdc++-v3/testsuite/30_threads/condition_variable_any/cons/assign_neg.cc
+@@ -32,4 +32,4 @@ void test01()
+ }
+ 
+ // { dg-error "used here" "" { target *-*-* } 31 }
+-// { dg-error "deleted function" "" { target *-*-* } 175 }
++// { dg-error "deleted function" "" { target *-*-* } 179 }
+diff --git a/libstdc++-v3/testsuite/30_threads/condition_variable_any/cons/copy_neg.cc b/libstdc++-v3/testsuite/30_threads/condition_variable_any/cons/copy_neg.cc
+index 1d06c2ded..1a48a9e62 100644
+--- a/libstdc++-v3/testsuite/30_threads/condition_variable_any/cons/copy_neg.cc
++++ b/libstdc++-v3/testsuite/30_threads/condition_variable_any/cons/copy_neg.cc
+@@ -31,4 +31,4 @@ void test01()
+ }
+ 
+ // { dg-error "used here" "" { target *-*-* } 30 }
+-// { dg-error "deleted function" "" { target *-*-* } 174 }
++// { dg-error "deleted function" "" { target *-*-* } 178 }

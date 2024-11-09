@@ -1,0 +1,120 @@
+diff --git a/gcc/config/i386/i386.md b/gcc/config/i386/i386.md
+index ebc9c48e..65c0a7cd 100644
+--- a/gcc/config/i386/i386.md
++++ b/gcc/config/i386/i386.md
+@@ -4717,7 +4717,7 @@
+ (define_insn "*addti3_1"
+   [(set (match_operand:TI 0 "nonimmediate_operand" "=r,o")
+ 	(plus:TI (match_operand:TI 1 "nonimmediate_operand" "%0,0")
+-		 (match_operand:TI 2 "general_operand" "roiF,riF")))
++		 (match_operand:TI 2 "x86_64_general_operand" "roe,re")))
+    (clobber (reg:CC FLAGS_REG))]
+   "TARGET_64BIT && ix86_binary_operator_ok (PLUS, TImode, operands)"
+   "#")
+@@ -4725,7 +4725,7 @@
+ (define_split
+   [(set (match_operand:TI 0 "nonimmediate_operand" "")
+ 	(plus:TI (match_operand:TI 1 "nonimmediate_operand" "")
+-		 (match_operand:TI 2 "general_operand" "")))
++		 (match_operand:TI 2 "x86_64_general_operand" "")))
+    (clobber (reg:CC FLAGS_REG))]
+   "TARGET_64BIT && reload_completed"
+   [(parallel [(set (reg:CC FLAGS_REG) (unspec:CC [(match_dup 1) (match_dup 2)]
+@@ -6451,7 +6451,7 @@
+ (define_insn "*subti3_1"
+   [(set (match_operand:TI 0 "nonimmediate_operand" "=r,o")
+ 	(minus:TI (match_operand:TI 1 "nonimmediate_operand" "0,0")
+-		  (match_operand:TI 2 "general_operand" "roiF,riF")))
++		  (match_operand:TI 2 "x86_64_general_operand" "roe,re")))
+    (clobber (reg:CC FLAGS_REG))]
+   "TARGET_64BIT && ix86_binary_operator_ok (MINUS, TImode, operands)"
+   "#")
+@@ -6459,7 +6459,7 @@
+ (define_split
+   [(set (match_operand:TI 0 "nonimmediate_operand" "")
+ 	(minus:TI (match_operand:TI 1 "nonimmediate_operand" "")
+-		  (match_operand:TI 2 "general_operand" "")))
++		  (match_operand:TI 2 "x86_64_general_operand" "")))
+    (clobber (reg:CC FLAGS_REG))]
+   "TARGET_64BIT && reload_completed"
+   [(parallel [(set (reg:CC FLAGS_REG) (compare:CC (match_dup 1) (match_dup 2)))
+@@ -9294,7 +9294,7 @@
+ 
+ (define_insn "*negti2_1"
+   [(set (match_operand:TI 0 "nonimmediate_operand" "=ro")
+-	(neg:TI (match_operand:TI 1 "general_operand" "0")))
++	(neg:TI (match_operand:TI 1 "nonimmediate_operand" "0")))
+    (clobber (reg:CC FLAGS_REG))]
+   "TARGET_64BIT
+    && ix86_unary_operator_ok (NEG, TImode, operands)"
+@@ -9302,7 +9302,7 @@
+ 
+ (define_split
+   [(set (match_operand:TI 0 "nonimmediate_operand" "")
+-	(neg:TI (match_operand:TI 1 "general_operand" "")))
++	(neg:TI (match_operand:TI 1 "nonimmediate_operand" "")))
+    (clobber (reg:CC FLAGS_REG))]
+   "TARGET_64BIT && reload_completed"
+   [(parallel
+diff --git a/gcc/config/i386/sse.md b/gcc/config/i386/sse.md
+index 15a1f2bd..4810db33 100644
+--- a/gcc/config/i386/sse.md
++++ b/gcc/config/i386/sse.md
+@@ -2124,11 +2124,11 @@
+ 	    (match_dup 1))
+ 	  (parallel [(const_int 0)
+ 		     (const_int 2)])))]
+-  "TARGET_SSE3 && !(MEM_P (operands[1]) && MEM_P (operands[2]))"
++  "TARGET_SSE3 && !(MEM_P (operands[0]) && MEM_P (operands[1]))"
+   "@
+    movddup\t{%1, %0|%0, %1}
+    #"
+-  [(set_attr "type" "sselog,ssemov")
++  [(set_attr "type" "sselog1,ssemov")
+    (set_attr "mode" "V2DF")])
+ 
+ (define_split
+diff --git a/gcc/testsuite/gcc.target/i386/pr31167.c b/gcc/testsuite/gcc.target/i386/pr31167.c
+new file mode 100644
+index 00000000..7205e257
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/i386/pr31167.c
+@@ -0,0 +1,20 @@
++/* { dg-do compile { target lp64 } } */
++/* { dg-options "-O" } */
++
++typedef int int32_t;
++
++int32_t round32hi (const __int128_t arg)
++{
++  const int SHIFT = 96;
++  const int mshift = 96;
++  const __int128_t M = (~(__int128_t) 0) << mshift;
++  const __int128_t L = (~M) + 1;
++  const __int128_t L1 = ((__int128_t) L) >> 1;
++  const __int128_t Mlo = ((__int128_t) (~M)) >> 1;
++  __int128_t vv = arg & M;
++
++  if ((arg & (L1)) && ((arg & Mlo) || (arg & L)))
++    vv += L;
++
++  return (int32_t) (vv >> SHIFT);
++}
+diff --git a/gcc/testsuite/gcc.target/i386/rh907750.c b/gcc/testsuite/gcc.target/i386/rh907750.c
+new file mode 100644
+index 00000000..6856afcf
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/i386/rh907750.c
+@@ -0,0 +1,12 @@
++/* { dg-do compile { target lp64 } } */
++/* { dg-options "-O2" } */
++
++typedef unsigned uint128_t __attribute__ ((mode (TI)));
++void bar (uint128_t);
++
++void
++foo (uint128_t t[2])
++{
++  t[0] += 0x8000000000000 - 1;
++  bar ((t[0] >> 26) | (t[1] << 25));
++}

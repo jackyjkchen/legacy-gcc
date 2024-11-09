@@ -1,0 +1,54 @@
+diff --git a/gcc/cp/cxx-pretty-print.c b/gcc/cp/cxx-pretty-print.c
+index e5a4c46d..baa305e1 100644
+--- a/gcc/cp/cxx-pretty-print.c
++++ b/gcc/cp/cxx-pretty-print.c
+@@ -701,7 +701,10 @@ pp_cxx_pm_expression (cxx_pretty_printer *pp, tree t)
+     case MEMBER_REF:
+     case DOTSTAR_EXPR:
+       pp_cxx_pm_expression (pp, TREE_OPERAND (t, 0));
+-      pp_cxx_dot (pp);
++      if (TREE_CODE (t) == MEMBER_REF)
++	pp_cxx_arrow (pp);
++      else
++	pp_cxx_dot (pp);
+       pp_star(pp);
+       pp_cxx_cast_expression (pp, TREE_OPERAND (t, 1));
+       break;
+diff --git a/gcc/cp/error.c b/gcc/cp/error.c
+index 25364847..a4fa57d0 100644
+--- a/gcc/cp/error.c
++++ b/gcc/cp/error.c
+@@ -1893,6 +1893,11 @@ dump_expr (tree t, int flags)
+       pp_cxx_offsetof_expression (cxx_pp, t);
+       break;
+ 
++    case MEMBER_REF:
++    case DOTSTAR_EXPR:
++      pp_multiplicative_expression (cxx_pp, t);
++      break;
++
+       /*  This list is incomplete, but should suffice for now.
+ 	  It is very important that `sorry' does not call
+ 	  `report_error_function'.  That could cause an infinite loop.  */
+diff --git a/gcc/testsuite/g++.dg/other/ptrmem8.C b/gcc/testsuite/g++.dg/other/ptrmem8.C
+new file mode 100644
+index 00000000..d0b0ba72
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/other/ptrmem8.C
+@@ -0,0 +1,16 @@
++// PR c++/33844
++// { dg-do compile }
++
++struct A {};
++
++template<int> void foo(void (A::* f)())
++{
++  A a;
++  &(a.*f);	// { dg-error "invalid use of\[^\n\]*\\.\\*\[^\n\]*to form|qualified-id is required" }
++}
++
++template<int> void bar(void (A::* f)())
++{
++  A *p;
++  &(p->*f);	// { dg-error "invalid use of\[^\n\]*->\\*\[^\n\]*to form|qualified-id is required" }
++}

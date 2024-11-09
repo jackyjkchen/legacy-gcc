@@ -1,0 +1,165 @@
+diff --git a/gcc/cp/cp-objcp-common.h b/gcc/cp/cp-objcp-common.h
+index 185643bb..3a7bde82 100644
+--- a/gcc/cp/cp-objcp-common.h
++++ b/gcc/cp/cp-objcp-common.h
+@@ -86,6 +86,8 @@ extern tree objcp_tsubst_copy_and_build (tree, tree, tsubst_flags_t,
+ #define LANG_HOOKS_WRITE_GLOBALS lhd_do_nothing
+ #undef LANG_HOOKS_COMDAT_GROUP
+ #define LANG_HOOKS_COMDAT_GROUP cxx_comdat_group
++#undef LANG_HOOKS_TYPE_HASH_EQ                                                                                          
++#define LANG_HOOKS_TYPE_HASH_EQ cxx_type_hash_eq
+ 
+ #undef LANG_HOOKS_FUNCTION_INIT
+ #define LANG_HOOKS_FUNCTION_INIT cxx_push_function_context
+diff --git a/gcc/cp/cp-tree.h b/gcc/cp/cp-tree.h
+index a45b790e..d5074868 100644
+--- a/gcc/cp/cp-tree.h
++++ b/gcc/cp/cp-tree.h
+@@ -4445,6 +4445,7 @@ extern tree rvalue				(tree);
+ extern tree convert_bitfield_to_declared_type   (tree);
+ extern tree cp_save_expr			(tree);
+ extern bool cast_valid_in_integral_constant_expression_p (tree);
++extern bool cxx_type_hash_eq			(tree, tree);
+ 
+ /* in typeck.c */
+ extern int string_conv_p			(tree, tree, int);
+diff --git a/gcc/cp/tree.c b/gcc/cp/tree.c
+index c19dd268..8f920997 100644
+--- a/gcc/cp/tree.c
++++ b/gcc/cp/tree.c
+@@ -1980,6 +1980,22 @@ cp_build_type_attribute_variant (tree type, tree attributes)
+   return new_type;
+ }
+ 
++/* Return TRUE if TYPE1 and TYPE2 are identical for type hashing purposes.
++   Called only after doing all language independent checks.  Only
++   to check TYPE_RAISES_EXCEPTIONS for FUNCTION_TYPE, the rest is already
++   compared in type_hash_eq.  */
++
++bool
++cxx_type_hash_eq (tree typea, tree typeb)
++{
++  if (TREE_CODE (typea) != FUNCTION_TYPE
++      || TYPE_RAISES_EXCEPTIONS (typea) == TYPE_RAISES_EXCEPTIONS (typeb))
++    return true;
++
++  return comp_except_specs (TYPE_RAISES_EXCEPTIONS (typea),
++			    TYPE_RAISES_EXCEPTIONS (typeb), 1);
++}
++
+ /* Apply FUNC to all language-specific sub-trees of TP in a pre-order
+    traversal.  Called from walk_tree.  */
+ 
+diff --git a/gcc/langhooks-def.h b/gcc/langhooks-def.h
+index 11100635..315d35b1 100644
+--- a/gcc/langhooks-def.h
++++ b/gcc/langhooks-def.h
+@@ -71,6 +71,7 @@ extern tree lhd_expr_size (tree);
+ extern size_t lhd_tree_size (enum tree_code);
+ extern HOST_WIDE_INT lhd_to_target_charset (HOST_WIDE_INT);
+ extern tree lhd_expr_to_decl (tree, bool *, bool *, bool *);
++extern bool lhd_type_hash_eq (tree, tree);
+ 
+ /* Declarations of default tree inlining hooks.  */
+ extern tree lhd_tree_inlining_walk_subtrees (tree *, int *, walk_tree_fn,
+@@ -222,6 +223,7 @@ extern tree lhd_make_node (enum tree_code);
+ #define LANG_HOOKS_TYPE_MAX_SIZE	lhd_return_null_tree
+ #define LANG_HOOKS_OMP_FIRSTPRIVATIZE_TYPE_SIZES \
+   lhd_omp_firstprivatize_type_sizes
++#define LANG_HOOKS_TYPE_HASH_EQ		lhd_type_hash_eq
+ #define LANG_HOOKS_HASH_TYPES		true
+ 
+ #define LANG_HOOKS_FOR_TYPES_INITIALIZER { \
+@@ -236,6 +238,7 @@ extern tree lhd_make_node (enum tree_code);
+   LANG_HOOKS_INCOMPLETE_TYPE_ERROR, \
+   LANG_HOOKS_TYPE_MAX_SIZE, \
+   LANG_HOOKS_OMP_FIRSTPRIVATIZE_TYPE_SIZES, \
++  LANG_HOOKS_TYPE_HASH_EQ, \
+   LANG_HOOKS_HASH_TYPES \
+ }
+ 
+diff --git a/gcc/langhooks.c b/gcc/langhooks.c
+index b54ee201..57567262 100644
+--- a/gcc/langhooks.c
++++ b/gcc/langhooks.c
+@@ -421,6 +421,16 @@ lhd_tree_dump_type_quals (tree t)
+ /* lang_hooks.expr_size: Determine the size of the value of an expression T
+    in a language-specific way.  Returns a tree for the size in bytes.  */
+ 
++/* Return TRUE if TYPE1 and TYPE2 are identical for type hashing purposes.
++   Called only after doing all language independent checks.  */
++
++bool
++lhd_type_hash_eq (tree typea ATTRIBUTE_UNUSED,
++		  tree typeb ATTRIBUTE_UNUSED)
++{
++  return true;
++}
++
+ tree
+ lhd_expr_size (tree exp)
+ {
+diff --git a/gcc/langhooks.h b/gcc/langhooks.h
+index 7e1770b6..18a5e416 100644
+--- a/gcc/langhooks.h
++++ b/gcc/langhooks.h
+@@ -148,6 +148,10 @@ struct lang_hooks_for_types
+      firstprivate variables.  */
+   void (*omp_firstprivatize_type_sizes) (struct gimplify_omp_ctx *, tree);
+ 
++  /* Return TRUE if TYPE1 and TYPE2 are identical for type hashing purposes.
++     Called only after doing all language independent checks.  */
++  bool (*type_hash_eq) (tree, tree);
++
+   /* Nonzero if types that are identical are to be hashed so that only
+      one copy is kept.  If a language requires unique types for each
+      user-specified type, such as Ada, this should be set to TRUE.  */
+diff --git a/gcc/testsuite/g++.dg/ext/attrib29.C b/gcc/testsuite/g++.dg/ext/attrib29.C
+new file mode 100644
+index 00000000..710a5ce2
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/ext/attrib29.C
+@@ -0,0 +1,10 @@
++// PR c++/33506
++// { dg-do compile }
++
++extern int f1 (char *) __attribute__ ((warn_unused_result));
++extern int f2 (char *) throw () __attribute__ ((warn_unused_result));
++extern int f2 (char *) throw ();
++
++extern int f3 (char *) __attribute__ ((nonnull (1)));
++extern int f4 (char *) throw () __attribute__ ((nonnull (1)));
++extern int f4 (char *) throw ();
+diff --git a/gcc/tree.c b/gcc/tree.c
+index aa9dd2e8..29309c2c 100644
+--- a/gcc/tree.c
++++ b/gcc/tree.c
+@@ -4234,17 +4234,21 @@ type_hash_eq (const void *va, const void *vb)
+ 				      TYPE_FIELDS (b->type))));
+ 
+     case FUNCTION_TYPE:
+-      return (TYPE_ARG_TYPES (a->type) == TYPE_ARG_TYPES (b->type)
+-	      || (TYPE_ARG_TYPES (a->type)
+-		  && TREE_CODE (TYPE_ARG_TYPES (a->type)) == TREE_LIST
+-		  && TYPE_ARG_TYPES (b->type)
+-		  && TREE_CODE (TYPE_ARG_TYPES (b->type)) == TREE_LIST
+-		  && type_list_equal (TYPE_ARG_TYPES (a->type),
+-				      TYPE_ARG_TYPES (b->type))));
++      if (TYPE_ARG_TYPES (a->type) == TYPE_ARG_TYPES (b->type)
++	  || (TYPE_ARG_TYPES (a->type)
++	      && TREE_CODE (TYPE_ARG_TYPES (a->type)) == TREE_LIST
++	      && TYPE_ARG_TYPES (b->type)
++	      && TREE_CODE (TYPE_ARG_TYPES (b->type)) == TREE_LIST
++	      && type_list_equal (TYPE_ARG_TYPES (a->type),
++				  TYPE_ARG_TYPES (b->type))))
++	break;
++      return 0;
+ 
+     default:
+       return 0;
+     }
++
++  return lang_hooks.types.type_hash_eq (a->type, b->type);
+ }
+ 
+ /* Return the cached hash value.  */

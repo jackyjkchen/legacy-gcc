@@ -1,0 +1,48 @@
+diff --git a/gcc/fortran/resolve.c b/gcc/fortran/resolve.c
+index 1abaefea3..7c306ad50 100644
+--- a/gcc/fortran/resolve.c
++++ b/gcc/fortran/resolve.c
+@@ -6661,6 +6661,7 @@ resolve_ordinary_assign (gfc_code *code, gfc_namespace *ns)
+       if (lhs->ts.type == BT_DERIVED
+ 	    && lhs->expr_type == EXPR_VARIABLE
+ 	    && lhs->ts.derived->attr.pointer_comp
++	    && rhs->expr_type == EXPR_VARIABLE
+ 	    && gfc_impure_variable (rhs->symtree->n.sym))
+ 	{
+ 	  gfc_error ("The impure variable at %L is assigned to "
+diff --git a/gcc/testsuite/gfortran.dg/impure_constructor_1.f90 b/gcc/testsuite/gfortran.dg/impure_constructor_1.f90
+new file mode 100644
+index 000000000..d742958bf
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/impure_constructor_1.f90
+@@ -0,0 +1,30 @@
++! { dg-do compile }
++!
++! PR fortran/43362
++!
++module m
++  implicit none
++  type t
++    integer, pointer :: a
++  end type t
++  type t2
++    type(t) :: b
++  end type t2
++  type t3
++    type(t), pointer :: b
++  end type t3
++contains
++ pure subroutine foo(x)
++   type(t), target, intent(in) :: x
++   type(t2) :: y
++   type(t3) :: z
++
++   ! The following gave an ICE but is valid:
++   y = t2(x) ! Note: F2003, C1272 (3) and (4) do not apply
++   
++   ! Variant which is invalid as C1272 (3) applies
++   z = t3(x) ! { dg-error "Invalid expression in the derived type constructor" "" { xfail *-*-* } }
++ end subroutine foo
++end module m
++
++
