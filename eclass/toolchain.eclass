@@ -2223,6 +2223,14 @@ gcc_do_make() {
 
 	pushd "${WORKDIR}"/build >/dev/null || die
 
+	if ! tc_version_is_at_least 3.0 ; then
+		local cpunum=$((`cat /sys/devices/system/cpu/online |awk -F '-' '{print$2}'` + 1))
+		if [[ $((cpunum)) -ge 2 ]] ; then
+			export MAKEOPTS='-j2'
+		else
+			export MAKEOPTS='-j1'
+		fi
+	fi
 	if tc_version_is_at_least 2.9 ; then
 		emake \
 			LDFLAGS="${LDFLAGS}" \
@@ -2308,7 +2316,7 @@ toolchain_src_test() {
 			SANDBOX_ON=0 LD_PRELOAD= emake -k check RUNTESTFLAGS=$RUNTESTFLAGS
 		fi
 	else
-		SANDBOX_ON=0 LD_PRELOAD= emake -k check -j4 RUNTESTFLAGS=$RUNTESTFLAGS
+		SANDBOX_ON=0 LD_PRELOAD= emake -k check RUNTESTFLAGS=$RUNTESTFLAGS
 	fi
 	local success_tests=$?
 
