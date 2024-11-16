@@ -136,7 +136,7 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/112_pr43028.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/113_pr43362.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/114_pr43680.patch
-	eapply "${FILESDIR}"/${PV}/postrelease/115_pr43706.patch
+	! is_djgpp && eapply "${FILESDIR}"/${PV}/postrelease/115_pr43706.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/116_pr49146.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/117_pr49484.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/118_pr54487.patch
