@@ -23,6 +23,8 @@ src_prepare() {
 
 	use vanilla && return 0
 	eapply "${FILESDIR}"/${PV}/postrelease/00_pr45262.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/01_pr24449.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/02_pr42466.patch
 }
 
 src_install() {
