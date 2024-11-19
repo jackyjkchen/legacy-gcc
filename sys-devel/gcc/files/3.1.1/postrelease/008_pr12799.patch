@@ -1,0 +1,106 @@
+diff --git a/gcc/reload1.c b/gcc/reload1.c
+index 0ce10c4..43adc28 100644
+--- a/gcc/reload1.c
++++ b/gcc/reload1.c
+@@ -9193,8 +9193,13 @@ reload_cse_move2add (first)
+ 		    success = validate_change (insn, &SET_SRC (pat), reg, 0);
+ 		  else if (rtx_cost (new_src, PLUS) < rtx_cost (src, SET)
+ 			   && have_add2_insn (reg, new_src))
+-		    success = validate_change (insn, &PATTERN (insn),
+-					       gen_add2_insn (reg, new_src), 0);
++		    {
++		      rtx newpat = gen_rtx_SET (VOIDmode, reg,
++						gen_rtx_PLUS (GET_MODE (reg),
++							      reg, new_src));
++		      success
++			= validate_change (insn, &PATTERN (insn), newpat, 0);
++		    }
+ 		  reg_set_luid[regno] = move2add_luid;
+ 		  reg_mode[regno] = GET_MODE (reg);
+ 		  reg_offset[regno] = INTVAL (src);
+@@ -9244,9 +9249,15 @@ reload_cse_move2add (first)
+ 		      else if ((rtx_cost (new_src, PLUS)
+ 				< COSTS_N_INSNS (1) + rtx_cost (src3, SET))
+ 			       && have_add2_insn (reg, new_src))
+-			success
+-			  = validate_change (next, &PATTERN (next),
+-					     gen_add2_insn (reg, new_src), 0);
++			{
++			  rtx newpat
++			    = gen_rtx_SET (VOIDmode, reg,
++					   gen_rtx_PLUS (GET_MODE (reg),
++							 reg, new_src));
++			  success
++			    = validate_change (next, &PATTERN (next),
++					       newpat, 0);
++			}
+ 		      if (success)
+ 			delete_insn (insn);
+ 		      insn = next;
+diff --git a/gcc/testsuite/gcc.c-torture/execute/20051002-1.c b/gcc/testsuite/gcc.c-torture/execute/20051002-1.c
+new file mode 100644
+index 0000000..f9d3f9b
+--- /dev/null
++++ b/gcc/testsuite/gcc.c-torture/execute/20051002-1.c
+@@ -0,0 +1,18 @@
++/* PR optimization/12799 */
++extern void abort (void);
++
++unsigned int
++foo (unsigned long a)
++{
++  if (a >= 0xffffffffUL)
++    return 0xffffffff;
++  return a;
++}
++
++int
++main ()
++{
++  if (foo (0) != 0)
++    abort ();
++  return 0;
++}
+diff --git a/gcc/testsuite/gcc.dg/20031102-1.c b/gcc/testsuite/gcc.dg/20031102-1.c
+new file mode 100644
+index 0000000..4da4e6a
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/20031102-1.c
+@@ -0,0 +1,37 @@
++/* PR optimization/12799 */
++/* Origin: Pratap Subrahmanyam <pratap@vmware.com> */
++
++/* { dg-do run } */
++/* { dg-options "-O2" } */
++/* { dg-options "-O2 -march=i686" { target i686-*-* } } */
++
++/* Verify that reload_cse_move2add doesn't add unexpected CLOBBERs. */
++
++extern void abort(void);
++
++int loo = 1;
++
++__inline__ char InlineFunc(void)
++{
++  return __builtin_expect(!!(loo == 1), 1);
++}
++
++int FooBar(void)
++{
++  int i;
++  int var1 = InlineFunc() ? 2046 : 1023;
++  int var2 = InlineFunc() ? 512 : 1024;
++
++  for (i = 0; i < var1; i++)
++    ;
++
++  if (InlineFunc() && var2 != 512)
++    abort();
++
++  return 0;
++}
++
++int main(void)
++{
++  return FooBar();
++}

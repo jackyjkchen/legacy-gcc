@@ -5,6 +5,7 @@ EAPI=8
 
 inherit toolchain
 
+# ia64 - broken static handling; USE=static emerge busybox
 KEYWORDS="alpha amd64 hppa m68k mips ppc ppc64 s390 sparc x86"
 
 src_prepare() {
@@ -24,20 +25,18 @@ src_prepare() {
 	esac
 
 	use vanilla && return 0
-	eapply "${FILESDIR}"/${PV}/postrelease/000_pr13685.patch
-	eapply "${FILESDIR}"/${PV}/postrelease/001_pr45262.patch
-	eapply "${FILESDIR}"/${PV}/postrelease/002_pr25572.patch
-	eapply "${FILESDIR}"/${PV}/postrelease/003_pr24915.patch
-	eapply "${FILESDIR}"/${PV}/postrelease/004_pr18681.patch
-	eapply "${FILESDIR}"/${PV}/postrelease/005_pr24449.patch
-	eapply "${FILESDIR}"/${PV}/postrelease/006_pr42466.patch
-	eapply "${FILESDIR}"/${PV}/postrelease/007_pr35317.patch
-	eapply "${FILESDIR}"/${PV}/postrelease/008_pr15759.patch
-	eapply "${FILESDIR}"/${PV}/postrelease/009_pr24103.patch
-	eapply "${FILESDIR}"/${PV}/postrelease/010_pr29295.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/000_pr45262.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/001_pr18681.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/002_pr24449.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/003_pr42466.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/004_pr35317.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/005_pr15759.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/006_pr24103.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/007_pr29295.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/008_pr12799.patch
 
 	if use test ; then
 		eapply "${FILESDIR}"/${PV}/postrelease/900_fix-known-test-fail.patch
-		rm -rf libstdc++-v3/testsuite/27_io/{filebuf_members.cc,filebuf_virtuals.cc,ostream_inserter_arith.cc,streambuf_members.cc,stringbuf_virtuals.cc}
+		rm -rf libstdc++-v3/testsuite/27_io/{ostream_inserter_arith.cc,stringbuf_virtuals.cc}
 	fi
 }
