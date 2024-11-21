@@ -1,0 +1,186 @@
+From 7c27ba2b5e4b5e026a9f954320f1725fed260bd9 Mon Sep 17 00:00:00 2001
+From: Achim Gratz <Achim.Gratz@Stromeko.DE>
+Date: Sat, 5 Oct 2024 09:51:57 +0200
+Subject: [PATCH] Cygwin: Ada shared prefix
+
+---
+ gcc/ada/gcc-interface/Makefile.in | 79 ++++++++++++++++---------------
+ 1 file changed, 42 insertions(+), 37 deletions(-)
+
+diff --git a/gcc/ada/gcc-interface/Makefile.in b/gcc/ada/gcc-interface/Makefile.in
+index 0666fc00bb8..ebff40ef59d 100644
+--- a/gcc/ada/gcc-interface/Makefile.in
++++ b/gcc/ada/gcc-interface/Makefile.in
+@@ -197,6 +197,11 @@ GNAT_SRC=$(fsrcpfx)ada
+ MULTISUBDIR =
+ RTSDIR = rts$(subst /,_,$(MULTISUBDIR))
+ 
++SHARED_PFX=lib
++ifneq (,$(filter %cygwin,$(target)))
++SHARED_PFX=cyg
++endif
++
+ # Link flags used to build gnat tools.  By default we prefer to statically
+ # link with libgcc to avoid a dependency on shared libgcc (which is tricky
+ # to deal with as it may conflict with the libgcc provided by the system).
+@@ -553,16 +558,16 @@ install-gnatlib: ../stamp-gnatlib-$(RTSDIR) install-gcc-specs
+ #     Also install the .dSYM directories if they exist (these directories
+ #     contain the debug information for the shared libraries on darwin)
+ 	for file in gnat gnarl; do \
+-	   if [ -f $(RTSDIR)/lib$${file}$(hyphen)$(LIBRARY_VERSION)$(soext) ]; then \
+-	      $(INSTALL) $(RTSDIR)/lib$${file}$(hyphen)$(LIBRARY_VERSION)$(soext) \
++	   if [ -f $(RTSDIR)/$(SHARED_PFX)$${file}$(hyphen)$(LIBRARY_VERSION)$(soext) ]; then \
++	      $(INSTALL) $(RTSDIR)/$(SHARED_PFX)$${file}$(hyphen)$(LIBRARY_VERSION)$(soext) \
+ 			 $(DESTDIR)$(ADA_RTL_DSO_DIR); \
+ 	   fi; \
+-	   if [ -f $(RTSDIR)/lib$${file}$(soext) ]; then \
+-	      $(LN_S) lib$${file}$(hyphen)$(LIBRARY_VERSION)$(soext) \
+-	      $(DESTDIR)$(ADA_RTL_DSO_DIR)/lib$${file}$(soext); \
++	   if [ -f $(RTSDIR)/$(SHARED_PFX)$${file}$(soext) ]; then \
++	      $(LN_S) $(SHARED_PFX)$${file}$(hyphen)$(LIBRARY_VERSION)$(soext) \
++	      $(DESTDIR)$(ADA_RTL_DSO_DIR)/$(SHARED_PFX)$${file}$(soext); \
+ 	   fi; \
+-	   if [ -d $(RTSDIR)/lib$${file}$(hyphen)$(LIBRARY_VERSION)$(soext).dSYM ]; then \
+-	      $(CP) -r $(RTSDIR)/lib$${file}$(hyphen)$(LIBRARY_VERSION)$(soext).dSYM \
++	   if [ -d $(RTSDIR)/$(SHARED_PFX)$${file}$(hyphen)$(LIBRARY_VERSION)$(soext).dSYM ]; then \
++	      $(CP) -r $(RTSDIR)/$(SHARED_PFX)$${file}$(hyphen)$(LIBRARY_VERSION)$(soext).dSYM \
+ 	        $(DESTDIR)$(ADA_RTL_DSO_DIR); \
+ 	   fi; \
+ 	done
+@@ -674,23 +679,23 @@ gnatlib-shared-default:
+ 	     THREAD_KIND="$(THREAD_KIND)" \
+ 	     LN_S="$(LN_S)" \
+              gnatlib
+-	$(RM) $(RTSDIR)/libgna*$(soext)
++	$(RM) $(RTSDIR)/$(SHARED_PFX)gna*$(soext)
+ 	cd $(RTSDIR); $(GCC_FOR_ADA_RTS) -shared $(GNATLIBCFLAGS) \
+ 		$(PICFLAG_FOR_TARGET) \
+-		-o libgnat$(hyphen)$(LIBRARY_VERSION)$(soext) \
++		-o $(SHARED_PFX)gnat$(hyphen)$(LIBRARY_VERSION)$(soext) \
+ 		$(GNATRTL_NONTASKING_OBJS) $(LIBGNAT_OBJS) \
+-		$(SO_OPTS)libgnat$(hyphen)$(LIBRARY_VERSION)$(soext) \
++		$(SO_OPTS)$(SHARED_PFX)gnat$(hyphen)$(LIBRARY_VERSION)$(soext) \
+ 		$(MISCLIB) -lm
+ 	cd $(RTSDIR); $(GCC_FOR_ADA_RTS) -shared $(GNATLIBCFLAGS) \
+ 		$(PICFLAG_FOR_TARGET) \
+-		-o libgnarl$(hyphen)$(LIBRARY_VERSION)$(soext) \
++		-o $(SHARED_PFX)gnarl$(hyphen)$(LIBRARY_VERSION)$(soext) \
+ 		$(GNATRTL_TASKING_OBJS) \
+-		$(SO_OPTS)libgnarl$(hyphen)$(LIBRARY_VERSION)$(soext) \
++		$(SO_OPTS)$(SHARED_PFX)gnarl$(hyphen)$(LIBRARY_VERSION)$(soext) \
+ 		$(THREADSLIB)
+-	cd $(RTSDIR); $(LN_S) libgnat$(hyphen)$(LIBRARY_VERSION)$(soext) \
+-		libgnat$(soext)
+-	cd $(RTSDIR); $(LN_S) libgnarl$(hyphen)$(LIBRARY_VERSION)$(soext) \
+-		libgnarl$(soext)
++	cd $(RTSDIR); $(LN_S) $(SHARED_PFX)gnat$(hyphen)$(LIBRARY_VERSION)$(soext) \
++		$(SHARED_PFX)gnat$(soext)
++	cd $(RTSDIR); $(LN_S) $(SHARED_PFX)gnarl$(hyphen)$(LIBRARY_VERSION)$(soext) \
++		$(SHARED_PFX)gnarl$(soext)
+ 
+ 	# Create static libgnat and libgnarl compiled with -fPIC
+ 	$(RM) $(RTSDIR)/libgnat_pic$(arext) $(RTSDIR)/libgnarl_pic$(arext)
+@@ -711,7 +716,7 @@ gnatlib-shared-dual:
+ 	     THREAD_KIND="$(THREAD_KIND)" \
+ 	     LN_S="$(LN_S)" \
+              gnatlib-shared-default
+-	$(MV) $(RTSDIR)/libgna*$(soext) .
++	$(MV) $(RTSDIR)/$(SHARED_PFX)gna*$(soext) .
+ 	$(MV) $(RTSDIR)/libgnat_pic$(arext) .
+ 	$(MV) $(RTSDIR)/libgnarl_pic$(arext) .
+ 	$(RM) ../stamp-gnatlib2-$(RTSDIR)
+@@ -723,7 +728,7 @@ gnatlib-shared-dual:
+ 	     THREAD_KIND="$(THREAD_KIND)" \
+ 	     LN_S="$(LN_S)" \
+ 	     gnatlib
+-	$(MV) libgna*$(soext) $(RTSDIR)
++	$(MV) $(SHARED_PFX)gna*$(soext) $(RTSDIR)
+ 	$(MV) libgnat_pic$(arext) $(RTSDIR)
+ 	$(MV) libgnarl_pic$(arext) $(RTSDIR)
+ 
+@@ -737,7 +742,7 @@ gnatlib-shared-dual-win32:
+ 	     THREAD_KIND="$(THREAD_KIND)" \
+ 	     LN_S="$(LN_S)" \
+ 	     gnatlib-shared-win32
+-	$(MV) $(RTSDIR)/libgna*$(soext) .
++	$(MV) $(RTSDIR)/$(SHARED_PFX)gna*$(soext) .
+ 	$(RM) ../stamp-gnatlib2-$(RTSDIR)
+ 	$(MAKE) $(FLAGS_TO_PASS) \
+              GNATLIBFLAGS="$(GNATLIBFLAGS)" \
+@@ -747,7 +752,7 @@ gnatlib-shared-dual-win32:
+ 	     THREAD_KIND="$(THREAD_KIND)" \
+ 	     LN_S="$(LN_S)" \
+ 	     gnatlib
+-	$(MV) libgna*$(soext) $(RTSDIR)
++	$(MV) $(SHARED_PFX)gna*$(soext) $(RTSDIR)
+ 
+ # ??? we need to add the option to support auto-import of arrays/records to
+ # the GNATLIBFLAGS when this will be supported by GNAT. At this point we will
+@@ -762,20 +767,20 @@ gnatlib-shared-win32:
+ 	     THREAD_KIND="$(THREAD_KIND)" \
+ 	     LN_S="$(LN_S)" \
+ 	     gnatlib
+-	$(RM) $(RTSDIR)/libgna*$(soext)
++	$(RM) $(RTSDIR)/$(SHARED_PFX)gna*$(soext)
+ 	$(CP) $(RTSDIR)/libgnat$(arext) $(RTSDIR)/libgnat_pic$(arext)
+ 	$(CP) $(RTSDIR)/libgnarl$(arext) $(RTSDIR)/libgnarl_pic$(arext)
+ 	cd $(RTSDIR); $(GCC_FOR_ADA_RTS) -shared -shared-libgcc \
+ 		$(PICFLAG_FOR_TARGET) \
+-		-o libgnat$(hyphen)$(LIBRARY_VERSION)$(soext) \
++		-o $(SHARED_PFX)gnat$(hyphen)$(LIBRARY_VERSION)$(soext) \
+ 		$(GNATRTL_NONTASKING_OBJS) $(LIBGNAT_OBJS) \
+-		$(SO_OPTS)libgnat$(hyphen)$(LIBRARY_VERSION)$(soext) $(MISCLIB)
++		$(SO_OPTS)$(SHARED_PFX)gnat$(hyphen)$(LIBRARY_VERSION)$(soext) $(MISCLIB)
+ 	cd $(RTSDIR); $(GCC_FOR_ADA_RTS) -shared -shared-libgcc \
+ 		$(PICFLAG_FOR_TARGET) \
+-		-o libgnarl$(hyphen)$(LIBRARY_VERSION)$(soext) \
++		-o $(SHARED_PFX)gnarl$(hyphen)$(LIBRARY_VERSION)$(soext) \
+ 		$(GNATRTL_TASKING_OBJS) \
+-		$(SO_OPTS)libgnarl$(hyphen)$(LIBRARY_VERSION)$(soext) \
+-		$(THREADSLIB) -Wl,libgnat$(hyphen)$(LIBRARY_VERSION)$(soext)
++		$(SO_OPTS)$(SHARED_PFX)gnarl$(hyphen)$(LIBRARY_VERSION)$(soext) \
++		$(THREADSLIB) -Wl,$(SHARED_PFX)gnat$(hyphen)$(LIBRARY_VERSION)$(soext)
+ 
+ gnatlib-shared-darwin:
+ 	$(MAKE) $(FLAGS_TO_PASS) \
+@@ -790,26 +795,26 @@ gnatlib-shared-darwin:
+ 	$(CP) $(RTSDIR)/libgnat$(arext) $(RTSDIR)/libgnat_pic$(arext)
+ 	$(CP) $(RTSDIR)/libgnarl$(arext) $(RTSDIR)/libgnarl_pic$(arext)
+ 	cd $(RTSDIR); $(GCC_FOR_ADA_RTS) -dynamiclib $(PICFLAG_FOR_TARGET) \
+-		-o libgnat$(hyphen)$(LIBRARY_VERSION)$(soext) \
++		-o $(SHARED_PFX)gnat$(hyphen)$(LIBRARY_VERSION)$(soext) \
+ 		$(GNATRTL_NONTASKING_OBJS) $(LIBGNAT_OBJS) \
+ 		$(SO_OPTS) \
+-		-Wl,-install_name,@rpath/libgnat$(hyphen)$(LIBRARY_VERSION)$(soext) \
++		-Wl,-install_name,@rpath/$(SHARED_PFX)gnat$(hyphen)$(LIBRARY_VERSION)$(soext) \
+ 		-nodefaultrpaths -Wl,-rpath,@loader_path/,-rpath,@loader_path/.. \
+ 		-Wl,-rpath,@loader_path/../../../../ $(MISCLIB)
+ 	cd $(RTSDIR); $(GCC_FOR_ADA_RTS) -dynamiclib $(PICFLAG_FOR_TARGET) \
+-		-o libgnarl$(hyphen)$(LIBRARY_VERSION)$(soext) \
++		-o $(SHARED_PFX)gnarl$(hyphen)$(LIBRARY_VERSION)$(soext) \
+ 		$(GNATRTL_TASKING_OBJS) \
+ 		$(SO_OPTS) \
+-		-Wl,-install_name,@rpath/libgnarl$(hyphen)$(LIBRARY_VERSION)$(soext) \
++		-Wl,-install_name,@rpath/$(SHARED_PFX)gnarl$(hyphen)$(LIBRARY_VERSION)$(soext) \
+ 		-nodefaultrpaths -Wl,-rpath,@loader_path/,-rpath,@loader_path/.. \
+ 		-Wl,-rpath,@loader_path/../../../../ \
+-		$(THREADSLIB) -Wl,libgnat$(hyphen)$(LIBRARY_VERSION)$(soext)
+-	cd $(RTSDIR); $(LN_S) libgnat$(hyphen)$(LIBRARY_VERSION)$(soext) \
+-		libgnat$(soext)
+-	cd $(RTSDIR); $(LN_S) libgnarl$(hyphen)$(LIBRARY_VERSION)$(soext) \
+-		libgnarl$(soext)
+-	cd $(RTSDIR); $(DSYMUTIL_FOR_TARGET) libgnat$(hyphen)$(LIBRARY_VERSION)$(soext)
+-	cd $(RTSDIR); $(DSYMUTIL_FOR_TARGET) libgnarl$(hyphen)$(LIBRARY_VERSION)$(soext)
++		$(THREADSLIB) -Wl,$(SHARED_PFX)gnat$(hyphen)$(LIBRARY_VERSION)$(soext)
++	cd $(RTSDIR); $(LN_S) $(SHARED_PFX)gnat$(hyphen)$(LIBRARY_VERSION)$(soext) \
++		$(SHARED_PFX)gnat$(soext)
++	cd $(RTSDIR); $(LN_S) $(SHARED_PFX)gnarl$(hyphen)$(LIBRARY_VERSION)$(soext) \
++		$(SHARED_PFX)gnarl$(soext)
++	cd $(RTSDIR); $(DSYMUTIL_FOR_TARGET) $(SHARED_PFX)gnat$(hyphen)$(LIBRARY_VERSION)$(soext)
++	cd $(RTSDIR); $(DSYMUTIL_FOR_TARGET) $(SHARED_PFX)gnarl$(hyphen)$(LIBRARY_VERSION)$(soext)
+ 
+ gnatlib-shared:
+ 	$(MAKE) $(FLAGS_TO_PASS) \
+-- 
+2.45.1
+
