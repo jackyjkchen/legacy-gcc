@@ -13,6 +13,7 @@ src_prepare() {
 
 	eapply "${FILESDIR}"/${PV}/01_riscv-fix-multilib.patch
 	eapply "${FILESDIR}"/${PV}/02_fix-werror.patch
+	is_glibc217 && eapply "${FILESDIR}"/${PV}/03_fake-c17.patch
 
 	use vanilla && return 0
 

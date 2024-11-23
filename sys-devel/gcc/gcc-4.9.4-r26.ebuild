@@ -18,6 +18,7 @@ src_prepare() {
 	esac
 	[[ $(tc-arch) == "mips" && ${DEFAULT_ABI} == "n64" ]] && eapply "${FILESDIR}"/${PV}/02_mips64-default-n64-abi.patch
 	eapply "${FILESDIR}"/${PV}/03_fix-werror.patch
+	is_glibc217 && eapply "${FILESDIR}"/${PV}/04_fake-c17.patch
 
 	use vanilla && return 0
 
