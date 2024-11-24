@@ -1,10 +1,13 @@
 diff --git a/gcc/Makefile.in b/gcc/Makefile.in
-index fc6a42b5a..409f458f3 100644
+index 39f436872..fa6b3c858 100644
 --- a/gcc/Makefile.in
 +++ b/gcc/Makefile.in
-@@ -217,6 +217,12 @@ libgcov-merge-tool.o-warn = -Wno-error
+@@ -216,7 +216,15 @@ libgcov-driver-tool.o-warn = -Wno-error
+ libgcov-merge-tool.o-warn = -Wno-error
  gimple-match.o-warn = -Wno-unused
  generic-match.o-warn = -Wno-unused
++df-scan.o-warn = -Wno-error=array-bounds
++fortran/simplify.o-warn = -Wno-error=array-bounds
  dfp.o-warn = -Wno-strict-aliasing
 +build/genhooks.o-warn = -Wno-error=unused-result
 +gcc.o-warn = -Wno-error=unused-result
@@ -15,3 +18,64 @@ index fc6a42b5a..409f458f3 100644
  
  # All warnings have to be shut off in stage1 if the compiler used then
  # isn't gcc; configure determines that.  WARN_CFLAGS will be either
+diff --git a/gcc/dwarf2out.c b/gcc/dwarf2out.c
+index 809da745b..837f62caf 100644
+--- a/gcc/dwarf2out.c
++++ b/gcc/dwarf2out.c
+@@ -4426,6 +4426,7 @@ add_addr_table_entry (void *addr, enum ate_kind kind)
+   addr_table_entry *node;
+   addr_table_entry finder;
+ 
++  memset(&finder, 0x00, sizeof(addr_table_entry));
+   gcc_assert (dwarf_split_debug_info);
+   if (! addr_index_table)
+     addr_index_table = hash_table<addr_hasher>::create_ggc (10);
+diff --git a/libdecnumber/decNumber.c b/libdecnumber/decNumber.c
+index d712d0d7d..f57b2756a 100644
+--- a/libdecnumber/decNumber.c
++++ b/libdecnumber/decNumber.c
+@@ -927,9 +927,9 @@ decNumber * decNumberCompareTotalMag(decNumber *res, const decNumber *lhs,
+ 				     const decNumber *rhs, decContext *set) {
+   uInt status=0;		   /* accumulator */
+   uInt needbytes;		   /* for space calculations */
+-  decNumber bufa[D2N(DECBUFFER+1)];/* +1 in case DECBUFFER=0 */
++  decNumber bufa[D2N(DECBUFFER+1)] = {0};/* +1 in case DECBUFFER=0 */
+   decNumber *allocbufa=NULL;	   /* -> allocated bufa, iff allocated */
+-  decNumber bufb[D2N(DECBUFFER+1)];
++  decNumber bufb[D2N(DECBUFFER+1)] = {0};
+   decNumber *allocbufb=NULL;	   /* -> allocated bufb, iff allocated */
+   decNumber *a, *b;		   /* temporary pointers */
+ 
+@@ -947,6 +947,7 @@ decNumber * decNumberCompareTotalMag(decNumber *res, const decNumber *lhs,
+ 	if (allocbufa==NULL) {		/* hopeless -- abandon */
+ 	  status|=DEC_Insufficient_storage;
+ 	  break;}
++	memset(allocbufa, 0x00, needbytes);
+ 	a=allocbufa;			/* use the allocated space */
+ 	}
+       decNumberCopy(a, lhs);		/* copy content */
+@@ -961,6 +962,7 @@ decNumber * decNumberCompareTotalMag(decNumber *res, const decNumber *lhs,
+ 	if (allocbufb==NULL) {		/* hopeless -- abandon */
+ 	  status|=DEC_Insufficient_storage;
+ 	  break;}
++	memset(allocbufb, 0x00, needbytes);
+ 	b=allocbufb;			/* use the allocated space */
+ 	}
+       decNumberCopy(b, rhs);		/* copy content */
+@@ -3343,6 +3345,8 @@ const char *decNumberClassToString(enum decClass eclass) {
+ /* All fields are updated as required.	This is a utility operation,  */
+ /* so special values are unchanged and no error is possible.	      */
+ /* ------------------------------------------------------------------ */
++#pragma GCC push_options
++#pragma GCC optimize ("-O2")
+ decNumber * decNumberCopy(decNumber *dest, const decNumber *src) {
+ 
+   #if DECCHECK
+@@ -3370,6 +3374,7 @@ decNumber * decNumberCopy(decNumber *dest, const decNumber *src) {
+     }
+   return dest;
+   } /* decNumberCopy */
++#pragma GCC pop_options
+ 
+ /* ------------------------------------------------------------------ */
+ /* decNumberCopyAbs -- quiet absolute value operator		      */

@@ -1,8 +1,18 @@
 diff --git a/gcc/Makefile.in b/gcc/Makefile.in
-index fb0920ad3..32dbe8cb3 100644
+index 9f6ed8125..25d139a2c 100644
 --- a/gcc/Makefile.in
 +++ b/gcc/Makefile.in
-@@ -221,6 +221,15 @@ libgcov-merge-tool.o-warn = -Wno-error
+@@ -213,7 +213,9 @@ GCC_WARN_CXXFLAGS = $(LOOSE_WARN) $($(@D)-warn) $(NOCOMMON_FLAG) $($@-warn)
+ # These files are to have specific diagnostics suppressed, or are not to
+ # be subject to -Werror:
+ # flex output may yield harmless "no previous prototype" warnings
++build/gengtype.o-warn = -Wno-format-overflow
+ build/gengtype-lex.o-warn = -Wno-error
++gengtype.o-warn = -Wno-format-overflow
+ gengtype-lex.o-warn = -Wno-error
+ libgcov-util.o-warn = -Wno-error
+ libgcov-driver-tool.o-warn = -Wno-error
+@@ -221,6 +223,15 @@ libgcov-merge-tool.o-warn = -Wno-error
  gimple-match.o-warn = -Wno-unused
  generic-match.o-warn = -Wno-unused
  dfp.o-warn = -Wno-strict-aliasing
@@ -94,6 +104,73 @@ index 4f1e4afdc..49a6debf7 100644
  
          /* Find edge of first predecessor (last_scheduled_insn_old->insn).  */
          FOR_EACH_SUCC_1 (succ, si, last_scheduled_insn_old,
+diff --git a/gcc/tree-vect-stmts.c b/gcc/tree-vect-stmts.c
+index 2ef71ec41..3a2084012 100644
+--- a/gcc/tree-vect-stmts.c
++++ b/gcc/tree-vect-stmts.c
+@@ -7553,10 +7553,10 @@ vectorizable_store (stmt_vec_info stmt_info, gimple_stmt_iterator *gsi,
+ 
+   if (memory_access_type == VMAT_GATHER_SCATTER && gs_info.decl)
+     {
+-      tree vec_oprnd0 = NULL_TREE, vec_oprnd1 = NULL_TREE, src;
++      tree vec_oprnd0 = NULL_TREE, vec_oprnd1 = NULL_TREE, src = NULL_TREE;
+       tree arglist = TYPE_ARG_TYPES (TREE_TYPE (gs_info.decl));
+-      tree rettype, srctype, ptrtype, idxtype, masktype, scaletype;
+-      tree ptr, var, scale, vec_mask;
++      tree rettype = NULL_TREE, srctype = NULL_TREE, ptrtype = NULL_TREE, idxtype = NULL_TREE, masktype = NULL_TREE, scaletype = NULL_TREE;
++      tree ptr = NULL_TREE, var = NULL_TREE, scale = NULL_TREE, vec_mask = NULL_TREE;
+       tree mask_arg = NULL_TREE, mask_op = NULL_TREE, perm_mask = NULL_TREE;
+       tree mask_halfvectype = mask_vectype;
+       edge pe = loop_preheader_edge (loop);
+diff --git a/libdecnumber/decNumber.c b/libdecnumber/decNumber.c
+index 6c9a58173..bc9c5a45a 100644
+--- a/libdecnumber/decNumber.c
++++ b/libdecnumber/decNumber.c
+@@ -927,9 +927,9 @@ decNumber * decNumberCompareTotalMag(decNumber *res, const decNumber *lhs,
+ 				     const decNumber *rhs, decContext *set) {
+   uInt status=0;		   /* accumulator */
+   uInt needbytes;		   /* for space calculations */
+-  decNumber bufa[D2N(DECBUFFER+1)];/* +1 in case DECBUFFER=0 */
++  decNumber bufa[D2N(DECBUFFER+1)] = {0};/* +1 in case DECBUFFER=0 */
+   decNumber *allocbufa=NULL;	   /* -> allocated bufa, iff allocated */
+-  decNumber bufb[D2N(DECBUFFER+1)];
++  decNumber bufb[D2N(DECBUFFER+1)] = {0};
+   decNumber *allocbufb=NULL;	   /* -> allocated bufb, iff allocated */
+   decNumber *a, *b;		   /* temporary pointers */
+ 
+@@ -947,6 +947,7 @@ decNumber * decNumberCompareTotalMag(decNumber *res, const decNumber *lhs,
+ 	if (allocbufa==NULL) {		/* hopeless -- abandon */
+ 	  status|=DEC_Insufficient_storage;
+ 	  break;}
++	memset(allocbufa, 0x00, needbytes);
+ 	a=allocbufa;			/* use the allocated space */
+ 	}
+       decNumberCopy(a, lhs);		/* copy content */
+@@ -961,6 +962,7 @@ decNumber * decNumberCompareTotalMag(decNumber *res, const decNumber *lhs,
+ 	if (allocbufb==NULL) {		/* hopeless -- abandon */
+ 	  status|=DEC_Insufficient_storage;
+ 	  break;}
++	memset(allocbufb, 0x00, needbytes);
+ 	b=allocbufb;			/* use the allocated space */
+ 	}
+       decNumberCopy(b, rhs);		/* copy content */
+@@ -3343,6 +3345,8 @@ const char *decNumberClassToString(enum decClass eclass) {
+ /* All fields are updated as required.	This is a utility operation,  */
+ /* so special values are unchanged and no error is possible.	      */
+ /* ------------------------------------------------------------------ */
++#pragma GCC push_options
++#pragma GCC optimize ("-O2")
+ decNumber * decNumberCopy(decNumber *dest, const decNumber *src) {
+ 
+   #if DECCHECK
+@@ -3370,6 +3374,7 @@ decNumber * decNumberCopy(decNumber *dest, const decNumber *src) {
+     }
+   return dest;
+   } /* decNumberCopy */
++#pragma GCC pop_options
+ 
+ /* ------------------------------------------------------------------ */
+ /* decNumberCopyAbs -- quiet absolute value operator		      */
 diff --git a/libstdc++-v3/config/locale/gnu/ctype_members.cc b/libstdc++-v3/config/locale/gnu/ctype_members.cc
 index 61ab0a02c..b62302edc 100644
 --- a/libstdc++-v3/config/locale/gnu/ctype_members.cc

@@ -48,6 +48,20 @@ tc_version_is_between() {
 	tc_version_is_at_least "${1}" && ! tc_version_is_at_least "${2}"
 }
 
+# @ECLASS_VARIABLE: GCC_TESTS_CHECK_TARGET
+# @USER_VARIABLE
+# @DESCRIPTION:
+# Defaults to 'check'. Allows choosing a different test target, e.g.
+# 'test-gcc' (https://gcc.gnu.org/install/test.html).
+: "${GCC_TESTS_CHECK_TARGET:=check}"
+
+# @ECLASS_VARIABLE: GCC_TESTS_RUNTESTFLAGS
+# @DEFAULT_UNSET
+# @USER_VARIABLE
+# @DESCRIPTION:
+# Extra options to pass to DejaGnu as RUNTESTFLAGS.
+: "${GCC_TESTS_RUNTESTFLAGS:=}"
+
 # @ECLASS_VARIABLE: TOOLCHAIN_GCC_PV
 # @DEFAULT_UNSET
 # @DESCRIPTION:
@@ -1086,19 +1100,8 @@ gcc_version_patch() {
 #---->> src_configure <<----
 
 toolchain_src_configure() {
-	# Allow users to explicitly avoid flag sanitization via
-	# USE=custom-cflags.
-	if ! _tc_use_if_iuse custom-cflags; then
-		# Over-zealous CFLAGS can often cause problems.  What may work for one
-		# person may not work for another.  To avoid a large influx of bugs
-		# relating to failed builds, we strip most CFLAGS out to ensure as few
-		# problems as possible.
-		strip-flags
-
-		# Lock gcc at -O2; we want to be conservative here.
-		filter-flags '-O?'
-		append-flags -O2
-	fi
+	BUILD_CONFIG_TARGETS=()
+	tc_version_is_at_least 11 && is-flagq '-O3' && BUILD_CONFIG_TARGETS+=( bootstrap-O3 )
 
 	downgrade_arch_flags ${GCC_BRANCH_VER}
 	gcc_do_filter_flags
@@ -1131,8 +1134,6 @@ toolchain_src_configure() {
 	else
 		confgcc=( -srcdir=../${P} ${CHOST} )
 	fi
-
-	local build_config_targets=()
 
 	if tc_version_is_at_least 2.3 ; then
 		[[ -n ${CBUILD} ]] && confgcc+=( --build=${CBUILD} )
@@ -1265,7 +1266,7 @@ toolchain_src_configure() {
 				# sh4 and so on
 				;;
 		esac
-		if [[ ${ENABLE_WERROR} == "yes" ]] && ! is_crosscompile ; then
+		if [[ ${ENABLE_WERROR} == "yes" ]] && ! is_crosscompile && ! tc-is-cross-compiler; then
 			confgcc+=( --enable-werror )
 		else
 			confgcc+=( --disable-werror )
@@ -1331,11 +1332,11 @@ toolchain_src_configure() {
 
 	# Build compiler itself using LTO
 	if tc_version_is_at_least 4.9 && _tc_use_if_iuse lto ; then
-		build_config_targets+=( bootstrap-lto )
+		BUILD_CONFIG_TARGETS+=( bootstrap-lto )
 	fi
 
 	if tc_version_is_at_least 12 && _tc_use_if_iuse cet && [[ ${CTARGET} == x86_64-*-gnu* ]] ; then
-		build_config_targets+=( bootstrap-cet )
+		BUILD_CONFIG_TARGETS+=( bootstrap-cet )
 	fi
 
 	# Support to disable PCH when building libstdcxx
@@ -1365,7 +1366,7 @@ toolchain_src_configure() {
 	if is_crosscompile ; then
 		# Enable build warnings by default with cross-compilers when system
 		# paths are included (e.g. via -I flags).
-		confgcc+=( --enable-poison-system-directories )
+		tc_version_is_at_least 4.7 && confgcc+=( --enable-poison-system-directories )
 
 		# When building a stage1 cross-compiler (just C compiler), we have to
 		# disable a bunch of features or gcc goes boom
@@ -1906,9 +1907,9 @@ toolchain_src_configure() {
 	eval "local -a EXTRA_ECONF=(${EXTRA_ECONF})"
 	confgcc+=( "$@" "${EXTRA_ECONF[@]}" )
 
-	if [[ -n ${build_config_targets} ]] ; then
-		# ./configure --with-build-config='bootstrap-lto bootstrap-cet'
-		confgcc+=( --with-build-config="${build_config_targets[*]}" )
+	if ! is_crosscompile && ! tc-is-cross-compiler && [[ -n ${BUILD_CONFIG_TARGETS} ]] ; then
+		# e.g. ./configure --with-build-config='bootstrap-lto bootstrap-cet'
+		confgcc+=( --with-build-config="${BUILD_CONFIG_TARGETS[*]}" )
 	fi
 
 	# Nothing wrong with a good dose of verbosity
@@ -1991,6 +1992,77 @@ toolchain_src_configure() {
 }
 
 gcc_do_filter_flags() {
+	# Allow users to explicitly avoid flag sanitization via
+	# USE=custom-cflags.
+	if ! _tc_use_if_iuse custom-cflags; then
+		# Over-zealous CFLAGS can often cause problems.  What may work for one
+		# person may not work for another.  To avoid a large influx of bugs
+		# relating to failed builds, we strip most CFLAGS out to ensure as few
+		# problems as possible.
+		strip-flags
+
+		# Lock gcc at -O2; we want to be conservative here.
+		filter-flags '-O?'
+
+		# We allow -O3 given it's a supported option upstream.
+		# Only add -O2 if we're not doing -O3.
+		if [[ ${BUILD_CONFIG_TARGETS[@]} == *bootstrap-O3* ]] ; then
+			append-flags '-O3'
+		else
+			append-flags '-O2'
+		fi
+	fi
+
+	declare -A l1_cache_sizes=()
+	# Workaround for inconsistent cache sizes on hybrid P/E cores
+	# See PR111768 (and bug #904426, bug #908523, and bug #915389)
+	if [[ ${CBUILD} == @(x86_64|i?86)* ]] && [[ "${CFLAGS}${CXXFLAGS}" == *-march=native* ]] && tc-is-gcc ; then
+		local x
+		local l1_cache_size
+		# Iterate over all cores and find their L1 cache size
+		for x in $(seq 0 $(($(nproc)-1))) ; do
+			[[ -z ${x} || ${x} -gt 64 ]] && break
+			l1_cache_size=$(taskset --cpu-list ${x} $(tc-getCC) -Q --help=params -O2 -march=native \
+				| awk '{ if ($1 ~ /^.*param.*l1-cache-size/) print $2; }' || die)
+			[[ -n ${l1_cache_size} && ${l1_cache_size} =~ ^[0-9]+$ ]] || break
+			l1_cache_sizes[${l1_cache_size}]=1
+		done
+		# If any of them are different, abort. We can't just pass one value of
+		# l1-cache-size because it doesn't cancel out the -march=native one.
+		if [[ ${#l1_cache_sizes[@]} -gt 1 ]] ; then
+			eerror "Different values of l1-cache-size detected!"
+			eerror "GCC will fail to bootstrap when comparing files with these flags."
+			eerror "This CPU is likely big.little/hybrid hardware with power/efficiency cores."
+			eerror "Please install app-misc/resolve-march-native and run 'resolve-march-native'"
+			eerror "to find a safe value of CFLAGS for this CPU. Note that this may vary"
+			eerror "depending on the core it ran on. taskset can be used to fix the cores used."
+			die "Varying l1-cache-size found, aborting (bug #915389, gcc PR#111768)"
+		fi
+	fi
+
+	if ver_test -lt 13.6 ; then
+		# These aren't supported by the just-built compiler either.
+		filter-flags -fharden-compares -fharden-conditional-branches \
+			-fharden-control-flow-redundancy -fno-harden-control-flow-redundancy \
+			-fhardcfr-skip-leaf -fhardcfr-check-exceptions \
+			-fhardcfr-check-returning-calls '-fhardcfr-check-noreturn-calls=*'
+
+		# New in GCC 14.
+		filter-flags -Walloc-size
+	fi
+
+	if ver_test -lt 15.1 ; then
+		filter-flags -fdiagnostics-explain-harder -fdiagnostics-details
+	fi
+
+	if is_d ; then
+		# bug #940750
+		filter-flags -Warray-bounds
+	fi
+
+	# Please use USE=lto instead (bug #906007).
+	filter-lto
+
 	# Avoid shooting self in foot
 	filter-flags '-mabi*' -m31 -m32 -m64
 
@@ -2061,13 +2133,12 @@ gcc_do_filter_flags() {
 		CFLAGS="-O2 -pipe"
 		FFLAGS=${CFLAGS}
 		FCFLAGS=${CFLAGS}
+		GDCFLAGS=${CFLAGS}
 
 		# "hppa2.0-unknown-linux-gnu" -> hppa2_0_unknown_linux_gnu
 		local VAR="CFLAGS_"${CTARGET//[-.]/_}
 		CXXFLAGS=${!VAR-${CFLAGS}}
 	fi
-
-	export GCJFLAGS=${GCJFLAGS:-${CFLAGS}}
 }
 
 gcc-multilib-configure() {
@@ -2296,58 +2367,102 @@ gcc_do_make() {
 #---->> src_test <<----
 
 toolchain_src_test() {
-	cd "${WORKDIR}"/build || die
+	# GCC's testsuite is a special case.
+	#
+	# * Generally, people work off comparisons rather than a full set of
+	#   passing tests.
+	#
+	# * The guality (sic) tests are for debug info quality and are especially
+	#   unreliable.
+	#
+	# * The execute torture tests are hopefully a good way for us to smoketest
+	#   and find critical regresions.
 
-	# From opensuse's spec file:
-	# "asan needs a whole shadow address space"
+	# From opensuse's spec file: "asan needs a whole shadow address space"
 	ulimit -v unlimited
 
-	local RUNTESTFLAGS=
-	[[ $(tc-arch) == "amd64" ]] && is_multilib && RUNTESTFLAGS="--target_board=unix\{,-m32\}"
 	# 'asan' wants to be preloaded first, so does 'sandbox'.
-	# To make asan tests work disable sandbox for all of test suite.
-	# 'backtrace' tests also does not like 'libsandbox.so' presence.
-	if tc_version_is_at_least 3.4 ; then
+	# To make asan tests work, we disable sandbox for all of test suite.
+	# The 'backtrace' tests also do not like the presence of 'libsandbox.so'.
+	local -x SANDBOX_ON=0
+	local -x LD_PRELOAD=
+
+	# Controls running expensive tests in e.g. the torture testsuite.
+	# Note that 'TEST', not 'TESTS', is correct here as it's a GCC
+	# testsuite variable, not ours.
+	tc_version_is_at_least 5 && local -x GCC_TEST_RUN_EXPENSIVE=1
+
+	# Use a subshell to allow meddling with flags just for the testsuite
+	(
+		# Workaround our -Wformat-security default which breaks
+		# various tests as it adds unexpected warning output.
+		if tc_version_is_at_least 13 ; then
+			GCC_TESTS_CFLAGS+=" -Wno-format-security -Wno-format"
+			GCC_TESTS_CXXFLAGS+=" -Wno-format-security -Wno-format"
+		fi
+
+		# Workaround our -Wtrampolines default which breaks
+		# tests too.
+		if tc_version_is_at_least 4.7 ; then
+			GCC_TESTS_CFLAGS+=" -Wno-trampolines"
+			GCC_TESTS_CXXFLAGS+=" -Wno-trampolines"
+		fi
+		# A handful of Ada (and objc++?) tests need an executable stack
+		if tc_version_is_at_least 12 ; then
+			GCC_TESTS_LDFLAGS+=" -Wl,--no-warn-execstack"
+		fi
+		# Avoid confusing tests like Fortran/C interop ones where
+		# CFLAGS are used.
+		if tc_version_is_at_least 13 ; then
+			GCC_TESTS_CFLAGS+=" -Wno-complain-wrong-lang"
+			GCC_TESTS_CXXFLAGS+=" -Wno-complain-wrong-lang"
+		fi
+
+		# TODO: Does this handle s390 (-m31) correctly?
+		# TODO: What if there are multiple ABIs like x32 too?
+		# XXX: Disabled until validate_failures.py can handle 'variants'
+		# XXX: https://gcc.gnu.org/PR116260
+		[[ $(tc-arch) == "amd64" ]] && is_multilib && GCC_TESTS_RUNTESTFLAGS="--target_board=unix\{,-m32\}"
+
+		# nonfatal here as we die if the comparison below fails. Also, note that
+		# the exit code of targets other than 'check' may be unreliable.
+		#
+		# CFLAGS and so on are repeated here because of tests vs building test
+		# deps like libbacktrace.
+		#
+		# TODO: Should we try pass in the regular user flags for the non-RUNTESTFLAGS
+		# instances below for building e.g. libbacktrace?
+		local cpunum=
 		if tc_version_is_between 4.9 9 && [[ is_multilib || $(tc-arch) == "x86" || $(tc-arch) == "arm" ]] ; then
-			local cpunum=$((`cat /sys/devices/system/cpu/online |awk -F '-' '{print$2}'` + 1))
+			cpunum=$((`cat /sys/devices/system/cpu/online |awk -F '-' '{print$2}'` + 1))
 			[[ $cpunum -gt 16 ]] && cpunum=16
-			OMP_NUM_THREADS=$cpunum SANDBOX_ON=0 LD_PRELOAD= emake -k check RUNTESTFLAGS=$RUNTESTFLAGS
-		else
-			SANDBOX_ON=0 LD_PRELOAD= emake -k check RUNTESTFLAGS=$RUNTESTFLAGS
+			[[ $cpunum -eq 1 ]] && cpunum=
 		fi
-	else
-		SANDBOX_ON=0 LD_PRELOAD= emake -k check RUNTESTFLAGS=$RUNTESTFLAGS
-	fi
-	local success_tests=$?
+		nonfatal emake -C "${WORKDIR}"/build -k "${GCC_TESTS_CHECK_TARGET}" \
+			RUNTESTFLAGS=" \
+				${GCC_TESTS_RUNTESTFLAGS} \
+				CFLAGS_FOR_TARGET='${GCC_TESTS_CFLAGS_FOR_TARGET:-${GCC_TESTS_CFLAGS}}' \
+				CXXFLAGS_FOR_TARGET='${GCC_TESTS_CXXFLAGS_FOR_TARGET:-${GCC_TESTS_CXXFLAGS}}' \
+				LDFLAGS_FOR_TARGET='${TEST_LDFLAGS_FOR_TARGET:-${GCC_TESTS_LDFLAGS}}' \
+				CFLAGS='${GCC_TESTS_CFLAGS}' \
+				CXXFLAGS='${GCC_TESTS_CXXFLAGS}' \
+				FCFLAGS='${GCC_TESTS_FCFLAGS}' \
+				FFLAGS='${GCC_TESTS_FFLAGS}' \
+				LDFLAGS='${GCC_TESTS_LDFLAGS}' \
+				OMP_NUM_THREADS='${cpunum}' \
+			" \
+			CFLAGS_FOR_TARGET="${GCC_TESTS_CFLAGS_FOR_TARGET:-${GCC_TESTS_CFLAGS}}" \
+			CXXFLAGS_FOR_TARGET="${GCC_TESTS_CXXFLAGS_FOR_TARGET:-${GCC_TESTS_CXXFLAGS}}" \
+			LDFLAGS_FOR_TARGET="${GCC_TESTS_LDFLAGS_FOR_TARGET:-${GCC_TESTS_LDFLAGS}}" \
+			CFLAGS="${GCC_TESTS_CFLAGS}" \
+			CXXFLAGS="${GCC_TESTS_CXXFLAGS}" \
+			FCFLAGS="${GCC_TESTS_FCFLAGS}" \
+			FFLAGS="${GCC_TESTS_FFLAGS}" \
+			LDFLAGS="${GCC_TESTS_LDFLAGS}" \
+			OMP_NUM_THREADS="${cpunum}"
+	)
 
-	if [[ ! -d "${BROOT}"/var/cache/gcc/${SLOT} ]] && ! [[ ${success_tests} -eq 0 ]] ; then
-		# We have no reference data saved from a previous run to know if
-		# the failures are tolerable or not, so we bail out.
-		eerror "Reference test data does NOT exist at ${BROOT}/var/cache/gcc/${SLOT}"
-		eerror "Tests failed and nothing to compare with, so this is a fatal error."
-		eerror "(Set GCC_TESTS_IGNORE_NO_BASELINE=1 to make this non-fatal for initial run.)"
-
-		if [[ -z ${GCC_TESTS_IGNORE_NO_BASELINE} ]] ; then
-			die "Tests failed (failures occurred with no reference data)"
-		fi
-	fi
-
-	einfo "Testing complete! Review the following output to check for success or failure."
-	einfo "Please ignore any 'mail' lines in the summary output below (no mail is sent)."
-	einfo "Summary:"
-	"${S}"/contrib/test_summary
-
-	# If previous results exist on the system, compare with it
-	# TODO: Distribute some baseline results in e.g. gcc-patches.git?
-	if [[ -d "${BROOT}"/var/cache/gcc/${SLOT} ]] ; then
-		einfo "Comparing with previous cached results at ${BROOT}/var/cache/gcc/${SLOT}"
-
-		# Exit with the following values:
-		# 0 if there is nothing of interest
-		# 1 if there are errors when comparing single test case files
-		# N for the number of errors found when comparing directories
-		"${S}"/contrib/compare_tests "${BROOT}"/var/cache/gcc/${SLOT}/ . || die "Comparison for tests results failed, error code: $?"
-	fi
+	einfo $("${S}"/contrib/test_summary)
 }
 
 #---->> src_install <<----
