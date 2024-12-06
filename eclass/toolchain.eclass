@@ -1367,7 +1367,7 @@ toolchain_setup_d() {
 
 toolchain_src_configure() {
 	BUILD_CONFIG_TARGETS=()
-	tc_version_is_at_least 11 && is-flagq '-O3' && BUILD_CONFIG_TARGETS+=( bootstrap-O3 )
+	tc_version_is_at_least 4.6 && is-flagq '-O3' && BUILD_CONFIG_TARGETS+=( bootstrap-O3 )
 
 	downgrade_arch_flags ${GCC_BRANCH_VER}
 	gcc_do_filter_flags
