@@ -30,9 +30,6 @@ BDEPEND=""
 
 CHOST="${TOOL_PREFIX}-linux-gnu"
 
-CC="${CHOST}-gcc-2.6,3"
-CXX="${CHOST}-g++-2.6.3"
-
 S="${WORKDIR}"/STLport-${PV}
 
 src_unpack() {
@@ -50,7 +47,7 @@ src_prepare() {
 src_configure() {
 	pushd "${S}" > /dev/null
 	downgrade_arch_flags 2.6.3
-	sh ./configure --enable-newalloc || die
+	CC="${CHOST}-gcc-2.6.3" CXX="${CHOST}-g++-2.6.3" sh ./configure --enable-newalloc || die
 	popd > /dev/null
 }
 

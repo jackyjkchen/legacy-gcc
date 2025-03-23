@@ -45,7 +45,7 @@ src_configure() {
 
 	echo "${S}"/configure "${econfargs[@]}"
 
-	PATH=/usr/${CHOST}/bin:${PATH} "${S}"/configure "${econfargs[@]}" || die "failed to run configure"
+	PATH=/usr/${CHOST}/bin:${PATH} CC="${CC}" CXX="${CXX}" "${S}"/configure "${econfargs[@]}" || die "failed to run configure"
 
 	popd > /dev/null
 }

@@ -344,6 +344,11 @@ toolchain-oldlibc_src_configure() {
 	downgrade_arch_flags ${GCC_BRANCH_VER}
 	gcc_do_filter_flags
 
+	# portage-3.0.67 not export CC/CXX
+	export CC=${CC}
+	export CXX=${CXX}
+	einfo "CC=\"${CC}\""
+	einfo "CXX=\"${CXX}\""
 	einfo "CFLAGS=\"${CFLAGS}\""
 	einfo "CXXFLAGS=\"${CXXFLAGS}\""
 	einfo "LDFLAGS=\"${LDFLAGS}\""

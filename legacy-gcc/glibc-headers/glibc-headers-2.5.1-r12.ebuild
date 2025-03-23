@@ -103,7 +103,7 @@ src_configure() {
 
 	echo "${S}"/configure "${econfargs[@]}"
 
-	"${S}"/configure "${econfargs[@]}" libc_cv_forced_unwind=yes libc_cv_c_cleanup=yes || die "failed to run configure"
+	CC=${CC} CXX=${CXX} "${S}"/configure "${econfargs[@]}" libc_cv_forced_unwind=yes libc_cv_c_cleanup=yes || die "failed to run configure"
 
 	popd > /dev/null
 }
@@ -114,7 +114,7 @@ src_compile() {
 
 src_install() {
 	pushd "${WORKDIR}"/build >/dev/null
-	make install-headers || die
+	make CC=${CC} CXX=${CXX} install-headers || die
 	touch  ${ED}/usr/${CHOST}/include/gnu/stubs.h || die
 	cp -v bits/stdio_lim.h ${ED}/usr/${CHOST}/include/bits || die
 	rm -rv ${ED}/usr/${CHOST}/include/scsi || die

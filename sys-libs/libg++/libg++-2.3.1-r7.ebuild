@@ -52,7 +52,7 @@ src_configure() {
 
 	echo "${S}"/configure "${econfargs[@]}"
 
-	"${S}"/configure "${econfargs[@]}" || die "failed to run configure"
+	CC="${CC}" CXX="${CXX}" "${S}"/configure "${econfargs[@]}" || die "failed to run configure"
 
 	popd > /dev/null
 }

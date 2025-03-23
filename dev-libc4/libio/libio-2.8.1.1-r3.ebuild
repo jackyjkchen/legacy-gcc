@@ -46,7 +46,7 @@ src_configure() {
 
 	echo "${S}"/configure "${econfargs[@]}"
 
-	PATH=/usr/${CHOST}/bin:${PATH} "${S}"/configure "${econfargs[@]}" || die "failed to run configure"
+	PATH=/usr/${CHOST}/bin:${PATH} CC="${CC}" CXX="${CXX}" "${S}"/configure "${econfargs[@]}" || die "failed to run configure"
 
 	popd > /dev/null
 }
@@ -59,7 +59,7 @@ src_compile() {
 
 src_install() {
 	pushd "${WORKDIR}"/build > /dev/null
-	PATH=/usr/${CHOST}/bin:${PATH} emake -j1 DESTDIR="${ED}" install-target-libio || die "failed to run make install"
+	PATH=/usr/${CHOST}/bin:${PATH} emake -j1 CC="${CC}" CXX="${CXX}" DESTDIR="${ED}" install-target-libio || die "failed to run make install"
 	cp -ax libraries/libio/libiostream.a "${ED}"/usr/lib/gcc-lib/${CHOST}/2.8.1/ || die
 	rm -rfv "${ED}"/usr/lib/libiberty.a "${ED}"/usr/${CHOST}
 	popd > /dev/null

@@ -20,9 +20,6 @@ BDEPEND=""
 
 CHOST="i486-legacy-linuxaout"
 
-CC="${CHOST}-gcc-2.6,3"
-CXX="${CHOST}-g++-2.6.3"
-
 S="${WORKDIR}"/STLport-${PV}
 
 src_unpack() {

@@ -72,7 +72,7 @@ src_configure() {
 
 	echo "${S}"/configure "${econfargs[@]}"
 
-	"${S}"/configure "${econfargs[@]}" || die "failed to run configure"
+	CC="${CC}" CXX="${CXX}" "${S}"/configure "${econfargs[@]}" || die "failed to run configure"
 
 	popd > /dev/null
 }
@@ -85,7 +85,7 @@ src_compile() {
 
 src_install() {
 	pushd "${WORKDIR}"/build > /dev/null
-	emake -j1 DESTDIR="${ED}" install || die "failed to run make install"
+	emake -j1 CC="${CC}" CXX="${CXX}" DESTDIR="${ED}" install || die "failed to run make install"
 	mv -v "${ED}"/usr/lib/libstdc++* "${ED}"/usr/lib/gcc-lib/${CHOST}/2.8.1/ || die
 	rm -rfv "${ED}"/usr/lib/libiberty.a "${ED}"/usr/${CHOST}
 	popd > /dev/null

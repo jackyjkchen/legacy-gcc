@@ -104,6 +104,8 @@ multilib_src_configure() {
 		&& myconf+=( --without-included-gettext ) \
 		|| myconf+=( --disable-nls )
 
+	export CC=${CC}
+	export CXX=${CXX}
 	ECONF_SOURCE=${S} \
 	econf "${myconf[@]}"
 }

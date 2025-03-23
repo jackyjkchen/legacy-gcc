@@ -1378,6 +1378,11 @@ toolchain_src_configure() {
 		export ac_cv_std_swap_in_utility=no
 	fi
 
+	# portage-3.0.67 not export CC/CXX
+	export CC=${CC}
+	export CXX=${CXX}
+	einfo "CC=\"${CC}\""
+	einfo "CXX=\"${CXX}\""
 	einfo "CFLAGS=\"${CFLAGS}\""
 	einfo "CXXFLAGS=\"${CXXFLAGS}\""
 	einfo "LDFLAGS=\"${LDFLAGS}\""

@@ -193,6 +193,10 @@ toolchain-binutils_pkgversion() {
 }
 
 toolchain-binutils_src_configure() {
+	# portage-3.0.67 not export CC/CXX
+	export CC=${CC}
+	export CXX=${CXX}
+
 	# See https://www.gnu.org/software/make/manual/html_node/Parallel-Output.html
 	# Avoid really confusing logs from subconfigure spam, makes logs far
 	# more legible.
