@@ -478,6 +478,9 @@ toolchain-binutils_src_install() {
 
 	# Remove shared info pages
 	rm -f "${ED}"/${DATAPATH}/info/{dir,configure.info,standards.info}
+	if is_cross; then
+		rm -rf "${ED}"/usr/share/
+	fi
 
 	# Trim all empty dirs
 	find "${ED}" -depth -type d -exec rmdir {} + 2>/dev/null
