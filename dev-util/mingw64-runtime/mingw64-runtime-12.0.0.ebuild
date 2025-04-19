@@ -20,7 +20,7 @@ inherit autotools flag-o-matic toolchain-funcs
 
 DESCRIPTION="Free Win64 runtime and import library definitions"
 HOMEPAGE="http://mingw-w64.sourceforge.net/"
-SRC_URI="mirror://sourceforge/mingw-w64/mingw-w64/mingw-w64-release/mingw-w64-v${PV}.tar.bz2"
+SRC_URI="https://sourceforge.net/projects/mingw-w64/files/mingw-w64/mingw-w64-release/mingw-w64-v${PV}.tar.bz2"
 
 LICENSE="BSD"
 SLOT="0"
