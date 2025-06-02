@@ -1,7 +1,7 @@
 #include <stdio.h>
 
 static const char* attr_type[] = {
-    "普", "格", "飞", "毒", "地", "岩", "虫", "鬼", "钢", "火", "水", "草", "电", "超", "冰", "龙", "恶", "仙",
+    "普", "格", "飞", "毒", "地", "岩", "虫", "鬼", "钢", "火", "水", "草", "电", "超", "冰", "龙", "恶", "妖",
 };
 
 #define ATTR_NUM (sizeof(attr_type) / sizeof(const char*))
@@ -14,7 +14,7 @@ static const char* attr_type[] = {
 #define QUARTER 9
 
 static const unsigned char attr_table[] = {
-/*       普    格    飞    毒    地    岩    虫    鬼    钢    火    水    草    电    超    冰    龙    恶    仙 */
+/*       普    格    飞    毒    地    岩    虫    鬼    钢    火    水    草    电    超    冰    龙    恶    妖 */
 /*普*/  ONE,  ONE,  ONE,  ONE,  ONE, HALF,  ONE, ZERO, HALF,  ONE,  ONE,  ONE,  ONE,  ONE,  ONE,  ONE,  ONE,  ONE,
 /*格*/  TWO,  ONE, HALF, HALF,  ONE,  TWO, HALF, ZERO,  TWO,  ONE,  ONE,  ONE,  ONE, HALF,  TWO,  ONE,  TWO, HALF,
 /*飞*/  ONE,  TWO,  ONE,  ONE,  ONE, HALF,  TWO,  ONE, HALF,  ONE,  ONE,  TWO, HALF,  ONE,  ONE,  ONE,  ONE,  ONE, 
@@ -32,7 +32,7 @@ static const unsigned char attr_table[] = {
 /*冰*/  ONE,  ONE,  TWO,  ONE,  TWO,  ONE,  ONE,  ONE, HALF, HALF, HALF,  TWO,  ONE,  ONE, HALF,  TWO,  ONE,  ONE, 
 /*龙*/  ONE,  ONE,  ONE,  ONE,  ONE,  ONE,  ONE,  ONE, HALF,  ONE,  ONE,  ONE,  ONE,  ONE,  ONE,  TWO,  ONE, ZERO, 
 /*恶*/  ONE, HALF,  ONE,  ONE,  ONE,  ONE,  ONE,  TWO,  ONE,  ONE,  ONE,  ONE,  ONE,  TWO,  ONE,  ONE, HALF, HALF, 
-/*仙*/  ONE,  TWO,  ONE, HALF,  ONE,  ONE,  ONE,  ONE, HALF, HALF,  ONE,  ONE,  ONE,  ONE,  ONE,  TWO,  TWO,  ONE, 
+/*妖*/  ONE,  TWO,  ONE, HALF,  ONE,  ONE,  ONE,  ONE, HALF, HALF,  ONE,  ONE,  ONE,  ONE,  ONE,  TWO,  TWO,  ONE, 
 };
 
 static const char* value_string(unsigned char v) {
