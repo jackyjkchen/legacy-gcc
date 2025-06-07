@@ -1,4 +1,4 @@
-From 64b03bde3cd42548946d3294938e643b6074ef43 Mon Sep 17 00:00:00 2001
+From dc1f70670a478cc51a4ec8a49f6860bcee26d23e Mon Sep 17 00:00:00 2001
 From: Achim Gratz <Achim.Gratz@Stromeko.DE>
 Date: Sun, 25 Apr 2021 11:33:55 +0200
 Subject: [PATCH 101/102] Cygwin: enable libgccjit not just for MingW
@@ -7,9 +7,8 @@ Subject: [PATCH 101/102] Cygwin: enable libgccjit not just for MingW
  configure            | 17 +++++++++++++++--
  configure.ac         |  3 ++-
  gcc/cp/Make-lang.in  |  2 +-
- gcc/jit/Make-lang.in | 15 ++++++++++-----
- gcc/system.h         |  5 +++--
- 5 files changed, 31 insertions(+), 11 deletions(-)
+ gcc/jit/Make-lang.in | 27 +++++++++++++++++++++------
+ 4 files changed, 39 insertions(+), 10 deletions(-)
 
 diff --git a/configure b/configure
 index 117a7ef23f2..ba4b9384e82 100755
@@ -116,10 +115,10 @@ index 4ee26fad93d..6526aa14abb 100644
  
  c++.uninstall:
 diff --git a/gcc/jit/Make-lang.in b/gcc/jit/Make-lang.in
-index 55079209264..fb2956b5657 100644
+index 55079209264..2d82284db38 100644
 --- a/gcc/jit/Make-lang.in
 +++ b/gcc/jit/Make-lang.in
-@@ -44,8 +44,22 @@ LIBGCCJIT_VERSION_NUM = 0
+@@ -44,10 +44,24 @@ LIBGCCJIT_VERSION_NUM = 0
  LIBGCCJIT_MINOR_NUM = 0
  LIBGCCJIT_RELEASE_NUM = 1
  
@@ -133,7 +132,7 @@ index 55079209264..fb2956b5657 100644
 +ifneq (,$(filter %-mingw% %-cygwin,$(target)))
 +LIBGCCJIT_FILENAME = $(SHARED_PFX)gccjit-$(LIBGCCJIT_VERSION_NUM).dll
  LIBGCCJIT_IMPORT_LIB = libgccjit.dll.a
-+
+ 
 +# Conditionalize the use of the LD_VERSION_SCRIPT_OPTION and
 +# LD_SONAME_OPTION depending if configure found them, using $(if)
 +# We have to define a COMMA here, otherwise the commas in the "true"
@@ -142,9 +141,11 @@ index 55079209264..fb2956b5657 100644
 +LIBGCCJIT_VERSION_SCRIPT_OPTION = \
 +	$(if $(LD_VERSION_SCRIPT_OPTION),\
 +	  -Wl$(COMMA)$(LD_VERSION_SCRIPT_OPTION)$(COMMA)$(srcdir)/jit/libgccjit.map)
- 
++
  jit: $(LIBGCCJIT_FILENAME) \
-@@ -149,9 +154,10 @@ endif
+ 	$(FULL_DRIVER_NAME)
+ 
+@@ -149,9 +163,10 @@ endif
  # Use strict warnings for this front end.
  jit-warn = $(STRICT_WARN)
  
@@ -157,7 +158,7 @@ index 55079209264..fb2956b5657 100644
  else
  ifneq (,$(findstring darwin,$(host)))
  LIBGCCJIT_VERS = $(LIBGCCJIT_CURRENT).$(LIBGCCJIT_REVISION).$(LIBGCCJIT_AGE)
-@@ -191,7 +196,7 @@ $(LIBGCCJIT_FILENAME): $(jit_OBJS) \
+@@ -191,7 +206,7 @@ $(LIBGCCJIT_FILENAME): $(jit_OBJS) \
  	@$(call LINK_PROGRESS,$(INDEX.jit),end)
  
  # Create symlinks when not building for Windows
@@ -166,7 +167,7 @@ index 55079209264..fb2956b5657 100644
  
  ifeq (,$(findstring darwin,$(host)))
  # but only one level for Darwin, version info is embedded.
-@@ -377,7 +382,7 @@ jit.install-headers: installdirs
+@@ -377,7 +392,7 @@ jit.install-headers: installdirs
  	$(INSTALL_DATA) $(srcdir)/jit/libgccjit++.h \
  	  $(DESTDIR)$(includedir)/libgccjit++.h
  
@@ -175,22 +176,6 @@ index 55079209264..fb2956b5657 100644
  jit.install-common: installdirs jit.install-headers
  # Install import library
  	$(INSTALL_PROGRAM) $(LIBGCCJIT_IMPORT_LIB) \
-diff --git a/gcc/system.h b/gcc/system.h
-index 03ab33ac960..39ce790ab22 100644
---- a/gcc/system.h
-+++ b/gcc/system.h
-@@ -690,8 +690,9 @@ extern int vsnprintf (char *, size_t, const char *, va_list);
- # endif
- #endif
- 
--#if defined (ENABLE_PLUGIN) && defined (HAVE_DLFCN_H)
--/* If plugin support is enabled, we could use libdl.  */
-+#if defined (HAVE_DLFCN_H) && (defined (ENABLE_PLUGIN) || defined (__CYGWIN__))
-+/* If plugin support is enabled, we could use libdl.
-+   On Cygwin libdl is needed for libgccjit but no plugin support is available.  */
- #include <dlfcn.h>
- #endif
- 
 -- 
 2.45.1
 
