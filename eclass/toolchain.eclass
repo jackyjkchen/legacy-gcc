@@ -729,7 +729,7 @@ get_gcc_src_uri() {
 		GCC_SRC_URI="http://gcc.gnu.org/pub/gcc/old-releases/gcc-1/gcc-${GCC_PV}.tar.bz2"
 	fi
 
-	if tc_version_is_at_least 12 ; then
+	if tc_version_is_at_least 13 ; then
 		[[ -n ${PATCH_VER} ]] && \
 			GCC_SRC_URI+=" $(gentoo_urls gcc-${PATCH_GCC_VER}-patches-${PATCH_VER}.tar.${TOOLCHAIN_PATCH_SUFFIX})"
 		[[ -n ${MUSL_VER} ]] && \
@@ -799,7 +799,7 @@ git_init_src() {
 
 toolchain_src_unpack() {
 	default_src_unpack
-	tc_version_is_at_least 12 || unpack_gcc_patchset
+	tc_version_is_at_least 13 || unpack_gcc_patchset
 	#tc_version_is_at_least 4.7 || git_init_src
 }
 
@@ -817,6 +817,12 @@ toolchain_src_prepare() {
 	do_gcc_DJGPP_patches
 
 	eapply_user
+
+	# Workaround -march=native not working for stage1 with non-GCC (bug #933772).
+	if ! tc-is-gcc && [[ "${CFLAGS}${CXXFLAGS}" == *-march=native* ]] ; then
+		CLANG_DISABLE_CET_HACK=1
+		filter-flags '-march=native'
+	fi
 
 	if ! _tc_use_if_iuse vanilla ; then
 		tc_enable_hardened_gcc
@@ -1037,7 +1043,7 @@ tc_enable_hardened_gcc() {
 		hardened_gcc_flags+=" -DDEF_GENTOO_ZNOW"
 	fi
 
-	if _tc_use_if_iuse cet && [[ ${CTARGET} == *x86_64*-linux-gnu* ]] ; then
+	if _tc_use_if_iuse cet && [[ -z ${CLANG_DISABLE_CET_HACK} && ${CTARGET} == *x86_64*-linux-gnu* ]] ; then
 		einfo "Updating gcc to use x86-64 control flow protection by default ..."
 		hardened_gcc_flags+=" -DEXTRA_OPTIONS_CF"
 	fi
@@ -1538,14 +1544,14 @@ toolchain_src_configure() {
 	if tc_version_is_at_least 3.4 ; then
 		case $(tc-arch) in
 			amd64|x86|arm64|alpha|hppa|loong|m68k|mips|ppc|ppc64|riscv|s390|sparc)
-				tc_version_is_at_least 12 || ENABLE_WERROR="yes"
+				ENABLE_WERROR="yes"
 				;;
 			arm)
 				if [[ ${CTARGET} == arm*-*-linux-gnueabihf ]] ; then
-					tc_version_is_between 4.5 12 && ENABLE_WERROR="yes"
+					tc_version_is_at_least 4.5&& ENABLE_WERROR="yes"
 				fi
 				if [[ ${CTARGET} == arm*-*-linux-gnueabi ]] ; then
-					tc_version_is_at_least 12 || ENABLE_WERROR="yes"
+					ENABLE_WERROR="yes"
 				fi
 				;;
 			*)
@@ -1621,7 +1627,7 @@ toolchain_src_configure() {
 		BUILD_CONFIG_TARGETS+=( bootstrap-lto )
 	fi
 
-	if tc_version_is_at_least 12 && _tc_use_if_iuse cet && [[ ${CTARGET} == x86_64-*-gnu* ]] ; then
+	if tc_version_is_at_least 12 && _tc_use_if_iuse cet && [[ -z ${CLANG_DISABLE_CET_HACK} && ${CTARGET} == x86_64-*-gnu* ]] ; then
 		BUILD_CONFIG_TARGETS+=( bootstrap-cet )
 	fi
 
@@ -2042,8 +2048,20 @@ toolchain_src_configure() {
 	fi
 
 	if in_iuse cet ; then
-		[[ ${CTARGET} == x86_64-*-gnu* ]] && confgcc+=( $(use_enable cet) )
-		[[ ${CTARGET} == aarch64-*-gnu* ]] && confgcc+=( $(use_enable cet standard-branch-protection) )
+		# Usage: triple_arch triple_env cet_name
+		enable_cet_for() {
+			if [[ ${CTARGET} == ${1}-* ]] ; then
+				if use cet && [[ ${CTARGET} == *-${2}* ]]; then
+					confgcc+=( --enable-${3} )
+				else
+					confgcc+=( --disable-${3} )
+				fi
+			fi
+		}
+
+		enable_cet_for 'x86_64' 'gnu' 'cet'
+		enable_cet_for 'aarch64' 'gnu' 'standard-branch-protection'
+		[[ -n ${CLANG_DISABLE_CET_HACK} || ${CTARGET} == i[34567]86-* ]] && confgcc+=( --disable-cet )
 	fi
 
 	if in_iuse systemtap ; then

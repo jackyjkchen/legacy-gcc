@@ -1,0 +1,143 @@
+diff --git a/gcc/Makefile.in b/gcc/Makefile.in
+index f38d8c339..75963260e 100644
+--- a/gcc/Makefile.in
++++ b/gcc/Makefile.in
+@@ -214,14 +214,26 @@ GCC_WARN_CXXFLAGS = $(LOOSE_WARN) $($(@D)-warn) $(NOCOMMON_FLAG) $($@-warn)
+ # These files are to have specific diagnostics suppressed, or are not to
+ # be subject to -Werror:
+ # flex output may yield harmless "no previous prototype" warnings
++build/gengtype.o-warn = -Wno-format-overflow
+ build/gengtype-lex.o-warn = -Wno-error
++gengtype.o-warn = -Wno-format-overflow
+ gengtype-lex.o-warn = -Wno-error
+ libgcov-util.o-warn = -Wno-error
+ libgcov-driver-tool.o-warn = -Wno-error
+ libgcov-merge-tool.o-warn = -Wno-error
++aarch64.o-warn = -Wno-error
+ gimple-match.o-warn = -Wno-unused
+ generic-match.o-warn = -Wno-unused
+ dfp.o-warn = -Wno-strict-aliasing
++arm.o-warn = -Wno-error=format-diag
++build/genhooks.o-warn = -Wno-error=unused-result
++gcc.o-warn = -Wno-error=unused-result
++ggc-common.o-warn = -Wno-error=deprecated-declarations
++lto/lto-common.o-warn = -Wno-error=unused-result
++lto-wrapper.o-warn = -Wno-error=unused-result
++m68k-common.o-warn = -Wno-error=unused-result
++objc/objc-next-runtime-abi-02.o-warn = -Wno-error=unused-result
++objcp/objc-next-runtime-abi-02.o-warn = -Wno-error=unused-result
+ 
+ # All warnings have to be shut off in stage1 if the compiler used then
+ # isn't gcc; configure determines that.  WARN_CFLAGS will be either
+diff --git a/libdecnumber/decNumber.c b/libdecnumber/decNumber.c
+index 22ac359a6..48f0b07b4 100644
+--- a/libdecnumber/decNumber.c
++++ b/libdecnumber/decNumber.c
+@@ -927,9 +927,9 @@ decNumber * decNumberCompareTotalMag(decNumber *res, const decNumber *lhs,
+ 				     const decNumber *rhs, decContext *set) {
+   uInt status=0;		   /* accumulator */
+   uInt needbytes;		   /* for space calculations */
+-  decNumber bufa[D2N(DECBUFFER+1)];/* +1 in case DECBUFFER=0 */
++  decNumber bufa[D2N(DECBUFFER+1)] = {0};/* +1 in case DECBUFFER=0 */
+   decNumber *allocbufa=NULL;	   /* -> allocated bufa, iff allocated */
+-  decNumber bufb[D2N(DECBUFFER+1)];
++  decNumber bufb[D2N(DECBUFFER+1)] = {0};
+   decNumber *allocbufb=NULL;	   /* -> allocated bufb, iff allocated */
+   decNumber *a, *b;		   /* temporary pointers */
+ 
+@@ -947,6 +947,7 @@ decNumber * decNumberCompareTotalMag(decNumber *res, const decNumber *lhs,
+ 	if (allocbufa==NULL) {		/* hopeless -- abandon */
+ 	  status|=DEC_Insufficient_storage;
+ 	  break;}
++	memset(allocbufa, 0x00, needbytes);
+ 	a=allocbufa;			/* use the allocated space */
+ 	}
+       decNumberCopy(a, lhs);		/* copy content */
+@@ -961,6 +962,7 @@ decNumber * decNumberCompareTotalMag(decNumber *res, const decNumber *lhs,
+ 	if (allocbufb==NULL) {		/* hopeless -- abandon */
+ 	  status|=DEC_Insufficient_storage;
+ 	  break;}
++	memset(allocbufb, 0x00, needbytes);
+ 	b=allocbufb;			/* use the allocated space */
+ 	}
+       decNumberCopy(b, rhs);		/* copy content */
+@@ -3343,6 +3345,8 @@ const char *decNumberClassToString(enum decClass eclass) {
+ /* All fields are updated as required.	This is a utility operation,  */
+ /* so special values are unchanged and no error is possible.	      */
+ /* ------------------------------------------------------------------ */
++#pragma GCC push_options
++#pragma GCC optimize ("-O2")
+ decNumber * decNumberCopy(decNumber *dest, const decNumber *src) {
+ 
+   #if DECCHECK
+@@ -3370,6 +3374,7 @@ decNumber * decNumberCopy(decNumber *dest, const decNumber *src) {
+     }
+   return dest;
+   } /* decNumberCopy */
++#pragma GCC pop_options
+ 
+ /* ------------------------------------------------------------------ */
+ /* decNumberCopyAbs -- quiet absolute value operator		      */
+diff --git a/libstdc++-v3/config/locale/gnu/ctype_members.cc b/libstdc++-v3/config/locale/gnu/ctype_members.cc
+index bd190712e..9382d7629 100644
+--- a/libstdc++-v3/config/locale/gnu/ctype_members.cc
++++ b/libstdc++-v3/config/locale/gnu/ctype_members.cc
+@@ -221,7 +221,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
+   ctype<wchar_t>::
+   do_narrow(wchar_t __wc, char __dfault) const
+   {
+-    if (__wc >= 0 && __wc < 128 && _M_narrow_ok)
++    if (__wc < 128 && _M_narrow_ok)
+       return _M_narrow[__wc];
+ #if __GLIBC__ > 2 || (__GLIBC__ == 2 && __GLIBC_MINOR__ > 2)
+     __c_locale __old = __uselocale(_M_c_locale_ctype);
+@@ -244,7 +244,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
+     if (_M_narrow_ok)
+       while (__lo < __hi)
+ 	{
+-	  if (*__lo >= 0 && *__lo < 128)
++	  if (*__lo < 128)
+ 	    *__dest = _M_narrow[*__lo];
+ 	  else
+ 	    {
+diff --git a/libstdc++-v3/libsupc++/pure.cc b/libstdc++-v3/libsupc++/pure.cc
+index 30b4e57de..bab21fe21 100644
+--- a/libstdc++-v3/libsupc++/pure.cc
++++ b/libstdc++-v3/libsupc++/pure.cc
+@@ -46,13 +46,19 @@
+ extern "C" void
+ __cxxabiv1::__cxa_pure_virtual (void)
+ {
+-  writestr ("pure virtual method called\n");
++#if _GLIBCXX_HOSTED && _GLIBCXX_VERBOSE
++  auto ret = writestr ("pure virtual method called\n");
++  (void)ret;
++#endif
+   std::terminate ();
+ }
+ 
+ extern "C" void
+ __cxxabiv1::__cxa_deleted_virtual (void)
+ {
+-  writestr ("deleted virtual method called\n");
++#if _GLIBCXX_HOSTED && _GLIBCXX_VERBOSE
++  auto ret = writestr ("deleted virtual method called\n");
++  (void)ret;
++#endif
+   std::terminate ();
+ }
+diff --git a/libstdc++-v3/src/c++17/floating_to_chars.cc b/libstdc++-v3/src/c++17/floating_to_chars.cc
+index 4599d68a3..5dbc88e81 100644
+--- a/libstdc++-v3/src/c++17/floating_to_chars.cc
++++ b/libstdc++-v3/src/c++17/floating_to_chars.cc
+@@ -85,6 +85,10 @@ using F128_type = __float128;
+ using F128_type = void;
+ #endif
+ 
++#if !defined __SIZEOF_INT128__
++#pragma GCC diagnostic ignored "-Wunused-function"
++#endif
++
+ namespace
+ {
+ #if defined __SIZEOF_INT128__
