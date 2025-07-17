@@ -36,7 +36,7 @@ src_prepare() {
 
 	use vanilla && return 0
 
-	eapply "${FILESDIR}"/${PV}/postrelease/000_pr111224.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/000_pr98645-98688-111224.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/001_pr100130.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/002_pr93444-107833.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/003_pr97219.patch
