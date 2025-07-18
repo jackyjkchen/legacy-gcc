@@ -143,6 +143,50 @@ index 6c960c396..4484e3b53 100644
  
  extern "C" int printf (const char *, ...);
  
+diff --git a/gcc/testsuite/g++.dg/gomp/attrs-10.C b/gcc/testsuite/g++.dg/gomp/attrs-10.C
+index a78f892c2..ed0214a8d 100644
+--- a/gcc/testsuite/g++.dg/gomp/attrs-10.C
++++ b/gcc/testsuite/g++.dg/gomp/attrs-10.C
+@@ -55,7 +55,7 @@ f4 (int l)
+ 
+ int
+ f5 (int l)
+-{	// { dg-warning "GCC does not currently support mixed size types for 'simd' functions" "" { target aarch64*-*-* } .-1 }
++{	// { dg-warning "GCC does not currently support simdlen 8 for type 'int'" "" { target aarch64*-*-* } .-1 }
+   return l + 4;
+ }
+ 
+@@ -78,7 +78,7 @@ f5 (int l)
+ int
+ f6 [[omp::sequence (directive (declare simd uniform (l) simdlen (8), notinbranch),
+ 		    omp::directive (declare simd linear (l) simdlen (8) inbranch))]] (int l)
+-{	// { dg-warning "GCC does not currently support mixed size types for 'simd' functions" "" { target aarch64*-*-* } .-2 }
++{	// { dg-warning "GCC does not currently support simdlen 8 for type 'int'" "" { target aarch64*-*-* } .-2 }
+   return l + 5;
+ }
+ 
+@@ -124,7 +124,7 @@ f8 (int l)
+ int
+ f9 [[omp::directive (declare simd uniform (l) simdlen (8)),
+      omp::directive (declare variant (f8) match (construct={parallel,for}))]] (int l)
+-{	// { dg-warning "GCC does not currently support mixed size types for 'simd' functions" "" { target aarch64*-*-* } .-2 }
++{	// { dg-warning "GCC does not currently support simdlen 8 for type 'int'" "" { target aarch64*-*-* } .-2 }
+   return l + 8;
+ }
+ 
+diff --git a/gcc/testsuite/g++.dg/gomp/declare-simd-8.C b/gcc/testsuite/g++.dg/gomp/declare-simd-8.C
+index 01c91e890..90b028c39 100644
+--- a/gcc/testsuite/g++.dg/gomp/declare-simd-8.C
++++ b/gcc/testsuite/g++.dg/gomp/declare-simd-8.C
+@@ -3,7 +3,7 @@
+ template <int N, typename T>
+ struct S {
+   #pragma omp declare simd aligned(a : N * 2) aligned(b) linear(ref(b): N)
+-  float foo (float *a, T *&b) { return *a + *b; }
++  float foo (float *a, T *&b) { return *a + *b; } // { dg-warning "GCC does not currently support mixed size types for 'simd' functions" "" { target aarch64*-*-* } }
+ };
+ 
+ S<16, float> s;
 diff --git a/gcc/testsuite/g++.dg/init/elide3.C b/gcc/testsuite/g++.dg/init/elide3.C
 index 7eb0389a3..22a01c7ee 100644
 --- a/gcc/testsuite/g++.dg/init/elide3.C
@@ -231,6 +275,23 @@ index 540d1a09a..cef4dd05f 100644
  
  extern "C" int printf(const char*, ...);
  struct A {
+diff --git a/gcc/testsuite/g++.dg/warn/Waddress-5.C b/gcc/testsuite/g++.dg/warn/Waddress-5.C
+index b1287b2fa..1de88076f 100644
+--- a/gcc/testsuite/g++.dg/warn/Waddress-5.C
++++ b/gcc/testsuite/g++.dg/warn/Waddress-5.C
+@@ -23,7 +23,11 @@ void T (bool);
+ void warn_memptr_if ()
+ {
+   // Exercise warnings for addresses of nonstatic member functions.
+-  if (&A::f == 0)         // { dg-warning "the address '&A::f'" }
++  // On targets with TARGET_PTRMEMFUNC_VBIT_LOCATION ==
++  // ptrmemfunc_vbit_in_delta, cp_build_binary_op recurses to compare
++  // the pfn from the ptrmemfunc with null, so we get two warnings.
++  // This matches both.  ??? Should we disable one of them?
++  if (&A::f == 0)         // { dg-warning "A::f" }
+     T (0);
+ 
+   if (&A::vf)             // { dg-warning "-Waddress" }
 diff --git a/gcc/testsuite/g++.dg/warn/pr83054.C b/gcc/testsuite/g++.dg/warn/pr83054.C
 index 5285f94ac..9020c9f36 100644
 --- a/gcc/testsuite/g++.dg/warn/pr83054.C
@@ -993,6 +1054,29 @@ index c2feebdfc..c911a9298 100644
  
 -/* { dg-final { scan-tree-dump-times "&a" 1 "ivopts" } } */
 +/* { dg-final { scan-tree-dump-times "&a" 1 "ivopts" { xfail ia32 } } } */
+diff --git a/gcc/testsuite/gcc.dg/vect/complex/fast-math-bb-slp-complex-add-pattern-half-float.c b/gcc/testsuite/gcc.dg/vect/complex/fast-math-bb-slp-complex-add-pattern-half-float.c
+index 885fd97c5..e30df0ff0 100644
+--- a/gcc/testsuite/gcc.dg/vect/complex/fast-math-bb-slp-complex-add-pattern-half-float.c
++++ b/gcc/testsuite/gcc.dg/vect/complex/fast-math-bb-slp-complex-add-pattern-half-float.c
+@@ -12,5 +12,5 @@
+ 
+ /* { dg-final { scan-tree-dump-times "stmt.*COMPLEX_ADD_ROT90" 1 "slp1" { target { vect_complex_add_half } } } } */
+ /* { dg-final { scan-tree-dump-times "stmt.*COMPLEX_ADD_ROT270" 1 "slp1" { target { vect_complex_add_half } && ! target { arm*-*-* } } } } */
+-/* { dg-final { scan-tree-dump "Found COMPLEX_ADD_ROT270" "slp1" { xfail *-*-* } } } */
++/* { dg-final { scan-tree-dump "Found COMPLEX_ADD_ROT270" "slp1" } } */
+ /* { dg-final { scan-tree-dump "Found COMPLEX_ADD_ROT90" "slp1" } } */
+diff --git a/gcc/testsuite/gcc.dg/vect/complex/fast-math-complex-add-half-float.c b/gcc/testsuite/gcc.dg/vect/complex/fast-math-complex-add-half-float.c
+index c656a2f6d..046f01424 100644
+--- a/gcc/testsuite/gcc.dg/vect/complex/fast-math-complex-add-half-float.c
++++ b/gcc/testsuite/gcc.dg/vect/complex/fast-math-complex-add-half-float.c
+@@ -9,5 +9,5 @@
+ 
+ /* Vectorization is failing for these cases.  They should work but for now ignore.  */
+ 
+-/* { dg-final { scan-tree-dump-times "stmt.*COMPLEX_ADD_ROT270" 1 "slp1" { xfail *-*-* } } } */
+-/* { dg-final { scan-tree-dump-times "stmt.*COMPLEX_ADD_ROT90" 1 "slp1" { xfail *-*-* } } } */
++/* { dg-final { scan-tree-dump-times "stmt.*COMPLEX_ADD_ROT270" 1 "vect" { xfail *-*-* } } } */
++/* { dg-final { scan-tree-dump-times "stmt.*COMPLEX_ADD_ROT90" 1 "vect" { xfail *-*-* } } } */
 diff --git a/gcc/testsuite/gcc.dg/vect/pr116125.c b/gcc/testsuite/gcc.dg/vect/pr116125.c
 index eab9efdc0..b584a7a47 100644
 --- a/gcc/testsuite/gcc.dg/vect/pr116125.c
@@ -1242,6 +1326,1076 @@ index 1f17b5342..eaf6f444d 100644
  /* { dg-options "-O3" } */
  
  #include <arm_neon.h>
+diff --git a/gcc/testsuite/gcc.target/aarch64/ldp_stp_unaligned_2.c b/gcc/testsuite/gcc.target/aarch64/ldp_stp_unaligned_2.c
+index 1e46755a3..e2d9545ba 100644
+--- a/gcc/testsuite/gcc.target/aarch64/ldp_stp_unaligned_2.c
++++ b/gcc/testsuite/gcc.target/aarch64/ldp_stp_unaligned_2.c
+@@ -1,4 +1,4 @@
+-/* { dg-options "-O2 -fomit-frame-pointer" } */
++/* { dg-options "-O2 -fomit-frame-pointer -fno-stack-protector -fno-stack-clash-protection" } */
+ 
+ /* Check that we split unaligned LDP/STP into base and aligned offset.  */
+ 
+diff --git a/gcc/testsuite/gcc.target/aarch64/mgeneral-regs_3.c b/gcc/testsuite/gcc.target/aarch64/mgeneral-regs_3.c
+index fa6299960..4e634f6eb 100644
+--- a/gcc/testsuite/gcc.target/aarch64/mgeneral-regs_3.c
++++ b/gcc/testsuite/gcc.target/aarch64/mgeneral-regs_3.c
+@@ -3,9 +3,9 @@
+ extern void abort (void);
+ 
+ int
+-test (int i, ...)
++test (int i, ...) /* { dg-error "'-mgeneral-regs-only' is incompatible with the use of floating-point types" } */
+ {
+-  float f = (float) i; /* { dg-error "'-mgeneral-regs-only' is incompatible with the use of floating-point types" } */
+-  if (f != f) abort ();
++  float f = (float) i;
++  if (f != 0) abort ();
+   return 2;
+ }
+diff --git a/gcc/testsuite/gcc.target/aarch64/shadow_call_stack_5.c b/gcc/testsuite/gcc.target/aarch64/shadow_call_stack_5.c
+index d88357ca0..28fab07e5 100644
+--- a/gcc/testsuite/gcc.target/aarch64/shadow_call_stack_5.c
++++ b/gcc/testsuite/gcc.target/aarch64/shadow_call_stack_5.c
+@@ -7,7 +7,7 @@
+      * optimized code should use "ldr	x29, [sp]" to restore x29 only.  */
+ 
+ /* { dg-do compile } */
+-/* { dg-options "-O2 -fno-omit-frame-pointer -fsanitize=shadow-call-stack -fno-exceptions -ffixed-x18 --save-temps" } */
++/* { dg-options "-O2 -fno-omit-frame-pointer -fsanitize=shadow-call-stack -fno-exceptions -ffixed-x18 --save-temps -fno-stack-protector -fno-stack-clash-protection" } */
+ 
+ #include "test_frame_common.h"
+ 
+diff --git a/gcc/testsuite/gcc.target/aarch64/shadow_call_stack_6.c b/gcc/testsuite/gcc.target/aarch64/shadow_call_stack_6.c
+index 83b74834c..1d95b4feb 100644
+--- a/gcc/testsuite/gcc.target/aarch64/shadow_call_stack_6.c
++++ b/gcc/testsuite/gcc.target/aarch64/shadow_call_stack_6.c
+@@ -7,7 +7,7 @@
+      * optimized code should not restore x30 in epilogue.  */
+ 
+ /* { dg-do compile } */
+-/* { dg-options "-O2 -fomit-frame-pointer -fsanitize=shadow-call-stack -fno-exceptions -ffixed-x18 --save-temps" } */
++/* { dg-options "-O2 -fomit-frame-pointer -fsanitize=shadow-call-stack -fno-exceptions -ffixed-x18 --save-temps -fno-stack-protector -fno-stack-clash-protection" } */
+ 
+ #include "test_frame_common.h"
+ 
+diff --git a/gcc/testsuite/gcc.target/aarch64/shadow_call_stack_7.c b/gcc/testsuite/gcc.target/aarch64/shadow_call_stack_7.c
+index 5537fb329..b3db4613c 100644
+--- a/gcc/testsuite/gcc.target/aarch64/shadow_call_stack_7.c
++++ b/gcc/testsuite/gcc.target/aarch64/shadow_call_stack_7.c
+@@ -7,7 +7,7 @@
+      * optimized code should use "ldr   x19, [sp], x" to restore x19 only.  */
+ 
+ /* { dg-do compile } */
+-/* { dg-options "-O2 -fomit-frame-pointer -fsanitize=shadow-call-stack -fno-exceptions -ffixed-x18 --save-temps" } */
++/* { dg-options "-O2 -fomit-frame-pointer -fsanitize=shadow-call-stack -fno-exceptions -ffixed-x18 --save-temps -fno-stack-protector -fno-stack-clash-protection" } */
+ 
+ #include "test_frame_common.h"
+ 
+diff --git a/gcc/testsuite/gcc.target/aarch64/shadow_call_stack_8.c b/gcc/testsuite/gcc.target/aarch64/shadow_call_stack_8.c
+index b03f26f7b..e185ec3f5 100644
+--- a/gcc/testsuite/gcc.target/aarch64/shadow_call_stack_8.c
++++ b/gcc/testsuite/gcc.target/aarch64/shadow_call_stack_8.c
+@@ -9,7 +9,7 @@
+      * optimized code should not restore x30 in epilogue.  */
+ 
+ /* { dg-do compile } */
+-/* { dg-options "-O0 -fomit-frame-pointer -fsanitize=shadow-call-stack -fno-exceptions -ffixed-x18 --save-temps" } */
++/* { dg-options "-O0 -fomit-frame-pointer -fsanitize=shadow-call-stack -fno-exceptions -ffixed-x18 --save-temps -fno-stack-protector -fno-stack-clash-protection" } */
+ 
+ int func1 (void)
+ {
+diff --git a/gcc/testsuite/gcc.target/aarch64/simd/vfma_f64.c b/gcc/testsuite/gcc.target/aarch64/simd/vfma_f64.c
+index ef414f1b2..467c740ea 100644
+--- a/gcc/testsuite/gcc.target/aarch64/simd/vfma_f64.c
++++ b/gcc/testsuite/gcc.target/aarch64/simd/vfma_f64.c
+@@ -7,33 +7,24 @@
+ 
+ #define EPS 1.0e-15
+ 
+-#define INHIB_OPT(x) asm volatile ("mov %d0, %1.d[0]"	\
+-				   : "=w"(x)		\
+-				   : "w"(x)		\
+-				   : /* No clobbers. */);
+-
+ extern void abort (void);
+ 
++float64_t __attribute__((noipa))
++test_vfma (float64x1_t arg1, float64x1_t arg2, float64x1_t arg3)
++{
++  return vget_lane_f64 (vfma_f64 (arg1, arg2, arg3), 0);
++}
++
+ int
+ main (void)
+ {
+-  float64x1_t arg1;
+-  float64x1_t arg2;
+-  float64x1_t arg3;
+-
+   float64_t expected;
+   float64_t actual;
+ 
+-  arg1 = vcreate_f64 (0x3fe3955382d35b0eULL);
+-  arg2 = vcreate_f64 (0x3fa88480812d6670ULL);
+-  arg3 = vcreate_f64 (0x3fd5791ae2a92572ULL);
+-
+-  INHIB_OPT (arg1);
+-  INHIB_OPT (arg2);
+-  INHIB_OPT (arg3);
+-
+   expected = 0.6280448184360076;
+-  actual = vget_lane_f64 (vfma_f64 (arg1, arg2, arg3), 0);
++  actual = test_vfma (vcreate_f64 (0x3fe3955382d35b0eULL),
++		      vcreate_f64 (0x3fa88480812d6670ULL),
++		      vcreate_f64 (0x3fd5791ae2a92572ULL));
+ 
+   if (__builtin_fabs (expected - actual) > EPS)
+     abort ();
+diff --git a/gcc/testsuite/gcc.target/aarch64/simd/vfms_f64.c b/gcc/testsuite/gcc.target/aarch64/simd/vfms_f64.c
+index afbb8a892..af6ca6ff1 100644
+--- a/gcc/testsuite/gcc.target/aarch64/simd/vfms_f64.c
++++ b/gcc/testsuite/gcc.target/aarch64/simd/vfms_f64.c
+@@ -7,33 +7,24 @@
+ 
+ #define EPS 1.0e-15
+ 
+-#define INHIB_OPT(x) asm volatile ("mov %d0, %1.d[0]"   \
+-                                   : "=w"(x)           \
+-                                   : "w"(x)            \
+-                                   : /* No clobbers. */);
+-
+ extern void abort (void);
+ 
++float64_t __attribute__((noipa))
++test_vfms (float64x1_t arg1, float64x1_t arg2, float64x1_t arg3)
++{
++  return vget_lane_f64 (vfms_f64 (arg1, arg2, arg3), 0);
++}
++
+ int
+ main (void)
+ {
+-  float64x1_t arg1;
+-  float64x1_t arg2;
+-  float64x1_t arg3;
+-
+   float64_t expected;
+   float64_t actual;
+ 
+-  arg1 = vcreate_f64 (0x3fe730af8db9e6f7ULL);
+-  arg2 = vcreate_f64 (0x3fe6b78680fa29ceULL);
+-  arg3 = vcreate_f64 (0x3feea3cbf921fbe0ULL);
+-
+-  INHIB_OPT (arg1);
+-  INHIB_OPT (arg2);
+-  INHIB_OPT (arg3);
+-
+   expected = 4.4964705746355915e-2;
+-  actual = vget_lane_f64 (vfms_f64 (arg1, arg2, arg3), 0);
++  actual = test_vfms (vcreate_f64 (0x3fe730af8db9e6f7ULL),
++		      vcreate_f64 (0x3fe6b78680fa29ceULL),
++		      vcreate_f64 (0x3feea3cbf921fbe0ULL));
+ 
+   if (__builtin_fabs (expected - actual) > EPS)
+     abort ();
+diff --git a/gcc/testsuite/gcc.target/aarch64/simd/vmul_f64_1.c b/gcc/testsuite/gcc.target/aarch64/simd/vmul_f64_1.c
+index c855c8cdb..dfa808cb9 100644
+--- a/gcc/testsuite/gcc.target/aarch64/simd/vmul_f64_1.c
++++ b/gcc/testsuite/gcc.target/aarch64/simd/vmul_f64_1.c
+@@ -7,19 +7,23 @@
+ 
+ extern void abort (void);
+ 
++float64_t __attribute__((noipa))
++test_vmul (float64x1_t arg1, float64x1_t arg2)
++{
++  return vget_lane_f64 (vmul_f64 (arg1, arg2), 0);
++}
++
+ int
+ main (void)
+ {
+-  volatile float64_t minus_e, pi;
++  float64_t minus_e, pi;
+   float64_t expected, actual;
+ 
+   pi = 3.14159265359;
+   minus_e = -2.71828;
+ 
+   expected = pi * minus_e;
+-
+-  actual = vget_lane_f64 (vmul_f64 ((float64x1_t) { pi },
+-                                    (float64x1_t) { minus_e }), 0);
++  actual = test_vmul ((float64x1_t) { pi }, (float64x1_t) { minus_e });
+   if (expected != actual)
+     abort ();
+ 
+diff --git a/gcc/testsuite/gcc.target/aarch64/simd/vmul_n_f64_1.c b/gcc/testsuite/gcc.target/aarch64/simd/vmul_n_f64_1.c
+index f8f3cd2ed..91c12bc9c 100644
+--- a/gcc/testsuite/gcc.target/aarch64/simd/vmul_n_f64_1.c
++++ b/gcc/testsuite/gcc.target/aarch64/simd/vmul_n_f64_1.c
+@@ -7,19 +7,23 @@
+ 
+ extern void abort (void);
+ 
++float64_t __attribute__((noipa))
++test_vmul (float64x1_t arg1, float64_t arg2)
++{
++  return vget_lane_f64 (vmul_n_f64 (arg1, arg2), 0);
++}
++
+ int
+ main (void)
+ {
+-  volatile float64_t minus_e, pi;
++  float64_t minus_e, pi;
+   float64_t expected, actual;
+ 
+   pi = 3.14159265359;
+   minus_e = -2.71828;
+ 
+   expected = pi * minus_e;
+-
+-  actual = vget_lane_f64 (vmul_n_f64 ((float64x1_t) { pi },
+-                                       minus_e), 0);
++  actual = test_vmul ((float64x1_t) { pi }, minus_e);
+   if (expected != actual)
+     abort ();
+ 
+diff --git a/gcc/testsuite/gcc.target/aarch64/simd/vqdmlalh_laneq_s16_1.c b/gcc/testsuite/gcc.target/aarch64/simd/vqdmlalh_laneq_s16_1.c
+index 9a9bd0dcf..aa6b89aaa 100644
+--- a/gcc/testsuite/gcc.target/aarch64/simd/vqdmlalh_laneq_s16_1.c
++++ b/gcc/testsuite/gcc.target/aarch64/simd/vqdmlalh_laneq_s16_1.c
+@@ -1,27 +1,27 @@
+ /* Test the vqdmlalh_laneq_s16 AArch64 SIMD intrinsic.  */
+ 
+ /* { dg-do run } */
+-/* { dg-options "-save-temps -O3 -fno-inline" } */
++/* { dg-options "-save-temps -O3" } */
+ 
+ #include "arm_neon.h"
+ 
+ extern void abort (void);
+ 
++int32_t __attribute__((noipa))
++test_vqdmlalh (int32_t arg1, int16_t arg2, int16x8_t arg3)
++{
++  return vqdmlalh_laneq_s16 (arg1, arg2, arg3, 7);
++}
++
+ int
+ main (void)
+ {
+-  int32_t arg1;
+-  int16_t arg2;
+-  int16x8_t arg3;
+   int32_t actual;
+   int32_t expected;
+ 
+-  arg1 = 0x80000000;
+-  arg2 = -24497;
+-  arg3 = vcombine_s16 (vcreate_s16 (0x008a80007fff7fffULL),
+-                       vcreate_s16 (0xfffffa797fff8000ULL));
+-
+-  actual = vqdmlalh_laneq_s16 (arg1, arg2, arg3, 7);
++  actual = test_vqdmlalh (0x80000000, -24497,
++			  vcombine_s16 (vcreate_s16 (0x008a80007fff7fffULL),
++					vcreate_s16 (0xfffffa797fff8000ULL)));
+   expected = -2147434654;
+ 
+   if (expected != actual)
+diff --git a/gcc/testsuite/gcc.target/aarch64/simd/vqdmlals_laneq_s32_1.c b/gcc/testsuite/gcc.target/aarch64/simd/vqdmlals_laneq_s32_1.c
+index 0dbe3392a..ea39595ae 100644
+--- a/gcc/testsuite/gcc.target/aarch64/simd/vqdmlals_laneq_s32_1.c
++++ b/gcc/testsuite/gcc.target/aarch64/simd/vqdmlals_laneq_s32_1.c
+@@ -1,27 +1,27 @@
+ /* Test the vqdmlals_laneq_s32 AArch64 SIMD intrinsic.  */
+ 
+ /* { dg-do run } */
+-/* { dg-options "-save-temps -O3 -fno-inline" } */
++/* { dg-options "-save-temps -O3" } */
+ 
+ #include "arm_neon.h"
+ 
+ extern void abort (void);
+ 
++int64_t __attribute__((noipa))
++test_vqdmlals (int64_t arg1, int32_t arg2, int32x4_t arg3)
++{
++  return vqdmlals_laneq_s32 (arg1, arg2, arg3, 3);
++}
++
+ int
+ main (void)
+ {
+-  int64_t arg1;
+-  int32_t arg2;
+-  int32x4_t arg3;
+   int64_t actual;
+   int64_t expected;
+ 
+-  arg1 = -9223182289494545592LL;
+-  arg2 = 32768;
+-  arg3 = vcombine_s32 (vcreate_s32 (0xffff7fff8000ffffULL),
+-                       vcreate_s32 (0x80000000ffff0000ULL));
+-
+-  actual = vqdmlals_laneq_s32 (arg1, arg2, arg3, 3);
++  actual = test_vqdmlals (-9223182289494545592LL, 32768,
++			  vcombine_s32 (vcreate_s32 (0xffff7fff8000ffffULL),
++					vcreate_s32 (0x80000000ffff0000ULL)));
+   expected = -9223323026982900920LL;
+ 
+   if (expected != actual)
+diff --git a/gcc/testsuite/gcc.target/aarch64/simd/vqdmlslh_laneq_s16_1.c b/gcc/testsuite/gcc.target/aarch64/simd/vqdmlslh_laneq_s16_1.c
+index 2763e0612..0f1babca3 100644
+--- a/gcc/testsuite/gcc.target/aarch64/simd/vqdmlslh_laneq_s16_1.c
++++ b/gcc/testsuite/gcc.target/aarch64/simd/vqdmlslh_laneq_s16_1.c
+@@ -1,27 +1,27 @@
+ /* Test the vqdmlslh_laneq_s16 AArch64 SIMD intrinsic.  */
+ 
+ /* { dg-do run } */
+-/* { dg-options "-save-temps -O3 -fno-inline" } */
++/* { dg-options "-save-temps -O3" } */
+ 
+ #include "arm_neon.h"
+ 
+ extern void abort (void);
+ 
++int32_t __attribute__((noipa))
++test_vqdmlslh (int32_t arg1, int16_t arg2, int16x8_t arg3)
++{
++  return vqdmlslh_laneq_s16 (arg1, arg2, arg3, 4);
++}
++
+ int
+ main (void)
+ {
+-  int32_t arg1;
+-  int16_t arg2;
+-  int16x8_t arg3;
+   int32_t actual;
+   int32_t expected;
+ 
+-  arg1 = -2147450881;
+-  arg2 = 32767;
+-  arg3 = vcombine_s16 (vcreate_s16 (0x359d7fff00007fffULL),
+-                       vcreate_s16 (0xe678ffff00008000ULL));
+-
+-  actual = vqdmlslh_laneq_s16 (arg1, arg2, arg3, 4);
++  actual = test_vqdmlslh (-2147450881, 32767,
++			  vcombine_s16 (vcreate_s16 (0x359d7fff00007fffULL),
++					vcreate_s16 (0xe678ffff00008000ULL)));
+   expected = -32769;
+ 
+   if (expected != actual)
+diff --git a/gcc/testsuite/gcc.target/aarch64/simd/vqdmlsls_laneq_s32_1.c b/gcc/testsuite/gcc.target/aarch64/simd/vqdmlsls_laneq_s32_1.c
+index e003adb7c..ff922541f 100644
+--- a/gcc/testsuite/gcc.target/aarch64/simd/vqdmlsls_laneq_s32_1.c
++++ b/gcc/testsuite/gcc.target/aarch64/simd/vqdmlsls_laneq_s32_1.c
+@@ -1,28 +1,27 @@
+ /* Test the vqdmlsls_laneq_s32 AArch64 SIMD intrinsic.  */
+ 
+ /* { dg-do run } */
+-/* { dg-options "-save-temps -O3 -fno-inline" } */
++/* { dg-options "-save-temps -O3" } */
+ 
+ #include "arm_neon.h"
+ 
+ extern void abort (void);
+ 
++int64_t __attribute__((noipa))
++test_vqdmlsls (int64_t arg1, int32_t arg2, int32x4_t arg3)
++{
++  return vqdmlsls_laneq_s32 (arg1, arg2, arg3, 3);
++}
++
+ int
+ main (void)
+ {
+-  int64_t arg1;
+-  int32_t arg2;
+-  int32x4_t arg3;
+   int64_t actual;
+   int64_t expected;
+ 
+-  arg1 = 140733193453567LL;
+-  arg2 = 25544;
+-  arg3 = vcombine_s32 (vcreate_s32 (0x417b8000ffff8397LL),
+-                       vcreate_s32 (0x7fffffff58488000LL));
+-
+-
+-  actual = vqdmlsls_laneq_s32 (arg1, arg2, arg3, 3);
++  actual = test_vqdmlsls (140733193453567LL, 25544,
++			  vcombine_s32 (vcreate_s32 (0x417b8000ffff8397LL),
++					vcreate_s32 (0x7fffffff58488000LL)));
+   expected = 31022548895631LL;
+ 
+   if (expected != actual)
+diff --git a/gcc/testsuite/gcc.target/aarch64/simd/vqdmulhh_lane_s16.c b/gcc/testsuite/gcc.target/aarch64/simd/vqdmulhh_lane_s16.c
+index 75f677024..12b79715b 100644
+--- a/gcc/testsuite/gcc.target/aarch64/simd/vqdmulhh_lane_s16.c
++++ b/gcc/testsuite/gcc.target/aarch64/simd/vqdmulhh_lane_s16.c
+@@ -1,25 +1,26 @@
+ /* Test the vqdmulhh_lane_s16 AArch64 SIMD intrinsic.  */
+ 
+ /* { dg-do run } */
+-/* { dg-options "-save-temps -O3 -fno-inline" } */
++/* { dg-options "-save-temps -O3" } */
+ 
+ #include "arm_neon.h"
+ #include <stdio.h>
+ 
+ extern void abort (void);
+ 
++int16_t __attribute__((noipa))
++test_vqdmulhh (int16_t arg1, int16x4_t arg2)
++{
++  return vqdmulhh_lane_s16 (arg1, arg2, 2);
++}
++
+ int
+ main (void)
+ {
+-  int16_t arg1;
+-  int16x4_t arg2;
+-  int16_t result;
+   int16_t actual;
+   int16_t expected;
+ 
+-  arg1 = -32768;
+-  arg2 = vcreate_s16 (0x0000ffff2489e398ULL);
+-  actual = vqdmulhh_lane_s16 (arg1, arg2, 2);
++  actual = test_vqdmulhh (-32768, vcreate_s16 (0x0000ffff2489e398ULL));
+   expected = 1;
+ 
+   if (expected != actual)
+diff --git a/gcc/testsuite/gcc.target/aarch64/simd/vqdmulhh_laneq_s16_1.c b/gcc/testsuite/gcc.target/aarch64/simd/vqdmulhh_laneq_s16_1.c
+index b3ae37c67..1015c6878 100644
+--- a/gcc/testsuite/gcc.target/aarch64/simd/vqdmulhh_laneq_s16_1.c
++++ b/gcc/testsuite/gcc.target/aarch64/simd/vqdmulhh_laneq_s16_1.c
+@@ -1,25 +1,27 @@
+ /* Test the vqdmulhh_laneq_s16 AArch64 SIMD intrinsic.  */
+ 
+ /* { dg-do run } */
+-/* { dg-options "-save-temps -O3 -fno-inline" } */
++/* { dg-options "-save-temps -O3" } */
+ 
+ #include "arm_neon.h"
+ 
+ extern void abort (void);
+ 
++int16_t __attribute__((noipa))
++test_vqdmulhh (int16_t arg1, int16x8_t arg2)
++{
++  return vqdmulhh_laneq_s16 (arg1, arg2, 7);
++}
++
+ int
+ main (void)
+ {
+-  int16_t arg1;
+-  int16x8_t arg2;
+   int16_t actual;
+   int16_t expected;
+ 
+-  arg1 = 268;
+-  arg2 = vcombine_s16 (vcreate_s16 (0xffffffff00000000ULL),
+-                       vcreate_s16 (0x0000800018410000ULL));
+-
+-  actual = vqdmulhh_laneq_s16 (arg1, arg2, 7);
++  actual = test_vqdmulhh (268,
++			  vcombine_s16 (vcreate_s16 (0xffffffff00000000ULL),
++					vcreate_s16 (0x0000800018410000ULL)));
+   expected = 0;
+ 
+   if (expected != actual)
+diff --git a/gcc/testsuite/gcc.target/aarch64/simd/vqdmulhs_lane_s32.c b/gcc/testsuite/gcc.target/aarch64/simd/vqdmulhs_lane_s32.c
+index eef3ac061..f3b297ecc 100644
+--- a/gcc/testsuite/gcc.target/aarch64/simd/vqdmulhs_lane_s32.c
++++ b/gcc/testsuite/gcc.target/aarch64/simd/vqdmulhs_lane_s32.c
+@@ -1,27 +1,43 @@
+ /* Test the vqdmulhs_lane_s32 AArch64 SIMD intrinsic.  */
+ 
+ /* { dg-do run } */
+-/* { dg-options "-save-temps -O3 -fno-inline" } */
++/* { dg-options "-save-temps -O3" } */
+ 
+ #include "arm_neon.h"
+ #include <stdio.h>
+ 
+ extern void abort (void);
+ 
++int32_t __attribute__((noipa))
++test_vqdmulhs_0 (int32_t arg1, int32x2_t arg2)
++{
++  return vqdmulhs_lane_s32 (arg1, arg2, 0);
++}
++
++int32_t __attribute__((noipa))
++test_vqdmulhs_1 (int32_t arg1, int32x2_t arg2)
++{
++  return vqdmulhs_lane_s32 (arg1, arg2, 1);
++}
++
+ int
+ main (void)
+ {
+-  int32_t arg1;
+-  int32x2_t arg2;
+-  int32_t result;
+   int32_t actual;
+   int32_t expected;
+ 
+-  arg1 = 57336;
+-  arg2 = vcreate_s32 (0x55897fff7fff0000ULL);
+-  actual = vqdmulhs_lane_s32 (arg1, arg2, 0);
++  actual = test_vqdmulhs_0 (57336, vcreate_s32 (0x55897fff7fff0000ULL));
+   expected = 57334;
+ 
++  if (expected != actual)
++    {
++      fprintf (stderr, "Expected: %xd, got %xd\n", expected, actual);
++      abort ();
++    }
++
++  actual = test_vqdmulhs_1 (57336, vcreate_s32 (0x55897fff7fff0000ULL));
++  expected = 38315;
++
+   if (expected != actual)
+     {
+       fprintf (stderr, "Expected: %xd, got %xd\n", expected, actual);
+@@ -30,4 +46,5 @@ main (void)
+ 
+   return 0;
+ }
+-/* { dg-final { scan-assembler-times "sqdmulh\[ \t\]+\[sS\]\[0-9\]+, ?\[sS\]\[0-9\]+, ?\[vV\]\[0-9\]+\.\[sS\]\\\[0\\\]\n" 1 } } */
++/* { dg-final { scan-assembler-times "sqdmulh\[ \t\]+\[sS\]\[0-9\]+, ?\[sS\]\[0-9\]+, ?(?:\[sS\]\[0-9\]+|\[vV\]\[0-9\]+\.\[sS\]\\\[0\\\])\n" 1 } } */
++/* { dg-final { scan-assembler-times "sqdmulh\[ \t\]+\[sS\]\[0-9\]+, ?\[sS\]\[0-9\]+, ?\[vV\]\[0-9\]+\.\[sS\]\\\[1\\\]\n" 1 } } */
+diff --git a/gcc/testsuite/gcc.target/aarch64/simd/vqdmulhs_laneq_s32_1.c b/gcc/testsuite/gcc.target/aarch64/simd/vqdmulhs_laneq_s32_1.c
+index 71b260015..fd63bf9a4 100644
+--- a/gcc/testsuite/gcc.target/aarch64/simd/vqdmulhs_laneq_s32_1.c
++++ b/gcc/testsuite/gcc.target/aarch64/simd/vqdmulhs_laneq_s32_1.c
+@@ -1,25 +1,27 @@
+ /* Test the vqdmulhs_laneq_s32 AArch64 SIMD intrinsic.  */
+ 
+ /* { dg-do run } */
+-/* { dg-options "-save-temps -O3 -fno-inline" } */
++/* { dg-options "-save-temps -O3" } */
+ 
+ #include "arm_neon.h"
+ 
+ extern void abort (void);
+ 
++int32_t __attribute__((noipa))
++test_vqdmulhs (int32_t arg1, int32x4_t arg2)
++{
++  return vqdmulhs_laneq_s32 (arg1, arg2, 3);
++}
++
+ int
+ main (void)
+ {
+-  int32_t arg1;
+-  int32x4_t arg2;
+   int32_t actual;
+   int32_t expected;
+ 
+-  arg1 = 0x80000000;
+-  arg2 = vcombine_s32 (vcreate_s32 (0x950dffffc4f40000ULL),
+-                       vcreate_s32 (0x7fff8000274a8000ULL));
+-
+-  actual = vqdmulhs_laneq_s32 (arg1, arg2, 3);
++  actual = test_vqdmulhs (0x80000000,
++			  vcombine_s32 (vcreate_s32 (0x950dffffc4f40000ULL),
++					vcreate_s32 (0x7fff8000274a8000ULL)));
+   expected = -2147450880;
+ 
+   if (expected != actual)
+diff --git a/gcc/testsuite/gcc.target/aarch64/simd/vqrdmulhh_lane_s16.c b/gcc/testsuite/gcc.target/aarch64/simd/vqrdmulhh_lane_s16.c
+index aca96d1fd..7dddb7550 100644
+--- a/gcc/testsuite/gcc.target/aarch64/simd/vqrdmulhh_lane_s16.c
++++ b/gcc/testsuite/gcc.target/aarch64/simd/vqrdmulhh_lane_s16.c
+@@ -1,25 +1,26 @@
+ /* Test the vqrdmulhh_lane_s16 AArch64 SIMD intrinsic.  */
+ 
+ /* { dg-do run } */
+-/* { dg-options "-save-temps -O3 -fno-inline" } */
++/* { dg-options "-save-temps -O3" } */
+ 
+ #include "arm_neon.h"
+ #include <stdio.h>
+ 
+ extern void abort (void);
+ 
++int16_t __attribute__((noipa))
++test_vqrdmulhh (int16_t arg1, int16x4_t arg2)
++{
++  return vqrdmulhh_lane_s16 (arg1, arg2, 3);
++}
++
+ int
+ main (void)
+ {
+-  int16_t arg1;
+-  int16x4_t arg2;
+-  int16_t result;
+   int16_t actual;
+   int16_t expected;
+ 
+-  arg1 = -32768;
+-  arg2 = vcreate_s16 (0xd78e000005d78000ULL);
+-  actual = vqrdmulhh_lane_s16 (arg1, arg2, 3);
++  actual = test_vqrdmulhh (-32768, vcreate_s16 (0xd78e000005d78000ULL));
+   expected = 10354;
+ 
+   if (expected != actual)
+diff --git a/gcc/testsuite/gcc.target/aarch64/simd/vqrdmulhh_laneq_s16_1.c b/gcc/testsuite/gcc.target/aarch64/simd/vqrdmulhh_laneq_s16_1.c
+index fd2c61dea..78d6299d7 100644
+--- a/gcc/testsuite/gcc.target/aarch64/simd/vqrdmulhh_laneq_s16_1.c
++++ b/gcc/testsuite/gcc.target/aarch64/simd/vqrdmulhh_laneq_s16_1.c
+@@ -1,25 +1,27 @@
+ /* Test the vqrdmulhh_laneq_s16 AArch64 SIMD intrinsic.  */
+ 
+ /* { dg-do run } */
+-/* { dg-options "-save-temps -O3 -fno-inline" } */
++/* { dg-options "-save-temps -O3" } */
+ 
+ #include "arm_neon.h"
+ 
+ extern void abort (void);
+ 
++int16_t __attribute__((noipa))
++test_vqrdmulhh (int16_t arg1, int16x8_t arg2)
++{
++  return vqrdmulhh_laneq_s16 (arg1, arg2, 7);
++}
++
+ int
+ main (void)
+ {
+-  int16_t arg1;
+-  int16x8_t arg2;
+   int16_t actual;
+   int16_t expected;
+ 
+-  arg1 = 0;
+-  arg2 = vcombine_s16 (vcreate_s16 (0x7fffffffa7908000ULL),
+-                       vcreate_s16 (0x8000d2607fff0000ULL));
+-
+-  actual = vqrdmulhh_laneq_s16 (arg1, arg2, 7);
++  actual = test_vqrdmulhh (0,
++			   vcombine_s16 (vcreate_s16 (0x7fffffffa7908000ULL),
++					 vcreate_s16 (0x8000d2607fff0000ULL)));
+   expected = 0;
+ 
+   if (expected != actual)
+diff --git a/gcc/testsuite/gcc.target/aarch64/simd/vqrdmulhs_lane_s32.c b/gcc/testsuite/gcc.target/aarch64/simd/vqrdmulhs_lane_s32.c
+index 30b21c9b4..827b52f33 100644
+--- a/gcc/testsuite/gcc.target/aarch64/simd/vqrdmulhs_lane_s32.c
++++ b/gcc/testsuite/gcc.target/aarch64/simd/vqrdmulhs_lane_s32.c
+@@ -1,25 +1,26 @@
+ /* Test the vqrdmulhs_lane_s32 AArch64 SIMD intrinsic.  */
+ 
+ /* { dg-do run } */
+-/* { dg-options "-save-temps -O3 -fno-inline" } */
++/* { dg-options "-save-temps -O3" } */
+ 
+ #include "arm_neon.h"
+ #include <stdio.h>
+ 
+ extern void abort (void);
+ 
++int32_t __attribute__((noipa))
++test_vqrdmulhs (int32_t arg1, int32x2_t arg2)
++{
++  return vqrdmulhs_lane_s32 (arg1, arg2, 1);
++}
++
+ int
+ main (void)
+ {
+-  int32_t arg1;
+-  int32x2_t arg2;
+-  int32_t result;
+   int32_t actual;
+   int32_t expected;
+ 
+-  arg1 = -2099281921;
+-  arg2 = vcreate_s32 (0x000080007fff0000ULL);
+-  actual = vqrdmulhs_lane_s32 (arg1, arg2, 1);
++  actual = test_vqrdmulhs (-2099281921, vcreate_s32 (0x000080007fff0000ULL));
+   expected = -32033;
+ 
+   if (expected != actual)
+diff --git a/gcc/testsuite/gcc.target/aarch64/simd/vqrdmulhs_laneq_s32_1.c b/gcc/testsuite/gcc.target/aarch64/simd/vqrdmulhs_laneq_s32_1.c
+index 6d4e76483..b06d16f20 100644
+--- a/gcc/testsuite/gcc.target/aarch64/simd/vqrdmulhs_laneq_s32_1.c
++++ b/gcc/testsuite/gcc.target/aarch64/simd/vqrdmulhs_laneq_s32_1.c
+@@ -1,25 +1,27 @@
+ /* Test the vqrdmulhs_laneq_s32 AArch64 SIMD intrinsic.  */
+ 
+ /* { dg-do run } */
+-/* { dg-options "-save-temps -O3 -fno-inline" } */
++/* { dg-options "-save-temps -O3" } */
+ 
+ #include "arm_neon.h"
+ 
+ extern void abort (void);
+ 
++int32_t __attribute__((noipa))
++test_vqrdmulhs (int32_t arg1, int32x4_t arg2)
++{
++  return vqrdmulhs_laneq_s32 (arg1, arg2, 3);
++}
++
+ int
+ main (void)
+ {
+-  int32_t arg1;
+-  int32x4_t arg2;
+   int32_t actual;
+   int32_t expected;
+ 
+-  arg1 = 32768;
+-  arg2 = vcombine_s32 (vcreate_s32 (0x8000ffffffffcd5bULL),
+-                       vcreate_s32 (0x7fffffffffffffffULL));
+-
+-  actual = vqrdmulhs_laneq_s32 (arg1, arg2, 3);
++  actual = test_vqrdmulhs (32768,
++			   vcombine_s32 (vcreate_s32 (0x8000ffffffffcd5bULL),
++					 vcreate_s32 (0x7fffffffffffffffULL)));
+   expected = 32768;
+ 
+   if (expected != actual)
+diff --git a/gcc/testsuite/gcc.target/aarch64/stack-check-12.c b/gcc/testsuite/gcc.target/aarch64/stack-check-12.c
+index be5a57a9e..e1a4c67b0 100644
+--- a/gcc/testsuite/gcc.target/aarch64/stack-check-12.c
++++ b/gcc/testsuite/gcc.target/aarch64/stack-check-12.c
+@@ -1,5 +1,5 @@
+ /* { dg-do compile } */
+-/* { dg-options "-O2 -fstack-clash-protection --param stack-clash-protection-guard-size=16 -fno-asynchronous-unwind-tables -fno-unwind-tables" } */
++/* { dg-options "-O2 -fstack-clash-protection --param stack-clash-protection-guard-size=16 -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector" } */
+ /* { dg-require-effective-target supports_stack_clash_protection } */
+ 
+ typedef unsigned __attribute__((mode(DI))) uint64_t;
+diff --git a/gcc/testsuite/gcc.target/aarch64/stack-check-prologue-11.c b/gcc/testsuite/gcc.target/aarch64/stack-check-prologue-11.c
+index 741f2f5fa..d57aece05 100644
+--- a/gcc/testsuite/gcc.target/aarch64/stack-check-prologue-11.c
++++ b/gcc/testsuite/gcc.target/aarch64/stack-check-prologue-11.c
+@@ -1,5 +1,5 @@
+ /* { dg-do compile } */
+-/* { dg-options "-O2 -fstack-clash-protection --param stack-clash-protection-guard-size=16" } */
++/* { dg-options "-O2 -fstack-clash-protection --param stack-clash-protection-guard-size=16 -fno-stack-protector" } */
+ /* { dg-require-effective-target supports_stack_clash_protection } */
+ 
+ #define SIZE (6 * 64 * 1024) + (1 * 32 * 1024)
+diff --git a/gcc/testsuite/gcc.target/aarch64/stack-check-prologue-12.c b/gcc/testsuite/gcc.target/aarch64/stack-check-prologue-12.c
+index ece68003a..895d130e4 100644
+--- a/gcc/testsuite/gcc.target/aarch64/stack-check-prologue-12.c
++++ b/gcc/testsuite/gcc.target/aarch64/stack-check-prologue-12.c
+@@ -1,5 +1,5 @@
+ /* { dg-do compile } */
+-/* { dg-options "-O2 -fstack-clash-protection --param stack-clash-protection-guard-size=16 -fomit-frame-pointer -momit-leaf-frame-pointer" } */
++/* { dg-options "-O2 -fstack-clash-protection --param stack-clash-protection-guard-size=16 -fomit-frame-pointer -momit-leaf-frame-pointer -fno-stack-protector" } */
+ /* { dg-require-effective-target supports_stack_clash_protection } */
+ 
+ void
+diff --git a/gcc/testsuite/gcc.target/aarch64/stack-check-prologue-13.c b/gcc/testsuite/gcc.target/aarch64/stack-check-prologue-13.c
+index 0fc900c69..1f1a6c497 100644
+--- a/gcc/testsuite/gcc.target/aarch64/stack-check-prologue-13.c
++++ b/gcc/testsuite/gcc.target/aarch64/stack-check-prologue-13.c
+@@ -1,5 +1,5 @@
+ /* { dg-do compile } */
+-/* { dg-options "-O2 -fstack-clash-protection --param stack-clash-protection-guard-size=16 -fomit-frame-pointer -momit-leaf-frame-pointer" } */
++/* { dg-options "-O2 -fstack-clash-protection --param stack-clash-protection-guard-size=16 -fomit-frame-pointer -momit-leaf-frame-pointer -fno-stack-protector" } */
+ /* { dg-require-effective-target supports_stack_clash_protection } */
+ 
+ void h (void) __attribute__ ((noreturn));
+@@ -17,4 +17,4 @@ f (void)
+ 
+ /* SIZE is more than 1 guard-size, but only one 64KB page is used, expect only 1
+    probe.  Leaf function and omitting leaf pointers, tail call to noreturn which
+-   may only omit an epilogue and not a prologue.  Checking for LR saving.  */
+\ No newline at end of file
++   may only omit an epilogue and not a prologue.  Checking for LR saving.  */
+diff --git a/gcc/testsuite/gcc.target/aarch64/stack-check-prologue-14.c b/gcc/testsuite/gcc.target/aarch64/stack-check-prologue-14.c
+index ea733f861..facb3cb72 100644
+--- a/gcc/testsuite/gcc.target/aarch64/stack-check-prologue-14.c
++++ b/gcc/testsuite/gcc.target/aarch64/stack-check-prologue-14.c
+@@ -1,5 +1,5 @@
+ /* { dg-do compile } */
+-/* { dg-options "-O2 -fstack-clash-protection --param stack-clash-protection-guard-size=16 -fomit-frame-pointer -momit-leaf-frame-pointer" } */
++/* { dg-options "-O2 -fstack-clash-protection --param stack-clash-protection-guard-size=16 -fomit-frame-pointer -momit-leaf-frame-pointer -fno-stack-protector" } */
+ /* { dg-require-effective-target supports_stack_clash_protection } */
+ 
+ void h (void) __attribute__ ((noreturn));
+@@ -21,4 +21,4 @@ f (void)
+    probe at 1024 and one implicit probe due to LR being saved.  Leaf function
+    and omitting leaf pointers, tail call to noreturn which may only omit an
+    epilogue and not a prologue and control flow in between.  Checking for
+-   LR saving.  */
+\ No newline at end of file
++   LR saving.  */
+diff --git a/gcc/testsuite/gcc.target/aarch64/stack-check-prologue-15.c b/gcc/testsuite/gcc.target/aarch64/stack-check-prologue-15.c
+index 63df4a560..f2ac60a62 100644
+--- a/gcc/testsuite/gcc.target/aarch64/stack-check-prologue-15.c
++++ b/gcc/testsuite/gcc.target/aarch64/stack-check-prologue-15.c
+@@ -1,5 +1,5 @@
+ /* { dg-do compile } */
+-/* { dg-options "-O2 -fstack-clash-protection --param stack-clash-protection-guard-size=16 -fomit-frame-pointer -momit-leaf-frame-pointer" } */
++/* { dg-options "-O2 -fstack-clash-protection --param stack-clash-protection-guard-size=16 -fomit-frame-pointer -momit-leaf-frame-pointer -fno-stack-protector" } */
+ /* { dg-require-effective-target supports_stack_clash_protection } */
+ 
+ void g (volatile int *x) ;
+diff --git a/gcc/testsuite/gcc.target/aarch64/stack-check-prologue-17.c b/gcc/testsuite/gcc.target/aarch64/stack-check-prologue-17.c
+index f0ec13897..1cf6fbbb0 100644
+--- a/gcc/testsuite/gcc.target/aarch64/stack-check-prologue-17.c
++++ b/gcc/testsuite/gcc.target/aarch64/stack-check-prologue-17.c
+@@ -1,4 +1,4 @@
+-/* { dg-options "-O2 -fstack-clash-protection -fomit-frame-pointer --param stack-clash-protection-guard-size=12" } */
++/* { dg-options "-O2 -fstack-clash-protection -fomit-frame-pointer --param stack-clash-protection-guard-size=12 -fno-stack-protector" } */
+ /* { dg-final { check-function-bodies "**" "" } } */
+ 
+ void f(int, ...);
+diff --git a/gcc/testsuite/gcc.target/aarch64/stack-check-prologue-18.c b/gcc/testsuite/gcc.target/aarch64/stack-check-prologue-18.c
+index 6383bec5e..2e06346c1 100644
+--- a/gcc/testsuite/gcc.target/aarch64/stack-check-prologue-18.c
++++ b/gcc/testsuite/gcc.target/aarch64/stack-check-prologue-18.c
+@@ -1,4 +1,4 @@
+-/* { dg-options "-O2 -fstack-clash-protection -fomit-frame-pointer --param stack-clash-protection-guard-size=12" } */
++/* { dg-options "-O2 -fstack-clash-protection -fomit-frame-pointer --param stack-clash-protection-guard-size=12 -fno-stack-protector" } */
+ /* { dg-final { check-function-bodies "**" "" } } */
+ 
+ void f(int, ...);
+diff --git a/gcc/testsuite/gcc.target/aarch64/stack-check-prologue-19.c b/gcc/testsuite/gcc.target/aarch64/stack-check-prologue-19.c
+index 562039b5e..38eab4d36 100644
+--- a/gcc/testsuite/gcc.target/aarch64/stack-check-prologue-19.c
++++ b/gcc/testsuite/gcc.target/aarch64/stack-check-prologue-19.c
+@@ -1,4 +1,4 @@
+-/* { dg-options "-O2 -fstack-clash-protection -fomit-frame-pointer --param stack-clash-protection-guard-size=12 -fsanitize=shadow-call-stack -ffixed-x18" } */
++/* { dg-options "-O2 -fstack-clash-protection -fomit-frame-pointer --param stack-clash-protection-guard-size=12 -fsanitize=shadow-call-stack -ffixed-x18 -fno-stack-protector" } */
+ /* { dg-final { check-function-bodies "**" "" } } */
+ 
+ void f(int, ...);
+diff --git a/gcc/testsuite/gcc.target/aarch64/stack-check-prologue-2.c b/gcc/testsuite/gcc.target/aarch64/stack-check-prologue-2.c
+index 61c52a251..b37f62cad 100644
+--- a/gcc/testsuite/gcc.target/aarch64/stack-check-prologue-2.c
++++ b/gcc/testsuite/gcc.target/aarch64/stack-check-prologue-2.c
+@@ -1,5 +1,5 @@
+ /* { dg-do compile } */
+-/* { dg-options "-O2 -fstack-clash-protection --param stack-clash-protection-guard-size=16" } */
++/* { dg-options "-O2 -fstack-clash-protection --param stack-clash-protection-guard-size=16 -fno-stack-protector" } */
+ /* { dg-require-effective-target supports_stack_clash_protection } */
+ 
+ #define SIZE 2 * 1024
+diff --git a/gcc/testsuite/gcc.target/aarch64/stack-check-prologue-5.c b/gcc/testsuite/gcc.target/aarch64/stack-check-prologue-5.c
+index 2ee163501..34a438671 100644
+--- a/gcc/testsuite/gcc.target/aarch64/stack-check-prologue-5.c
++++ b/gcc/testsuite/gcc.target/aarch64/stack-check-prologue-5.c
+@@ -1,5 +1,5 @@
+ /* { dg-do compile } */
+-/* { dg-options "-O2 -fstack-clash-protection --param stack-clash-protection-guard-size=16" } */
++/* { dg-options "-O2 -fstack-clash-protection --param stack-clash-protection-guard-size=16 -fno-stack-protector" } */
+ /* { dg-require-effective-target supports_stack_clash_protection } */
+ 
+ #define SIZE 64 * 1024
+diff --git a/gcc/testsuite/gcc.target/aarch64/stack-check-prologue-6.c b/gcc/testsuite/gcc.target/aarch64/stack-check-prologue-6.c
+index 3c9b606cb..a4e34e2fe 100644
+--- a/gcc/testsuite/gcc.target/aarch64/stack-check-prologue-6.c
++++ b/gcc/testsuite/gcc.target/aarch64/stack-check-prologue-6.c
+@@ -1,5 +1,5 @@
+ /* { dg-do compile } */
+-/* { dg-options "-O2 -fstack-clash-protection --param stack-clash-protection-guard-size=16" } */
++/* { dg-options "-O2 -fstack-clash-protection --param stack-clash-protection-guard-size=16 -fno-stack-protector" } */
+ /* { dg-require-effective-target supports_stack_clash_protection } */
+ 
+ #define SIZE 65 * 1024
+diff --git a/gcc/testsuite/gcc.target/aarch64/stack-check-prologue-8.c b/gcc/testsuite/gcc.target/aarch64/stack-check-prologue-8.c
+index 333f5fcc3..277dce4c7 100644
+--- a/gcc/testsuite/gcc.target/aarch64/stack-check-prologue-8.c
++++ b/gcc/testsuite/gcc.target/aarch64/stack-check-prologue-8.c
+@@ -1,5 +1,5 @@
+ /* { dg-do compile } */
+-/* { dg-options "-O2 -fstack-clash-protection --param stack-clash-protection-guard-size=16" } */
++/* { dg-options "-O2 -fstack-clash-protection --param stack-clash-protection-guard-size=16 -fno-stack-protector" } */
+ /* { dg-require-effective-target supports_stack_clash_protection } */
+ 
+ #define SIZE 128 * 1024
+diff --git a/gcc/testsuite/gcc.target/aarch64/stack-check-prologue-9.c b/gcc/testsuite/gcc.target/aarch64/stack-check-prologue-9.c
+index a3ff89b55..a21305541 100644
+--- a/gcc/testsuite/gcc.target/aarch64/stack-check-prologue-9.c
++++ b/gcc/testsuite/gcc.target/aarch64/stack-check-prologue-9.c
+@@ -1,5 +1,5 @@
+ /* { dg-do compile } */
+-/* { dg-options "-O2 -fstack-clash-protection --param stack-clash-protection-guard-size=16" } */
++/* { dg-options "-O2 -fstack-clash-protection --param stack-clash-protection-guard-size=16 -fno-stack-protector" } */
+ /* { dg-require-effective-target supports_stack_clash_protection } */
+ 
+ #define SIZE 6 * 64 * 1024
+diff --git a/gcc/testsuite/gcc.target/aarch64/stack-protector-8.c b/gcc/testsuite/gcc.target/aarch64/stack-protector-8.c
+index e71d820e3..5decc83b1 100644
+--- a/gcc/testsuite/gcc.target/aarch64/stack-protector-8.c
++++ b/gcc/testsuite/gcc.target/aarch64/stack-protector-8.c
+@@ -1,4 +1,4 @@
+-/* { dg-options " -O -fstack-protector-strong -mstack-protector-guard=sysreg -mstack-protector-guard-reg=tpidr2_el0 -mstack-protector-guard-offset=16" } */
++/* { dg-options " -O -fstack-protector-strong -mstack-protector-guard=sysreg -mstack-protector-guard-reg=tpidr2_el0 -mstack-protector-guard-offset=16 -fno-stack-clash-protection" } */
+ /* { dg-final { check-function-bodies "**" "" } } */
+ 
+ void g(void *);
+diff --git a/gcc/testsuite/gcc.target/aarch64/sve/pcs/args_1.c b/gcc/testsuite/gcc.target/aarch64/sve/pcs/args_1.c
+index 4509fff22..69a42c414 100644
+--- a/gcc/testsuite/gcc.target/aarch64/sve/pcs/args_1.c
++++ b/gcc/testsuite/gcc.target/aarch64/sve/pcs/args_1.c
+@@ -1,5 +1,5 @@
+ /* { dg-do compile } */
+-/* { dg-options "-O -g" } */
++/* { dg-options "-O -g -fno-stack-clash-protection" } */
+ /* { dg-final { check-function-bodies "**" "" "" { target lp64 } } } */
+ 
+ #include <arm_sve.h>
+diff --git a/gcc/testsuite/gcc.target/aarch64/sve/struct_vect_24.c b/gcc/testsuite/gcc.target/aarch64/sve/struct_vect_24.c
+index 68a9d5e3d..19be6de0c 100644
+--- a/gcc/testsuite/gcc.target/aarch64/sve/struct_vect_24.c
++++ b/gcc/testsuite/gcc.target/aarch64/sve/struct_vect_24.c
+@@ -1,6 +1,6 @@
+ /* { dg-do compile } */
+ /* { dg-require-effective-target supports_stack_clash_protection } */
+-/* { dg-options "-O3 -fopenmp-simd -fstack-clash-protection --param stack-clash-protection-guard-size=16" } */
++/* { dg-options "-O3 -fopenmp-simd -fstack-clash-protection --param stack-clash-protection-guard-size=16 -fno-stack-protector" } */
+ 
+ #include <stdint.h>
+ 
+diff --git a/gcc/testsuite/gcc.target/aarch64/test_frame_1.c b/gcc/testsuite/gcc.target/aarch64/test_frame_1.c
+index f906b0735..a64069b9c 100644
+--- a/gcc/testsuite/gcc.target/aarch64/test_frame_1.c
++++ b/gcc/testsuite/gcc.target/aarch64/test_frame_1.c
+@@ -6,7 +6,7 @@
+      * optimized code should use "str !" for stack adjustment.  */
+ 
+ /* { dg-do run } */
+-/* { dg-options "-O2 -fomit-frame-pointer --save-temps" } */
++/* { dg-options "-O2 -fomit-frame-pointer --save-temps -fno-stack-protector -fno-stack-clash-protection" } */
+ 
+ #include "test_frame_common.h"
+ 
+diff --git a/gcc/testsuite/gcc.target/aarch64/test_frame_10.c b/gcc/testsuite/gcc.target/aarch64/test_frame_10.c
+index c19505082..219ddac29 100644
+--- a/gcc/testsuite/gcc.target/aarch64/test_frame_10.c
++++ b/gcc/testsuite/gcc.target/aarch64/test_frame_10.c
+@@ -7,7 +7,7 @@
+      * Use a single stack adjustment, no writeback.  */
+ 
+ /* { dg-do run } */
+-/* { dg-options "-O2 -fomit-frame-pointer --save-temps" } */
++/* { dg-options "-O2 -fomit-frame-pointer --save-temps -fno-stack-protector -fno-stack-clash-protection" } */
+ 
+ #include "test_frame_common.h"
+ 
+diff --git a/gcc/testsuite/gcc.target/aarch64/test_frame_11.c b/gcc/testsuite/gcc.target/aarch64/test_frame_11.c
+index f162cc091..9cfe2df14 100644
+--- a/gcc/testsuite/gcc.target/aarch64/test_frame_11.c
++++ b/gcc/testsuite/gcc.target/aarch64/test_frame_11.c
+@@ -5,7 +5,7 @@
+      * optimized code should use "stp !" for stack adjustment.  */
+ 
+ /* { dg-do run } */
+-/* { dg-options "-O2 --save-temps" } */
++/* { dg-options "-O2 --save-temps -fno-stack-protector -fno-stack-clash-protection" } */
+ 
+ #include "test_frame_common.h"
+ 
+diff --git a/gcc/testsuite/gcc.target/aarch64/test_frame_13.c b/gcc/testsuite/gcc.target/aarch64/test_frame_13.c
+index 74b3370fa..da7223df0 100644
+--- a/gcc/testsuite/gcc.target/aarch64/test_frame_13.c
++++ b/gcc/testsuite/gcc.target/aarch64/test_frame_13.c
+@@ -5,7 +5,7 @@
+      * Use a single stack adjustment, no writeback.  */
+ 
+ /* { dg-do run } */
+-/* { dg-options "-O2 --save-temps" } */
++/* { dg-options "-O2 --save-temps -fno-stack-protector -fno-stack-clash-protection" } */
+ 
+ #include "test_frame_common.h"
+ 
+diff --git a/gcc/testsuite/gcc.target/aarch64/test_frame_15.c b/gcc/testsuite/gcc.target/aarch64/test_frame_15.c
+index bed6714b4..f8fcebc14 100644
+--- a/gcc/testsuite/gcc.target/aarch64/test_frame_15.c
++++ b/gcc/testsuite/gcc.target/aarch64/test_frame_15.c
+@@ -6,7 +6,7 @@
+      * Use a single stack adjustment, no writeback.  */
+ 
+ /* { dg-do run } */
+-/* { dg-options "-O2 --save-temps" } */
++/* { dg-options "-O2 --save-temps -fno-stack-protector -fno-stack-clash-protection" } */
+ 
+ #include "test_frame_common.h"
+ 
+diff --git a/gcc/testsuite/gcc.target/aarch64/test_frame_2.c b/gcc/testsuite/gcc.target/aarch64/test_frame_2.c
+index 7e5df84cf..2d55eadc6 100644
+--- a/gcc/testsuite/gcc.target/aarch64/test_frame_2.c
++++ b/gcc/testsuite/gcc.target/aarch64/test_frame_2.c
+@@ -6,7 +6,7 @@
+      * optimized code should use "stp !" for stack adjustment.  */
+ 
+ /* { dg-do run } */
+-/* { dg-options "-O2 -fomit-frame-pointer --save-temps" } */
++/* { dg-options "-O2 -fomit-frame-pointer --save-temps -fno-stack-protector -fno-stack-clash-protection" } */
+ 
+ #include "test_frame_common.h"
+ 
+diff --git a/gcc/testsuite/gcc.target/aarch64/test_frame_4.c b/gcc/testsuite/gcc.target/aarch64/test_frame_4.c
+index ed13487a0..2d565a6a4 100644
+--- a/gcc/testsuite/gcc.target/aarch64/test_frame_4.c
++++ b/gcc/testsuite/gcc.target/aarch64/test_frame_4.c
+@@ -6,7 +6,7 @@
+      * we can use "stp !" to optimize stack adjustment.  */
+ 
+ /* { dg-do run } */
+-/* { dg-options "-O2 -fomit-frame-pointer --save-temps" } */
++/* { dg-options "-O2 -fomit-frame-pointer --save-temps -fno-stack-protector -fno-stack-clash-protection" } */
+ 
+ #include "test_frame_common.h"
+ 
+diff --git a/gcc/testsuite/gcc.target/aarch64/test_frame_6.c b/gcc/testsuite/gcc.target/aarch64/test_frame_6.c
+index 56259c945..2833289f1 100644
+--- a/gcc/testsuite/gcc.target/aarch64/test_frame_6.c
++++ b/gcc/testsuite/gcc.target/aarch64/test_frame_6.c
+@@ -6,7 +6,7 @@
+      * use a single stack adjustment, no writeback.  */
+ 
+ /* { dg-do run } */
+-/* { dg-options "-O2 -fomit-frame-pointer --save-temps" } */
++/* { dg-options "-O2 -fomit-frame-pointer --save-temps -fno-stack-protector -fno-stack-clash-protection" } */
+ 
+ #include "test_frame_common.h"
+ 
+diff --git a/gcc/testsuite/gcc.target/aarch64/test_frame_7.c b/gcc/testsuite/gcc.target/aarch64/test_frame_7.c
+index 964527949..0124fe347 100644
+--- a/gcc/testsuite/gcc.target/aarch64/test_frame_7.c
++++ b/gcc/testsuite/gcc.target/aarch64/test_frame_7.c
+@@ -6,7 +6,7 @@
+      * use a single stack adjustment, no writeback.  */
+ 
+ /* { dg-do run } */
+-/* { dg-options "-O2 -fomit-frame-pointer --save-temps" } */
++/* { dg-options "-O2 -fomit-frame-pointer --save-temps -fno-stack-protector -fno-stack-clash-protection" } */
+ 
+ #include "test_frame_common.h"
+ 
+diff --git a/gcc/testsuite/gcc.target/aarch64/test_frame_8.c b/gcc/testsuite/gcc.target/aarch64/test_frame_8.c
+index 75a68b41e..4b7d05624 100644
+--- a/gcc/testsuite/gcc.target/aarch64/test_frame_8.c
++++ b/gcc/testsuite/gcc.target/aarch64/test_frame_8.c
+@@ -5,7 +5,7 @@
+      * number of callee-saved reg == 1.  */
+ 
+ /* { dg-do run } */
+-/* { dg-options "-O2 -fomit-frame-pointer --save-temps" } */
++/* { dg-options "-O2 -fomit-frame-pointer --save-temps -fno-stack-protector -fno-stack-clash-protection" } */
+ 
+ #include "test_frame_common.h"
+ 
 diff --git a/gcc/testsuite/gcc.target/i386/avx2-dest-false-dep-for-glc.c b/gcc/testsuite/gcc.target/i386/avx2-dest-false-dep-for-glc.c
 index 787b1d08f..fe331fe5e 100644
 --- a/gcc/testsuite/gcc.target/i386/avx2-dest-false-dep-for-glc.c
@@ -2426,6 +3580,17 @@ index e5fe02135..4779094fe 100644
    assert (x->dim[2].extent == 1);
  }
 +#pragma GCC diagnostic pop
+diff --git a/gcc/testsuite/gfortran.dg/gomp/declare-simd-6.f90 b/gcc/testsuite/gfortran.dg/gomp/declare-simd-6.f90
+index 83f2c0ab7..fdaf1893d 100644
+--- a/gcc/testsuite/gfortran.dg/gomp/declare-simd-6.f90
++++ b/gcc/testsuite/gfortran.dg/gomp/declare-simd-6.f90
+@@ -1,5 +1,5 @@
+ ! { dg-do compile }
+-! { dg-additional-options "-fdump-tree-gimple" }
++! { dg-additional-options "-fdump-tree-gimple -w" }
+ !
+ ! PR fortran/106566
+ !
 diff --git a/gcc/testsuite/gfortran.dg/proc_ptr_21.f90 b/gcc/testsuite/gfortran.dg/proc_ptr_21.f90
 index 83ef50356..bea1d0d5e 100644
 --- a/gcc/testsuite/gfortran.dg/proc_ptr_21.f90
@@ -2500,6 +3665,20 @@ index 08965cc5e..2e5487482 100644
  ! { dg-additional-options "-mzarch" { target { s390*-*-* } } }
  
  ******* RESID COMPUTES THE RESIDUAL:  R = V - AU
+diff --git a/gcc/testsuite/gfortran.dg/vect/vect-8.f90 b/gcc/testsuite/gfortran.dg/vect/vect-8.f90
+index ca72ddcff..938dfc297 100644
+--- a/gcc/testsuite/gfortran.dg/vect/vect-8.f90
++++ b/gcc/testsuite/gfortran.dg/vect/vect-8.f90
+@@ -704,7 +704,7 @@ CALL track('KERNEL  ')
+ RETURN
+ END SUBROUTINE kernel
+ 
+-! { dg-final { scan-tree-dump-times "vectorized 25 loops" 1 "vect" { target aarch64_sve } } }
+-! { dg-final { scan-tree-dump-times "vectorized 24 loops" 1 "vect" { target { aarch64*-*-* && { ! aarch64_sve } } } } }
++! { dg-final { scan-tree-dump-times "vectorized 2\[56\] loops" 1 "vect" { target aarch64_sve } } }
++! { dg-final { scan-tree-dump-times "vectorized 2\[45\] loops" 1 "vect" { target { aarch64*-*-* && { ! aarch64_sve } } } } }
+ ! { dg-final { scan-tree-dump-times "vectorized 2\[234\] loops" 1 "vect" { target { vect_intdouble_cvt && { ! aarch64*-*-* } } } } }
+ ! { dg-final { scan-tree-dump-times "vectorized 17 loops" 1 "vect" { target { { ! vect_intdouble_cvt } && { ! aarch64*-*-* } } } } }
 diff --git a/gcc/testsuite/objc.dg/torture/strings/const-str-3.m b/gcc/testsuite/objc.dg/torture/strings/const-str-3.m
 index 0eb2d6a01..785352592 100644
 --- a/gcc/testsuite/objc.dg/torture/strings/const-str-3.m
