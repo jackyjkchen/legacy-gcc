@@ -1,0 +1,59 @@
+diff --git a/gcc/fortran/trans-expr.cc b/gcc/fortran/trans-expr.cc
+index 42c4f1006..3467efc48 100644
+--- a/gcc/fortran/trans-expr.cc
++++ b/gcc/fortran/trans-expr.cc
+@@ -7551,8 +7551,14 @@ gfc_conv_procedure_call (gfc_se * se, gfc_symbol * sym,
+ 	{
+ 	  gcc_assert (se->loop && info);
+ 
+-	  /* Set the type of the array.  */
+-	  tmp = gfc_typenode_for_spec (&comp->ts);
++	  /* Set the type of the array. vtable charlens are not always reliable.
++	     Use the interface, if possible.  */
++	  if (comp->ts.type == BT_CHARACTER
++	      && expr->symtree->n.sym->ts.type == BT_CLASS
++	      && comp->ts.interface && comp->ts.interface->result)
++	    tmp = gfc_typenode_for_spec (&comp->ts.interface->result->ts);
++	  else
++	    tmp = gfc_typenode_for_spec (&comp->ts);
+ 	  gcc_assert (se->ss->dimen == se->loop->dimen);
+ 
+ 	  /* Evaluate the bounds of the result, if known.  */
+diff --git a/gcc/testsuite/gfortran.dg/pr93678.f90 b/gcc/testsuite/gfortran.dg/pr93678.f90
+new file mode 100644
+index 000000000..403bedd0c
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/pr93678.f90
+@@ -0,0 +1,32 @@
++! { dg-do compile }
++! Test the fix for PR93678 in which the charlen for the 'unpackbytes'
++! vtable field was incomplete and caused the ICE as indicated.
++! Contributed by Luis Kornblueh  <mail.luis@web.de>
++!
++! The testcase was reduced by various gfortran regulars.
++module mo_a
++  implicit none
++  type t_b
++    integer :: i
++  contains
++    procedure :: unpackbytes => b_unpackbytes
++  end type t_b
++contains
++  function b_unpackbytes (me) result (res)
++    class(t_b), intent(inout) :: me
++    character                 :: res(1)
++    res = char (me%i)
++  end function b_unpackbytes
++  subroutine b_unpackint (me, c)
++    class(t_b), intent(inout) :: me
++    character, intent(in) :: c
++!   print *, b_unpackbytes (me) ! ok
++    if (any (me% unpackbytes () .ne. c)) stop 1 ! ICEd here
++  end subroutine b_unpackint
++end module mo_a
++
++  use mo_a
++  class(t_b), allocatable :: z
++  allocate (z, source = t_b(97))
++  call b_unpackint (z, "a")
++end

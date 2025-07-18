@@ -1,0 +1,34 @@
+diff --git a/gcc/cp/constexpr.cc b/gcc/cp/constexpr.cc
+index 247a24844..9945fd196 100644
+--- a/gcc/cp/constexpr.cc
++++ b/gcc/cp/constexpr.cc
+@@ -8661,8 +8661,9 @@ potential_constant_expression_1 (tree t, bool want_rval, bool strict, bool now,
+       if (now && want_rval)
+ 	{
+ 	  tree type = TREE_TYPE (t);
+-	  if ((processing_template_decl && !COMPLETE_TYPE_P (type))
+-	      || dependent_type_p (type)
++	  if (dependent_type_p (type)
++	      || !COMPLETE_TYPE_P (processing_template_decl
++				   ? type : complete_type (type))
+ 	      || is_really_empty_class (type, /*ignore_vptr*/false))
+ 	    /* An empty class has no data to read.  */
+ 	    return true;
+diff --git a/gcc/testsuite/g++.dg/cpp0x/noexcept80.C b/gcc/testsuite/g++.dg/cpp0x/noexcept80.C
+new file mode 100644
+index 000000000..3e90af747
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/noexcept80.C
+@@ -0,0 +1,12 @@
++// PR c++/110106
++// { dg-do compile { target c++11 } }
++
++template<int> struct S
++{
++};
++
++struct G {
++  G(S<0>);
++};
++
++void y(S<0> s) noexcept(noexcept(G{s}));

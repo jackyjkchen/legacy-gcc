@@ -1,0 +1,109 @@
+diff --git a/gcc/config/i386/i386.cc b/gcc/config/i386/i386.cc
+index 0c0d1efe3..97c3f5583 100644
+--- a/gcc/config/i386/i386.cc
++++ b/gcc/config/i386/i386.cc
+@@ -16070,6 +16070,19 @@ ix86_call_use_plt_p (rtx call_op)
+   return true;
+ }
+ 
++/* Implement TARGET_IFUNC_REF_LOCAL_OK.  If this hook returns true,
++   the PLT entry will be used as the function address for local IFUNC
++   functions.  When the PIC register is needed for PLT call, indirect
++   call via the PLT entry will fail since the PIC register may not be
++   set up properly for indirect call.  In this case, we should return
++   false.  */
++
++static bool
++ix86_ifunc_ref_local_ok (void)
++{
++  return !flag_pic || (TARGET_64BIT && ix86_cmodel != CM_LARGE_PIC);
++}
++
+ /* Return true if the function being called was marked with attribute
+    "noplt" or using -fno-plt and we are compiling for non-PIC.  We need
+    to handle the non-PIC case in the backend because there is no easy
+@@ -24901,7 +24914,7 @@ ix86_libgcc_floating_mode_supported_p
+   ix86_get_multilib_abi_name
+ 
+ #undef TARGET_IFUNC_REF_LOCAL_OK
+-#define TARGET_IFUNC_REF_LOCAL_OK hook_bool_void_true
++#define TARGET_IFUNC_REF_LOCAL_OK ix86_ifunc_ref_local_ok
+ 
+ #if !TARGET_MACHO && !TARGET_DLLIMPORT_DECL_ATTRIBUTES
+ # undef TARGET_ASM_RELOC_RW_MASK
+diff --git a/gcc/testsuite/gcc.target/i386/pr83782-1.c b/gcc/testsuite/gcc.target/i386/pr83782-1.c
+index ce97b12e6..85674346a 100644
+--- a/gcc/testsuite/gcc.target/i386/pr83782-1.c
++++ b/gcc/testsuite/gcc.target/i386/pr83782-1.c
+@@ -1,4 +1,4 @@
+-/* { dg-do compile } */
++/* { dg-do compile { target { ! ia32 } } } */
+ /* { dg-require-ifunc "" } */
+ /* { dg-options "-O2 -fpic" } */
+ 
+@@ -20,7 +20,5 @@ bar(void)
+   return foo;
+ }
+ 
+-/* { dg-final { scan-assembler {leal[ \t]foo@GOTOFF\(%[^,]*\),[ \t]%eax} { target ia32 } } } */
+-/* { dg-final { scan-assembler {lea(?:l|q)[ \t]foo\(%rip\),[ \t]%(?:e|r)ax} { target { ! ia32 } } } } */
+-/* { dg-final { scan-assembler-not "foo@GOT\\\(" { target ia32 } } } */
+-/* { dg-final { scan-assembler-not "foo@GOTPCREL\\\(" { target { ! ia32 } } } } */
++/* { dg-final { scan-assembler {lea(?:l|q)[ \t]foo\(%rip\),[ \t]%(?:e|r)ax} } } */
++/* { dg-final { scan-assembler-not "foo@GOTPCREL\\\(" } } */
+diff --git a/gcc/testsuite/gcc.target/i386/pr83782-2.c b/gcc/testsuite/gcc.target/i386/pr83782-2.c
+index e25d258bb..a654ded77 100644
+--- a/gcc/testsuite/gcc.target/i386/pr83782-2.c
++++ b/gcc/testsuite/gcc.target/i386/pr83782-2.c
+@@ -1,4 +1,4 @@
+-/* { dg-do compile } */
++/* { dg-do compile { target { ! ia32 } } } */
+ /* { dg-require-ifunc "" } */
+ /* { dg-options "-O2 -fpic" } */
+ 
+@@ -20,7 +20,5 @@ bar(void)
+   return foo;
+ }
+ 
+-/* { dg-final { scan-assembler {leal[ \t]foo@GOTOFF\(%[^,]*\),[ \t]%eax} { target ia32 } } } */
+ /* { dg-final { scan-assembler {lea(?:l|q)[ \t]foo\(%rip\),[ \t]%(?:e|r)ax} { target { ! ia32 } } } } */
+-/* { dg-final { scan-assembler-not "foo@GOT\\\(" { target ia32 } } } */
+ /* { dg-final { scan-assembler-not "foo@GOTPCREL\\\(" { target { ! ia32 } } } } */
+diff --git a/gcc/testsuite/gcc.target/i386/pr83782-3.c b/gcc/testsuite/gcc.target/i386/pr83782-3.c
+new file mode 100644
+index 000000000..1536481cb
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/i386/pr83782-3.c
+@@ -0,0 +1,32 @@
++/* { dg-do run }  */
++/* { dg-require-ifunc "" } */
++/* { dg-require-effective-target pie } */
++/* { dg-options "-fpie -pie" } */
++
++#include <stdio.h>
++
++static int __attribute__((noinline))
++implementation (void)
++{
++  printf ("'ere I am JH\n");
++  return 0;
++}
++
++static __typeof__ (implementation) *resolver (void)
++{
++  return (void *)implementation;
++}
++
++extern int magic (void) __attribute__ ((ifunc ("resolver")));
++
++__attribute__ ((weak))
++int
++call_magic (int (*ptr) (void))
++{
++  return ptr ();
++}
++
++int main ()
++{
++  return call_magic (magic);
++}

@@ -1,0 +1,159 @@
+diff --git a/gcc/fortran/trans-array.cc b/gcc/fortran/trans-array.cc
+index ddaedf960..bb57b1550 100644
+--- a/gcc/fortran/trans-array.cc
++++ b/gcc/fortran/trans-array.cc
+@@ -11282,6 +11282,15 @@ gfc_trans_deferred_array (gfc_symbol * sym, gfc_wrapped_block * block)
+     {
+       gfc_conv_string_length (sym->ts.u.cl, NULL, &init);
+       gfc_trans_vla_type_sizes (sym, &init);
++
++      /* Presence check of optional deferred-length character dummy.  */
++      if (sym->ts.deferred && sym->attr.dummy && sym->attr.optional)
++	{
++	  tmp = gfc_finish_block (&init);
++	  tmp = build3_v (COND_EXPR, gfc_conv_expr_present (sym),
++			  tmp, build_empty_stmt (input_location));
++	  gfc_add_expr_to_block (&init, tmp);
++	}
+     }
+ 
+   /* Dummy, use associated and result variables don't need anything special.  */
+diff --git a/gcc/fortran/trans-expr.cc b/gcc/fortran/trans-expr.cc
+index 3467efc48..46253659a 100644
+--- a/gcc/fortran/trans-expr.cc
++++ b/gcc/fortran/trans-expr.cc
+@@ -2106,10 +2106,24 @@ gfc_conv_missing_dummy (gfc_se * se, gfc_expr * arg, gfc_typespec ts, int kind)
+ 
+   if (ts.type == BT_CHARACTER)
+     {
+-      tmp = build_int_cst (gfc_charlen_type_node, 0);
+-      tmp = fold_build3_loc (input_location, COND_EXPR, gfc_charlen_type_node,
+-			     present, se->string_length, tmp);
+-      tmp = gfc_evaluate_now (tmp, &se->pre);
++      /* Handle deferred-length dummies that pass the character length by
++	 reference so that the value can be returned.  */
++      if (ts.deferred && INDIRECT_REF_P (se->string_length))
++	{
++	  tmp = gfc_build_addr_expr (NULL_TREE, se->string_length);
++	  tmp = fold_build3_loc (input_location, COND_EXPR, TREE_TYPE (tmp),
++				 present, tmp, null_pointer_node);
++	  tmp = gfc_evaluate_now (tmp, &se->pre);
++	  tmp = build_fold_indirect_ref_loc (input_location, tmp);
++	}
++      else
++	{
++	  tmp = build_int_cst (gfc_charlen_type_node, 0);
++	  tmp = fold_build3_loc (input_location, COND_EXPR,
++				 gfc_charlen_type_node,
++				 present, se->string_length, tmp);
++	  tmp = gfc_evaluate_now (tmp, &se->pre);
++	}
+       se->string_length = tmp;
+     }
+   return;
+diff --git a/gcc/testsuite/gfortran.dg/optional_deferred_char_1.f90 b/gcc/testsuite/gfortran.dg/optional_deferred_char_1.f90
+new file mode 100644
+index 000000000..d399dd11c
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/optional_deferred_char_1.f90
+@@ -0,0 +1,100 @@
++! { dg-do run }
++! PR fortran/93762
++! PR fortran/100651 - deferred-length character as optional dummy argument
++
++program main
++  implicit none
++  character(:), allocatable :: err_msg, msg3(:)
++  character(:), pointer     :: err_msg2 => NULL()
++
++  ! Subroutines with optional arguments
++  call to_int ()
++  call to_int_p ()
++  call test_rank1 ()
++  call assert_code ()
++  call assert_p ()
++  call assert_rank1 ()
++
++  ! Test passing of optional arguments
++  call to_int (err_msg)
++  if (.not. allocated (err_msg)) stop 1
++  if (len (err_msg) /= 7)        stop 2
++  if (err_msg(1:7) /= "foo bar") stop 3
++
++  call to_int2 (err_msg)
++  if (.not. allocated (err_msg)) stop 4
++  if (len (err_msg) /= 7)        stop 5
++  if (err_msg(1:7) /= "foo bar") stop 6
++  deallocate (err_msg)
++
++  call to_int_p (err_msg2)
++  if (.not. associated (err_msg2)) stop 11
++  if (len (err_msg2) /= 8)         stop 12
++  if (err_msg2(1:8) /= "poo bla ") stop 13
++  deallocate (err_msg2)
++
++  call to_int2_p (err_msg2)
++  if (.not. associated (err_msg2)) stop 14
++  if (len (err_msg2) /= 8)         stop 15
++  if (err_msg2(1:8) /= "poo bla ") stop 16
++  deallocate (err_msg2)
++
++  call test_rank1 (msg3)
++  if (.not. allocated (msg3)) stop 21
++  if (len (msg3) /= 2)        stop 22
++  if (size (msg3) /= 42)      stop 23
++  if (any (msg3 /= "ok"))     stop 24
++  deallocate (msg3)
++
++contains
++
++  ! Deferred-length character, allocatable:
++  subroutine assert_code (err_msg0)
++    character(:), optional, allocatable :: err_msg0
++    if (present (err_msg0)) err_msg0 = 'foo bar'
++  end
++  ! Test: optional argument
++  subroutine to_int (err_msg1)
++    character(:), optional, allocatable :: err_msg1
++    call assert_code (err_msg1)
++  end
++  ! Control: non-optional argument
++  subroutine to_int2 (err_msg2)
++    character(:), allocatable :: err_msg2
++    call assert_code (err_msg2)
++  end
++
++  ! Rank-1:
++  subroutine assert_rank1 (msg)
++    character(:), optional, allocatable, intent(out) :: msg(:)
++    if (present (msg)) then
++       allocate (character(2) :: msg(42))
++       msg(:) = "ok"
++    end if
++  end
++
++  subroutine test_rank1 (msg1)
++    character(:), optional, allocatable, intent(out) :: msg1(:)
++    call assert_rank1 (msg1)
++  end
++
++  ! Deferred-length character, pointer:
++  subroutine assert_p (err_msg0)
++    character(:), optional, pointer :: err_msg0
++    if (present (err_msg0)) then
++       if (associated (err_msg0)) deallocate (err_msg0)
++       allocate (character(8) :: err_msg0)
++       err_msg0 = 'poo bla'
++    end if
++  end
++
++  subroutine to_int_p (err_msg1)
++    character(:), optional, pointer :: err_msg1
++    call assert_p (err_msg1)
++  end
++
++  subroutine to_int2_p (err_msg2)
++    character(:), pointer :: err_msg2
++    call assert_p (err_msg2)
++  end
++end

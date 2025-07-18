@@ -1,0 +1,36 @@
+diff --git a/gcc/cp/mangle.cc b/gcc/cp/mangle.cc
+index 4660514dc..29cc90761 100644
+--- a/gcc/cp/mangle.cc
++++ b/gcc/cp/mangle.cc
+@@ -3252,7 +3252,8 @@ write_expression (tree expr)
+   else if (TREE_CODE (expr) == TEMPLATE_ID_EXPR)
+     {
+       tree fn = TREE_OPERAND (expr, 0);
+-      fn = OVL_NAME (fn);
++      if (!identifier_p (fn))
++	fn = OVL_NAME (fn);
+       if (IDENTIFIER_ANY_OP_P (fn))
+ 	write_string ("on");
+       write_unqualified_id (fn);
+diff --git a/gcc/testsuite/g++.dg/cpp2a/fn-template26.C b/gcc/testsuite/g++.dg/cpp2a/fn-template26.C
+new file mode 100644
+index 000000000..d4a17eb9b
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp2a/fn-template26.C
+@@ -0,0 +1,16 @@
++// PR c++/110524
++// { dg-do compile { target c++20 } }
++
++template<class T>
++auto f(T t) -> decltype(g<T>(t));
++
++namespace N {
++  struct A { };
++  template<class T> void g(T);
++};
++
++int main() {
++  f(N::A{});
++}
++
++// { dg-final { scan-assembler "_Z1fIN1N1AEEDTcl1gIT_Efp_EES2_" } }

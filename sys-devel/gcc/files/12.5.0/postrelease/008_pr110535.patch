@@ -1,0 +1,57 @@
+diff --git a/gcc/cp/call.cc b/gcc/cp/call.cc
+index 6fd6da4b2..d538a4dba 100644
+--- a/gcc/cp/call.cc
++++ b/gcc/cp/call.cc
+@@ -2549,6 +2549,14 @@ add_conv_candidate (struct z_candidate **candidates, tree fn, tree obj,
+   if (*candidates && (*candidates)->fn == totype)
+     return NULL;
+ 
++  if (!constraints_satisfied_p (fn))
++    {
++      reason = constraint_failure ();
++      viable = 0;
++      return add_candidate (candidates, fn, obj, arglist, len, convs,
++			    access_path, conversion_path, viable, reason, flags);
++    }
++
+   for (i = 0; i < len; ++i)
+     {
+       tree arg, argtype, convert_type = NULL_TREE;
+diff --git a/gcc/testsuite/g++.dg/cpp2a/concepts-surrogate1.C b/gcc/testsuite/g++.dg/cpp2a/concepts-surrogate1.C
+new file mode 100644
+index 000000000..e8481a316
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp2a/concepts-surrogate1.C
+@@ -0,0 +1,12 @@
++// PR c++/110535
++// { dg-do compile { target c++20 } }
++
++using F = int(int);
++
++template<bool B>
++struct A {
++ operator F*() requires B;
++};
++
++int i = A<true>{}(0);  // OK
++int j = A<false>{}(0); // { dg-error "no match" }
+diff --git a/gcc/testsuite/g++.dg/cpp2a/concepts-surrogate2.C b/gcc/testsuite/g++.dg/cpp2a/concepts-surrogate2.C
+new file mode 100644
+index 000000000..8bf8364be
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp2a/concepts-surrogate2.C
+@@ -0,0 +1,14 @@
++// PR c++/110535
++// { dg-do compile { target c++20 } }
++
++using F = int(int);
++using G = long(int);
++
++template<bool B>
++struct A {
++ operator F&() requires B;
++ operator G&() requires (!B);
++};
++
++int i = A<true>{}(0);  // { dg-bogus "ambiguous" }
++int j = A<false>{}(0); // { dg-bogus "ambiguous" }
