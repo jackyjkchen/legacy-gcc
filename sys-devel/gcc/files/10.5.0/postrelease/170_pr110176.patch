@@ -1,0 +1,82 @@
+diff --git a/gcc/match.pd b/gcc/match.pd
+index 432916708..a55cf8f9f 100644
+--- a/gcc/match.pd
++++ b/gcc/match.pd
+@@ -4263,19 +4263,19 @@ DEFINE_INT_AND_FLOAT_ROUND_FN (RINT)
+ 		   >= TYPE_PRECISION (TREE_TYPE (@10)))
+ 		  && (TYPE_UNSIGNED (TREE_TYPE (@00))
+ 		      == TYPE_UNSIGNED (TREE_TYPE (@10))))
+-	      || (TREE_CODE (@10) == INTEGER_CST
++	      || (TREE_CODE (@1) == INTEGER_CST
+ 		  && INTEGRAL_TYPE_P (TREE_TYPE (@00))
+-		  && int_fits_type_p (@10, TREE_TYPE (@00)))))
++		  && int_fits_type_p (@1, TREE_TYPE (@00)))))
+       (cmp @00 (convert @10))
+-      (if (TREE_CODE (@10) == INTEGER_CST
++      (if (TREE_CODE (@1) == INTEGER_CST
+ 	   && INTEGRAL_TYPE_P (TREE_TYPE (@00))
+-	   && !int_fits_type_p (@10, TREE_TYPE (@00)))
++	   && !int_fits_type_p (@1, TREE_TYPE (@00)))
+        (with
+ 	{
+ 	  tree min = lower_bound_in_type (TREE_TYPE (@10), TREE_TYPE (@00));
+ 	  tree max = upper_bound_in_type (TREE_TYPE (@10), TREE_TYPE (@00));
+-	  bool above = integer_nonzerop (const_binop (LT_EXPR, type, max, @10));
+-	  bool below = integer_nonzerop (const_binop (LT_EXPR, type, @10, min));
++	  bool above = integer_nonzerop (const_binop (LT_EXPR, type, max, @1));
++	  bool below = integer_nonzerop (const_binop (LT_EXPR, type, @1, min));
+ 	}
+ 	(if (above || below)
+ 	 (if (cmp == EQ_EXPR || cmp == NE_EXPR)
+diff --git a/gcc/testsuite/gcc.dg/torture/pr110176.c b/gcc/testsuite/gcc.dg/torture/pr110176.c
+new file mode 100644
+index 000000000..e41e3a0c3
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/torture/pr110176.c
+@@ -0,0 +1,46 @@
++/* { dg-do run } */
++
++int f(_Bool t)
++{
++        int tt = t;
++        unsigned x = -1;
++        int xx = x;
++        return xx <= tt;
++}
++
++int a, b;
++void c() {}
++__attribute__((noipa))
++void h() {__builtin_abort();}
++int d() {
++  unsigned f[1];
++  int i;
++  if (a)
++    goto h;
++  f[0] = -1;
++  while (1) {
++    c();
++    for (; a < 1; a++) {
++      if (0) {
++      j:
++        continue;
++      }
++      i = f[0];
++      if (a)
++        break;
++      b = i >= (b == 0);
++    }
++    if (!b) {
++      if (0) {
++      h:
++        goto j;
++      }
++      return 0;
++    }
++    h();
++  }
++}
++int main() {
++  d();
++  return 0;
++}

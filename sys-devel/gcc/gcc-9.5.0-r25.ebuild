@@ -42,13 +42,13 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/023_pr101469.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/024_pr89563.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/025_pr101156.patch
-	eapply "${FILESDIR}"/${PV}/postrelease/026_pr90348.patch
-	eapply "${FILESDIR}"/${PV}/postrelease/027_pr93444-107833.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/026_pr90348-110115-111422.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/027_pr93444-107833-107839.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/028_pr97219.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/029_pr100119.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/030_pr53164-105848.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/031_pr101419.patch
-	eapply "${FILESDIR}"/${PV}/postrelease/032_pr101839.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/032_pr101839-106057.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/033_pr116512.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/034_pr89355.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/035_pr85620.patch
@@ -184,6 +184,19 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/165_pr39751.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/166_pr93272.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/167_pr67791.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/168_pr114052.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/169_pr116706.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/170_pr87984.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/171_pr112411.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/172_pr116034.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/173_pr116287.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/174_pr106692.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/175_pr93672.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/176_pr117811.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/177_pr91299.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/178_pr116891.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/179_pr66279.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/180_pr117574.patch
 
 	if use test ; then
 		rm -rf gcc/testsuite/gcc.c-torture/execute/vfprintf-chk-1.c gcc/testsuite/gcc.c-torture/execute/vprintf-chk-1.c gcc/testsuite/c-c++-common/Warray-bounds-2.c gcc/testsuite/c-c++-common/Wrestrict-2.c gcc/testsuite/g++.dg/warn/Wstringop-truncation-1.C

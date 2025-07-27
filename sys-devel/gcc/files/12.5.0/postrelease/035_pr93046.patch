@@ -1,0 +1,49 @@
+diff --git a/gcc/cp/call.cc b/gcc/cp/call.cc
+index d538a4dba..f9e63227e 100644
+--- a/gcc/cp/call.cc
++++ b/gcc/cp/call.cc
+@@ -5374,6 +5374,11 @@ build_conditional_expr (const op_location_t &loc,
+ 	  arg1 = cp_stabilize_reference (arg1);
+ 	  arg2 = arg1 = prevent_lifetime_extension (arg1);
+ 	}
++      else if (TREE_CODE (arg1) == TARGET_EXPR)
++	/* arg1 can't be a prvalue result of the conditional
++	   expression, since it needs to be materialized for the
++	   conversion to bool, so treat it as an xvalue in arg2.  */
++	arg2 = move (TARGET_EXPR_SLOT (arg1));
+       else
+ 	arg2 = arg1 = cp_save_expr (arg1);
+     }
+diff --git a/gcc/testsuite/g++.dg/ext/cond4.C b/gcc/testsuite/g++.dg/ext/cond4.C
+index d2853f403..86993306a 100644
+--- a/gcc/testsuite/g++.dg/ext/cond4.C
++++ b/gcc/testsuite/g++.dg/ext/cond4.C
+@@ -1,10 +1,14 @@
+ // PR c++/93046
+-// { dg-do compile }
++// { dg-do run }
+ // { dg-options "" }
+ 
++int c;
++
+ struct S {
+-  S (int);
+-  operator bool ();
++  int i;
++  S (int i) : i(i) { ++c; }
++  S (const S &s): i(s.i) { ++c; }
++  operator bool () { return i; }
+ };
+ 
+ S
+@@ -12,3 +16,10 @@ foo ()
+ {
+   return S (1) ? : S (2);
+ }
++
++int main()
++{
++  S s = foo();
++  if (s.i != 1 || c != 2)
++    __builtin_abort ();
++}

@@ -38,7 +38,7 @@ src_prepare() {
 
 	eapply "${FILESDIR}"/${PV}/postrelease/000_pr98645-98688-111224.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/001_pr100130.patch
-	eapply "${FILESDIR}"/${PV}/postrelease/002_pr93444-107833.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/002_pr93444-107833-107839.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/003_pr97219.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/004_pr100119.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/005_pr100394.patch
@@ -47,7 +47,7 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/008_pr51577-97279.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/009_pr101260.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/010_pr101419.patch
-	eapply "${FILESDIR}"/${PV}/postrelease/011_pr101839.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/011_pr101839-106057.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/012_pr101885.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/013_pr114924.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/014_pr104996.patch
@@ -136,6 +136,24 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/098_pr77693.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/099_pr65396.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/100_pr79181.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/101_pr114052.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/102_pr110799-113630.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/103_pr116706.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/104_pr87984.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/105_pr93672.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/106_pr117432.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/107_pr116034.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/108_pr116287.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/109_pr106692.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/110_pr47634-101833.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/111_pr116768.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/112_pr117811.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/113_pr91299.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/114_pr116891.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/115_pr66279.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/116_pr117574.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/117_pr112411.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/118_pr116641.patch
 
 	if use test ; then
 		rm -rf gcc/testsuite/gcc.c-torture/execute/vfprintf-chk-1.c gcc/testsuite/gcc.c-torture/execute/vprintf-chk-1.c gcc/testsuite/c-c++-common/Warray-bounds-2.c gcc/testsuite/c-c++-common/Wrestrict-2.c gcc/testsuite/g++.dg/warn/Wstringop-truncation-1.C gcc/testsuite/gcc.target/aarch64/cpunative/native_cpu_18.c

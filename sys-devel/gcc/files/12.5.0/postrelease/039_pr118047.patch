@@ -1,0 +1,100 @@
+diff --git a/gcc/cp/typeck2.cc b/gcc/cp/typeck2.cc
+index 63d95c152..fae576430 100644
+--- a/gcc/cp/typeck2.cc
++++ b/gcc/cp/typeck2.cc
+@@ -1434,10 +1434,10 @@ massage_init_elt (tree type, tree init, int nested, int flags,
+     new_flags |= LOOKUP_AGGREGATE_PAREN_INIT;
+   init = digest_init_r (type, init, nested ? 2 : 1, new_flags, complain);
+   /* When we defer constant folding within a statement, we may want to
+-     defer this folding as well.  Don't call this on CONSTRUCTORs because
+-     their elements have already been folded, and we must avoid folding
+-     the result of get_nsdmi.  */
+-  if (TREE_CODE (init) != CONSTRUCTOR)
++     defer this folding as well.  Don't call this on CONSTRUCTORs in
++     a template because their elements have already been folded, and
++     we must avoid folding the result of get_nsdmi.  */
++  if (!(processing_template_decl && TREE_CODE (init) == CONSTRUCTOR))
+     {
+       tree t = fold_non_dependent_init (init, complain);
+       if (TREE_CONSTANT (t))
+diff --git a/gcc/testsuite/g++.dg/cpp0x/nsdmi-list10.C b/gcc/testsuite/g++.dg/cpp0x/nsdmi-list10.C
+new file mode 100644
+index 000000000..36b74749c
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/nsdmi-list10.C
+@@ -0,0 +1,35 @@
++// PR c++/118047
++// { dg-do compile { target c++11 } }
++
++typedef decltype(sizeof(char)) size_t;
++
++namespace std {
++template <typename T>
++struct initializer_list {
++  const T *_M_array;
++  size_t _M_len;
++  constexpr size_t size() const { return _M_len; }
++};
++}
++
++enum E {
++    One
++};
++
++struct A {
++    E e = One;
++};
++
++struct B {
++    A as[1] {};
++};
++
++struct V
++{
++  constexpr V(const std::initializer_list<B> &a) : size(a.size()){}
++  int size;
++};
++
++constexpr V a{{}};
++
++static_assert(a.size == 1, "");
+diff --git a/gcc/testsuite/g++.dg/cpp0x/nsdmi-list9.C b/gcc/testsuite/g++.dg/cpp0x/nsdmi-list9.C
+new file mode 100644
+index 000000000..ae69ba081
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/nsdmi-list9.C
+@@ -0,0 +1,34 @@
++// PR c++/118355
++// { dg-do compile { target c++11 } }
++
++enum MY_ENUM
++{
++  ZERO,
++};
++
++struct FOO
++{
++  MY_ENUM type = ZERO;
++};
++
++struct ARR
++{
++  FOO array[1] = {};
++};
++
++template<typename>
++struct ARR2
++{
++  FOO array[1] = {};
++};
++
++void
++g ()
++{
++
++  ARR arr;
++  arr = {};
++
++  ARR2<int> arr2;
++  arr2 = {};
++}

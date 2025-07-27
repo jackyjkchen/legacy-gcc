@@ -1,0 +1,145 @@
+diff --git a/gcc/c/c-typeck.cc b/gcc/c/c-typeck.cc
+index 3310e7072..d6b41cffb 100644
+--- a/gcc/c/c-typeck.cc
++++ b/gcc/c/c-typeck.cc
+@@ -1928,7 +1928,7 @@ array_to_pointer_conversion (location_t loc, tree exp)
+       if (!TREE_READONLY (decl) && !TREE_STATIC (decl))
+ 	warning_at (DECL_SOURCE_LOCATION (decl), OPT_Wc___compat,
+ 		    "converting an array compound literal to a pointer "
+-		    "is ill-formed in C++");
++		    "leads to a dangling pointer in C++");
+     }
+ 
+   adr = build_unary_op (loc, ADDR_EXPR, exp, true);
+diff --git a/gcc/cp/call.cc b/gcc/cp/call.cc
+index f9e63227e..f27a9e49e 100644
+--- a/gcc/cp/call.cc
++++ b/gcc/cp/call.cc
+@@ -8099,8 +8099,6 @@ convert_like_internal (conversion *convs, tree expr, tree fn, int argnum,
+ 	      (elttype, cp_type_quals (elttype) | TYPE_QUAL_CONST);
+ 	    array = build_array_of_n_type (elttype, len);
+ 	    array = finish_compound_literal (array, new_ctor, complain);
+-	    /* Take the address explicitly rather than via decay_conversion
+-	       to avoid the error about taking the address of a temporary.  */
+ 	    array = cp_build_addr_expr (array, complain);
+ 	  }
+ 	else
+diff --git a/gcc/cp/parser.cc b/gcc/cp/parser.cc
+index 8caa7b4e5..264768de9 100644
+--- a/gcc/cp/parser.cc
++++ b/gcc/cp/parser.cc
+@@ -12706,6 +12706,9 @@ cp_parser_expression_statement (cp_parser* parser, tree in_statement_expr)
+       if (statement == error_mark_node
+ 	  && !cp_parser_uncommitted_to_tentative_parse_p (parser))
+ 	{
++	  /* If we ran into a problem, make sure we complained.  */
++	  gcc_assert (seen_error ());
++
+ 	  cp_parser_skip_to_end_of_block_or_statement (parser);
+ 	  return error_mark_node;
+ 	}
+diff --git a/gcc/cp/typeck.cc b/gcc/cp/typeck.cc
+index d1fb3086e..892f62c0c 100644
+--- a/gcc/cp/typeck.cc
++++ b/gcc/cp/typeck.cc
+@@ -2382,15 +2382,6 @@ decay_conversion (tree exp,
+ 	  return error_mark_node;
+ 	}
+ 
+-      /* Don't let an array compound literal decay to a pointer.  It can
+-	 still be used to initialize an array or bind to a reference.  */
+-      if (TREE_CODE (exp) == TARGET_EXPR)
+-	{
+-	  if (complain & tf_error)
+-	    error_at (loc, "taking address of temporary array");
+-	  return error_mark_node;
+-	}
+-
+       ptrtype = build_pointer_type (TREE_TYPE (type));
+ 
+       if (VAR_P (exp))
+@@ -8888,6 +8879,8 @@ cp_build_c_cast (location_t loc, tree type, tree expr,
+ 	  maybe_warn_about_useless_cast (loc, type, value, complain);
+ 	  maybe_warn_about_cast_ignoring_quals (loc, type, complain);
+ 	}
++      else if (complain & tf_error)
++	build_const_cast_1 (loc, type, value, tf_error, &valid_p);
+       return result;
+     }
+ 
+@@ -8923,7 +8916,7 @@ cp_build_c_cast (location_t loc, tree type, tree expr,
+ 	 to succeed.  */
+       if (!same_type_p (non_reference (type), non_reference (result_type)))
+ 	{
+-	  result = build_const_cast_1 (loc, type, result, false, &valid_p);
++	  result = build_const_cast_1 (loc, type, result, tf_none, &valid_p);
+ 	  gcc_assert (valid_p);
+ 	}
+       return result;
+@@ -10183,6 +10176,9 @@ maybe_warn_about_returning_address_of_local (tree retval, location_t loc)
+       if (TYPE_REF_P (valtype))
+ 	warning_at (loc, OPT_Wreturn_local_addr,
+ 		    "returning reference to temporary");
++      else if (TYPE_PTR_P (valtype))
++	warning_at (loc, OPT_Wreturn_local_addr,
++		    "returning pointer to temporary");
+       else if (is_std_init_list (valtype))
+ 	warning_at (loc, OPT_Winit_list_lifetime,
+ 		    "returning temporary %<initializer_list%> does not extend "
+diff --git a/gcc/testsuite/c-c++-common/array-lit.c b/gcc/testsuite/c-c++-common/array-lit.c
+index 6505c2091..a6b3adf7c 100644
+--- a/gcc/testsuite/c-c++-common/array-lit.c
++++ b/gcc/testsuite/c-c++-common/array-lit.c
+@@ -1,10 +1,11 @@
+ /* { dg-options "-std=c99 -Wc++-compat -Werror" { target c } } */
++/* { dg-options "-Werror=dangling-pointer=1" { target c++ } } */
+ /* { dg-prune-output "treated as errors" } */
+ #include <stdio.h>
+ 
+ int main()
+ {
+-  for (int *p = (int[]){ 1, 2, 3, 0 }; /* { dg-error "array" } */
++  for (int *p = (int[]){ 1, 2, 3, 0 }; /* { dg-error "array|temporary" } */
+        *p; ++p) {
+     printf("%d\n", *p);
+   }
+diff --git a/gcc/testsuite/g++.dg/cpp0x/initlist-array20.C b/gcc/testsuite/g++.dg/cpp0x/initlist-array20.C
+new file mode 100644
+index 000000000..048c5b456
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/initlist-array20.C
+@@ -0,0 +1,11 @@
++// PR c++/112658
++// PR c++/94264
++// { dg-do compile { target c++11 } }
++
++void f(int*);
++
++int main() {
++  using array = int[];
++  f(array{42});
++  f((int*)array{42});
++}
+diff --git a/gcc/testsuite/g++.dg/cpp1z/array-prvalue1.C b/gcc/testsuite/g++.dg/cpp1z/array-prvalue1.C
+new file mode 100644
+index 000000000..e837d3253
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp1z/array-prvalue1.C
+@@ -0,0 +1,7 @@
++// PR c++/94264
++// { dg-do compile { target c++17 } }
++
++int main() {
++  using T = int[];
++  T{1, 2} == nullptr;
++}
+diff --git a/gcc/testsuite/g++.dg/ext/complit17.C b/gcc/testsuite/g++.dg/ext/complit17.C
+new file mode 100644
+index 000000000..acc80847b
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/ext/complit17.C
+@@ -0,0 +1,4 @@
++// PR c++/53220
++// { dg-options "" }
++
++int* f() { return (int[]){42}; } // { dg-warning "pointer to temporary" }

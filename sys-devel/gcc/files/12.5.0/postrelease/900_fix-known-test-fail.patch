@@ -275,6 +275,17 @@ index 540d1a09a..cef4dd05f 100644
  
  extern "C" int printf(const char*, ...);
  struct A {
+diff --git a/gcc/testsuite/g++.dg/tree-ssa/pr90883.C b/gcc/testsuite/g++.dg/tree-ssa/pr90883.C
+index 37df17d0b..2d0b6046a 100644
+--- a/gcc/testsuite/g++.dg/tree-ssa/pr90883.C
++++ b/gcc/testsuite/g++.dg/tree-ssa/pr90883.C
+@@ -16,5 +16,5 @@
+ // We want to match enough here to capture that we deleted an empty
+ // constructor store
+ // mips will expand to loop to clear because CLEAR_RATIO.
+-// { dg-final { scan-tree-dump "Deleted redundant store: .*\.a = {}" "dse1" { xfail { mips*-*-* } } } }
++// { dg-final { scan-tree-dump "Deleted redundant store: .*\.a = {}" "dse1" { xfail { mips*-*-* loongarch*-*-* } } } }
+ 
 diff --git a/gcc/testsuite/g++.dg/warn/Waddress-5.C b/gcc/testsuite/g++.dg/warn/Waddress-5.C
 index b1287b2fa..1de88076f 100644
 --- a/gcc/testsuite/g++.dg/warn/Waddress-5.C
@@ -584,6 +595,78 @@ index d4c5985cd..2789827f0 100644
  #include <stdio.h>
  
  template <int n1>
+diff --git a/gcc/testsuite/gcc.dg/Warray-bounds-48.c b/gcc/testsuite/gcc.dg/Warray-bounds-48.c
+index 775b301e3..e9203140a 100644
+--- a/gcc/testsuite/gcc.dg/Warray-bounds-48.c
++++ b/gcc/testsuite/gcc.dg/Warray-bounds-48.c
+@@ -4,6 +4,11 @@
+    { dg-options "-O2 -Wall" }
+    { dg-require-effective-target alloca } */
+ 
++/* pr102706: disabled warnings because the now-disabled conditions for the
++   bogus warnings to come up do not take cost analysis into account, and often
++   come up wrong.  */
++/* { dg-additional-options "-Wno-stringop-overflow" } */
++
+ typedef __INT16_TYPE__ int16_t;
+ typedef __INT32_TYPE__ int32_t;
+ 
+@@ -30,7 +35,8 @@ static void nowarn_ax_extern (struct AX *p)
+ 
+ static void warn_ax_local_buf (struct AX *p)
+ {
+-  p->ax[0] = 4; p->ax[1] = 5;  // { dg-warning "\\\[-Wstringop-overflow" "pr102706" { target { vect_slp_v2hi_store_align &&  { ! vect_slp_v4hi_store_unalign } } } }
++  p->ax[0] = 4; p->ax[1] = 5;  // { dg-bogus "\\\[-Wstringop-overflow" "pr102706" }
++                               //   { xfail { vect_slp_v2hi_store_align &&  { ! vect_slp_v4hi_store_unalign } } }
+ 
+   p->ax[2] = 6;     // { dg-warning "\\\[-Warray-bounds" }
+   p->ax[3] = 7;     // { dg-warning "\\\[-Warray-bounds" }
+@@ -130,7 +136,8 @@ static void warn_a0_extern (struct A0 *p)
+ 
+ static void warn_a0_local_buf (struct A0 *p)
+ {
+-  p->a0[0] = 4; p->a0[1] = 5;  // { dg-warning "\\\[-Wstringop-overflow" "pr102706" { target { vect_slp_v2hi_store_align && { ! vect_slp_v4hi_store_unalign } } } }
++  p->a0[0] = 4; p->a0[1] = 5;  // { dg-bogus "\\\[-Wstringop-overflow" "pr102706" }
++                               //   { xfail { vect_slp_v2hi_store_align && { ! vect_slp_v4hi_store_unalign } } }
+ 
+   p->a0[2] = 6;     // { dg-warning "\\\[-Warray-bounds" }
+   p->a0[3] = 7;     // { dg-warning "\\\[-Warray-bounds" }
+diff --git a/gcc/testsuite/gcc.dg/Wzero-length-array-bounds-2.c b/gcc/testsuite/gcc.dg/Wzero-length-array-bounds-2.c
+index 2ef5ccd56..19932d05a 100644
+--- a/gcc/testsuite/gcc.dg/Wzero-length-array-bounds-2.c
++++ b/gcc/testsuite/gcc.dg/Wzero-length-array-bounds-2.c
+@@ -4,6 +4,11 @@
+    { dg-do compile }
+    { dg-options "-O2 -Wall" } */
+ 
++/* pr102706: disabled warnings because the now-disabled conditions for the
++   bogus warnings to come up do not take cost analysis into account, and often
++   come up wrong.  */
++/* { dg-additional-options "-Wno-stringop-overflow" } */
++
+ void sink (void*);
+ 
+ struct A { int i; };
+@@ -87,7 +92,8 @@ void test_C_global_buf (void)
+   p->b1.a[ 1].i = 0;     // { dg-warning "\\\[-Wzero-length-bounds" }
+   sink (p);
+ 
+-  p->b2.a[ 0].i = 0;    // { dg-warning "\\\[-Wstringop-overflow" "pr102706" { target { vect_slp_v2si_store_align &&  { ! vect_slp_v4si_store_unalign } } } }
++  p->b2.a[ 0].i = 0;    // { dg-bogus "\\\[-Wstringop-overflow" "pr102706" }
++                        //   { xfail { vect_slp_v2si_store_align &&  { ! vect_slp_v4si_store_unalign } } }
+   p->b2.a[ 1].i = 0;
+   p->b2.a[ 2].i = 0;     // { dg-warning "\\\[-Warray-bounds" }
+   p->b2.a[ 3].i = 0;     // { dg-warning "\\\[-Warray-bounds" }
+@@ -117,7 +123,8 @@ void test_C_local_buf (void)
+   p->b1.a[ 1].i = 8;     // { dg-warning "\\\[-Wzero-length-bounds" }
+   sink (p);
+ 
+-  p->b2.a[ 0].i = 9;
++  p->b2.a[ 0].i = 9;    // { dg-bogus "\\\[-Wstringop-overflow" "pr102706" }
++                        //   { xfail { vect_slp_v2si_store_align &&  { ! vect_slp_v4si_store_unalign } } }
+   p->b2.a[ 1].i = 10;
+   p->b2.a[ 2].i = 11;    // { dg-warning "\\\[-Warray-bounds" }
+   p->b2.a[ 3].i = 12;    // { dg-warning "\\\[-Warray-bounds" }
 diff --git a/gcc/testsuite/gcc.dg/analyzer/asm-x86-dyndbg-1.c b/gcc/testsuite/gcc.dg/analyzer/asm-x86-dyndbg-1.c
 index cce3f6b80..b93cef7ed 100644
 --- a/gcc/testsuite/gcc.dg/analyzer/asm-x86-dyndbg-1.c
@@ -667,6 +750,21 @@ index 0cf85f0eb..9631bcf73 100644
    return ferror (f) || fclose (f) != 0;
  
    ;
+diff --git a/gcc/testsuite/gcc.dg/attr-alloc_size-11.c b/gcc/testsuite/gcc.dg/attr-alloc_size-11.c
+index 8332b3993..37768411f 100644
+--- a/gcc/testsuite/gcc.dg/attr-alloc_size-11.c
++++ b/gcc/testsuite/gcc.dg/attr-alloc_size-11.c
+@@ -47,8 +47,8 @@ typedef __SIZE_TYPE__    size_t;
+ 
+ /* The following tests fail because of missing range information.  The xfail
+    exclusions are PR79356.  */
+-TEST (signed char, SCHAR_MIN + 2, ALLOC_MAX);   /* { dg-warning "argument 1 range \\\[13, \[0-9\]+\\\] exceeds maximum object size 12" "missing range info for signed char" { xfail { ! { aarch64*-*-* arm*-*-* avr-*-* alpha*-*-* ia64-*-* mips*-*-* or1k*-*-* pdp11*-*-* powerpc*-*-* sparc*-*-* s390*-*-* visium-*-* msp430-*-* nvptx*-*-*} } } } */
+-TEST (short, SHRT_MIN + 2, ALLOC_MAX); /* { dg-warning "argument 1 range \\\[13, \[0-9\]+\\\] exceeds maximum object size 12" "missing range info for short" { xfail { ! { aarch64*-*-* arm*-*-* alpha*-*-* avr-*-* ia64-*-* mips*-*-* or1k*-*-* pdp11*-*-* powerpc*-*-* sparc*-*-* s390x-*-* visium-*-* msp430-*-* nvptx*-*-* } } } } */
++TEST (signed char, SCHAR_MIN + 2, ALLOC_MAX);   /* { dg-warning "argument 1 range \\\[13, \[0-9\]+\\\] exceeds maximum object size 12" "missing range info for signed char" { xfail { ! { aarch64*-*-* arm*-*-* avr-*-* alpha*-*-* ia64-*-* mips*-*-* or1k*-*-* pdp11*-*-* powerpc*-*-* sparc*-*-* s390*-*-* visium-*-* msp430-*-* nvptx*-*-* loongarch*-*-* } } } } */
++TEST (short, SHRT_MIN + 2, ALLOC_MAX); /* { dg-warning "argument 1 range \\\[13, \[0-9\]+\\\] exceeds maximum object size 12" "missing range info for short" { xfail { ! { aarch64*-*-* arm*-*-* alpha*-*-* avr-*-* ia64-*-* mips*-*-* or1k*-*-* pdp11*-*-* powerpc*-*-* sparc*-*-* s390x-*-* visium-*-* msp430-*-* nvptx*-*-* loongarch*-*-* } } } } */
+ TEST (int, INT_MIN + 2, ALLOC_MAX);    /* { dg-warning "argument 1 range \\\[13, \[0-9\]+\\\] exceeds maximum object size 12" } */
+ TEST (int, -3, ALLOC_MAX);             /* { dg-warning "argument 1 range \\\[13, \[0-9\]+\\\] exceeds maximum object size 12" } */
+ TEST (int, -2, ALLOC_MAX);             /* { dg-warning "argument 1 range \\\[13, \[0-9\]+\\\] exceeds maximum object size 12" } */
 diff --git a/gcc/testsuite/gcc.dg/builtins-nonnull.c b/gcc/testsuite/gcc.dg/builtins-nonnull.c
 index f8c482e98..91fc7e462 100644
 --- a/gcc/testsuite/gcc.dg/builtins-nonnull.c
@@ -882,6 +980,16 @@ index d40652624..f6decfce5 100644
  /* { dg-require-effective-target fstack_protector } */
  
  #ifdef DEBUG
+diff --git a/gcc/testsuite/gcc.dg/pr44194-1.c b/gcc/testsuite/gcc.dg/pr44194-1.c
+index a38270b79..20a4915fe 100644
+--- a/gcc/testsuite/gcc.dg/pr44194-1.c
++++ b/gcc/testsuite/gcc.dg/pr44194-1.c
+@@ -1,4 +1,4 @@
+-/* { dg-do compile { target { { { { { { { { { { i?86-*-* x86_64-*-* } && x32 } || lp64 } && { ! s390*-*-* } } && { ! hppa*64*-*-* } } && { ! alpha*-*-* } } && { { ! powerpc*-*-linux* } || powerpc_elfv2 } } && { ! nvptx-*-* } } } } } } */
++/* { dg-do compile { target { { { { { { { { { { { i?86-*-* x86_64-*-* } && x32 } || lp64 } && { ! s390*-*-* } } && { ! hppa*64*-*-* } } && { ! alpha*-*-* } } && { { ! powerpc*-*-linux* } || powerpc_elfv2 } } && { ! nvptx-*-* } } && { ! loongarch*-*-* } } } } } } */
+ /* { dg-skip-if "returns that struct in memory" { mmix-*-* } } */
+ /* { dg-options "-O2 -fdump-rtl-dse1 -fdump-rtl-final" } */
+ 
 diff --git a/gcc/testsuite/gcc.dg/pr82167.c b/gcc/testsuite/gcc.dg/pr82167.c
 index af3b3a5a1..7ebcf9f8a 100644
 --- a/gcc/testsuite/gcc.dg/pr82167.c
@@ -985,6 +1093,16 @@ index 8a23e77c1..43b78dbf8 100644
  
  #include <pthread.h>
  extern int printf (char *,...);
+diff --git a/gcc/testsuite/gcc.dg/tree-ssa/20040204-1.c b/gcc/testsuite/gcc.dg/tree-ssa/20040204-1.c
+index b9f8fd21a..754d92168 100644
+--- a/gcc/testsuite/gcc.dg/tree-ssa/20040204-1.c
++++ b/gcc/testsuite/gcc.dg/tree-ssa/20040204-1.c
+@@ -33,4 +33,4 @@ void test55 (int x, int y)
+    that the && should be emitted (based on BRANCH_COST).  Fix this
+    by teaching dom to look through && and register all components
+    as true.  */
+-/* { dg-final { scan-tree-dump-times "link_error" 0 "optimized" { xfail { ! "alpha*-*-* arm*-*-* aarch64*-*-* powerpc*-*-* cris-*-* hppa*-*-* i?86-*-* mmix-*-* mips*-*-* m68k*-*-* moxie-*-* nds32*-*-* s390*-*-* sh*-*-* sparc*-*-* visium-*-* x86_64-*-* riscv*-*-* or1k*-*-* msp430-*-* pru*-*-* nvptx*-*-*" } } } } */
++/* { dg-final { scan-tree-dump-times "link_error" 0 "optimized" { xfail { ! "alpha*-*-* arm*-*-* aarch64*-*-* powerpc*-*-* cris-*-* hppa*-*-* i?86-*-* mmix-*-* mips*-*-* m68k*-*-* moxie-*-* nds32*-*-* s390*-*-* sh*-*-* sparc*-*-* visium-*-* x86_64-*-* riscv*-*-* or1k*-*-* msp430-*-* pru*-*-* nvptx*-*-* loongarch*-*-*" } } } } */
 diff --git a/gcc/testsuite/gcc.dg/tree-ssa/builtin-printf-2.c b/gcc/testsuite/gcc.dg/tree-ssa/builtin-printf-2.c
 index 701f61a70..ebb6049ff 100644
 --- a/gcc/testsuite/gcc.dg/tree-ssa/builtin-printf-2.c
@@ -1054,6 +1172,29 @@ index c2feebdfc..c911a9298 100644
  
 -/* { dg-final { scan-tree-dump-times "&a" 1 "ivopts" } } */
 +/* { dg-final { scan-tree-dump-times "&a" 1 "ivopts" { xfail ia32 } } } */
+diff --git a/gcc/testsuite/gcc.dg/tree-ssa/ssa-dom-cse-2.c b/gcc/testsuite/gcc.dg/tree-ssa/ssa-dom-cse-2.c
+index a879d3059..23c6e0a6f 100644
+--- a/gcc/testsuite/gcc.dg/tree-ssa/ssa-dom-cse-2.c
++++ b/gcc/testsuite/gcc.dg/tree-ssa/ssa-dom-cse-2.c
+@@ -27,4 +27,4 @@ foo ()
+    but the loop reads only one element at a time, and DOM cannot resolve these.
+    The same happens on powerpc depending on the SIMD support available.  */
+ 
+-/* { dg-final { scan-tree-dump "return 28;" "optimized" { xfail { { alpha*-*-* hppa*64*-*-* nvptx*-*-* mmix-knuth-mmixware } || { { { lp64 && { powerpc*-*-* sparc*-*-* riscv*-*-* } } || aarch64_sve } || { arm*-*-* && { ! arm_neon } } } } } } } */
++/* { dg-final { scan-tree-dump "return 28;" "optimized" { xfail { { alpha*-*-* hppa*64*-*-* nvptx*-*-* mmix-knuth-mmixware } || { { { lp64 && { powerpc*-*-* sparc*-*-* riscv*-*-* loongarch*-*-* } } || aarch64_sve } || { arm*-*-* && { ! arm_neon } } } } } } } */
+diff --git a/gcc/testsuite/gcc.dg/uninit-pred-9_b.c b/gcc/testsuite/gcc.dg/uninit-pred-9_b.c
+index 53c4a5399..56fdb2a7c 100644
+--- a/gcc/testsuite/gcc.dg/uninit-pred-9_b.c
++++ b/gcc/testsuite/gcc.dg/uninit-pred-9_b.c
+@@ -17,7 +17,7 @@ int foo (int n, int l, int m, int r)
+ 
+   if (l > 100)
+     if ( (n <= 9) &&  (m < 100)  && (r < 19) )
+-      blah(v); /* { dg-bogus "uninitialized" "bogus warning" { xfail powerpc64*-*-* cris-*-* } } */
++      blah(v); /* { dg-bogus "uninitialized" "bogus warning" { xfail powerpc64*-*-* cris-*-* riscv*-*-* loongarch*-*-* } } */
+ 
+   if ( (n <= 8) &&  (m < 99)  && (r < 19) )
+       blah(v); /* { dg-bogus "uninitialized" "pr101674" { xfail mmix-*-* } } */
 diff --git a/gcc/testsuite/gcc.dg/vect/complex/fast-math-bb-slp-complex-add-pattern-half-float.c b/gcc/testsuite/gcc.dg/vect/complex/fast-math-bb-slp-complex-add-pattern-half-float.c
 index 885fd97c5..e30df0ff0 100644
 --- a/gcc/testsuite/gcc.dg/vect/complex/fast-math-bb-slp-complex-add-pattern-half-float.c
@@ -3580,6 +3721,28 @@ index e5fe02135..4779094fe 100644
    assert (x->dim[2].extent == 1);
  }
 +#pragma GCC diagnostic pop
+diff --git a/gcc/testsuite/gfortran.dg/bind_c_array_params_2.f90 b/gcc/testsuite/gfortran.dg/bind_c_array_params_2.f90
+index 8dd7e8fb0..02954c115 100644
+--- a/gcc/testsuite/gfortran.dg/bind_c_array_params_2.f90
++++ b/gcc/testsuite/gfortran.dg/bind_c_array_params_2.f90
+@@ -2,6 +2,7 @@
+ ! { dg-options "-std=f2008ts -fdump-tree-original" }
+ ! { dg-additional-options "-mno-explicit-relocs" { target alpha*-*-* } }
+ ! { dg-additional-options "-mno-relax-pic-calls" { target mips*-*-* } }
++! { dg-additional-options "-fplt -mcmodel=normal" { target loongarch*-*-* } }
+ !
+ ! Check that assumed-shape variables are correctly passed to BIND(C)
+ ! as defined in TS 29913
+@@ -16,7 +17,8 @@ integer :: aa(4,4)
+ call test(aa)
+ end
+ 
+-! { dg-final { scan-assembler-times "\[ \t\]\[$,_0-9\]*myBindC" 1 { target { ! { hppa*-*-* s390*-*-* *-*-cygwin* amdgcn*-*-* powerpc-ibm-aix*} } } } }
++! { dg-final { scan-assembler-times "\[ \t\]\[$,_0-9\]*myBindC" 1 { target { ! { hppa*-*-* s390*-*-* *-*-cygwin* amdgcn*-*-* powerpc-ibm-aix* loongarch*-*-*} } } } }
++! { dg-final { scan-assembler-times "bl\t%plt\\(myBindC\\)" 1 { target loongarch*-*-* } } }
+ ! { dg-final { scan-assembler-times "myBindC,%r2" 1 { target { hppa*-*-* } } } }
+ ! { dg-final { scan-assembler-times "call\tmyBindC" 1 { target { *-*-cygwin* } } } }
+ ! { dg-final { scan-assembler-times "brasl\t%r\[0-9\]*,myBindC" 1 { target { s390*-*-* } } } }
 diff --git a/gcc/testsuite/gfortran.dg/gomp/declare-simd-6.f90 b/gcc/testsuite/gfortran.dg/gomp/declare-simd-6.f90
 index 83f2c0ab7..fdaf1893d 100644
 --- a/gcc/testsuite/gfortran.dg/gomp/declare-simd-6.f90
@@ -3591,6 +3754,21 @@ index 83f2c0ab7..fdaf1893d 100644
  !
  ! PR fortran/106566
  !
+diff --git a/gcc/testsuite/gfortran.dg/pr95690.f90 b/gcc/testsuite/gfortran.dg/pr95690.f90
+index 47a5df9e8..19a2178e8 100644
+--- a/gcc/testsuite/gfortran.dg/pr95690.f90
++++ b/gcc/testsuite/gfortran.dg/pr95690.f90
+@@ -2,8 +2,8 @@
+ module m
+ contains
+    subroutine s
+-      print *, (erfc) ! { dg-error "not a floating constant" "" { target i?86-*-* x86_64-*-* sparc*-*-* cris-*-* } }
+-   end ! { dg-error "not a floating constant" "" { target { ! "i?86-*-* x86_64-*-* sparc*-*-* cris-*-*" } } }
++      print *, (erfc) ! { dg-error "not a floating constant" "" { target i?86-*-* x86_64-*-* sparc*-*-* cris-*-* loongarch*-*-* } }
++   end ! { dg-error "not a floating constant" "" { target { ! "i?86-*-* x86_64-*-* sparc*-*-* cris-*-* loongarch*-*-*" } } }
+    function erfc()
+    end
+ end
 diff --git a/gcc/testsuite/gfortran.dg/proc_ptr_21.f90 b/gcc/testsuite/gfortran.dg/proc_ptr_21.f90
 index 83ef50356..bea1d0d5e 100644
 --- a/gcc/testsuite/gfortran.dg/proc_ptr_21.f90

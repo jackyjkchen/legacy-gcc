@@ -1,0 +1,57 @@
+diff --git a/gcc/testsuite/gcc.target/i386/pr87984.c b/gcc/testsuite/gcc.target/i386/pr87984.c
+new file mode 100644
+index 000000000..39a6a7480
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/i386/pr87984.c
+@@ -0,0 +1,23 @@
++/* { dg-do run } */
++/* { dg-options "-O" } */
++
++__attribute__((noipa))
++int f(void)
++{
++  int o = 0;
++  for (int i = 0; i < 3; i++)
++    {
++      register int a asm("eax");
++      a = 1;
++      asm("add %1, %0" : "+r"(o) : "r"(a));
++      asm("xor %%eax, %%eax" ::: "eax");
++    }
++  return o;
++}
++
++int main()
++{
++  if (f() != 3)
++    __builtin_abort();
++  return 0;
++}
+diff --git a/gcc/tree-ssa-dom.c b/gcc/tree-ssa-dom.c
+index 5bb337b54..073aa74cd 100644
+--- a/gcc/tree-ssa-dom.c
++++ b/gcc/tree-ssa-dom.c
+@@ -2135,7 +2135,9 @@ dom_opt_dom_walker::optimize_stmt (basic_block bb, gimple_stmt_iterator *si,
+ 
+       /* Perform simple redundant store elimination.  */
+       if (gimple_assign_single_p (stmt)
+-	  && TREE_CODE (gimple_assign_lhs (stmt)) != SSA_NAME)
++	  && TREE_CODE (gimple_assign_lhs (stmt)) != SSA_NAME
++	  && (TREE_CODE (gimple_assign_lhs (stmt)) != VAR_DECL
++	      || !DECL_HARD_REGISTER (gimple_assign_lhs (stmt))))
+ 	{
+ 	  tree lhs = gimple_assign_lhs (stmt);
+ 	  tree rhs = gimple_assign_rhs1 (stmt);
+diff --git a/gcc/tree-ssa-sccvn.c b/gcc/tree-ssa-sccvn.c
+index 9c4f55aeb..1c35bdb49 100644
+--- a/gcc/tree-ssa-sccvn.c
++++ b/gcc/tree-ssa-sccvn.c
+@@ -5238,6 +5238,8 @@ eliminate_dom_walker::eliminate_stmt (basic_block b, gimple_stmt_iterator *gsi)
+   if (gimple_assign_single_p (stmt)
+       && !gimple_has_volatile_ops (stmt)
+       && !is_gimple_reg (gimple_assign_lhs (stmt))
++      && (TREE_CODE (gimple_assign_lhs (stmt)) != VAR_DECL
++	  || !DECL_HARD_REGISTER (gimple_assign_lhs (stmt)))
+       && (TREE_CODE (gimple_assign_rhs1 (stmt)) == SSA_NAME
+ 	  || is_gimple_min_invariant (gimple_assign_rhs1 (stmt))))
+     {

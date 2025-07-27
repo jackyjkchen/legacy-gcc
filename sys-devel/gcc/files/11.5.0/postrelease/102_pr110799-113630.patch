@@ -1,0 +1,123 @@
+diff --git a/gcc/testsuite/gcc.dg/torture/pr110799.c b/gcc/testsuite/gcc.dg/torture/pr110799.c
+new file mode 100644
+index 000000000..53f06f079
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/torture/pr110799.c
+@@ -0,0 +1,46 @@
++/* { dg-do run { target { { *-*-linux* *-*-gnu* *-*-uclinux* } && mmap } } } */
++
++#include <unistd.h>
++#include <stdlib.h>
++#include <sys/mman.h>
++
++struct S {
++    int a;
++};
++struct M {
++    int a, b;
++};
++
++int __attribute__((noipa))
++f(struct S *p, int c, int d)
++{
++  int r;
++  if (c)
++    {
++      if (d)
++	r = p->a;
++      else
++	r = ((struct M*)p)->a;
++    }
++  else
++    r = ((struct M*)p)->b;
++  return r;
++}
++
++int main ()
++{
++  long pgsz = sysconf(_SC_PAGESIZE);
++  if (pgsz < sizeof (struct M))
++    return 0;
++  char *p = mmap ((void *) 0, 2 * pgsz, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS,
++		  -1, 0);
++  if (p == MAP_FAILED)
++    return 0;
++  if (mprotect (p, pgsz, PROT_READ | PROT_WRITE))
++    return 0;
++  struct S *q = (struct S *)(p + pgsz) - 1;
++  q->a = 42;
++  if (f (q, 1, 1) != 42)
++    abort ();
++  return 0;
++}
+diff --git a/gcc/testsuite/gcc.dg/torture/pr113630.c b/gcc/testsuite/gcc.dg/torture/pr113630.c
+new file mode 100644
+index 000000000..72ebdefae
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/torture/pr113630.c
+@@ -0,0 +1,4 @@
++/* { dg-do run { target { { *-*-linux* *-*-gnu* *-*-uclinux* } && mmap } } } */
++/* { dg-additional-options "-fno-strict-aliasing" } */
++
++#include "pr110799.c"
+diff --git a/gcc/tree-ssa-pre.c b/gcc/tree-ssa-pre.c
+index d751ee4de..d45aea748 100644
+--- a/gcc/tree-ssa-pre.c
++++ b/gcc/tree-ssa-pre.c
+@@ -4152,8 +4152,10 @@ compute_avail (void)
+ 		      /* TBAA behavior is an obvious part so make sure
+ 		         that the hashtable one covers this as well
+ 			 by adjusting the ref alias set and its base.  */
+-		      if (ref->set == set
+-			  || alias_set_subset_of (set, ref->set))
++		      if ((ref->set == set
++			   || alias_set_subset_of (set, ref->set))
++			  && (ref->base_set == base_set
++			      || alias_set_subset_of (base_set, ref->base_set)))
+ 			;
+ 		      else if (ref1->opcode != ref2->opcode
+ 			       || (ref1->opcode != MEM_REF
+@@ -4165,16 +4167,19 @@ compute_avail (void)
+ 			  operands.release ();
+ 			  continue;
+ 			}
+-		      else if (alias_set_subset_of (ref->set, set))
++		      else if (ref->set == set
++			       || alias_set_subset_of (ref->set, set))
+ 			{
++			  tree reft = reference_alias_ptr_type (rhs1);
+ 			  ref->set = set;
++			  ref->base_set = set;
+ 			  if (ref1->opcode == MEM_REF)
+ 			    ref1->op0
+-			      = wide_int_to_tree (TREE_TYPE (ref2->op0),
++			      = wide_int_to_tree (reft,
+ 						  wi::to_wide (ref1->op0));
+ 			  else
+ 			    ref1->op2
+-			      = wide_int_to_tree (TREE_TYPE (ref2->op2),
++			      = wide_int_to_tree (reft,
+ 						  wi::to_wide (ref1->op2));
+ 			}
+ 		      else
+@@ -4189,6 +4194,20 @@ compute_avail (void)
+ 			      = wide_int_to_tree (ptr_type_node,
+ 						  wi::to_wide (ref1->op2));
+ 			}
++		      /* We also need to make sure that the access path
++			 ends in an access of the same size as otherwise
++			 we might assume an access may not trap while in
++			 fact it might.  That's independent of whether
++			 TBAA is in effect.  */
++		      if (TYPE_SIZE (ref1->type) != TYPE_SIZE (ref2->type)
++			  && (! TYPE_SIZE (ref1->type)
++			      || ! TYPE_SIZE (ref2->type)
++			      || ! operand_equal_p (TYPE_SIZE (ref1->type),
++						    TYPE_SIZE (ref2->type))))
++			{
++			  operands.release ();
++			  continue;
++			}
+ 		      operands.release ();
+ 
+ 		      result = get_or_alloc_expr_for_reference

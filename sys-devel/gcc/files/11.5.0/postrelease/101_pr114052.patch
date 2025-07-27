@@ -1,0 +1,66 @@
+diff --git a/gcc/testsuite/gcc.dg/pr114052-1.c b/gcc/testsuite/gcc.dg/pr114052-1.c
+new file mode 100644
+index 000000000..e971f6844
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr114052-1.c
+@@ -0,0 +1,40 @@
++/* { dg-do run } */
++/* { dg-require-effective-target signal } */
++/* { dg-options "-O2" } */
++
++#include <stdint.h>
++#include <unistd.h>
++#include <signal.h>
++#include <stdlib.h>
++
++volatile int y;
++void __attribute__((noipa)) put(int x)
++{
++  if (y)
++    __builtin_printf ("%i\n", x);
++}
++
++void __attribute__((noipa)) f(void)
++{
++  int counter = 0;
++  while (1) {
++      if (counter >= 2) continue;
++      put (counter++);
++  }
++}
++
++void do_exit (int i)
++{
++  exit (0);
++}
++
++int main()
++{
++  struct sigaction s;
++  sigemptyset (&s.sa_mask);
++  s.sa_handler = do_exit;
++  s.sa_flags = 0;
++  sigaction (SIGALRM, &s, NULL);
++  alarm (1);
++  f();
++}
+diff --git a/gcc/tree-ssa-loop-niter.c b/gcc/tree-ssa-loop-niter.c
+index 3817ec423..317d4179e 100644
+--- a/gcc/tree-ssa-loop-niter.c
++++ b/gcc/tree-ssa-loop-niter.c
+@@ -4166,7 +4166,14 @@ maybe_lower_iteration_bound (class loop *loop)
+           FOR_EACH_EDGE (e, ei, bb->succs)
+ 	    {
+ 	      if (loop_exit_edge_p (loop, e)
+-		  || e == loop_latch_edge (loop))
++		  || e == loop_latch_edge (loop)
++		  /* When exiting an inner loop, verify it is finite.  */
++		  || (!flow_bb_inside_loop_p (bb->loop_father, e->dest)
++		      && !finite_loop_p (bb->loop_father))
++		  /* When we enter an irreducible region and the entry
++		     does not contain a bounding stmt assume it might be
++		     infinite.  */
++		  || (bb->flags & BB_IRREDUCIBLE_LOOP))
+ 		{
+ 		  found_exit = true;
+ 		  break;

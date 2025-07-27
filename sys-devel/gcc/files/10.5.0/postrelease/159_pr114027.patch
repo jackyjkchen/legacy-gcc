@@ -1,0 +1,60 @@
+diff --git a/gcc/testsuite/gcc.dg/vect/pr114027.c b/gcc/testsuite/gcc.dg/vect/pr114027.c
+new file mode 100644
+index 000000000..b3f3e30e1
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/vect/pr114027.c
+@@ -0,0 +1,26 @@
++#include "tree-vect.h"
++
++int __attribute__((noipa))
++foo (int *f, int n)
++{
++  int res = 0;
++  for (int i = 0; i < n; ++i)
++    {
++      if (f[2*i])
++        res = 2;
++      if (f[2*i+1])
++        res = -2;
++    }
++  return res;
++}
++
++int f[] = { 1, 1, 1, 1, 1, 1, 1, 1,
++            1, 1, 1, 1, 1, 1, 1, 0 };
++
++int
++main ()
++{
++  if (foo (f, 8) != 2)
++    __builtin_abort ();
++  return 0;
++}
+diff --git a/gcc/tree-vect-loop.c b/gcc/tree-vect-loop.c
+index d14283b1a..1c3fbaf3a 100644
+--- a/gcc/tree-vect-loop.c
++++ b/gcc/tree-vect-loop.c
+@@ -6265,17 +6265,18 @@ vectorizable_reduction (stmt_vec_info stmt_info, slp_tree slp_node,
+ 		  < GET_MODE_SIZE (SCALAR_TYPE_MODE (TREE_TYPE (tem))))))
+ 	vectype_in = tem;
+ 
+-      if (code == COND_EXPR)
++      /* Record how the non-reduction-def value of COND_EXPR is defined.
++	 ???  For a chain of multiple CONDs we'd have to match them up all.  */
++      if (code == COND_EXPR && reduc_chain_length == 1)
+ 	{
+-	  /* Record how the non-reduction-def value of COND_EXPR is defined.  */
+ 	  if (dt == vect_constant_def)
+ 	    {
+ 	      cond_reduc_dt = dt;
+ 	      cond_reduc_val = op;
+ 	    }
+-	  if (dt == vect_induction_def
+-	      && def_stmt_info
+-	      && is_nonwrapping_integer_induction (def_stmt_info, loop))
++	  else if (dt == vect_induction_def
++		   && def_stmt_info
++		   && is_nonwrapping_integer_induction (def_stmt_info, loop))
+ 	    {
+ 	      cond_reduc_dt = dt;
+ 	      cond_stmt_vinfo = def_stmt_info;

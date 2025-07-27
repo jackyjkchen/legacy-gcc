@@ -1,0 +1,73 @@
+diff --git a/gcc/testsuite/gcc.dg/torture/pr116768.c b/gcc/testsuite/gcc.dg/torture/pr116768.c
+new file mode 100644
+index 000000000..57b5d00e7
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/torture/pr116768.c
+@@ -0,0 +1,32 @@
++/* { dg-do run } */
++
++#define numwords 2
++
++typedef struct {
++  unsigned words[numwords];
++} Child;
++
++typedef struct {
++  Child child;
++} Parent;
++
++Parent my_or(Parent x, const Parent *y) {
++  const Child *y_child = &y->child;
++  for (int i = 0; i < numwords; i++) {
++    x.child.words[i] |= y_child->words[i];
++  }
++  return x;
++}
++
++int main() {
++  Parent bs[4];
++  __builtin_memset(bs, 0, sizeof(bs));
++
++  bs[0].child.words[0] = 1;
++  for (int i = 1; i <= 3; i++) {
++    bs[i] = my_or(bs[i], &bs[i - 1]);
++  }
++  if (bs[2].child.words[0] != 1)
++    __builtin_abort ();
++  return 0;
++}
+diff --git a/gcc/tree-chrec.c b/gcc/tree-chrec.c
+index a88480670..4bdd11efe 100644
+--- a/gcc/tree-chrec.c
++++ b/gcc/tree-chrec.c
+@@ -1596,7 +1596,7 @@ eq_evolutions_p (const_tree chrec0, const_tree chrec1)
+       || TREE_CODE (chrec0) != TREE_CODE (chrec1))
+     return false;
+ 
+-  if (chrec0 == chrec1)
++  if (operand_equal_p (chrec0, chrec1, 0))
+     return true;
+ 
+   if (! types_compatible_p (TREE_TYPE (chrec0), TREE_TYPE (chrec1)))
+@@ -1623,7 +1623,7 @@ eq_evolutions_p (const_tree chrec0, const_tree chrec1)
+ 			      TREE_OPERAND (chrec1, 0));
+ 
+     default:
+-      return operand_equal_p (chrec0, chrec1, 0);
++      return false;
+     }
+ }
+ 
+diff --git a/gcc/tree-data-ref.c b/gcc/tree-data-ref.c
+index ba059ebc0..f3ac85f4a 100644
+--- a/gcc/tree-data-ref.c
++++ b/gcc/tree-data-ref.c
+@@ -4827,8 +4827,6 @@ build_classic_dist_vector_1 (struct data_dependence_relation *ddr,
+ 	  non_affine_dependence_relation (ddr);
+ 	  return false;
+ 	}
+-      else
+-	*init_b = true;
+     }
+ 
+   return true;

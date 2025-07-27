@@ -1,0 +1,145 @@
+diff --git a/gcc/config/i386/i386.c b/gcc/config/i386/i386.c
+index c4b5a5f3c..60194b933 100644
+--- a/gcc/config/i386/i386.c
++++ b/gcc/config/i386/i386.c
+@@ -17235,9 +17235,11 @@ ix86_fold_builtin (tree fndecl, int n_args,
+ 	      unsigned int prec = TYPE_PRECISION (TREE_TYPE (args[0]));
+ 	      unsigned int start = tree_to_uhwi (args[1]);
+ 	      unsigned int len = (start & 0xff00) >> 8;
++	      tree lhs_type = TREE_TYPE (TREE_TYPE (fndecl));
+ 	      start &= 0xff;
+ 	      if (start >= prec || len == 0)
+-		res = 0;
++		return omit_one_operand (lhs_type, build_zero_cst (lhs_type),
++					 args[0]);
+ 	      else if (!tree_fits_uhwi_p (args[0]))
+ 		break;
+ 	      else
+@@ -17246,7 +17248,7 @@ ix86_fold_builtin (tree fndecl, int n_args,
+ 		len = prec;
+ 	      if (len < HOST_BITS_PER_WIDE_INT)
+ 		res &= (HOST_WIDE_INT_1U << len) - 1;
+-	      return build_int_cstu (TREE_TYPE (TREE_TYPE (fndecl)), res);
++	      return build_int_cstu (lhs_type, res);
+ 	    }
+ 	  break;
+ 
+@@ -17256,15 +17258,17 @@ ix86_fold_builtin (tree fndecl, int n_args,
+ 	  if (tree_fits_uhwi_p (args[1]))
+ 	    {
+ 	      unsigned int idx = tree_to_uhwi (args[1]) & 0xff;
++	      tree lhs_type = TREE_TYPE (TREE_TYPE (fndecl));
+ 	      if (idx >= TYPE_PRECISION (TREE_TYPE (args[0])))
+ 		return args[0];
+ 	      if (idx == 0)
+-		return build_int_cst (TREE_TYPE (TREE_TYPE (fndecl)), 0);
++		return omit_one_operand (lhs_type, build_zero_cst (lhs_type),
++					 args[0]);
+ 	      if (!tree_fits_uhwi_p (args[0]))
+ 		break;
+ 	      unsigned HOST_WIDE_INT res = tree_to_uhwi (args[0]);
+ 	      res &= ~(HOST_WIDE_INT_M1U << idx);
+-	      return build_int_cstu (TREE_TYPE (TREE_TYPE (fndecl)), res);
++	      return build_int_cstu (lhs_type, res);
+ 	    }
+ 	  break;
+ 
+diff --git a/gcc/testsuite/gcc.target/i386/bmi-pr116287.c b/gcc/testsuite/gcc.target/i386/bmi-pr116287.c
+new file mode 100644
+index 000000000..2212cb458
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/i386/bmi-pr116287.c
+@@ -0,0 +1,28 @@
++/* PR target/116287 */
++/* { dg-do run { target bmi } } */
++/* { dg-options "-O2 -mbmi" } */
++
++#include <x86intrin.h>
++
++#include "bmi-check.h"
++
++static void
++bmi_test ()
++{
++  unsigned int a = 0;
++  if (__builtin_ia32_bextr_u32 (a++, 0) != 0)
++    abort ();
++  if (__builtin_ia32_bextr_u32 (a++, 0x120) != 0)
++    abort ();
++  if (a != 2)
++    abort ();
++#ifdef __x86_64__
++  unsigned long long b = 0;
++  if (__builtin_ia32_bextr_u64 (b++, 0) != 0)
++    abort ();
++  if (__builtin_ia32_bextr_u64 (b++, 0x140) != 0)
++    abort ();
++  if (b != 2)
++    abort ();
++#endif
++}
+diff --git a/gcc/testsuite/gcc.target/i386/bmi2-pr116287.c b/gcc/testsuite/gcc.target/i386/bmi2-pr116287.c
+new file mode 100644
+index 000000000..51c939c39
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/i386/bmi2-pr116287.c
+@@ -0,0 +1,24 @@
++/* PR target/116287 */
++/* { dg-do run { target bmi2 } } */
++/* { dg-options "-O2 -mbmi2" } */
++
++#include <x86intrin.h>
++
++#include "bmi2-check.h"
++
++static void
++bmi2_test ()
++{
++  unsigned int a = 0;
++  if (__builtin_ia32_bzhi_si (a++, 0) != 0)
++    abort ();
++  if (a != 1)
++    abort ();
++#ifdef __x86_64__
++  unsigned long long b = 0;
++  if (__builtin_ia32_bzhi_di (b++, 0) != 0)
++    abort ();
++  if (b != 1)
++    abort ();
++#endif
++}
+diff --git a/gcc/testsuite/gcc.target/i386/tbm-pr116287.c b/gcc/testsuite/gcc.target/i386/tbm-pr116287.c
+new file mode 100644
+index 000000000..a229d8bb4
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/i386/tbm-pr116287.c
+@@ -0,0 +1,29 @@
++/* PR target/116287 */
++/* { dg-do compile } */
++/* { dg-options "-O2 -mtbm -fdump-tree-optimized" } */
++/* { dg-final { scan-tree-dump-not "link_error \\\(\\\);" "optimized" } } */
++
++#include <x86intrin.h>
++
++extern void link_error (void);
++
++void
++tbm_test ()
++{
++  unsigned int a = 0;
++  if (__builtin_ia32_bextri_u32 (a++, 0) != 0)
++    link_error ();
++  if (__builtin_ia32_bextri_u32 (a++, 0x120) != 0)
++    link_error ();
++  if (a != 2)
++    link_error ();
++#ifdef __x86_64__
++  unsigned long long b = 0;
++  if (__builtin_ia32_bextr_u64 (b++, 0) != 0)
++    link_error ();
++  if (__builtin_ia32_bextr_u64 (b++, 0x140) != 0)
++    link_error ();
++  if (b != 2)
++    link_error ();
++#endif
++}

@@ -69,6 +69,18 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/027_pr115426.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/028_pr112494.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/029_pr112887.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/030_pr114052.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/031_pr102844-111465.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/032_pr110799-113630.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/033_pr67196.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/034_pr116706.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/035_pr93046.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/036_pr47634-101833.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/037_pr107508.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/038_pr53220-94264-112658.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/039_pr118047.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/040_pr116906.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/041_pr112411.patch
 
 	if use test ; then
 		rm -rf gcc/testsuite/gcc.c-torture/execute/vfprintf-chk-1.c gcc/testsuite/gcc.c-torture/execute/vprintf-chk-1.c gcc/testsuite/c-c++-common/Warray-bounds-2.c gcc/testsuite/c-c++-common/Wrestrict-2.c gcc/testsuite/g++.dg/warn/Wstringop-truncation-1.C gcc/testsuite/gcc.target/aarch64/cpunative/native_cpu_18.c
