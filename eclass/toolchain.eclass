@@ -2099,6 +2099,12 @@ toolchain_src_configure() {
 		confgcc+=( --disable-lto )
 	fi
 
+	if tc_version_is_at_least 4.9 ; then
+		confgcc+=( --enable-plugin )
+	elif tc_version_is_at_least 4.5 ; then
+		confgcc+=( --disable-plugin )
+	fi
+
 	# graphite was added in 4.4 but we only support it in 6.5+ due to external
 	# library issues. bug #448024, bug #701270
 	if tc_version_is_at_least 6.5 && in_iuse graphite ; then
@@ -2993,6 +2999,9 @@ toolchain_src_install() {
 			;;
 	esac
 	rm -rfv "${D}${BINPATH}"/{*c++filt,*gccbug,*protoize,*unprotoize}
+	if tc_version_is_between 4.5 4.9 ; then
+		rm -rfv ${D}${PREFIX}/libexec/gcc/${CTARGET}/${GCC_CONFIG_VER}/lto-wrapper
+	fi
 
 	# Use gid of 0 because some stupid ports don't have
 	# the group 'root' set to gid 0.  Send to /dev/null
