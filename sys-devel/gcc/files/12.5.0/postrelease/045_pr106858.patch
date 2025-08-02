@@ -1,0 +1,62 @@
+diff --git a/gcc/cp/parser.cc b/gcc/cp/parser.cc
+index 264768de9..96a5bd867 100644
+--- a/gcc/cp/parser.cc
++++ b/gcc/cp/parser.cc
+@@ -36700,10 +36700,9 @@ cp_parser_omp_var_list_no_open (cp_parser *parser, enum omp_clause_code kind,
+ 		  cp_id_kind idk = CP_ID_KIND_NONE;
+ 		  cp_lexer_consume_token (parser->lexer);
+ 		  decl = convert_from_reference (decl);
+-		  decl
+-		    = cp_parser_postfix_dot_deref_expression (parser, ttype,
+-							      decl, false,
+-							      &idk, loc);
++		  decl = (cp_parser_postfix_dot_deref_expression
++			  (parser, ttype, cp_expr (decl, token->location),
++			   false, &idk, loc));
+ 		}
+ 	      /* FALLTHROUGH.  */
+ 	    case OMP_CLAUSE_AFFINITY:
+diff --git a/gcc/cp/semantics.cc b/gcc/cp/semantics.cc
+index f6655126c..ee1a012ee 100644
+--- a/gcc/cp/semantics.cc
++++ b/gcc/cp/semantics.cc
+@@ -8120,6 +8120,10 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
+ 	      t = TREE_OPERAND (t, 1);
+ 	      STRIP_NOPS (t);
+ 	    }
++	  if (TREE_CODE (t) == COMPONENT_REF
++	      && invalid_nonstatic_memfn_p (EXPR_LOCATION (t), t,
++					    tf_warning_or_error))
++	    remove = true;
+ 	  indir_component_ref_p = false;
+ 	  if (TREE_CODE (t) == COMPONENT_REF
+ 	      && (TREE_CODE (TREE_OPERAND (t, 0)) == INDIRECT_REF
+diff --git a/gcc/cp/typeck.cc b/gcc/cp/typeck.cc
+index 892f62c0c..33aa079a7 100644
+--- a/gcc/cp/typeck.cc
++++ b/gcc/cp/typeck.cc
+@@ -2199,7 +2199,8 @@ invalid_nonstatic_memfn_p (location_t loc, tree expr, tsubst_flags_t complain)
+     return false;
+   if (is_overloaded_fn (expr) && !really_overloaded_fn (expr))
+     expr = get_first_fn (expr);
+-  if (DECL_NONSTATIC_MEMBER_FUNCTION_P (expr))
++  if (TREE_TYPE (expr)
++      && DECL_NONSTATIC_MEMBER_FUNCTION_P (expr))
+     {
+       if (complain & tf_error)
+ 	{
+diff --git a/gcc/testsuite/g++.dg/gomp/map-3.C b/gcc/testsuite/g++.dg/gomp/map-3.C
+new file mode 100644
+index 000000000..c45f85095
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/gomp/map-3.C
+@@ -0,0 +1,9 @@
++// PR c++/106858
++// { dg-additional-options "-fopenmp -fsanitize=undefined" }
++
++class A {
++  void f() {
++    #pragma omp target map(this->f) // { dg-error "member function" }
++    ;
++  }
++};

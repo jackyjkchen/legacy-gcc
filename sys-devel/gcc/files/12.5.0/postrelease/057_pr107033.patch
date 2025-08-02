@@ -1,0 +1,134 @@
+diff --git a/gcc/cp/module.cc b/gcc/cp/module.cc
+index 0edf8bab3..11aa0d44a 100644
+--- a/gcc/cp/module.cc
++++ b/gcc/cp/module.cc
+@@ -8097,13 +8097,18 @@ trees_in::decl_value ()
+ 	/* Set the TEMPLATE_DECL's type.  */
+ 	TREE_TYPE (decl) = TREE_TYPE (inner);
+ 
+-      if (mk & MK_template_mask
+-	  || mk == MK_partial)
++      /* Add to specialization tables now that constraints etc are
++	 added.  */
++      if (mk == MK_partial)
+ 	{
+-	  /* Add to specialization tables now that constraints etc are
+-	     added.  */
+-	  bool is_type = mk == MK_partial || !(mk & MK_tmpl_decl_mask);
+-
++	  bool is_type = TREE_CODE (inner) == TYPE_DECL;
++	  spec.spec = is_type ? type : inner;
++	  add_mergeable_specialization (!is_type, false,
++					&spec, decl, spec_flags);
++	}
++      else if (mk & MK_template_mask)
++	{
++	  bool is_type = !(mk & MK_tmpl_decl_mask);
+ 	  spec.spec = is_type ? type : mk & MK_tmpl_tmpl_mask ? inner : decl;
+ 	  add_mergeable_specialization (!is_type,
+ 					!is_type && mk & MK_tmpl_alias_mask,
+diff --git a/gcc/cp/pt.cc b/gcc/cp/pt.cc
+index 25cf83b0c..e88982bcd 100644
+--- a/gcc/cp/pt.cc
++++ b/gcc/cp/pt.cc
+@@ -30976,7 +30976,7 @@ add_mergeable_specialization (bool decl_p, bool alias_p, spec_entry *elt,
+       /* A partial specialization.  */
+       tree cons = tree_cons (elt->args, decl,
+ 			     DECL_TEMPLATE_SPECIALIZATIONS (elt->tmpl));
+-      TREE_TYPE (cons) = elt->spec;
++      TREE_TYPE (cons) = decl_p ? TREE_TYPE (elt->spec) : elt->spec;
+       DECL_TEMPLATE_SPECIALIZATIONS (elt->tmpl) = cons;
+     }
+ }
+diff --git a/gcc/testsuite/g++.dg/modules/partial-2.cc b/gcc/testsuite/g++.dg/modules/partial-2.cc
+new file mode 100644
+index 000000000..1316bf5e1
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/modules/partial-2.cc
+@@ -0,0 +1,17 @@
++static_assert(is_reference_v<int&>);
++static_assert(is_reference_v<int&&>);
++static_assert(!is_reference_v<int>);
++
++static_assert(A::is_reference_v<long&>);
++static_assert(A::is_reference_v<long&&>);
++static_assert(!A::is_reference_v<long>);
++
++#if __cpp_concepts
++static_assert(concepts::is_reference_v<char&>);
++static_assert(concepts::is_reference_v<char&&>);
++static_assert(!concepts::is_reference_v<char>);
++
++static_assert(concepts::A::is_reference_v<bool&>);
++static_assert(concepts::A::is_reference_v<bool&&>);
++static_assert(!concepts::A::is_reference_v<bool>);
++#endif
+diff --git a/gcc/testsuite/g++.dg/modules/partial-2.h b/gcc/testsuite/g++.dg/modules/partial-2.h
+new file mode 100644
+index 000000000..afcfce791
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/modules/partial-2.h
+@@ -0,0 +1,38 @@
++template<class T> constexpr bool is_reference_v = false;
++template<class T> constexpr bool is_reference_v<T&> = true;
++template<class T> constexpr bool is_reference_v<T&&> = true;
++
++struct A {
++  template<class T> static constexpr bool is_reference_v = false;
++};
++
++template<class T> constexpr bool A::is_reference_v<T&> = true;
++template<class T> constexpr bool A::is_reference_v<T&&> = true;
++
++#if __cpp_concepts
++namespace concepts {
++  template<class T> bool is_reference_v;
++
++  template<class T> requires __is_same(T, T&)
++  constexpr bool is_reference_v<T> = true;
++
++  template<class T> requires __is_same(T, T&&) && (!__is_same(T, T&))
++  constexpr bool is_reference_v<T> = true;
++
++  template<class T> requires (!__is_same(T, T&)) && (!__is_same(T, T&&))
++  constexpr bool is_reference_v<T> = false;
++
++  struct A {
++    template<class T> static bool is_reference_v;
++  };
++
++  template<class T> requires __is_same(T, T&)
++  constexpr bool A::is_reference_v<T> = true;
++
++  template<class T> requires __is_same(T, T&&) && (!__is_same(T, T&))
++  constexpr bool A::is_reference_v<T> = true;
++
++  template<class T> requires (!__is_same(T, T&)) && (!__is_same(T, T&&))
++  constexpr bool A::is_reference_v<T> = false;
++}
++#endif
+diff --git a/gcc/testsuite/g++.dg/modules/partial-2_c.H b/gcc/testsuite/g++.dg/modules/partial-2_c.H
+new file mode 100644
+index 000000000..bd838529c
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/modules/partial-2_c.H
+@@ -0,0 +1,5 @@
++// PR c++/107033
++// { dg-additional-options -fmodule-header }
++// { dg-module-cmi {} }
++
++#include "partial-2.h"
+diff --git a/gcc/testsuite/g++.dg/modules/partial-2_d.C b/gcc/testsuite/g++.dg/modules/partial-2_d.C
+new file mode 100644
+index 000000000..ed54d3c28
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/modules/partial-2_d.C
+@@ -0,0 +1,8 @@
++// PR c++/107033
++// { dg-additional-options -fmodules-ts }
++// { dg-module-cmi pr107033 }
++export module pr107033;
++
++import "partial-2_c.H";
++
++#include "partial-2.cc"

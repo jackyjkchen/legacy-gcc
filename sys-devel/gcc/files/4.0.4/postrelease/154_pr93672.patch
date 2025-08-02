@@ -1,0 +1,171 @@
+diff --git a/libstdc++-v3/src/istream.cc b/libstdc++-v3/src/istream.cc
+index e8da16ce..097f014b 100644
+--- a/libstdc++-v3/src/istream.cc
++++ b/libstdc++-v3/src/istream.cc
+@@ -110,8 +110,17 @@ namespace std
+     basic_istream<char>::
+     ignore(streamsize __n, int_type __delim)
+     {
+-      if (traits_type::eq_int_type(__delim, traits_type::eof()))
+-	return ignore(__n);
++      {
++	// If conversion to int_type changes the value then __delim does not
++	// correspond to a value of type char_type, and so will never match
++	// a character extracted from the input sequence. Just use ignore(n).
++	const int_type chk_delim = traits_type::to_int_type(__delim);
++	const bool matchable = traits_type::eq_int_type(chk_delim, __delim);
++	if (__builtin_expect(!matchable, 0))
++	  return ignore(__n);
++	// Now we know that __delim is a valid char_type value, so it's safe
++	// for the code below to use traits_type::find to search for it.
++      }
+ 
+       _M_gcount = 0;
+       sentry __cerb(*this, true);
+diff --git a/libstdc++-v3/testsuite/27_io/basic_istream/ignore/char/93672.cc b/libstdc++-v3/testsuite/27_io/basic_istream/ignore/char/93672.cc
+new file mode 100644
+index 00000000..96737485
+--- /dev/null
++++ b/libstdc++-v3/testsuite/27_io/basic_istream/ignore/char/93672.cc
+@@ -0,0 +1,101 @@
++// { dg-do run }
++
++#include <sstream>
++#include <limits>
++#include <testsuite_hooks.h>
++
++void
++test_pr93672() // std::basic_istream::ignore hangs if delim MSB is set
++{
++  std::istringstream in(".\xfc..\xfd...\xfe.");
++
++  // This should find '\xfd' even on platforms where char is signed,
++  // because the delimiter is correctly converted to the stream's int_type.
++  in.ignore(100, std::char_traits<char>::to_int_type('\xfc'));
++  VERIFY( in.gcount() == 2 );
++  VERIFY( ! in.eof() );
++
++  // This should work equivalently to traits_type::to_int_type
++  in.ignore(100, (unsigned char)'\xfd');
++  VERIFY( in.gcount() == 3 );
++  VERIFY( ! in.eof() );
++
++  // This only works if char is unsigned.
++  in.ignore(100, '\xfe');
++  if (std::numeric_limits<char>::is_signed)
++  {
++    // When char is signed, '\xfe' != traits_type::to_int_type('\xfe')
++    // so the delimiter does not match the character in the input sequence,
++    // and ignore consumes all input until EOF.
++    VERIFY( in.gcount() == 5 );
++    VERIFY( in.eof() );
++  }
++  else
++  {
++    // When char is unsigned, '\xfe' == to_int_type('\xfe') so the delimiter
++    // matches the character in the input sequence, and doesn't reach EOF.
++    VERIFY( in.gcount() == 4 );
++    VERIFY( ! in.eof() );
++  }
++
++  in.clear();
++  in.str(".a.");
++  in.ignore(100, 'a' + 256); // Should not match 'a'
++  VERIFY( in.gcount() == 3 );
++  VERIFY( in.eof() );
++}
++
++// Custom traits type that inherits all behaviour from std::char_traits<char>.
++struct traits : std::char_traits<char> { };
++
++void
++test_primary_template()
++{
++  // Check that the primary template for std::basic_istream::ignore
++  // works the same as the std::istream::ignore specialization.
++  // The infinite loop bug was never present in the primary template,
++  // because it doesn't use traits_type::find to search the input sequence.
++
++  std::basic_istringstream<char, traits> in(".\xfc..\xfd...\xfe.");
++
++  // This should find '\xfd' even on platforms where char is signed,
++  // because the delimiter is correctly converted to the stream's int_type.
++  in.ignore(100, std::char_traits<char>::to_int_type('\xfc'));
++  VERIFY( in.gcount() == 2 );
++  VERIFY( ! in.eof() );
++
++  // This should work equivalently to traits_type::to_int_type
++  in.ignore(100, (unsigned char)'\xfd');
++  VERIFY( in.gcount() == 3 );
++  VERIFY( ! in.eof() );
++
++  // This only works if char is unsigned.
++  in.ignore(100, '\xfe');
++  if (std::numeric_limits<char>::is_signed)
++  {
++    // When char is signed, '\xfe' != traits_type::to_int_type('\xfe')
++    // so the delimiter does not match the character in the input sequence,
++    // and ignore consumes all input until EOF.
++    VERIFY( in.gcount() == 5 );
++    VERIFY( in.eof() );
++  }
++  else
++  {
++    // When char is unsigned, '\xfe' == to_int_type('\xfe') so the delimiter
++    // matches the character in the input sequence, and doesn't reach EOF.
++    VERIFY( in.gcount() == 4 );
++    VERIFY( ! in.eof() );
++  }
++
++  in.clear();
++  in.str(".a.");
++  in.ignore(100, 'a' + 256); // Should not match 'a'
++  VERIFY( in.gcount() == 3 );
++  VERIFY( in.eof() );
++}
++
++int main()
++{
++  test_pr93672();
++  test_primary_template();
++}
+diff --git a/libstdc++-v3/testsuite/27_io/basic_istream/ignore/wchar_t/93672.cc b/libstdc++-v3/testsuite/27_io/basic_istream/ignore/wchar_t/93672.cc
+new file mode 100644
+index 00000000..5ce9155e
+--- /dev/null
++++ b/libstdc++-v3/testsuite/27_io/basic_istream/ignore/wchar_t/93672.cc
+@@ -0,0 +1,34 @@
++// { dg-do run }
++
++#include <sstream>
++#include <limits>
++#include <climits>
++#include <testsuite_hooks.h>
++
++// PR 93672 was a bug in std::istream that never affected std::wistream.
++// This test ensures that the bug doesn't get introduced to std::wistream.
++void
++test_pr93672()
++{
++  std::wstring str = L".x..x.";
++  str[1] = (wchar_t)-2;
++  str[4] = (wchar_t)-3;
++  std::wistringstream in(str);
++
++  // This should find the character even on platforms where wchar_t is signed,
++  // because the delimiter is correctly converted to the stream's int_type.
++  in.ignore(100, std::char_traits<wchar_t>::to_int_type((wchar_t)-2));
++  VERIFY( in.gcount() == 2 );
++  VERIFY( ! in.eof() );
++
++  // This also works, because std::char_traits<wchar_t>::to_int_type(wc) is
++  // equivalent to (int_type)wc so using to_int_type isn't needed.
++  in.ignore(100, (wchar_t)-3);
++  VERIFY( in.gcount() == 3 );
++  VERIFY( ! in.eof() );
++}
++
++int main()
++{
++  test_pr93672();
++}

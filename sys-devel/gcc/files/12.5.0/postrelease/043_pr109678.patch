@@ -1,0 +1,93 @@
+diff --git a/gcc/cp/constexpr.cc b/gcc/cp/constexpr.cc
+index 9945fd196..5816f318f 100644
+--- a/gcc/cp/constexpr.cc
++++ b/gcc/cp/constexpr.cc
+@@ -5168,6 +5168,19 @@ cxx_fold_indirect_ref_1 (const constexpr_ctx *ctx, location_t loc, tree type,
+ 		  return ret;
+ 	      }
+ 	  }
++
++      /* Handle conversion to an empty base class, which is represented with a
++	 NOP_EXPR.  Do this before spelunking into the non-empty subobjects,
++	 which is likely to be a waste of time (109678).  */
++      if (is_empty_class (type)
++	  && CLASS_TYPE_P (optype)
++	  && DERIVED_FROM_P (type, optype))
++	{
++	  if (empty_base)
++	    *empty_base = true;
++	  return op;
++	}
++
+       for (tree field = TYPE_FIELDS (optype);
+ 	   field; field = DECL_CHAIN (field))
+ 	if (TREE_CODE (field) == FIELD_DECL
+@@ -5190,15 +5203,6 @@ cxx_fold_indirect_ref_1 (const constexpr_ctx *ctx, location_t loc, tree type,
+ 		  return ret;
+ 	      }
+ 	  }
+-      /* Also handle conversion to an empty base class, which
+-	 is represented with a NOP_EXPR.  */
+-      if (is_empty_class (type)
+-	  && CLASS_TYPE_P (optype)
+-	  && DERIVED_FROM_P (type, optype))
+-	{
+-	  *empty_base = true;
+-	  return op;
+-	}
+     }
+ 
+   return NULL_TREE;
+diff --git a/gcc/testsuite/g++.dg/cpp1z/variant1.C b/gcc/testsuite/g++.dg/cpp1z/variant1.C
+new file mode 100644
+index 000000000..9b18cc233
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp1z/variant1.C
+@@ -0,0 +1,47 @@
++// PR c++/109678
++// With the bug, compiling this testcase takes more than the typical timeout.
++// { dg-do compile { target c++17 } }
++
++#include <variant>
++
++struct A {};
++struct B {};
++struct C {};
++struct D {};
++struct E {};
++struct F {};
++struct G {};
++struct H {};
++struct I {};
++struct J {};
++struct K {};
++struct L {};
++struct M {};
++struct N {};
++struct O {};
++struct P {};
++struct Q {};
++struct R {};
++struct S {};
++struct T {};
++struct U {};
++struct V {};
++struct W {
++    // gcc13 + compiler explorer = 20000ms 
++    // gcc12.2 + compiler explorer =   400ms
++    int i;
++};
++struct X {};
++struct Y {};
++struct Z {};
++
++using Foo = std::variant<A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, X, Y, Z>;
++
++struct Bar {
++    Foo f;
++    static Bar dummy() {
++        // issue is triggered by this initialization
++        return {Z{}};
++        // return {A{}}; // would be very quick
++    }
++};

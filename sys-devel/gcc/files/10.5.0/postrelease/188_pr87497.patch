@@ -1,0 +1,66 @@
+diff --git a/gcc/cp/constexpr.c b/gcc/cp/constexpr.c
+index 62401cc46..8f1700670 100644
+--- a/gcc/cp/constexpr.c
++++ b/gcc/cp/constexpr.c
+@@ -7501,9 +7501,15 @@ maybe_constant_init_1 (tree t, tree decl, bool allow_non_constant,
+   else if (CONSTANT_CLASS_P (t) && allow_non_constant)
+     /* No evaluation needed.  */;
+   else
+-    t = cxx_eval_outermost_constant_expr (t, allow_non_constant,
+-					  /*strict*/false,
+-					  manifestly_const_eval, false, decl);
++    {
++      /* [basic.start.static] allows constant-initialization of variables with
++	 static or thread storage duration even if it isn't required, but we
++	 shouldn't bend the rules the same way for automatic variables.  */
++      bool is_static = (decl && DECL_P (decl)
++			&& (TREE_STATIC (decl) || DECL_EXTERNAL (decl)));
++      t = cxx_eval_outermost_constant_expr (t, allow_non_constant, !is_static,
++					    manifestly_const_eval, false, decl);
++    }
+   if (TREE_CODE (t) == TARGET_EXPR)
+     {
+       tree init = TARGET_EXPR_INITIAL (t);
+diff --git a/gcc/testsuite/g++.dg/cpp1y/constexpr-local4.C b/gcc/testsuite/g++.dg/cpp1y/constexpr-local4.C
+new file mode 100644
+index 000000000..bef624885
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp1y/constexpr-local4.C
+@@ -0,0 +1,17 @@
++// { dg-do compile { target c++14 } }
++
++struct A
++{
++  int i;
++  constexpr A(int i): i(i) {};
++};
++
++const A a = 42;
++
++constexpr int f()
++{
++  const int j = a.i;		// { dg-message "'a'" }
++  return j;
++}
++
++static_assert (f() == 42,"");	// { dg-error "non-constant" }
+diff --git a/libstdc++-v3/testsuite/20_util/function_objects/constexpr_searcher.cc b/libstdc++-v3/testsuite/20_util/function_objects/constexpr_searcher.cc
+index f9ecbb365..f8b090e57 100644
+--- a/libstdc++-v3/testsuite/20_util/function_objects/constexpr_searcher.cc
++++ b/libstdc++-v3/testsuite/20_util/function_objects/constexpr_searcher.cc
+@@ -28,13 +28,13 @@
+ 
+ #include <string_view>
+ 
+-const std::string_view
++constexpr std::string_view
+ patt = "World";
+ 
+ constexpr std::string_view
+ greet = "Hello, Humongous World of Wonder!!!";
+ 
+-const std::wstring_view
++constexpr std::wstring_view
+ wpatt = L"World";
+ 
+ constexpr std::wstring_view

@@ -1,0 +1,339 @@
+diff --git a/libstdc++-v3/include/bits/hashtable.h b/libstdc++-v3/include/bits/hashtable.h
+index 3823c7e74..b88ef0e71 100644
+--- a/libstdc++-v3/include/bits/hashtable.h
++++ b/libstdc++-v3/include/bits/hashtable.h
+@@ -900,21 +900,33 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
+ 
+       template<typename _Arg, typename _NodeGenerator>
+ 	std::pair<iterator, bool>
+-	_M_insert(_Arg&& __arg, const _NodeGenerator& __node_gen,
+-		  true_type /* __uks */)
++	_M_insert_unique_aux(_Arg&& __arg, const _NodeGenerator& __node_gen)
+ 	{
+ 	  return _M_insert_unique(
+ 	    _S_forward_key(_ExtractKey{}(std::forward<_Arg>(__arg))),
+ 	    std::forward<_Arg>(__arg), __node_gen);
+ 	}
+ 
++      template<typename _Arg, typename _NodeGenerator>
++	std::pair<iterator, bool>
++	_M_insert(_Arg&& __arg, const _NodeGenerator& __node_gen,
++		  true_type /* __uks */)
++	{
++	  using __to_value
++	    = __detail::_ConvertToValueType<_ExtractKey, value_type>;
++	  return _M_insert_unique_aux(
++	    __to_value{}(std::forward<_Arg>(__arg)), __node_gen);
++	}
++
+       template<typename _Arg, typename _NodeGenerator>
+ 	iterator
+ 	_M_insert(_Arg&& __arg, const _NodeGenerator& __node_gen,
+ 		  false_type __uks)
+ 	{
+-	  return _M_insert(cend(), std::forward<_Arg>(__arg), __node_gen,
+-			   __uks);
++	  using __to_value
++	    = __detail::_ConvertToValueType<_ExtractKey, value_type>;
++	  return _M_insert(cend(),
++	    __to_value{}(std::forward<_Arg>(__arg)), __node_gen, __uks);
+ 	}
+ 
+       // Insert with hint, not used when keys are unique.
+@@ -1201,10 +1213,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
+ 		 const _Hash& __h, const _Equal& __eq,
+ 		 const allocator_type& __a, true_type /* __uks */)
+       : _Hashtable(__bkt_count_hint, __h, __eq, __a)
+-      {
+-	for (; __f != __l; ++__f)
+-	  this->insert(*__f);
+-      }
++      { this->insert(__f, __l); }
+ 
+   template<typename _Key, typename _Value, typename _Alloc,
+ 	   typename _ExtractKey, typename _Equal,
+@@ -1216,7 +1225,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
+       _Hashtable(_InputIterator __f, _InputIterator __l,
+ 		 size_type __bkt_count_hint,
+ 		 const _Hash& __h, const _Equal& __eq,
+-		 const allocator_type& __a, false_type /* __uks */)
++		 const allocator_type& __a, false_type __uks)
+       : _Hashtable(__h, __eq, __a)
+       {
+ 	auto __nb_elems = __detail::__distance_fw(__f, __l);
+@@ -1231,8 +1240,9 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
+ 	    _M_bucket_count = __bkt_count;
+ 	  }
+ 
++	__alloc_node_gen_t __node_gen(*this);
+ 	for (; __f != __l; ++__f)
+-	  this->insert(*__f);
++	  _M_insert(*__f, __node_gen, __uks);
+       }
+ 
+   template<typename _Key, typename _Value, typename _Alloc,
+diff --git a/libstdc++-v3/include/bits/hashtable_policy.h b/libstdc++-v3/include/bits/hashtable_policy.h
+index f69280478..09292eeaf 100644
+--- a/libstdc++-v3/include/bits/hashtable_policy.h
++++ b/libstdc++-v3/include/bits/hashtable_policy.h
+@@ -111,6 +111,40 @@ namespace __detail
+       { return std::forward<_Tp>(__x).first; }
+   };
+ 
++  template<typename _ExKey, typename _Value>
++    struct _ConvertToValueType;
++
++  template<typename _Value>
++    struct _ConvertToValueType<_Identity, _Value>
++    {
++      template<typename _Kt>
++	constexpr _Kt&&
++	operator()(_Kt&& __k) const noexcept
++	{ return std::forward<_Kt>(__k); }
++    };
++
++  template<typename _Value>
++    struct _ConvertToValueType<_Select1st, _Value>
++    {
++      constexpr _Value&&
++      operator()(_Value&& __x) const noexcept
++      { return std::move(__x); }
++
++      constexpr const _Value&
++      operator()(const _Value& __x) const noexcept
++      { return __x; }
++
++      template<typename _Kt, typename _Val>
++	constexpr std::pair<_Kt, _Val>&&
++	operator()(std::pair<_Kt, _Val>&& __x) const noexcept
++	{ return std::move(__x); }
++
++      template<typename _Kt, typename _Val>
++	constexpr const std::pair<_Kt, _Val>&
++	operator()(const std::pair<_Kt, _Val>& __x) const noexcept
++	{ return __x; }
++    };
++
+   template<typename _ExKey>
+     struct _NodeBuilder;
+ 
+diff --git a/libstdc++-v3/testsuite/23_containers/unordered_map/cons/56112.cc b/libstdc++-v3/testsuite/23_containers/unordered_map/cons/56112.cc
+index c4cdeee23..b0eda30b4 100644
+--- a/libstdc++-v3/testsuite/23_containers/unordered_map/cons/56112.cc
++++ b/libstdc++-v3/testsuite/23_containers/unordered_map/cons/56112.cc
+@@ -20,30 +20,51 @@
+ #include <unordered_map>
+ #include <utility>
+ 
++#include <testsuite_hooks.h>
++
+ struct Key
+ {
+   explicit Key(const int* p) : value(p) { }
+   ~Key() { value = nullptr; }
+ 
+-  bool operator==(const Key& k) const { return *value == *k.value; }
++  bool operator==(const Key& k) const
++  { return *value == *k.value; }
+ 
+   const int* value;
+ };
+ 
+ struct hash
+ {
+-  std::size_t operator()(const Key& k) const noexcept { return *k.value; }
++  std::size_t operator()(const Key& k) const noexcept
++  { return *k.value; }
+ };
+ 
+ struct S
+ {
++  static int _count;
++
+   int value;
+-  operator std::pair<const Key, int>() const { return {Key(&value), value}; }
++  operator std::pair<const Key, int>() const
++  {
++    ++_count;
++    return { Key(&value), value };
++  }
+ };
+ 
+-int main()
++int S::_count = 0;
++
++void test01()
+ {
+     S s[1] = { {2} };
+-    std::unordered_map<Key, int, hash> m(s, s+1);
+-    std::unordered_multimap<Key, int, hash> mm(s, s+1);
++    std::unordered_map<Key, int, hash> m(s, s + 1);
++    VERIFY( S::_count == 1 );
++
++    std::unordered_multimap<Key, int, hash> mm(s, s + 1);
++    VERIFY( S::_count == 2 );
++}
++
++int main()
++{
++  test01();
++  return 0;
+ }
+diff --git a/libstdc++-v3/testsuite/23_containers/unordered_map/insert/105717.cc b/libstdc++-v3/testsuite/23_containers/unordered_map/insert/105717.cc
+new file mode 100644
+index 000000000..202baa981
+--- /dev/null
++++ b/libstdc++-v3/testsuite/23_containers/unordered_map/insert/105717.cc
+@@ -0,0 +1,73 @@
++// { dg-do run { target c++11 } }
++
++// Copyright (C) 2022 Free Software Foundation, Inc.
++//
++// This file is part of the GNU ISO C++ Library.  This library is free
++// software; you can redistribute it and/or modify it under the
++// terms of the GNU General Public License as published by the
++// Free Software Foundation; either version 3, or (at your option)
++// any later version.
++
++// This library is distributed in the hope that it will be useful,
++// but WITHOUT ANY WARRANTY; without even the implied warranty of
++// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++// GNU General Public License for more details.
++
++// You should have received a copy of the GNU General Public License along
++// with this library; see the file COPYING3.  If not see
++// <http://www.gnu.org/licenses/>.
++
++#include <unordered_map>
++#include <utility>
++
++#include <testsuite_hooks.h>
++
++struct Key
++{
++  explicit Key(const int* p) : value(p) { }
++  ~Key() { value = nullptr; }
++
++  bool operator==(const Key& k) const
++  { return *value == *k.value; }
++
++  const int* value;
++};
++
++struct hash
++{
++  std::size_t operator()(const Key& k) const noexcept
++  { return *k.value; }
++};
++
++struct S
++{
++  static int _count;
++
++  int value;
++  operator std::pair<const Key, int>() const
++  {
++    ++_count;
++    return { Key(&value), value };
++  }
++};
++
++int S::_count = 0;
++
++void test01()
++{
++    S s[1] = { {2} };
++    std::unordered_map<Key, int, hash> m;
++    std::unordered_multimap<Key, int, hash> mm;
++
++    m.insert(s, s + 1);
++    VERIFY( S::_count == 1 );
++
++    mm.insert(s, s + 1);
++    VERIFY( S::_count == 2 );
++}
++
++int main()
++{
++  test01();
++  return 0;
++}
+diff --git a/libstdc++-v3/testsuite/23_containers/unordered_set/insert/105717.cc b/libstdc++-v3/testsuite/23_containers/unordered_set/insert/105717.cc
+new file mode 100644
+index 000000000..ab229c5ba
+--- /dev/null
++++ b/libstdc++-v3/testsuite/23_containers/unordered_set/insert/105717.cc
+@@ -0,0 +1,73 @@
++// { dg-do run { target c++11 } }
++
++// Copyright (C) 2022 Free Software Foundation, Inc.
++//
++// This file is part of the GNU ISO C++ Library.  This library is free
++// software; you can redistribute it and/or modify it under the
++// terms of the GNU General Public License as published by the
++// Free Software Foundation; either version 3, or (at your option)
++// any later version.
++
++// This library is distributed in the hope that it will be useful,
++// but WITHOUT ANY WARRANTY; without even the implied warranty of
++// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++// GNU General Public License for more details.
++
++// You should have received a copy of the GNU General Public License along
++// with this library; see the file COPYING3.  If not see
++// <http://www.gnu.org/licenses/>.
++
++#include <unordered_set>
++#include <utility>
++
++#include <testsuite_hooks.h>
++
++struct Key
++{
++  explicit Key(const int* p) : value(p) { }
++  ~Key() { value = nullptr; }
++
++  bool operator==(const Key& k) const
++  { return *value == *k.value; }
++
++  const int* value;
++};
++
++struct hash
++{
++  std::size_t operator()(const Key& k) const noexcept
++  { return *k.value; }
++};
++
++struct S
++{
++  static int _count;
++
++  int value;
++  operator Key() const
++  {
++    ++_count;
++    return Key(&value);
++  }
++};
++
++int S::_count = 0;
++
++void test01()
++{
++    S a[1] = { {2} };
++    std::unordered_set<Key, hash> s;
++    std::unordered_multiset<Key, hash> ms;
++
++    s.insert(a, a + 1);
++    VERIFY( S::_count == 1 );
++
++    ms.insert(a, a + 1);
++    VERIFY( S::_count == 2 );
++}
++
++int main()
++{
++  test01();
++  return 0;
++}

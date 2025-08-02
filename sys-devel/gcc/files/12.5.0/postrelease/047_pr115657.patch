@@ -1,0 +1,70 @@
+diff --git a/gcc/cp/decl.cc b/gcc/cp/decl.cc
+index dde5f03f1..f7a25a32a 100644
+--- a/gcc/cp/decl.cc
++++ b/gcc/cp/decl.cc
+@@ -16645,9 +16645,15 @@ build_enumerator (tree name, tree value, tree enumtype, tree attributes,
+   tree type;
+ 
+   /* scalar_constant_value will pull out this expression, so make sure
+-     it's folded as appropriate.  */
++     it's folded as appropriate.
++
++     Creating a TARGET_EXPR in a template breaks when substituting, and
++     here we would create it for instance when using a class prvalue with
++     a user-defined conversion function.  So don't use such a tree.  We
++     instantiate VALUE here to get errors about bad enumerators even in
++     a template that does not get instantiated.  */
+   if (processing_template_decl)
+-    value = fold_non_dependent_expr (value);
++    value = maybe_fold_non_dependent_expr (value);
+ 
+   /* If the VALUE was erroneous, pretend it wasn't there; that will
+      result in the enum being assigned the next value in sequence.  */
+diff --git a/gcc/testsuite/g++.dg/cpp1y/constexpr-recursion2.C b/gcc/testsuite/g++.dg/cpp1y/constexpr-recursion2.C
+new file mode 100644
+index 000000000..f268f52e2
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp1y/constexpr-recursion2.C
+@@ -0,0 +1,22 @@
++// PR c++/115657
++// { dg-do compile { target c++14 } }
++// { dg-options "-Wall" }
++
++// Like constexpr-recursion1.C but use a class with a conversion function.
++
++struct X {
++  constexpr operator int() { return 0; }
++};
++
++template <int N>
++constexpr X f1 ()
++{
++  enum E { a = f1<0> () }; // { dg-error "called in a constant expression before its definition is complete|is not an integer constant" }
++  return {};
++}
++
++constexpr X f3 ()
++{
++  enum E { a = f3 () };	// { dg-error "called in a constant expression before its definition is complete|is not an integer constant" }
++  return {};
++}
+diff --git a/gcc/testsuite/g++.dg/template/conv21.C b/gcc/testsuite/g++.dg/template/conv21.C
+new file mode 100644
+index 000000000..1dc7b3d50
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/template/conv21.C
+@@ -0,0 +1,14 @@
++// PR c++/115657
++// { dg-do compile { target c++11 } }
++
++struct NonIntegral
++{
++    constexpr operator int() { return 0; }
++};
++
++template<typename T> struct TemplatedStructural
++{
++    enum { e = NonIntegral{} };
++};
++
++template struct TemplatedStructural<void>;

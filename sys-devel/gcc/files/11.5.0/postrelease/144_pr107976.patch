@@ -1,0 +1,55 @@
+diff --git a/gcc/params.opt b/gcc/params.opt
+index d8d7dca55..bd63873ef 100644
+--- a/gcc/params.opt
++++ b/gcc/params.opt
+@@ -343,11 +343,11 @@ Common Joined UInteger Var(param_iv_max_considered_uses) Init(250) Param Optimiz
+ Bound on number of iv uses in loop optimized in iv optimizations.
+ 
+ -param=jump-table-max-growth-ratio-for-size=
+-Common Joined UInteger Var(param_jump_table_max_growth_ratio_for_size) Init(300) Param Optimization
++Common Joined UInteger Var(param_jump_table_max_growth_ratio_for_size) Init(300) IntegerRange(0, 10000) Param Optimization
+ The maximum code size growth ratio when expanding into a jump table (in percent).  The parameter is used when optimizing for size.
+ 
+ -param=jump-table-max-growth-ratio-for-speed=
+-Common Joined UInteger Var(param_jump_table_max_growth_ratio_for_speed) Init(800) Param Optimization
++Common Joined UInteger Var(param_jump_table_max_growth_ratio_for_speed) Init(800) IntegerRange(0, 10000) Param Optimization
+ The maximum code size growth ratio when expanding into a jump table (in percent).  The parameter is used when optimizing for speed.
+ 
+ -param=l1-cache-line-size=
+diff --git a/gcc/stmt.c b/gcc/stmt.c
+index 297e0d0ff..a59d15adb 100644
+--- a/gcc/stmt.c
++++ b/gcc/stmt.c
+@@ -746,7 +746,7 @@ emit_case_dispatch_table (tree index_expr, tree index_type,
+ 			  tree range, basic_block stmt_bb)
+ {
+   int i, ncases;
+-  rtx *labelvec;
++  auto_vec<rtx> labelvec;
+   rtx_insn *fallback_label = label_rtx (case_list[0].m_code_label);
+   rtx_code_label *table_label = gen_label_rtx ();
+   bool has_gaps = false;
+@@ -779,8 +779,7 @@ emit_case_dispatch_table (tree index_expr, tree index_type,
+   /* Get table of labels to jump to, in order of case index.  */
+ 
+   ncases = tree_to_shwi (range) + 1;
+-  labelvec = XALLOCAVEC (rtx, ncases);
+-  memset (labelvec, 0, ncases * sizeof (rtx));
++  labelvec.safe_grow_cleared (ncases);
+ 
+   for (unsigned j = 0; j < case_list.length (); j++)
+     {
+@@ -861,11 +860,11 @@ emit_case_dispatch_table (tree index_expr, tree index_type,
+     emit_jump_table_data (gen_rtx_ADDR_DIFF_VEC (CASE_VECTOR_MODE,
+ 						 gen_rtx_LABEL_REF (Pmode,
+ 								    table_label),
+-						 gen_rtvec_v (ncases, labelvec),
++						 gen_rtvec_v (ncases, labelvec.address ()),
+ 						 const0_rtx, const0_rtx));
+   else
+     emit_jump_table_data (gen_rtx_ADDR_VEC (CASE_VECTOR_MODE,
+-					    gen_rtvec_v (ncases, labelvec)));
++					    gen_rtvec_v (ncases, labelvec.address ())));
+ 
+   /* Record no drop-through after the table.  */
+   emit_barrier ();

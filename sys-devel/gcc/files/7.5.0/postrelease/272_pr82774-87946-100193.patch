@@ -1,0 +1,239 @@
+diff --git a/gcc/fortran/resolve.c b/gcc/fortran/resolve.c
+index fe27577d5..25196f4c3 100644
+--- a/gcc/fortran/resolve.c
++++ b/gcc/fortran/resolve.c
+@@ -10048,6 +10048,17 @@ resolve_ordinary_assign (gfc_code *code, gfc_namespace *ns)
+   lhs = code->expr1;
+   rhs = code->expr2;
+ 
++  if ((lhs->symtree->n.sym->ts.type == BT_DERIVED
++       || lhs->symtree->n.sym->ts.type == BT_CLASS)
++      && !lhs->symtree->n.sym->attr.proc_pointer
++      && gfc_expr_attr (lhs).proc_pointer)
++    {
++      gfc_error ("Variable in the ordinary assignment at %L is a procedure "
++		 "pointer component",
++		 &lhs->where);
++      return false;
++    }
++
+   if (rhs->is_boz
+       && !gfc_notify_std (GFC_STD_GNU, "BOZ literal at %L outside "
+ 			  "a DATA statement and outside INT/REAL/DBLE/CMPLX",
+diff --git a/gcc/fortran/trans-array.c b/gcc/fortran/trans-array.c
+index 0e3558133..98b21cbb1 100644
+--- a/gcc/fortran/trans-array.c
++++ b/gcc/fortran/trans-array.c
+@@ -9742,6 +9742,12 @@ gfc_walk_array_ref (gfc_ss * ss, gfc_expr * expr, gfc_ref * ref)
+ 	  break;
+ 
+ 	case AR_FULL:
++	  /* Assumed shape arrays from interface mapping need this fix.  */
++	  if (!ar->as && expr->symtree->n.sym->as)
++	    {
++	      ar->as = gfc_get_array_spec();
++	      *ar->as = *expr->symtree->n.sym->as;
++	    }
+ 	  newss = gfc_get_array_ss (ss, expr, ar->as->rank, GFC_SS_SECTION);
+ 	  newss->info->data.array.ref = ref;
+ 
+diff --git a/gcc/fortran/trans-expr.c b/gcc/fortran/trans-expr.c
+index 914f64522..dc9d9a247 100644
+--- a/gcc/fortran/trans-expr.c
++++ b/gcc/fortran/trans-expr.c
+@@ -7281,11 +7281,9 @@ gfc_trans_alloc_subarray_assign (tree dest, gfc_component * cm,
+ /* Allocate or reallocate scalar component, as necessary.  */
+ 
+ static void
+-alloc_scalar_allocatable_for_subcomponent_assignment (stmtblock_t *block,
+-						      tree comp,
+-						      gfc_component *cm,
+-						      gfc_expr *expr2,
+-						      gfc_symbol *sym)
++alloc_scalar_allocatable_subcomponent (stmtblock_t *block, tree comp,
++				       gfc_component *cm, gfc_expr *expr2,
++				       tree slen)
+ {
+   tree tmp;
+   tree ptr;
+@@ -7303,26 +7301,20 @@ alloc_scalar_allocatable_for_subcomponent_assignment (stmtblock_t *block,
+ 
+   if (cm->ts.type == BT_CHARACTER && cm->ts.deferred)
+     {
+-      char name[GFC_MAX_SYMBOL_LEN+9];
+-      gfc_component *strlen;
+-      /* Use the rhs string length and the lhs element size.  */
+       gcc_assert (expr2->ts.type == BT_CHARACTER);
+-      if (!expr2->ts.u.cl->backend_decl)
+-	{
+-	  gfc_conv_string_length (expr2->ts.u.cl, expr2, block);
+-	  gcc_assert (expr2->ts.u.cl->backend_decl);
+-	}
++      if (!expr2->ts.u.cl->backend_decl
++	  || !VAR_P (expr2->ts.u.cl->backend_decl))
++	expr2->ts.u.cl->backend_decl = gfc_create_var (TREE_TYPE (slen),
++						       "slen");
++      gfc_add_modify (block, expr2->ts.u.cl->backend_decl, slen);
+ 
+       size = expr2->ts.u.cl->backend_decl;
+ 
+-      /* Ensure that cm->ts.u.cl->backend_decl is a componentref to _%s_length
+-	 component.  */
+-      sprintf (name, "_%s_length", cm->name);
+-      strlen = gfc_find_component (sym, name, true, true, NULL);
++      gfc_deferred_strlen (cm, &tmp);
+       lhs_cl_size = fold_build3_loc (input_location, COMPONENT_REF,
+ 				     gfc_charlen_type_node,
+ 				     TREE_OPERAND (comp, 0),
+-				     strlen->backend_decl, NULL_TREE);
++				     tmp, NULL_TREE);
+ 
+       tmp = TREE_TYPE (gfc_typenode_for_spec (&cm->ts));
+       tmp = TYPE_SIZE_UNIT (tmp);
+@@ -7394,8 +7386,8 @@ alloc_scalar_allocatable_for_subcomponent_assignment (stmtblock_t *block,
+ /* Assign a single component of a derived type constructor.  */
+ 
+ static tree
+-gfc_trans_subcomponent_assign (tree dest, gfc_component * cm, gfc_expr * expr,
+-			       gfc_symbol *sym, bool init)
++gfc_trans_subcomponent_assign (tree dest, gfc_component * cm,
++			       gfc_expr * expr, bool init)
+ {
+   gfc_se se;
+   gfc_se lse;
+@@ -7489,19 +7481,17 @@ gfc_trans_subcomponent_assign (tree dest, gfc_component * cm, gfc_expr * expr,
+ 	   || (cm->ts.type == BT_CLASS && CLASS_DATA (cm)->attr.allocatable
+ 	       && expr->ts.type != BT_CLASS)))
+     {
++      gfc_init_se (&se, NULL);
++      gfc_conv_expr (&se, expr);
++
+       /* Take care about non-array allocatable components here.  The alloc_*
+ 	 routine below is motivated by the alloc_scalar_allocatable_for_
+ 	 assignment() routine, but with the realloc portions removed and
+ 	 different input.  */
+-      alloc_scalar_allocatable_for_subcomponent_assignment (&block,
+-							    dest,
+-							    cm,
+-							    expr,
+-							    sym);
++      alloc_scalar_allocatable_subcomponent (&block, dest, cm, expr,
++					     se.string_length);
+       /* The remainder of these instructions follow the if (cm->attr.pointer)
+ 	 if (!cm->attr.dimension) part above.  */
+-      gfc_init_se (&se, NULL);
+-      gfc_conv_expr (&se, expr);
+       gfc_add_block_to_block (&block, &se.pre);
+ 
+       if (expr->symtree && expr->symtree->n.sym->attr.proc_pointer
+@@ -7753,13 +7743,11 @@ gfc_trans_structure_assign (tree dest, gfc_expr * expr, bool init, bool coarray)
+       if (!c->expr)
+ 	{
+ 	  gfc_expr *e = gfc_get_null_expr (NULL);
+-	  tmp = gfc_trans_subcomponent_assign (tmp, cm, e, expr->ts.u.derived,
+-					       init);
++	  tmp = gfc_trans_subcomponent_assign (tmp, cm, e, init);
+ 	  gfc_free_expr (e);
+ 	}
+       else
+-        tmp = gfc_trans_subcomponent_assign (tmp, cm, c->expr,
+-                                             expr->ts.u.derived, init);
++	tmp = gfc_trans_subcomponent_assign (tmp, cm, c->expr, init);
+       gfc_add_expr_to_block (&block, tmp);
+     }
+   return gfc_finish_block (&block);
+diff --git a/gcc/testsuite/gfortran.dg/pr100193.f90 b/gcc/testsuite/gfortran.dg/pr100193.f90
+new file mode 100644
+index 000000000..07a3634cb
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/pr100193.f90
+@@ -0,0 +1,20 @@
++! { dg-do compile }
++!
++! Contributed by Gerhard Steinmetz  <gscfq@t-online.de>
++!
++module m
++   implicit none
++   type t
++      procedure(f), pointer, nopass :: g
++   end type
++contains
++   function f()
++      character(:), allocatable :: f
++      f = 'abc'
++   end
++   subroutine s
++      type(t) :: z
++      z%g = 'x'  ! { dg-error "is a procedure pointer" }
++      if ( z%g() /= 'abc' ) stop
++   end
++end
+diff --git a/gcc/testsuite/gfortran.dg/pr82774.f90 b/gcc/testsuite/gfortran.dg/pr82774.f90
+new file mode 100644
+index 000000000..81c22ab38
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/pr82774.f90
+@@ -0,0 +1,15 @@
++! { dg-do run }
++!
++! Contributed by Steve Kargl  <kargl@gcc.gnu.org>
++!
++program main
++   implicit none
++   type stuff
++      character(:), allocatable :: key
++   end type stuff
++   type(stuff) nonsense, total
++   nonsense = stuff('Xe')
++   total = stuff(nonsense%key) ! trim nonsense%key made this work
++   if (nonsense%key /= total%key) call abort
++   if (len(total%key) /= 2) call abort
++end program main
+diff --git a/gcc/testsuite/gfortran.dg/pr87946.f90 b/gcc/testsuite/gfortran.dg/pr87946.f90
+new file mode 100644
+index 000000000..793d37a7f
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/pr87946.f90
+@@ -0,0 +1,42 @@
++! { dg-do run }
++!
++! Contributed by Gerhard Steinmetz  <gscfq@t-online.de>
++!
++module m
++   type t
++   contains
++      generic :: h => g
++      procedure, private :: g
++   end type
++contains
++   function g(x, y) result(z)
++      class(t), intent(in) :: x
++      real, intent(in) :: y(:, :)
++      real :: z(size(y, 2))
++      integer :: i
++      do i = 1, size(y, 2)
++        z(i) = i
++      end do
++   end
++end
++module m2
++   use m
++   type t2
++      class(t), allocatable :: u(:)
++   end type
++end
++   use m2
++   type(t2) :: x
++   real :: y(1,5)
++   allocate (x%u(1))
++   if (any (int(f (x, y)) .ne. [1,2,3,4,5])) stop 1
++   deallocate (x%u)
++contains
++   function f(x, y) result(z)
++      use m2
++      type(t2) :: x
++      real :: y(:, :)
++      real :: z(size(y, 2))
++      z = x%u(1)%h(y)          ! Used to segfault here
++   end
++end

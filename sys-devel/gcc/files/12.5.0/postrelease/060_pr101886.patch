@@ -1,0 +1,151 @@
+diff --git a/gcc/cp/pt.cc b/gcc/cp/pt.cc
+index a9c88a9b5..a5ecb0814 100644
+--- a/gcc/cp/pt.cc
++++ b/gcc/cp/pt.cc
+@@ -10754,14 +10754,14 @@ for_each_template_parm (tree t, tree_fn_t fn, void* data,
+ struct find_template_parameter_info
+ {
+   explicit find_template_parameter_info (tree ctx_parms)
+-    : parm_list (NULL_TREE),
+-      ctx_parms (ctx_parms),
++    : ctx_parms (ctx_parms),
+       max_depth (TMPL_PARMS_DEPTH (ctx_parms))
+   {}
+ 
+   hash_set<tree> visited;
+   hash_set<tree> parms;
+-  tree parm_list;
++  tree parm_list = NULL_TREE;
++  tree *parm_list_tail = &parm_list;
+   tree ctx_parms;
+   int max_depth;
+ };
+@@ -10807,7 +10807,12 @@ keep_template_parm (tree t, void* data)
+   if (TYPE_P (t))
+     t = TYPE_MAIN_VARIANT (t);
+   if (!ftpi->parms.add (t))
+-    ftpi->parm_list = tree_cons (NULL_TREE, t, ftpi->parm_list);
++    {
++      /* Append T to PARM_LIST.  */
++      tree node = build_tree_list (NULL_TREE, t);
++      *ftpi->parm_list_tail = node;
++      ftpi->parm_list_tail = &TREE_CHAIN (node);
++    }
+ 
+   /* Verify the parameter we found has a valid index.  */
+   if (flag_checking)
+@@ -29191,18 +29196,24 @@ extract_autos_r (tree t, void *data)
+     {
+       /* All the autos were built with index 0; fix that up now.  */
+       tree *p = hash.find_slot (t, INSERT);
+-      unsigned idx;
++      int idx;
+       if (*p)
+ 	/* If this is a repeated constrained-type-specifier, use the index we
+ 	   chose before.  */
+-	idx = TEMPLATE_PARM_IDX (TEMPLATE_TYPE_PARM_INDEX (*p));
++	idx = TEMPLATE_TYPE_IDX (*p);
+       else
+ 	{
+ 	  /* Otherwise this is new, so use the current count.  */
+ 	  *p = t;
+ 	  idx = hash.elements () - 1;
+ 	}
+-      TEMPLATE_PARM_IDX (TEMPLATE_TYPE_PARM_INDEX (t)) = idx;
++      if (idx != TEMPLATE_TYPE_IDX (t))
++	{
++	  gcc_checking_assert (TEMPLATE_TYPE_IDX (t) == 0);
++	  gcc_checking_assert (TYPE_CANONICAL (t) != t);
++	  TEMPLATE_TYPE_IDX (t) = idx;
++	  TYPE_CANONICAL (t) = canonical_type_parameter (t);
++	}
+     }
+ 
+   /* Always keep walking.  */
+diff --git a/gcc/testsuite/g++.dg/concepts/auto5.C b/gcc/testsuite/g++.dg/concepts/auto5.C
+new file mode 100644
+index 000000000..f1d653efd
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/concepts/auto5.C
+@@ -0,0 +1,9 @@
++// PR c++/101886
++// { dg-do compile { target c++17_only } }
++// { dg-options "-fconcepts-ts" }
++
++template<typename...> struct A { };
++
++A<int, int> a;
++A<auto, auto> b1 = a;
++A<auto, auto> b2 = a;
+diff --git a/gcc/testsuite/g++.dg/concepts/auto6.C b/gcc/testsuite/g++.dg/concepts/auto6.C
+new file mode 100644
+index 000000000..1f6d72e54
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/concepts/auto6.C
+@@ -0,0 +1,14 @@
++// PR c++/101886
++// { dg-do compile { target c++17_only } }
++// { dg-options "-fconcepts-ts" }
++
++template<typename, typename> struct A { };
++
++template<class T>
++void f() {
++  A<int, int> a;
++  A<auto, auto> b1 = a;
++  A<auto, auto> b2 = a;
++}
++
++template void f<int>();
+diff --git a/gcc/testsuite/g++.dg/concepts/diagnostic12.C b/gcc/testsuite/g++.dg/concepts/diagnostic12.C
+index 548ba9c1b..808650076 100644
+--- a/gcc/testsuite/g++.dg/concepts/diagnostic12.C
++++ b/gcc/testsuite/g++.dg/concepts/diagnostic12.C
+@@ -3,7 +3,7 @@
+ 
+ template<typename T, typename... Args>
+   concept c1 = requires (T t, Args... args) { *t; };
+-// { dg-message "in requirements with .T t., .Args ... args. .with Args = \{\}; T = int" "" { target *-*-* } .-1 }
++// { dg-message "in requirements with .T t., .Args ... args. .with T = int; Args = \{\}" "" { target *-*-* } .-1 }
+ 
+ static_assert(c1<int>); // { dg-error "failed" }
+ 
+diff --git a/gcc/tree.cc b/gcc/tree.cc
+index dbbef1ee6..ae32368c7 100644
+--- a/gcc/tree.cc
++++ b/gcc/tree.cc
+@@ -11300,12 +11300,12 @@ walk_tree_1 (tree *tp, walk_tree_fn func, void *data,
+ 	if (len == 0)
+ 	  break;
+ 
+-	/* Walk all elements but the first.  */
+-	while (--len)
+-	  WALK_SUBTREE (TREE_VEC_ELT (*tp, len));
++	/* Walk all elements but the last.  */
++	for (int i = 0; i < len - 1; ++i)
++	  WALK_SUBTREE (TREE_VEC_ELT (*tp, i));
+ 
+-	/* Now walk the first one as a tail call.  */
+-	WALK_SUBTREE_TAIL (TREE_VEC_ELT (*tp, 0));
++	/* Now walk the last one as a tail call.  */
++	WALK_SUBTREE_TAIL (TREE_VEC_ELT (*tp, len - 1));
+       }
+ 
+     case VECTOR_CST:
+@@ -11313,11 +11313,11 @@ walk_tree_1 (tree *tp, walk_tree_fn func, void *data,
+ 	unsigned len = vector_cst_encoded_nelts (*tp);
+ 	if (len == 0)
+ 	  break;
+-	/* Walk all elements but the first.  */
+-	while (--len)
+-	  WALK_SUBTREE (VECTOR_CST_ENCODED_ELT (*tp, len));
+-	/* Now walk the first one as a tail call.  */
+-	WALK_SUBTREE_TAIL (VECTOR_CST_ENCODED_ELT (*tp, 0));
++	/* Walk all elements but the last.  */
++	for (unsigned i = 0; i < len - 1; ++i)
++	  WALK_SUBTREE (VECTOR_CST_ENCODED_ELT (*tp, i));
++	/* Now walk the last one as a tail call.  */
++	WALK_SUBTREE_TAIL (VECTOR_CST_ENCODED_ELT (*tp, len - 1));
+       }
+ 
+     case COMPLEX_CST:

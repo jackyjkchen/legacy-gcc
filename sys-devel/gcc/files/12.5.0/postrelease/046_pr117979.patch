@@ -1,0 +1,54 @@
+diff --git a/gcc/testsuite/gcc.dg/torture/pr117979.c b/gcc/testsuite/gcc.dg/torture/pr117979.c
+new file mode 100644
+index 000000000..646cd7077
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/torture/pr117979.c
+@@ -0,0 +1,21 @@
++/* { dg-do compile } */
++
++int a, b;
++void foo (void);
++int __attribute__((returns_twice)) bar (int);
++
++int __attribute__((const))
++baz (int f)
++{
++  if (f)
++    {
++      l:;
++      for (f = 0; f < 6; ++f)
++        if (bar (b))
++          goto l;
++      for (;; a--)
++        ;
++    }
++  foo ();
++  return 0;
++}
+diff --git a/gcc/tree-ssa-dce.cc b/gcc/tree-ssa-dce.cc
+index 4fa830dff..3a5a90aeb 100644
+--- a/gcc/tree-ssa-dce.cc
++++ b/gcc/tree-ssa-dce.cc
+@@ -1814,12 +1814,22 @@ make_forwarders_with_degenerate_phis (function *fn)
+ 		    }
+ 		  free_dominance_info (fn, CDI_DOMINATORS);
+ 		  basic_block forwarder = split_edge (args[start].first);
++		  bool irr = false;
+ 		  for (unsigned j = start + 1; j < i; ++j)
+ 		    {
+ 		      edge e = args[j].first;
++		      if (e->flags & EDGE_IRREDUCIBLE_LOOP)
++			irr = true;
+ 		      redirect_edge_and_branch_force (e, forwarder);
+ 		      redirect_edge_var_map_clear (e);
+ 		    }
++		  if (irr)
++		    {
++		      forwarder->flags |= BB_IRREDUCIBLE_LOOP;
++		      single_succ_edge (forwarder)->flags
++			|= EDGE_IRREDUCIBLE_LOOP;
++		    }
++
+ 		  if (vphi)
+ 		    {
+ 		      tree def = copy_ssa_name (vphi_args[0]);

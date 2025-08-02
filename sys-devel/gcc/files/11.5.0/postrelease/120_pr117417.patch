@@ -1,0 +1,39 @@
+diff --git a/gcc/testsuite/gcc.dg/torture/pr117417.c b/gcc/testsuite/gcc.dg/torture/pr117417.c
+new file mode 100644
+index 000000000..2c80dd5d7
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/torture/pr117417.c
+@@ -0,0 +1,16 @@
++/* { dg-do compile } */
++
++typedef __attribute__((__vector_size__ (8))) double V;
++int bar (int a, V *p)
++{
++  V v;
++  v = *p;
++  a += *(_Complex short *) &v;
++  return a;
++}
++V x;
++int
++foo ()
++{
++  return bar (0, &x);
++}
+diff --git a/gcc/tree-ssa-forwprop.c b/gcc/tree-ssa-forwprop.c
+index 3bb4a07d5..83bff2fd9 100644
+--- a/gcc/tree-ssa-forwprop.c
++++ b/gcc/tree-ssa-forwprop.c
+@@ -2843,9 +2843,9 @@ pass_forwprop::execute (function *fun)
+ 	  else if (TREE_CODE (TREE_TYPE (lhs)) == COMPLEX_TYPE
+ 		   && gimple_assign_load_p (stmt)
+ 		   && !gimple_has_volatile_ops (stmt)
+-		   && (TREE_CODE (gimple_assign_rhs1 (stmt))
+-		       != TARGET_MEM_REF)
+-		   && !stmt_can_throw_internal (cfun, stmt))
++		   && TREE_CODE (rhs) != TARGET_MEM_REF
++		   && TREE_CODE (rhs) != BIT_FIELD_REF
++		   && !stmt_can_throw_internal (fun, stmt))
+ 	    {
+ 	      /* Rewrite loads used only in real/imagpart extractions to
+ 	         component-wise loads.  */

@@ -1,0 +1,46 @@
+diff --git a/gcc/testsuite/gcc.dg/pr111039.c b/gcc/testsuite/gcc.dg/pr111039.c
+new file mode 100644
+index 000000000..bec9983b3
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr111039.c
+@@ -0,0 +1,15 @@
++/* { dg-do compile } */
++/* { dg-options "-O" } */
++
++int _setjmp ();
++void abcd ();
++void abcde ();
++void compiler_corruption_function(int flags)
++{
++  int nowait = flags & 1048576, isexpand = flags & 8388608;
++  abcd();
++  _setjmp(flags);
++  if (nowait && isexpand)
++    flags &= 0;
++  abcde();
++}
+diff --git a/gcc/tree-ssa-ifcombine.c b/gcc/tree-ssa-ifcombine.c
+index 16f6c73d7..b4f3730de 100644
+--- a/gcc/tree-ssa-ifcombine.c
++++ b/gcc/tree-ssa-ifcombine.c
+@@ -414,6 +414,9 @@ ifcombine_ifandif (basic_block inner_cond_bb, bool inner_inv,
+     {
+       tree t, t2;
+ 
++      if (SSA_NAME_OCCURS_IN_ABNORMAL_PHI (name1))
++	return false;
++
+       /* Do it.  */
+       gsi = gsi_for_stmt (inner_cond);
+       t = fold_build2 (LSHIFT_EXPR, TREE_TYPE (name1),
+@@ -464,6 +467,10 @@ ifcombine_ifandif (basic_block inner_cond_bb, bool inner_inv,
+       gimple_stmt_iterator gsi;
+       tree t;
+ 
++      if (SSA_NAME_OCCURS_IN_ABNORMAL_PHI (name1)
++	  || SSA_NAME_OCCURS_IN_ABNORMAL_PHI (name2))
++	return false;
++
+       /* Find the common name which is bit-tested.  */
+       if (name1 == name2)
+ 	;

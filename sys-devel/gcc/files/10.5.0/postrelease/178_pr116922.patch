@@ -1,0 +1,46 @@
+diff --git a/gcc/gimple-ssa-backprop.c b/gcc/gimple-ssa-backprop.c
+index 77a07703f..416cbe375 100644
+--- a/gcc/gimple-ssa-backprop.c
++++ b/gcc/gimple-ssa-backprop.c
+@@ -657,8 +657,14 @@ remove_unused_var (tree var)
+       print_gimple_stmt (dump_file, stmt, 0, TDF_SLIM);
+     }
+   gimple_stmt_iterator gsi = gsi_for_stmt (stmt);
+-  gsi_remove (&gsi, true);
+-  release_defs (stmt);
++  if (gimple_code (stmt) == GIMPLE_PHI)
++    remove_phi_node (&gsi, true);
++  else
++    {
++      unlink_stmt_vdef (stmt);
++      gsi_remove (&gsi, true);
++      release_defs (stmt);
++    }
+ }
+ 
+ /* Note that we're replacing OLD_RHS with NEW_RHS in STMT.  */
+diff --git a/gcc/testsuite/gcc.dg/torture/pr116922.c b/gcc/testsuite/gcc.dg/torture/pr116922.c
+new file mode 100644
+index 000000000..0fcf91293
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/torture/pr116922.c
+@@ -0,0 +1,19 @@
++/* { dg-do compile } */
++/* { dg-additional-options "-ffast-math" } */
++/* PR tree-optimization/116922 */
++
++
++static int g;
++
++void
++foo (int c, double v, double *r)
++{
++b:
++  do
++    v /= g - v;
++  while (c);
++  *r = v;
++
++  double x;
++  foo (5, (double)0, &x);
++}

@@ -1,0 +1,833 @@
+diff --git a/gcc/c/c-decl.cc b/gcc/c/c-decl.cc
+index 668e234f0..106ce1de1 100644
+--- a/gcc/c/c-decl.cc
++++ b/gcc/c/c-decl.cc
+@@ -5125,7 +5125,8 @@ start_decl (struct c_declarator *declarator, struct c_declspecs *declspecs,
+     if (lastdecl != error_mark_node)
+       *lastloc = DECL_SOURCE_LOCATION (lastdecl);
+ 
+-  if (expr)
++  /* Make sure the size expression is evaluated at this point.  */
++  if (expr && !current_scope->parm_flag)
+     add_stmt (fold_convert (void_type_node, expr));
+ 
+   if (TREE_CODE (decl) != FUNCTION_DECL && MAIN_NAME_P (DECL_NAME (decl))
+@@ -7193,7 +7194,8 @@ grokdeclarator (const struct c_declarator *declarator,
+ 		&& variably_modified_type_p (type, NULL_TREE))
+ 	      {
+ 		tree bind = NULL_TREE;
+-		if (decl_context == TYPENAME || decl_context == PARM)
++		if (decl_context == TYPENAME || decl_context == PARM
++		    || decl_context == FIELD)
+ 		  {
+ 		    bind = build3 (BIND_EXPR, void_type_node, NULL_TREE,
+ 				   NULL_TREE, NULL_TREE);
+@@ -7202,10 +7204,11 @@ grokdeclarator (const struct c_declarator *declarator,
+ 		    push_scope ();
+ 		  }
+ 		tree decl = build_decl (loc, TYPE_DECL, NULL_TREE, type);
+-		DECL_ARTIFICIAL (decl) = 1;
+ 		pushdecl (decl);
+-		finish_decl (decl, loc, NULL_TREE, NULL_TREE, NULL_TREE);
++		DECL_ARTIFICIAL (decl) = 1;
++		add_stmt (build_stmt (DECL_SOURCE_LOCATION (decl), DECL_EXPR, decl));
+ 		TYPE_NAME (type) = decl;
++
+ 		if (bind)
+ 		  {
+ 		    pop_scope ();
+@@ -8357,7 +8360,7 @@ start_struct (location_t loc, enum tree_code code, tree name,
+ tree
+ grokfield (location_t loc,
+ 	   struct c_declarator *declarator, struct c_declspecs *declspecs,
+-	   tree width, tree *decl_attrs)
++	   tree width, tree *decl_attrs, tree *expr)
+ {
+   tree value;
+ 
+@@ -8414,7 +8417,7 @@ grokfield (location_t loc,
+     }
+ 
+   value = grokdeclarator (declarator, declspecs, FIELD, false,
+-			  width ? &width : NULL, decl_attrs, NULL, NULL,
++			  width ? &width : NULL, decl_attrs, expr, NULL,
+ 			  DEPRECATED_NORMAL);
+ 
+   finish_decl (value, loc, NULL_TREE, NULL_TREE, NULL_TREE);
+@@ -9010,13 +9013,6 @@ finish_struct (location_t loc, tree t, tree fieldlist, tree attributes,
+ 
+   finish_incomplete_vars (incomplete_vars, toplevel);
+ 
+-  /* If we're inside a function proper, i.e. not file-scope and not still
+-     parsing parameters, then arrange for the size of a variable sized type
+-     to be bound now.  */
+-  if (building_stmt_list_p () && variably_modified_type_p (t, NULL_TREE))
+-    add_stmt (build_stmt (loc,
+-			  DECL_EXPR, build_decl (loc, TYPE_DECL, NULL, t)));
+-
+   if (warn_cxx_compat)
+     warn_cxx_compat_finish_struct (fieldlist, TREE_CODE (t), loc);
+ 
+@@ -9505,6 +9501,7 @@ start_function (struct c_declspecs *declspecs, struct c_declarator *declarator,
+   tree decl1, old_decl;
+   tree restype, resdecl;
+   location_t loc;
++  tree expr = NULL;
+ 
+   current_function_returns_value = 0;  /* Assume, until we see it does.  */
+   current_function_returns_null = 0;
+@@ -9516,7 +9513,7 @@ start_function (struct c_declspecs *declspecs, struct c_declarator *declarator,
+   in_statement = 0;
+ 
+   decl1 = grokdeclarator (declarator, declspecs, FUNCDEF, true, NULL,
+-			  &attributes, NULL, NULL, DEPRECATED_NORMAL);
++			  &attributes, &expr, NULL, DEPRECATED_NORMAL);
+   invoke_plugin_callbacks (PLUGIN_START_PARSE_FUNCTION, decl1);
+ 
+   /* If the declarator is not suitable for a function definition,
+@@ -9525,6 +9522,11 @@ start_function (struct c_declspecs *declspecs, struct c_declarator *declarator,
+       || TREE_CODE (decl1) != FUNCTION_DECL)
+     return false;
+ 
++  /* Nested functions may have variably modified (return) type.
++     Make sure the size expression is evaluated at this point.  */
++  if (expr && !current_scope->parm_flag)
++    add_stmt (fold_convert (void_type_node, expr));
++
+   loc = DECL_SOURCE_LOCATION (decl1);
+ 
+   /* A nested function is not global.  */
+@@ -11716,10 +11718,13 @@ declspecs_add_type (location_t loc, struct c_declspecs *specs,
+     }
+   else
+     {
+-      if (TREE_CODE (type) != ERROR_MARK && spec.kind == ctsk_typeof)
++      if (TREE_CODE (type) != ERROR_MARK)
+ 	{
+-	  specs->typedef_p = true;
+-	  specs->locations[cdw_typedef] = loc;
++	  if (spec.kind == ctsk_typeof)
++	    {
++	      specs->typedef_p = true;
++	      specs->locations[cdw_typedef] = loc;
++	    }
+ 	  if (spec.expr)
+ 	    {
+ 	      if (specs->expr)
+diff --git a/gcc/c/c-parser.cc b/gcc/c/c-parser.cc
+index ed292db42..9800a28c2 100644
+--- a/gcc/c/c-parser.cc
++++ b/gcc/c/c-parser.cc
+@@ -1498,7 +1498,7 @@ static void c_parser_static_assert_declaration_no_semi (c_parser *);
+ static void c_parser_static_assert_declaration (c_parser *);
+ static struct c_typespec c_parser_enum_specifier (c_parser *);
+ static struct c_typespec c_parser_struct_or_union_specifier (c_parser *);
+-static tree c_parser_struct_declaration (c_parser *);
++static tree c_parser_struct_declaration (c_parser *, tree *);
+ static struct c_typespec c_parser_typeof_specifier (c_parser *);
+ static tree c_parser_alignas_specifier (c_parser *);
+ static struct c_declarator *c_parser_direct_declarator (c_parser *, bool,
+@@ -2037,6 +2037,9 @@ c_parser_declaration_or_fndef (c_parser *parser, bool fndef_ok,
+ 	  shadow_tag_warned (specs, 1);
+ 	  pedwarn (here, 0, "empty declaration");
+ 	}
++      /* We still have to evaluate size expressions.  */
++      if (specs->expr)
++	add_stmt (fold_convert (void_type_node, specs->expr));
+       c_parser_consume_token (parser);
+       if (oacc_routine_data)
+ 	c_finish_oacc_routine (oacc_routine_data, NULL_TREE, false);
+@@ -3390,6 +3393,7 @@ c_parser_struct_or_union_specifier (c_parser *parser)
+ 	 so we'll be minimizing the number of node traversals required
+ 	 by chainon.  */
+       tree contents;
++      tree expr = NULL;
+       timevar_push (TV_PARSE_STRUCT);
+       contents = NULL_TREE;
+       c_parser_consume_token (parser);
+@@ -3451,7 +3455,7 @@ c_parser_struct_or_union_specifier (c_parser *parser)
+ 	    }
+ 	  /* Parse some comma-separated declarations, but not the
+ 	     trailing semicolon if any.  */
+-	  decls = c_parser_struct_declaration (parser);
++	  decls = c_parser_struct_declaration (parser, &expr);
+ 	  contents = chainon (decls, contents);
+ 	  /* If no semicolon follows, either we have a parse error or
+ 	     are at the end of the struct or union and should
+@@ -3482,7 +3486,7 @@ c_parser_struct_or_union_specifier (c_parser *parser)
+ 					 chainon (attrs, postfix_attrs)),
+ 				struct_info);
+       ret.kind = ctsk_tagdef;
+-      ret.expr = NULL_TREE;
++      ret.expr = expr;
+       ret.expr_const_operands = true;
+       timevar_pop (TV_PARSE_STRUCT);
+       return ret;
+@@ -3541,7 +3545,7 @@ c_parser_struct_or_union_specifier (c_parser *parser)
+    expressions will be diagnosed as non-constant.  */
+ 
+ static tree
+-c_parser_struct_declaration (c_parser *parser)
++c_parser_struct_declaration (c_parser *parser, tree *expr)
+ {
+   struct c_declspecs *specs;
+   tree prefix_attrs;
+@@ -3554,7 +3558,7 @@ c_parser_struct_declaration (c_parser *parser)
+       tree decl;
+       ext = disable_extension_diagnostics ();
+       c_parser_consume_token (parser);
+-      decl = c_parser_struct_declaration (parser);
++      decl = c_parser_struct_declaration (parser, expr);
+       restore_extension_diagnostics (ext);
+       return decl;
+     }
+@@ -3600,7 +3604,7 @@ c_parser_struct_declaration (c_parser *parser)
+ 
+ 	  ret = grokfield (c_parser_peek_token (parser)->location,
+ 			   build_id_declarator (NULL_TREE), specs,
+-			   NULL_TREE, &attrs);
++			   NULL_TREE, &attrs, expr);
+ 	  if (ret)
+ 	    decl_attributes (&ret, attrs, 0);
+ 	}
+@@ -3657,7 +3661,7 @@ c_parser_struct_declaration (c_parser *parser)
+ 	  if (c_parser_next_token_is_keyword (parser, RID_ATTRIBUTE))
+ 	    postfix_attrs = c_parser_gnu_attributes (parser);
+ 	  d = grokfield (c_parser_peek_token (parser)->location,
+-			 declarator, specs, width, &all_prefix_attrs);
++			 declarator, specs, width, &all_prefix_attrs, expr);
+ 	  decl_attributes (&d, chainon (postfix_attrs,
+ 					all_prefix_attrs), 0);
+ 	  DECL_CHAIN (d) = decls;
+@@ -11058,7 +11062,7 @@ c_parser_objc_class_instance_variables (c_parser *parser)
+ 	}
+ 
+       /* Parse some comma-separated declarations.  */
+-      decls = c_parser_struct_declaration (parser);
++      decls = c_parser_struct_declaration (parser, NULL);
+       if (decls == NULL)
+ 	{
+ 	  /* There is a syntax error.  We want to skip the offending
+@@ -12196,7 +12200,7 @@ c_parser_objc_at_property_declaration (c_parser *parser)
+   /* 'properties' is the list of properties that we read.  Usually a
+      single one, but maybe more (eg, in "@property int a, b, c;" there
+      are three).  */
+-  tree properties = c_parser_struct_declaration (parser);
++  tree properties = c_parser_struct_declaration (parser, NULL);
+ 
+   if (properties == error_mark_node)
+     c_parser_skip_until_found (parser, CPP_SEMICOLON, NULL);
+diff --git a/gcc/c/c-tree.h b/gcc/c/c-tree.h
+index c70f0ba5a..4df9cbe8b 100644
+--- a/gcc/c/c-tree.h
++++ b/gcc/c/c-tree.h
+@@ -603,7 +603,7 @@ extern tree c_simulate_record_decl (location_t, const char *,
+ extern struct c_arg_info *build_arg_info (void);
+ extern struct c_arg_info *get_parm_info (bool, tree);
+ extern tree grokfield (location_t, struct c_declarator *,
+-		       struct c_declspecs *, tree, tree *);
++		       struct c_declspecs *, tree, tree *, tree *);
+ extern tree groktypename (struct c_type_name *, tree *, bool *);
+ extern tree grokparm (const struct c_parm *, tree *);
+ extern tree implicitly_declare (location_t, tree);
+diff --git a/gcc/testsuite/gcc.dg/nested-vla-1.c b/gcc/testsuite/gcc.dg/nested-vla-1.c
+new file mode 100644
+index 000000000..5b62c2c21
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/nested-vla-1.c
+@@ -0,0 +1,63 @@
++/* { dg-do run } */
++/* { dg-options "-std=gnu99" } */
++
++
++int main()
++{
++	int n = 1;
++
++	struct foo { char x[++n]; } bar(void) { struct foo r; return r; }
++
++	if (2 != n)
++		__builtin_abort();
++
++	if (2 != sizeof(bar()))
++		__builtin_abort();
++
++	n = 1;
++
++	struct bar { char x[++n]; } (*bar2p)(void);
++	struct bar bar2(void) { struct bar r; return r; }
++	bar2p = &bar2;
++
++	if (2 != n)
++		__builtin_abort();
++
++	if (2 != sizeof((*bar2p)()))
++		__builtin_abort();
++
++	n = 1;
++
++	struct str { char x[++n]; } *bar3(void)
++	{ 
++		struct str* s = __builtin_malloc(sizeof(struct str));
++		if (!s)
++			__builtin_abort();
++		struct str t;
++		*s = t;
++		return s;
++	}
++
++	if (2 != n)
++		__builtin_abort();
++
++	struct str* p;
++
++	if (2 != sizeof(*(p = bar3())))
++		__builtin_abort();
++
++	__builtin_free(p);
++
++	n = 1;
++
++	struct { char x[++n]; } *bar4(void) { }
++
++	if (2 != n)
++		__builtin_abort();
++#if 0
++	// UB
++	if (2 != sizeof(*bar4()))
++		__builtin_abort();
++#endif
++}
++
+diff --git a/gcc/testsuite/gcc.dg/nested-vla-2.c b/gcc/testsuite/gcc.dg/nested-vla-2.c
+new file mode 100644
+index 000000000..d83c90a0b
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/nested-vla-2.c
+@@ -0,0 +1,34 @@
++/* { dg-do run } */
++/* { dg-options "-std=gnu99" } */
++
++
++int main()
++{
++	int n = 1;
++
++	char tmp[2] = { 0 };
++	typeof(char (*)[++n]) bar(void) { return &tmp; }
++
++	if (2 != n)
++		__builtin_abort();
++
++	if (2 != sizeof(*bar()))
++		__builtin_abort();
++
++	if (2 != n)
++		__builtin_abort();
++
++	n = 1;
++
++	typeof(char (*)[++n]) (*bar2)(void) = bar;
++
++	if (2 != n)
++		__builtin_abort();
++
++	if (2 != sizeof(*(*bar2)()))
++		__builtin_abort();
++
++	if (2 != n)
++		__builtin_abort();
++}
++
+diff --git a/gcc/testsuite/gcc.dg/nested-vla-3.c b/gcc/testsuite/gcc.dg/nested-vla-3.c
+new file mode 100644
+index 000000000..1ffb482da
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/nested-vla-3.c
+@@ -0,0 +1,29 @@
++/* { dg-do run } */
++/* { dg-options "-std=gnu99" } */
++
++
++int main()
++{
++	int n = 1;
++
++	char tmp[2] = { 0 };
++	char (*bar(void))[++n] { return &tmp; }
++
++	if (2 != n)
++		__builtin_abort();
++
++	if (2 != sizeof(*bar()))
++		__builtin_abort();
++
++	n = 1;
++
++	char (*(*bar2)(void))[++n] = bar;
++
++	if (2 != n)
++		__builtin_abort();
++
++	if (2 != sizeof(*(*bar2)()))
++		__builtin_abort();
++
++}
++
+diff --git a/gcc/testsuite/gcc.dg/pr106465.c b/gcc/testsuite/gcc.dg/pr106465.c
+new file mode 100644
+index 000000000..0c351a513
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr106465.c
+@@ -0,0 +1,109 @@
++/* PR c/106465
++ * { dg-do run }
++ * { dg-options "-std=gnu99" }
++ * */
++
++int main()
++{
++	int n = 3;
++
++	void* p = __builtin_malloc(sizeof(struct { char p[16]; }));
++
++	if (!p)
++		return 0;
++	
++	void g1(int m, struct foo { char p[++m]; }* b)	/* { dg-warning "struct" } */
++	{
++		if (3 != m)
++			__builtin_abort();
++
++		struct foo t;
++		*b = t;
++
++		if (3 != sizeof(b->p))
++			__builtin_abort();
++	}
++
++	void g2(struct { char p[++n]; }* b)	/* { dg-warning "anonymous struct" } */
++	{ 
++		if (4 != n)
++			__builtin_abort();
++
++		typeof(*b) t;
++		*b = t;
++
++		if (4 != sizeof(b->p))
++			__builtin_abort();
++	}
++
++	void g2b(struct { char (*p)[++n]; }* b)	/* { dg-warning "anonymous struct" } */
++	{ 
++		if (5 != n)
++			__builtin_abort();
++
++		char tmp[5];
++		typeof(*b) t = { &tmp };
++		*b = t;
++
++		if (5 != sizeof(*b->p))
++			__builtin_abort();
++	}
++
++	if (3 != n)
++		__builtin_abort();
++
++	g1(2, p);
++	g2(p);
++	g2b(p);
++	n--;
++
++	__builtin_free(p);
++
++	if (4 != n)
++		__builtin_abort();
++
++	struct foo { char (*p)[++n]; } x;
++
++	if (5 != n)
++		__builtin_abort();
++
++	char tmp1[5];
++	x.p = &tmp1;
++
++	struct bar { char (*p)[++n]; };
++
++	if (6 != n)
++		__builtin_abort();
++
++	auto struct z { char (*p)[++n]; } g3(void);
++
++	if (7 != n)
++		__builtin_abort();
++
++	struct z g3(void) { };
++
++	if (7 != n)
++		__builtin_abort();
++
++	struct { char (*p)[++n]; } g4(void) { };
++
++	if (8 != n)
++		__builtin_abort();
++
++	__auto_type u = g3();
++
++	if (8 != n)
++		__builtin_abort();
++
++	char tmp2[7];
++	u.p = &tmp2;
++
++	if (5 != sizeof *x.p)
++		__builtin_abort();
++
++	if (7 != sizeof *u.p)
++		__builtin_abort();
++
++	return 0;
++}
++
+diff --git a/gcc/testsuite/gcc.dg/pr107557-1.c b/gcc/testsuite/gcc.dg/pr107557-1.c
+new file mode 100644
+index 000000000..88c248b65
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr107557-1.c
+@@ -0,0 +1,24 @@
++/* PR107557
++ * { dg-do compile }
++ * { dg-options "-flto -fsanitize=undefined -fexceptions -Wno-incompatible-pointer-types" }
++ */
++
++
++int c[1][3*2];
++int f(int * const m, int (**v)[*m * 2])
++{
++	return &(c[0][*m]) == &((*v)[0][*m]);
++}
++int test(int n, int (*(*fn)(void))[n])
++{
++	return (*fn())[0];
++}
++int main()
++{
++	int m = 3;
++	int (*d)[3*2] = c;
++	int (*fn[m])(void);
++	return f(&m, &d) + test(m, &fn);
++}
++
++
+diff --git a/gcc/testsuite/gcc.dg/pr107557-2.c b/gcc/testsuite/gcc.dg/pr107557-2.c
+new file mode 100644
+index 000000000..2d26bb0b1
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr107557-2.c
+@@ -0,0 +1,23 @@
++/* PR107557
++ * { dg-do compile }
++ * { dg-options "-flto -fsanitize=undefined -fexceptions -Wno-incompatible-pointer-types" }
++ */
++
++
++int c[1][3*2];
++int f(int * const m, int (**(*v))[*m * 2])
++{
++	return &(c[0][*m]) == &((*v)[0][*m]);	/* { dg-warning "lacks a cast" } */
++}
++int test(int n, int (*(*(*fn))(void))[n])
++{
++	return (*(*fn)())[0];
++}
++int main()
++{
++	int m = 3;
++	int (*d)[3*2] = c;
++	int (*fn[m])(void);
++	return f(&m, &d) + test(m, &fn);
++}
++
+diff --git a/gcc/testsuite/gcc.dg/pr108423-1.c b/gcc/testsuite/gcc.dg/pr108423-1.c
+new file mode 100644
+index 000000000..0c98d1d46
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr108423-1.c
+@@ -0,0 +1,16 @@
++/* PR108423
++ * { dg-do compile }
++ * { dg-options "-O2 -Wno-int-conversion -Wno-incompatible-pointer-types" }
++ */
++int f (int n, int (**(*a)(void))[n])
++{
++	return (*a())[0];
++}
++int g ()
++{
++	int m = 3;
++	int (*a[m])(void);
++	return f(m, &a);
++}
++
++
+diff --git a/gcc/testsuite/gcc.dg/pr108423-2.c b/gcc/testsuite/gcc.dg/pr108423-2.c
+new file mode 100644
+index 000000000..006e45a96
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr108423-2.c
+@@ -0,0 +1,16 @@
++/* PR108423
++ * { dg-do compile }
++ * { dg-options "-O2" }
++ */
++
++void f(int n, int (*a(void))[n])
++{
++	(a())[0];
++}
++
++void g(void)
++{
++	int (*a(void))[1];
++	f(1, a);
++}
++
+diff --git a/gcc/testsuite/gcc.dg/pr108423-3.c b/gcc/testsuite/gcc.dg/pr108423-3.c
+new file mode 100644
+index 000000000..c1987c42b
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr108423-3.c
+@@ -0,0 +1,17 @@
++/* PR108423
++ * { dg-do compile }
++ * { dg-options "-O2" }
++ */
++
++void f(int n, int (*(*b)(void))[n])
++{
++    sizeof (*(*b)());
++}
++
++int (*a(void))[1];
++
++void g(void)
++{
++	    f(1, &a);
++}
++
+diff --git a/gcc/testsuite/gcc.dg/pr108423-4.c b/gcc/testsuite/gcc.dg/pr108423-4.c
+new file mode 100644
+index 000000000..91336f3f2
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr108423-4.c
+@@ -0,0 +1,17 @@
++/* PR108423
++ * { dg-do compile }
++ * { dg-options "-O2" }
++ */
++
++void f(int n, int (*a(void))[n])
++{
++    sizeof (*a());
++}
++
++int (*a(void))[1];
++
++void g(void)
++{
++	    f(1, a);
++}
++
+diff --git a/gcc/testsuite/gcc.dg/pr108423-5.c b/gcc/testsuite/gcc.dg/pr108423-5.c
+new file mode 100644
+index 000000000..7e4fffb28
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr108423-5.c
+@@ -0,0 +1,17 @@
++/* PR108423
++ * { dg-do compile }
++ * { dg-options "-O2" }
++ */
++
++void f(int n, int (*(*a)(void))[n])
++{
++    sizeof ((*a)());
++}
++
++int (*a(void))[1];
++
++void g(void)
++{
++	    f(1, a);
++}
++
+diff --git a/gcc/testsuite/gcc.dg/pr108423-6.c b/gcc/testsuite/gcc.dg/pr108423-6.c
+new file mode 100644
+index 000000000..c36e45aaf
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr108423-6.c
+@@ -0,0 +1,16 @@
++/* PR108423
++ * { dg-do compile }
++ * { dg-options "-O2" }
++ */
++
++void f(int n, int (*a())[n])
++{
++	(a())[0];
++}
++
++void g(void)
++{
++	int (*a())[1];
++	f(1, a);
++}
++
+diff --git a/gcc/testsuite/gcc.dg/pr70418.c b/gcc/testsuite/gcc.dg/pr70418.c
+new file mode 100644
+index 000000000..81bf93a56
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr70418.c
+@@ -0,0 +1,9 @@
++/* { dg-do compile } */
++/* { dg-options "-std=gnu99" } */
++
++
++int main() 
++{
++	void func(int a, struct {int _[a];} v) {}	/* { dg-warning "struct" } */
++}
++
+diff --git a/gcc/testsuite/gcc.dg/typename-vla-2.c b/gcc/testsuite/gcc.dg/typename-vla-2.c
+new file mode 100644
+index 000000000..24d3db8f5
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/typename-vla-2.c
+@@ -0,0 +1,19 @@
++/* { dg-do run } 
++ * { dg-options "-std=c99" }
++ * */
++
++
++static char tmp[2];
++
++static int f(int n, char (*x)[sizeof (*(++n, (char (*)[n])&tmp))])
++{
++  return sizeof *x;
++}
++
++int main (void)
++{
++  if (2 != f(1, &tmp))
++    __builtin_abort ();
++  return 0;
++}
++
+diff --git a/gcc/testsuite/gcc.dg/typename-vla-3.c b/gcc/testsuite/gcc.dg/typename-vla-3.c
+new file mode 100644
+index 000000000..2bd683e1b
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/typename-vla-3.c
+@@ -0,0 +1,18 @@
++/* { dg-do run } 
++ * { dg-options "-std=c99" }
++ * */
++
++static char tmp[2];
++
++static int f(int n, char (*x)[sizeof *(++n, (struct { char (*x)[n]; }){ &tmp }).x]) /* { dg-warning "anonymous struct" } */
++{
++  return sizeof *x;
++}
++
++int main (void)
++{
++  if (2 != f(1, &tmp))
++    __builtin_abort ();
++  return 0;
++}
++
+diff --git a/gcc/testsuite/gcc.dg/typename-vla-4.c b/gcc/testsuite/gcc.dg/typename-vla-4.c
+new file mode 100644
+index 000000000..a05c782b5
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/typename-vla-4.c
+@@ -0,0 +1,23 @@
++/* { dg-do run } 
++ * { dg-options "-std=gnu99" }
++ * */
++
++int main()
++{
++	int n = 1;
++	sizeof(int[n++]);
++	typeof(int[n++]);			/* { dg-warning "empty declaration" } */
++	struct { int x[n++]; };			/* { dg-warning "no instance" } */
++	struct foo { int x[n++]; };
++	struct { int x[n++]; } x;
++	struct bar { int x[n++]; } y;
++	(int(*)[n++])0;
++	(typeof(int(*)[n++]))0;
++	(struct { int x[n++]; }*)0;
++	(struct q { int x[n++]; }*)0;
++	typeof(struct { int x[n++]; });		/* { dg-warning "empty declaration" } */
++	typeof(struct r { int x[n++]; });	/* { dg-warning "empty declaration" } */
++
++	if (13 != n)
++		__builtin_abort();
++}
+diff --git a/gcc/testsuite/gcc.dg/typename-vla-5.c b/gcc/testsuite/gcc.dg/typename-vla-5.c
+new file mode 100644
+index 000000000..4644d25df
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/typename-vla-5.c
+@@ -0,0 +1,14 @@
++/* { dg-do run } 
++ * { dg-options "-std=gnu99" }
++ * */
++
++int
++main (void)
++{
++	int a = 1;
++	char tmp[2];
++	if (sizeof (*(++a, (struct { char (*x)[a]; }){ &tmp }).x) != 2)
++ 		__builtin_abort ();
++}
++
++
+diff --git a/gcc/testsuite/gcc.dg/typename-vla-6.c b/gcc/testsuite/gcc.dg/typename-vla-6.c
+new file mode 100644
+index 000000000..58831df54
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/typename-vla-6.c
+@@ -0,0 +1,16 @@
++/* { dg-do run } 
++ * { dg-options "-std=gnu99" }
++ * */
++
++
++
++int
++main (void)
++{
++	int a = 1;
++	char tmp[2];
++	if ((++a, sizeof(*((struct { char (*x)[a]; }){ &tmp }).x)) != 2)
++ 		__builtin_abort ();
++}
++
++
+diff --git a/gcc/testsuite/gcc.misc-tests/gcov-pr85350.c b/gcc/testsuite/gcc.misc-tests/gcov-pr85350.c
+index 0383b81fd..a42bf1282 100644
+--- a/gcc/testsuite/gcc.misc-tests/gcov-pr85350.c
++++ b/gcc/testsuite/gcc.misc-tests/gcov-pr85350.c
+@@ -4,7 +4,7 @@
+ int main (void)
+ {
+   const int t = 2; /* count(1) */
+-  struct s1 {	/* count(1) */
++  struct s1 {	/* count(-) */
+     int x;
+     int g[t];
+   };

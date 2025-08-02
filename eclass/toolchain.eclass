@@ -450,6 +450,8 @@ case $(tc-arch) in
 	loong)
 		if tc_version_is_between 8 10 ; then
 			BDEPEND+=" ${CATEGORY}/binutils:2.39"
+		elif tc_version_is_between 10 13 ; then
+			BDEPEND+=" ${CATEGORY}/binutils:2.44"
 		fi
 		;;
 	*)
@@ -2200,6 +2202,8 @@ toolchain_src_configure() {
 			loong)
 				if tc_version_is_between 8 10 ; then
 					confgcc+=( --with-as=/usr/$CHOST/binutils-bin/2.39/as --with-ld=/usr/$CHOST/binutils-bin/2.39/ld )
+				elif tc_version_is_between 10 13 ; then
+					confgcc+=( --with-as=/usr/$CHOST/binutils-bin/2.44/as --with-ld=/usr/$CHOST/binutils-bin/2.44/ld )
 				fi
 				;;
 			*)

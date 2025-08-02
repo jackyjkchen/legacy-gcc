@@ -1,0 +1,96 @@
+diff --git a/gcc/cp/constexpr.c b/gcc/cp/constexpr.c
+index 8f1700670..161543602 100644
+--- a/gcc/cp/constexpr.c
++++ b/gcc/cp/constexpr.c
+@@ -3664,16 +3664,23 @@ cxx_eval_array_reference (const constexpr_ctx *ctx, tree t,
+     {
+       tree empty_ctor = build_constructor (init_list_type_node, NULL);
+       val = digest_init (elem_type, empty_ctor, tf_warning_or_error);
++    }
++  else
++    val = build_value_init (elem_type, tf_warning_or_error);
++
++  if (!SCALAR_TYPE_P (elem_type))
++    {
+       new_ctx = *ctx;
+-      new_ctx.object = t;
++      if (ctx->object)
++	/* If there was no object, don't add one: it could confuse us
++	   into thinking we're modifying a const object.  */
++	new_ctx.object = t;
+       new_ctx.ctor = build_constructor (elem_type, NULL);
+       ctx = &new_ctx;
+     }
+-  else
+-    val = build_value_init (elem_type, tf_warning_or_error);
+   t = cxx_eval_constant_expression (ctx, val, lval, non_constant_p,
+ 				    overflow_p);
+-  if (CP_AGGREGATE_TYPE_P (elem_type) && t != ctx->ctor)
++  if (!SCALAR_TYPE_P (elem_type) && t != ctx->ctor)
+     free_constructor (ctx->ctor);
+   return t;
+ }
+diff --git a/gcc/testsuite/g++.dg/cpp1y/constexpr-101371-2.C b/gcc/testsuite/g++.dg/cpp1y/constexpr-101371-2.C
+new file mode 100644
+index 000000000..fb67b67c2
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp1y/constexpr-101371-2.C
+@@ -0,0 +1,23 @@
++// PR c++/101371
++// { dg-do compile { target c++14 } }
++
++struct A {
++  int i;
++};
++struct B {
++  A a{};
++  constexpr B() : a() {}
++  constexpr B(const B &rhs) : a(rhs.a) {}
++};
++struct C {
++  B arr[1];
++};
++
++constexpr C
++fn ()
++{
++  C c{};
++  return c;
++}
++
++constexpr C c = fn();
+diff --git a/gcc/testsuite/g++.dg/cpp1y/constexpr-101371.C b/gcc/testsuite/g++.dg/cpp1y/constexpr-101371.C
+new file mode 100644
+index 000000000..b6351b806
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp1y/constexpr-101371.C
+@@ -0,0 +1,29 @@
++// PR c++/101371
++// { dg-do compile { target c++14 } }
++
++struct A {
++  int i;
++};
++struct B {
++  A a{};
++  constexpr B() : a() {}
++  constexpr B(const B &rhs) : a(rhs.a) {}
++};
++struct C {
++  B arr[1];
++};
++
++struct X {
++  constexpr C fn () const
++  {
++    C c{};
++    return c;
++  }
++};
++
++void
++g ()
++{
++  X x;
++  constexpr auto z = x.fn();
++}
