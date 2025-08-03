@@ -16,12 +16,6 @@ tc_version_is_at_least() {
 	ver_test "${2}" -ge "$1"
 }
 
-# General purpose version range check
-# Note that it matches up to but NOT including the second version
-tc_version_is_between() {
-	tc_version_is_at_least "${1}" && ! tc_version_is_at_least "${2}"
-}
-
 # Replace -m flags unsupported by the version being built with the best
 # available equivalent
 downgrade_arch_flags() {
@@ -84,6 +78,17 @@ downgrade_arch_flags() {
 	ppc64)
 		if ! tc_version_is_at_least 6 ${bver} ; then
 			replace-cpu-flags power9 power8
+		fi
+		;;
+	s390)
+		if tc_version_is_at_least 4.4 ${bver} && ! tc_version_is_at_least 4.8 ${bver} ; then
+			filter-flags '-march=*' '-mtune=*'
+			append-flags '-march=z10' '-mtune=z10'
+		elif tc_version_is_at_least 3.4 ${bver} && ! tc_version_is_at_least 4.4 ${bver} ; then
+			filter-flags '-march=*' '-mtune=*'
+			append-flags '-march=z990' '-mtune=z990'
+		elif ! tc_version_is_at_least 3.4 ${bver} ; then
+			filter-flags '-march=*' '-mtune=*'
 		fi
 		;;
 	sparc)
