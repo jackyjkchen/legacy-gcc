@@ -15,6 +15,7 @@ src_prepare() {
 	[[ $(tc-arch) == "mips" && ${DEFAULT_ABI} == "n64" ]] && eapply "${FILESDIR}"/${PV}/02_mips64-default-n64-abi.patch
 	eapply "${FILESDIR}"/${PV}/03_remove-struct-matrix-reorg.patch
 	eapply "${FILESDIR}"/${PV}/04_fix-werror.patch
+	eapply "${FILESDIR}"/${PV}/05_fix-sparc-build.patch
 
 	use vanilla && return 0
 
