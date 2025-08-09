@@ -366,7 +366,14 @@ tc_version_is_at_least 4.7 && IUSE+=" go"
 # sanitizer support appeared in gcc-4.8, but <gcc-5 does not
 # support modern glibc.
 # update: only >=gcc-8 support sanitizer in >=glibc-2.36
-tc_version_is_at_least 8 && IUSE+=" +sanitize"  TC_FEATURES+=( sanitize )
+case $(tc-arch) in
+	loong)
+		tc_version_is_at_least 13 && IUSE+=" +sanitize"  TC_FEATURES+=( sanitize )
+		;;
+	*)
+		tc_version_is_at_least 8 && IUSE+=" +sanitize"  TC_FEATURES+=( sanitize )
+		;;
+esac
 
 # Note:
 #   <gcc-4.8 supported graphite, it required forked ppl
@@ -526,24 +533,29 @@ PDEPEND="sys-devel/gcc-config"
 
 if ! is_crosscompile ; then
 	if tc_version_is_at_least 10 ; then
-		if [[ -f /usr/bin/gcc-${GCC_CONFIG_VER} ]] ;then
+		if [[ -f /usr/bin/gcc-${GCC_CONFIG_VER} ]] ; then
 			CC="gcc-${GCC_CONFIG_VER}"
 			CXX="g++-${GCC_CONFIG_VER}"
 		fi
 	elif tc_version_is_between 4.9 10 ; then
-		if [[ $(tc-arch) != "loong" ]] && ! is_glibc217 ; then
+		if [[ $(tc-arch) == "loong" ]] ; then
+			BDEPEND+=" sys-devel/gcc:12"
+		elif ! is_glibc217 ; then
 			BDEPEND+=" sys-devel/gcc:10"
 		fi
-		if [[ -f /usr/bin/gcc-${GCC_CONFIG_VER} ]] ;then
+		if [[ -f /usr/bin/gcc-${GCC_CONFIG_VER} ]] ; then
 			CC="gcc-${GCC_CONFIG_VER}"
 			CXX="g++-${GCC_CONFIG_VER}"
-		elif [[ $(tc-arch) != "loong" ]] && ! is_glibc217 ; then
+		elif [[ $(tc-arch) == "loong" ]] ; then
+			CC="gcc-12"
+			CXX="g++-12"
+		elif ! is_glibc217 ; then
 			CC="gcc-10"
 			CXX="g++-10"
 		fi
 	elif tc_version_is_between 4.4 4.9 ; then
 		BDEPEND+=" sys-devel/gcc:4.9.4"
-		if [[ -f /usr/bin/gcc-${GCC_CONFIG_VER} ]] ;then
+		if [[ -f /usr/bin/gcc-${GCC_CONFIG_VER} ]] ; then
 			CC="gcc-${GCC_CONFIG_VER}"
 			CXX="g++-${GCC_CONFIG_VER}"
 		else
@@ -552,7 +564,7 @@ if ! is_crosscompile ; then
 		fi
 	elif tc_version_is_between 4.0 4.4 ; then
 		BDEPEND+=" sys-devel/gcc:4.4.7"
-		if [[ -f /usr/bin/gcc-${GCC_CONFIG_VER} ]] ;then
+		if [[ -f /usr/bin/gcc-${GCC_CONFIG_VER} ]] ; then
 			CC="gcc-${GCC_CONFIG_VER}"
 			CXX="g++-${GCC_CONFIG_VER}"
 		else
@@ -563,7 +575,7 @@ if ! is_crosscompile ; then
 		DEPEND="${DEPEND} ${LEGACY_DEPEND}"
 		if [[ $(tc-arch) == "sh" ]] ; then
 			BDEPEND+=" sys-devel/gcc:4.1.2"
-			if [[ -f /usr/bin/gcc-${GCC_CONFIG_VER} ]] ;then
+			if [[ -f /usr/bin/gcc-${GCC_CONFIG_VER} ]] ; then
 				CC="gcc-${GCC_CONFIG_VER}"
 				CXX="g++-${GCC_CONFIG_VER}"
 			else
@@ -572,7 +584,7 @@ if ! is_crosscompile ; then
 			fi
 		else
 			BDEPEND+=" sys-devel/gcc:4.4.7"
-			if [[ -f /usr/bin/gcc-${GCC_CONFIG_VER} ]] ;then
+			if [[ -f /usr/bin/gcc-${GCC_CONFIG_VER} ]] ; then
 				CC="gcc-${GCC_CONFIG_VER}"
 				CXX="g++-${GCC_CONFIG_VER}"
 			else
@@ -583,7 +595,7 @@ if ! is_crosscompile ; then
 	elif tc_version_is_between 2.95 3.4 ; then
 		DEPEND="${DEPEND} ${LEGACY_DEPEND}"
 		BDEPEND+=" sys-devel/gcc:3.4.6"
-		if [[ -f /usr/bin/gcc-${GCC_CONFIG_VER} ]] ;then
+		if [[ -f /usr/bin/gcc-${GCC_CONFIG_VER} ]] ; then
 			CC="gcc-${GCC_CONFIG_VER}"
 			CXX="g++-${GCC_CONFIG_VER}"
 		else

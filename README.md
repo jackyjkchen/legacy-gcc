@@ -40,6 +40,7 @@ Linux glibc本地工具链——
 * sparc64：>=gcc-3.1.1
 
 其中amd64/x86/x32，mips64el/mipsel，mips64/mips，sparc64/sparc已测试支持multilib。
+loongarch架构请对glibc应用patch：etc/portage/patches/sys-libs/glibc/03_workaround-loong-gcc89.patch
 
 Windows/MSDOS交叉工具链——
 * mingw-w64：>=gcc-4.5.4

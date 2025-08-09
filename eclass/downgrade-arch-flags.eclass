@@ -43,6 +43,11 @@ downgrade_arch_flags() {
 			append-flags '-mcpu=ev6'
 		fi
 		;;
+	loong)
+		if ! tc_version_is_at_least 12 ${bver} ; then
+			filter-flags '-march=*' '-mtune=*'
+		fi
+		;;
 	m68k)
 		if ! tc_version_is_at_least 4.3 ${bver} ; then
 			filter-flags '-march=*' '-mtune=*' '-mcpu=*'
