@@ -22,6 +22,7 @@ src_prepare() {
 			eapply "${FILESDIR}"/${PV}/04_hppa-fix-build.patch
 			;;
 	esac
+	eapply "${FILESDIR}"/${PV}/05_add-__LP64__.patch
 
 	use vanilla && return 0
 	eapply "${FILESDIR}"/${PV}/postrelease/000_pr13685.patch

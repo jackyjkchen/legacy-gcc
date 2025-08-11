@@ -18,6 +18,7 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/05_fix-crash-00204.patch
 	eapply "${FILESDIR}"/${PV}/06_sjlj-exception-default.patch
 	eapply "${FILESDIR}"/${PV}/07_add-gxxdg-exp.patch
+	eapply "${FILESDIR}"/${PV}/08_add-__LP64__.patch
 	touch -r gcc/README gcc/configure.in || die
 
 	use vanilla && return 0
