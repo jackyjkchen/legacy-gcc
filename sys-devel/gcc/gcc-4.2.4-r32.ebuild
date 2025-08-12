@@ -15,6 +15,7 @@ src_prepare() {
 	[[ $(tc-arch) == "mips" && ${DEFAULT_ABI} == "n64" ]] && eapply "${FILESDIR}"/${PV}/02_mips64-default-n64-abi.patch
 	[[ $(tc-arch) == "arm" ]] && eapply "${FILESDIR}"/${PV}/03_add-.note.GNU-stack.patch
 	eapply "${FILESDIR}"/${PV}/04_backport-static-libstdc++-option.patch
+	eapply "${FILESDIR}"/${PV}/05_fix-dw2-hang.patch
 
 	use vanilla && return 0
 

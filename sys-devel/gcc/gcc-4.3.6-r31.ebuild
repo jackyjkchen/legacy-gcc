@@ -18,6 +18,7 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/03_backport-static-libstdc++-option.patch
 	eapply "${FILESDIR}"/${PV}/04_support-__builtin_isinf_sign.patch
 	eapply "${FILESDIR}"/${PV}/05_enable-libobjc-in-arm-eabi.patch
+	eapply "${FILESDIR}"/${PV}/06_fix-dw2-hang.patch
 
 	use vanilla && return 0
 
@@ -166,8 +167,7 @@ src_prepare() {
 
 	if use test ; then
 		eapply "${FILESDIR}"/${PV}/postrelease/900_fix-known-test-fail.patch
-		[[ $(tc-arch) == "x86" || $(tc-arch) == "amd64" ]] && eapply "${FILESDIR}"/${PV}/postrelease/901_fix-x86-test-fail.patch
 		[[ $(tc-arch) == "arm" ]] && rm -rf gcc/testsuite/obj-c++.dg/try-catch-11.mm
-		[[ ${CTARGET} == arm*-*-*eabi ]] && eapply "${FILESDIR}"/${PV}/postrelease/902_fix-armel-test-fail.patch
+		[[ ${CTARGET} == arm*-*-*eabi ]] && eapply "${FILESDIR}"/${PV}/postrelease/901_fix-armel-test-fail.patch
 	fi
 }

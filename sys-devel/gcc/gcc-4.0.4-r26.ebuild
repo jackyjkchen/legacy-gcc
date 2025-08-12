@@ -19,6 +19,7 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/06_backport-static-libstdc++-option.patch
 	eapply "${FILESDIR}"/${PV}/07_fix-werror.patch
 	eapply "${FILESDIR}"/${PV}/08_fix-random-build-break.patch
+	eapply "${FILESDIR}"/${PV}/09_fix-dw2-hang.patch
 
 	use vanilla && return 0
 

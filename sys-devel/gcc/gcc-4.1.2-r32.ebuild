@@ -21,6 +21,7 @@ src_prepare() {
 	! is_crosscompile && eapply "${FILESDIR}"/${PV}/08_workaround-bootstrap.patch
 	eapply "${FILESDIR}"/${PV}/09_Unset-_M_init.patch
 	eapply "${FILESDIR}"/${PV}/10_backport-static-libstdc++-option.patch
+	eapply "${FILESDIR}"/${PV}/11_fix-dw2-hang.patch
 
 	use vanilla && return 0
 
