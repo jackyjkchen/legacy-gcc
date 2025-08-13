@@ -10,6 +10,18 @@ index 92b1d32..566ae11 100644
  
  extern "C" void abort ();
  
+diff --git a/gcc/testsuite/gcc.c-torture/compile/compile.exp b/gcc/testsuite/gcc.c-torture/compile/compile.exp
+index 1b075a8..949c748 100644
+--- a/gcc/testsuite/gcc.c-torture/compile/compile.exp
++++ b/gcc/testsuite/gcc.c-torture/compile/compile.exp
+@@ -24,6 +24,7 @@ if $tracelevel then {
+ 
+ # load support procs
+ load_lib c-torture.exp
++load_lib target-supports.exp
+ 
+ foreach testcase [glob -nocomplain $srcdir/$subdir/*.c] {
+     # If we're only testing specific files and this isn't one of them, skip it.
 diff --git a/gcc/testsuite/gcc.c-torture/execute/20020227-1.x b/gcc/testsuite/gcc.c-torture/execute/20020227-1.x
 index 3c3c4bb..4e71947 100644
 --- a/gcc/testsuite/gcc.c-torture/execute/20020227-1.x
@@ -106,6 +118,20 @@ index 0000000..32db2d8
 +}
 +
 +return 0
+diff --git a/gcc/testsuite/gcc.c-torture/execute/ieee/ieee.exp b/gcc/testsuite/gcc.c-torture/execute/ieee/ieee.exp
+index 6b23a4e..f0120a3 100644
+--- a/gcc/testsuite/gcc.c-torture/execute/ieee/ieee.exp
++++ b/gcc/testsuite/gcc.c-torture/execute/ieee/ieee.exp
+@@ -38,6 +38,9 @@ set additional_flags "";
+ if [istarget "i\[34567\]86-*-*"] then {
+   lappend additional_flags "-ffloat-store"
+ }
++if { [istarget "x86_64-*-*"] && [check_effective_target_ilp32] } then {
++  lappend additional_flags "-ffloat-store"
++}
+ if [istarget "m68k-*-*"] then {
+   lappend additional_flags "-ffloat-store"
+ }
 diff --git a/gcc/testsuite/gcc.dg/20020103-1.c b/gcc/testsuite/gcc.dg/20020103-1.c
 index 7a5fdbe..54ad83c 100644
 --- a/gcc/testsuite/gcc.dg/20020103-1.c
@@ -148,6 +174,201 @@ index b887502..870a9a7 100644
      dg-finish
  } else {
      unsupported "gcsec-1.c"
+diff --git a/gcc/testsuite/gcc.misc-tests/linkage.exp b/gcc/testsuite/gcc.misc-tests/linkage.exp
+index 4778376..cb0122d 100644
+--- a/gcc/testsuite/gcc.misc-tests/linkage.exp
++++ b/gcc/testsuite/gcc.misc-tests/linkage.exp
+@@ -27,6 +27,12 @@ if [isnative] then {
+ 
+ 	# Need to ensure ABI for native compiler matches gcc
+ 	set native_cflags ""
++	if [istarget "x86_64-*-linux*"] {
++	    set file_string [exec file "linkage-x.o"]
++	    if [ string match "*32-bit*" $file_string ] {
++		set native_cflags "-m32"
++	    }
++	}
+ 	if  [istarget "mips-sgi-irix6*"] {
+ 	    set file_string [exec file "linkage-x.o"]
+ 	    if [ string match "*64*" $file_string ] {
+diff --git a/gcc/testsuite/lib/target-supports.exp b/gcc/testsuite/lib/target-supports.exp
+index 8664256..314d035 100644
+--- a/gcc/testsuite/lib/target-supports.exp
++++ b/gcc/testsuite/lib/target-supports.exp
+@@ -19,6 +19,47 @@
+ 
+ # This file defines procs for determining features supported by the target.
+ 
++# Try to compile some code and return the messages printed by the compiler.
++#
++# BASENAME is a basename to use for temporary files.
++# TYPE is the type of compilation to perform (see target_compile).
++# CONTENTS gives the contents of the input file.
++# The rest is optional:
++# OPTIONS: additional compiler options to use.
++proc get_compiler_messages {basename type contents args} {
++    global tool
++
++    if { [llength $args] > 0 } {
++	set options "additional_flags=[lindex $args 0]"
++    } else {
++	set options ""
++    }
++
++    set src ${basename}[pid].c
++    switch $type {
++	assembly { set output ${basename}[pid].s }
++	object { set output ${basename}[pid].o }
++    }
++    set f [open $src "w"]
++    puts $f $contents
++    close $f
++    set lines [${tool}_target_compile $src $output $type "$options"]
++    file delete $src
++    remote_file build delete $output
++
++    return $lines
++}
++
++proc current_target_name { } {
++    global target_info
++    if [info exists target_info(target,name)] {
++	set answer $target_info(target,name)
++    } else {
++	set answer ""
++    }
++    return $answer
++}
++
+ ###############################
+ # proc check_weak_available { }
+ ###############################
+@@ -106,3 +147,125 @@ proc check_alias_available { testfile } {
+ 
+     return $alias_available_saved
+ }
++
++# Return 1 if -fpic and -fPIC are supported, as in no warnings or errors
++# emitted, 0 otherwise.  Whether a shared library can actually be built is
++# out of scope for this test.
++#
++# When the target name changes, replace the cached result.
++
++proc check_effective_target_fpic { } {
++    global et_fpic_saved
++    global et_fpic_target_name
++
++    if { ![info exists et_fpic_target_name] } {
++	set et_fpic_target_name ""
++    }
++
++    # If the target has changed since we set the cached value, clear it.
++    set current_target [current_target_name]
++    if { $current_target != $et_fpic_target_name } {
++	verbose "check_effective_target_fpic: `$et_fpic_target_name'" 2
++	set et_fpic_target_name $current_target
++	if [info exists et_fpic_saved] {
++	    verbose "check_effective_target_fpic: removing cached result" 2
++	    unset et_fpic_saved
++	}
++    }
++
++    if [info exists et_fpic_saved] {
++	verbose "check_effective_target_fpic: using cached result" 2
++    } else {
++	verbose "check_effective_target_fpic: compiling source" 2
++
++	# Note that M68K has a multilib that supports -fpic but not
++	# -fPIC, so we need to check both.  We test with a program that
++	# requires GOT references.
++	set et_fpic_saved [string match "" [get_compiler_messages fpic object {
++	    extern int foo (void); extern int bar;
++	    int baz (void) { return foo () + bar; }
++	} "-fpic"]]
++
++	if { $et_fpic_saved != 0 } {
++	    set et_fpic_saved [string match "" [get_compiler_messages fpic object {
++		extern int foo (void); extern int bar;
++		int baz (void) { return foo () + bar; }
++	    } "-fPIC"]]
++	}
++    }
++    verbose "check_effective_target_fpic: returning $et_fpic_saved" 2
++    return $et_fpic_saved
++}
++
++# Return 1 if we're generating 32-bit code using default options, 0
++# otherwise.
++#
++# When the target name changes, replace the cached result.
++
++proc check_effective_target_ilp32 { } {
++    global et_ilp32_saved
++    global et_ilp32_target_name
++
++    if { ![info exists et_ilp32_target_name] } {
++	set et_ilp32_target_name ""
++    }
++
++    # If the target has changed since we set the cached value, clear it.
++    set current_target [current_target_name]
++    if { $current_target != $et_ilp32_target_name } {
++	verbose "check_effective_target_ilp32: `$et_ilp32_target_name' `$current_target'" 2
++	set et_ilp32_target_name $current_target
++	if { [info exists et_ilp32_saved] } {
++	    verbose "check_effective_target_ilp32: removing cached result" 2
++	    unset et_ilp32_saved
++	}
++    }
++
++    if [info exists et_ilp32_saved] {
++	verbose "check-effective_target_ilp32: using cached result" 2
++    } else {
++	verbose "check_effective_target_ilp32: compiling source" 2
++	set et_ilp32_saved [string match "" [get_compiler_messages ilp32 object {
++	    int dummy[(sizeof (int) == 4 && sizeof (void *) == 4 && sizeof (long) == 4 ) ? 1 : -1];
++	}]]
++    }
++    verbose "check_effective_target_ilp32: returning $et_ilp32_saved" 2
++    return $et_ilp32_saved
++}
++
++# Return 1 if we're generating 64-bit code using default options, 0
++# otherwise.
++#
++# When the target name changes, replace the cached result.
++
++proc check_effective_target_lp64 { } {
++    global et_lp64_saved
++    global et_lp64_target_name
++
++    if { ![info exists et_lp64_target_name] } {
++	set et_lp64_target_name ""
++    }
++
++    # If the target has changed since we set the cached value, clear it.
++    set current_target [current_target_name]
++    if { $current_target != $et_lp64_target_name } {
++	verbose "check_effective_target_lp64: `$et_lp64_target_name' `$current_target'" 2
++	set et_lp64_target_name $current_target
++	if [info exists et_lp64_saved] {
++	    verbose "check_effective_target_lp64: removing cached result" 2
++	    unset et_lp64_saved
++	}
++    }
++
++    if [info exists et_lp64_saved] {
++	verbose "check_effective_target_lp64: using cached result" 2
++    } else {
++	verbose "check_effective_target_lp64: compiling source" 2
++	set et_lp64_saved [string match "" [get_compiler_messages lp64 object {
++	    int dummy[(sizeof (int) == 4 && sizeof (void *) == 8 && sizeof (long) == 8 ) ? 1 : -1];
++	}]]
++    }
++    verbose "check_effective_target_lp64: returning $et_lp64_saved" 2
++    return $et_lp64_saved
++}
++
 diff --git a/libstdc++-v3/testsuite/22_locale/codecvt_members_char_char.cc b/libstdc++-v3/testsuite/22_locale/codecvt_members_char_char.cc
 index 9cf4e7d..25a36ef 100644
 --- a/libstdc++-v3/testsuite/22_locale/codecvt_members_char_char.cc
