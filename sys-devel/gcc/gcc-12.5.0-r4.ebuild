@@ -13,7 +13,7 @@ MUSL_VER="3"
 
 inherit toolchain
 
-KEYWORDS="alpha amd64 arm arm64 hppa m68k mips ppc ppc64 riscv s390 sh sparc x86"
+KEYWORDS="alpha amd64 arm arm64 hppa loong m68k mips ppc ppc64 riscv s390 sh sparc x86"
 
 if [[ ${CATEGORY} != cross-* ]] ; then
 	# Technically only if USE=hardened *too* right now, but no point in complicating it further.
