@@ -2343,7 +2343,7 @@ toolchain_src_configure() {
 		case $(tc-arch) in
 			loong)
 				if tc_version_is_between 8 10 ; then
-					confgcc+=( --with-as=/usr/$CHOST/binutils-bin/2.39/as --with-ld=/usr/$CHOST/binutils-bin/2.39/ld )
+					confgcc+=( --with-as=/usr/$CHOST/binutils-bin/2.39/as --with-ld=/usr/bin/ld )
 				fi
 				;;
 			*)
@@ -2878,6 +2878,8 @@ toolchain_src_test() {
 		fi
 		# A handful of Ada (and objc++?) tests need an executable stack
 		if tc_version_is_at_least 12 ; then
+			GCC_TESTS_LDFLAGS+=" -Wl,--no-warn-execstack"
+		elif [[ $(tc-arch) == "loong" ]] ; then
 			GCC_TESTS_LDFLAGS+=" -Wl,--no-warn-execstack"
 		fi
 		# Avoid confusing tests like Fortran/C interop ones where

@@ -7,10 +7,6 @@
 # We install binutils into CTARGET-VERSION specific directories.  This lets
 # us easily merge multiple versions for multiple targets (if we wish) and
 # then switch the versions on the fly (with `binutils-config`).
-#
-# binutils-9999           -> live git
-# binutils-9999_preYYMMDD -> nightly snapshot date YYMMDD
-# binutils-#              -> normal release
 
 inherit libtool flag-o-matic gnuconfig strip-linguas toolchain-funcs downgrade-arch-flags
 case ${EAPI:-0} in
@@ -88,7 +84,7 @@ if tc_version_is_at_least 2.18 ; then
 else
 	LICENSE="|| ( GPL-2 LGPL-2 )"
 fi
-IUSE="+cxx doc multitarget +nls static-libs test"
+IUSE="+cxx doc multitarget nls static-libs test"
 if tc_version_is_at_least 2.21 ; then
 	IUSE+=" gold"
 fi
@@ -377,10 +373,6 @@ toolchain-binutils_src_configure() {
 			$(use_enable gprofng)
 		)
 	fi
-
-	myconf+=( 
-		${EXTRA_ECONF}
-	)
 
 	ECONF_SOURCE="${S}" econf "${myconf[@]}" || die
 
