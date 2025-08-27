@@ -10,7 +10,7 @@ MUSL_VER="2"
 
 inherit toolchain
 
-KEYWORDS="alpha amd64 arm arm64 hppa ia64 m68k mips ppc ppc64 riscv s390 sparc x86"
+KEYWORDS="alpha amd64 arm arm64 hppa loong m68k mips ppc ppc64 riscv s390 sparc x86"
 
 src_prepare() {
 	if has_version '>=sys-libs/glibc-2.32-r1'; then
@@ -55,7 +55,7 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/028_pr104996.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/029_pr105980.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/030_pr116512.patch
-	eapply "${FILESDIR}"/${PV}/postrelease/031_pr96383.patch
+	[[ $(tc-arch) != "loong" ]] &&eapply "${FILESDIR}"/${PV}/postrelease/031_pr96383.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/032_pr85620.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/033_pr97952.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/034_pr93762-100651.patch
@@ -229,5 +229,6 @@ src_prepare() {
 		eapply "${FILESDIR}"/${PV}/postrelease/900_fix-known-test-fail.patch
 		[[ $(tc-arch) == "arm64" ]] && eapply "${FILESDIR}"/${PV}/postrelease/901_fix-aarch64-test-fail.patch
 		[[ $(tc-arch) == "arm" ]] && eapply "${FILESDIR}"/${PV}/postrelease/902_fix-arm-test-fail.patch
+		[[ $(tc-arch) == "loong" ]] && eapply "${FILESDIR}"/${PV}/postrelease/903_fix-loong-test-fail.patch
 	fi
 }

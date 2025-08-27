@@ -44,7 +44,7 @@ downgrade_arch_flags() {
 		fi
 		;;
 	loong)
-		if ! tc_version_is_at_least 12 ${bver} ; then
+		if ! tc_version_is_at_least 10 ${bver} ; then
 			filter-flags '-march=*' '-mtune=*'
 		fi
 		;;

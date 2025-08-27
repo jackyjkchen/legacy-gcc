@@ -5,7 +5,7 @@ EAPI=8
 
 inherit toolchain
 
-KEYWORDS="alpha amd64 arm hppa ia64 m68k mips ppc ppc64 s390 sh sparc x86"
+KEYWORDS="alpha amd64 arm hppa m68k mips ppc ppc64 s390 sh sparc x86"
 
 src_prepare() {
 	eapply "${FILESDIR}"/${PV}/00_gcc-4.1.3-without-change-version.patch

@@ -445,7 +445,7 @@ tc_version_is_at_least 2.95 && BDEPEND+=" test? ( dev-util/dejagnu sys-devel/aut
 
 case $(tc-arch) in
 	loong)
-		if tc_version_is_between 8 10 ; then
+		if tc_version_is_between 8 11 ; then
 			BDEPEND+=" ${CATEGORY}/binutils:2.39"
 		fi
 		;;
@@ -2076,6 +2076,12 @@ toolchain_src_configure() {
 			# Enable sjlj exceptions for backward compatibility on hppa
 			tc_version_is_at_least 3.4 || confgcc+=( --enable-sjlj-exceptions )
 			;;
+		loong)
+			confgcc+=(
+				--disable-libquadmath
+				--disable-libquadmath-support
+			)
+			;;
 		ppc)
 			# Set up defaults based on current CFLAGS
 			is-flagq -mfloat-gprs=double && confgcc+=( --enable-e500-double )
@@ -2342,7 +2348,7 @@ toolchain_src_configure() {
 	if ! is_crosscompile && [[ ${CBUILD} == ${CHOST} ]] ; then
 		case $(tc-arch) in
 			loong)
-				if tc_version_is_between 8 10 ; then
+				if tc_version_is_between 8 11 ; then
 					confgcc+=( --with-as=/usr/$CHOST/binutils-bin/2.39/as --with-ld=/usr/bin/ld )
 				fi
 				;;
