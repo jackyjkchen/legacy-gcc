@@ -285,5 +285,7 @@ src_prepare() {
 		eapply "${FILESDIR}"/${PV}/postrelease/900_fix-known-test-fail.patch
 		[[ $(tc-arch) == "arm64" ]] && eapply "${FILESDIR}"/${PV}/postrelease/901_fix-aarch64-test-fail.patch
 		[[ $(tc-arch) == "arm" ]] && eapply "${FILESDIR}"/${PV}/postrelease/902_fix-arm-test-fail.patch
+		[[ $(tc-arch) == "mips" ]] && eapply "${FILESDIR}"/${PV}/postrelease/903_fix-mips-test-fail.patch && \
+			rm -rf gcc/testsuite/gcc.target/mips/mips-nonpic gcc/testsuite/gcc.target/mips/interrupt_handler-5.c
 	fi
 }

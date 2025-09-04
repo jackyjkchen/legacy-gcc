@@ -2731,7 +2731,7 @@ gcc_do_make() {
 	elif [[ ${GCC_BRANCH_VER} == "3.4" && $(tc-arch) == "hppa" ]] ; then
 		STAGE1_CFLAGS="-O1 -pipe"
 	elif [[ ${GCC_BRANCH_VER} == "3.0" ]] ; then
-		STAGE1_CFLAGS="-O1 -pipe"
+		STAGE1_CFLAGS="-O1 -pipe -D_FILE_OFFSET_BITS=64"
 	else
 		STAGE1_CFLAGS=${STAGE1_CFLAGS-"${CFLAGS}"}
 	fi
@@ -2914,6 +2914,7 @@ toolchain_src_test() {
 		# XXX: Disabled until validate_failures.py can handle 'variants'
 		# XXX: https://gcc.gnu.org/PR116260
 		[[ $(tc-arch) == "amd64" ]] && is_multilib && GCC_TESTS_RUNTESTFLAGS="--target_board=unix\{,-m32\}"
+		[[ $(tc-arch) == "mips" ]] && is_multilib && GCC_TESTS_RUNTESTFLAGS="--target_board=unix\{-mabi=64,-mabi=n32,-mabi=32\}"
 
 		# nonfatal here as we die if the comparison below fails. Also, note that
 		# the exit code of targets other than 'check' may be unreliable.

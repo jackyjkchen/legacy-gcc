@@ -58,18 +58,18 @@ downgrade_arch_flags() {
 		if ! tc_version_is_at_least 4.4 ${bver} ; then
 			filter-flags '-march=*' '-mtune=*' '-mips*'
 			if ! tc_version_is_at_least 3.1 ${bver} ; then
-				append-flags '-mips2'
+				append-flags '-mips2' '-D_FILE_OFFSET_BITS=64'
 			elif ! tc_version_is_at_least 3.3 ${bver} ; then
 				if [[ ${ABI} == "n64" || ${ABI} == "n32" ]]; then
-					append-flags '-mips3'
+					append-flags '-mips3' '-D_FILE_OFFSET_BITS=64'
 				else
-					append-flags '-mips2'
+					append-flags '-mips2' '-D_FILE_OFFSET_BITS=64'
 				fi
 			elif ! tc_version_is_at_least 3.4 ${bver} ; then
 				if [[ ${ABI} == "n64" || ${ABI} == "n32" ]]; then
-					append-flags '-march=mips64' '-mtune=mips64'
+					append-flags '-march=mips64' '-mtune=mips64' '-D_FILE_OFFSET_BITS=64'
 				else
-					append-flags '-march=mips32' '-mtune=mips32'
+					append-flags '-march=mips32' '-mtune=mips32' '-D_FILE_OFFSET_BITS=64'
 				fi
 			else
 				if [[ ${ABI} == "n64" || ${ABI} == "n32" ]]; then

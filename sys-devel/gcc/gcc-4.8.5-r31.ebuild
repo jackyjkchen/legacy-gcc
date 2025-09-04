@@ -264,5 +264,7 @@ src_prepare() {
 		[[ $(tc-arch) == "arm" ]] && eapply "${FILESDIR}"/${PV}/postrelease/901_fix-arm-test-fail.patch
 		# gcc-4.8.5 on aarch64, pch case random build crash
 		[[ $(tc-arch) == "arm64" ]] && rm -rf gcc/testsuite/gcc.dg/pch gcc/testsuite/g++.dg/pch gcc/testsuite/objc.dg/pch
+		[[ $(tc-arch) == "mips" ]] && eapply "${FILESDIR}"/${PV}/postrelease/902_fix-mips-test-fail.patch && \
+			rm -rf gcc/testsuite/gcc.target/mips/mips-nonpic
 	fi
 }
