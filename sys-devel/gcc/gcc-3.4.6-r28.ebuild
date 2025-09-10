@@ -20,8 +20,8 @@ src_prepare() {
 			;;
 		mips)
 			eapply "${FILESDIR}"/${PV}/01_backport-mips-t-linux64.patch
-			[[ ${DEFAULT_ABI} == "n64" ]] && eapply "${FILESDIR}"/${PV}/02_mips64-default-n64-abi.patch
-			[[ ${DEFAULT_ABI} == "n32" ]] && eapply "${FILESDIR}"/${PV}/02_mips64-default-n32-abi.patch
+			# g77 ICE on n64
+			[[ ${DEFAULT_ABI} == "n32" || ${DEFAULT_ABI} == "n64" ]] && eapply "${FILESDIR}"/${PV}/02_mips64-default-n32-abi.patch
 			;;
 		hppa)
 			eapply "${FILESDIR}"/${PV}/03_hppa-fix-build.patch

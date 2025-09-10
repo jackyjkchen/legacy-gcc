@@ -572,6 +572,10 @@ if ! is_crosscompile ; then
 			else
 				CC="gcc-4.4.7"
 				CXX="g++-4.4.7"
+				if [[ $(tc-arch) == "mips" ]] ; then
+					CC="${CC} ${CFLAGS_n32}"
+					CXX="${CXX} ${CFLAGS_n32}"
+				fi
 			fi
 		fi
 	elif tc_version_is_between 2.95 3.4 ; then
@@ -2058,7 +2062,7 @@ toolchain_src_configure() {
 			;;
 		mips)
 			# Add --with-abi flags to set default ABI
-			tc_version_is_at_least 3.4 && confgcc+=( --with-abi=$(gcc-abi-map ${TARGET_DEFAULT_ABI}) )
+			tc_version_is_at_least 4.0 && confgcc+=( --with-abi=$(gcc-abi-map ${TARGET_DEFAULT_ABI}) )
 			;;
 		amd64)
 			# drop the older/ABI checks once this gets merged into some
@@ -2914,7 +2918,13 @@ toolchain_src_test() {
 		# XXX: Disabled until validate_failures.py can handle 'variants'
 		# XXX: https://gcc.gnu.org/PR116260
 		[[ $(tc-arch) == "amd64" ]] && is_multilib && GCC_TESTS_RUNTESTFLAGS="--target_board=unix\{,-m32\}"
-		[[ $(tc-arch) == "mips" ]] && is_multilib && GCC_TESTS_RUNTESTFLAGS="--target_board=unix\{-mabi=64,-mabi=n32,-mabi=32\}"
+		if [[ $(tc-arch) == "mips" ]] && is_multilib ; then
+			if tc_version_is_at_least 3.4 ; then
+				GCC_TESTS_RUNTESTFLAGS="--target_board=unix\{-mabi=64,-mabi=n32,-mabi=32\}"
+			else
+				GCC_TESTS_RUNTESTFLAGS="--target_board=unix\{-mabi=n32,-mabi=32\}"
+			fi
+		fi
 
 		# nonfatal here as we die if the comparison below fails. Also, note that
 		# the exit code of targets other than 'check' may be unreliable.

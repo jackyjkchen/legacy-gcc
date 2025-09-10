@@ -159,5 +159,7 @@ src_prepare() {
 		eapply "${FILESDIR}"/${PV}/postrelease/900_fix-known-test-fail.patch
 		[[ $(tc-arch) == "amd64" ]] && eapply "${FILESDIR}"/${PV}/postrelease/901_workaround-pr34999.patch
 		[[ ${CTARGET} == arm*-*-*eabi ]] && eapply "${FILESDIR}"/${PV}/postrelease/902_fix-armel-test-fail.patch
+		[[ $(tc-arch) == "mips" ]] && eapply "${FILESDIR}"/${PV}/postrelease/903_fix-mips-test-fail.patch && \
+			rm -rf gcc/testsuite/gcc.target/mips/mips-nonpic
 	fi
 }

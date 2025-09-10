@@ -180,5 +180,7 @@ src_prepare() {
 
 	if use test ; then
 		eapply "${FILESDIR}"/${PV}/postrelease/900_fix-known-test-fail.patch
+		[[ $(tc-arch) == "mips" ]] && eapply "${FILESDIR}"/${PV}/postrelease/901_fix-mips-test-fail.patch && \
+			rm -rf gcc/testsuite/gcc.target/mips/mips-nonpic
 	fi
 }
