@@ -1,0 +1,720 @@
+diff --git a/gcc/Makefile.in b/gcc/Makefile.in
+index e3d0c788..e1ab283a 100644
+--- a/gcc/Makefile.in
++++ b/gcc/Makefile.in
+@@ -936,6 +936,9 @@ C_TARGET_OBJS=@c_target_objs@
+ # Target specific, C++ specific object file
+ CXX_TARGET_OBJS=@cxx_target_objs@
+ 
++# Object files for gcc driver.
++GCC_OBJS = gcc.o opts-common.o gcc-options.o
++
+ # Language-specific object files for C and Objective C.
+ C_AND_OBJC_OBJS = attribs.o c-errors.o c-lex.o c-pragma.o c-decl.o c-typeck.o \
+   c-convert.o c-aux-info.o c-common.o c-opts.o c-format.o c-semantics.o \
+@@ -975,7 +978,7 @@ OBJS-common = \
+  haifa-sched.o hooks.o ifcvt.o insn-attrtab.o insn-emit.o insn-modes.o	   \
+  insn-extract.o insn-opinit.o insn-output.o insn-peep.o insn-recog.o	   \
+  integrate.o intl.o jump.o  langhooks.o lcm.o lists.o local-alloc.o  	   \
+- loop.o mode-switching.o modulo-sched.o optabs.o options.o opts.o	   \
++ loop.o mode-switching.o modulo-sched.o optabs.o options.o opts.o opts-common.o \
+  params.o postreload.o postreload-gcse.o predict.o			   \
+  insn-preds.o pointer-set.o 					   	   \
+  print-rtl.o print-tree.o profile.o value-prof.o var-tracking.o		   \
+@@ -1220,18 +1223,18 @@ libbackend.a: $(OBJS@onestep@)
+ # We call this executable `xgcc' rather than `gcc'
+ # to avoid confusion if the current directory is in the path
+ # and CC is `gcc'.  It is renamed to `gcc' when it is installed.
+-xgcc$(exeext): gcc.o gccspec.o version.o intl.o prefix.o \
++xgcc$(exeext): $(GCC_OBJS) gccspec.o version.o intl.o prefix.o \
+    version.o $(LIBDEPS) $(EXTRA_GCC_OBJS)
+-	$(CC) $(ALL_CFLAGS) $(LDFLAGS) -o $@ gcc.o gccspec.o intl.o \
+-	  prefix.o version.o $(EXTRA_GCC_OBJS) $(LIBS)
++	$(CC) $(ALL_CFLAGS) $(LDFLAGS) -o $@ $(GCC_OBJS) gccspec.o \
++	  intl.o prefix.o version.o $(EXTRA_GCC_OBJS) $(LIBS)
+ 
+ # cpp is to cpp0 as gcc is to cc1.
+ # The only difference from xgcc is that it's linked with cppspec.o
+ # instead of gccspec.o.
+-cpp$(exeext): gcc.o cppspec.o version.o intl.o prefix.o \
++cpp$(exeext): $(GCC_OBJS) cppspec.o version.o intl.o prefix.o \
+    version.o $(LIBDEPS) $(EXTRA_GCC_OBJS)
+-	$(CC) $(ALL_CFLAGS) $(LDFLAGS) -o $@ gcc.o cppspec.o intl.o \
+-	  prefix.o version.o $(EXTRA_GCC_OBJS) $(LIBS)
++	$(CC) $(ALL_CFLAGS) $(LDFLAGS) -o $@ $(GCC_OBJS) cppspec.o \
++	  intl.o prefix.o version.o $(EXTRA_GCC_OBJS) $(LIBS)
+ 
+ # Create links to binutils, especially for in-tree builds, to make -B.
+ # use them.  We need hard links so that directories can be shuffled
+@@ -1613,7 +1616,7 @@ DRIVER_DEFINES = \
+ 
+ gcc.o: gcc.c $(CONFIG_H) $(SYSTEM_H) coretypes.h $(TM_H) intl.h multilib.h \
+     Makefile $(lang_specs_files) specs.h prefix.h $(GCC_H) $(FLAGS_H) \
+-    configargs.h $(OBSTACK_H)
++    configargs.h $(OBSTACK_H) opts.h
+ 	(SHLIB_LINK='$(SHLIB_LINK)' \
+ 	SHLIB_MULTILIB='$(SHLIB_MULTILIB)'; \
+ 	$(CC) $(ALL_CFLAGS) $(ALL_CPPFLAGS) \
+@@ -1685,6 +1688,9 @@ s-options-h: optionlist $(srcdir)/opt-functions.awk $(srcdir)/opth-gen.awk
+ 
+ options.o: options.c $(CONFIG_H) $(SYSTEM_H) coretypes.h $(TM_H) opts.h intl.h
+ 
++gcc-options.o: options.c $(CONFIG_H) $(SYSTEM_H) coretypes.h $(TM_H) opts.h intl.h
++	$(CC) -c $(ALL_CFLAGS) $(ALL_CPPFLAGS) $(OUTPUT_OPTION) -DGCC_DRIVER options.c
++
+ dumpvers: dumpvers.c
+ 
+ version.o: version.c version.h $(DATESTAMP) $(BASEVER) $(DEVPHASE)
+@@ -2026,6 +2032,8 @@ opts.o : opts.c opts.h options.h toplev.h $(CONFIG_H) $(SYSTEM_H) \
+    coretypes.h $(TREE_H) $(TM_H) langhooks.h $(GGC_H) $(RTL_H) \
+    output.h $(DIAGNOSTIC_H) $(TM_P_H) $(INSN_ATTR_H) intl.h $(TARGET_H) \
+    $(FLAGS_H) $(PARAMS_H) tree-pass.h
++opts-common.o : opts-common.c opts.h $(CONFIG_H) $(SYSTEM_H) \
++   coretypes.h intl.h
+ targhooks.o : targhooks.c $(CONFIG_H) $(SYSTEM_H) coretypes.h $(TREE_H) \
+    $(EXPR_H) $(TM_H) $(RTL_H) $(TM_P_H) function.h output.h toplev.h \
+    $(MACHMODE_H) $(TARGET_DEF_H) $(TARGET_H) $(GGC_H) gt-targhooks.h
+diff --git a/gcc/common.opt b/gcc/common.opt
+index 6ac77fdd..4913e6f2 100644
+--- a/gcc/common.opt
++++ b/gcc/common.opt
+@@ -1050,11 +1050,11 @@ Common JoinedOrMissing
+ Generate debug information in default format
+ 
+ gcoff
+-Common JoinedOrMissing
++Common JoinedOrMissing Negative(gdwarf-2)
+ Generate debug information in COFF format
+ 
+ gdwarf-2
+-Common JoinedOrMissing
++Common JoinedOrMissing Negative(gstabs)
+ Generate debug information in DWARF v2 format
+ 
+ ggdb
+@@ -1062,23 +1062,23 @@ Common JoinedOrMissing
+ Generate debug information in default extended format
+ 
+ gstabs
+-Common JoinedOrMissing
++Common JoinedOrMissing Negative(gstabs+)
+ Generate debug information in STABS format
+ 
+ gstabs+
+-Common JoinedOrMissing
++Common JoinedOrMissing Negative(gvms)
+ Generate debug information in extended STABS format
+ 
+ gvms
+-Common JoinedOrMissing
++Common JoinedOrMissing Negative(gxcoff)
+ Generate debug information in VMS format
+ 
+ gxcoff
+-Common JoinedOrMissing
++Common JoinedOrMissing Negative(gxcoff+)
+ Generate debug information in XCOFF format
+ 
+ gxcoff+
+-Common JoinedOrMissing
++Common JoinedOrMissing Negative(gcoff)
+ Generate debug information in extended XCOFF format
+ 
+ o
+diff --git a/gcc/config/i386/i386.opt b/gcc/config/i386/i386.opt
+index 2a51fcbe..ea5151f2 100644
+--- a/gcc/config/i386/i386.opt
++++ b/gcc/config/i386/i386.opt
+@@ -24,7 +24,7 @@ Target RejectNegative Report Mask(128BIT_LONG_DOUBLE)
+ sizeof(long double) is 16
+ 
+ m32
+-Target RejectNegative Report InverseMask(64BIT)
++Target RejectNegative Negative(m64) Report InverseMask(64BIT)
+ Generate 32bit i386 code
+ 
+ m386
+@@ -40,7 +40,7 @@ Target RejectNegative Undocumented
+ ;; Deprecated
+ 
+ m64
+-Target RejectNegative Report Mask(64BIT)
++Target RejectNegative Negative(m32) Report Mask(64BIT)
+ Generate 64bit x86-64 code
+ 
+ m80387
+diff --git a/gcc/cp/Make-lang.in b/gcc/cp/Make-lang.in
+index 7b9b7d90..d54a02cc 100644
+--- a/gcc/cp/Make-lang.in
++++ b/gcc/cp/Make-lang.in
+@@ -60,7 +60,7 @@ g++spec.o: $(srcdir)/cp/g++spec.c $(SYSTEM_H) coretypes.h $(TM_H) $(GCC_H) $(CON
+ 		$(INCLUDES) $(srcdir)/cp/g++spec.c)
+ 
+ # Create the compiler driver for g++.
+-GXX_OBJS = gcc.o g++spec.o intl.o prefix.o version.o
++GXX_OBJS = $(GCC_OBJS) g++spec.o intl.o prefix.o version.o
+ g++$(exeext): $(GXX_OBJS) $(EXTRA_GCC_OBJS) $(LIBDEPS)
+ 	$(CC) $(ALL_CFLAGS) $(LDFLAGS) -o $@ \
+ 	  $(GXX_OBJS) $(EXTRA_GCC_OBJS) $(LIBS)
+diff --git a/gcc/doc/options.texi b/gcc/doc/options.texi
+index b4ada5be..58791c72 100644
+--- a/gcc/doc/options.texi
++++ b/gcc/doc/options.texi
+@@ -135,6 +135,13 @@ variable that is nonzero when the option is enabled.  The options
+ parser will set the variable to 1 when the positive form of the
+ option is used and 0 when the ``no-'' form is used.
+ 
++@item
++If the option uses the @code{Negative} property, @var{var} is the
++the name of an option, with the leading ``-'' removed, which will be
++turned off when this option is turned on.  This chain action will
++propagate through the @code{Negative} property of the option to be
++turned off.
++
+ @item
+ If the option takes an argument and has the @code{UInteger} property,
+ @var{var} is an integer variable that stores the value of the argument.
+diff --git a/gcc/fortran/Make-lang.in b/gcc/fortran/Make-lang.in
+index 0a6fe74f..f708e02b 100644
+--- a/gcc/fortran/Make-lang.in
++++ b/gcc/fortran/Make-lang.in
+@@ -92,7 +92,7 @@ gfortranspec.o: $(srcdir)/fortran/gfortranspec.c $(SYSTEM_H) $(TM_H) $(GCC_H) $(
+ 		$(INCLUDES) $(srcdir)/fortran/gfortranspec.c)
+ 
+ # Create the compiler driver gfortran.
+-GFORTRAN_D_OBJS = gcc.o gfortranspec.o version.o prefix.o intl.o
++GFORTRAN_D_OBJS = $(GCC_OBJS) gfortranspec.o version.o prefix.o intl.o
+ gfortran$(exeext): $(GFORTRAN_D_OBJS) $(EXTRA_GCC_OBJS) $(LIBDEPS)
+ 	$(CC) $(ALL_CFLAGS) $(LDFLAGS) -o $@ \
+ 	  $(GFORTRAN_D_OBJS) $(EXTRA_GCC_OBJS) $(LIBS)
+diff --git a/gcc/gcc.c b/gcc/gcc.c
+index 74d805a5..095c43a2 100644
+--- a/gcc/gcc.c
++++ b/gcc/gcc.c
+@@ -86,6 +86,7 @@ compilation is specified by a string called a "spec".  */
+ #include "prefix.h"
+ #include "gcc.h"
+ #include "flags.h"
++#include "opts.h"
+ 
+ /* By default there is no special suffix for target executables.  */
+ /* FIXME: when autoconf is fixed, remove the host check - dj */
+@@ -6297,6 +6298,8 @@ main (int argc, const char **argv)
+ 
+   xmalloc_set_program_name (programname);
+ 
++  prune_options (&argc, &argv);
++
+ #ifdef GCC_DRIVER_HOST_INITIALIZATION
+   /* Perform host dependent initialization when needed.  */
+   GCC_DRIVER_HOST_INITIALIZATION;
+diff --git a/gcc/java/Make-lang.in b/gcc/java/Make-lang.in
+index 458d65b8..db5384b3 100644
+--- a/gcc/java/Make-lang.in
++++ b/gcc/java/Make-lang.in
+@@ -67,10 +67,10 @@ jvspec.o: $(srcdir)/java/jvspec.c $(SYSTEM_H) coretypes.h $(TM_H) \
+ 		$(INCLUDES) $(srcdir)/java/jvspec.c $(OUTPUT_OPTION))
+ 
+ # Create the compiler driver for $(GCJ).
+-$(GCJ)$(exeext): gcc.o jvspec.o version.o \
++$(GCJ)$(exeext): $(GCC_OBJS) jvspec.o version.o \
+ 	   prefix.o intl.o $(LIBDEPS) $(EXTRA_GCC_OBJS)
+-	$(CC) $(ALL_CFLAGS) $(LDFLAGS) -o $@ gcc.o jvspec.o prefix.o intl.o \
+-	  version.o $(EXTRA_GCC_OBJS) $(LIBS)
++	$(CC) $(ALL_CFLAGS) $(LDFLAGS) -o $@ $(GCC_OBJS) jvspec.o \
++	  prefix.o intl.o version.o $(EXTRA_GCC_OBJS) $(LIBS)
+ 
+ # Create a version of the $(GCJ) driver which calls the cross-compiler.
+ $(GCJ)-cross$(exeext): $(GCJ)$(exeext)
+diff --git a/gcc/java/lang.opt b/gcc/java/lang.opt
+index 001a4a75..d601282e 100644
+--- a/gcc/java/lang.opt
++++ b/gcc/java/lang.opt
+@@ -119,7 +119,7 @@ fcompile-resource=
+ Java Joined RejectNegative
+ 
+ femit-class-file
+-Java Var(flag_emit_class_files) VarExists
++Java Var(flag_emit_class_files)
+ Output a class file
+ 
+ femit-class-files
+diff --git a/gcc/optc-gen.awk b/gcc/optc-gen.awk
+index 189e7c65..83497120 100644
+--- a/gcc/optc-gen.awk
++++ b/gcc/optc-gen.awk
+@@ -62,24 +62,39 @@ for (i = 1; i <= n_headers; i++)
+ print "#include " quote "opts.h" quote
+ print "#include " quote "intl.h" quote
+ print ""
++print "#ifdef GCC_DRIVER"
++print "int target_flags;"
++print "#endif /* GCC_DRIVER */"
++print ""
+ 
+ for (i = 0; i < n_opts; i++) {
+ 	name = var_name(flags[i]);
+ 	if (name == "")
+ 		continue;
+ 
+-	if (flag_set_p("VarExists", flags[i]))
+-		continue;
+-
+-	init = opt_args("Init", flags[i])
+-	if (init != "")
+-		init = " = " init;
+-	else if (name in var_seen)
+-		continue;
++	if (flag_set_p("VarExists", flags[i])) {
++		# Need it for the gcc driver.
++		if (name in var_seen)
++			continue;
++		init = ""
++		gcc_driver = 1
++	}
++	else {
++		init = opt_args("Init", flags[i])
++		if (init != "")
++			init = " = " init;
++		else if (name in var_seen)
++			continue;
++		gcc_driver = 0
++	}
+ 
++	if (gcc_driver == 1)
++		print "#ifdef GCC_DRIVER"
+ 	print "/* Set by -" opts[i] "."
+ 	print "   " help[i] "  */"
+ 	print var_type(flags[i]) name init ";"
++	if (gcc_driver == 1)
++		print "#endif /* GCC_DRIVER */"
+ 	print ""
+ 
+ 	var_seen[name] = 1;
+@@ -107,8 +122,21 @@ print "const unsigned int cl_options_count = N_OPTS;\n"
+ 
+ print "const struct cl_option cl_options[] =\n{"
+ 
+-for (i = 0; i < n_opts; i++)
++j = 0
++for (i = 0; i < n_opts; i++) {
+ 	back_chain[i] = "N_OPTS";
++	indices[opts[i]] = j;
++	# Combine the flags of identical switches.  Switches
++	# appear many times if they are handled by many front
++	# ends, for example.
++	while( i + 1 != n_opts && opts[i] == opts[i + 1] ) {
++		flags[i + 1] = flags[i] " " flags[i + 1];
++		i++;
++		back_chain[i] = "N_OPTS";
++		indices[opts[i]] = j;
++	}
++	j++;
++}
+ 
+ for (i = 0; i < n_opts; i++) {
+ 	# Combine the flags of identical switches.  Switches
+@@ -147,8 +175,21 @@ for (i = 0; i < n_opts; i++) {
+ 	else
+ 		hlp = quote help[i] quote;
+ 
+-	printf("  { %c-%s%c,\n    %s,\n    %s, %u,\n",
+-	       quote, opts[i], quote, hlp, back_chain[i], len)
++	neg = opt_args("Negative", flags[i]);
++	if (neg != "")
++		idx = indices[neg]
++	else {
++		if (flag_set_p("RejectNegative", flags[i]))
++			idx = -1;
++		else {
++			if (opts[i] ~ "^[Wfm]")
++				idx = indices[opts[i]];
++			else
++				idx = -1;
++		}
++	}
++	printf("  { %c-%s%c,\n    %s,\n    %s, %u, %d,\n",
++	       quote, opts[i], quote, hlp, back_chain[i], len, idx)
+ 	condition = opt_args("Condition", flags[i])
+ 	cl_flags = switch_flags(flags[i])
+ 	if (condition != "")
+diff --git a/gcc/opts-common.c b/gcc/opts-common.c
+new file mode 100644
+index 00000000..f3f65420
+--- /dev/null
++++ b/gcc/opts-common.c
+@@ -0,0 +1,233 @@
++/* Command line option handling.
++   Copyright (C) 2006 Free Software Foundation, Inc.
++
++This file is part of GCC.
++
++GCC is free software; you can redistribute it and/or modify it under
++the terms of the GNU General Public License as published by the Free
++Software Foundation; either version 2, or (at your option) any later
++version.
++
++GCC is distributed in the hope that it will be useful, but WITHOUT ANY
++WARRANTY; without even the implied warranty of MERCHANTABILITY or
++FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
++for more details.
++
++You should have received a copy of the GNU General Public License
++along with GCC; see the file COPYING.  If not, write to the Free
++Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
++02110-1301, USA.  */
++
++#include "config.h"
++#include "system.h"
++#include "intl.h"
++#include "coretypes.h"
++#include "opts.h"
++
++/* Perform a binary search to find which option the command-line INPUT
++   matches.  Returns its index in the option array, and N_OPTS
++   (cl_options_count) on failure.
++
++   This routine is quite subtle.  A normal binary search is not good
++   enough because some options can be suffixed with an argument, and
++   multiple sub-matches can occur, e.g. input of "-pedantic" matching
++   the initial substring of "-pedantic-errors".
++
++   A more complicated example is -gstabs.  It should match "-g" with
++   an argument of "stabs".  Suppose, however, that the number and list
++   of switches are such that the binary search tests "-gen-decls"
++   before having tested "-g".  This doesn't match, and as "-gen-decls"
++   is less than "-gstabs", it will become the lower bound of the
++   binary search range, and "-g" will never be seen.  To resolve this
++   issue, opts.sh makes "-gen-decls" point, via the back_chain member,
++   to "-g" so that failed searches that end between "-gen-decls" and
++   the lexicographically subsequent switch know to go back and see if
++   "-g" causes a match (which it does in this example).
++
++   This search is done in such a way that the longest match for the
++   front end in question wins.  If there is no match for the current
++   front end, the longest match for a different front end is returned
++   (or N_OPTS if none) and the caller emits an error message.  */
++size_t
++find_opt (const char *input, int lang_mask)
++{
++  size_t mn, mx, md, opt_len;
++  size_t match_wrong_lang;
++  int comp;
++
++  mn = 0;
++  mx = cl_options_count;
++
++  /* Find mn such this lexicographical inequality holds:
++     cl_options[mn] <= input < cl_options[mn + 1].  */
++  while (mx - mn > 1)
++    {
++      md = (mn + mx) / 2;
++      opt_len = cl_options[md].opt_len;
++      comp = strncmp (input, cl_options[md].opt_text + 1, opt_len);
++
++      if (comp < 0)
++	mx = md;
++      else
++	mn = md;
++    }
++
++  /* This is the switch that is the best match but for a different
++     front end, or cl_options_count if there is no match at all.  */
++  match_wrong_lang = cl_options_count;
++
++  /* Backtrace the chain of possible matches, returning the longest
++     one, if any, that fits best.  With current GCC switches, this
++     loop executes at most twice.  */
++  do
++    {
++      const struct cl_option *opt = &cl_options[mn];
++
++      /* Is the input either an exact match or a prefix that takes a
++	 joined argument?  */
++      if (!strncmp (input, opt->opt_text + 1, opt->opt_len)
++	  && (input[opt->opt_len] == '\0' || (opt->flags & CL_JOINED)))
++	{
++	  /* If language is OK, return it.  */
++	  if (opt->flags & lang_mask)
++	    return mn;
++
++	  /* If we haven't remembered a prior match, remember this
++	     one.  Any prior match is necessarily better.  */
++	  if (match_wrong_lang == cl_options_count)
++	    match_wrong_lang = mn;
++	}
++
++      /* Try the next possibility.  This is cl_options_count if there
++	 are no more.  */
++      mn = opt->back_chain;
++    }
++  while (mn != cl_options_count);
++
++  /* Return the best wrong match, or cl_options_count if none.  */
++  return match_wrong_lang;
++}
++
++/* Return true if NEXT_OPT_IDX cancels OPT_IDX.  Return false if the
++   next one is the same as ORIG_NEXT_OPT_IDX.  */
++
++static bool
++cancel_option (int opt_idx, int next_opt_idx, int orig_next_opt_idx)
++{
++  /* An option can be canceled by the same option or an option with
++     Negative.  */
++  if (cl_options [next_opt_idx].neg_index == opt_idx)
++    return true;
++
++  if (cl_options [next_opt_idx].neg_index != orig_next_opt_idx)
++    return cancel_option (opt_idx, cl_options [next_opt_idx].neg_index,
++			  orig_next_opt_idx);
++    
++  return false;
++}
++
++/* Filter out options canceled by the ones after them.  */
++
++void
++prune_options (int *argcp, char ***argvp)
++{
++  int argc = *argcp;
++  int *options = xmalloc (argc * sizeof (*options));
++  char **argv = xmalloc (argc * sizeof (char *));
++  int i, arg_count, need_prune = 0;
++  const struct cl_option *option;
++  size_t opt_index;
++
++  /* Scan all arguments.  */
++  for (i = 1; i < argc; i++)
++    {
++      int value = 1;
++      const char *opt = (*argvp) [i];
++
++      opt_index = find_opt (opt + 1, -1);
++      if (opt_index == cl_options_count
++	  && (opt[1] == 'W' || opt[1] == 'f' || opt[1] == 'm')
++	  && opt[2] == 'n' && opt[3] == 'o' && opt[4] == '-')
++	{
++	  char *dup;
++
++	  /* Drop the "no-" from negative switches.  */
++	  size_t len = strlen (opt) - 3;
++
++	  dup = XNEWVEC (char, len + 1);
++	  dup[0] = '-';
++	  dup[1] = opt[1];
++	  memcpy (dup + 2, opt + 5, len - 2 + 1);
++	  opt = dup;
++	  value = 0;
++	  opt_index = find_opt (opt + 1, -1);
++	  free (dup);
++	}
++
++      if (opt_index == cl_options_count)
++	{
++cont:
++	  options [i] = 0;
++	  continue;
++	}
++
++      option = &cl_options[opt_index];
++      if (option->neg_index < 0)
++	goto cont;
++
++      /* Reject negative form of switches that don't take negatives as
++	 unrecognized.  */
++      if (!value && (option->flags & CL_REJECT_NEGATIVE))
++	goto cont;
++
++      options [i] = (int) opt_index;
++      need_prune |= options [i];
++    }
++
++  if (!need_prune)
++    goto done;
++
++  /* Remove arguments which are negated by others after them.  */
++  argv [0] = (*argvp) [0];
++  arg_count = 1;
++  for (i = 1; i < argc; i++)
++    {
++      int j, opt_idx;
++
++      opt_idx = options [i];
++      if (opt_idx)
++	{
++	  int next_opt_idx;
++	  for (j = i + 1; j < argc; j++)
++	    {
++	      next_opt_idx = options [j];
++	      if (next_opt_idx
++		  && cancel_option (opt_idx, next_opt_idx,
++				    next_opt_idx))
++		break;
++	    }
++	}
++      else
++	goto keep;
++
++      if (j == argc)
++	{
++keep:
++	  argv [arg_count] = (*argvp) [i];
++	  arg_count++;
++	}
++    }
++
++  if (arg_count != argc)
++    {
++      *argcp = arg_count;
++      *argvp = argv;
++    }
++  else
++    {
++done:
++      free (argv);
++    }
++
++  free (options);
++}
+diff --git a/gcc/opts.c b/gcc/opts.c
+index e264b4ab..037cad2d 100644
+--- a/gcc/opts.c
++++ b/gcc/opts.c
+@@ -101,7 +101,6 @@ static bool flag_loop_optimize_set;
+ const char **in_fnames;
+ unsigned num_in_fnames;
+ 
+-static size_t find_opt (const char *, int);
+ static int common_handle_option (size_t scode, const char *arg, int value);
+ static void handle_param (const char *);
+ static void set_Wextra (int);
+@@ -119,90 +118,6 @@ static unsigned int print_switch (const char *text, unsigned int indent);
+ static void set_debug_level (enum debug_info_type type, int extended,
+ 			     const char *arg);
+ 
+-/* Perform a binary search to find which option the command-line INPUT
+-   matches.  Returns its index in the option array, and N_OPTS
+-   (cl_options_count) on failure.
+-
+-   This routine is quite subtle.  A normal binary search is not good
+-   enough because some options can be suffixed with an argument, and
+-   multiple sub-matches can occur, e.g. input of "-pedantic" matching
+-   the initial substring of "-pedantic-errors".
+-
+-   A more complicated example is -gstabs.  It should match "-g" with
+-   an argument of "stabs".  Suppose, however, that the number and list
+-   of switches are such that the binary search tests "-gen-decls"
+-   before having tested "-g".  This doesn't match, and as "-gen-decls"
+-   is less than "-gstabs", it will become the lower bound of the
+-   binary search range, and "-g" will never be seen.  To resolve this
+-   issue, opts.sh makes "-gen-decls" point, via the back_chain member,
+-   to "-g" so that failed searches that end between "-gen-decls" and
+-   the lexicographically subsequent switch know to go back and see if
+-   "-g" causes a match (which it does in this example).
+-
+-   This search is done in such a way that the longest match for the
+-   front end in question wins.  If there is no match for the current
+-   front end, the longest match for a different front end is returned
+-   (or N_OPTS if none) and the caller emits an error message.  */
+-static size_t
+-find_opt (const char *input, int lang_mask)
+-{
+-  size_t mn, mx, md, opt_len;
+-  size_t match_wrong_lang;
+-  int comp;
+-
+-  mn = 0;
+-  mx = cl_options_count;
+-
+-  /* Find mn such this lexicographical inequality holds:
+-     cl_options[mn] <= input < cl_options[mn + 1].  */
+-  while (mx - mn > 1)
+-    {
+-      md = (mn + mx) / 2;
+-      opt_len = cl_options[md].opt_len;
+-      comp = strncmp (input, cl_options[md].opt_text + 1, opt_len);
+-
+-      if (comp < 0)
+-	mx = md;
+-      else
+-	mn = md;
+-    }
+-
+-  /* This is the switch that is the best match but for a different
+-     front end, or cl_options_count if there is no match at all.  */
+-  match_wrong_lang = cl_options_count;
+-
+-  /* Backtrace the chain of possible matches, returning the longest
+-     one, if any, that fits best.  With current GCC switches, this
+-     loop executes at most twice.  */
+-  do
+-    {
+-      const struct cl_option *opt = &cl_options[mn];
+-
+-      /* Is the input either an exact match or a prefix that takes a
+-	 joined argument?  */
+-      if (!strncmp (input, opt->opt_text + 1, opt->opt_len)
+-	  && (input[opt->opt_len] == '\0' || (opt->flags & CL_JOINED)))
+-	{
+-	  /* If language is OK, return it.  */
+-	  if (opt->flags & lang_mask)
+-	    return mn;
+-
+-	  /* If we haven't remembered a prior match, remember this
+-	     one.  Any prior match is necessarily better.  */
+-	  if (match_wrong_lang == cl_options_count)
+-	    match_wrong_lang = mn;
+-	}
+-
+-      /* Try the next possibility.  This is cl_options_count if there
+-	 are no more.  */
+-      mn = opt->back_chain;
+-    }
+-  while (mn != cl_options_count);
+-
+-  /* Return the best wrong match, or cl_options_count if none.  */
+-  return match_wrong_lang;
+-}
+-
+ /* If ARG is a non-negative integer made up solely of digits, return its
+    value, otherwise return -1.  */
+ static int
+diff --git a/gcc/opts.h b/gcc/opts.h
+index 2c2340c3..8f0e9799 100644
+--- a/gcc/opts.h
++++ b/gcc/opts.h
+@@ -46,6 +46,7 @@ struct cl_option
+   const char *help;
+   unsigned short back_chain;
+   unsigned char opt_len;
++  int neg_index;
+   unsigned int flags;
+   void *flag_var;
+   enum cl_var_type var_type;
+@@ -83,6 +84,8 @@ extern const char **in_fnames;
+ 
+ extern unsigned num_in_fnames;
+ 
++size_t find_opt (const char *input, int lang_mask);
++extern void prune_options (int *argcp, char ***argvp);
+ extern void decode_options (unsigned int argc, const char **argv);
+ extern int option_enabled (int opt_idx);
+ extern bool get_option_state (int, struct cl_option_state *);
+diff --git a/gcc/treelang/Make-lang.in b/gcc/treelang/Make-lang.in
+index 57499e54..26ac3ee6 100644
+--- a/gcc/treelang/Make-lang.in
++++ b/gcc/treelang/Make-lang.in
+@@ -87,10 +87,10 @@ tree1$(exeext): treelang/tree1.o treelang/treetree.o treelang/tree-convert.o \
+ 	$(BACKEND) $(LIBS) attribs.o
+ 
+ # Create the compiler driver treelang.
+-gtreelang$(exeext): gcc.o version.o prefix.o intl.o $(EXTRA_GCC_OBJS) \
++gtreelang$(exeext): $(GCC_OBJS) version.o prefix.o intl.o $(EXTRA_GCC_OBJS) \
+   $(LIBDEPS) treelang/spec.o
+ 	$(CC) $(ALL_CFLAGS) $(LDFLAGS) -o $@ treelang/spec.o \
+-	  gcc.o version.o prefix.o intl.o $(EXTRA_GCC_OBJS) $(LIBS)
++	  $(GCC_OBJS) version.o prefix.o intl.o $(EXTRA_GCC_OBJS) $(LIBS)
+ 
+ 
+ 
