@@ -1,4 +1,4 @@
-From e0e1cf96316339ee2b7e5c43d5b05c97af0b6e7f Mon Sep 17 00:00:00 2001
+From 2c546a53be9c5890be33aa799ea4f67d193b4ac3 Mon Sep 17 00:00:00 2001
 From: Kai Tietz <ktietz@anaconda.com>
 Date: Wed, 21 Apr 2021 07:54:59 +0200
 Subject: [PATCH 02/12] add -m(no-)align-vector-insn option for i386
@@ -6,16 +6,16 @@ Subject: [PATCH 02/12] add -m(no-)align-vector-insn option for i386
 ---
  gcc/config/i386/i386-options.cc |  9 +++++--
  gcc/config/i386/i386.opt        |  8 ++++++
- gcc/config/i386/mingw32.h       |  2 +-
  gcc/config/i386/predicates.md   |  2 +-
  gcc/config/i386/sse.md          | 43 +++++++++++++++++++++++++++++----
+ gcc/config/mingw/mingw32.h      |  2 +-
  5 files changed, 55 insertions(+), 9 deletions(-)
 
 diff --git a/gcc/config/i386/i386-options.cc b/gcc/config/i386/i386-options.cc
-index 368b98098a4..00ddb2ea1c6 100644
+index 964449fa8cd..2acace11f0a 100644
 --- a/gcc/config/i386/i386-options.cc
 +++ b/gcc/config/i386/i386-options.cc
-@@ -402,6 +402,7 @@ ix86_target_string (HOST_WIDE_INT isa, HOST_WIDE_INT isa2,
+@@ -422,6 +422,7 @@ ix86_target_string (HOST_WIDE_INT isa, HOST_WIDE_INT isa2,
      { "-minline-stringops-dynamically",	MASK_INLINE_STRINGOPS_DYNAMICALLY },
      { "-mms-bitfields",			MASK_MS_BITFIELD_LAYOUT },
      { "-mno-align-stringops",		MASK_NO_ALIGN_STRINGOPS },
@@ -23,7 +23,7 @@ index 368b98098a4..00ddb2ea1c6 100644
      { "-mno-fancy-math-387",		MASK_NO_FANCY_MATH_387 },
      { "-mno-push-args",			MASK_NO_PUSH_ARGS },
      { "-mno-red-zone",			MASK_NO_RED_ZONE },
-@@ -1131,8 +1132,12 @@ ix86_valid_target_attribute_inner_p (tree fndecl, tree args, char *p_strings[],
+@@ -1174,8 +1175,12 @@ ix86_valid_target_attribute_inner_p (tree fndecl, tree args, char *p_strings[],
  		   MASK_INLINE_STRINGOPS_DYNAMICALLY),
  
      IX86_ATTR_NO ("align-stringops",
@@ -39,10 +39,10 @@ index 368b98098a4..00ddb2ea1c6 100644
      IX86_ATTR_YES ("recip",
  		   OPT_mrecip,
 diff --git a/gcc/config/i386/i386.opt b/gcc/config/i386/i386.opt
-index 401acb20107..2dc50d345d3 100644
+index 27d34bd64ea..639aa84b1e5 100644
 --- a/gcc/config/i386/i386.opt
 +++ b/gcc/config/i386/i386.opt
-@@ -241,6 +241,10 @@ malign-stringops
+@@ -256,6 +256,10 @@ malign-stringops
  Target RejectNegative InverseMask(NO_ALIGN_STRINGOPS, ALIGN_STRINGOPS) Save
  Align destination of the string operations.
  
@@ -53,7 +53,7 @@ index 401acb20107..2dc50d345d3 100644
  malign-data=
  Target RejectNegative Joined Var(ix86_align_data_type) Enum(ix86_align_data) Init(ix86_align_data_type_compat)
  Use the given data alignment.
-@@ -424,6 +428,10 @@ mdaz-ftz
+@@ -439,6 +443,10 @@ mdaz-ftz
  Target
  Set the FTZ and DAZ Flags.
  
@@ -64,24 +64,11 @@ index 401acb20107..2dc50d345d3 100644
  mpreferred-stack-boundary=
  Target RejectNegative Joined UInteger Var(ix86_preferred_stack_boundary_arg)
  Attempt to keep stack aligned to this power of 2.
-diff --git a/gcc/config/i386/mingw32.h b/gcc/config/i386/mingw32.h
-index 6a55baaa458..25e482add18 100644
---- a/gcc/config/i386/mingw32.h
-+++ b/gcc/config/i386/mingw32.h
-@@ -30,7 +30,7 @@ along with GCC; see the file COPYING3.  If not see
- #define TARGET_SUBTARGET_DEFAULT \
- 	(MASK_80387 | MASK_IEEE_FP | MASK_FLOAT_RETURNS \
- 	 | MASK_STACK_PROBE | MASK_ALIGN_DOUBLE \
--	 | MASK_MS_BITFIELD_LAYOUT)
-+	 | MASK_MS_BITFIELD_LAYOUT | MASK_NO_ALIGN_VECTOR_INSN)
- 
- #ifndef TARGET_USING_MCFGTHREAD
- #define TARGET_USING_MCFGTHREAD  0
 diff --git a/gcc/config/i386/predicates.md b/gcc/config/i386/predicates.md
-index b4d9ab40ab9..6d4d2bbaf6d 100644
+index 3d3848c0a22..7b08cc48675 100644
 --- a/gcc/config/i386/predicates.md
 +++ b/gcc/config/i386/predicates.md
-@@ -1688,7 +1688,7 @@
+@@ -1715,7 +1715,7 @@
  ;; less than its natural alignment.
  (define_predicate "misaligned_operand"
    (and (match_code "mem")
@@ -91,10 +78,10 @@ index b4d9ab40ab9..6d4d2bbaf6d 100644
  ;; Return true if OP is a parallel for an mov{d,q,dqa,ps,pd} vec_select,
  ;; where one of the two operands of the vec_concat is const0_operand.
 diff --git a/gcc/config/i386/sse.md b/gcc/config/i386/sse.md
-index 704710b2144..e003f02fdaf 100644
+index b280676eee6..98adb8ad90f 100644
 --- a/gcc/config/i386/sse.md
 +++ b/gcc/config/i386/sse.md
-@@ -1761,7 +1761,8 @@
+@@ -1952,7 +1952,8 @@
  	(vec_concat:V2DF (vec_select:DF (match_dup 2)
  					(parallel [(const_int 0)]))
  			 (match_operand:DF 3 "memory_operand")))]
@@ -104,7 +91,7 @@ index 704710b2144..e003f02fdaf 100644
     && ix86_operands_ok_for_move_multiple (operands, true, DFmode)"
    [(set (match_dup 2) (match_dup 5))]
    "operands[5] = adjust_address (operands[1], V2DFmode, 0);")
-@@ -1772,7 +1773,8 @@
+@@ -1963,7 +1964,8 @@
     (set (match_operand:V2DF 2 "sse_reg_operand")
  	(vec_concat:V2DF (match_operand:DF 4 "sse_reg_operand")
  			 (match_operand:DF 3 "memory_operand")))]
@@ -114,7 +101,7 @@ index 704710b2144..e003f02fdaf 100644
     && REGNO (operands[4]) == REGNO (operands[2])
     && ix86_operands_ok_for_move_multiple (operands, true, DFmode)"
    [(set (match_dup 2) (match_dup 5))]
-@@ -1786,7 +1788,8 @@
+@@ -1977,7 +1979,8 @@
     (set (match_operand:DF 2 "memory_operand")
  	(vec_select:DF (match_operand:V2DF 3 "sse_reg_operand")
  		       (parallel [(const_int 1)])))]
@@ -124,7 +111,7 @@ index 704710b2144..e003f02fdaf 100644
     && ix86_operands_ok_for_move_multiple (operands, false, DFmode)"
    [(set (match_dup 4) (match_dup 1))]
    "operands[4] = adjust_address (operands[0], V2DFmode, 0);")
-@@ -10454,7 +10457,8 @@
+@@ -11622,7 +11625,8 @@
  	(vec_select:V2SF
  	  (match_operand:V4SF 1 "nonimmediate_operand" " v,v,m")
  	  (parallel [(const_int 0) (const_int 1)])))]
@@ -134,7 +121,7 @@ index 704710b2144..e003f02fdaf 100644
    "@
     %vmovlps\t{%1, %0|%q0, %1}
     %vmovaps\t{%1, %0|%0, %1}
-@@ -10463,6 +10467,21 @@
+@@ -11631,6 +11635,21 @@
     (set_attr "prefix" "maybe_vex")
     (set_attr "mode" "V2SF,V4SF,V2SF")])
  
@@ -156,7 +143,7 @@ index 704710b2144..e003f02fdaf 100644
  (define_expand "sse_loadlps_exp"
    [(set (match_operand:V4SF 0 "nonimmediate_operand")
  	(vec_concat:V4SF
-@@ -13338,7 +13357,7 @@
+@@ -14662,7 +14681,7 @@
  	(vec_select:DF
  	  (match_operand:V2DF 1 "nonimmediate_operand" "x,x,m")
  	  (parallel [(const_int 0)])))]
@@ -165,7 +152,7 @@ index 704710b2144..e003f02fdaf 100644
     && !(MEM_P (operands[0]) && MEM_P (operands[1]))"
    "@
     movlps\t{%1, %0|%0, %1}
-@@ -13347,6 +13366,20 @@
+@@ -14671,6 +14690,20 @@
    [(set_attr "type" "ssemov")
     (set_attr "mode" "V2SF,V4SF,V2SF")])
  
@@ -183,9 +170,22 @@ index 704710b2144..e003f02fdaf 100644
 +  [(set_attr "type" "ssemov")
 +   (set_attr "mode" "V2SF,V4SF,V2SF")])
 +
- (define_expand "sse2_loadhpd_exp"
-   [(set (match_operand:V2DF 0 "nonimmediate_operand")
- 	(vec_concat:V2DF
+ ;; Convert lowpart SUBREG into sse2_storelpd or *vec_extractv2df_0_sse.
+ (define_split
+   [(set (match_operand:DF 0 "register_operand")
+diff --git a/gcc/config/mingw/mingw32.h b/gcc/config/mingw/mingw32.h
+index 10bcd293527..a08de5a8a93 100644
+--- a/gcc/config/mingw/mingw32.h
++++ b/gcc/config/mingw/mingw32.h
+@@ -32,7 +32,7 @@ along with GCC; see the file COPYING3.  If not see
+ #define TARGET_SUBTARGET_DEFAULT \
+ 	(MASK_80387 | MASK_IEEE_FP | MASK_FLOAT_RETURNS \
+ 	 | MASK_STACK_PROBE | MASK_ALIGN_DOUBLE \
+-	 | MASK_MS_BITFIELD_LAYOUT)
++	 | MASK_MS_BITFIELD_LAYOUT | MASK_NO_ALIGN_VECTOR_INSN)
+ 
+ #ifdef TARGET_USING_MCFGTHREAD
+ #define DEFINE_THREAD_MODEL  builtin_define ("__USING_MCFGTHREAD__");
 -- 
 2.45.1
 
