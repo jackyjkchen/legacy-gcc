@@ -60,6 +60,65 @@ index ad07f0561..f6c9b18d2 100644
  
  # Build and host support libraries.
  
+diff --git a/gcc/ada/init.c b/gcc/ada/init.c
+index 5088ecffc..da2fb1ea0 100644
+--- a/gcc/ada/init.c
++++ b/gcc/ada/init.c
+@@ -570,12 +570,8 @@ __gnat_error_handler (int sig, siginfo_t *si ATTRIBUTE_UNUSED, void *ucontext)
+ 
+ #ifndef __ia64__
+ #define HAVE_GNAT_ALTERNATE_STACK 1
+-/* This must be in keeping with System.OS_Interface.Alternate_Stack_Size.
+-   It must be larger than MINSIGSTKSZ and hopefully near 2 * SIGSTKSZ.  */
+-# if 16 * 1024 < MINSIGSTKSZ
+-#  error "__gnat_alternate_stack too small"
+-# endif
+-char __gnat_alternate_stack[16 * 1024];
++/* This must be in keeping with System.OS_Interface.Alternate_Stack_Size.  */
++char __gnat_alternate_stack[32 * 1024];
+ #endif
+ 
+ #ifdef __XENO__
+diff --git a/gcc/ada/libgnarl/s-osinte__linux.ads b/gcc/ada/libgnarl/s-osinte__linux.ads
+index 5bf4a5fe1..c7d5d9bad 100644
+--- a/gcc/ada/libgnarl/s-osinte__linux.ads
++++ b/gcc/ada/libgnarl/s-osinte__linux.ads
+@@ -325,7 +325,7 @@ package System.OS_Interface is
+    pragma Import (C, Alternate_Stack, "__gnat_alternate_stack");
+    --  The alternate signal stack for stack overflows
+ 
+-   Alternate_Stack_Size : constant := 16 * 1024;
++   Alternate_Stack_Size : constant := 32 * 1024;
+    --  This must be in keeping with init.c:__gnat_alternate_stack
+ 
+    function Get_Stack_Base (thread : pthread_t) return Address;
+diff --git a/gcc/ada/terminals.c b/gcc/ada/terminals.c
+index 7025f57d6..bd2cdd0d0 100644
+--- a/gcc/ada/terminals.c
++++ b/gcc/ada/terminals.c
+@@ -1107,14 +1107,6 @@ __gnat_setup_winsize (void *desc, int rows, int columns)
+ #include <errno.h>
+ #include <stdio.h>
+ #include <stdlib.h>
+-
+-/* On some system termio is either absent or including it will disable termios
+-   (HP-UX) */
+-#if !defined (__hpux__) && !defined (BSD) && !defined (__APPLE__) \
+-  && !defined (__rtems__) && !defined (__QNXNTO__)
+-#   include <termio.h>
+-#endif
+-
+ #include <sys/ioctl.h>
+ #include <termios.h>
+ #include <fcntl.h>
+@@ -1130,7 +1122,6 @@ __gnat_setup_winsize (void *desc, int rows, int columns)
+ #   include <sys/signal.h>
+ #endif
+ #if defined (__hpux__)
+-#   include <sys/termio.h>
+ #   include <sys/stropts.h>
+ #endif
+ 
 diff --git a/gcc/c-family/c-cppbuiltin.c b/gcc/c-family/c-cppbuiltin.c
 index 18821eca8..fc9646af1 100644
 --- a/gcc/c-family/c-cppbuiltin.c
@@ -216,6 +275,251 @@ index d200ae518..3a596e14d 100644
  /* This is for -profile to use -lc_p instead of -lc.  */
  #undef CC1_SPEC
  #define CC1_SPEC "%{profile:-p} %{G*}"
+diff --git a/gcc/config/powerpcspe/driver-powerpcspe.c b/gcc/config/powerpcspe/driver-powerpcspe.c
+index cf3ef94dc..bd3386578 100644
+--- a/gcc/config/powerpcspe/driver-powerpcspe.c
++++ b/gcc/config/powerpcspe/driver-powerpcspe.c
+@@ -23,6 +23,8 @@ along with GCC; see the file COPYING3.  If not see
+ #include "system.h"
+ #include "coretypes.h"
+ #include "tm.h"
++#include "diagnostic.h"
++#include "opts.h"
+ #include <stdlib.h>
+ 
+ #ifdef _AIX
+@@ -38,6 +40,44 @@ along with GCC; see the file COPYING3.  If not see
+ # include <sys/sysctl.h>
+ #endif
+ 
++#ifdef __linux__
++/* Canonical GCC cpu name table.  */
++static const char *rs6000_supported_cpu_names[] =
++{
++#define RS6000_CPU(NAME, CPU, FLAGS) NAME,
++#include "powerpcspe-cpus.def"
++#undef RS6000_CPU
++};
++
++/* This table holds a list of cpus where their Linux AT_PLATFORM name differs
++   from their GCC canonical name.  The first column in a row contains the GCC
++   canonical cpu name and the other columns in that row contain AT_PLATFORM
++   names that should be mapped to the canonical name.  */
++
++static const char *linux_cpu_translation_table[][4] = {
++  { "403", "ppc403", NULL },
++  { "405", "ppc405", NULL },
++  { "440", "ppc440", "ppc440gp", NULL },
++  { "476", "ppc470", NULL },
++  { "601", "ppc601", NULL },
++  { "603", "ppc603", NULL },
++  { "604", "ppc604", NULL },
++  { "7400", "ppc7400", NULL },
++  { "7450", "ppc7450", NULL },
++  { "750", "ppc750", NULL },
++  { "823", "ppc823", NULL },
++  { "8540", "ppc8540", NULL },
++  { "8548", "ppc8548", NULL },
++  { "970", "ppc970", NULL },
++  { "cell", "ppc-cell-be", NULL },
++  { "e500mc", "ppce500mc", NULL },
++  { "e5500", "ppce5500", NULL },
++  { "e6500", "ppce6500", NULL },
++  { "power7", "power7+", NULL },
++  { NULL } /* End of table sentinel.  */
++};
++#endif
++
+ const char *host_detect_local_cpu (int argc, const char **argv);
+ 
+ #if GCC_VERSION >= 0
+@@ -158,14 +198,19 @@ detect_processor_freebsd (void)
+ 
+ #ifdef __linux__
+ 
+-/* Returns AT_PLATFORM if present, otherwise generic PowerPC.  */
++/* Returns the canonical AT_PLATFORM if present, otherwise NULL.  */
+ 
+ static const char *
+ elf_platform (void)
+ {
+-  int fd;
++  /* Used to cache the result we determine below.  */
++  static const char *cpu = NULL;
+ 
+-  fd = open ("/proc/self/auxv", O_RDONLY);
++  /* Use the cached AT_PLATFORM cpu name if we've already determined it.  */
++  if (cpu != NULL)
++    return cpu;
++
++  int fd = open ("/proc/self/auxv", O_RDONLY);
+ 
+   if (fd != -1)
+     {
+@@ -179,15 +224,51 @@ elf_platform (void)
+       if (n > 0)
+ 	{
+ 	  for (av = (ElfW(auxv_t) *) buf; av->a_type != AT_NULL; ++av)
+-	    switch (av->a_type)
++	    if (av->a_type == AT_PLATFORM)
+ 	      {
+-	      case AT_PLATFORM:
+-		return (const char *) av->a_un.a_val;
+-
+-	      default:
++		/* Cache the result.  */
++		cpu = (const char *) av->a_un.a_val;
+ 		break;
+ 	      }
+ 	}
++
++      /* Verify that CPU is either a valid -mcpu=<cpu> option name, or is a
++	 valid alternative name.  If it is a valid alternative name, then use
++	 the canonical name.  */
++      if (cpu != NULL)
++	{
++	  size_t i, j;
++	  char *s;
++
++	  /* Check if AT_PLATFORM is a GCC canonical cpu name.  */
++	  for (i = 0; i < ARRAY_SIZE (rs6000_supported_cpu_names); i++)
++	    if (!strcmp (cpu, rs6000_supported_cpu_names[i]))
++	      return cpu;
++
++	  /* Check if AT_PLATFORM can be translated to a canonical cpu name.  */
++	  for (i = 0; linux_cpu_translation_table[i][0] != NULL; i++)
++	    {
++	      const char *canonical = linux_cpu_translation_table[i][0];
++	      for (j = 1; linux_cpu_translation_table[i][j] != NULL; j++)
++		if (!strcmp (cpu, linux_cpu_translation_table[i][j]))
++		  {
++		    /* Cache the result.  */
++		    cpu = canonical;
++		    return cpu;
++		  }
++	    }
++
++	  /* The kernel returned an AT_PLATFORM name we do not support.  */
++	  auto_vec <const char *> candidates;
++	  for (i = 0; i < ARRAY_SIZE (rs6000_supported_cpu_names); i++)
++	    candidates.safe_push (rs6000_supported_cpu_names[i]);
++	  candidates_list_and_hint (cpu, s, candidates);
++	  fatal_error (
++	    input_location,
++	    "Unsupported cpu name returned from kernel for -mcpu=native: %s\n"
++	    "Please use an explicit cpu name.  Valid cpu names are: %s",
++	    cpu, s);
++	}
+     }
+   return NULL;
+ }
+diff --git a/gcc/config/powerpcspe/sysv4.h b/gcc/config/powerpcspe/sysv4.h
+index 4f3527461..c3b56431b 100644
+--- a/gcc/config/powerpcspe/sysv4.h
++++ b/gcc/config/powerpcspe/sysv4.h
+@@ -757,24 +757,59 @@ ENDIAN_SELECT(" -mbig", " -mlittle", DEFAULT_ASM_ENDIAN)
+ #define CRTOFFLOADEND ""
+ #endif
+ 
+-#ifdef HAVE_LD_PIE
+-#define	STARTFILE_LINUX_SPEC "\
+-%{!shared: %{pg|p|profile:gcrt1.o%s;pie:Scrt1.o%s;:crt1.o%s}} \
+-%{mnewlib:ecrti.o%s;:crti.o%s} \
+-%{static:crtbeginT.o%s;shared|pie:crtbeginS.o%s;:crtbegin.o%s} \
+-" CRTOFFLOADBEGIN
++/* STARTFILE_LINUX_SPEC should be the same as GNU_USER_TARGET_STARTFILE_SPEC
++   but with the mnewlib ecrti.o%s selection substituted for crti.o%s.  */
++#if defined HAVE_LD_PIE
++#define	STARTFILE_LINUX_SPEC \
++  "%{shared:; \
++     pg|p|profile:%{static-pie:grcrt1.o%s;:gcrt1.o%s}; \
++     static:crt1.o%s; \
++     static-pie:rcrt1.o%s; \
++     " PIE_SPEC ":Scrt1.o%s; \
++     :crt1.o%s} \
++   %{mnewlib:ecrti.o%s;:crti.o%s} \
++   %{static:crtbeginT.o%s; \
++     shared|static-pie|" PIE_SPEC ":crtbeginS.o%s; \
++     :crtbegin.o%s} \
++   %{fvtable-verify=none:%s; \
++     fvtable-verify=preinit:vtv_start_preinit.o%s; \
++     fvtable-verify=std:vtv_start.o%s} \
++   " CRTOFFLOADBEGIN
+ #else
+-#define	STARTFILE_LINUX_SPEC "\
+-%{!shared: %{pg|p|profile:gcrt1.o%s;:crt1.o%s}} \
+-%{mnewlib:ecrti.o%s;:crti.o%s} \
+-%{static:crtbeginT.o%s;shared|pie:crtbeginS.o%s;:crtbegin.o%s} \
+-" CRTOFFLOADBEGIN
++#define	STARTFILE_LINUX_SPEC \
++  "%{shared:; \
++     pg|p|profile:gcrt1.o%s; \
++     :crt1.o%s} \
++   %{mnewlib:ecrti.o%s;:crti.o%s} \
++   %{static:crtbeginT.o%s; \
++     shared|pie|static-pie:crtbeginS.o%s; \
++     :crtbegin.o%s} \
++   " CRTOFFLOADBEGIN
+ #endif
+ 
+-#define	ENDFILE_LINUX_SPEC "\
+-%{shared|pie:crtendS.o%s;:crtend.o%s} \
+-%{mnewlib:ecrtn.o%s;:crtn.o%s} \
+-" CRTOFFLOADEND
++/* ENDFILE_LINUX_SPEC should be the same as GNU_USER_TARGET_ENDFILE_SPEC
++   but with the mnewlib ecrtn.o%s selection substituted for crtn.o%s.  */
++#if defined HAVE_LD_PIE
++#define ENDFILE_LINUX_SPEC \
++  "%{fvtable-verify=none:%s; \
++     fvtable-verify=preinit:vtv_end_preinit.o%s; \
++     fvtable-verify=std:vtv_end.o%s} \
++   %{static:crtend.o%s; \
++     shared|static-pie|" PIE_SPEC ":crtendS.o%s; \
++     :crtend.o%s} \
++   %{mnewlib:ecrtn.o%s;:crtn.o%s} \
++   " CRTOFFLOADEND
++#else
++#define ENDFILE_LINUX_SPEC \
++  "%{fvtable-verify=none:%s; \
++     fvtable-verify=preinit:vtv_end_preinit.o%s; \
++     fvtable-verify=std:vtv_end.o%s} \
++   %{static:crtend.o%s; \
++     shared|pie|static-pie:crtendS.o%s; \
++     :crtend.o%s} \
++   %{mnewlib:ecrtn.o%s;:crtn.o%s} \
++   " CRTOFFLOADEND
++#endif
+ 
+ #define LINK_START_LINUX_SPEC ""
+ 
+diff --git a/gcc/config/riscv/t-linux-multilib b/gcc/config/riscv/t-linux-multilib
+index 298547fee..d72bdce9d 100644
+--- a/gcc/config/riscv/t-linux-multilib
++++ b/gcc/config/riscv/t-linux-multilib
+@@ -20,21 +20,9 @@ rv64gc ilp32 \
+ ilp32d \
+ lp64 \
+ lp64d
+-MULTILIB_REQUIRED = march=rv32imac/mabi=ilp32 \
+-march=rv32imafdc/mabi=ilp32d \
+-march=rv64imac/mabi=lp64 \
++MULTILIB_REQUIRED = march=rv64imac/mabi=lp64 \
+ march=rv64imafdc/mabi=lp64d
+-MULTILIB_REUSE = march.rv32imac/mabi.ilp32=march.rv32ima/mabi.ilp32 \
+-march.rv32imac/mabi.ilp32=march.rv32imaf/mabi.ilp32 \
+-march.rv32imac/mabi.ilp32=march.rv32imafd/mabi.ilp32 \
+-march.rv32imac/mabi.ilp32=march.rv32imafc/mabi.ilp32 \
+-march.rv32imac/mabi.ilp32=march.rv32imafdc/mabi.ilp32 \
+-march.rv32imac/mabi.ilp32=march.rv32g/mabi.ilp32 \
+-march.rv32imac/mabi.ilp32=march.rv32gc/mabi.ilp32 \
+-march.rv32imafdc/mabi.ilp32d=march.rv32imafd/mabi.ilp32d \
+-march.rv32imafdc/mabi.ilp32d=march.rv32gc/mabi.ilp32d \
+-march.rv32imafdc/mabi.ilp32d=march.rv32g/mabi.ilp32d \
+-march.rv64imac/mabi.lp64=march.rv64ima/mabi.lp64 \
++MULTILIB_REUSE = march.rv64imac/mabi.lp64=march.rv64ima/mabi.lp64 \
+ march.rv64imac/mabi.lp64=march.rv64imaf/mabi.lp64 \
+ march.rv64imac/mabi.lp64=march.rv64imafd/mabi.lp64 \
+ march.rv64imac/mabi.lp64=march.rv64imafc/mabi.lp64 \
 diff --git a/gcc/config/rs6000/ppc-asm.h b/gcc/config/rs6000/ppc-asm.h
 index 40cd947e1..ed4e001f7 100644
 --- a/gcc/config/rs6000/ppc-asm.h
@@ -495,6 +799,82 @@ index 000000000..d5799604b
 +void
 +foo (void)
 +{
++}
+diff --git a/gcc/testsuite/gcc.dg/pr91269.c b/gcc/testsuite/gcc.dg/pr91269.c
+new file mode 100644
+index 000000000..8c03ba8da
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr91269.c
+@@ -0,0 +1,70 @@
++/* PR target/91269 */
++/* Testcase by Sergei Trofimovich <slyfox@inbox.ru> */
++
++/* { dg-do assemble } */
++/* { dg-options "-O2 -Wno-int-conversion" }  */
++/* { dg-additional-options "-fcall-used-g6 -fPIE -mcpu=niagara4" { target sparc*-*-* } } */
++
++struct m;
++
++enum { a = 2 };
++int b[1];
++int d[2715];
++int e, f, h;
++enum { i = 2 } j;
++inline int c(int k) {
++  char *cp;
++  if (k >= 62 && k <= 247)
++    cp = b[k];
++  if (cp)
++    return 65533;
++  return 2;
++}
++inline int g(int k) {
++  if (k < sizeof(d))
++    return e;
++  return 0;
++}
++
++int u(struct m*, char*, char*);
++
++int l(struct m *k, char n, long o, int *p) {
++  int q, flags = j, r, s, lasttwo = *p;
++  char inptr, outptr;
++  while (inptr) {
++    if (__builtin_expect(h, 0))
++      break;
++    unsigned ch = inptr;
++    if (lasttwo) {
++      long need = lasttwo >> 3;
++      if (__builtin_expect(need > n, 0))
++        break;
++    } else if (s == i) {
++      long t = c(ch);
++      if (t != 65533) {
++        int jch = g(ch);
++        if (jch & 8)
++          continue;
++      }
++    }
++    if (ch <= 5)
++      ;
++    else {
++      long t = c(ch);
++      if (t != 65533)
++        ;
++      else {
++        switch (f >> 8)
++        case 79:
++          q = f == 20308 || f == 20350;
++        if (q)
++          if (j)
++            r = u(k, &inptr, &outptr);
++        s = *p;
++        if (r)
++          if (o && flags & a)
++            break;
++      }
++    }
++  }
 +}
 diff --git a/gcc/testsuite/gcc.target/i386/pr69471-3.c b/gcc/testsuite/gcc.target/i386/pr69471-3.c
 new file mode 100644
@@ -1193,6 +1573,30 @@ index 9c1429623..9f05c4e9e 100644
    extern unsigned IOCTL_EQL_EMANCIPATE;
    extern unsigned IOCTL_EQL_ENSLAVE;
    extern unsigned IOCTL_EQL_GETMASTRCFG;
+diff --git a/libstdc++-v3/po/Makefile.am b/libstdc++-v3/po/Makefile.am
+index 91ca11db5..ee847e8ba 100644
+--- a/libstdc++-v3/po/Makefile.am
++++ b/libstdc++-v3/po/Makefile.am
+@@ -38,6 +38,7 @@ MSGFMT = msgfmt
+ EXTRA_DIST = string_literals.cc POTFILES.in $(PACKAGE).pot $(LOCALE_IN)
+ 
+ .po.mo:
++	env --unset=LD_LIBRARY_PATH \
+ 	$(MSGFMT) -o $@ $<
+ 
+ all-local: all-local-$(USE_NLS)
+diff --git a/libstdc++-v3/po/Makefile.in b/libstdc++-v3/po/Makefile.in
+index b984752e5..b94020b95 100644
+--- a/libstdc++-v3/po/Makefile.in
++++ b/libstdc++-v3/po/Makefile.in
+@@ -496,6 +496,7 @@ uninstall-am:
+ 
+ 
+ .po.mo:
++	env --unset=LD_LIBRARY_PATH \
+ 	$(MSGFMT) -o $@ $<
+ 
+ all-local: all-local-$(USE_NLS)
 diff --git a/libstdc++-v3/src/Makefile.am b/libstdc++-v3/src/Makefile.am
 index f18932c9a..f22f87fa4 100644
 --- a/libstdc++-v3/src/Makefile.am
