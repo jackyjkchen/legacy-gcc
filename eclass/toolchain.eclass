@@ -410,7 +410,7 @@ SLOT="${GCC_CONFIG_VER}"
 
 #---->> DEPEND <<----
 
-RDEPEND="sys-libs/zlib"
+RDEPEND="virtual/zlib:="
 
 tc_version_is_at_least 2.9 && RDEPEND+=" nls? ( virtual/libintl )"
 
