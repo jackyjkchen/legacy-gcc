@@ -392,6 +392,9 @@ case $(tc-arch) in
 	amd64|x86)
 		tc_version_is_at_least 4.9 && IUSE+=" lto"
 		;;
+	hppa|m68k|sh)
+		tc_version_is_at_least 12 && IUSE+=" lto"
+		;;
 	*)
 		tc_version_is_at_least 9.1 && IUSE+=" lto"
 		;;
@@ -2247,16 +2250,19 @@ toolchain_src_configure() {
 	# This only controls whether the compiler *supports* LTO, not whether
 	# it's *built using* LTO. Hence we do it without a USE flag.
 	# lto supported ftom 4.5, bug unstable util gcc-4.9.
-	if tc_version_is_at_least 4.9 ; then
-		confgcc+=( --enable-lto )
+	if tc_version_is_at_least 12 ; then
+		confgcc+=( --enable-lto  --enable-plugin )
+	elif tc_version_is_between 4.9 11 ; then
+		case $(tc-arch) in
+			hppa|m68k|sh)
+				confgcc+=( --disable-lto --disable-plugin )
+				;;
+			*)
+				confgcc+=( --enable-lto  --enable-plugin )
+				;;
+		esac
 	elif tc_version_is_at_least 4.5 ; then
-		confgcc+=( --disable-lto )
-	fi
-
-	if tc_version_is_at_least 4.9 ; then
-		confgcc+=( --enable-plugin )
-	elif tc_version_is_at_least 4.5 ; then
-		confgcc+=( --disable-plugin )
+		confgcc+=( --disable-lto --disable-plugin )
 	fi
 
 	# graphite was added in 4.4 but we only support it in 6.5+ due to external
