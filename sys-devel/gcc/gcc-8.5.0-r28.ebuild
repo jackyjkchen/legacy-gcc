@@ -92,7 +92,7 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/072_pr86986.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/073_pr88123.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/074_pr85569.patch
-	eapply "${FILESDIR}"/${PV}/postrelease/075_pr86379.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/075_pr82774-87946-100193.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/076_pr49070.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/077_pr108550.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/078_pr59950.patch
@@ -244,7 +244,6 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/226_pr112684.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/227_pr111039.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/228_pr115608.patch
-	eapply "${FILESDIR}"/${PV}/postrelease/229_pr82774-87946-100193.patch
 
 	if use test ; then
 		rm -rf gcc/testsuite/gcc.c-torture/execute/vfprintf-chk-1.c gcc/testsuite/gcc.c-torture/execute/vprintf-chk-1.c gcc/testsuite/c-c++-common/Warray-bounds-2.c gcc/testsuite/c-c++-common/Wrestrict-2.c gcc/testsuite/g++.dg/warn/Wstringop-truncation-1.C
