@@ -15,6 +15,7 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/00_adjust-max-page-size.patch
 	eapply "${FILESDIR}"/${PV}/01_use-4k-max-page-size.patch
 	eapply "${FILESDIR}"/${PV}/02_disable-in-function-info.patch
+	eapply "${FILESDIR}"/${PV}/03_support-R_386_GOT32X.patch
 	[[ $(tc-arch) == "arm" ]] && eapply "${FILESDIR}"/${PV}/03_disable-ignoring-incorrect-section-type-warn.patch
 }
 
