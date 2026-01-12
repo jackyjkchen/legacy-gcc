@@ -13,6 +13,7 @@ src_prepare() {
 
 	eapply "${FILESDIR}"/${PV}/01_riscv-fix-multilib.patch
 	eapply "${FILESDIR}"/${PV}/02_fix-werror.patch
+	eapply "${FILESDIR}"/${PV}/03_fix-sanitizer-glibc-2.42.patch
 
 	use vanilla && return 0
 

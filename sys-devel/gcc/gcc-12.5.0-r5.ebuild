@@ -7,9 +7,9 @@ EAPI=8
 # https://wiki.gentoo.org/wiki/Project:Toolchain/sys-devel/gcc
 
 PATCH_GCC_VER="12.5.0"
-PATCH_VER="3"
+PATCH_VER="4"
 MUSL_GCC_VER="12.5.0"
-MUSL_VER="3"
+MUSL_VER="4"
 
 inherit toolchain
 
