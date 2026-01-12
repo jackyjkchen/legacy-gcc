@@ -17,6 +17,7 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/02_disable-in-function-info.patch
 	[[ $(tc-arch) == "arm" ]] && eapply "${FILESDIR}"/${PV}/03_disable-ignoring-incorrect-section-type-warn.patch
 	eapply "${FILESDIR}"/${PV}/04_support-R_386_GOT32X.patch
+	eapply "${FILESDIR}"/${PV}/05_fix-c23.patch
 }
 
 src_configure() {
