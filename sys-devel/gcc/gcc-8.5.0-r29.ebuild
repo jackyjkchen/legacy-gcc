@@ -14,7 +14,7 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/01_riscv-fix-multilib.patch
 	is_djgpp || eapply "${FILESDIR}"/${PV}/02_fix-ia32-sanitizer-malloc.patch
 	eapply "${FILESDIR}"/${PV}/03_fix-werror.patch
-	eapply "${FILESDIR}"/${PV}/04_fix-sanitizer-glibc-2.42.patch
+	is_djgpp || eapply "${FILESDIR}"/${PV}/04_fix-sanitizer-glibc-2.42.patch
 
 	use vanilla && return 0
 
