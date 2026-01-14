@@ -2252,7 +2252,7 @@ toolchain_src_configure() {
 	# lto supported ftom 4.5, bug unstable util gcc-4.9.
 	if tc_version_is_at_least 12 ; then
 		confgcc+=( --enable-lto  --enable-plugin )
-	elif tc_version_is_between 4.9 11 ; then
+	elif tc_version_is_between 4.9 12 ; then
 		case $(tc-arch) in
 			hppa|m68k|sh)
 				confgcc+=( --disable-lto --disable-plugin )
