@@ -86,7 +86,10 @@ downgrade_arch_flags() {
 		fi
 		;;
 	s390)
-		if tc_version_is_at_least 4.4 ${bver} && ! tc_version_is_at_least 4.8 ${bver} ; then
+		if tc_version_is_at_least 4.8 ${bver} && ! tc_version_is_at_least 5 ${bver} ; then
+			filter-flags '-march=*' '-mtune=*'
+			append-flags '-march=z196' '-mtune=z196'
+		elif tc_version_is_at_least 4.4 ${bver} && ! tc_version_is_at_least 4.8 ${bver} ; then
 			filter-flags '-march=*' '-mtune=*'
 			append-flags '-march=z10' '-mtune=z10'
 		elif tc_version_is_at_least 3.4 ${bver} && ! tc_version_is_at_least 4.4 ${bver} ; then
