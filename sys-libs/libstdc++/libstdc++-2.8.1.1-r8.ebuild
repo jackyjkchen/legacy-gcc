@@ -14,27 +14,25 @@ SLOT="$(ver_cut 1-3 ${PV})"
 KEYWORDS="amd64 alpha m68k ppc sparc x86"
 
 case ${ARCH} in
-amd64|x86)
-	TOOL_PREFIX="i686-legacy"
-	;;
-alpha|m68k)
-	TOOL_PREFIX="${ARCH}-legacy"
-	;;
-ppc)
-	TOOL_PREFIX="powerpc-legacy"
-	;;
-sparc)
-	TOOL_PREFIX="sparc-legacy"
-	;;
-*)
-	;;
+	amd64)
+		TOOL_PREFIX="${CHOST_x86%%-*}"
+		;;
+	x86|alpha|m68k|ppc)
+		TOOL_PREFIX="${CHOST%%-*}"
+		;;
+	sparc)
+		TOOL_PREFIX="${CHOST%%-*}"
+		TOOL_PREFIX="${TOOL_PREFIX/64/}"
+		;;
+	*)
+		;;
 esac
 
 DEPEND="sys-devel/gcc:2.8.1[cxx]"
 RDEPEND="${DEPEND}"
 BDEPEND=""
 
-CHOST="${TOOL_PREFIX}-linux-gnu"
+CHOST="${TOOL_PREFIX}-legacy-linux-gnu"
 
 CC="${CHOST}-gcc-2.8.1"
 CXX="${CHOST}-g++-2.8.1"

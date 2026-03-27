@@ -16,7 +16,7 @@ dev-libc5)
 	TOOL_SUFFIX="linux-gnulibc1"
 	case $(tc-arch) in
 	amd64|x86)
-		TOOL_PREFIX="i586-legacy"
+		TOOL_PREFIX="i586"
 		;;
 	*)
 		;;
@@ -27,7 +27,7 @@ dev-libc4)
 	LDFLAGS="-Wl,-O1"
 	case $(tc-arch) in
 	amd64|x86)
-		TOOL_PREFIX="i486-legacy"
+		TOOL_PREFIX="i486"
 		;;
 	*)
 		;;
@@ -38,7 +38,7 @@ dev-libc4)
 	;;
 esac
 
-CBUILD="${TOOL_PREFIX}-${TOOL_SUFFIX}"
+CBUILD="${TOOL_PREFIX}-legacy-${TOOL_SUFFIX}"
 CHOST=${CBUILD}
 AS="${CHOST}-as"
 LD="${CHOST}-ld"

@@ -131,58 +131,35 @@ if ! tc_version_is_at_least 4.0 ; then
 	case $(tc-arch) in
 	amd64)
 		if tc_version_is_at_least 3.1 ; then
-			TOOL_PREFIX="x86_64-legacy"
+			TOOL_PREFIX="${CHOST%%-*}"
 		else
-			TOOL_PREFIX="i686-legacy"
-			CHOST_x86="${TOOL_PREFIX}-linux-gnu"
+			TOOL_PREFIX="${CHOST_x86%%-*}"
+			CHOST_x86="${TOOL_PREFIX}-legacy-linux-gnu"
 			ABI='x86'
 			DEFAULT_ABI='x86'
 			ABI_X86='32'
 		fi
 		;;
 	x86)
-		TOOL_PREFIX="i686-legacy"
-		CHOST_x86="${TOOL_PREFIX}-linux-gnu"
+		TOOL_PREFIX="${CHOST%%-*}"
+		CHOST_x86="${TOOL_PREFIX}-legacy-linux-gnu"
 		ABI='x86'
 		DEFAULT_ABI='x86'
 		ABI_X86='32'
 		;;
-	alpha|m68k)
-		TOOL_PREFIX="$(tc-arch)-legacy"
+	alpha|hppa|m68k|ppc|ppc64|s390|sh)
+		TOOL_PREFIX="${CHOST%%-*}"
 		;;
-	hppa)
-		TOOL_PREFIX="hppa1.1-legacy"
-		;;
-	mips)
-		if tc_version_is_at_least 3.1 ; then
-			TOOL_PREFIX="${PROFILE_ARCH}-legacy"
-		else
-			TOOL_PREFIX="${PROFILE_ARCH/64/}-legacy"
-		fi
-		;;
-	ppc)
-		TOOL_PREFIX="powerpc-legacy"
-		;;
-	ppc64)
-		TOOL_PREFIX="powerpc64-legacy"
-		;;
-	s390)
-		TOOL_PREFIX="s390x-legacy"
-		;;
-	sh)
-		TOOL_PREFIX="sh4-legacy"
-		;;
-	sparc)
-		if tc_version_is_at_least 3.1 ; then
-			TOOL_PREFIX="${PROFILE_ARCH}-legacy"
-		else
-			TOOL_PREFIX="sparc-legacy"
+	mips|sparc)
+		TOOL_PREFIX="${CHOST%%-*}"
+		if ! tc_version_is_at_least 3.1 ; then
+			TOOL_PREFIX="${TOOL_PREFIX/64/}"
 		fi
 		;;
 	esac
 
 	if [[ ${TOOL_PREFIX} != "" ]]; then
-		CBUILD="${TOOL_PREFIX}-linux-gnu"
+		CBUILD="${TOOL_PREFIX}-legacy-linux-gnu"
 		CHOST=${CBUILD}
 		AS="${CHOST}-as"
 		LD="${CHOST}-ld"

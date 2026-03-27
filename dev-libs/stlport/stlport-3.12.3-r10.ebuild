@@ -11,17 +11,14 @@ inherit downgrade-arch-flags
 
 LICENSE=""
 SLOT="$(ver_cut 1-3 ${PV})"
-KEYWORDS="alpha amd64 m68k ppc x86"
+KEYWORDS="amd64 alpha m68k x86 ppc"
 
 case ${ARCH} in
-	amd64|x86)
-		TOOL_PREFIX="i686-legacy"
+	amd64)
+		TOOL_PREFIX="${CHOST_x86%%-*}"
 		;;
-	alpha|m68k)
-		TOOL_PREFIX="${ARCH}-legacy"
-		;;
-	ppc)
-		TOOL_PREFIX="powerpc-legacy"
+	x86|alpha|m68k|ppc)
+		TOOL_PREFIX="${CHOST%%-*}"
 		;;
 	*)
 		;;
@@ -35,7 +32,7 @@ DEPEND="
 RDEPEND="${DEPEND}"
 BDEPEND=""
 
-CHOST="${TOOL_PREFIX}-linux-gnu"
+CHOST="${TOOL_PREFIX}-legacy-linux-gnu"
 
 S="${WORKDIR}"/STLport-${PV}
 

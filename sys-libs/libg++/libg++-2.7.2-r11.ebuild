@@ -14,37 +14,41 @@ SLOT="$(ver_cut 1-3 ${PV})"
 KEYWORDS="amd64 m68k x86"
 
 case ${ARCH} in
-amd64|x86)
-	TOOL_PREFIX="i686-legacy"
-	;;
-m68k)
-	TOOL_PREFIX="${ARCH}-legacy"
-	;;
-*)
-	;;
+	amd64)
+		TOOL_PREFIX="${CHOST_x86%%-*}"
+		;;
+	x86|m68k)
+		TOOL_PREFIX="${CHOST%%-*}"
+		;;
+	*)
+		;;
 esac
 
-DEPEND="sys-devel/gcc:2.4.5[cxx]"
+DEPEND="sys-devel/gcc:2.7.2[cxx]"
 RDEPEND="${DEPEND}"
 BDEPEND=""
 
-CHOST="${TOOL_PREFIX}-linux-gnu"
+CHOST="${TOOL_PREFIX}-legacy-linux-gnu"
 
-CC="${CHOST}-gcc-2.4.5"
-CXX="${CHOST}-gcc-2.4.5"
+CC="${CHOST}-gcc-2.7.2"
+CXX="${CHOST}-gcc-2.7.2"
 
 src_prepare() {
 	default
 	gnuconfig_update
-	eapply "${FILESDIR}"/${PV}/00_libgxx-${PV}.patch || die
+	eapply "${FILESDIR}"/${PV}/00_fix-for-gentoo.patch || die
+	eapply "${FILESDIR}"/${PV}/01_fix-for-new-glibc.patch || die
+	eapply "${FILESDIR}"/${PV}/02_fix-for-crash-00187.patch || die
 }
 
 src_configure() {
-	downgrade_arch_flags 2.4.5
+	downgrade_arch_flags 2.7.2
 	local econfargs=(
+		--build=${CHOST}
 		--host=${CHOST}
 		--target=${CHOST}
 		--prefix=/usr
+		--enable-shared
 	)
 
 	mkdir -p "${WORKDIR}"/build
@@ -59,16 +63,16 @@ src_configure() {
 
 src_compile() {
 	pushd "${WORKDIR}"/build > /dev/null
-	emake -j1 CC="${CC}" CXX="${CXX}" CFLAGS="${CFLAGS}" CXXFLAGS="${CXXFLAGS}" AR="${CHOST}-ar" RANLIB="${CHOST}-ranlib" NM="${CHOST}-nm" || die "failed to run make"
+	emake CC="${CC}" CXX="${CXX}" CFLAGS="${CFLAGS}" CXXFLAGS="${CXXFLAGS}" AR="${CHOST}-ar" RANLIB="${CHOST}-ranlib" NM="${CHOST}-nm" || die "failed to run make"
 	popd > /dev/null
 }
 
 src_install() {
 	pushd "${WORKDIR}"/build > /dev/null
 	emake -j1 DESTDIR="${ED}" install || die "failed to run make install"
-	mkdir -p "${ED}"/usr/lib/gcc-lib/${CHOST}/2.4.5/include || die
-	mv -v "${ED}"/usr/lib/g++-include "${ED}"/usr/lib/gcc-lib/${CHOST}/2.4.5/include/g++ || die
-	mv -v "${ED}"/usr/lib/libg++.a "${ED}"/usr/lib/gcc-lib/${CHOST}/2.4.5/ || die
+	mkdir -p "${ED}"/usr/lib/gcc-lib/${CHOST}/2.7.2/include || die
+	mv -v "${ED}"/usr/lib/g++-include "${ED}"/usr/lib/gcc-lib/${CHOST}/2.7.2/include/g++ || die
+	mv -v "${ED}"/usr/lib/libstdc++* "${ED}"/usr/lib/libg++* "${ED}"/usr/lib/gcc-lib/${CHOST}/2.7.2/ || die
 	rm -rfv "${ED}"/usr/lib/lib* "${ED}"/usr/lib/doc "${ED}"/usr/bin "${ED}"/usr/include "${ED}"/usr/man "${ED}"/usr/${CHOST} "${ED}"/usr/lib/${CHOST}
 	popd > /dev/null
 }

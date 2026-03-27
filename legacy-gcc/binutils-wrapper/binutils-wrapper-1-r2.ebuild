@@ -8,21 +8,41 @@ HOMEPAGE=""
 SRC_URI=""
 
 LICENSE=""
-KEYWORDS="amd64"
+KEYWORDS="alpha amd64 hppa m68k mips ppc ppc64 s390 sh sparc x86"
 IUSE="multilib"
 case ${ARCH} in
 	amd64)
-		TOOL_PREFIX="x86_64-legacy"
-		TOOL32_PREFIX="i686-legacy"
+		TOOL_PREFIX="${CHOST%%-*}"
+		TOOL32_PREFIX="${CHOST_x86%%-*}"
 		AS_PARAMS="--32"
 		LD_PARAMS="-m elf_i386"
+		;;
+	x86|alpha|hppa|m68k|ppc|ppc64|s390|sh)
+		TOOL_PREFIX="${CHOST%%-*}"
+		;;
+	mips)
+		TOOL_PREFIX="${CHOST%%-*}"
+		[[ ${PROFILE_ARCH} == *64* ]] && TOOL32_PREFIX="${TOOL_PREFIX/64/}"
+		if [[ ${TOOL32_PREFIX} == mips*el*-* ]] ; then
+			AS_PARAMS="-EL -mabi=32"
+			LD_PARAMS="-EL -melf32ltsmip"
+		else
+			AS_PARAMS="-EB -mabi=32"
+			LD_PARAMS="-EB -melf32btsmip"
+		fi
+		;;
+	sparc)
+		TOOL_PREFIX="${CHOST%%-*}"
+		[[ ${PROFILE_ARCH} == *64* ]] && TOOL32_PREFIX="${TOOL_PREFIX/64/}"
+		AS_PARAMS="-32"
+		LD_PARAMS="-m elf32_sparc"
 		;;
 	*)
 		;;
 esac
 SLOT="0"
 
-BINUTILS_SLOT="2.30"
+BINUTILS_SLOT="2.38"
 DEPEND="sys-devel/binutils:${BINUTILS_SLOT}"
 RDEPEND="${DEPEND}"
 BDEPEND=""
@@ -34,9 +54,10 @@ src_unpack(){
 
 src_install() {
 	HOST_PREFIX="${CHOST}"
-	TARGET_PREFIX="${TOOL_PREFIX}-linux-gnu"
 	UNIX_PREFIX="/usr"
 	mkdir -p "${ED}"${UNIX_PREFIX}/bin || die
+
+	TARGET_PREFIX="${TOOL_PREFIX}-legacy-linux-gnu"
 	mkdir -p "${ED}"${UNIX_PREFIX}/${TARGET_PREFIX}/bin || die
 	ln -sv ../${HOST_PREFIX}/binutils-bin/${BINUTILS_SLOT}/addr2line "${ED}"${UNIX_PREFIX}/bin/${TARGET_PREFIX}-addr2line || die
 	ln -sv ../${HOST_PREFIX}/binutils-bin/${BINUTILS_SLOT}/ar "${ED}"${UNIX_PREFIX}/bin/${TARGET_PREFIX}-ar || die
@@ -70,8 +91,9 @@ src_install() {
 	ln -sv ../../bin/${TARGET_PREFIX}-strings "${ED}"${UNIX_PREFIX}/${TARGET_PREFIX}/bin/strings || die
 	ln -sv ../../bin/${TARGET_PREFIX}-strip "${ED}"${UNIX_PREFIX}/${TARGET_PREFIX}/bin/strip || die
 
-	if [[ ${TOOL32_PREFIX} != "" ]] && use multilib ; then
-		TARGET32_PREFIX="${TOOL32_PREFIX}-linux-gnu"
+	if [[ ${TOOL32_PREFIX} != "" ]] && use multilib
+	then
+		TARGET32_PREFIX="${TOOL32_PREFIX}-legacy-linux-gnu"
 		mkdir -p "${ED}"${UNIX_PREFIX}/${TARGET32_PREFIX}/bin || die
 		ln -sv ../${HOST_PREFIX}/binutils-bin/${BINUTILS_SLOT}/addr2line "${ED}"${UNIX_PREFIX}/bin/${TARGET32_PREFIX}-addr2line || die
 		ln -sv ../${HOST_PREFIX}/binutils-bin/${BINUTILS_SLOT}/ar "${ED}"${UNIX_PREFIX}/bin/${TARGET32_PREFIX}-ar || die
@@ -113,5 +135,4 @@ _EOF_
 		ln -sv ../../bin/${TARGET32_PREFIX}-strings "${ED}"${UNIX_PREFIX}/${TARGET32_PREFIX}/bin/strings || die
 		ln -sv ../../bin/${TARGET32_PREFIX}-strip "${ED}"${UNIX_PREFIX}/${TARGET32_PREFIX}/bin/strip || die
 	fi
-
 }

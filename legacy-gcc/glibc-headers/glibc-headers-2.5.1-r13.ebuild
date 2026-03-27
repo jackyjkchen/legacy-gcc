@@ -17,33 +17,15 @@ CXX="g++-4.4.7"
 IUSE="multilib"
 case ${ARCH} in
 	amd64)
-		TOOL_PREFIX="x86_64-legacy"
-		TOOL32_PREFIX="i686-legacy"
+		TOOL_PREFIX="${CHOST%%-*}"
+		TOOL32_PREFIX="${CHOST_x86%%-*}"
 		;;
-	x86)
-		TOOL_PREFIX="i686-legacy"
-		;;
-	alpha|m68k)
-		TOOL_PREFIX="${ARCH}-legacy"
-		;;
-	hppa)
-		TOOL_PREFIX="hppa1.1-legacy"
+	x86|alpha|hppa|m68k|ppc|ppc64|s390|sh)
+		TOOL_PREFIX="${CHOST%%-*}"
 		;;
 	mips|sparc)
-		TOOL_PREFIX="${PROFILE_ARCH}-legacy"
-		[[ ${PROFILE_ARCH} == *64* ]] && TOOL32_PREFIX="${PROFILE_ARCH/64/}-legacy"
-		;;
-	ppc)
-		TOOL_PREFIX="powerpc-legacy"
-		;;
-	ppc64)
-		TOOL_PREFIX="powerpc64-legacy"
-		;;
-	s390)
-		TOOL_PREFIX="s390x-legacy"
-		;;
-	sh)
-		TOOL_PREFIX="sh4-legacy"
+		TOOL_PREFIX="${CHOST%%-*}"
+		[[ ${PROFILE_ARCH} == *64* ]] && TOOL32_PREFIX="${TOOL_PREFIX/64/}"
 		;;
 	*)
 		;;
@@ -56,7 +38,7 @@ DEPEND="
 RDEPEND="${DEPEND}"
 BDEPEND="sys-devel/gcc:4.4.7"
 
-CHOST="${TOOL_PREFIX}-linux-gnu"
+CHOST="${TOOL_PREFIX}-legacy-linux-gnu"
 
 S=${WORKDIR}/glibc-${PV}
 
@@ -119,7 +101,7 @@ src_install() {
 	cp -v bits/stdio_lim.h ${ED}/usr/${CHOST}/include/bits || die
 	rm -rv ${ED}/usr/${CHOST}/include/scsi || die
 	if [[ ${TOOL32_PREFIX} != "" ]] && use multilib ; then
-		TARGET32_PREFIX="${TOOL32_PREFIX}-linux-gnu"
+		TARGET32_PREFIX="${TOOL32_PREFIX}-legacy-linux-gnu"
 		mkdir -p ${ED}/usr/${TARGET32_PREFIX} || die
 		ln -sv ../${CHOST}/include ${ED}/usr/${TARGET32_PREFIX}/include || die
 	fi
