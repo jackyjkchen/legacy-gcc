@@ -5,8 +5,8 @@ EAPI=8
 
 DESCRIPTION=""
 HOMEPAGE=""
-SRC_URI="https://mirrors.ustc.edu.cn/gnu/glibc/glibc-${PV}.tar.bz2
-		https://mirrors.ustc.edu.cn/gnu/glibc/glibc-ports-2.5.tar.bz2"
+SRC_URI="https://mirrors.tuna.tsinghua.edu.cn/gnu/glibc/glibc-${PV}.tar.bz2
+		https://mirrors.tuna.tsinghua.edu.cn/gnu/glibc/glibc-ports-2.5.tar.bz2"
 
 inherit downgrade-arch-flags gnuconfig
 

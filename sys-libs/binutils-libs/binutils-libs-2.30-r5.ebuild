@@ -14,7 +14,7 @@ PATCH_DEV=${PATCH_DEV:-slyfox}
 
 DESCRIPTION="Core binutils libraries (libbfd, libopcodes, libiberty) for external packages"
 HOMEPAGE="https://sourceware.org/binutils/"
-SRC_URI="https://mirrors.ustc.edu.cn/gnu/binutils/binutils-${PV}.tar.xz"
+SRC_URI="https://mirrors.tuna.tsinghua.edu.cn/gnu/binutils/binutils-${PV}.tar.xz"
 
 LICENSE="|| ( GPL-3 LGPL-3 )"
 # The shared lib SONAMEs use the ${PV} in them.

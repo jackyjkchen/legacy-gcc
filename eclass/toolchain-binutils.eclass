@@ -73,11 +73,11 @@ tc_version_is_at_least() {
 	ver_test "${2:-${BINUTILS_RELEASE_VER}}" -ge "$1"
 }
 if tc_version_is_at_least 2.28.1 ; then
-	SRC_URI="https://mirrors.ustc.edu.cn/gnu/binutils/binutils-${BVER}.tar.xz"
+	SRC_URI="https://mirrors.tuna.tsinghua.edu.cn/gnu/binutils/binutils-${BVER}.tar.xz"
 elif tc_version_is_at_least 2.12 ; then
-	SRC_URI="https://mirrors.ustc.edu.cn/gnu/binutils/binutils-${BVER}.tar.bz2"
+	SRC_URI="https://mirrors.tuna.tsinghua.edu.cn/gnu/binutils/binutils-${BVER}.tar.bz2"
 else
-	SRC_URI="https://mirrors.ustc.edu.cn/gnu/binutils/binutils-${BVER}.tar.gz"
+	SRC_URI="https://mirrors.tuna.tsinghua.edu.cn/gnu/binutils/binutils-${BVER}.tar.gz"
 fi
 if tc_version_is_at_least 2.18 ; then
 	LICENSE="|| ( GPL-3 LGPL-3 )"

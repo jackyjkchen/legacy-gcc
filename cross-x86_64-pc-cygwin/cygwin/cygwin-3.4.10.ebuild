@@ -24,10 +24,10 @@ esac
 
 DESCRIPTION=""
 HOMEPAGE=""
-SRC_URI="https://mirrors.ustc.edu.cn/cygwin/x86_64/release/w32api-headers/w32api-headers-11.0.1-1.tar.xz -> w32api-headers-11.0.1-1-x86_64.tar.xz
-		https://mirrors.ustc.edu.cn/cygwin/x86_64/release/w32api-runtime/w32api-runtime-11.0.1-1.tar.xz -> w32api-runtime-11.0.1-1-x86_64.tar.xz
-		https://mirrors.ustc.edu.cn/cygwin/x86_64/release/cygwin/cygwin-${PV}-1.tar.xz -> cygwin-${PV}-1-x86_64.tar.xz
-		https://mirrors.ustc.edu.cn/cygwin/x86_64/release/cygwin/cygwin-devel/cygwin-devel-${PV}-1.tar.xz -> cygwin-devel-${PV}-1-x86_64.tar.xz"
+SRC_URI="https://mirrors.tuna.tsinghua.edu.cn/cygwin/x86_64/release/w32api-headers/w32api-headers-11.0.1-1.tar.xz -> w32api-headers-11.0.1-1-x86_64.tar.xz
+		https://mirrors.tuna.tsinghua.edu.cn/cygwin/x86_64/release/w32api-runtime/w32api-runtime-11.0.1-1.tar.xz -> w32api-runtime-11.0.1-1-x86_64.tar.xz
+		https://mirrors.tuna.tsinghua.edu.cn/cygwin/x86_64/release/cygwin/cygwin-${PV}-1.tar.xz -> cygwin-${PV}-1-x86_64.tar.xz
+		https://mirrors.tuna.tsinghua.edu.cn/cygwin/x86_64/release/cygwin/cygwin-devel/cygwin-devel-${PV}-1.tar.xz -> cygwin-devel-${PV}-1-x86_64.tar.xz"
 
 LICENSE=""
 SLOT="0"

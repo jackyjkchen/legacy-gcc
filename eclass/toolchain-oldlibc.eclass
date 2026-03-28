@@ -208,9 +208,9 @@ gentoo_urls() {
 
 get_gcc_src_uri() {
 	if tc_version_is_at_least 3.2 ; then
-		GCC_SRC_URI="http://mirrors.ustc.edu.cn/gnu/gcc/gcc-${GCC_PV}/gcc-${GCC_RELEASE_VER}.tar.bz2"
+		GCC_SRC_URI="http://mirrors.tuna.tsinghua.edu.cn/gnu/gcc/gcc-${GCC_PV}/gcc-${GCC_RELEASE_VER}.tar.bz2"
 	elif tc_version_is_between 3.0 3.2 ; then
-		GCC_SRC_URI="http://mirrors.ustc.edu.cn/gnu/gcc/gcc-${GCC_PV}/gcc-${GCC_RELEASE_VER}.tar.gz"
+		GCC_SRC_URI="http://mirrors.tuna.tsinghua.edu.cn/gnu/gcc/gcc-${GCC_PV}/gcc-${GCC_RELEASE_VER}.tar.gz"
 	elif [[ ${P} == "gcc-2.91.66" ]] ; then
 		GCC_SRC_URI="http://gcc.gnu.org/pub/gcc/old-releases/egcs/egcs-1.1.2.tar.bz2"
 	elif tc_version_is_between 2.0 3.0 ; then

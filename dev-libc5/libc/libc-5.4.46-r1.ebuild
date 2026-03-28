@@ -5,7 +5,7 @@ EAPI=8
 
 DESCRIPTION=""
 HOMEPAGE=""
-SRC_URI="https://mirrors.ustc.edu.cn/kernel.org/linux/libs/libc5/old/libc-${PV}.bin.tar.gz"
+SRC_URI="https://mirrors.tuna.tsinghua.edu.cn/kernel.org/linux/libs/libc5/old/libc-${PV}.bin.tar.gz"
 
 LICENSE=""
 SLOT="0"
