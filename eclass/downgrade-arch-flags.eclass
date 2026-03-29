@@ -23,16 +23,6 @@ downgrade_arch_flags() {
 
 	bver=${1}
 
-	if [[ $(tc-arch) != amd64 && $(tc-arch) != x86 ]] ; then
-		strip-unsupported-flags
-		if ! tc_version_is_at_least 3.1 ${bver} ; then
-			strip-flags
-			CFLAGS="-O2 -pipe"
-			CXXFLAGS="-O2 -pipe"
-			FFLAGS="-O2 -pipe"
-			FCFLAGS="-O2 -pipe"
-		fi
-	fi
 	case $(tc-arch) in
 	alpha)
 		if ! tc_version_is_at_least 2.9 ${bver}; then
@@ -100,6 +90,9 @@ downgrade_arch_flags() {
 		fi
 		;;
 	sparc)
+		if ! tc_version_is_at_least 3.3 ${bver} ; then
+			replace-flags -O2 -O1
+		fi
 		if ! tc_version_is_at_least 3.1 ${bver} ; then
 			filter-flags '-mcpu=*' '-mtune=*'
 			if [[ ${ABI} == "sparc64" ]]; then

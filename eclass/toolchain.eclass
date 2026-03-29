@@ -2441,7 +2441,7 @@ toolchain_src_configure() {
 gcc_do_filter_flags() {
 	# Allow users to explicitly avoid flag sanitization via
 	# USE=custom-cflags.
-	if ! _tc_use_if_iuse custom-cflags; then
+	if ! _tc_use_if_iuse custom-cflags && tc_version_is_at_least 3.3 ; then
 		# Over-zealous CFLAGS can often cause problems.  What may work for one
 		# person may not work for another.  To avoid a large influx of bugs
 		# relating to failed builds, we strip most CFLAGS out to ensure as few
