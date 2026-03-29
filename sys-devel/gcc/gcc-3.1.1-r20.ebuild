@@ -22,6 +22,9 @@ src_prepare() {
 		hppa)
 			eapply "${FILESDIR}"/${PV}/04_hppa-fix-build.patch
 			;;
+		sparc)
+			eapply "${FILESDIR}"/${PV}/06_workaround-sparc.patch
+			;;
 	esac
 	eapply "${FILESDIR}"/${PV}/05_add-__LP64__.patch
 
