@@ -3237,13 +3237,13 @@ toolchain_src_install() {
 		mkdir -p ${ED}/etc/ld.so.conf.d/ || die
 		local ldconf="${ED}/etc/ld.so.conf.d/${GCC_INDEX[${GCC_RELEASE_VER}]}-${CHOST}-gcc-${GCC_RELEASE_VER}.conf"
 		case ${TOOL_PREFIX} in
-			x86_64-legacy|sparc64-legacy)
+			x86_64|sparc64)
 				cat <<-_EOF_ > ${ldconf} || die
 ${LIBPATH}
 ${LIBPATH}/32
 _EOF_
 				;;
-			mips64*-legacy)
+			mips64*)
 				if tc_version_is_at_least 3.3 ; then
 					cat <<-_EOF_ > ${ldconf} || die
 ${LIBPATH}
