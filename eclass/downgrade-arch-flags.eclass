@@ -91,7 +91,7 @@ downgrade_arch_flags() {
 		;;
 	sparc)
 		if ! tc_version_is_at_least 3.3 ${bver} ; then
-			replace-flags -O2 -O1
+			filter-flags -pipe
 		fi
 		if ! tc_version_is_at_least 3.1 ${bver} ; then
 			filter-flags '-mcpu=*' '-mtune=*'
