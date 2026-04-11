@@ -30,5 +30,6 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/012_pr7566.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/013_pr19005.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/014_pr12799.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/015_pr11739.patch
 }
 
