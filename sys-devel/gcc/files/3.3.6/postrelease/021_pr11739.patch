@@ -1,0 +1,70 @@
+diff --git a/gcc/config/i386/i386.c b/gcc/config/i386/i386.c
+index aaa4a04..18c15b0 100644
+--- a/gcc/config/i386/i386.c
++++ b/gcc/config/i386/i386.c
+@@ -1134,10 +1134,16 @@ override_options ()
+     if (! strcmp (ix86_cpu_string, processor_alias_table[i].name))
+       {
+ 	ix86_cpu = processor_alias_table[i].processor;
++
++	/* Intel CPUs have always interpreted SSE prefetch instructions as
++	   NOPs; so, we can enable SSE prefetch instructions even when
++	   -mtune (rather than -march) points us to a processor that has them.
++	   However, the VIA C3 gives a SIGILL, so we only do that for i686 and
++	   higher processors.  */
++	if (TARGET_CMOVE && (processor_alias_table[i].flags & PTA_PREFETCH_SSE))
++	  x86_prefetch_sse = true;
+ 	break;
+       }
+-  if (processor_alias_table[i].flags & PTA_PREFETCH_SSE)
+-    x86_prefetch_sse = true;
+   if (i == pta_size)
+     error ("bad value (%s) for -mcpu= switch", ix86_cpu_string);
+ 
+diff --git a/gcc/testsuite/gcc.misc-tests/i386-prefetch.exp b/gcc/testsuite/gcc.misc-tests/i386-prefetch.exp
+index 3091845..59f4556 100644
+--- a/gcc/testsuite/gcc.misc-tests/i386-prefetch.exp
++++ b/gcc/testsuite/gcc.misc-tests/i386-prefetch.exp
+@@ -24,14 +24,14 @@
+ # Do not generate prefetch instructions for the following options.
+ 
+ set PREFETCH_NONE [list \
+-	{ -mcpu=i386 } \
+-	{ -mcpu=i486 } \
+-	{ -mcpu=i586 } \
+-	{ -mcpu=i686 } \
+-	{ -mcpu=pentium2 } \
+-	{ -mcpu=k6 } \
+-	{ -mcpu=k6-2 } \
+-	{ -mcpu=k6-3 } \
++	{ -march=i386 -mcpu=i386 } \
++	{ -march=i386 -mcpu=i486 } \
++	{ -march=i386 -mcpu=i586 } \
++	{ -march=i386 -mcpu=i686 } \
++	{ -march=i386 -mcpu=pentium2 } \
++	{ -march=i386 -mcpu=k6 } \
++	{ -march=i386 -mcpu=k6-2 } \
++	{ -march=i386 -mcpu=k6-3 } \
+ 	{ -march=i386 } \
+ 	{ -march=i486 } \
+ 	{ -march=i586 } \
+@@ -44,12 +44,14 @@ set PREFETCH_NONE [list \
+ # instructions as nops.
+ 
+ set PREFETCH_SSE [list \
+-	{ -mcpu=pentium3 } \
+-	{ -mcpu=pentium4 } \
+-	{ -mcpu=athlon } \
+-	{ -mcpu=athlon-4 } \
++	{ -march=i686 -mcpu=pentium3 } \
++	{ -march=i686 -mcpu=pentium4 } \
++	{ -march=i686 -mcpu=prescott } \
++	{ -march=i686 -mcpu=athlon } \
++	{ -march=i686 -mcpu=athlon-4 } \
+ 	{ -march=pentium3 } \
+-	{ -march=pentium4 } ]
++	{ -march=pentium4 } \
++	{ -march=prescott } ]
+ 
+ # Generate 3DNow! prefetch instructions for the following.
+ 
