@@ -26812,3 +26812,120 @@ index 4d56cf25c..76719b8cf 100644
      if ([view conformsTo:@protocol(MyProto)]) {
          widget = [(Foo <MyProto> *)view widget];
      }
+diff --git a/libstdc++-v3/testsuite/ext/profile/all.cc b/libstdc++-v3/testsuite/ext/profile/all.cc
+index 57a55cce6..037eee497 100644
+--- a/libstdc++-v3/testsuite/ext/profile/all.cc
++++ b/libstdc++-v3/testsuite/ext/profile/all.cc
+@@ -1,10 +1,11 @@
+-// { dg-options "-std=gnu++0x -O0 -D_GLIBCXX_PROFILE" }
+-// { dg-options "-std=gnu++0x -O0 -D_GLIBCXX_PROFILE -D_GLIBCXX_PROFILE_NO_THREADS" { target { ! tls_native } } }
++// { dg-options "-std=gnu++0x -O0" }
++// { dg-options "-std=gnu++0x -O0 -D_GLIBCXX_PROFILE_NO_THREADS" { target { ! tls_native } } }
+ // { dg-do compile }
++// { dg-require-profile-mode "" }
+ 
+ // -*- C++ -*-
+ 
+-// Copyright (C) 2006, 2007, 2009 Free Software Foundation, Inc.
++// Copyright (C) 2006, 2007, 2009, 2010 Free Software Foundation, Inc.
+ //
+ // This file is part of the GNU ISO C++ Library.  This library is free
+ // software; you can redistribute it and/or modify it under the
+diff --git a/libstdc++-v3/testsuite/ext/profile/mh.cc b/libstdc++-v3/testsuite/ext/profile/mh.cc
+index 44a667c04..dc2e94198 100644
+--- a/libstdc++-v3/testsuite/ext/profile/mh.cc
++++ b/libstdc++-v3/testsuite/ext/profile/mh.cc
+@@ -1,9 +1,10 @@
+-// { dg-options "-D_GLIBCXX_PROFILE" }
+ // { dg-do compile { target *-*-linux* } }
++// { dg-xfail-if "" { uclibc } { "*" } { "" } }
++// { dg-require-profile-mode "" }
+ 
+ // -*- C++ -*-
+ 
+-// Copyright (C) 2006, 2007, 2009 Free Software Foundation, Inc.
++// Copyright (C) 2006, 2007, 2009, 2010 Free Software Foundation, Inc.
+ //
+ // This file is part of the GNU ISO C++ Library.  This library is free
+ // software; you can redistribute it and/or modify it under the
+diff --git a/libstdc++-v3/testsuite/lib/dg-options.exp b/libstdc++-v3/testsuite/lib/dg-options.exp
+index 10848bccc..c599b1f09 100644
+--- a/libstdc++-v3/testsuite/lib/dg-options.exp
++++ b/libstdc++-v3/testsuite/lib/dg-options.exp
+@@ -35,6 +35,15 @@ proc dg-require-debug-mode { args } {
+     return
+ }
+ 
++proc dg-require-profile-mode { args } {
++    if { ![ check_v3_target_profile_mode ] } {
++	upvar dg-do-what dg-do-what
++	set dg-do-what [list [lindex ${dg-do-what} 0] "N" "P"]
++	return
++    }
++    return
++}
++
+ proc dg-require-parallel-mode { args } {
+     if { ![ check_v3_target_parallel_mode ] } {
+ 	upvar dg-do-what dg-do-what
+diff --git a/libstdc++-v3/testsuite/lib/libstdc++.exp b/libstdc++-v3/testsuite/lib/libstdc++.exp
+index e749d2236..0830f15c3 100644
+--- a/libstdc++-v3/testsuite/lib/libstdc++.exp
++++ b/libstdc++-v3/testsuite/lib/libstdc++.exp
+@@ -980,6 +980,56 @@ proc check_v3_target_debug_mode { } {
+     return $et_debug_mode
+ }
+ 
++proc check_v3_target_profile_mode { } {
++    global et_profile_mode
++    global tool
++
++    if { ![info exists et_profile_mode_target_name] } {
++	set et_profile_mode_target_name ""
++    }
++
++    # If the target has changed since we set the cached value, clear it.
++    set current_target [current_target_name]
++    if { $current_target != $et_profile_mode_target_name } {
++	verbose "check_v3_target_profile_mode: `$et_profile_mode_target_name'" 2
++	set et_profile_mode_target_name $current_target
++	if [info exists et_profile_mode] {
++	    verbose "check_v3_target_profile_mode: removing cached result" 2
++	    unset et_profile_mode
++	}
++    }
++
++    if [info exists et_profile_mode] {
++	verbose "check_v3_target_profile_mode: using cached result" 2
++    } else {
++	set et_profile_mode 0
++
++	# Set up and compile a C++ test program that depends
++	# on profile mode activated.
++	set src profile_mode[pid].cc
++	set exe profile_mode[pid].exe
++
++	set f [open $src "w"]
++	puts $f "#ifndef _GLIBCXX_PROFILE"
++	puts $f "#  error No profile mode"
++	puts $f "#endif"
++	puts $f "int main()"
++	puts $f "{ return 0; }"
++	close $f
++
++	set lines [v3_target_compile $src $exe executable ""]
++	file delete $src
++
++	if [string match "" $lines] {
++	    # No error message, compilation succeeded.
++	    remote_file build delete $exe
++	    set et_profile_mode 1
++	}
++    }
++    verbose "check_v3_target_profile_mode: $et_profile_mode" 2
++    return $et_profile_mode
++}
++
+ proc check_v3_target_parallel_mode { } {
+     global cxxflags
+     global v3-libgomp
