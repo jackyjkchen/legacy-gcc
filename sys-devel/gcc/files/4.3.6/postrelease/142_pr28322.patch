@@ -1,0 +1,132 @@
+diff --git a/fixincludes/configure b/fixincludes/configure
+index 2812b89c..616fa84b 100755
+--- a/fixincludes/configure
++++ b/fixincludes/configure
+@@ -2801,7 +2801,7 @@ WARN_CFLAGS=
+ save_CFLAGS="$CFLAGS"
+ for option in -W -Wall -Wwrite-strings -Wstrict-prototypes \
+ 			  -Wmissing-prototypes -Wold-style-definition \
+-			  -Wmissing-format-attribute -Wno-overlength-strings; do
++			  -Wmissing-format-attribute; do
+   as_acx_Woption=`echo "acx_cv_prog_cc_warning_$option" | $as_tr_sh`
+ 
+   { echo "$as_me:$LINENO: checking whether $CC supports $option" >&5
+diff --git a/fixincludes/configure.ac b/fixincludes/configure.ac
+index 6b03130b..fdc2f172 100644
+--- a/fixincludes/configure.ac
++++ b/fixincludes/configure.ac
+@@ -11,7 +11,7 @@ AC_PROG_CC
+ 
+ ACX_PROG_CC_WARNING_OPTS([-W -Wall -Wwrite-strings -Wstrict-prototypes \
+ 			  -Wmissing-prototypes -Wold-style-definition \
+-			  -Wmissing-format-attribute -Wno-overlength-strings])
++			  -Wmissing-format-attribute])
+ ACX_PROG_CC_WARNING_ALMOST_PEDANTIC([-Wno-long-long])
+ 
+ # Only enable with --enable-werror-always until existing warnings are
+diff --git a/gcc/opts.c b/gcc/opts.c
+index 3233f3ae..3dfff4ab 100644
+--- a/gcc/opts.c
++++ b/gcc/opts.c
+@@ -356,6 +356,12 @@ DEF_VEC_ALLOC_P(char_p,heap);
+ static VEC(char_p,heap) *flag_instrument_functions_exclude_functions;
+ static VEC(char_p,heap) *flag_instrument_functions_exclude_files;
+ 
++typedef const char *const_char_p; /* For DEF_VEC_P.  */
++DEF_VEC_P(const_char_p);
++DEF_VEC_ALLOC_P(const_char_p,heap);
++
++static VEC(const_char_p,heap) *ignored_options;
++
+ /* Input file names.  */
+ const char **in_fnames;
+ unsigned num_in_fnames;
+@@ -434,6 +440,36 @@ complain_wrong_lang (const char *text, const struct cl_option *option,
+   free (bad_lang);
+ }
+ 
++/* Buffer the unknown option described by the string OPT.  Currently,
++   we only complain about unknown -Wno-* options if they may have
++   prevented a diagnostic. Otherwise, we just ignore them.
++   Note that if we do complain, it is only as a warning, not an error;
++   passing the compiler an unrecognised -Wno-* option should never
++   change whether the compilation succeeds or fails.  */
++
++static void postpone_unknown_option_warning(const char *opt)
++{
++  VEC_safe_push (const_char_p, heap, ignored_options, opt);
++}
++
++/* Produce a warning for each option previously buffered.  */
++
++void print_ignored_options (void)
++{
++  location_t saved_loc = input_location;
++
++  input_location = 0;
++
++  while (!VEC_empty (const_char_p, ignored_options))
++    {
++      const char *opt;
++      opt = VEC_pop (const_char_p, ignored_options);
++      warning (0, "unrecognized command line option \"%s\"", opt);
++    }
++
++  input_location = saved_loc;
++}
++
+ /* Handle the switch beginning at ARGV for the language indicated by
+    LANG_MASK.  Returns the number of switches consumed.  */
+ static unsigned int
+@@ -463,6 +499,14 @@ handle_option (const char **argv, unsigned int lang_mask)
+       opt = dup;
+       value = 0;
+       opt_index = find_opt (opt + 1, lang_mask | CL_COMMON | CL_TARGET);
++      if (opt_index == cl_options_count && opt[1] == 'W')
++	{
++	  /* We don't generate warnings for unknown -Wno-* options
++             unless we issue diagnostics.  */
++	  postpone_unknown_option_warning (argv[0]);
++	  result = 1;
++	  goto done;
++	}
+     }
+ 
+   if (opt_index == cl_options_count)
+diff --git a/gcc/opts.h b/gcc/opts.h
+index e6bee109..2f543407 100644
+--- a/gcc/opts.h
++++ b/gcc/opts.h
+@@ -105,4 +105,5 @@ extern bool get_option_state (int, struct cl_option_state *);
+ 
+ extern void enable_warning_as_error (const char *arg, int value,
+ 				     unsigned int lang_mask);
++extern void print_ignored_options (void);
+ #endif
+diff --git a/gcc/testsuite/lib/prune.exp b/gcc/testsuite/lib/prune.exp
+index 2e901a08..d1a9f95b 100644
+--- a/gcc/testsuite/lib/prune.exp
++++ b/gcc/testsuite/lib/prune.exp
+@@ -21,7 +21,7 @@ proc prune_gcc_output { text } {
+     #send_user "Before:$text\n"
+ 
+     regsub -all "(^|\n)(\[^\n\]*: )?In ((static member )?function|member|method|(copy )?constructor|destructor|instantiation|program|subroutine|block-data) \[^\n\]*" $text "" text
+-    regsub -all "(^|\n)\[^\n\]*: At (top level|global scope):\[^\n\]*" $text "" text
++    regsub -all "(^|\n)\[^\n\]*(: )?At (top level|global scope):\[^\n\]*" $text "" text
+     regsub -all "(^|\n)\[^\n\]*:   instantiated from \[^\n\]*" $text "" text
+     regsub -all "(^|\n)    inlined from \[^\n\]*" $text "" text
+     regsub -all "(^|\n)collect2: ld returned \[^\n\]*" $text "" text
+diff --git a/gcc/toplev.c b/gcc/toplev.c
+index c9657fc7..d06c3fb1 100644
+--- a/gcc/toplev.c
++++ b/gcc/toplev.c
+@@ -2271,6 +2271,9 @@ toplev_main (unsigned int argc, const char **argv)
+   if (!exit_after_options)
+     do_compile ();
+ 
++  if (warningcount || errorcount) 
++    print_ignored_options ();
++
+   if (errorcount || sorrycount)
+     return (FATAL_EXIT_CODE);
+ 

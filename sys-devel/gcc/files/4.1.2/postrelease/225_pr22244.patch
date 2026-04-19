@@ -1,0 +1,59 @@
+diff --git a/gcc/fortran/Make-lang.in b/gcc/fortran/Make-lang.in
+index f708e02b..5cd8bce0 100644
+--- a/gcc/fortran/Make-lang.in
++++ b/gcc/fortran/Make-lang.in
+@@ -284,7 +284,7 @@ fortran/trans-decl.o: $(GFORTRAN_TRANS_DEPS) gt-fortran-trans-decl.h \
+   cgraph.h $(TARGET_H) function.h $(FLAGS_H) tree-gimple.h \
+   tree-dump.h
+ fortran/trans-types.o: $(GFORTRAN_TRANS_DEPS) gt-fortran-trans-types.h \
+-  real.h toplev.h $(TARGET_H)
++  real.h toplev.h $(TARGET_H) $(FLAGS_H)
+ fortran/trans-const.o: $(GFORTRAN_TRANS_DEPS)
+ fortran/trans-expr.o: $(GFORTRAN_TRANS_DEPS) fortran/dependency.h
+ fortran/trans-stmt.o: $(GFORTRAN_TRANS_DEPS)
+diff --git a/gcc/fortran/trans-types.c b/gcc/fortran/trans-types.c
+index 9bef9b66..4c1f6fdf 100644
+--- a/gcc/fortran/trans-types.c
++++ b/gcc/fortran/trans-types.c
+@@ -35,6 +35,7 @@ Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
+ #include "trans-types.h"
+ #include "trans-const.h"
+ #include "real.h"
++#include "flags.h"
+ 
+ 
+ #if (GFC_MAX_DIMENSIONS < 10)
+@@ -1005,7 +1006,7 @@ gfc_get_nodesc_array_type (tree etype, gfc_array_spec * as, int packed)
+     {
+       /* Fill in the stride and bound components of the type.  */
+       if (known_stride)
+-	tmp =  gfc_conv_mpz_to_tree (stride, gfc_index_integer_kind);
++	tmp = gfc_conv_mpz_to_tree (stride, gfc_index_integer_kind);
+       else
+         tmp = NULL_TREE;
+       GFC_TYPE_ARRAY_STRIDE (type, n) = tmp;
+@@ -1103,6 +1104,24 @@ gfc_get_nodesc_array_type (tree etype, gfc_array_spec * as, int packed)
+   mpz_clear (stride);
+   mpz_clear (delta);
+ 
++  /* In debug info represent packed arrays as multi-dimensional
++     if they have rank > 1 and with proper bounds, instead of flat
++     arrays.  */
++  if (known_stride && write_symbols != NO_DEBUG)
++    {
++      tree gtype = etype, rtype, type_decl;
++
++      for (n = as->rank - 1; n >= 0; n--)
++	{
++	  rtype = build_range_type (gfc_array_index_type,
++				    GFC_TYPE_ARRAY_LBOUND (type, n),
++				    GFC_TYPE_ARRAY_UBOUND (type, n));
++	  gtype = build_array_type (gtype, rtype);
++	}
++      TYPE_NAME (type) = type_decl = build_decl (TYPE_DECL, NULL, gtype);
++      DECL_ORIGINAL_TYPE (type_decl) = gtype;
++    }
++
+   if (packed < 3 || !known_stride)
+     {
+       /* For dummy arrays and automatic (heap allocated) arrays we

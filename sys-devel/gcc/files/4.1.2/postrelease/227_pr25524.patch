@@ -1,0 +1,450 @@
+diff --git a/gcc/c-incpath.c b/gcc/c-incpath.c
+index 40406124..a05a8c9d 100644
+--- a/gcc/c-incpath.c
++++ b/gcc/c-incpath.c
+@@ -1,6 +1,7 @@
+ /* Set up combined include path chain for the preprocessor.
+    Copyright (C) 1986, 1987, 1989, 1992, 1993, 1994, 1995, 1996, 1997, 1998,
+-   1999, 2000, 2001, 2002, 2003, 2004, 2005 Free Software Foundation, Inc.
++   1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006
++   Free Software Foundation, Inc.
+ 
+    Broken out of cppinit.c and cppfiles.c and rewritten Mar 2003.
+ 
+@@ -45,8 +46,10 @@ Foundation, 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.  */
+ # define INO_T_COPY(DEST, SRC) (DEST) = (SRC)
+ #endif
+ 
++static const char dir_separator_str[] = { DIR_SEPARATOR, 0 };
++
+ static void add_env_var_paths (const char *, int);
+-static void add_standard_paths (const char *, const char *, int);
++static void add_standard_paths (const char *, const char *, const char *, int);
+ static void free_path (struct cpp_dir *, int);
+ static void merge_include_chains (cpp_reader *, int);
+ static struct cpp_dir *remove_duplicates (cpp_reader *, struct cpp_dir *,
+@@ -120,7 +123,8 @@ add_env_var_paths (const char *env_var, int chain)
+ 
+ /* Append the standard include chain defined in cppdefault.c.  */
+ static void
+-add_standard_paths (const char *sysroot, const char *iprefix, int cxx_stdinc)
++add_standard_paths (const char *sysroot, const char *iprefix,
++		    const char *imultilib, int cxx_stdinc)
+ {
+   const struct default_include *p;
+   size_t len;
+@@ -142,6 +146,8 @@ add_standard_paths (const char *sysroot, const char *iprefix, int cxx_stdinc)
+ 	      if (!strncmp (p->fname, cpp_GCC_INCLUDE_DIR, len))
+ 		{
+ 		  char *str = concat (iprefix, p->fname + len, NULL);
++		  if (p->multilib && imultilib)
++		    str = concat (str, dir_separator_str, imultilib, NULL);
+ 		  add_path (str, SYSTEM, p->cxx_aware, false);
+ 		}
+ 	    }
+@@ -160,6 +166,9 @@ add_standard_paths (const char *sysroot, const char *iprefix, int cxx_stdinc)
+ 	  else
+ 	    str = update_path (p->fname, p->component);
+ 
++	  if (p->multilib && imultilib)
++	    str = concat (str, dir_separator_str, imultilib, NULL);
++
+ 	  add_path (str, SYSTEM, p->cxx_aware, false);
+ 	}
+     }
+@@ -357,8 +366,8 @@ add_path (char *path, int chain, int cxx_aware, bool user_supplied_p)
+    removal, and registration with cpplib.  */
+ void
+ register_include_chains (cpp_reader *pfile, const char *sysroot,
+-			 const char *iprefix, int stdinc, int cxx_stdinc,
+-			 int verbose)
++			 const char *iprefix, const char *imultilib,
++			 int stdinc, int cxx_stdinc, int verbose)
+ {
+   static const char *const lang_env_vars[] =
+     { "C_INCLUDE_PATH", "CPLUS_INCLUDE_PATH",
+@@ -380,7 +389,7 @@ register_include_chains (cpp_reader *pfile, const char *sysroot,
+ 
+   /* Finally chain on the standard directories.  */
+   if (stdinc)
+-    add_standard_paths (sysroot, iprefix, cxx_stdinc);
++    add_standard_paths (sysroot, iprefix, imultilib, cxx_stdinc);
+ 
+   target_c_incpath.extra_includes (sysroot, iprefix, stdinc);
+ 
+diff --git a/gcc/c-incpath.h b/gcc/c-incpath.h
+index c309844c..3f268b79 100644
+--- a/gcc/c-incpath.h
++++ b/gcc/c-incpath.h
+@@ -1,5 +1,5 @@
+ /* Set up combined include path for the preprocessor.
+-   Copyright (C) 2003, 2004, 2005 Free Software Foundation, Inc.
++   Copyright (C) 2003, 2004, 2005, 2006 Free Software Foundation, Inc.
+ 
+ This program is free software; you can redistribute it and/or modify it
+ under the terms of the GNU General Public License as published by the
+@@ -18,7 +18,8 @@ Foundation, 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.  */
+ extern void split_quote_chain (void);
+ extern void add_path (char *, int, int, bool);
+ extern void register_include_chains (cpp_reader *, const char *,
+-				     const char *, int, int, int);
++				     const char *, const char *,
++				     int, int, int);
+ extern void add_cpp_dir_path (struct cpp_dir *, int);
+ 
+ struct target_c_incpath_s {
+diff --git a/gcc/c-opts.c b/gcc/c-opts.c
+index 4f5f734a..6dd34053 100644
+--- a/gcc/c-opts.c
++++ b/gcc/c-opts.c
+@@ -79,6 +79,9 @@ static const char *deps_file;
+ /* The prefix given by -iprefix, if any.  */
+ static const char *iprefix;
+ 
++/* The multilib directory given by -imultilib, if any.  */
++static const char *imultilib;
++
+ /* The system root, if any.  Overridden by -isysroot.  */
+ static const char *sysroot = TARGET_SYSTEM_ROOT;
+ 
+@@ -820,6 +823,10 @@ c_common_handle_option (size_t scode, const char *arg, int value)
+       defer_opt (code, arg);
+       break;
+ 
++    case OPT_imultilib:
++      imultilib = arg;
++      break;
++
+     case OPT_iprefix:
+       iprefix = arg;
+       break;
+@@ -979,7 +986,7 @@ c_common_post_options (const char **pfilename)
+ 
+   sanitize_cpp_opts ();
+ 
+-  register_include_chains (parse_in, sysroot, iprefix,
++  register_include_chains (parse_in, sysroot, iprefix, imultilib,
+ 			   std_inc, std_cxx_inc && c_dialect_cxx (), verbose);
+ 
+   flag_inline_trees = 1;
+diff --git a/gcc/c.opt b/gcc/c.opt
+index fe894b5e..e17f2390 100644
+--- a/gcc/c.opt
++++ b/gcc/c.opt
+@@ -761,6 +761,10 @@ imacros
+ C ObjC C++ ObjC++ Joined Separate
+ -imacros <file>	Accept definition of macros in <file>
+ 
++imultilib
++C ObjC C++ ObjC++ Joined Separate
++-imultilib <dir> Set <dir> to be the multilib include subdirectory
++
+ include
+ C ObjC C++ ObjC++ Joined Separate
+ -include <file>	Include the contents of <file> before other files
+diff --git a/gcc/cppdefault.c b/gcc/cppdefault.c
+index bcb8fe20..d040558b 100644
+--- a/gcc/cppdefault.c
++++ b/gcc/cppdefault.c
+@@ -1,6 +1,6 @@
+ /* CPP Library.
+    Copyright (C) 1986, 1987, 1989, 1992, 1993, 1994, 1995, 1996, 1997, 1998,
+-   1999, 2000, 2003, 2004 Free Software Foundation, Inc.
++   1999, 2000, 2003, 2004, 2006 Free Software Foundation, Inc.
+    Contributed by Per Bothner, 1994-95.
+    Based on CCCP program by Paul Rubin, June 1986
+    Adapted to ANSI C, Richard Stallman, Jan 1987
+@@ -48,44 +48,44 @@ const struct default_include cpp_include_defaults[]
+ = {
+ #ifdef GPLUSPLUS_INCLUDE_DIR
+     /* Pick up GNU C++ generic include files.  */
+-    { GPLUSPLUS_INCLUDE_DIR, "G++", 1, 1, 0 },
++    { GPLUSPLUS_INCLUDE_DIR, "G++", 1, 1, 0, 0 },
+ #endif
+ #ifdef GPLUSPLUS_TOOL_INCLUDE_DIR
+     /* Pick up GNU C++ target-dependent include files.  */
+-    { GPLUSPLUS_TOOL_INCLUDE_DIR, "G++", 1, 1, 0 },
++    { GPLUSPLUS_TOOL_INCLUDE_DIR, "G++", 1, 1, 0, 1 },
+ #endif
+ #ifdef GPLUSPLUS_BACKWARD_INCLUDE_DIR
+     /* Pick up GNU C++ backward and deprecated include files.  */
+-    { GPLUSPLUS_BACKWARD_INCLUDE_DIR, "G++", 1, 1, 0 },
++    { GPLUSPLUS_BACKWARD_INCLUDE_DIR, "G++", 1, 1, 0, 0 },
+ #endif
+ #ifdef LOCAL_INCLUDE_DIR
+     /* /usr/local/include comes before the fixincluded header files.  */
+-    { LOCAL_INCLUDE_DIR, 0, 0, 1, 1 },
++    { LOCAL_INCLUDE_DIR, 0, 0, 1, 1, 0 },
+ #endif
+ #ifdef PREFIX_INCLUDE_DIR
+-    { PREFIX_INCLUDE_DIR, 0, 0, 1, 0 },
++    { PREFIX_INCLUDE_DIR, 0, 0, 1, 0, 0 },
+ #endif
+ #ifdef GCC_INCLUDE_DIR
+     /* This is the dir for fixincludes and for gcc's private headers.  */
+-    { GCC_INCLUDE_DIR, "GCC", 0, 0, 0 },
++    { GCC_INCLUDE_DIR, "GCC", 0, 0, 0, 0 },
+ #endif
+ #ifdef CROSS_INCLUDE_DIR
+     /* One place the target system's headers might be.  */
+-    { CROSS_INCLUDE_DIR, "GCC", 0, 0, 0 },
++    { CROSS_INCLUDE_DIR, "GCC", 0, 0, 0, 0 },
+ #endif
+ #ifdef TOOL_INCLUDE_DIR
+     /* Another place the target system's headers might be.  */
+-    { TOOL_INCLUDE_DIR, "BINUTILS", 0, 1, 0 },
++    { TOOL_INCLUDE_DIR, "BINUTILS", 0, 1, 0, 0 },
+ #endif
+ #ifdef SYSTEM_INCLUDE_DIR
+     /* Some systems have an extra dir of include files.  */
+-    { SYSTEM_INCLUDE_DIR, 0, 0, 0, 1 },
++    { SYSTEM_INCLUDE_DIR, 0, 0, 0, 1, 0 },
+ #endif
+ #ifdef STANDARD_INCLUDE_DIR
+     /* /usr/include comes dead last.  */
+-    { STANDARD_INCLUDE_DIR, STANDARD_INCLUDE_COMPONENT, 0, 0, 1 },
++    { STANDARD_INCLUDE_DIR, STANDARD_INCLUDE_COMPONENT, 0, 0, 1, 0 },
+ #endif
+-    { 0, 0, 0, 0, 0 }
++    { 0, 0, 0, 0, 0, 0 }
+   };
+ #endif /* no INCLUDE_DEFAULTS */
+ 
+diff --git a/gcc/cppdefault.h b/gcc/cppdefault.h
+index f5b38884..a3a24169 100644
+--- a/gcc/cppdefault.h
++++ b/gcc/cppdefault.h
+@@ -1,6 +1,6 @@
+ /* CPP Library.
+    Copyright (C) 1986, 1987, 1989, 1992, 1993, 1994, 1995, 1996, 1997, 1998,
+-   1999, 2000, 2003, 2004 Free Software Foundation, Inc.
++   1999, 2000, 2003, 2004, 2006 Free Software Foundation, Inc.
+    Contributed by Per Bothner, 1994-95.
+    Based on CCCP program by Paul Rubin, June 1986
+    Adapted to ANSI C, Richard Stallman, Jan 1987
+@@ -43,6 +43,9 @@ struct default_include
+ 				   C++.  */
+   const char add_sysroot;	/* FNAME should be prefixed by
+ 				   cpp_SYSROOT.  */
++  const char multilib;		/* FNAME should have the multilib path
++				   specified with -imultilib
++				   appended.  */
+ };
+ 
+ extern const struct default_include cpp_include_defaults[];
+diff --git a/gcc/doc/cppopts.texi b/gcc/doc/cppopts.texi
+index adf77e18..06ca0b90 100644
+--- a/gcc/doc/cppopts.texi
++++ b/gcc/doc/cppopts.texi
+@@ -1,4 +1,4 @@
+-@c Copyright (c) 1999, 2000, 2001, 2002, 2003, 2004, 2005
++@c Copyright (c) 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006
+ @c Free Software Foundation, Inc.
+ @c This is part of the CPP and GCC manuals.
+ @c For copying conditions, see the file gcc.texi.
+@@ -483,6 +483,11 @@ would; @option{-iwithprefix} puts it where @option{-idirafter} would.
+ This option is like the @option{--sysroot} option, but applies only to
+ header files.  See the @option{--sysroot} option for more information.
+ 
++@item -imultilib @var{dir}
++@opindex imultilib
++Use @var{dir} as a subdirectory of the directory containing
++target-specific C++ headers.
++
+ @item -isystem @var{dir}
+ @opindex isystem
+ Search @var{dir} for header files, after all directories specified by
+diff --git a/gcc/doc/invoke.texi b/gcc/doc/invoke.texi
+index e3590a05..34716305 100644
+--- a/gcc/doc/invoke.texi
++++ b/gcc/doc/invoke.texi
+@@ -5,8 +5,8 @@
+ 
+ @ignore
+ @c man begin COPYRIGHT
+-Copyright @copyright{} 1988, 1989, 1992, 1993, 1994, 1995, 1996, 1997,
+-1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005 Free Software Foundation, Inc.
++Copyright @copyright{} 1988, 1989, 1992, 1993, 1994, 1995, 1996, 1997, 1998,
++1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006 Free Software Foundation, Inc.
+ 
+ Permission is granted to copy, distribute and/or modify this document
+ under the terms of the GNU Free Documentation License, Version 1.2 or
+@@ -355,7 +355,7 @@ Objective-C and Objective-C++ Dialects}.
+ -include @var{file}  -imacros @var{file} @gol
+ -iprefix @var{file}  -iwithprefix @var{dir} @gol
+ -iwithprefixbefore @var{dir}  -isystem @var{dir} @gol
+--isysroot @var{dir} @gol
++-imultilib @var{dir} -isysroot @var{dir} @gol
+ -M  -MM  -MF  -MG  -MP  -MQ  -MT  -nostdinc  @gol
+ -P  -fworking-directory  -remap @gol
+ -trigraphs  -undef  -U@var{macro}  -Wp,@var{option} @gol
+@@ -6888,9 +6888,9 @@ C@.
+ 
+ @item %I
+ Substitute any of @option{-iprefix} (made from @env{GCC_EXEC_PREFIX}),
+-@option{-isysroot} (made from @env{TARGET_SYSTEM_ROOT}), and
++@option{-isysroot} (made from @env{TARGET_SYSTEM_ROOT}),
+ @option{-isystem} (made from @env{COMPILER_PATH} and @option{-B} options)
+-as necessary.
++and @option{-imultilib} as necessary.
+ 
+ @item %s
+ Current argument is the name of a library or startup file of some sort.
+diff --git a/gcc/fix-header.c b/gcc/fix-header.c
+index 9ba38867..16b895c2 100644
+--- a/gcc/fix-header.c
++++ b/gcc/fix-header.c
+@@ -665,7 +665,8 @@ read_scan_file (char *in_fname, int argc, char **argv)
+   if (cpp_errors (scan_in))
+     exit (FATAL_EXIT_CODE);
+ 
+-  register_include_chains (scan_in, NULL /* sysroot */, NULL /* iprefix */,
++  register_include_chains (scan_in, NULL /* sysroot */,
++  			   NULL /* iprefix */, NULL /* imultilib */,
+ 			   true /* stdinc */, false /* cxx_stdinc */,
+ 			   false /* verbose */);
+ 
+diff --git a/gcc/gcc.c b/gcc/gcc.c
+index 095c43a2..d192f3f2 100644
+--- a/gcc/gcc.c
++++ b/gcc/gcc.c
+@@ -444,8 +444,8 @@ or with constant text in a single argument.
+ 	SUFFIX characters following %O as they would following, for
+ 	example, `.o'.
+  %I	Substitute any of -iprefix (made from GCC_EXEC_PREFIX), -isysroot
+-	(made from TARGET_SYSTEM_ROOT), and -isystem (made from COMPILER_PATH
+-	and -B options) as necessary.
++	(made from TARGET_SYSTEM_ROOT), -isystem (made from COMPILER_PATH
++	and -B options) and -imultilib as necessary.
+  %s     current argument is the name of a library or startup file of some sort.
+         Search for that file in a standard list of directories
+ 	and substitute the full name found.
+@@ -4949,6 +4949,15 @@ do_spec_1 (const char *spec, int inswitch, const char *soft_matched_part)
+ 	    {
+ 	      struct spec_path_info info;
+ 
++	      if (multilib_dir)
++		{
++		  do_spec_1 ("-imultilib", 1, NULL);
++		  /* Make this a separate argument.  */
++		  do_spec_1 (" ", 0, NULL);
++		  do_spec_1 (multilib_dir, 1, NULL);
++		  do_spec_1 (" ", 0, NULL);
++		}
++
+ 	      if (gcc_exec_prefix)
+ 		{
+ 		  do_spec_1 ("-iprefix", 1, NULL);
+diff --git a/libstdc++-v3/include/Makefile.am b/libstdc++-v3/include/Makefile.am
+index 01205436..5c8171ca 100644
+--- a/libstdc++-v3/include/Makefile.am
++++ b/libstdc++-v3/include/Makefile.am
+@@ -1,6 +1,7 @@
+ ## Makefile for the include subdirectory of the GNU C++ Standard library.
+ ##
+-## Copyright (C) 2001, 2002, 2003, 2004, 2005 Free Software Foundation, Inc.
++## Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006
++## Free Software Foundation, Inc.
+ ##
+ ## This file is part of the libstdc++ version 3 distribution.
+ ## Process this file with automake to produce Makefile.in.
+@@ -612,6 +613,7 @@ endif
+ 
+ host_srcdir = ${glibcxx_srcdir}/$(OS_INC_SRCDIR)
+ host_builddir = ./${host_alias}/bits
++host_installdir = ${gxx_include_dir}/${host_alias}$(MULTISUBDIR)/bits
+ host_headers = \
+ 	${host_srcdir}/ctype_base.h \
+ 	${host_srcdir}/ctype_inline.h \
+@@ -646,6 +648,7 @@ thread_host_headers = \
+ 
+ pch_input = ${host_builddir}/stdc++.h
+ pch_output_builddir = ${host_builddir}/stdc++.h.gch
++pch_output_installdir = ${host_installdir}/stdc++.h.gch
+ pch_source = ${glibcxx_srcdir}/include/stdc++.h
+ PCHFLAGS=-Winvalid-pch -Wno-deprecated -x c++-header $(CXXFLAGS)
+ if GLIBCXX_BUILD_PCH
+@@ -907,9 +910,9 @@ endif
+ # are copied here.
+ install-freestanding-headers:
+ 	$(mkinstalldirs) $(DESTDIR)${gxx_include_dir}
+-	$(mkinstalldirs) $(DESTDIR)${gxx_include_dir}/${host_builddir}
++	$(mkinstalldirs) $(DESTDIR)${host_installdir}
+ 	for file in ${host_srcdir}/os_defines.h ${host_builddir}/c++config.h; do \
+-	  $(INSTALL_DATA) $${file} $(DESTDIR)${gxx_include_dir}/${host_builddir}; done
++	  $(INSTALL_DATA) $${file} $(DESTDIR)${host_installdir}; done
+ 	$(mkinstalldirs) $(DESTDIR)${gxx_include_dir}/${std_builddir}
+ 	$(INSTALL_DATA) ${std_builddir}/limits $(DESTDIR)${gxx_include_dir}/${std_builddir}
+ 	$(mkinstalldirs) $(DESTDIR)${gxx_include_dir}/${c_base_builddir}
+@@ -969,15 +972,15 @@ install-headers:
+ 	$(mkinstalldirs) $(DESTDIR)${gxx_include_dir}/${debug_builddir}
+ 	for file in ${debug_headers}; do \
+ 	  $(INSTALL_DATA) $${file} $(DESTDIR)${gxx_include_dir}/${debug_builddir}; done
+-	$(mkinstalldirs) $(DESTDIR)${gxx_include_dir}/${host_builddir}
++	$(mkinstalldirs) $(DESTDIR)${host_installdir}
+ 	for file in ${host_headers} ${host_headers_extra} \
+ 	 ${thread_host_headers}; do \
+-	  $(INSTALL_DATA) $${file} $(DESTDIR)${gxx_include_dir}/${host_builddir}; done
++	  $(INSTALL_DATA) $${file} $(DESTDIR)${host_installdir}; done
+ 
+ install-pch:
+-	$(mkinstalldirs) $(DESTDIR)${gxx_include_dir}/${pch_output_builddir}
++	$(mkinstalldirs) $(DESTDIR)${pch_output_installdir}
+ 	for file in ${pch_output_builddir}/*; do \
+-	  $(INSTALL_DATA) $$file $(DESTDIR)${gxx_include_dir}/${pch_output_builddir}; done
++	  $(INSTALL_DATA) $$file $(DESTDIR)${pch_output_installdir}; done
+ 
+ # By adding these files here, automake will remove them for 'make clean'
+ CLEANFILES = ${pch_input} ${pch_output_builddir}/*
+diff --git a/libstdc++-v3/include/Makefile.in b/libstdc++-v3/include/Makefile.in
+index a0c358c6..4dd6d129 100644
+--- a/libstdc++-v3/include/Makefile.in
++++ b/libstdc++-v3/include/Makefile.in
+@@ -822,6 +822,7 @@ debug_headers = \
+ @GLIBCXX_C_HEADERS_COMPATIBILITY_TRUE@c_compatibility_headers_extra = ${c_compatibility_headers}
+ host_srcdir = ${glibcxx_srcdir}/$(OS_INC_SRCDIR)
+ host_builddir = ./${host_alias}/bits
++host_installdir = ${gxx_include_dir}/${host_alias}$(MULTISUBDIR)/bits
+ host_headers = \
+ 	${host_srcdir}/ctype_base.h \
+ 	${host_srcdir}/ctype_inline.h \
+@@ -858,6 +859,7 @@ thread_host_headers = \
+ 
+ pch_input = ${host_builddir}/stdc++.h
+ pch_output_builddir = ${host_builddir}/stdc++.h.gch
++pch_output_installdir = ${host_installdir}/stdc++.h.gch
+ pch_source = ${glibcxx_srcdir}/include/stdc++.h
+ PCHFLAGS = -Winvalid-pch -Wno-deprecated -x c++-header $(CXXFLAGS)
+ @GLIBCXX_BUILD_PCH_FALSE@pch_build = 
+@@ -1279,9 +1281,9 @@ ${pch_input}: ${allstamped} ${host_builddir}/c++config.h ${pch_source}
+ # are copied here.
+ install-freestanding-headers:
+ 	$(mkinstalldirs) $(DESTDIR)${gxx_include_dir}
+-	$(mkinstalldirs) $(DESTDIR)${gxx_include_dir}/${host_builddir}
++	$(mkinstalldirs) $(DESTDIR)${host_installdir}
+ 	for file in ${host_srcdir}/os_defines.h ${host_builddir}/c++config.h; do \
+-	  $(INSTALL_DATA) $${file} $(DESTDIR)${gxx_include_dir}/${host_builddir}; done
++	  $(INSTALL_DATA) $${file} $(DESTDIR)${host_installdir}; done
+ 	$(mkinstalldirs) $(DESTDIR)${gxx_include_dir}/${std_builddir}
+ 	$(INSTALL_DATA) ${std_builddir}/limits $(DESTDIR)${gxx_include_dir}/${std_builddir}
+ 	$(mkinstalldirs) $(DESTDIR)${gxx_include_dir}/${c_base_builddir}
+@@ -1341,15 +1343,15 @@ install-headers:
+ 	$(mkinstalldirs) $(DESTDIR)${gxx_include_dir}/${debug_builddir}
+ 	for file in ${debug_headers}; do \
+ 	  $(INSTALL_DATA) $${file} $(DESTDIR)${gxx_include_dir}/${debug_builddir}; done
+-	$(mkinstalldirs) $(DESTDIR)${gxx_include_dir}/${host_builddir}
++	$(mkinstalldirs) $(DESTDIR)${host_installdir}
+ 	for file in ${host_headers} ${host_headers_extra} \
+ 	 ${thread_host_headers}; do \
+-	  $(INSTALL_DATA) $${file} $(DESTDIR)${gxx_include_dir}/${host_builddir}; done
++	  $(INSTALL_DATA) $${file} $(DESTDIR)${host_installdir}; done
+ 
+ install-pch:
+-	$(mkinstalldirs) $(DESTDIR)${gxx_include_dir}/${pch_output_builddir}
++	$(mkinstalldirs) $(DESTDIR)${pch_output_installdir}
+ 	for file in ${pch_output_builddir}/*; do \
+-	  $(INSTALL_DATA) $$file $(DESTDIR)${gxx_include_dir}/${pch_output_builddir}; done
++	  $(INSTALL_DATA) $$file $(DESTDIR)${pch_output_installdir}; done
+ 
+ # Stop implicit '.o' make rules from ever stomping on extensionless
+ # headers, in the improbable case where some foolish, crack-addled

@@ -1,0 +1,76 @@
+diff --git a/gcc/c-common.c b/gcc/c-common.c
+index 2d62a1cc1..89147bfa8 100644
+--- a/gcc/c-common.c
++++ b/gcc/c-common.c
+@@ -7561,11 +7561,11 @@ c_warn_unused_result (gimple_seq seq)
+ 	      location_t loc = gimple_location (g);
+ 
+ 	      if (fdecl)
+-		warning (0, "%Hignoring return value of %qD, "
++		warning (OPT_Wunused_result, "%Hignoring return value of %qD, "
+ 			 "declared with attribute warn_unused_result",
+ 			 &loc, fdecl);
+ 	      else
+-		warning (0, "%Hignoring return value of function "
++		warning (OPT_Wunused_result, "%Hignoring return value of function "
+ 			 "declared with attribute warn_unused_result",
+ 			 &loc);
+ 	    }
+diff --git a/gcc/c.opt b/gcc/c.opt
+index ef2bc2b26..f185c71bb 100644
+--- a/gcc/c.opt
++++ b/gcc/c.opt
+@@ -476,6 +476,10 @@ Wunused-macros
+ C ObjC C++ ObjC++ Warning
+ Warn about macros defined in the main file that are not used
+ 
++Wunused-result
++C ObjC C++ ObjC++ Var(warn_unused_result) Init(1) Warning
++Warn if a caller of a function, marked with attribute warn_unused_result, does not use its return value
++
+ Wvariadic-macros
+ C ObjC C++ ObjC++ Warning
+ Do not warn about using variadic macros when -pedantic
+diff --git a/gcc/doc/invoke.texi b/gcc/doc/invoke.texi
+index 6d68539d0..f4006ab90 100644
+--- a/gcc/doc/invoke.texi
++++ b/gcc/doc/invoke.texi
+@@ -260,7 +260,7 @@ Objective-C and Objective-C++ Dialects}.
+ -Wsystem-headers  -Wtrigraphs  -Wtype-limits  -Wundef  -Wuninitialized @gol
+ -Wunknown-pragmas  -Wno-pragmas -Wunreachable-code @gol
+ -Wunused  -Wunused-function  -Wunused-label  -Wunused-parameter @gol
+--Wunused-value  -Wunused-variable @gol
++-Wno-unused-result -Wunused-value  -Wunused-variable @gol
+ -Wvariadic-macros -Wvla @gol
+ -Wvolatile-register-var  -Wwrite-strings}
+ 
+@@ -3224,6 +3224,13 @@ Warn whenever a function parameter is unused aside from its declaration.
+ To suppress this warning use the @samp{unused} attribute
+ (@pxref{Variable Attributes}).
+ 
++@item -Wno-unused-result
++@opindex Wunused-result
++@opindex Wno-unused-result
++Do not warn if a caller of a function marked with attribute
++@code{warn_unused_result} (@pxref{Variable Attributes}) does not use
++its return value. The default is @option{-Wunused-result}.
++
+ @item -Wunused-variable
+ @opindex Wunused-variable
+ @opindex Wno-unused-variable
+diff --git a/gcc/testsuite/g++.dg/warn/unused-result1-Werror.c b/gcc/testsuite/g++.dg/warn/unused-result1-Werror.c
+new file mode 100644
+index 000000000..033d70777
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/warn/unused-result1-Werror.c
+@@ -0,0 +1,10 @@
++// PR 40614
++// { dg-options "-Werror=unused-result" }
++class QByteArray {
++public:
++  QByteArray(const QByteArray &);
++};
++class QString {
++  QByteArray toLocal8Bit() const __attribute__ ((warn_unused_result));
++  void fooWarnHere() const { toLocal8Bit(); } // { dg-error "ignoring" }
++};

@@ -164,6 +164,12 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/139_pr33763.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/140_pr25507.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/141_pr93672.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/142_pr28322.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/143_pr38292.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/144_pr40134.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/145_pr25509.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/146_pr37053.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/147_pr39429.patch
 
 	if use test ; then
 		eapply "${FILESDIR}"/${PV}/postrelease/900_fix-known-test-fail.patch

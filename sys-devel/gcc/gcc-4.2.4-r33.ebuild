@@ -255,6 +255,8 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/233_pr30988.patch
 	[[ $(tc-arch) != "arm" ]] && eapply "${FILESDIR}"/${PV}/postrelease/234_pr30293-30494-34829.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/235_pr93672.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/236_pr25509.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/237_pr22244.patch
 
 	if use test ; then
 		eapply "${FILESDIR}"/${PV}/postrelease/900_fix-known-test-fail.patch

@@ -1,0 +1,113 @@
+diff --git a/gcc/config.gcc b/gcc/config.gcc
+index 54b784ad..482e911f 100644
+--- a/gcc/config.gcc
++++ b/gcc/config.gcc
+@@ -1020,6 +1020,7 @@ i[34567]86-*-freebsd*)
+ 	;;
+ x86_64-*-freebsd*)
+ 	tm_file="${tm_file} i386/unix.h i386/att.h dbxelf.h elfos.h ${fbsd_tm_file} i386/x86-64.h i386/freebsd.h i386/freebsd64.h"
++	tmake_file="${tmake_file} i386/t-crtstuff64"
+ 	;;
+ i[34567]86-*-netbsdelf*)
+ 	tm_file="${tm_file} i386/unix.h i386/att.h dbxelf.h elfos.h netbsd.h netbsd-elf.h i386/netbsd-elf.h"
+@@ -1032,6 +1033,7 @@ i[34567]86-*-netbsd*)
+ 	;;
+ x86_64-*-netbsd*)
+ 	tm_file="${tm_file} i386/unix.h i386/att.h dbxelf.h elfos.h netbsd.h netbsd-elf.h i386/x86-64.h i386/netbsd64.h"
++	tmake_file="${tmake_file} i386/t-crtstuff64"
+ 	;;
+ i[34567]86-*-openbsd2.*|i[34567]86-*openbsd3.[0123])
+ 	tm_file="i386/i386.h i386/unix.h i386/bsd.h i386/gas.h i386/gstabs.h openbsd-oldgas.h openbsd.h i386/openbsd.h"
+@@ -1067,7 +1069,7 @@ x86_64-*-linux* | x86_64-*-kfreebsd*-gnu | x86_64-*-knetbsd*-gnu)
+ 	x86_64-*-kfreebsd*-gnu) tm_file="${tm_file} kfreebsd-gnu.h" ;;
+ 	x86_64-*-knetbsd*-gnu) tm_file="${tm_file} knetbsd-gnu.h" ;;
+ 	esac
+-	tmake_file="${tmake_file} i386/t-linux64 i386/t-crtfm"
++	tmake_file="${tmake_file} i386/t-linux64 i386/t-crtstuff64 i386/t-crtfm"
+ 	;;
+ i[34567]86-*-gnu*)
+ 	;;
+@@ -1158,7 +1160,7 @@ i[34567]86-*-solaris2*)
+ 	*-*-solaris2.1[0-9]*)
+ 		tm_file="${tm_file} i386/x86-64.h i386/sol2-10.h"
+ 		tm_defines="${tm_defines} TARGET_BI_ARCH=1"
+-		tmake_file="$tmake_file i386/t-sol2-10"
++		tmake_file="$tmake_file i386/t-crtstuff64 i386/t-sol2-10"
+ 		need_64bit_hwint=yes
+ 		# Solaris 2.10 provides crt1.o, crti.o, crtn.o, and gcrt1.o as 
+ 		# part of the base system.
+diff --git a/gcc/config/i386/t-crtstuff64 b/gcc/config/i386/t-crtstuff64
+new file mode 100644
+index 00000000..abc6bdba
+--- /dev/null
++++ b/gcc/config/i386/t-crtstuff64
+@@ -0,0 +1,5 @@
++# The pushl in CTOR initialization interferes with frame pointer elimination.
++# crtend*.o cannot be compiled without -fno-asynchronous-unwind-tables,
++# because then __FRAME_END__ might not be the last thing in .eh_frame
++# section.
++CRTSTUFF_T_CFLAGS = -fno-omit-frame-pointer -fno-asynchronous-unwind-tables
+diff --git a/gcc/config/i386/t-linux64 b/gcc/config/i386/t-linux64
+index aac59a08..5b125a64 100644
+--- a/gcc/config/i386/t-linux64
++++ b/gcc/config/i386/t-linux64
+@@ -13,9 +13,3 @@ INSTALL_LIBGCC = install-multilib
+ 
+ EXTRA_MULTILIB_PARTS=crtbegin.o crtend.o crtbeginS.o crtendS.o \
+ 		     crtbeginT.o crtfastmath.o
+-
+-# The pushl in CTOR initialization interferes with frame pointer elimination.
+-# crtend*.o cannot be compiled without -fno-asynchronous-unwind-tables,
+-# because then __FRAME_END__ might not be the last thing in .eh_frame
+-# section.
+-CRTSTUFF_T_CFLAGS = -fno-omit-frame-pointer -fno-asynchronous-unwind-tables
+diff --git a/gcc/config/t-freebsd b/gcc/config/t-freebsd
+index 211dbdf6..0680618a 100644
+--- a/gcc/config/t-freebsd
++++ b/gcc/config/t-freebsd
+@@ -1,5 +1,5 @@
+ # Compile crtbeginS.o and crtendS.o with pic.
+-CRTSTUFF_T_CFLAGS_S = -fPIC
++CRTSTUFF_T_CFLAGS_S = $(CRTSTUFF_T_CFLAGS) -fPIC
+ 
+ # Compile libgcc.a with pic.
+ TARGET_LIBGCC2_CFLAGS += -fPIC
+diff --git a/gcc/config/t-libc-ok b/gcc/config/t-libc-ok
+index 4dae812a..561ee0b3 100644
+--- a/gcc/config/t-libc-ok
++++ b/gcc/config/t-libc-ok
+@@ -1 +1 @@
+-CRTSTUFF_T_CFLAGS_S=-fPIC
++CRTSTUFF_T_CFLAGS_S = $(CRTSTUFF_T_CFLAGS) -fPIC
+diff --git a/gcc/config/t-lynx b/gcc/config/t-lynx
+index a14a53c6..3a6a5d87 100644
+--- a/gcc/config/t-lynx
++++ b/gcc/config/t-lynx
+@@ -1,5 +1,5 @@
+ # Compile crtbeginS.o and crtendS.o with pic.
+-CRTSTUFF_T_CFLAGS_S = -fPIC
++CRTSTUFF_T_CFLAGS_S = $(CRTSTUFF_T_CFLAGS) -fPIC
+ 
+ # Compile libgcc2.a with pic.
+ TARGET_LIBGCC2_CFLAGS = -fPIC
+diff --git a/gcc/config/t-netbsd b/gcc/config/t-netbsd
+index 843e4100..34949e12 100644
+--- a/gcc/config/t-netbsd
++++ b/gcc/config/t-netbsd
+@@ -1,2 +1,2 @@
+ # Always build crtstuff with PIC.
+-CRTSTUFF_T_CFLAGS = -fPIC
++CRTSTUFF_T_CFLAGS_S = $(CRTSTUFF_T_CFLAGS) -fPIC
+diff --git a/gcc/config/t-svr4 b/gcc/config/t-svr4
+index 52c9b28f..3ea11745 100644
+--- a/gcc/config/t-svr4
++++ b/gcc/config/t-svr4
+@@ -4,7 +4,7 @@
+ # we will be doing that, we just always use -fPIC when compiling the
+ # routines in crtstuff.c.  Likewise for libgcc2.c.
+ 
+-CRTSTUFF_T_CFLAGS = -fPIC
++CRTSTUFF_T_CFLAGS_S = $(CRTSTUFF_T_CFLAGS) -fPIC
+ TARGET_LIBGCC2_CFLAGS = -fPIC
+ 
+ # See all the declarations.

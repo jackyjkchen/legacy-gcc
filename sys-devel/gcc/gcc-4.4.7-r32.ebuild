@@ -154,6 +154,12 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/130_pr25507.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/131_pr93672.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/132_pr115646.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/133_pr25509.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/134_pr37053.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/135_pr50090.patch
+	[[ ${CTARGET} == arm*-*-*eabihf* ]] || eapply "${FILESDIR}"/${PV}/postrelease/136_pr41848.patch
+	[[ ${CTARGET} == arm*-*-*eabihf* ]] || eapply "${FILESDIR}"/${PV}/postrelease/137_pr40133.patch
+	[[ ${CTARGET} == arm*-*-*eabihf* ]] || eapply "${FILESDIR}"/${PV}/postrelease/138_pr45112.patch
 
 	if use test ; then
 		eapply "${FILESDIR}"/${PV}/postrelease/900_fix-known-test-fail.patch

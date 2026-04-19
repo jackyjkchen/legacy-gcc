@@ -1,0 +1,47 @@
+diff --git a/gcc/config/arm/arm.c b/gcc/config/arm/arm.c
+index de076adb..ac722009 100644
+--- a/gcc/config/arm/arm.c
++++ b/gcc/config/arm/arm.c
+@@ -6842,7 +6842,7 @@ adjacent_mem_locations (rtx a, rtx b)
+       /* Don't accept any offset that will require multiple
+ 	 instructions to handle, since this would cause the
+ 	 arith_adjacentmem pattern to output an overlong sequence.  */
+-      if (!const_ok_for_op (PLUS, val0) || !const_ok_for_op (PLUS, val1))
++      if (!const_ok_for_op (val0, PLUS) || !const_ok_for_op (val1, PLUS))
+ 	return 0;
+ 
+       /* Don't allow an eliminable register: register elimination can make
+diff --git a/gcc/testsuite/gcc.target/arm/pr39429.c b/gcc/testsuite/gcc.target/arm/pr39429.c
+new file mode 100644
+index 00000000..e6958435
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/arm/pr39429.c
+@@ -0,0 +1,28 @@
++/* PR target/39429 */
++/* { dg-do run } */
++/* { dg-options "-O2 -mtune=arm740t" } */
++
++struct obj {
++    unsigned int _filler[270];
++    unsigned int mapsize;
++    unsigned int size;
++};
++
++int __attribute__((noinline)) useOffScreen(struct obj *obj)
++{
++    unsigned int size = obj->size;
++    unsigned int mapsize = obj->mapsize;
++
++    return (mapsize - size) < 16*1024 ? 0 : 1;
++}
++
++int main(void)
++{
++    struct obj obj;
++
++    obj.mapsize = 0;
++    obj.size = 0;
++    if (useOffScreen(&obj) != 0)
++	__builtin_abort();
++    return 0;
++}
