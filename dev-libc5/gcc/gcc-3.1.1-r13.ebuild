@@ -24,5 +24,9 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/006_pr24103.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/007_pr29295.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/008_pr12799.patch
+
+	if use test ; then
+		eapply "${FILESDIR}"/${PV}/postrelease/901_fix-known-test-fail-glibc1.patch
+	fi
 }
 

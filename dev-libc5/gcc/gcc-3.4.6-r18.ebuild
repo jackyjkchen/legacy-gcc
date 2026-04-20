@@ -72,6 +72,7 @@ src_prepare() {
 
 	if use test ; then
 		eapply "${FILESDIR}"/${PV}/postrelease/900_fix-known-test-fail.patch
+		eapply "${FILESDIR}"/${PV}/postrelease/901_fix-known-test-fail-glibc1.patch
 	fi
 }
 
