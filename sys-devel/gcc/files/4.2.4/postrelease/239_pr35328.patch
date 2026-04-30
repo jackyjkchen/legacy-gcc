@@ -1,0 +1,77 @@
+diff --git a/gcc/cp/semantics.c b/gcc/cp/semantics.c
+index 675630ea..209e88a0 100644
+--- a/gcc/cp/semantics.c
++++ b/gcc/cp/semantics.c
+@@ -3651,6 +3651,17 @@ finish_omp_clauses (tree clauses)
+ 	      t = build_special_member_call (NULL_TREE,
+ 					     complete_ctor_identifier,
+ 					     t, inner_type, LOOKUP_NORMAL);
++
++	      if (targetm.cxx.cdtor_returns_this () || errorcount)
++		/* Because constructors and destructors return this,
++		   the call will have been cast to "void".  Remove the
++		   cast here.  We would like to use STRIP_NOPS, but it
++		   wouldn't work here because TYPE_MODE (t) and
++		   TYPE_MODE (TREE_OPERAND (t, 0)) are different.
++		   They are VOIDmode and Pmode, respectively.  */
++		if (TREE_CODE (t) == NOP_EXPR)
++		  t = TREE_OPERAND (t, 0);
++
+ 	      t = get_callee_fndecl (t);
+ 	      TREE_VEC_ELT (info, 0) = t;
+ 	    }
+@@ -3662,6 +3673,17 @@ finish_omp_clauses (tree clauses)
+ 	      t = build1 (INDIRECT_REF, inner_type, t);
+ 	      t = build_special_member_call (t, complete_dtor_identifier,
+ 					     NULL, inner_type, LOOKUP_NORMAL);
++
++	      if (targetm.cxx.cdtor_returns_this () || errorcount)
++		/* Because constructors and destructors return this,
++		   the call will have been cast to "void".  Remove the
++		   cast here.  We would like to use STRIP_NOPS, but it
++		   wouldn't work here because TYPE_MODE (t) and
++		   TYPE_MODE (TREE_OPERAND (t, 0)) are different.
++		   They are VOIDmode and Pmode, respectively.  */
++		if (TREE_CODE (t) == NOP_EXPR)
++		  t = TREE_OPERAND (t, 0);
++
+ 	      t = get_callee_fndecl (t);
+ 	      TREE_VEC_ELT (info, 1) = t;
+ 	    }
+diff --git a/gcc/testsuite/g++.dg/gomp/pr35328.C b/gcc/testsuite/g++.dg/gomp/pr35328.C
+new file mode 100644
+index 00000000..718283b5
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/gomp/pr35328.C
+@@ -0,0 +1,31 @@
++// PR c++/35328
++// { dg-do compile }
++// { dg-options "-fopenmp" }
++
++struct A
++{
++  ~A ()();		// { dg-error "declared as function returning a function" }
++};
++struct B
++{
++  B ()();		// { dg-error "declared as function returning a function" }
++};
++struct C
++{
++  C ();
++  C (const C &)();	// { dg-error "declared as function returning a function" }
++};
++
++void
++foo ()
++{
++  A a;
++  B b;
++  C c;
++  #pragma omp parallel firstprivate (a)
++    ;
++  #pragma omp parallel private (b)
++    ;
++  #pragma omp parallel firstprivate (c)
++    ;
++}
