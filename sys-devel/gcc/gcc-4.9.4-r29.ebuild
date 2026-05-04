@@ -7,6 +7,10 @@ inherit toolchain
 
 KEYWORDS="alpha amd64 arm arm64 hppa m68k mips ppc ppc64 s390 sh sparc x86"
 
+use_linaro() {
+	[[ $(tc-arch) == "arm" || $(tc-arch) == "arm64" ]]
+}
+
 src_prepare() {
 	eapply "${FILESDIR}"/${PV}/00_gentoo-patchset.patch
 	toolchain_src_prepare
@@ -21,6 +25,8 @@ src_prepare() {
 	is_glibc217 && eapply "${FILESDIR}"/${PV}/04_fake-c17.patch
 
 	use vanilla && return 0
+
+	use_linaro && eapply "${FILESDIR}"/${PV}/05_gcc-linaro.patch
 
 	eapply "${FILESDIR}"/${PV}/postrelease/000_pr77450-77605-78185-78333.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/001_pr81395.patch
@@ -78,7 +84,7 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/053_pr71976.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/054_pr110044.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/055_pr82210.patch
-	eapply "${FILESDIR}"/${PV}/postrelease/056_pr91927.patch
+	use_linaro || eapply "${FILESDIR}"/${PV}/postrelease/056_pr91927.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/057_pr82336.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/058_pr64697.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/059_pr3698-86208.patch
@@ -133,7 +139,7 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/108_pr84001.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/109_pr83898.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/110_pr77919.patch
-	eapply "${FILESDIR}"/${PV}/postrelease/111_pr81422.patch
+	use_linaro || eapply "${FILESDIR}"/${PV}/postrelease/111_pr81422.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/112_pr67278.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/113_pr72801.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/114_pr79896.patch
@@ -255,6 +261,11 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/230_pr117296.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/231_pr111039.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/232_pr115608.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/233_pr61257.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/234_pr59586.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/235_pr61294.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/236_pr61106.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/237_pr61126.patch
 
 	if use test ; then
 		rm -rf gcc/testsuite/gcc.c-torture/execute/vfprintf-chk-1.c gcc/testsuite/gcc.c-torture/execute/vprintf-chk-1.c

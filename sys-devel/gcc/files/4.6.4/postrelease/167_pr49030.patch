@@ -1,0 +1,392 @@
+diff --git a/gcc/config/arm/arm-protos.h b/gcc/config/arm/arm-protos.h
+index c04a8f9af..1e6dd7b6e 100644
+--- a/gcc/config/arm/arm-protos.h
++++ b/gcc/config/arm/arm-protos.h
+@@ -176,6 +176,7 @@ extern int is_called_in_ARM_mode (tree);
+ #endif
+ extern int thumb_shiftable_const (unsigned HOST_WIDE_INT);
+ #ifdef RTX_CODE
++extern enum arm_cond_code maybe_get_arm_condition_code (rtx);
+ extern void thumb1_final_prescan_insn (rtx);
+ extern void thumb2_final_prescan_insn (rtx);
+ extern const char *thumb_load_double_from_address (rtx *);
+diff --git a/gcc/config/arm/arm.c b/gcc/config/arm/arm.c
+index 9fedd9c26..42595ca44 100644
+--- a/gcc/config/arm/arm.c
++++ b/gcc/config/arm/arm.c
+@@ -17070,10 +17070,10 @@ arm_elf_asm_destructor (rtx symbol, int priority)
+    decremented/zeroed by arm_asm_output_opcode as the insns are output.  */
+ 
+ /* Returns the index of the ARM condition code string in
+-   `arm_condition_codes'.  COMPARISON should be an rtx like
+-   `(eq (...) (...))'.  */
+-static enum arm_cond_code
+-get_arm_condition_code (rtx comparison)
++   `arm_condition_codes', or ARM_NV if the comparison is invalid.
++   COMPARISON should be an rtx like `(eq (...) (...))'.  */
++enum arm_cond_code
++maybe_get_arm_condition_code (rtx comparison)
+ {
+   enum machine_mode mode = GET_MODE (XEXP (comparison, 0));
+   enum arm_cond_code code;
+@@ -17097,11 +17097,11 @@ get_arm_condition_code (rtx comparison)
+     case CC_DLTUmode: code = ARM_CC;
+ 
+     dominance:
+-      gcc_assert (comp_code == EQ || comp_code == NE);
+-
+       if (comp_code == EQ)
+ 	return ARM_INVERSE_CONDITION_CODE (code);
+-      return code;
++      if (comp_code == NE)
++	return code;
++      return ARM_NV;
+ 
+     case CC_NOOVmode:
+       switch (comp_code)
+@@ -17110,7 +17110,7 @@ get_arm_condition_code (rtx comparison)
+ 	case EQ: return ARM_EQ;
+ 	case GE: return ARM_PL;
+ 	case LT: return ARM_MI;
+-	default: gcc_unreachable ();
++	default: return ARM_NV;
+ 	}
+ 
+     case CC_Zmode:
+@@ -17118,7 +17118,7 @@ get_arm_condition_code (rtx comparison)
+ 	{
+ 	case NE: return ARM_NE;
+ 	case EQ: return ARM_EQ;
+-	default: gcc_unreachable ();
++	default: return ARM_NV;
+ 	}
+ 
+     case CC_Nmode:
+@@ -17126,7 +17126,7 @@ get_arm_condition_code (rtx comparison)
+ 	{
+ 	case NE: return ARM_MI;
+ 	case EQ: return ARM_PL;
+-	default: gcc_unreachable ();
++	default: return ARM_NV;
+ 	}
+ 
+     case CCFPEmode:
+@@ -17151,7 +17151,7 @@ get_arm_condition_code (rtx comparison)
+ 	  /* UNEQ and LTGT do not have a representation.  */
+ 	case UNEQ: /* Fall through.  */
+ 	case LTGT: /* Fall through.  */
+-	default: gcc_unreachable ();
++	default: return ARM_NV;
+ 	}
+ 
+     case CC_SWPmode:
+@@ -17167,7 +17167,7 @@ get_arm_condition_code (rtx comparison)
+ 	case GTU: return ARM_CC;
+ 	case LEU: return ARM_CS;
+ 	case LTU: return ARM_HI;
+-	default: gcc_unreachable ();
++	default: return ARM_NV;
+ 	}
+ 
+     case CC_Cmode:
+@@ -17175,7 +17175,7 @@ get_arm_condition_code (rtx comparison)
+ 	{
+ 	case LTU: return ARM_CS;
+ 	case GEU: return ARM_CC;
+-	default: gcc_unreachable ();
++	default: return ARM_NV;
+ 	}
+ 
+     case CC_CZmode:
+@@ -17187,7 +17187,7 @@ get_arm_condition_code (rtx comparison)
+ 	case GTU: return ARM_HI;
+ 	case LEU: return ARM_LS;
+ 	case LTU: return ARM_CC;
+-	default: gcc_unreachable ();
++	default: return ARM_NV;
+ 	}
+ 
+     case CC_NCVmode:
+@@ -17197,7 +17197,7 @@ get_arm_condition_code (rtx comparison)
+ 	case LT: return ARM_LT;
+ 	case GEU: return ARM_CS;
+ 	case LTU: return ARM_CC;
+-	default: gcc_unreachable ();
++	default: return ARM_NV;
+ 	}
+ 
+     case CCmode:
+@@ -17213,13 +17213,22 @@ get_arm_condition_code (rtx comparison)
+ 	case GTU: return ARM_HI;
+ 	case LEU: return ARM_LS;
+ 	case LTU: return ARM_CC;
+-	default: gcc_unreachable ();
++	default: return ARM_NV;
+ 	}
+ 
+     default: gcc_unreachable ();
+     }
+ }
+ 
++/* Like maybe_get_arm_condition_code, but never return ARM_NV.  */
++static enum arm_cond_code
++get_arm_condition_code (rtx comparison)
++{
++  enum arm_cond_code code = maybe_get_arm_condition_code (comparison);
++  gcc_assert (code != ARM_NV);
++  return code;
++}
++
+ /* Tell arm_asm_output_opcode to output IT blocks for conditionally executed
+    instructions.  */
+ void
+diff --git a/gcc/config/arm/arm.md b/gcc/config/arm/arm.md
+index afd6ad950..c8b571927 100644
+--- a/gcc/config/arm/arm.md
++++ b/gcc/config/arm/arm.md
+@@ -6458,7 +6458,7 @@
+ 
+ (define_expand "cbranchsi4"
+   [(set (pc) (if_then_else
+-	      (match_operator 0 "arm_comparison_operator"
++	      (match_operator 0 "expandable_comparison_operator"
+ 	       [(match_operand:SI 1 "s_register_operand" "")
+ 	        (match_operand:SI 2 "nonmemory_operand" "")])
+ 	      (label_ref (match_operand 3 "" ""))
+@@ -6509,7 +6509,7 @@
+ 
+ (define_expand "cbranchsf4"
+   [(set (pc) (if_then_else
+-	      (match_operator 0 "arm_comparison_operator"
++	      (match_operator 0 "expandable_comparison_operator"
+ 	       [(match_operand:SF 1 "s_register_operand" "")
+ 	        (match_operand:SF 2 "arm_float_compare_operand" "")])
+ 	      (label_ref (match_operand 3 "" ""))
+@@ -6521,7 +6521,7 @@
+ 
+ (define_expand "cbranchdf4"
+   [(set (pc) (if_then_else
+-	      (match_operator 0 "arm_comparison_operator"
++	      (match_operator 0 "expandable_comparison_operator"
+ 	       [(match_operand:DF 1 "s_register_operand" "")
+ 	        (match_operand:DF 2 "arm_float_compare_operand" "")])
+ 	      (label_ref (match_operand 3 "" ""))
+@@ -6533,7 +6533,7 @@
+ 
+ (define_expand "cbranchdi4"
+   [(set (pc) (if_then_else
+-	      (match_operator 0 "arm_comparison_operator"
++	      (match_operator 0 "expandable_comparison_operator"
+ 	       [(match_operand:DI 1 "s_register_operand" "")
+ 	        (match_operand:DI 2 "cmpdi_operand" "")])
+ 	      (label_ref (match_operand 3 "" ""))
+@@ -7366,7 +7366,7 @@
+ 
+ (define_expand "cstoresi4"
+   [(set (match_operand:SI 0 "s_register_operand" "")
+-	(match_operator:SI 1 "arm_comparison_operator"
++	(match_operator:SI 1 "expandable_comparison_operator"
+ 	 [(match_operand:SI 2 "s_register_operand" "")
+ 	  (match_operand:SI 3 "reg_or_int_operand" "")]))]
+   "TARGET_32BIT || TARGET_THUMB1"
+@@ -7502,7 +7502,7 @@
+ 
+ (define_expand "cstoresf4"
+   [(set (match_operand:SI 0 "s_register_operand" "")
+-	(match_operator:SI 1 "arm_comparison_operator"
++	(match_operator:SI 1 "expandable_comparison_operator"
+ 	 [(match_operand:SF 2 "s_register_operand" "")
+ 	  (match_operand:SF 3 "arm_float_compare_operand" "")]))]
+   "TARGET_32BIT && TARGET_HARD_FLOAT"
+@@ -7512,7 +7512,7 @@
+ 
+ (define_expand "cstoredf4"
+   [(set (match_operand:SI 0 "s_register_operand" "")
+-	(match_operator:SI 1 "arm_comparison_operator"
++	(match_operator:SI 1 "expandable_comparison_operator"
+ 	 [(match_operand:DF 2 "s_register_operand" "")
+ 	  (match_operand:DF 3 "arm_float_compare_operand" "")]))]
+   "TARGET_32BIT && TARGET_HARD_FLOAT && !TARGET_VFP_SINGLE"
+@@ -7522,7 +7522,7 @@
+ 
+ (define_expand "cstoredi4"
+   [(set (match_operand:SI 0 "s_register_operand" "")
+-	(match_operator:SI 1 "arm_comparison_operator"
++	(match_operator:SI 1 "expandable_comparison_operator"
+ 	 [(match_operand:DI 2 "s_register_operand" "")
+ 	  (match_operand:DI 3 "cmpdi_operand" "")]))]
+   "TARGET_32BIT"
+@@ -7638,7 +7638,7 @@
+ 
+ (define_expand "movsicc"
+   [(set (match_operand:SI 0 "s_register_operand" "")
+-	(if_then_else:SI (match_operand 1 "arm_comparison_operator" "")
++	(if_then_else:SI (match_operand 1 "expandable_comparison_operator" "")
+ 			 (match_operand:SI 2 "arm_not_operand" "")
+ 			 (match_operand:SI 3 "arm_not_operand" "")))]
+   "TARGET_32BIT"
+@@ -7658,7 +7658,7 @@
+ 
+ (define_expand "movsfcc"
+   [(set (match_operand:SF 0 "s_register_operand" "")
+-	(if_then_else:SF (match_operand 1 "arm_comparison_operator" "")
++	(if_then_else:SF (match_operand 1 "expandable_comparison_operator" "")
+ 			 (match_operand:SF 2 "s_register_operand" "")
+ 			 (match_operand:SF 3 "nonmemory_operand" "")))]
+   "TARGET_32BIT && TARGET_HARD_FLOAT"
+@@ -7684,7 +7684,7 @@
+ 
+ (define_expand "movdfcc"
+   [(set (match_operand:DF 0 "s_register_operand" "")
+-	(if_then_else:DF (match_operand 1 "arm_comparison_operator" "")
++	(if_then_else:DF (match_operand 1 "expandable_comparison_operator" "")
+ 			 (match_operand:DF 2 "s_register_operand" "")
+ 			 (match_operand:DF 3 "arm_float_add_operand" "")))]
+   "TARGET_32BIT && TARGET_HARD_FLOAT && (TARGET_FPA || TARGET_VFP_DOUBLE)"
+diff --git a/gcc/config/arm/predicates.md b/gcc/config/arm/predicates.md
+index e34b46da0..cc2b44167 100644
+--- a/gcc/config/arm/predicates.md
++++ b/gcc/config/arm/predicates.md
+@@ -241,11 +241,15 @@
+ 
+ ;; True for integer comparisons and, if FP is active, for comparisons
+ ;; other than LTGT or UNEQ.
++(define_special_predicate "expandable_comparison_operator"
++  (match_code "eq,ne,le,lt,ge,gt,geu,gtu,leu,ltu,
++	       unordered,ordered,unlt,unle,unge,ungt"))
++
++;; Likewise, but only accept comparisons that are directly supported
++;; by ARM condition codes.
+ (define_special_predicate "arm_comparison_operator"
+-  (ior (match_code "eq,ne,le,lt,ge,gt,geu,gtu,leu,ltu")
+-       (and (match_test "TARGET_32BIT && TARGET_HARD_FLOAT
+-			 && (TARGET_FPA || TARGET_VFP)")
+-            (match_code "unordered,ordered,unlt,unle,unge,ungt"))))
++  (and (match_operand 0 "expandable_comparison_operator")
++       (match_test "maybe_get_arm_condition_code (op) != ARM_NV")))
+ 
+ (define_special_predicate "lt_ge_comparison_operator"
+   (match_code "lt,ge"))
+diff --git a/gcc/testsuite/gcc.dg/torture/pr49030.c b/gcc/testsuite/gcc.dg/torture/pr49030.c
+new file mode 100644
+index 000000000..4b078a9e0
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/torture/pr49030.c
+@@ -0,0 +1,19 @@
++void
++sample_move_d32u24_sS (char *dst, float *src, unsigned long nsamples,
++		       unsigned long dst_skip)
++{
++  long long y;
++  while (nsamples--)
++    {
++      y = (long long) (*src * 8388608.0f) << 8;
++      if (y > 2147483647) {
++	*(int *) dst = 2147483647;
++      } else if (y < -2147483647 - 1) {
++	*(int *) dst = -2147483647 - 1;
++      } else {
++	*(int *) dst = (int) y;
++      }
++      dst += dst_skip;
++      src++;
++    }
++}
+diff --git a/gcc/testsuite/gcc.target/arm/cmp-1.c b/gcc/testsuite/gcc.target/arm/cmp-1.c
+new file mode 100644
+index 000000000..0d6b7c266
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/arm/cmp-1.c
+@@ -0,0 +1,37 @@
++/* { dg-do compile } */
++/* { dg-options "-O" } */
++/* { dg-final { scan-assembler-not "\tbl\t" } } */
++/* { dg-final { scan-assembler-not "__aeabi" } } */
++int x, y;
++
++#define TEST_EXPR(NAME, ARGS, EXPR)			\
++  int NAME##1 ARGS { return (EXPR); }			\
++  int NAME##2 ARGS { return !(EXPR); }			\
++  int NAME##3 ARGS { return (EXPR) ? x : y; }		\
++  void NAME##4 ARGS { if (EXPR) x++; }			\
++  void NAME##5 ARGS { if (!(EXPR)) x++; }
++
++#define TEST(NAME, TYPE, OPERATOR) \
++  TEST_EXPR (NAME##_rr, (TYPE a1, TYPE a2), a1 OPERATOR a2)	\
++  TEST_EXPR (NAME##_rm, (TYPE a1, TYPE *a2), a1 OPERATOR *a2)	\
++  TEST_EXPR (NAME##_mr, (TYPE *a1, TYPE a2), *a1 OPERATOR a2)	\
++  TEST_EXPR (NAME##_mm, (TYPE *a1, TYPE *a2), *a1 OPERATOR *a2) \
++  TEST_EXPR (NAME##_rc, (TYPE a1), a1 OPERATOR 100)		\
++  TEST_EXPR (NAME##_cr, (TYPE a1), 100 OPERATOR a1)
++
++#define TEST_OP(NAME, OPERATOR) \
++  TEST (sc_##NAME, signed char, OPERATOR)		\
++  TEST (uc_##NAME, unsigned char, OPERATOR)		\
++  TEST (ss_##NAME, short, OPERATOR)			\
++  TEST (us_##NAME, unsigned short, OPERATOR)		\
++  TEST (si_##NAME, int, OPERATOR)			\
++  TEST (ui_##NAME, unsigned int, OPERATOR)		\
++  TEST (sll_##NAME, long long, OPERATOR)		\
++  TEST (ull_##NAME, unsigned long long, OPERATOR)
++
++TEST_OP (eq, ==)
++TEST_OP (ne, !=)
++TEST_OP (lt, <)
++TEST_OP (gt, >)
++TEST_OP (le, <=)
++TEST_OP (ge, >=)
+diff --git a/gcc/testsuite/gcc.target/arm/cmp-2.c b/gcc/testsuite/gcc.target/arm/cmp-2.c
+new file mode 100644
+index 000000000..ed6b609ca
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/arm/cmp-2.c
+@@ -0,0 +1,49 @@
++/* { dg-do compile } */
++/* { dg-require-effective-target arm_vfp_ok } */
++/* { dg-skip-if "need fp instructions" { *-*-* } { "-mfloat-abi=soft" } { "" } } */
++/* { dg-options "-O -mfpu=vfp -mfloat-abi=softfp" } */
++/* { dg-final { scan-assembler-not "\tbl\t" } } */
++/* { dg-final { scan-assembler-not "__aeabi" } } */
++int x, y;
++
++#define EQ(X, Y) ((X) == (Y))
++#define NE(X, Y) ((X) != (Y))
++#define LT(X, Y) ((X) < (Y))
++#define GT(X, Y) ((X) > (Y))
++#define LE(X, Y) ((X) <= (Y))
++#define GE(X, Y) ((X) >= (Y))
++
++#define TEST_EXPR(NAME, ARGS, EXPR)			\
++  int NAME##1 ARGS { return (EXPR); }			\
++  int NAME##2 ARGS { return !(EXPR); }			\
++  int NAME##3 ARGS { return (EXPR) ? x : y; }		\
++  void NAME##4 ARGS { if (EXPR) x++; }			\
++  void NAME##5 ARGS { if (!(EXPR)) x++; }
++
++#define TEST(NAME, TYPE, OPERATOR) \
++  TEST_EXPR (NAME##_rr, (TYPE a1, TYPE a2), OPERATOR (a1, a2))		\
++  TEST_EXPR (NAME##_rm, (TYPE a1, TYPE *a2), OPERATOR (a1, *a2))	\
++  TEST_EXPR (NAME##_mr, (TYPE *a1, TYPE a2), OPERATOR (*a1, a2))	\
++  TEST_EXPR (NAME##_mm, (TYPE *a1, TYPE *a2), OPERATOR (*a1, *a2))	\
++  TEST_EXPR (NAME##_rc, (TYPE a1), OPERATOR (a1, 100))			\
++  TEST_EXPR (NAME##_cr, (TYPE a1), OPERATOR (100, a1))
++
++#define TEST_OP(NAME, OPERATOR) \
++  TEST (f_##NAME, float, OPERATOR)		\
++  TEST (d_##NAME, double, OPERATOR)		\
++  TEST (ld_##NAME, long double, OPERATOR)
++
++TEST_OP (eq, EQ)
++TEST_OP (ne, NE)
++TEST_OP (lt, LT)
++TEST_OP (gt, GT)
++TEST_OP (le, LE)
++TEST_OP (ge, GE)
++TEST_OP (blt, __builtin_isless)
++TEST_OP (bgt, __builtin_isgreater)
++TEST_OP (ble, __builtin_islessequal)
++TEST_OP (bge, __builtin_isgreaterequal)
++/* This one should be expanded into separate ordered and equality
++   comparisons.  */
++TEST_OP (blg, __builtin_islessgreater)
++TEST_OP (bun, __builtin_isunordered)

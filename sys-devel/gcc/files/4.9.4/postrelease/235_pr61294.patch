@@ -1,0 +1,467 @@
+diff --git a/gcc/c-family/c.opt b/gcc/c-family/c.opt
+index defae0f5f..87820c8d9 100644
+--- a/gcc/c-family/c.opt
++++ b/gcc/c-family/c.opt
+@@ -494,6 +494,10 @@ Wmain
+ LangEnabledBy(C ObjC C++ ObjC++,Wpedantic, 2, 0)
+ ;
+ 
++Wmemset-transposed-args
++C ObjC C++ ObjC++ Var(warn_memset_transposed_args) Warning LangEnabledBy(C ObjC C++ ObjC++,Wall)
++Warn about suspicious calls to memset where the third argument is constant literal zero and the second is not
++
+ Wmissing-braces
+ C ObjC C++ ObjC++ Var(warn_missing_braces) Warning LangEnabledBy(C ObjC,Wall)
+ Warn about possibly missing braces around initializers
+diff --git a/gcc/c/c-parser.c b/gcc/c/c-parser.c
+index ee78c2044..1014e0b99 100644
+--- a/gcc/c/c-parser.c
++++ b/gcc/c/c-parser.c
+@@ -1204,7 +1204,8 @@ static struct c_expr c_parser_expression (c_parser *);
+ static struct c_expr c_parser_expression_conv (c_parser *);
+ static vec<tree, va_gc> *c_parser_expr_list (c_parser *, bool, bool,
+ 					     vec<tree, va_gc> **, location_t *,
+-					     tree *, vec<location_t> *);
++					     tree *, vec<location_t> *,
++					     unsigned int * = NULL);
+ static void c_parser_omp_construct (c_parser *);
+ static void c_parser_omp_threadprivate (c_parser *);
+ static void c_parser_omp_barrier (c_parser *);
+@@ -7631,6 +7632,7 @@ c_parser_postfix_expression_after_primary (c_parser *parser,
+   tree ident, idx;
+   location_t sizeof_arg_loc[3];
+   tree sizeof_arg[3];
++  unsigned int literal_zero_mask;
+   unsigned int i;
+   vec<tree, va_gc> *exprlist;
+   vec<tree, va_gc> *origtypes = NULL;
+@@ -7685,12 +7687,13 @@ c_parser_postfix_expression_after_primary (c_parser *parser,
+ 	      sizeof_arg[i] = NULL_TREE;
+ 	      sizeof_arg_loc[i] = UNKNOWN_LOCATION;
+ 	    }
++	  literal_zero_mask = 0;
+ 	  if (c_parser_next_token_is (parser, CPP_CLOSE_PAREN))
+ 	    exprlist = NULL;
+ 	  else
+ 	    exprlist = c_parser_expr_list (parser, true, false, &origtypes,
+ 					   sizeof_arg_loc, sizeof_arg,
+-					   &arg_loc);
++					   &arg_loc, &literal_zero_mask);
+ 	  c_parser_skip_until_found (parser, CPP_CLOSE_PAREN,
+ 				     "expected %<)%>");
+ 	  orig_expr = expr;
+@@ -7700,6 +7703,19 @@ c_parser_postfix_expression_after_primary (c_parser *parser,
+ 					      expr.value, exprlist,
+ 					      sizeof_arg,
+ 					      sizeof_ptr_memacc_comptypes);
++	  if (warn_memset_transposed_args
++	      && TREE_CODE (expr.value) == FUNCTION_DECL
++	      && DECL_BUILT_IN_CLASS (expr.value) == BUILT_IN_NORMAL
++	      && DECL_FUNCTION_CODE (expr.value) == BUILT_IN_MEMSET
++	      && vec_safe_length (exprlist) == 3
++	      && integer_zerop ((*exprlist)[2])
++	      && (literal_zero_mask & (1 << 2)) != 0
++	      && (!integer_zerop ((*exprlist)[1])
++		  || (literal_zero_mask & (1 << 1)) == 0))
++	    warning_at (expr_loc, OPT_Wmemset_transposed_args,
++			"%<memset%> used with constant zero length parameter; "
++			"this could be due to transposed parameters");
++
+ 	  expr.value
+ 	    = c_build_function_call_vec (expr_loc, arg_loc, expr.value,
+ 					 exprlist, origtypes);
+@@ -7867,6 +7883,36 @@ c_parser_expression_conv (c_parser *parser)
+   return expr;
+ }
+ 
++/* Helper function of c_parser_expr_list.  Check if IDXth (0 based)
++   argument is a literal zero alone and if so, set it in literal_zero_mask.  */
++
++static inline void
++c_parser_check_literal_zero (c_parser *parser, unsigned *literal_zero_mask,
++			     unsigned int idx)
++{
++  if (idx >= HOST_BITS_PER_INT)
++    return;
++
++  c_token *tok = c_parser_peek_token (parser);
++  switch (tok->type)
++    {
++    case CPP_NUMBER:
++    case CPP_CHAR:
++    case CPP_WCHAR:
++    case CPP_CHAR16:
++    case CPP_CHAR32:
++      /* If a parameter is literal zero alone, remember it
++	 for -Wmemset-transposed-args warning.  */
++      if (integer_zerop (tok->value)
++	  && !TREE_OVERFLOW (tok->value)
++	  && (c_parser_peek_2nd_token (parser)->type == CPP_COMMA
++	      || c_parser_peek_2nd_token (parser)->type == CPP_CLOSE_PAREN))
++	*literal_zero_mask |= 1U << idx;
++    default:
++      break;
++    }
++}
++
+ /* Parse a non-empty list of expressions.  If CONVERT_P, convert
+    functions and arrays to pointers and lvalues to rvalues.  If
+    FOLD_P, fold the expressions.  If LOCATIONS is non-NULL, save the
+@@ -7881,7 +7927,8 @@ static vec<tree, va_gc> *
+ c_parser_expr_list (c_parser *parser, bool convert_p, bool fold_p,
+ 		    vec<tree, va_gc> **p_orig_types,
+ 		    location_t *sizeof_arg_loc, tree *sizeof_arg,
+-		    vec<location_t> *locations)
++		    vec<location_t> *locations,
++		    unsigned int *literal_zero_mask)
+ {
+   vec<tree, va_gc> *ret;
+   vec<tree, va_gc> *orig_types;
+@@ -7899,6 +7946,8 @@ c_parser_expr_list (c_parser *parser, bool convert_p, bool fold_p,
+   if (sizeof_arg != NULL
+       && c_parser_next_token_is_keyword (parser, RID_SIZEOF))
+     cur_sizeof_arg_loc = c_parser_peek_2nd_token (parser)->location;
++  if (literal_zero_mask)
++    c_parser_check_literal_zero (parser, literal_zero_mask, 0);
+   expr = c_parser_expr_no_commas (parser, NULL);
+   if (convert_p)
+     expr = convert_lvalue_to_rvalue (loc, expr, true, true);
+@@ -7925,6 +7974,8 @@ c_parser_expr_list (c_parser *parser, bool convert_p, bool fold_p,
+ 	cur_sizeof_arg_loc = c_parser_peek_2nd_token (parser)->location;
+       else
+ 	cur_sizeof_arg_loc = UNKNOWN_LOCATION;
++      if (literal_zero_mask)
++	c_parser_check_literal_zero (parser, literal_zero_mask, idx + 1);
+       expr = c_parser_expr_no_commas (parser, NULL);
+       if (convert_p)
+ 	expr = convert_lvalue_to_rvalue (loc, expr, true, true);
+diff --git a/gcc/cp/cp-tree.h b/gcc/cp/cp-tree.h
+index 3ff2cca06..89639e994 100644
+--- a/gcc/cp/cp-tree.h
++++ b/gcc/cp/cp-tree.h
+@@ -4190,6 +4190,10 @@ more_aggr_init_expr_args_p (const aggr_init_expr_arg_iterator *iter)
+ #define SIZEOF_EXPR_TYPE_P(NODE) \
+   TREE_LANG_FLAG_0 (SIZEOF_EXPR_CHECK (NODE))
+ 
++/* True if INTEGER_CST is a zero literal seen in function argument list.  */
++#define LITERAL_ZERO_P(NODE) \
++  (INTEGER_CST_CHECK (NODE)->base.nothrow_flag)
++
+ /* An enumeration of the kind of tags that C++ accepts.  */
+ enum tag_types {
+   none_type = 0, /* Not a tag type.  */
+diff --git a/gcc/cp/parser.c b/gcc/cp/parser.c
+index f9d31b465..4bfbbdda5 100644
+--- a/gcc/cp/parser.c
++++ b/gcc/cp/parser.c
+@@ -1922,7 +1922,7 @@ static tree cp_parser_postfix_open_square_expression
+ static tree cp_parser_postfix_dot_deref_expression
+   (cp_parser *, enum cpp_ttype, tree, bool, cp_id_kind *, location_t);
+ static vec<tree, va_gc> *cp_parser_parenthesized_expression_list
+-  (cp_parser *, int, bool, bool, bool *);
++  (cp_parser *, int, bool, bool, bool *, bool = false);
+ /* Values for the second parameter of cp_parser_parenthesized_expression_list.  */
+ enum { non_attr = 0, normal_attr = 1, id_attr = 2 };
+ static void cp_parser_pseudo_destructor_name
+@@ -6039,7 +6039,8 @@ cp_parser_postfix_expression (cp_parser *parser, bool address_p, bool cast_p,
+ 	    args = (cp_parser_parenthesized_expression_list
+ 		    (parser, non_attr,
+ 		     /*cast_p=*/false, /*allow_expansion_p=*/true,
+-		     /*non_constant_p=*/NULL));
++		     /*non_constant_p=*/NULL,
++		     /*want_literal_zero_p=*/warn_memset_transposed_args));
+ 	    if (is_builtin_constant_p)
+ 	      {
+ 		parser->integral_constant_expression_p
+@@ -6107,6 +6108,30 @@ cp_parser_postfix_expression (cp_parser *parser, bool address_p, bool cast_p,
+ 		  }
+ 	      }
+ 
++	    if (warn_memset_transposed_args)
++	      {
++		if (TREE_CODE (postfix_expression) == FUNCTION_DECL
++		    && DECL_BUILT_IN_CLASS (postfix_expression) == BUILT_IN_NORMAL
++		    && DECL_FUNCTION_CODE (postfix_expression) == BUILT_IN_MEMSET
++		    && vec_safe_length (args) == 3
++		    && integer_zerop ((*args)[2])
++		    && LITERAL_ZERO_P ((*args)[2])
++		    && !(integer_zerop ((*args)[1])
++			 && LITERAL_ZERO_P ((*args)[1])))
++		  warning (OPT_Wmemset_transposed_args,
++			   "%<memset%> used with constant zero length "
++			   "parameter; this could be due to transposed "
++			   "parameters");
++
++		/* Replace LITERAL_ZERO_P INTEGER_CSTs with normal ones
++		   to avoid leaking those into folder and middle-end.  */
++		unsigned int i;
++		tree arg;
++		FOR_EACH_VEC_SAFE_ELT (args, i, arg)
++		  if (TREE_CODE (arg) == INTEGER_CST && LITERAL_ZERO_P (arg))
++		    (*args)[i] = build_int_cst (TREE_TYPE (arg), 0);
++	      }
++
+ 	    if (TREE_CODE (postfix_expression) == COMPONENT_REF)
+ 	      {
+ 		tree instance = TREE_OPERAND (postfix_expression, 0);
+@@ -6595,6 +6620,10 @@ cp_parser_postfix_dot_deref_expression (cp_parser *parser,
+   return postfix_expression;
+ }
+ 
++/* Cache of LITERAL_ZERO_P constants.  */
++
++static GTY(()) tree literal_zeros[itk_none];
++
+ /* Parse a parenthesized expression-list.
+ 
+    expression-list:
+@@ -6619,14 +6648,18 @@ cp_parser_postfix_dot_deref_expression (cp_parser *parser,
+    plain identifier argument, normal_attr for an attribute that wants
+    an expression, or non_attr if we aren't parsing an attribute list.  If
+    NON_CONSTANT_P is non-NULL, *NON_CONSTANT_P indicates whether or
+-   not all of the expressions in the list were constant.  */
++   not all of the expressions in the list were constant.
++   WANT_LITERAL_ZERO_P is true if the caller is interested in
++   LITERAL_ZERO_P INTEGER_CSTs.  FIXME: once we don't fold everything
++   immediately, this can be removed.  */
+ 
+ static vec<tree, va_gc> *
+ cp_parser_parenthesized_expression_list (cp_parser* parser,
+ 					 int is_attribute_list,
+ 					 bool cast_p,
+                                          bool allow_expansion_p,
+-					 bool *non_constant_p)
++					 bool *non_constant_p,
++					 bool want_literal_zero_p)
+ {
+   vec<tree, va_gc> *expression_list;
+   bool fold_expr_p = is_attribute_list != non_attr;
+@@ -6689,7 +6722,50 @@ cp_parser_parenthesized_expression_list (cp_parser* parser,
+ 		  *non_constant_p = true;
+ 	      }
+ 	    else
+-	      expr = cp_parser_assignment_expression (parser, cast_p, NULL);
++	      {
++		expr = NULL_TREE;
++		cp_token *tok = cp_lexer_peek_token (parser->lexer);
++		switch (tok->type)
++		  {
++		  case CPP_NUMBER:
++		  case CPP_CHAR:
++		  case CPP_WCHAR:
++		  case CPP_CHAR16:
++		  case CPP_CHAR32:
++		    /* If a parameter is literal zero alone, remember it
++		       for -Wmemset-transposed-args warning.  */
++		    if (integer_zerop (tok->u.value)
++			&& !TREE_OVERFLOW (tok->u.value)
++			&& want_literal_zero_p
++			&& (cp_lexer_peek_nth_token (parser->lexer, 2)->type
++			    == CPP_COMMA
++			    || cp_lexer_peek_nth_token (parser->lexer, 2)->type
++			       == CPP_CLOSE_PAREN))
++		      {
++			unsigned int i;
++			for (i = 0; i < itk_none; ++i)
++			  if (TREE_TYPE (tok->u.value) == integer_types[i])
++			    break;
++			if (i < itk_none && literal_zeros[i])
++			  expr = literal_zeros[i];
++			else
++			  {
++			    expr = copy_node (tok->u.value);
++			    LITERAL_ZERO_P (expr) = 1;
++			    if (i < itk_none)
++			      literal_zeros[i] = expr;
++			  }
++			/* Consume the 0 token (or '\0', 0LL etc.).  */
++			cp_lexer_consume_token (parser->lexer);
++		      }
++		    break;
++		  default:
++		    break;
++		  }
++		if (expr == NULL_TREE)
++		  expr = cp_parser_assignment_expression (parser, cast_p,
++							  NULL);
++	      }
+ 
+ 	    if (fold_expr_p)
+ 	      expr = fold_non_dependent_expr (expr);
+diff --git a/gcc/doc/invoke.texi b/gcc/doc/invoke.texi
+index effebf7f5..897be8fbe 100644
+--- a/gcc/doc/invoke.texi
++++ b/gcc/doc/invoke.texi
+@@ -254,8 +254,8 @@ Objective-C and Objective-C++ Dialects}.
+ -Wno-int-to-pointer-cast -Wno-invalid-offsetof @gol
+ -Winvalid-pch -Wlarger-than=@var{len}  -Wunsafe-loop-optimizations @gol
+ -Wlogical-op -Wlong-long @gol
+--Wmain -Wmaybe-uninitialized -Wmissing-braces  -Wmissing-field-initializers @gol
+--Wmissing-include-dirs @gol
++-Wmain -Wmaybe-uninitialized -Wmemset-transposed-args -Wmissing-braces @gol
++-Wmissing-field-initializers -Wmissing-include-dirs @gol
+ -Wno-multichar  -Wnonnull  -Wno-overflow -Wopenmp-simd @gol
+ -Woverlength-strings  -Wpacked  -Wpacked-bitfield-compat  -Wpadded @gol
+ -Wparentheses  -Wpedantic-ms-format -Wno-pedantic-ms-format @gol
+@@ -4624,6 +4624,18 @@ but a pointer, and suggests a possible fix, or about
+ @code{memcpy (&foo, ptr, sizeof (&foo));}.  This warning is enabled by
+ @option{-Wall}.
+ 
++@item -Wmemset-transposed-args
++@opindex Wmemset-transposed-args
++@opindex Wno-memset-transposed-args
++Warn for suspicious calls to the @code{memset} built-in function, if the
++second argument is not zero and the third argument is zero.  This warns e.g.@
++about @code{memset (buf, sizeof buf, 0)} where most probably
++@code{memset (buf, 0, sizeof buf)} was meant instead.  The diagnostics
++is only emitted if the third argument is literal zero, if it is some expression
++that is folded to zero, or e.g. a cast of zero to some type etc., it
++is far less likely that user has mistakenly exchanged the arguments and
++no warning is emitted.  This warning is enabled by @option{-Wall}.
++
+ @item -Waddress
+ @opindex Waddress
+ @opindex Wno-address
+diff --git a/gcc/testsuite/c-c++-common/Wmemset-transposed-args1.c b/gcc/testsuite/c-c++-common/Wmemset-transposed-args1.c
+new file mode 100644
+index 000000000..d188d6f7c
+--- /dev/null
++++ b/gcc/testsuite/c-c++-common/Wmemset-transposed-args1.c
+@@ -0,0 +1,31 @@
++/* { dg-do compile } */
++/* { dg-options "-Wall" } */
++
++typedef __SIZE_TYPE__ size_t;
++extern
++#ifdef __cplusplus
++"C"
++#endif
++void *memset (void *, int, size_t);
++char buf[1024];
++
++void
++foo ()
++{
++  memset (buf, sizeof buf, 0);	/* { dg-warning ".memset. used with constant zero length parameter; this could be due to transposed parameters" } */
++  memset (buf, sizeof buf, '\0'); /* { dg-warning ".memset. used with constant zero length parameter; this could be due to transposed parameters" } */
++  memset (buf, sizeof buf, L'\0'); /* { dg-warning ".memset. used with constant zero length parameter; this could be due to transposed parameters" } */
++  memset (buf, 1, 1 - 1);
++  memset (buf, 1, 0 - 0);
++  memset (buf, 0, 0);
++  memset (buf, '\0', 0);
++  memset (buf, L'\0', 0);
++  memset (buf, 1 - 1, 0); /* { dg-warning ".memset. used with constant zero length parameter; this could be due to transposed parameters" } */
++  memset (buf, 0 - 0, 0); /* { dg-warning ".memset. used with constant zero length parameter; this could be due to transposed parameters" } */
++  memset (buf, sizeof buf, 0L);	/* { dg-warning ".memset. used with constant zero length parameter; this could be due to transposed parameters" } */
++  memset (buf, sizeof buf, 0UL); /* { dg-warning ".memset. used with constant zero length parameter; this could be due to transposed parameters" } */
++  memset (buf, sizeof buf, 0LL); /* { dg-warning ".memset. used with constant zero length parameter; this could be due to transposed parameters" } */
++  memset (buf, sizeof buf, 0ULL); /* { dg-warning ".memset. used with constant zero length parameter; this could be due to transposed parameters" } */
++  memset (buf, sizeof buf, (int) 0);
++  memset (buf, sizeof buf, -0);
++}
+diff --git a/gcc/testsuite/c-c++-common/Wmemset-transposed-args2.c b/gcc/testsuite/c-c++-common/Wmemset-transposed-args2.c
+new file mode 100644
+index 000000000..8647138cf
+--- /dev/null
++++ b/gcc/testsuite/c-c++-common/Wmemset-transposed-args2.c
+@@ -0,0 +1,20 @@
++/* { dg-do compile { target { c || c++11 } } } */
++/* { dg-options "-Wall" } */
++/* { dg-additional-options "-std=gnu99" { target c } } */
++
++typedef __SIZE_TYPE__ size_t;
++extern
++#ifdef __cplusplus
++"C"
++#endif
++void *memset (void *, int, size_t);
++char buf[1024];
++
++void
++foo ()
++{
++  memset (buf, sizeof buf, u'\0'); /* { dg-warning ".memset. used with constant zero length parameter; this could be due to transposed parameters" } */
++  memset (buf, sizeof buf, U'\0'); /* { dg-warning ".memset. used with constant zero length parameter; this could be due to transposed parameters" } */
++  memset (buf, u'\0', 0);
++  memset (buf, U'\0', 0);
++}
+diff --git a/gcc/testsuite/g++.dg/warn/Wmemset-transposed-args-1.C b/gcc/testsuite/g++.dg/warn/Wmemset-transposed-args-1.C
+new file mode 100644
+index 000000000..89d3edf96
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/warn/Wmemset-transposed-args-1.C
+@@ -0,0 +1,74 @@
++// { dg-do compile }
++// { dg-options "-Wall" }
++
++typedef __SIZE_TYPE__ size_t;
++extern "C" void *memset (void *, int, size_t);
++char buf[1024];
++namespace std
++{
++  extern "C" void *memset (void *, int, size_t);
++}
++
++template <int N>
++void
++foo ()
++{
++  memset (buf, sizeof buf, 0);	/* { dg-warning ".memset. used with constant zero length parameter; this could be due to transposed parameters" } */
++  memset (buf, sizeof buf, '\0'); /* { dg-warning ".memset. used with constant zero length parameter; this could be due to transposed parameters" } */
++  memset (buf, sizeof buf, L'\0'); /* { dg-warning ".memset. used with constant zero length parameter; this could be due to transposed parameters" } */
++  memset (buf, sizeof buf, N);
++  memset (buf, 1, 1 - 1);
++  memset (buf, 1, 0 - 0);
++  memset (buf, 1, N - N);
++  memset (buf, 0, 0);
++  memset (buf, 1 - 1, 0); /* { dg-warning ".memset. used with constant zero length parameter; this could be due to transposed parameters" } */
++  memset (buf, 0 - 0, 0); /* { dg-warning ".memset. used with constant zero length parameter; this could be due to transposed parameters" } */
++  memset (buf, sizeof buf, 0L);	/* { dg-warning ".memset. used with constant zero length parameter; this could be due to transposed parameters" } */
++  memset (buf, sizeof buf, 0UL); /* { dg-warning ".memset. used with constant zero length parameter; this could be due to transposed parameters" } */
++  memset (buf, sizeof buf, 0LL); /* { dg-warning ".memset. used with constant zero length parameter; this could be due to transposed parameters" } */
++  memset (buf, sizeof buf, 0ULL); /* { dg-warning ".memset. used with constant zero length parameter; this could be due to transposed parameters" } */
++  memset (buf, sizeof buf, (int) 0);
++  memset (buf, sizeof buf, -0);
++}
++
++template <int N>
++void
++baz ()
++{
++  std::memset (buf, sizeof buf, 0);	/* { dg-warning ".memset. used with constant zero length parameter; this could be due to transposed parameters" } */
++  std::memset (buf, sizeof buf, '\0'); /* { dg-warning ".memset. used with constant zero length parameter; this could be due to transposed parameters" } */
++  std::memset (buf, sizeof buf, L'\0'); /* { dg-warning ".memset. used with constant zero length parameter; this could be due to transposed parameters" } */
++  std::memset (buf, sizeof buf, N);
++  std::memset (buf, 1, 1 - 1);
++  std::memset (buf, 1, 0 - 0);
++  std::memset (buf, 1, N - N);
++  std::memset (buf, 0, 0);
++  std::memset (buf, 1 - 1, 0); /* { dg-warning ".memset. used with constant zero length parameter; this could be due to transposed parameters" } */
++  std::memset (buf, 0 - 0, 0); /* { dg-warning ".memset. used with constant zero length parameter; this could be due to transposed parameters" } */
++  std::memset (buf, sizeof buf, 0L);	/* { dg-warning ".memset. used with constant zero length parameter; this could be due to transposed parameters" } */
++  std::memset (buf, sizeof buf, 0UL); /* { dg-warning ".memset. used with constant zero length parameter; this could be due to transposed parameters" } */
++  std::memset (buf, sizeof buf, 0LL); /* { dg-warning ".memset. used with constant zero length parameter; this could be due to transposed parameters" } */
++  std::memset (buf, sizeof buf, 0ULL); /* { dg-warning ".memset. used with constant zero length parameter; this could be due to transposed parameters" } */
++  std::memset (buf, sizeof buf, (int) 0);
++  std::memset (buf, sizeof buf, -0);
++}
++
++void
++bar ()
++{
++  foo<0> ();
++  std::memset (buf, sizeof buf, 0);	/* { dg-warning ".memset. used with constant zero length parameter; this could be due to transposed parameters" } */
++  std::memset (buf, sizeof buf, '\0'); /* { dg-warning ".memset. used with constant zero length parameter; this could be due to transposed parameters" } */
++  std::memset (buf, sizeof buf, L'\0'); /* { dg-warning ".memset. used with constant zero length parameter; this could be due to transposed parameters" } */
++  std::memset (buf, 1, 1 - 1);
++  std::memset (buf, 1, 0 - 0);
++  std::memset (buf, 0, 0);
++  std::memset (buf, 1 - 1, 0); /* { dg-warning ".memset. used with constant zero length parameter; this could be due to transposed parameters" } */
++  std::memset (buf, 0 - 0, 0); /* { dg-warning ".memset. used with constant zero length parameter; this could be due to transposed parameters" } */
++  std::memset (buf, sizeof buf, 0L);	/* { dg-warning ".memset. used with constant zero length parameter; this could be due to transposed parameters" } */
++  std::memset (buf, sizeof buf, 0UL); /* { dg-warning ".memset. used with constant zero length parameter; this could be due to transposed parameters" } */
++  std::memset (buf, sizeof buf, 0LL); /* { dg-warning ".memset. used with constant zero length parameter; this could be due to transposed parameters" } */
++  std::memset (buf, sizeof buf, 0ULL); /* { dg-warning ".memset. used with constant zero length parameter; this could be due to transposed parameters" } */
++  std::memset (buf, sizeof buf, (int) 0);
++  std::memset (buf, sizeof buf, -0);
++}

@@ -7,6 +7,10 @@ inherit toolchain
 
 KEYWORDS="alpha amd64 arm arm64 hppa m68k mips ppc ppc64 s390 sh sparc x86"
 
+use_linaro() {
+	[[ $(tc-arch) == "arm" || $(tc-arch) == "arm64" ]]
+}
+
 src_prepare() {
 	eapply "${FILESDIR}"/${PV}/00_gentoo-patchset.patch
 	toolchain_src_prepare
@@ -15,6 +19,8 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/02_fix-werror.patch
 
 	use vanilla && return 0
+
+	use_linaro && eapply "${FILESDIR}"/${PV}/03_gcc-linaro.patch
 
 	eapply "${FILESDIR}"/${PV}/postrelease/000_pr77450-77605-78185-78333.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/001_pr77943.patch
@@ -244,7 +250,7 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/225_pr77767.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/226_pr78064.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/227_pr78416.patch
-	eapply "${FILESDIR}"/${PV}/postrelease/228_pr78796.patch
+	use_linaro || eapply "${FILESDIR}"/${PV}/postrelease/228_pr78796.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/229_pr93272.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/230_pr79439.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/231_pr79969.patch
@@ -257,6 +263,9 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/238_pr93672.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/239_pr115646.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/240_pr115608.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/241_pr62032.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/242_pr59586.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/243_pr57211.patch
 
 	if use test ; then
 		rm -rf gcc/testsuite/gcc.c-torture/execute/vfprintf-chk-1.c gcc/testsuite/gcc.c-torture/execute/vprintf-chk-1.c

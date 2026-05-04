@@ -7,6 +7,10 @@ inherit toolchain
 
 KEYWORDS="alpha amd64 arm hppa m68k mips ppc ppc64 s390 sh sparc x86"
 
+use_linaro() {
+	[[ ${CTARGET} == arm*-*-*eabi ]]
+}
+
 src_prepare() {
 	eapply "${FILESDIR}"/${PV}/00_gentoo-patchset.patch
 	toolchain_src_prepare
@@ -17,6 +21,8 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/04_fix-werror.patch
 
 	use vanilla && return 0
+
+	use_linaro && eapply "${FILESDIR}"/${PV}/05_gcc-linaro.patch
 
 	eapply "${FILESDIR}"/${PV}/postrelease/000_pr77605-78185-78333.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/001_pr58943.patch
@@ -33,7 +39,7 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/012_pr52448.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/013_pr91131.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/014_pr54919.patch
-	eapply "${FILESDIR}"/${PV}/postrelease/015_pr53636.patch
+	use_linaro || eapply "${FILESDIR}"/${PV}/postrelease/015_pr53636.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/016_pr51447.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/017_pr58647.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/018_pr55771.patch
@@ -136,7 +142,7 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/116_pr107863.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/117_pr67046.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/118_pr71494.patch
-	eapply "${FILESDIR}"/${PV}/postrelease/119_pr49423.patch
+	use_linaro || eapply "${FILESDIR}"/${PV}/postrelease/119_pr49423.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/120_pr72809.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/121_pr79361.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/122_pr84900.patch
@@ -207,6 +213,7 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/187_pr93672.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/188_pr115646.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/189_pr115608.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/190_pr57211.patch
 
 	if use test ; then
 		rm -rf gcc/testsuite/gcc.c-torture/execute/vfprintf-chk-1.c gcc/testsuite/gcc.c-torture/execute/vprintf-chk-1.c gcc/testsuite/gcc.dg/format/opt-*.c

@@ -1,0 +1,59 @@
+diff --git a/gcc/testsuite/gcc.target/i386/pr51987.c b/gcc/testsuite/gcc.target/i386/pr51987.c
+new file mode 100644
+index 000000000..85261d12b
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/i386/pr51987.c
+@@ -0,0 +1,33 @@
++/* PR tree-optimization/51987 */
++/* { dg-do run { target { ! { ilp32 } } } } */
++/* { dg-options "-O3" } */
++
++extern void abort (void);
++union U { unsigned long long l; struct { unsigned int l, h; } i; };
++
++__attribute__((noinline, noclone)) void
++foo (char *x, char *y)
++{
++  int i;
++  for (i = 0; i < 64; i++)
++    {
++      union U u;
++      asm ("movl %1, %k0; salq $32, %0" : "=r" (u.l) : "r" (i));
++      x[i] = u.i.h;
++      union U v;
++      asm ("movl %1, %k0; salq $32, %0" : "=r" (v.l) : "r" (i));
++      y[i] = v.i.h;
++    }
++}
++
++int
++main ()
++{
++  char a[64], b[64];
++  int i;
++  foo (a, b);
++  for (i = 0; i < 64; i++)
++    if (a[i] != i || b[i] != i)
++      abort ();
++  return 0;
++}
+diff --git a/gcc/tree-data-ref.c b/gcc/tree-data-ref.c
+index 05127d819..9fae3e50e 100644
+--- a/gcc/tree-data-ref.c
++++ b/gcc/tree-data-ref.c
+@@ -1,5 +1,5 @@
+ /* Data references and dependences detectors.
+-   Copyright (C) 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011
++   Copyright (C) 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012
+    Free Software Foundation, Inc.
+    Contributed by Sebastian Pop <pop@cri.ensmp.fr>
+ 
+@@ -4162,7 +4162,7 @@ get_references_in_stmt (gimple stmt, VEC (data_ref_loc, heap) **references)
+   if ((stmt_code == GIMPLE_CALL
+        && !(gimple_call_flags (stmt) & (ECF_CONST | ECF_PURE)))
+       || (stmt_code == GIMPLE_ASM
+-	  && gimple_asm_volatile_p (stmt)))
++	  && (gimple_asm_volatile_p (stmt) || gimple_vuse (stmt))))
+     clobbers_memory = true;
+ 
+   if (!gimple_vuse (stmt))

@@ -2698,8 +2698,12 @@ gcc_do_make() {
 			ewarn "This compiler may not be safe or reliable for production use!"
 		elif tc_version_is_at_least 4.2 && _tc_use_if_iuse pgo; then
 			GCC_MAKE_TARGET=${GCC_MAKE_TARGET-profiledbootstrap}
-		elif tc_version_is_at_least 4.5 && ! _tc_use_if_iuse test ; then
-			GCC_MAKE_TARGET=${GCC_MAKE_TARGET-bootstrap-lean}
+		elif tc_version_is_at_least 4.5 ; then
+			if ! _tc_use_if_iuse test ; then
+				GCC_MAKE_TARGET=${GCC_MAKE_TARGET-bootstrap-lean}
+			else
+				GCC_MAKE_TARGET=${GCC_MAKE_TARGET-bootstrap2}
+			fi
 		else
 			GCC_MAKE_TARGET=${GCC_MAKE_TARGET-bootstrap}
 		fi

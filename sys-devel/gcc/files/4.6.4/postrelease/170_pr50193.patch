@@ -1,0 +1,95 @@
+diff --git a/gcc/config/arm/predicates.md b/gcc/config/arm/predicates.md
+index cc2b44167..c5308aae4 100644
+--- a/gcc/config/arm/predicates.md
++++ b/gcc/config/arm/predicates.md
+@@ -218,13 +218,20 @@
+        (match_test "mode == GET_MODE (op)")))
+ 
+ ;; True for shift operators.
++;; Notes:
++;;  * mult is only permitted with a constant shift amount
++;;  * patterns that permit register shift amounts only in ARM mode use
++;;    shift_amount_operand, patterns that always allow registers do not,
++;;    so we don't have to worry about that sort of thing here.
+ (define_special_predicate "shift_operator"
+   (and (ior (ior (and (match_code "mult")
+ 		      (match_test "power_of_two_operand (XEXP (op, 1), mode)"))
+ 		 (and (match_code "rotate")
+ 		      (match_test "GET_CODE (XEXP (op, 1)) == CONST_INT
+ 				   && ((unsigned HOST_WIDE_INT) INTVAL (XEXP (op, 1))) < 32")))
+-	    (match_code "ashift,ashiftrt,lshiftrt,rotatert"))
++	    (and (match_code "ashift,ashiftrt,lshiftrt,rotatert")
++		 (match_test "GET_CODE (XEXP (op, 1)) != CONST_INT
++			      || ((unsigned HOST_WIDE_INT) INTVAL (XEXP (op, 1))) < 32")))
+        (match_test "mode == GET_MODE (op)")))
+ 
+ ;; True for MULT, to identify which variant of shift_operator is in use.
+diff --git a/gcc/testsuite/gcc.target/arm/shiftable.c b/gcc/testsuite/gcc.target/arm/shiftable.c
+new file mode 100644
+index 000000000..f3080620a
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/arm/shiftable.c
+@@ -0,0 +1,63 @@
++/* { dg-do compile } */
++/* { dg-options "-O2" } */
++/* { dg-require-effective-target arm32 } */
++
++/* ARM has shift-and-alu insns.  Depending on the ALU op GCC represents some
++   of these as a left shift, others as a multiply.  Check that we match the
++    right one.  */
++
++int
++plus (int a, int b)
++{
++  return (a * 64) + b;
++}
++
++/* { dg-final { scan-assembler "add.*\[al]sl #6" } } */
++
++int
++minus (int a, int b)
++{
++  return a - (b * 64);
++}
++
++/* { dg-final { scan-assembler "sub.*\[al]sl #6" } } */
++
++int
++ior (int a, int b)
++{
++  return (a * 64) | b;
++}
++
++/* { dg-final { scan-assembler "orr.*\[al]sl #6" } } */
++
++int
++xor (int a, int b)
++{
++  return (a * 64) ^ b;
++}
++
++/* { dg-final { scan-assembler "eor.*\[al]sl #6" } } */
++
++int
++and (int a, int b)
++{
++  return (a * 64) & b;
++}
++
++/* { dg-final { scan-assembler "and.*\[al]sl #6" } } */
++
++int
++rsb (int a, int b)
++{
++  return (a * 64) - b;
++}
++
++/* { dg-final { scan-assembler "rsb.*\[al]sl #6" } } */
++
++int
++mvn (int a, int b)
++{
++  return ~(a * 64);
++}
++
++/* { dg-final { scan-assembler "mvn.*\[al]sl #6" } } */

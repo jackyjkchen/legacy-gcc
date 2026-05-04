@@ -1,0 +1,64 @@
+diff --git a/gcc/simplify-rtx.c b/gcc/simplify-rtx.c
+index 5c6f74cdf..3a0020b64 100644
+--- a/gcc/simplify-rtx.c
++++ b/gcc/simplify-rtx.c
+@@ -1,7 +1,7 @@
+ /* RTL simplification functions for GNU compiler.
+    Copyright (C) 1987, 1988, 1989, 1992, 1993, 1994, 1995, 1996, 1997, 1998,
+    1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010,
+-   2011  Free Software Foundation, Inc.
++   2011, 2012  Free Software Foundation, Inc.
+ 
+ This file is part of GCC.
+ 
+@@ -2100,7 +2100,7 @@ simplify_binary_operation_1 (enum rtx_code code, enum machine_mode mode,
+ 				    neg_const_int (mode, op1));
+ 
+       /* (x - (x & y)) -> (x & ~y) */
+-      if (GET_CODE (op1) == AND)
++      if (INTEGRAL_MODE_P (mode) && GET_CODE (op1) == AND)
+ 	{
+ 	  if (rtx_equal_p (op0, XEXP (op1, 0)))
+ 	    {
+diff --git a/gcc/testsuite/gcc.target/i386/pr54703.c b/gcc/testsuite/gcc.target/i386/pr54703.c
+new file mode 100644
+index 000000000..071c3235e
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/i386/pr54703.c
+@@ -0,0 +1,36 @@
++/* PR target/54703 */
++/* { dg-do run { target sse2_runtime } } */
++/* { dg-options "-O -msse2" } */
++/* { dg-options "-O -msse2 -mavx -mtune=bdver1" { target avx_runtime } } */
++
++extern void abort (void);
++typedef double V __attribute__((vector_size(16)));
++
++union {
++  unsigned long long m[2];
++  V v;
++} u = { { 0xffffffffff000000ULL, 0xffffffffff000000ULL } };
++
++static inline V
++foo (V x)
++{
++  V y = __builtin_ia32_andpd (x, u.v);
++  V z = __builtin_ia32_subpd (x, y);
++  return __builtin_ia32_mulpd (y, z);
++}
++
++void
++test (V *x)
++{
++  V a = { 2.1, 2.1 };
++  *x = foo (foo (a));
++}
++
++int
++main ()
++{
++  test (&u.v);
++  if (u.m[0] != 0x3acbf487f0a30550ULL || u.m[1] != u.m[0])
++    abort ();
++  return 0;
++}
