@@ -23,6 +23,7 @@ src_prepare() {
 	use vanilla && return 0
 
 	use_linaro && eapply "${FILESDIR}"/${PV}/05_gcc-linaro.patch
+	use test && eapply "${FILESDIR}"/${PV}/06_support-parallel-test.patch
 
 	eapply "${FILESDIR}"/${PV}/postrelease/000_pr77605-78185-78333.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/001_pr58943.patch

@@ -19,6 +19,8 @@ src_prepare() {
 
 	use vanilla && return 0
 
+	use test && eapply "${FILESDIR}"/${PV}/06_support-parallel-test.patch
+
 	eapply "${FILESDIR}"/${PV}/postrelease/000_pr77605-78185-78333.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/001_pr58726.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/002_pr62052-69889.patch

@@ -1,0 +1,2161 @@
+diff --git a/contrib/dg-extract-results.py b/contrib/dg-extract-results.py
+new file mode 100755
+index 000000000..7db5e64cf
+--- /dev/null
++++ b/contrib/dg-extract-results.py
+@@ -0,0 +1,585 @@
++#!/usr/bin/python
++#
++# Copyright (C) 2014 Free Software Foundation, Inc.
++#
++# This script is free software; you can redistribute it and/or modify
++# it under the terms of the GNU General Public License as published by
++# the Free Software Foundation; either version 3, or (at your option)
++# any later version.
++
++import sys
++import getopt
++import re
++import io
++from datetime import datetime
++from operator import attrgetter
++
++# True if unrecognised lines should cause a fatal error.  Might want to turn
++# this on by default later.
++strict = False
++
++# True if the order of .log segments should match the .sum file, false if
++# they should keep the original order.
++sort_logs = True
++
++# A version of open() that is safe against whatever binary output
++# might be added to the log.
++def safe_open (filename):
++    if sys.version_info >= (3, 0):
++        return open (filename, 'r', errors = 'surrogateescape')
++    return open (filename, 'r')
++
++# Force stdout to handle escape sequences from a safe_open file.
++if sys.version_info >= (3, 0):
++    sys.stdout = io.TextIOWrapper (sys.stdout.buffer,
++                                   errors = 'surrogateescape')
++
++class Named:
++    def __init__ (self, name):
++        self.name = name
++
++class ToolRun (Named):
++    def __init__ (self, name):
++        Named.__init__ (self, name)
++        # The variations run for this tool, mapped by --target_board name.
++        self.variations = dict()
++
++    # Return the VariationRun for variation NAME.
++    def get_variation (self, name):
++        if name not in self.variations:
++            self.variations[name] = VariationRun (name)
++        return self.variations[name]
++
++class VariationRun (Named):
++    def __init__ (self, name):
++        Named.__init__ (self, name)
++        # A segment of text before the harness runs start, describing which
++        # baseboard files were loaded for the target.
++        self.header = None
++        # The harnesses run for this variation, mapped by filename.
++        self.harnesses = dict()
++        # A list giving the number of times each type of result has
++        # been seen.
++        self.counts = []
++
++    # Return the HarnessRun for harness NAME.
++    def get_harness (self, name):
++        if name not in self.harnesses:
++            self.harnesses[name] = HarnessRun (name)
++        return self.harnesses[name]
++
++class HarnessRun (Named):
++    def __init__ (self, name):
++        Named.__init__ (self, name)
++        # Segments of text that make up the harness run, mapped by a test-based
++        # key that can be used to order them.
++        self.segments = dict()
++        # Segments of text that make up the harness run but which have
++        # no recognized test results.  These are typically harnesses that
++        # are completely skipped for the target.
++        self.empty = []
++        # A list of results.  Each entry is a pair in which the first element
++        # is a unique sorting key and in which the second is the full
++        # PASS/FAIL line.
++        self.results = []
++
++    # Add a segment of text to the harness run.  If the segment includes
++    # test results, KEY is an example of one of them, and can be used to
++    # combine the individual segments in order.  If the segment has no
++    # test results (e.g. because the harness doesn't do anything for the
++    # current configuration) then KEY is None instead.  In that case
++    # just collect the segments in the order that we see them.
++    def add_segment (self, key, segment):
++        if key:
++            assert key not in self.segments
++            self.segments[key] = segment
++        else:
++            self.empty.append (segment)
++
++class Segment:
++    def __init__ (self, filename, start):
++        self.filename = filename
++        self.start = start
++        self.lines = 0
++
++class Prog:
++    def __init__ (self):
++        # The variations specified on the command line.
++        self.variations = []
++        # The variations seen in the input files.
++        self.known_variations = set()
++        # The tools specified on the command line.
++        self.tools = []
++        # Whether to create .sum rather than .log output.
++        self.do_sum = True
++        # Regexps used while parsing.
++        self.test_run_re = re.compile (r'^Test Run By (\S+) on (.*)$')
++        self.tool_re = re.compile (r'^\t\t=== (.*) tests ===$')
++        self.result_re = re.compile (r'^(PASS|XPASS|FAIL|XFAIL|UNRESOLVED'
++                                     r'|WARNING|ERROR|UNSUPPORTED|UNTESTED'
++                                     r'|KFAIL):\s*(.+)')
++        self.completed_re = re.compile (r'.* completed at (.*)')
++        # Pieces of text to write at the head of the output.
++        # start_line is a pair in which the first element is a datetime
++        # and in which the second is the associated 'Test Run By' line.
++        self.start_line = None
++        self.native_line = ''
++        self.target_line = ''
++        self.host_line = ''
++        self.acats_premable = ''
++        # Pieces of text to write at the end of the output.
++        # end_line is like start_line but for the 'runtest completed' line.
++        self.acats_failures = []
++        self.version_output = ''
++        self.end_line = None
++        # Known summary types.
++        self.count_names = [
++            '# of expected passes\t\t',
++            '# of unexpected failures\t',
++            '# of unexpected successes\t',
++            '# of expected failures\t\t',
++            '# of unknown successes\t\t',
++            '# of known failures\t\t',
++            '# of untested testcases\t\t',
++            '# of unresolved testcases\t',
++            '# of unsupported tests\t\t'
++        ]
++        self.runs = dict()
++
++    def usage (self):
++        name = sys.argv[0]
++        sys.stderr.write ('Usage: ' + name
++                          + ''' [-t tool] [-l variant-list] [-L] log-or-sum-file ...
++
++    tool           The tool (e.g. g++, libffi) for which to create a
++                   new test summary file.  If not specified then output
++                   is created for all tools.
++    variant-list   One or more test variant names.  If the list is
++                   not specified then one is constructed from all
++                   variants in the files for <tool>.
++    sum-file       A test summary file with the format of those
++                   created by runtest from DejaGnu.
++    If -L is used, merge *.log files instead of *.sum.  In this
++    mode the exact order of lines may not be preserved, just different
++    Running *.exp chunks should be in correct order.
++''')
++        sys.exit (1)
++
++    def fatal (self, what, string):
++        if not what:
++            what = sys.argv[0]
++        sys.stderr.write (what + ': ' + string + '\n')
++        sys.exit (1)
++
++    # Parse the command-line arguments.
++    def parse_cmdline (self):
++        try:
++            (options, self.files) = getopt.getopt (sys.argv[1:], 'l:t:L')
++            if len (self.files) == 0:
++                self.usage()
++            for (option, value) in options:
++                if option == '-l':
++                    self.variations.append (value)
++                elif option == '-t':
++                    self.tools.append (value)
++                else:
++                    self.do_sum = False
++        except getopt.GetoptError as e:
++            self.fatal (None, e.msg)
++
++    # Try to parse time string TIME, returning an arbitrary time on failure.
++    # Getting this right is just a nice-to-have so failures should be silent.
++    def parse_time (self, time):
++        try:
++            return datetime.strptime (time, '%c')
++        except ValueError:
++            return datetime.now()
++
++    # Parse an integer and abort on failure.
++    def parse_int (self, filename, value):
++        try:
++            return int (value)
++        except ValueError:
++            self.fatal (filename, 'expected an integer, got: ' + value)
++
++    # Return a list that represents no test results.
++    def zero_counts (self):
++        return [0 for x in self.count_names]
++
++    # Return the ToolRun for tool NAME.
++    def get_tool (self, name):
++        if name not in self.runs:
++            self.runs[name] = ToolRun (name)
++        return self.runs[name]
++
++    # Add the result counts in list FROMC to TOC.
++    def accumulate_counts (self, toc, fromc):
++        for i in range (len (self.count_names)):
++            toc[i] += fromc[i]
++
++    # Parse the list of variations after 'Schedule of variations:'.
++    # Return the number seen.
++    def parse_variations (self, filename, file):
++        num_variations = 0
++        while True:
++            line = file.readline()
++            if line == '':
++                self.fatal (filename, 'could not parse variation list')
++            if line == '\n':
++                break
++            self.known_variations.add (line.strip())
++            num_variations += 1
++        return num_variations
++
++    # Parse from the first line after 'Running target ...' to the end
++    # of the run's summary.
++    def parse_run (self, filename, file, tool, variation, num_variations):
++        header = None
++        harness = None
++        segment = None
++        final_using = 0
++
++        # If this is the first run for this variation, add any text before
++        # the first harness to the header.
++        if not variation.header:
++            segment = Segment (filename, file.tell())
++            variation.header = segment
++
++        # Parse up until the first line of the summary.
++        if num_variations == 1:
++            end = '\t\t=== ' + tool.name + ' Summary ===\n'
++        else:
++            end = ('\t\t=== ' + tool.name + ' Summary for '
++                   + variation.name + ' ===\n')
++        while True:
++            line = file.readline()
++            if line == '':
++                self.fatal (filename, 'no recognised summary line')
++            if line == end:
++                break
++
++            # Look for the start of a new harness.
++            if line.startswith ('Running ') and line.endswith (' ...\n'):
++                # Close off the current harness segment, if any.
++                if harness:
++                    segment.lines -= final_using
++                    harness.add_segment (first_key, segment)
++                name = line[len ('Running '):-len(' ...\n')]
++                harness = variation.get_harness (name)
++                segment = Segment (filename, file.tell())
++                first_key = None
++                final_using = 0
++                continue
++
++            # Record test results.  Associate the first test result with
++            # the harness segment, so that if a run for a particular harness
++            # has been split up, we can reassemble the individual segments
++            # in a sensible order.
++            #
++            # dejagnu sometimes issues warnings about the testing environment
++            # before running any tests.  Treat them as part of the header
++            # rather than as a test result.
++            match = self.result_re.match (line)
++            if match and (harness or not line.startswith ('WARNING:')):
++                if not harness:
++                    self.fatal (filename, 'saw test result before harness name')
++                name = match.group (2)
++                # Ugly hack to get the right order for gfortran.
++                if name.startswith ('gfortran.dg/g77/'):
++                    name = 'h' + name
++                key = (name, len (harness.results))
++                harness.results.append ((key, line))
++                if not first_key and sort_logs:
++                    first_key = key
++
++            # 'Using ...' lines are only interesting in a header.  Splitting
++            # the test up into parallel runs leads to more 'Using ...' lines
++            # than there would be in a single log.
++            if line.startswith ('Using '):
++                final_using += 1
++            else:
++                final_using = 0
++
++            # Add other text to the current segment, if any.
++            if segment:
++                segment.lines += 1
++
++        # Close off the final harness segment, if any.
++        if harness:
++            segment.lines -= final_using
++            harness.add_segment (first_key, segment)
++
++        # Parse the rest of the summary (the '# of ' lines).
++        if len (variation.counts) == 0:
++            variation.counts = self.zero_counts()
++        while True:
++            before = file.tell()
++            line = file.readline()
++            if line == '':
++                break
++            if line == '\n':
++                continue
++            if not line.startswith ('# '):
++                file.seek (before)
++                break
++            found = False
++            for i in range (len (self.count_names)):
++                if line.startswith (self.count_names[i]):
++                    count = line[len (self.count_names[i]):-1].strip()
++                    variation.counts[i] += self.parse_int (filename, count)
++                    found = True
++                    break
++            if not found:
++                self.fatal (filename, 'unknown test result: ' + line[:-1])
++
++    # Parse an acats run, which uses a different format from dejagnu.
++    # We have just skipped over '=== acats configuration ==='.
++    def parse_acats_run (self, filename, file):
++        # Parse the preamble, which describes the configuration and logs
++        # the creation of support files.
++        record = (self.acats_premable == '')
++        if record:
++            self.acats_premable = '\t\t=== acats configuration ===\n'
++        while True:
++            line = file.readline()
++            if line == '':
++                self.fatal (filename, 'could not parse acats preamble')
++            if line == '\t\t=== acats tests ===\n':
++                break
++            if record:
++                self.acats_premable += line
++
++        # Parse the test results themselves, using a dummy variation name.
++        tool = self.get_tool ('acats')
++        variation = tool.get_variation ('none')
++        self.parse_run (filename, file, tool, variation, 1)
++
++        # Parse the failure list.
++        while True:
++            before = file.tell()
++            line = file.readline()
++            if line.startswith ('*** FAILURES: '):
++                self.acats_failures.append (line[len ('*** FAILURES: '):-1])
++                continue
++            file.seek (before)
++            break
++
++    # Parse the final summary at the end of a log in order to capture
++    # the version output that follows it.
++    def parse_final_summary (self, filename, file):
++        record = (self.version_output == '')
++        while True:
++            line = file.readline()
++            if line == '':
++                break
++            if line.startswith ('# of '):
++                continue
++            if record:
++                self.version_output += line
++            if line == '\n':
++                break
++
++    # Parse a .log or .sum file.
++    def parse_file (self, filename, file):
++        tool = None
++        target = None
++        num_variations = 1
++        while True:
++            line = file.readline()
++            if line == '':
++                return
++
++            # Parse the list of variations, which comes before the test
++            # runs themselves.
++            if line.startswith ('Schedule of variations:'):
++                num_variations = self.parse_variations (filename, file)
++                continue
++
++            # Parse a testsuite run for one tool/variation combination.
++            if line.startswith ('Running target '):
++                name = line[len ('Running target '):-1]
++                if not tool:
++                    self.fatal (filename, 'could not parse tool name')
++                if name not in self.known_variations:
++                    self.fatal (filename, 'unknown target: ' + name)
++                self.parse_run (filename, file, tool,
++                                tool.get_variation (name),
++                                num_variations)
++                # If there is only one variation then there is no separate
++                # summary for it.  Record any following version output.
++                if num_variations == 1:
++                    self.parse_final_summary (filename, file)
++                continue
++
++            # Parse the start line.  In the case where several files are being
++            # parsed, pick the one with the earliest time.
++            match = self.test_run_re.match (line)
++            if match:
++                time = self.parse_time (match.group (2))
++                if not self.start_line or self.start_line[0] > time:
++                    self.start_line = (time, line)
++                continue
++
++            # Parse the form used for native testing.
++            if line.startswith ('Native configuration is '):
++                self.native_line = line
++                continue
++
++            # Parse the target triplet.
++            if line.startswith ('Target is '):
++                self.target_line = line
++                continue
++
++            # Parse the host triplet.
++            if line.startswith ('Host   is '):
++                self.host_line = line
++                continue
++
++            # Parse the acats premable.
++            if line == '\t\t=== acats configuration ===\n':
++                self.parse_acats_run (filename, file)
++                continue
++
++            # Parse the tool name.
++            match = self.tool_re.match (line)
++            if match:
++                tool = self.get_tool (match.group (1))
++                continue
++
++            # Skip over the final summary (which we instead create from
++            # individual runs) and parse the version output.
++            if tool and line == '\t\t=== ' + tool.name + ' Summary ===\n':
++                if file.readline() != '\n':
++                    self.fatal (filename, 'expected blank line after summary')
++                self.parse_final_summary (filename, file)
++                continue
++
++            # Parse the completion line.  In the case where several files
++            # are being parsed, pick the one with the latest time.
++            match = self.completed_re.match (line)
++            if match:
++                time = self.parse_time (match.group (1))
++                if not self.end_line or self.end_line[0] < time:
++                    self.end_line = (time, line)
++                continue
++
++            # Sanity check to make sure that important text doesn't get
++            # dropped accidentally.
++            if strict and line.strip() != '':
++                self.fatal (filename, 'unrecognised line: ' + line[:-1])
++
++    # Output a segment of text.
++    def output_segment (self, segment):
++        with safe_open (segment.filename) as file:
++            file.seek (segment.start)
++            for i in range (segment.lines):
++                sys.stdout.write (file.readline())
++
++    # Output a summary giving the number of times each type of result has
++    # been seen.
++    def output_summary (self, tool, counts):
++        for i in range (len (self.count_names)):
++            name = self.count_names[i]
++            # dejagnu only prints result types that were seen at least once,
++            # but acats always prints a number of unexpected failures.
++            if (counts[i] > 0
++                or (tool.name == 'acats'
++                    and name.startswith ('# of unexpected failures'))):
++                sys.stdout.write ('%s%d\n' % (name, counts[i]))
++
++    # Output unified .log or .sum information for a particular variation,
++    # with a summary at the end.
++    def output_variation (self, tool, variation):
++        self.output_segment (variation.header)
++        for harness in sorted (variation.harnesses.values(),
++                               key = attrgetter ('name')):
++            sys.stdout.write ('Running ' + harness.name + ' ...\n')
++            if self.do_sum:
++                harness.results.sort()
++                for (key, line) in harness.results:
++                    sys.stdout.write (line)
++            else:
++                # Rearrange the log segments into test order (but without
++                # rearranging text within those segments).
++                for key in sorted (harness.segments.keys()):
++                    self.output_segment (harness.segments[key])
++                for segment in harness.empty:
++                    self.output_segment (segment)
++        if len (self.variations) > 1:
++            sys.stdout.write ('\t\t=== ' + tool.name + ' Summary for '
++                              + variation.name + ' ===\n\n')
++            self.output_summary (tool, variation.counts)
++
++    # Output unified .log or .sum information for a particular tool,
++    # with a summary at the end.
++    def output_tool (self, tool):
++        counts = self.zero_counts()
++        if tool.name == 'acats':
++            # acats doesn't use variations, so just output everything.
++            # It also has a different approach to whitespace.
++            sys.stdout.write ('\t\t=== ' + tool.name + ' tests ===\n')
++            for variation in tool.variations.values():
++                self.output_variation (tool, variation)
++                self.accumulate_counts (counts, variation.counts)
++            sys.stdout.write ('\t\t=== ' + tool.name + ' Summary ===\n')
++        else:
++            # Output the results in the usual dejagnu runtest format.
++            sys.stdout.write ('\n\t\t=== ' + tool.name + ' tests ===\n\n'
++                              'Schedule of variations:\n')
++            for name in self.variations:
++                if name in tool.variations:
++                    sys.stdout.write ('    ' + name + '\n')
++            sys.stdout.write ('\n')
++            for name in self.variations:
++                if name in tool.variations:
++                    variation = tool.variations[name]
++                    sys.stdout.write ('Running target '
++                                      + variation.name + '\n')
++                    self.output_variation (tool, variation)
++                    self.accumulate_counts (counts, variation.counts)
++            sys.stdout.write ('\n\t\t=== ' + tool.name + ' Summary ===\n\n')
++        self.output_summary (tool, counts)
++
++    def main (self):
++        self.parse_cmdline()
++        try:
++            # Parse the input files.
++            for filename in self.files:
++                with safe_open (filename) as file:
++                    self.parse_file (filename, file)
++
++            # Decide what to output.
++            if len (self.variations) == 0:
++                self.variations = sorted (self.known_variations)
++            else:
++                for name in self.variations:
++                    if name not in self.known_variations:
++                        self.fatal (None, 'no results for ' + name)
++            if len (self.tools) == 0:
++                self.tools = sorted (self.runs.keys())
++
++            # Output the header.
++            if self.start_line:
++                sys.stdout.write (self.start_line[1])
++            sys.stdout.write (self.native_line)
++            sys.stdout.write (self.target_line)
++            sys.stdout.write (self.host_line)
++            sys.stdout.write (self.acats_premable)
++
++            # Output the main body.
++            for name in self.tools:
++                if name not in self.runs:
++                    self.fatal (None, 'no results for ' + name)
++                self.output_tool (self.runs[name])
++
++            # Output the footer.
++            if len (self.acats_failures) > 0:
++                sys.stdout.write ('*** FAILURES: '
++                                  + ' '.join (self.acats_failures) + '\n')
++            sys.stdout.write (self.version_output)
++            if self.end_line:
++                sys.stdout.write (self.end_line[1])
++        except IOError as e:
++            self.fatal (e.filename, e.strerror)
++
++Prog().main()
+diff --git a/contrib/dg-extract-results.sh b/contrib/dg-extract-results.sh
+index be7d47b1e..5a8e67ea2 100755
+--- a/contrib/dg-extract-results.sh
++++ b/contrib/dg-extract-results.sh
+@@ -6,7 +6,7 @@
+ # The resulting file can be used with test result comparison scripts for
+ # results from tests that were run in parallel.  See usage() below.
+ 
+-# Copyright (C) 2008, 2009, 2010 Free Software Foundation
++# Copyright (C) 2008, 2009, 2010, 2012 Free Software Foundation
+ # Contributed by Janis Johnson <janis187@us.ibm.com>
+ #
+ # This file is part of GCC.
+@@ -28,6 +28,15 @@
+ 
+ PROGNAME=dg-extract-results.sh
+ 
++# Try to use the python version if possible, since it tends to be faster.
++PYTHON_VER=`echo "$0" | sed 's/sh$/py/'`
++if test "$PYTHON_VER" != "$0" &&
++   test -f "$PYTHON_VER" &&
++   python -c 'import sys, getopt, re, io, datetime, operator; sys.exit (0 if sys.version_info >= (2, 6) else 1)' \
++     > /dev/null 2> /dev/null; then
++  exec python $PYTHON_VER "$@"
++fi
++
+ usage() {
+   cat <<EOF >&2
+ Usage: $PROGNAME [-t tool] [-l variant-list] [-L] sum-file ...
+@@ -118,13 +127,28 @@ do
+ done
+ test $ERROR -eq 0 || exit 1
+ 
++# Test if grep supports the '--text' option
++
++GREP=grep
++
++if echo -e '\x00foo\x00' | $GREP --text foo > /dev/null 2>&1 ; then
++  GREP="grep --text"
++else
++  # Our grep does not recognize the '--text' option.  We have to
++  # treat our files in order to remove any non-printable character.
++  for file in $SUM_FILES ; do
++    mv $file ${file}.orig
++    cat -v ${file}.orig > $file
++  done
++fi
++
+ if [ -z "$TOOL" ]; then
+   # If no tool was specified, all specified summary files must be for
+   # the same tool.
+ 
+-  CNT=`grep '=== .* tests ===' $SUM_FILES | $AWK '{ print $3 }' | sort -u | wc -l`
++  CNT=`$GREP '=== .* tests ===' $SUM_FILES | $AWK '{ print $3 }' | sort -u | wc -l`
+   if [ $CNT -eq 1 ]; then
+-    TOOL=`grep '=== .* tests ===' $FIRST_SUM | $AWK '{ print $2 }'`
++    TOOL=`$GREP '=== .* tests ===' $FIRST_SUM | $AWK '{ print $2 }'`
+   else
+     msg "${PROGNAME}: sum files are for multiple tools, specify a tool"
+     msg ""
+@@ -135,7 +159,7 @@ else
+   # Ignore the specified summary files that are not for this tool.  This
+   # should keep the relevant files in the same order.
+ 
+-  SUM_FILES=`grep -l "=== $TOOL" $SUM_FILES`
++  SUM_FILES=`$GREP -l "=== $TOOL" $SUM_FILES`
+   if test -z "$SUM_FILES" ; then
+     msg "${PROGNAME}: none of the specified files are results for $TOOL"
+     exit 1
+@@ -224,7 +248,7 @@ else
+   VARIANTS=""
+   for VAR in $VARS
+   do
+-    grep "Running target $VAR" $SUM_FILES > /dev/null && VARIANTS="$VARIANTS $VAR"
++    $GREP "Running target $VAR" $SUM_FILES > /dev/null && VARIANTS="$VARIANTS $VAR"
+   done
+ fi
+ 
+@@ -288,7 +312,7 @@ BEGIN {
+ /^Using / {
+   if (variant == curvar && print_using) { print; next }
+ }
+-/^Running / {
++/^Running .*\\.exp \\.\\.\\./ {
+   print_using=0
+   if (variant == curvar) {
+     if (need_close) close(curfile)
+@@ -345,7 +369,7 @@ EOF
+ BEGIN {
+   variant="$VAR"
+   tool="$TOOL"
+-  passcnt=0; failcnt=0; untstcnt=0; xpasscnt=0; xfailcnt=0; unsupcnt=0; unrescnt=0;
++  passcnt=0; failcnt=0; untstcnt=0; xpasscnt=0; xfailcnt=0; kpasscnt=0; kfailcnt=0; unsupcnt=0; unrescnt=0;
+   curvar=""; insummary=0
+ }
+ /^Running target /		{ curvar = \$3; next }
+@@ -354,6 +378,8 @@ BEGIN {
+ /^# of unexpected successes/	{ if (insummary == 1) xpasscnt += \$5; next; }
+ /^# of unexpected failures/	{ if (insummary == 1) failcnt += \$5; next; }
+ /^# of expected failures/	{ if (insummary == 1) xfailcnt += \$5; next; }
++/^# of unknown successes/	{ if (insummary == 1) kpasscnt += \$5; next; }
++/^# of known failures/		{ if (insummary == 1) kfailcnt += \$5; next; }
+ /^# of untested testcases/	{ if (insummary == 1) untstcnt += \$5; next; }
+ /^# of unresolved testcases/	{ if (insummary == 1) unrescnt += \$5; next; }
+ /^# of unsupported tests/	{ if (insummary == 1) unsupcnt += \$5; next; }
+@@ -368,6 +394,8 @@ END {
+   if (failcnt != 0) printf ("# of unexpected failures\t%d\n", failcnt)
+   if (xpasscnt != 0) printf ("# of unexpected successes\t%d\n", xpasscnt)
+   if (xfailcnt != 0) printf ("# of expected failures\t\t%d\n", xfailcnt)
++  if (kpasscnt != 0) printf ("# of unknown successes\t\t%d\n", kpasscnt)
++  if (kfailcnt != 0) printf ("# of known failures\t\t%d\n", kfailcnt)
+   if (untstcnt != 0) printf ("# of untested testcases\t\t%d\n", untstcnt)
+   if (unrescnt != 0) printf ("# of unresolved testcases\t%d\n", unrescnt)
+   if (unsupcnt != 0) printf ("# of unsupported tests\t\t%d\n", unsupcnt)
+@@ -391,12 +419,14 @@ TOTAL_AWK=${TMP}/total.awk
+ cat << EOF > $TOTAL_AWK
+ BEGIN {
+   tool="$TOOL"
+-  passcnt=0; failcnt=0; untstcnt=0; xpasscnt=0; xfailcnt=0; unsupcnt=0; unrescnt=0
++  passcnt=0; failcnt=0; untstcnt=0; xpasscnt=0; xfailcnt=0; kfailcnt=0; unsupcnt=0; unrescnt=0
+ }
+ /^# of expected passes/		{ passcnt += \$5 }
+ /^# of unexpected failures/	{ failcnt += \$5 }
+ /^# of unexpected successes/	{ xpasscnt += \$5 }
+ /^# of expected failures/	{ xfailcnt += \$5 }
++/^# of unknown successes/	{ kpasscnt += \$5 }
++/^# of known failures/		{ kfailcnt += \$5 }
+ /^# of untested testcases/	{ untstcnt += \$5 }
+ /^# of unresolved testcases/	{ unrescnt += \$5 }
+ /^# of unsupported tests/	{ unsupcnt += \$5 }
+@@ -406,6 +436,8 @@ END {
+   if (failcnt != 0) printf ("# of unexpected failures\t%d\n", failcnt)
+   if (xpasscnt != 0) printf ("# of unexpected successes\t%d\n", xpasscnt)
+   if (xfailcnt != 0) printf ("# of expected failures\t\t%d\n", xfailcnt)
++  if (kpasscnt != 0) printf ("# of unknown successes\t\t%d\n", kpasscnt)
++  if (kfailcnt != 0) printf ("# of known failures\t\t%d\n", kfailcnt)
+   if (untstcnt != 0) printf ("# of untested testcases\t\t%d\n", untstcnt)
+   if (unrescnt != 0) printf ("# of unresolved testcases\t%d\n", unrescnt)
+   if (unsupcnt != 0) printf ("# of unsupported tests\t\t%d\n", unsupcnt)
+@@ -418,6 +450,6 @@ cat ${TMP}/var-* | $AWK -f $TOTAL_AWK
+ # This is ugly, but if there's version output from the compiler under test
+ # at the end of the file, we want it.  The other thing that might be there
+ # is the final summary counts.
+-tail -2 $FIRST_SUM | grep '^#' > /dev/null || tail -2 $FIRST_SUM
++tail -2 $FIRST_SUM | $GREP '^#' > /dev/null || tail -2 $FIRST_SUM
+ 
+ exit 0
+diff --git a/gcc/Makefile.in b/gcc/Makefile.in
+index faa171413..4700569f1 100644
+--- a/gcc/Makefile.in
++++ b/gcc/Makefile.in
+@@ -551,31 +551,10 @@ xm_include_list=@xm_include_list@
+ xm_defines=@xm_defines@
+ lang_checks=check-gcc
+ lang_checks_parallelized=check-gcc
+-dg_target_exps:=alpha.exp,arm.exp,avr.exp,bfin.exp,cris.exp,frv.exp
+-dg_target_exps:=$(dg_target_exps),i386.exp,ia64.exp,m68k.exp,microblaze.exp
+-dg_target_exps:=$(dg_target_exps),mips.exp,powerpc.exp,rx.exp,s390.exp,sh.exp
+-dg_target_exps:=$(dg_target_exps),sparc.exp,spu.exp,xstormy16.exp
+-# This lists a couple of test files that take most time during check-gcc.
+-# When doing parallelized check-gcc, these can run in parallel with the
+-# remaining tests.  Each word in this variable stands for work for one
+-# make goal and one extra make goal is added to handle all the *.exp
+-# files not handled explicitly already.  If multiple *.exp files
+-# should be run in the same runtest invocation (usually if they aren't
+-# very long running, but still should be split of from the check-parallel-$lang
+-# remaining tests runtest invocation), they should be concatenated with commas.
+-# Note that [a-zA-Z] wildcards need to have []s prefixed with \ (needed
+-# by tcl) and as the *.exp arguments are mached both as is and with
+-# */ prefixed to it in runtest_file_p, it is usually desirable to include
+-# a subdirectory name.
+-check_gcc_parallelize=execute.exp=execute/2* \
+-		      execute.exp=execute/\[013-9a-fA-F\]* \
+-		      execute.exp=execute/\[pP\]*,dg.exp \
+-		      execute.exp=execute/\[g-oq-zG-OQ-Z\]*,compile.exp=compile/2* \
+-		      compile.exp=compile/\[9pP\]*,builtins.exp \
+-		      compile.exp=compile/\[013-8a-oq-zA-OQ-Z\]* \
+-		      dg-torture.exp,ieee.exp \
+-		      vect.exp,guality.exp,unsorted.exp \
+-		      struct-layout-1.exp,stackalign.exp,$(dg_target_exps)
++# Upper limit to which it is useful to parallelize this lang target.
++# It doesn't make sense to try e.g. 128 goals for small testsuites
++# like objc or go.
++check_gcc_parallelize=10000
+ lang_opt_files=@lang_opt_files@ $(srcdir)/c-family/c.opt $(srcdir)/common.opt
+ lang_specs_files=@lang_specs_files@
+ lang_tree_files=@lang_tree_files@
+@@ -5075,27 +5054,34 @@ $(filter-out $(lang_checks_parallelized),$(lang_checks)): check-% : site.exp
+ 	    export TCL_LIBRARY ; fi ; \
+ 	$(RUNTEST) --tool $* $(RUNTESTFLAGS))
+ 
+-$(patsubst %,%-subtargets,$(filter-out $(lang_checks_parallelized),$(lang_checks))): check-%-subtargets:
++$(patsubst %,%-subtargets,$(lang_checks)): check-%-subtargets:
+ 	@echo check-$*
+ 
+ check_p_tool=$(firstword $(subst _, ,$*))
+-check_p_vars=$(check_$(check_p_tool)_parallelize)
++check_p_count=$(check_$(check_p_tool)_parallelize)
+ check_p_subno=$(word 2,$(subst _, ,$*))
+-check_p_comma=,
+-check_p_subwork=$(subst $(check_p_comma), ,$(if $(check_p_subno),$(word $(check_p_subno),$(check_p_vars))))
+-check_p_numbers=1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20
++check_p_numbers0:=1 2 3 4 5 6 7 8 9
++check_p_numbers1:=0 $(check_p_numbers0)
++check_p_numbers2:=$(foreach i,$(check_p_numbers0),$(addprefix $(i),$(check_p_numbers1)))
++check_p_numbers3:=$(addprefix 0,$(check_p_numbers1)) $(check_p_numbers2)
++check_p_numbers4:=$(foreach i,$(check_p_numbers0),$(addprefix $(i),$(check_p_numbers3)))
++check_p_numbers5:=$(addprefix 0,$(check_p_numbers3)) $(check_p_numbers4)
++check_p_numbers6:=$(foreach i,$(check_p_numbers0),$(addprefix $(i),$(check_p_numbers5)))
++check_p_numbers:=$(check_p_numbers0) $(check_p_numbers2) $(check_p_numbers4) $(check_p_numbers6)
+ check_p_subdir=$(subst _,,$*)
+-check_p_subdirs=$(wordlist 1,$(words $(check_$*_parallelize)),$(check_p_numbers))
++check_p_subdirs=$(wordlist 1,$(check_p_count),$(wordlist 1, \
++		$(if $(GCC_TEST_PARALLEL_SLOTS),$(GCC_TEST_PARALLEL_SLOTS),128), \
++		$(check_p_numbers)))
+ 
+ # For parallelized check-% targets, this decides whether parallelization
+ # is desirable (if -jN is used and RUNTESTFLAGS doesn't contain anything
+ # but optional --target_board or --extra_opts arguments).  If desirable,
+ # recursive make is run with check-parallel-$lang{,1,2,3,4,5} etc. goals,
+ # which can be executed in parallel, as they are run in separate directories.
+-# check-parallel-$lang{1,2,3,4,5} etc. goals invoke runtest with the longest
+-# running *.exp files from the testsuite, as determined by check_$lang_parallelize
+-# variable.  The check-parallel-$lang goal in that case invokes runtest with
+-# all the remaining *.exp files not handled by the separate goals.
++# check-parallel-$lang{,1,2,3,4,5} etc. goals invoke runtest with
++# GCC_RUNTEST_PARALLELIZE_DIR var in the environment and runtest_file_p
++# dejaGNU procedure is overridden to additionally synchronize through
++# a $lang-parallel directory which tests will be run by which runtest instance.
+ # Afterwards contrib/dg-extract-results.sh is used to merge the sum and log
+ # files.  If parallelization isn't desirable, only one recursive make
+ # is run with check-parallel-$lang goal and check_$lang_parallelize variable
+@@ -5106,76 +5092,60 @@ check_p_subdirs=$(wordlist 1,$(words $(check_$*_parallelize)),$(check_p_numbers)
+ # to lang_checks_parallelized variable and define check_$lang_parallelize
+ # variable (see above check_gcc_parallelize description).
+ $(lang_checks_parallelized): check-% : site.exp
+-	@if [ -z "$(filter-out --target_board=%,$(filter-out --extra_opts%,$(RUNTESTFLAGS)))" ] \
+-	    && [ "$(filter -j, $(MFLAGS))" = "-j" ]; then \
++	-rm -rf $(TESTSUITEDIR)/$*-parallel
++	@if [ -n "$(filter -j%, $(MFLAGS))" ]; then \
++	  test -d $(TESTSUITEDIR) || mkdir $(TESTSUITEDIR) || true; \
++	  test -d $(TESTSUITEDIR)/$*-parallel || mkdir $(TESTSUITEDIR)/$*-parallel || true; \
++	  GCC_RUNTEST_PARALLELIZE_DIR=`${PWD_COMMAND}`/$(TESTSUITEDIR)/$(check_p_tool)-parallel ; \
++	  export GCC_RUNTEST_PARALLELIZE_DIR ; \
+ 	  $(MAKE) TESTSUITEDIR="$(TESTSUITEDIR)" RUNTESTFLAGS="$(RUNTESTFLAGS)" \
+ 	    check-parallel-$* \
+ 	    $(patsubst %,check-parallel-$*_%, $(check_p_subdirs)); \
+-	  for file in $(TESTSUITEDIR)/$*/$* \
+-		      $(patsubst %,$(TESTSUITEDIR)/$*%/$*,$(check_p_subdirs));\
++	  sums= ; logs= ; \
++	  for dir in $(TESTSUITEDIR)/$* \
++		     $(patsubst %,$(TESTSUITEDIR)/$*%,$(check_p_subdirs));\
+ 	  do \
+-	    mv -f $$file.sum $$file.sum.sep; mv -f $$file.log $$file.log.sep; \
++	    if [ -d $$dir ]; then \
++	      mv -f $$dir/$*.sum $$dir/$*.sum.sep; mv -f $$dir/$*.log $$dir/$*.log.sep; \
++	      sums="$$sums $$dir/$*.sum.sep"; logs="$$logs $$dir/$*.log.sep"; \
++	    fi; \
+ 	  done; \
+-	  $(SHELL) $(srcdir)/../contrib/dg-extract-results.sh \
+-	    $(TESTSUITEDIR)/$*/$*.sum.sep \
+-	    $(patsubst %,$(TESTSUITEDIR)/$*%/$*.sum.sep,$(check_p_subdirs)) \
++	  $(SHELL) $(srcdir)/../contrib/dg-extract-results.sh $$sums \
+ 	    > $(TESTSUITEDIR)/$*/$*.sum; \
+-	  $(SHELL) $(srcdir)/../contrib/dg-extract-results.sh -L \
+-	    $(TESTSUITEDIR)/$*/$*.log.sep \
+-	    $(patsubst %,$(TESTSUITEDIR)/$*%/$*.log.sep,$(check_p_subdirs)) \
++	  $(SHELL) $(srcdir)/../contrib/dg-extract-results.sh -L $$logs \
+ 	    > $(TESTSUITEDIR)/$*/$*.log; \
++	  rm -rf $(TESTSUITEDIR)/$*-parallel || true; \
+ 	else \
+ 	  $(MAKE) TESTSUITEDIR="$(TESTSUITEDIR)" RUNTESTFLAGS="$(RUNTESTFLAGS)" \
+ 	    check_$*_parallelize= check-parallel-$*; \
+ 	fi
+ 
+-# Just print the parallelized subtargets for those that want to split
+-# the testing across machines.
+-$(patsubst %,%-subtargets,$(lang_checks_parallelized)): check-%-subtargets:
+-	@echo check-parallel-$* \
+-	  $(patsubst %,check-parallel-$*_%, $(check_p_subdirs))
+-
+-# In the if [ -n "$(check_p_subno)" ] case runtest should be given the name of
+-# the given *.exp file(s).  See comment above check_gcc_parallelize variable
+-# for details on the content of these variables.
+-#
+-# In the elif [ -n "$(check_p_vars)" ] case runtest should be given
+-# names of all the *.exp files for this tool that aren't already handled by
+-# other goals.  First it finds all the *.exp files for this tool, then
+-# prunes those already specified in check_$lang_parallelize or duplicates.
+-#
+-# Otherwise check-$lang isn't parallelized and runtest is invoked just with
+-# the $(RUNTESTFLAGS) arguments.
+ check-parallel-% : site.exp
+ 	-test -d plugin || mkdir plugin
+ 	-test -d $(TESTSUITEDIR) || mkdir $(TESTSUITEDIR)
+ 	test -d $(TESTSUITEDIR)/$(check_p_subdir) || mkdir $(TESTSUITEDIR)/$(check_p_subdir)
+ 	-(rootme=`${PWD_COMMAND}`; export rootme; \
+ 	srcdir=`cd ${srcdir}; ${PWD_COMMAND}` ; export srcdir ; \
+-	cd $(TESTSUITEDIR)/$(check_p_subdir); \
+-	rm -f tmp-site.exp; \
+-	sed '/set tmpdir/ s|testsuite$$|$(TESTSUITEDIR)/$(check_p_subdir)|' \
++	if [ -n "$(check_p_subno)" ] \
++	   && [ -n "$$GCC_RUNTEST_PARALLELIZE_DIR" ] \
++	   && [ -f $(TESTSUITEDIR)/$(check_p_tool)-parallel/finished ]; then \
++	  rm -rf $(TESTSUITEDIR)/$(check_p_subdir); \
++	else \
++	  cd $(TESTSUITEDIR)/$(check_p_subdir); \
++	  rm -f tmp-site.exp; \
++	  sed '/set tmpdir/ s|testsuite$$|$(TESTSUITEDIR)/$(check_p_subdir)|' \
+ 		< ../../site.exp > tmp-site.exp; \
+-	$(SHELL) $${srcdir}/../move-if-change tmp-site.exp site.exp; \
+-	EXPECT=${EXPECT} ; export EXPECT ; \
+-	if [ -f $${rootme}/../expect/expect ] ; then  \
+-	   TCL_LIBRARY=`cd .. ; cd $${srcdir}/../tcl/library ; ${PWD_COMMAND}` ; \
+-	    export TCL_LIBRARY ; fi ; \
+-	runtestflags= ; \
+-	if [ -n "$(check_p_subno)" ] ; then \
+-	  runtestflags="$(check_p_subwork)"; \
+-	elif [ -n "$(check_p_vars)" ] ; then \
+-	  parts="`echo ' $(strip $(subst $(check_p_comma), ,$(check_p_vars))) ' \
+-		  | sed 's/=[^ ]* / /g'`"; \
+-	  for part in `find $$srcdir/testsuite/$(check_p_tool)* -name \*.exp` ; do \
+-	    part=`basename $$part` ; \
+-	    case " $$parts $$runtestflags " in \
+-	      *" $$part "*) ;; \
+-	      *) runtestflags="$$runtestflags $$part" ;; \
+-	    esac ; \
+-	  done ; \
+-	fi ; \
+-	$(RUNTEST) --tool $(check_p_tool) $(RUNTESTFLAGS) $$runtestflags)
++	  $(SHELL) $${srcdir}/../move-if-change tmp-site.exp site.exp; \
++	  EXPECT=${EXPECT} ; export EXPECT ; \
++	  if [ -f $${rootme}/../expect/expect ] ; then  \
++	    TCL_LIBRARY=`cd .. ; cd $${srcdir}/../tcl/library ; ${PWD_COMMAND}` ; \
++	    export TCL_LIBRARY ; \
++	  fi ; \
++	  $(RUNTEST) --tool $(check_p_tool) $(RUNTESTFLAGS); \
++	  if [ -n "$$GCC_RUNTEST_PARALLELIZE_DIR" ] ; then \
++	    touch $${rootme}/$(TESTSUITEDIR)/$(check_p_tool)-parallel/finished; \
++	  fi ; \
++	fi )
+ 
+ # QMTest targets
+ 
+diff --git a/gcc/ada/gcc-interface/Make-lang.in b/gcc/ada/gcc-interface/Make-lang.in
+index 0131e3010..984a3dadc 100644
+--- a/gcc/ada/gcc-interface/Make-lang.in
++++ b/gcc/ada/gcc-interface/Make-lang.in
+@@ -1095,43 +1095,64 @@ check-ada-subtargets: check-acats-subtargets check-gnat-subtargets
+ 
+ ACATSDIR = $(TESTSUITEDIR)/ada/acats
+ 
+-check_acats_targets = $(patsubst %,check-acats%, 0 1 2)
++check_acats_numbers0:=1 2 3 4 5 6 7 8 9
++check_acats_numbers1:=0 $(check_acats_numbers0)
++check_acats_numbers2:=$(foreach i,$(check_acats_numbers0),$(addprefix $(i),$(check_acats_numbers1)))
++check_acats_numbers3:=$(addprefix 0,$(check_acats_numbers1)) $(check_acats_numbers2)
++check_acats_numbers4:=$(foreach i,$(check_acats_numbers0),$(addprefix $(i),$(check_acats_numbers3)))
++check_acats_numbers5:=$(addprefix 0,$(check_acats_numbers3)) $(check_acats_numbers4)
++check_acats_numbers6:=$(foreach i,$(check_acats_numbers0),$(addprefix $(i),$(check_acats_numbers5)))
++check_acats_numbers:=$(check_acats_numbers0) $(check_acats_numbers2) $(check_acats_numbers4) $(check_acats_numbers6)
++check_acats_subdirs=$(wordlist 1, \
++		    $(if $(GCC_TEST_PARALLEL_SLOTS),$(GCC_TEST_PARALLEL_SLOTS),128), \
++		    $(check_acats_numbers))
++check_acats_targets = $(addprefix check-acats, $(check_acats_subdirs))
+ 
+ check-acats:
+ 	@test -d $(ACATSDIR) || mkdir -p $(ACATSDIR); \
+ 	rootme=`${PWD_COMMAND}`; export rootme; \
+ 	EXPECT=$(EXPECT); export EXPECT; \
+-	if [ -z "$(CHAPTERS)" ] && [ "$(filter -j, $(MFLAGS))" = "-j" ]; \
++	if [ -z "$(CHAPTERS)" ] && [ -n "$(filter -j%, $(MFLAGS))" ]; \
+ 	then \
++	  rm -rf $(ACATSDIR)-parallel; \
++	  mkdir $(ACATSDIR)-parallel; \
++	  ( testdir=`cd ${srcdir}/${ACATSDIR} && ${PWD_COMMAND}`; \
++	    export testdir; \
++	    cd $(ACATSDIR) && $(SHELL) $${testdir}/run_acats NONE ) \
++	    || exit 1; \
++	  GCC_RUNTEST_PARALLELIZE_DIR=$$rootme/$(ACATSDIR)-parallel; \
++	  export GCC_RUNTEST_PARALLELIZE_DIR; \
+ 	  $(MAKE) $(check_acats_targets); \
+-	  for idx in 0 1 2; do \
++	  rm -rf $(ACATSDIR)-parallel; \
++	  acats_sums= ; acats_logs= ; \
++	  for idx in "" $(check_acats_subdirs); do \
++	    [ -d $(ACATSDIR)$$idx ] || continue; \
+ 	    mv -f $(ACATSDIR)$$idx/acats.sum $(ACATSDIR)$$idx/acats.sum.sep; \
+ 	    mv -f $(ACATSDIR)$$idx/acats.log $(ACATSDIR)$$idx/acats.log.sep; \
++	    acats_sums="$$acats_sums $(ACATSDIR)$$idx/acats.sum.sep"; \
++	    acats_logs="$$acats_logs $(ACATSDIR)$$idx/acats.log.sep"; \
+ 	  done; \
+ 	  $(SHELL) $(srcdir)/../contrib/dg-extract-results.sh \
+-	    $(ACATSDIR)0/acats.sum.sep $(ACATSDIR)1/acats.sum.sep \
+-	    $(ACATSDIR)2/acats.sum.sep > $(ACATSDIR)/acats.sum; \
++	    $$acats_sums > $(ACATSDIR)/acats.sum; \
+ 	  $(SHELL) $(srcdir)/../contrib/dg-extract-results.sh -L \
+-	    $(ACATSDIR)0/acats.log.sep $(ACATSDIR)1/acats.log.sep \
+-	    $(ACATSDIR)2/acats.log.sep > $(ACATSDIR)/acats.log; \
++	    $$acats_logs > $(ACATSDIR)/acats.log; \
+ 	  exit 0; \
+ 	fi; \
+ 	testdir=`cd ${srcdir}/${ACATSDIR} && ${PWD_COMMAND}`; \
+ 	export testdir; cd $(ACATSDIR) && $(SHELL) $${testdir}/run_acats $(CHAPTERS)
+ 
+ check-acats-subtargets:
+-	@echo $(check_acats_targets)
++	@echo check-acats
+ 
+ # Parallelized check-acats
+ $(check_acats_targets): check-acats%:
++	if [ -f $$GCC_RUNTEST_PARALLELIZE_DIR/finished ]; then \
++	  rm -rf $(ACATSDIR)$*; exit 0; \
++	fi; \
+ 	test -d $(ACATSDIR)$* || mkdir -p $(ACATSDIR)$*; \
+ 	testdir=`cd ${srcdir}/${ACATSDIR} && ${PWD_COMMAND}`; \
+-	case "$*" in \
+-	  0) chapters="`cd $$testdir/tests; echo [a-b]* c[0-4]*`";; \
+-	  1) chapters="`cd $$testdir/tests; echo c[5-9ab]*`";; \
+-	  2) chapters="`cd $$testdir/tests; echo c[c-z]* [d-z]*`";; \
+-	esac; \
+-	export testdir; cd $(ACATSDIR)$* && $(SHELL) $${testdir}/run_acats $$chapters
++	export testdir; cd $(ACATSDIR)$* && $(SHELL) $${testdir}/run_acats
++	touch $$GCC_RUNTEST_PARALLELIZE_DIR/finished
+ 
+ .PHONY: check-acats $(check_acats_targets)
+ 
+diff --git a/gcc/cp/Make-lang.in b/gcc/cp/Make-lang.in
+index 0ce01ac49..b9a26b96c 100644
+--- a/gcc/cp/Make-lang.in
++++ b/gcc/cp/Make-lang.in
+@@ -162,7 +162,7 @@ check-c++-subtargets : check-g++-subtargets
+ lang_checks += check-g++
+ lang_checks_parallelized += check-g++
+ # For description see comment above check_gcc_parallelize in gcc/Makefile.in.
+-check_g++_parallelize = old-deja.exp dg.exp dg-torture.exp
++check_g++_parallelize = 10000
+ 
+ #
+ # Install hooks:
+diff --git a/gcc/fortran/Make-lang.in b/gcc/fortran/Make-lang.in
+index b4c5ea214..025e6de3a 100644
+--- a/gcc/fortran/Make-lang.in
++++ b/gcc/fortran/Make-lang.in
+@@ -172,12 +172,7 @@ check-fortran-subtargets : check-gfortran-subtargets
+ lang_checks += check-gfortran
+ lang_checks_parallelized += check-gfortran
+ # For description see comment above check_gcc_parallelize in gcc/Makefile.in.
+-check_gfortran_parallelize = dg.exp=gfortran.dg/\[adAD\]* \
+-			     dg.exp=gfortran.dg/\[bcBC\]* \
+-			     dg.exp=gfortran.dg/\[nopNOP\]* \
+-			     dg.exp=gfortran.dg/\[isuvISUV\]* \
+-			     dg.exp=gfortran.dg/\[efhkqrxzEFHKQRXZ\]* \
+-			     dg.exp=gfortran.dg/\[0-9gjlmtwyGJLMTWY\]*
++check_gfortran_parallelize = 10000
+ 
+ # GFORTRAN documentation.
+ GFORTRAN_TEXI = \
+diff --git a/gcc/go/Make-lang.in b/gcc/go/Make-lang.in
+index b3cb2bdbc..0e6b285b3 100644
+--- a/gcc/go/Make-lang.in
++++ b/gcc/go/Make-lang.in
+@@ -134,10 +134,7 @@ go.srcman: doc/gccgo.1
+ 
+ lang_checks += check-go
+ lang_checks_parallelized += check-go
+-check_go_parallelize = go-test.exp=*/test/\[0-57-9a-bd-hj-zA-Z\]* \
+-		       go-test.exp=*/test/c* \
+-		       go-test.exp=*/test/i* \
+-		       go-test.exp=*/test/6*
++check_go_parallelize = 10
+ 
+ # Install hooks.
+ 
+diff --git a/gcc/objc/Make-lang.in b/gcc/objc/Make-lang.in
+index 7cc8f84e2..e39ee4331 100644
+--- a/gcc/objc/Make-lang.in
++++ b/gcc/objc/Make-lang.in
+@@ -176,7 +176,7 @@ lang_checks += check-objc
+ # The following allows you to do 'make check-objc -j2'.  The
+ # execute.exp tests will be run in parallel with all the other ones.
+ lang_checks_parallelized += check-objc
+-check_objc_parallelize = gnu-encoding.exp execute.exp exceptions.exp
++check_objc_parallelize = 6
+ 
+ #
+ # Install hooks:
+diff --git a/gcc/testsuite/g++.dg/guality/guality.exp b/gcc/testsuite/g++.dg/guality/guality.exp
+index 749691dab..6b355dd73 100644
+--- a/gcc/testsuite/g++.dg/guality/guality.exp
++++ b/gcc/testsuite/g++.dg/guality/guality.exp
+@@ -10,6 +10,11 @@ if { [istarget *-*-darwin*] || [istarget alpha*-dec-osf*] } {
+ }
+ 
+ proc check_guality {args} {
++    # Don't count check_guality as PASS, or FAIL etc., that would make
++    # the total PASS count dependent on how many parallel runtest invocations
++    # ran guality.exp.  So save the counts first and restore them afterwards.
++    global test_counts
++    array set saved_test_counts [array get test_counts]
+     set result [eval check_compile guality_check executable $args "-g -O0"]
+     set lines [lindex $result 0]
+     set output [lindex $result 1]
+@@ -19,6 +24,7 @@ proc check_guality {args} {
+       set ret [string match "*1 PASS, 0 FAIL, 0 UNRESOLVED*" $execout]
+     }
+     remote_file build delete $output
++    array get test_counts [array get saved_test_counts]
+     return $ret
+ }
+ 
+diff --git a/gcc/testsuite/g++.dg/plugin/plugin.exp b/gcc/testsuite/g++.dg/plugin/plugin.exp
+index fb962dfde..9782c35a8 100644
+--- a/gcc/testsuite/g++.dg/plugin/plugin.exp
++++ b/gcc/testsuite/g++.dg/plugin/plugin.exp
+@@ -44,6 +44,15 @@ if $tracelevel then {
+ # Load support procs.
+ load_lib plugin-support.exp
+ 
++# These tests don't run runtest_file_p consistently if it
++# doesn't return the same values, so disable parallelization
++# of this *.exp file.  The first parallel runtest to reach
++# this will run all the tests serially.
++if ![gcc_parallel_test_run_p plugin] {
++    return
++}
++gcc_parallel_test_enable 0
++
+ # Specify the plugin source file and the associated test files in a list.
+ # plugin_test_list={ {plugin1 test1 test2 ...} {plugin2 test1 ...} ... }
+ set plugin_test_list [list \
+@@ -68,3 +77,5 @@ foreach plugin_test $plugin_test_list {
+     set plugin_input_tests [lreplace $plugin_test 0 0]
+     plugin-test-execute $plugin_src $plugin_input_tests
+ }
++
++gcc_parallel_test_enable 1
+diff --git a/gcc/testsuite/gcc.dg/guality/guality.exp b/gcc/testsuite/gcc.dg/guality/guality.exp
+index 5e3284d5d..56c6c5991 100644
+--- a/gcc/testsuite/gcc.dg/guality/guality.exp
++++ b/gcc/testsuite/gcc.dg/guality/guality.exp
+@@ -10,6 +10,11 @@ if { [istarget *-*-darwin*] || [istarget alpha*-dec-osf*] } {
+ }
+ 
+ proc check_guality {args} {
++    # Don't count check_guality as PASS, or FAIL etc., that would make
++    # the total PASS count dependent on how many parallel runtest invocations
++    # ran guality.exp.  So save the counts first and restore them afterwards.
++    global test_counts
++    array set saved_test_counts [array get test_counts]
+     set result [eval check_compile guality_check executable $args "-g -O0"]
+     set lines [lindex $result 0]
+     set output [lindex $result 1]
+@@ -19,6 +24,7 @@ proc check_guality {args} {
+       set ret [string match "*1 PASS, 0 FAIL, 0 UNRESOLVED*" $execout]
+     }
+     remote_file build delete $output
++    array set test_counts [array get saved_test_counts]
+     return $ret
+ }
+ 
+diff --git a/gcc/testsuite/gcc.dg/plugin/plugin.exp b/gcc/testsuite/gcc.dg/plugin/plugin.exp
+index 444bd1bb6..fd2b1b5d4 100644
+--- a/gcc/testsuite/gcc.dg/plugin/plugin.exp
++++ b/gcc/testsuite/gcc.dg/plugin/plugin.exp
+@@ -44,6 +44,15 @@ if $tracelevel then {
+ # Load support procs.
+ load_lib plugin-support.exp
+ 
++# These tests don't run runtest_file_p consistently if it
++# doesn't return the same values, so disable parallelization
++# of this *.exp file.  The first parallel runtest to reach
++# this will run all the tests serially.
++if ![gcc_parallel_test_run_p plugin] {
++    return
++}
++gcc_parallel_test_enable 0
++
+ # Specify the plugin source file and the associated test files in a list.
+ # plugin_test_list={ {plugin1 test1 test2 ...} {plugin2 test1 ...} ... }
+ set plugin_test_list [list \
+@@ -80,3 +89,5 @@ dg-runtest [lsort [glob -nocomplain $srcdir/$subdir/plugindir*.\[cSi\]]] \
+ 
+ # All done.
+ dg-finish
++
++gcc_parallel_test_enable 1
+diff --git a/gcc/testsuite/gcc.misc-tests/acker1.exp b/gcc/testsuite/gcc.misc-tests/acker1.exp
+index 58b9b1654..ded351b0c 100644
+--- a/gcc/testsuite/gcc.misc-tests/acker1.exp
++++ b/gcc/testsuite/gcc.misc-tests/acker1.exp
+@@ -20,9 +20,21 @@ if { ![info exists PERF_TEST] || "$PERF_TEST" != "yes" } {
+ }
+ 
+ load_lib mike-gcc.exp
++load_lib gcc-defs.exp
++
++# These tests don't run runtest_file_p consistently if it
++# doesn't return the same values, so disable parallelization
++# of this *.exp file.  The first parallel runtest to reach
++# this will run all the tests serially.
++if ![gcc_parallel_test_run_p acker1] {
++    return
++}
++gcc_parallel_test_enable 0
+ 
+ prebase
+ set actions run
+ set compiler_output "^$"
+ set program_output "^$"
+ postbase acker1.c $run $groups
++
++gcc_parallel_test_enable 1
+diff --git a/gcc/testsuite/gcc.misc-tests/dhry.exp b/gcc/testsuite/gcc.misc-tests/dhry.exp
+index c913a955d..19b759de2 100644
+--- a/gcc/testsuite/gcc.misc-tests/dhry.exp
++++ b/gcc/testsuite/gcc.misc-tests/dhry.exp
+@@ -20,9 +20,21 @@ if { ![info exists PERF_TEST] || "$PERF_TEST" != "yes" } {
+ }
+ 
+ load_lib mike-gcc.exp
++load_lib gcc-defs.exp
++
++# These tests don't run runtest_file_p consistently if it
++# doesn't return the same values, so disable parallelization
++# of this *.exp file.  The first parallel runtest to reach
++# this will run all the tests serially.
++if ![gcc_parallel_test_run_p dhry] {
++    return
++}
++gcc_parallel_test_enable 0
+ 
+ prebase
+ set actions run
+ set compiler_output "^$"
+ set program_output "^$"
+ postbase dhry.c $run $groups
++
++gcc_parallel_test_enable 1
+diff --git a/gcc/testsuite/gcc.misc-tests/help.exp b/gcc/testsuite/gcc.misc-tests/help.exp
+index 6c38c8fed..ca2041bf9 100644
+--- a/gcc/testsuite/gcc.misc-tests/help.exp
++++ b/gcc/testsuite/gcc.misc-tests/help.exp
+@@ -18,6 +18,16 @@
+ # documented in --help, and that the various --help* options work.
+ 
+ load_lib options.exp
++load_lib gcc-defs.exp
++
++# These tests don't run runtest_file_p consistently if it
++# doesn't return the same values, so disable parallelization
++# of this *.exp file.  The first parallel runtest to reach
++# this will run all the tests serially.
++if ![gcc_parallel_test_run_p help] {
++    return
++}
++gcc_parallel_test_enable 0
+ 
+ # Document --version.  Ideally, there should be no undocumented switches
+ # in --help.
+@@ -78,3 +88,5 @@ check_for_options c "--help=joined,^separate" "--help=" "" ""
+ check_for_options c "--help=joined,undocumented" "" "" ""
+ # Listing only excludes gives empty results.
+ check_for_options c "--help=^joined,^separate" "" "" ""
++
++gcc_parallel_test_enable 1
+diff --git a/gcc/testsuite/gcc.misc-tests/linkage.exp b/gcc/testsuite/gcc.misc-tests/linkage.exp
+index 887f31b21..e64c91498 100644
+--- a/gcc/testsuite/gcc.misc-tests/linkage.exp
++++ b/gcc/testsuite/gcc.misc-tests/linkage.exp
+@@ -19,6 +19,17 @@
+ # was written by Rob Savoye. (rob@cygnus.com)
+ # All the other tests driven by that file have since been moved elsewhere.
+ 
++load_lib gcc-defs.exp
++
++# These tests don't run runtest_file_p consistently if it
++# doesn't return the same values, so disable parallelization
++# of this *.exp file.  The first parallel runtest to reach
++# this will run all the tests serially.
++if ![gcc_parallel_test_run_p linkage] {
++    return
++}
++gcc_parallel_test_enable 0
++
+ if { [isnative] && ![is_remote host] } then {
+     set lines [gcc_target_compile "$srcdir/$subdir/linkage-x.c" "linkage-x.o" object {additional_flags="-w"}]
+     if ![string match "" $lines] then {
+@@ -128,3 +139,5 @@ if { [isnative] && ![is_remote host] } then {
+ 	file delete "linkage-x.o"
+     }
+ }
++
++gcc_parallel_test_enable 1
+diff --git a/gcc/testsuite/gcc.misc-tests/matrix1.exp b/gcc/testsuite/gcc.misc-tests/matrix1.exp
+index d825eba80..8f3a17df2 100644
+--- a/gcc/testsuite/gcc.misc-tests/matrix1.exp
++++ b/gcc/testsuite/gcc.misc-tests/matrix1.exp
+@@ -20,9 +20,21 @@ if { ![info exists PERF_TEST] || "$PERF_TEST" != "yes" } {
+ }
+ 
+ load_lib mike-gcc.exp
++load_lib gcc-defs.exp
++
++# These tests don't run runtest_file_p consistently if it
++# doesn't return the same values, so disable parallelization
++# of this *.exp file.  The first parallel runtest to reach
++# this will run all the tests serially.
++if ![gcc_parallel_test_run_p matrix1] {
++    return
++}
++gcc_parallel_test_enable 0
+ 
+ prebase
+ set actions run
+ set compiler_output "^$"
+ set program_output "^$"
+ postbase matrix1.c $run $groups
++
++gcc_parallel_test_enable 1
+diff --git a/gcc/testsuite/gcc.misc-tests/mg-2.exp b/gcc/testsuite/gcc.misc-tests/mg-2.exp
+index cfeeb8346..0ab9aba27 100644
+--- a/gcc/testsuite/gcc.misc-tests/mg-2.exp
++++ b/gcc/testsuite/gcc.misc-tests/mg-2.exp
+@@ -17,8 +17,20 @@
+ # Test the -MG flag with a system header file.
+ 
+ load_lib mike-gcc.exp
++load_lib gcc-defs.exp
++
++# These tests don't run runtest_file_p consistently if it
++# doesn't return the same values, so disable parallelization
++# of this *.exp file.  The first parallel runtest to reach
++# this will run all the tests serially.
++if ![gcc_parallel_test_run_p mg-2] {
++    return
++}
++gcc_parallel_test_enable 0
+ 
+ prebase
+ set actions none-of-the-above
+ set compiler_output "mg-2.o ?: .*mg-2.c \[ \\\\\n\]*nonexist.h"
+ postbase mg-2.c "" "" "-MM -MG"
++
++gcc_parallel_test_enable 1
+diff --git a/gcc/testsuite/gcc.misc-tests/mg.exp b/gcc/testsuite/gcc.misc-tests/mg.exp
+index 7ba3ae1c6..df04c822b 100644
+--- a/gcc/testsuite/gcc.misc-tests/mg.exp
++++ b/gcc/testsuite/gcc.misc-tests/mg.exp
+@@ -17,8 +17,20 @@
+ # Test the -MG flag.
+ 
+ load_lib mike-gcc.exp
++load_lib gcc-defs.exp
++
++# These tests don't run runtest_file_p consistently if it
++# doesn't return the same values, so disable parallelization
++# of this *.exp file.  The first parallel runtest to reach
++# this will run all the tests serially.
++if ![gcc_parallel_test_run_p mg] {
++    return
++}
++gcc_parallel_test_enable 0
+ 
+ prebase
+ set actions none-of-the-above
+ set compiler_output "mg.o ?: .*mg.c \[ \\\\\n\]*nonexist.h"
+ postbase mg.c "" "" "-MM -MG"
++
++gcc_parallel_test_enable 1
+diff --git a/gcc/testsuite/gcc.misc-tests/options.exp b/gcc/testsuite/gcc.misc-tests/options.exp
+index a9a74e19a..1b91ae7fe 100644
+--- a/gcc/testsuite/gcc.misc-tests/options.exp
++++ b/gcc/testsuite/gcc.misc-tests/options.exp
+@@ -19,6 +19,17 @@
+ # match the patterns COMPILER_PATTERN, AS_PATTERN and LD_PATTERN,
+ # respectively.
+ 
++load_lib gcc-defs.exp
++
++# These tests don't run runtest_file_p consistently if it
++# doesn't return the same values, so disable parallelization
++# of this *.exp file.  The first parallel runtest to reach
++# this will run all the tests serially.
++if ![gcc_parallel_test_run_p options] {
++    return
++}
++gcc_parallel_test_enable 0
++
+ proc check_for_all_options {language gcc_options compiler_pattern as_pattern ld_pattern} {
+     set filename test-[pid]
+     set fd [open $filename.c w]
+@@ -52,3 +63,5 @@ proc check_for_all_options {language gcc_options compiler_pattern as_pattern ld_
+ }
+ 
+ check_for_all_options c {--coverage} {-fprofile-arcs -ftest-coverage} {} {-lgcov}
++
++gcc_parallel_test_enable 1
+diff --git a/gcc/testsuite/gcc.misc-tests/sieve.exp b/gcc/testsuite/gcc.misc-tests/sieve.exp
+index 3f82ca91b..4eabeae82 100644
+--- a/gcc/testsuite/gcc.misc-tests/sieve.exp
++++ b/gcc/testsuite/gcc.misc-tests/sieve.exp
+@@ -20,9 +20,21 @@ if { ![info exists PERF_TEST] || "$PERF_TEST" != "yes" } {
+ }
+ 
+ load_lib mike-gcc.exp
++load_lib gcc-defs.exp
++
++# These tests don't run runtest_file_p consistently if it
++# doesn't return the same values, so disable parallelization
++# of this *.exp file.  The first parallel runtest to reach
++# this will run all the tests serially.
++if ![gcc_parallel_test_run_p sieve] {
++    return
++}
++gcc_parallel_test_enable 0
+ 
+ prebase
+ set actions run
+ set compiler_output "^$"
+ set program_output "^$"
+ postbase sieve.c $run $groups
++
++gcc_parallel_test_enable 1
+diff --git a/gcc/testsuite/gcc.misc-tests/sort2.exp b/gcc/testsuite/gcc.misc-tests/sort2.exp
+index d89be7af7..23226075b 100644
+--- a/gcc/testsuite/gcc.misc-tests/sort2.exp
++++ b/gcc/testsuite/gcc.misc-tests/sort2.exp
+@@ -20,9 +20,21 @@ if { ![info exists PERF_TEST] || "$PERF_TEST" != "yes" } {
+ }
+ 
+ load_lib mike-gcc.exp
++load_lib gcc-defs.exp
++
++# These tests don't run runtest_file_p consistently if it
++# doesn't return the same values, so disable parallelization
++# of this *.exp file.  The first parallel runtest to reach
++# this will run all the tests serially.
++if ![gcc_parallel_test_run_p sort2] {
++    return
++}
++gcc_parallel_test_enable 0
+ 
+ prebase
+ set actions run
+ set compiler_output "^$"
+ set program_output "^$"
+ postbase sort2.c $run $groups
++
++gcc_parallel_test_enable 1
+diff --git a/gcc/testsuite/gfortran.dg/binding_label_tests_10.f03 b/gcc/testsuite/gfortran.dg/binding_label_tests_10.f03
+index 99c9c5276..0809c87f3 100644
+--- a/gcc/testsuite/gfortran.dg/binding_label_tests_10.f03
++++ b/gcc/testsuite/gfortran.dg/binding_label_tests_10.f03
+@@ -1,10 +1,6 @@
+ ! { dg-do compile }
+-! This file must be compiled BEFORE binding_label_tests_10_main.f03, which it 
+-! should be because dejagnu will sort the files.
+ module binding_label_tests_10
+   use iso_c_binding
+   implicit none
+   integer(c_int), bind(c,name="c_one") :: one
+ end module binding_label_tests_10
+-
+-! Do not use dg-final to cleanup-modules
+diff --git a/gcc/testsuite/gfortran.dg/binding_label_tests_10_main.f03 b/gcc/testsuite/gfortran.dg/binding_label_tests_10_main.f03
+index aa24a6ac1..c96d984f9 100644
+--- a/gcc/testsuite/gfortran.dg/binding_label_tests_10_main.f03
++++ b/gcc/testsuite/gfortran.dg/binding_label_tests_10_main.f03
+@@ -1,6 +1,5 @@
+ ! { dg-do compile }
+-! This file must be compiled AFTER binding_label_tests_10.f03, which it 
+-! should be because dejagnu will sort the files.
++! { dg-compile-aux-modules "binding_label_tests_10.f03" }
+ module binding_label_tests_10_main
+   use iso_c_binding
+   implicit none
+diff --git a/gcc/testsuite/gfortran.dg/binding_label_tests_11.f03 b/gcc/testsuite/gfortran.dg/binding_label_tests_11.f03
+index 5e889a788..c1fc98eff 100644
+--- a/gcc/testsuite/gfortran.dg/binding_label_tests_11.f03
++++ b/gcc/testsuite/gfortran.dg/binding_label_tests_11.f03
+@@ -1,6 +1,4 @@
+ ! { dg-do compile }
+-! This file must be compiled BEFORE binding_label_tests_11_main.f03, which it 
+-! should be because dejagnu will sort the files.
+ module binding_label_tests_11
+   use iso_c_binding, only: c_int
+   implicit none
+@@ -10,5 +8,3 @@ contains
+     one = 1
+   end function one
+ end module binding_label_tests_11
+-
+-! Do not use dg-final to cleanup-modules
+diff --git a/gcc/testsuite/gfortran.dg/binding_label_tests_11_main.f03 b/gcc/testsuite/gfortran.dg/binding_label_tests_11_main.f03
+index 53eac7cf5..88f87c167 100644
+--- a/gcc/testsuite/gfortran.dg/binding_label_tests_11_main.f03
++++ b/gcc/testsuite/gfortran.dg/binding_label_tests_11_main.f03
+@@ -1,6 +1,5 @@
+ ! { dg-do compile }
+-! This file must be compiled AFTER binding_label_tests_11.f03, which it 
+-! should be because dejagnu will sort the files.
++! { dg-compile-aux-modules "binding_label_tests_11.f03" }
+ module binding_label_tests_11_main
+   use iso_c_binding, only: c_int
+   implicit none
+diff --git a/gcc/testsuite/gfortran.dg/binding_label_tests_13.f03 b/gcc/testsuite/gfortran.dg/binding_label_tests_13.f03
+index 786945d3a..71aac2dbf 100644
+--- a/gcc/testsuite/gfortran.dg/binding_label_tests_13.f03
++++ b/gcc/testsuite/gfortran.dg/binding_label_tests_13.f03
+@@ -1,6 +1,4 @@
+ ! { dg-do compile }
+-! This file must be compiled BEFORE binding_label_tests_13_main.f03, which it 
+-! should be because dejagnu will sort the files.  
+ module binding_label_tests_13
+  use, intrinsic :: iso_c_binding, only: c_int
+   integer(c_int) :: c3
+diff --git a/gcc/testsuite/gfortran.dg/binding_label_tests_13_main.f03 b/gcc/testsuite/gfortran.dg/binding_label_tests_13_main.f03
+index 1addc9c49..9f40b0ed4 100644
+--- a/gcc/testsuite/gfortran.dg/binding_label_tests_13_main.f03
++++ b/gcc/testsuite/gfortran.dg/binding_label_tests_13_main.f03
+@@ -1,7 +1,5 @@
+ ! { dg-do compile }
+-! This file must be compiled AFTER binding_label_tests_13.f03, which it 
+-! should be because dejagnu will sort the files.  The module file 
+-! binding_label_tests_13.mod can not be removed until after this test is done.
++! { dg-compile-aux-modules "binding_label_tests_13.f03" }
+ module binding_label_tests_13_main
+   use, intrinsic :: iso_c_binding, only: c_int
+   integer(c_int) :: c3 ! { dg-error "collides" }
+diff --git a/gcc/testsuite/gfortran.dg/class_4a.f03 b/gcc/testsuite/gfortran.dg/class_4a.f03
+index 3cf0b7abf..015e53cbb 100644
+--- a/gcc/testsuite/gfortran.dg/class_4a.f03
++++ b/gcc/testsuite/gfortran.dg/class_4a.f03
+@@ -1,10 +1,11 @@
+-! { dg-do compile }
++! { dg-do link }
++! { dg-additional-sources "class_4b.f03 class_4c.f03" }
+ !
+ ! Test the fix for PR41583, in which the different source files
+ ! would generate the same 'vindex' for different class declared
+ ! types.
+ !
+-! The test comprises class_4a, class_4b class_4c and class_4d.f03
++! The test comprises class_4a, class_4b and class_4c.f03
+ 
+ ! Contributed by Tobias Burnus <burnus@gcc.gnu.org>
+ !
+@@ -12,3 +13,4 @@ module m
+   type t
+   end type t
+ end module m
++! { dg-final { cleanup-modules "m m2" } }
+diff --git a/gcc/testsuite/gfortran.dg/class_4b.f03 b/gcc/testsuite/gfortran.dg/class_4b.f03
+index 4658b8cf3..dda55b5b0 100644
+--- a/gcc/testsuite/gfortran.dg/class_4b.f03
++++ b/gcc/testsuite/gfortran.dg/class_4b.f03
+@@ -1,10 +1,11 @@
+-! { dg-do compile }
++! Don't compile this anywhere.
++! { dg-do compile { target { lp64 && { ! lp64 } } } }
+ !
+ ! Test the fix for PR41583, in which the different source files
+ ! would generate the same 'vindex' for different class declared
+ ! types.
+ !
+-! The test comprises class_4a, class_4b class_4c and class_4d.f03
++! The test comprises class_4a, class_4b class_4c.f03
+ !
+ ! Contributed by Tobias Burnus <burnus@gcc.gnu.org>
+ !
+diff --git a/gcc/testsuite/gfortran.dg/class_4c.f03 b/gcc/testsuite/gfortran.dg/class_4c.f03
+index c28a32b0f..e78a30966 100644
+--- a/gcc/testsuite/gfortran.dg/class_4c.f03
++++ b/gcc/testsuite/gfortran.dg/class_4c.f03
+@@ -1,5 +1,5 @@
+-! { dg-do link }
+-! { dg-additional-sources class_4a.f03 class_4b.f03 }
++! Don't compile this anywhere.
++! { dg-do compile { target { lp64 && { ! lp64 } } } }
+ !
+ ! Test the fix for PR41583, in which the different source files
+ ! would generate the same 'vindex' for different class declared
+@@ -27,5 +27,3 @@
+   end select
+   print *, i
+ end
+-
+-! { dg-final { cleanup-modules "m m2 m3" } }
+diff --git a/gcc/testsuite/gfortran.dg/dg.exp b/gcc/testsuite/gfortran.dg/dg.exp
+index ea0428315..2e776bcf4 100644
+--- a/gcc/testsuite/gfortran.dg/dg.exp
++++ b/gcc/testsuite/gfortran.dg/dg.exp
+@@ -28,6 +28,21 @@ if ![info exists DEFAULT_FFLAGS] then {
+ # Initialize `dg'.
+ dg-init
+ 
++global gfortran_test_path
++global gfortran_aux_module_flags
++set gfortran_test_path $srcdir/$subdir
++set gfortran_aux_module_flags $DEFAULT_FFLAGS
++proc dg-compile-aux-modules { args } {
++    global gfortran_test_path
++    global gfortran_aux_module_flags
++    if { [llength $args] != 2 } {
++	error "dg-set-target-env-var: needs one argument"
++	return
++    }
++    dg-test $gfortran_test_path/[lindex $args 1] "" $gfortran_aux_module_flags
++    # cleanup-modules isn't intentionally invoked here.
++}
++
+ # Main loop.
+ gfortran-dg-runtest [lsort \
+        [glob -nocomplain $srcdir/$subdir/*.\[fF\]{,90,95,03,08} ] ] $DEFAULT_FFLAGS
+diff --git a/gcc/testsuite/gfortran.dg/test_common_binding_labels_2_main.f03 b/gcc/testsuite/gfortran.dg/test_common_binding_labels_2_main.f03
+index 1b4103ef4..07d511509 100644
+--- a/gcc/testsuite/gfortran.dg/test_common_binding_labels_2_main.f03
++++ b/gcc/testsuite/gfortran.dg/test_common_binding_labels_2_main.f03
+@@ -1,6 +1,5 @@
+ ! { dg-do compile }
+-! This file depends on the module test_common_binding_labels_2.  That module
+-! must be compiled first and not be removed until after this test.
++! { dg-compile-aux-modules "test_common_binding_labels_2.f03" }
+ module test_common_binding_labels_2_main
+   use, intrinsic :: iso_c_binding, only: c_double, c_int
+   implicit none
+diff --git a/gcc/testsuite/gfortran.dg/test_common_binding_labels_3_main.f03 b/gcc/testsuite/gfortran.dg/test_common_binding_labels_3_main.f03
+index d2c67f651..29790f0b4 100644
+--- a/gcc/testsuite/gfortran.dg/test_common_binding_labels_3_main.f03
++++ b/gcc/testsuite/gfortran.dg/test_common_binding_labels_3_main.f03
+@@ -1,6 +1,5 @@
+ ! { dg-do compile }
+-! This file depends on the module test_common_binding_labels_3.  That module
+-! must be compiled first and not be removed until after this test.
++! { dg-compile-aux-modules "test_common_binding_labels_3.f03" }
+ module test_common_binding_labels_3_main
+   use, intrinsic :: iso_c_binding, only: c_int
+   integer(c_int), bind(c, name="my_common_block") :: my_int ! { dg-error "collides" }
+diff --git a/gcc/testsuite/gfortran.dg/whole_file_28.f90 b/gcc/testsuite/gfortran.dg/whole_file_28.f90
+index 78c848e40..681b123f4 100644
+--- a/gcc/testsuite/gfortran.dg/whole_file_28.f90
++++ b/gcc/testsuite/gfortran.dg/whole_file_28.f90
+@@ -1,6 +1,5 @@
+ ! { dg-do compile }
+ ! Test the fix for the problem described in PR45077 comments #4 and #5.
+-! Note that the module file is kept for whole_file_29.f90
+ !
+ ! Contributed by Tobias Burnus  <burnus@gcc.gnu.org>
+ !
+@@ -9,4 +8,3 @@ module iso_red
+      character(LEN=1), dimension(:), allocatable :: chars
+   end type varying_string
+ end module iso_red
+-! DO NOT CLEAN UP THE MODULE FILE - whole_file_29.f90 does it.
+diff --git a/gcc/testsuite/gfortran.dg/whole_file_29.f90 b/gcc/testsuite/gfortran.dg/whole_file_29.f90
+index 2521dadac..b73d072e6 100644
+--- a/gcc/testsuite/gfortran.dg/whole_file_29.f90
++++ b/gcc/testsuite/gfortran.dg/whole_file_29.f90
+@@ -1,7 +1,6 @@
+ ! { dg-do compile }
++! { dg-compile-aux-modules "whole_file_28.f90" }
+ ! Test the fix for the problem described in PR45077 comments #4 and #5.
+-! Note that the module file from whole_file_28.f90, 'iso_red', is
+-! needed for this test.
+ !
+ ! Contributed by Tobias Burnus  <burnus@gcc.gnu.org>
+ !
+diff --git a/gcc/testsuite/gfortran.dg/whole_file_30.f90 b/gcc/testsuite/gfortran.dg/whole_file_30.f90
+index 813ca0686..551f2e801 100644
+--- a/gcc/testsuite/gfortran.dg/whole_file_30.f90
++++ b/gcc/testsuite/gfortran.dg/whole_file_30.f90
+@@ -1,6 +1,5 @@
+ ! { dg-do compile }
+ ! Test the fix for the problem described in PR46818.
+-! Note that the module file is kept for whole_file_31.f90
+ !
+ ! Contributed by Martien Hulsen  <m.a.hulsen@tue.nl>
+ ! and reduced by Tobias Burnus  <burnus@gcc.gnu.org>
+@@ -12,4 +11,3 @@ module system_defs_m
+     real, allocatable, dimension(:) :: u
+   end type sysvector_t
+ end module system_defs_m
+-! DO NOT CLEAN UP THE MODULE FILE - whole_file_31.f90 does it.
+diff --git a/gcc/testsuite/gfortran.dg/whole_file_31.f90 b/gcc/testsuite/gfortran.dg/whole_file_31.f90
+index 7ef0b9f67..a05f8fc0e 100644
+--- a/gcc/testsuite/gfortran.dg/whole_file_31.f90
++++ b/gcc/testsuite/gfortran.dg/whole_file_31.f90
+@@ -1,7 +1,6 @@
+ ! { dg-do compile }
++! { dg-compile-aux-modules "whole_file_30.f90" }
+ ! Test the fix for the problem described in PR46818.
+-! Note that the module file from whole_file_30.f90, 'system_defs_m',
+-! is needed for this test.
+ !
+ ! Contributed by Martien Hulsen  <m.a.hulsen@tue.nl>
+ ! and reduced by Tobias Burnus  <burnus@gcc.gnu.org>
+diff --git a/gcc/testsuite/go.test/go-test.exp b/gcc/testsuite/go.test/go-test.exp
+index 943a7f1a1..b02247ce8 100644
+--- a/gcc/testsuite/go.test/go-test.exp
++++ b/gcc/testsuite/go.test/go-test.exp
+@@ -394,6 +394,12 @@ proc go-gc-tests { } {
+ 
+ 	close $fd
+ 
++	# runtest_file_p is already run above, and the code below can run
++	# runtest_file_p again, make sure everything for this test is
++	# performed if the above runtest_file_p decided this runtest
++	# instance should execute the test
++	gcc_parallel_test_enable 0
++
+ 	set go_compile_args ""
+ 	set go_execute_args ""
+ 	if { [regexp ".*\\\$A.out (\[^|&>2\].*)\$" $test_line match progargs] } {
+@@ -1142,6 +1148,7 @@ proc go-gc-tests { } {
+ 
+ 	set go_compile_args ""
+ 	set go_execute_args ""
++	gcc_parallel_test_enable 1
+     }
+ 
+     set dg-do-what-default ${saved-dg-do-what-default}
+diff --git a/gcc/testsuite/lib/gcc-defs.exp b/gcc/testsuite/lib/gcc-defs.exp
+index 0dbb08831..114f5f5bd 100644
+--- a/gcc/testsuite/lib/gcc-defs.exp
++++ b/gcc/testsuite/lib/gcc-defs.exp
+@@ -183,6 +183,81 @@ if { [info procs runtest_file_p] == "" } then {
+     }
+ }
+ 
++if { [info exists env(GCC_RUNTEST_PARALLELIZE_DIR)] \
++     && [info procs runtest_file_p] != [list] \
++     && [info procs gcc_parallelize_saved_runtest_file_p] == [list] } then {
++    global gcc_runtest_parallelize_counter
++    global gcc_runtest_parallelize_counter_minor
++    global gcc_runtest_parallelize_enable
++    global gcc_runtest_parallelize_dir
++    global gcc_runtest_parallelize_last
++
++    set gcc_runtest_parallelize_counter 0
++    set gcc_runtest_parallelize_counter_minor 0
++    set gcc_runtest_parallelize_enable 1
++    set gcc_runtest_parallelize_dir [getenv GCC_RUNTEST_PARALLELIZE_DIR]
++    set gcc_runtest_parallelize_last 0
++
++    proc gcc_parallel_test_run_p { testcase } {
++	global gcc_runtest_parallelize_counter
++	global gcc_runtest_parallelize_counter_minor
++	global gcc_runtest_parallelize_enable
++	global gcc_runtest_parallelize_dir
++	global gcc_runtest_parallelize_last
++
++	if { $gcc_runtest_parallelize_enable == 0 } {
++	    return 1
++	}
++
++	# Only test the filesystem every 10th iteration
++	incr gcc_runtest_parallelize_counter_minor
++	if { $gcc_runtest_parallelize_counter_minor == 10 } {
++	    set gcc_runtest_parallelize_counter_minor 0
++	}
++	if { $gcc_runtest_parallelize_counter_minor != 1 } {
++	    #verbose -log "gcc_parallel_test_run_p $testcase $gcc_runtest_parallelize_counter $gcc_runtest_parallelize_last"
++	    return $gcc_runtest_parallelize_last
++	}
++
++	set path $gcc_runtest_parallelize_dir/$gcc_runtest_parallelize_counter
++
++	if {![catch {open $path {RDWR CREAT EXCL} 0600} fd]} {
++	    close $fd
++	    set gcc_runtest_parallelize_last 1
++	    #verbose -log "gcc_parallel_test_run_p $testcase $gcc_runtest_parallelize_counter 1"
++	    incr gcc_runtest_parallelize_counter
++	    return 1
++	}
++	set gcc_runtest_parallelize_last 0
++	#verbose -log "gcc_parallel_test_run_p $testcase $gcc_runtest_parallelize_counter 0"
++	incr gcc_runtest_parallelize_counter
++	return 0
++    }
++
++    proc gcc_parallel_test_enable { val } {
++	global gcc_runtest_parallelize_enable
++	set gcc_runtest_parallelize_enable $val
++    }
++
++    rename runtest_file_p gcc_parallelize_saved_runtest_file_p
++    proc runtest_file_p { runtests testcase } {
++	if ![gcc_parallelize_saved_runtest_file_p $runtests $testcase] {
++	    return 0
++	}
++	return [gcc_parallel_test_run_p $testcase]
++    }
++
++} else {
++
++    proc gcc_parallel_test_run_p { testcase } {
++	return 1
++    }
++
++    proc gcc_parallel_test_enable { val } {
++    }
++
++}
++
+ # Like dg-options, but adds to the default options rather than replacing them.
+ 
+ proc dg-additional-options { args } {
+diff --git a/gcc/testsuite/objc.dg/gnu-encoding/gnu-encoding.exp b/gcc/testsuite/objc.dg/gnu-encoding/gnu-encoding.exp
+index b137b751a..01e36a0c9 100644
+--- a/gcc/testsuite/objc.dg/gnu-encoding/gnu-encoding.exp
++++ b/gcc/testsuite/objc.dg/gnu-encoding/gnu-encoding.exp
+@@ -58,7 +58,9 @@ if { $status == 0 } then {
+                 continue
+             }
+ 
++	    gcc_parallel_test_enable 0
+             dg-runtest $src "" $DEFAULT_CFLAGS
++	    gcc_parallel_test_enable 1
+         }
+     } else {
+         warning "Could not execute objc.dg/gnu-encoding/struct-layout-encoding-1 generator"
+diff --git a/libstdc++-v3/testsuite/Makefile.am b/libstdc++-v3/testsuite/Makefile.am
+index 0cf8de501..1ab35834e 100644
+--- a/libstdc++-v3/testsuite/Makefile.am
++++ b/libstdc++-v3/testsuite/Makefile.am
+@@ -102,26 +102,37 @@ new-abi-baseline:
+ 	@test ! -f $*/site.exp || mv $*/site.exp $*/site.bak
+ 	@mv $*/site.exp.tmp $*/site.exp
+ 
+-check_DEJAGNU_normal_targets = $(patsubst %,check-DEJAGNUnormal%,0 1 2 3 4 5 6 7 8 9)
++check_p_numbers0:=1 2 3 4 5 6 7 8 9
++check_p_numbers1:=0 $(check_p_numbers0)
++check_p_numbers2:=$(foreach i,$(check_p_numbers0),$(addprefix $(i),$(check_p_numbers1)))
++check_p_numbers3:=$(addprefix 0,$(check_p_numbers1)) $(check_p_numbers2)
++check_p_numbers4:=$(foreach i,$(check_p_numbers0),$(addprefix $(i),$(check_p_numbers3)))
++check_p_numbers5:=$(addprefix 0,$(check_p_numbers3)) $(check_p_numbers4)
++check_p_numbers6:=$(foreach i,$(check_p_numbers0),$(addprefix $(i),$(check_p_numbers5)))
++check_p_numbers:=$(check_p_numbers0) $(check_p_numbers2) $(check_p_numbers4) $(check_p_numbers6)
++check_p_subdirs=$(wordlist 1,$(if $(GCC_TEST_PARALLEL_SLOTS),$(GCC_TEST_PARALLEL_SLOTS),128),$(check_p_numbers))
++check_DEJAGNU_normal_targets = $(addprefix check-DEJAGNUnormal,$(check_p_subdirs))
+ $(check_DEJAGNU_normal_targets): check-DEJAGNUnormal%: normal%/site.exp
+ 
+ # Run the testsuite in normal mode.
+ check-DEJAGNU $(check_DEJAGNU_normal_targets): check-DEJAGNU%: site.exp
+ 	AR="$(AR)"; export AR; \
+ 	RANLIB="$(RANLIB)"; export RANLIB; \
+-	if [ -z "$*$(filter-out --target_board=%, $(RUNTESTFLAGS))" ] \
+-	    && [ "$(filter -j, $(MFLAGS))" = "-j" ]; then \
++	if [ -z "$*" ] && [ -n "$(filter -j%, $(MFLAGS))" ]; then \
++	  rm -rf normal-parallel || true; \
++	  mkdir normal-parallel; \
+ 	  $(MAKE) $(AM_MAKEFLAGS) $(check_DEJAGNU_normal_targets); \
+-	  for idx in 0 1 2 3 4 5 6 7 8 9; do \
+-	    mv -f normal$$idx/libstdc++.sum normal$$idx/libstdc++.sum.sep; \
+-	    mv -f normal$$idx/libstdc++.log normal$$idx/libstdc++.log.sep; \
++	  rm -rf normal-parallel || true; \
++	  for idx in $(check_p_subdirs); do \
++	    if [ -d normal$$idx ]; then \
++	      mv -f normal$$idx/libstdc++.sum normal$$idx/libstdc++.sum.sep; \
++	      mv -f normal$$idx/libstdc++.log normal$$idx/libstdc++.log.sep; \
++	    fi; \
+ 	  done; \
+-	  mv -f libstdc++.sum libstdc++.sum.sep; \
+-	  mv -f libstdc++.log libstdc++.log.sep; \
+ 	  $(SHELL) $(srcdir)/../../contrib/dg-extract-results.sh \
+-	    libstdc++.sum.sep normal[0-9]/libstdc++.sum.sep > libstdc++.sum; \
++	    normal[0-9]*/libstdc++.sum.sep > libstdc++.sum; \
+ 	  $(SHELL) $(srcdir)/../../contrib/dg-extract-results.sh -L \
+-	    libstdc++.log.sep normal[0-9]/libstdc++.log.sep > libstdc++.log; \
++	    normal[0-9]*/libstdc++.log.sep > libstdc++.log; \
+ 	  exit 0; \
+ 	fi; \
+ 	srcdir=`$(am__cd) $(srcdir) && pwd`; export srcdir; \
+@@ -129,45 +140,20 @@ check-DEJAGNU $(check_DEJAGNU_normal_targets): check-DEJAGNU%: site.exp
+ 	runtest=$(RUNTEST); \
+ 	if [ -z "$$runtest" ]; then runtest=runtest; fi; \
+ 	tool=libstdc++; \
+-	dirs=; \
+-	case "$*" in \
+-	  normal0) \
+-	    if $(SHELL) -c "$$runtest --version" > /dev/null 2>&1; then \
+-	      $$runtest $(AM_RUNTESTFLAGS) $(RUNTESTDEFAULTFLAGS) \
+-			$(RUNTESTFLAGS) abi.exp prettyprinters.exp; \
+-	    else echo "WARNING: could not find \`runtest'" 1>&2; :;\
+-	    fi; \
+-	    dirs="`cd $$srcdir; echo [013-9][0-9]_*/*`";; \
+-	  normal1) \
+-	    dirs="`cd $$srcdir; echo [ab]* de* [ep]*/*`";; \
+-	  normal2) \
+-	    dirs="`cd $$srcdir; echo 2[01]_*/*`";; \
+-	  normal3) \
+-	    dirs="`cd $$srcdir; echo 22_*/*`";; \
+-	  normal4) \
+-	    dirs="`cd $$srcdir; echo 23_*/[a-km-tw-z]*`";; \
+-	  normal5) \
+-	    dirs="`cd $$srcdir; echo 23_*/[luv]*`";; \
+-	  normal6) \
+-	    dirs="`cd $$srcdir; echo 2[459]_*/*`";; \
+-	  normal7) \
+-	    dirs="`cd $$srcdir; echo 2[68]_*/*`";; \
+-	  normal8) \
+-	    dirs="`cd $$srcdir; echo 27_*/*`";; \
+-	  normal9) \
+-	    dirs="`cd $$srcdir; echo t*/*`";; \
+-	esac; \
+-	if [ -n "$*" ]; then cd "$*"; fi; \
++	if [ -n "$*" ]; then \
++	  if [ -f normal-parallel/finished ]; then rm -rf "$*"; exit 0; fi; \
++	  GCC_RUNTEST_PARALLELIZE_DIR=`${PWD_COMMAND}`/normal-parallel; \
++	  export GCC_RUNTEST_PARALLELIZE_DIR; \
++	  cd "$*"; \
++	fi; \
+ 	if $(SHELL) -c "$$runtest --version" > /dev/null 2>&1; then \
+-	  if [ -n "$$dirs" ]; then \
+-	    $$runtest $(AM_RUNTESTFLAGS) $(RUNTESTDEFAULTFLAGS) \
+-		    $(RUNTESTFLAGS) \
+-		    "conformance.exp=`echo $$dirs | sed 's/ /* /g;s/$$/*/'`"; \
+-	  else \
+-	    $$runtest $(AM_RUNTESTFLAGS) $(RUNTESTDEFAULTFLAGS) \
++	  $$runtest $(AM_RUNTESTFLAGS) $(RUNTESTDEFAULTFLAGS) \
+ 		    $(RUNTESTFLAGS); \
++	  if [ -n "$*" ]; then \
++	    touch $$GCC_RUNTEST_PARALLELIZE_DIR/finished; \
+ 	  fi; \
+-	else echo "WARNING: could not find \`runtest'" 1>&2; :;\
++	else \
++	  echo "WARNING: could not find \`runtest'" 1>&2; :;\
+ 	fi
+ 
+ check-am:
+diff --git a/libstdc++-v3/testsuite/Makefile.in b/libstdc++-v3/testsuite/Makefile.in
+index 3c4f39ec3..0662bd4b2 100644
+--- a/libstdc++-v3/testsuite/Makefile.in
++++ b/libstdc++-v3/testsuite/Makefile.in
+@@ -291,7 +291,16 @@ lists_of_files = \
+ 
+ extract_symvers = $(glibcxx_builddir)/scripts/extract_symvers
+ baseline_subdir := $(shell $(CXX) $(baseline_subdir_switch))
+-check_DEJAGNU_normal_targets = $(patsubst %,check-DEJAGNUnormal%,0 1 2 3 4 5 6 7 8 9)
++check_p_numbers0:=1 2 3 4 5 6 7 8 9
++check_p_numbers1:=0 $(check_p_numbers0)
++check_p_numbers2:=$(foreach i,$(check_p_numbers0),$(addprefix $(i),$(check_p_numbers1)))
++check_p_numbers3:=$(addprefix 0,$(check_p_numbers1)) $(check_p_numbers2)
++check_p_numbers4:=$(foreach i,$(check_p_numbers0),$(addprefix $(i),$(check_p_numbers3)))
++check_p_numbers5:=$(addprefix 0,$(check_p_numbers3)) $(check_p_numbers4)
++check_p_numbers6:=$(foreach i,$(check_p_numbers0),$(addprefix $(i),$(check_p_numbers5)))
++check_p_numbers:=$(check_p_numbers0) $(check_p_numbers2) $(check_p_numbers4) $(check_p_numbers6)
++check_p_subdirs=$(wordlist 1,$(if $(GCC_TEST_PARALLEL_SLOTS),$(GCC_TEST_PARALLEL_SLOTS),128),$(check_p_numbers))
++check_DEJAGNU_normal_targets = $(addprefix check-DEJAGNUnormal,$(check_p_subdirs))
+ 
+ # Runs the testsuite, but in compile only mode.
+ # Can be used to test sources with non-GNU FE's at various warning
+@@ -549,19 +558,21 @@ $(check_DEJAGNU_normal_targets): check-DEJAGNUnormal%: normal%/site.exp
+ check-DEJAGNU $(check_DEJAGNU_normal_targets): check-DEJAGNU%: site.exp
+ 	AR="$(AR)"; export AR; \
+ 	RANLIB="$(RANLIB)"; export RANLIB; \
+-	if [ -z "$*$(filter-out --target_board=%, $(RUNTESTFLAGS))" ] \
+-	    && [ "$(filter -j, $(MFLAGS))" = "-j" ]; then \
++	if [ -z "$*" ] && [ -n "$(filter -j%, $(MFLAGS))" ]; then \
++	  rm -rf normal-parallel || true; \
++	  mkdir normal-parallel; \
+ 	  $(MAKE) $(AM_MAKEFLAGS) $(check_DEJAGNU_normal_targets); \
+-	  for idx in 0 1 2 3 4 5 6 7 8 9; do \
+-	    mv -f normal$$idx/libstdc++.sum normal$$idx/libstdc++.sum.sep; \
+-	    mv -f normal$$idx/libstdc++.log normal$$idx/libstdc++.log.sep; \
++	  rm -rf normal-parallel || true; \
++	  for idx in $(check_p_subdirs); do \
++	    if [ -d normal$$idx ]; then \
++	      mv -f normal$$idx/libstdc++.sum normal$$idx/libstdc++.sum.sep; \
++	      mv -f normal$$idx/libstdc++.log normal$$idx/libstdc++.log.sep; \
++	    fi; \
+ 	  done; \
+-	  mv -f libstdc++.sum libstdc++.sum.sep; \
+-	  mv -f libstdc++.log libstdc++.log.sep; \
+ 	  $(SHELL) $(srcdir)/../../contrib/dg-extract-results.sh \
+-	    libstdc++.sum.sep normal[0-9]/libstdc++.sum.sep > libstdc++.sum; \
++	    normal[0-9]*/libstdc++.sum.sep > libstdc++.sum; \
+ 	  $(SHELL) $(srcdir)/../../contrib/dg-extract-results.sh -L \
+-	    libstdc++.log.sep normal[0-9]/libstdc++.log.sep > libstdc++.log; \
++	    normal[0-9]*/libstdc++.log.sep > libstdc++.log; \
+ 	  exit 0; \
+ 	fi; \
+ 	srcdir=`$(am__cd) $(srcdir) && pwd`; export srcdir; \
+@@ -569,45 +580,20 @@ check-DEJAGNU $(check_DEJAGNU_normal_targets): check-DEJAGNU%: site.exp
+ 	runtest=$(RUNTEST); \
+ 	if [ -z "$$runtest" ]; then runtest=runtest; fi; \
+ 	tool=libstdc++; \
+-	dirs=; \
+-	case "$*" in \
+-	  normal0) \
+-	    if $(SHELL) -c "$$runtest --version" > /dev/null 2>&1; then \
+-	      $$runtest $(AM_RUNTESTFLAGS) $(RUNTESTDEFAULTFLAGS) \
+-			$(RUNTESTFLAGS) abi.exp prettyprinters.exp; \
+-	    else echo "WARNING: could not find \`runtest'" 1>&2; :;\
+-	    fi; \
+-	    dirs="`cd $$srcdir; echo [013-9][0-9]_*/*`";; \
+-	  normal1) \
+-	    dirs="`cd $$srcdir; echo [ab]* de* [ep]*/*`";; \
+-	  normal2) \
+-	    dirs="`cd $$srcdir; echo 2[01]_*/*`";; \
+-	  normal3) \
+-	    dirs="`cd $$srcdir; echo 22_*/*`";; \
+-	  normal4) \
+-	    dirs="`cd $$srcdir; echo 23_*/[a-km-tw-z]*`";; \
+-	  normal5) \
+-	    dirs="`cd $$srcdir; echo 23_*/[luv]*`";; \
+-	  normal6) \
+-	    dirs="`cd $$srcdir; echo 2[459]_*/*`";; \
+-	  normal7) \
+-	    dirs="`cd $$srcdir; echo 2[68]_*/*`";; \
+-	  normal8) \
+-	    dirs="`cd $$srcdir; echo 27_*/*`";; \
+-	  normal9) \
+-	    dirs="`cd $$srcdir; echo t*/*`";; \
+-	esac; \
+-	if [ -n "$*" ]; then cd "$*"; fi; \
++	if [ -n "$*" ]; then \
++	  if [ -f normal-parallel/finished ]; then rm -rf "$*"; exit 0; fi; \
++	  GCC_RUNTEST_PARALLELIZE_DIR=`${PWD_COMMAND}`/normal-parallel; \
++	  export GCC_RUNTEST_PARALLELIZE_DIR; \
++	  cd "$*"; \
++	fi; \
+ 	if $(SHELL) -c "$$runtest --version" > /dev/null 2>&1; then \
+-	  if [ -n "$$dirs" ]; then \
+-	    $$runtest $(AM_RUNTESTFLAGS) $(RUNTESTDEFAULTFLAGS) \
+-		    $(RUNTESTFLAGS) \
+-		    "conformance.exp=`echo $$dirs | sed 's/ /* /g;s/$$/*/'`"; \
+-	  else \
+-	    $$runtest $(AM_RUNTESTFLAGS) $(RUNTESTDEFAULTFLAGS) \
++	  $$runtest $(AM_RUNTESTFLAGS) $(RUNTESTDEFAULTFLAGS) \
+ 		    $(RUNTESTFLAGS); \
++	  if [ -n "$*" ]; then \
++	    touch $$GCC_RUNTEST_PARALLELIZE_DIR/finished; \
+ 	  fi; \
+-	else echo "WARNING: could not find \`runtest'" 1>&2; :;\
++	else \
++	  echo "WARNING: could not find \`runtest'" 1>&2; :;\
+ 	fi
+ 
+ check-am:
+diff --git a/libstdc++-v3/testsuite/lib/libstdc++.exp b/libstdc++-v3/testsuite/lib/libstdc++.exp
+index abb92bf35..9413ee6b9 100644
+--- a/libstdc++-v3/testsuite/lib/libstdc++.exp
++++ b/libstdc++-v3/testsuite/lib/libstdc++.exp
+@@ -1704,3 +1704,78 @@ proc check_v3_target_nprocs { } {
+ 
+ 
+ set additional_prunes ""
++
++if { [info exists env(GCC_RUNTEST_PARALLELIZE_DIR)] \
++     && [info procs runtest_file_p] != [list] \
++     && [info procs gcc_parallelize_saved_runtest_file_p] == [list] } then {
++    global gcc_runtest_parallelize_counter
++    global gcc_runtest_parallelize_counter_minor
++    global gcc_runtest_parallelize_enable
++    global gcc_runtest_parallelize_dir
++    global gcc_runtest_parallelize_last
++
++    set gcc_runtest_parallelize_counter 0
++    set gcc_runtest_parallelize_counter_minor 0
++    set gcc_runtest_parallelize_enable 1
++    set gcc_runtest_parallelize_dir [getenv GCC_RUNTEST_PARALLELIZE_DIR]
++    set gcc_runtest_parallelize_last 0
++
++    proc gcc_parallel_test_run_p { testcase } {
++	global gcc_runtest_parallelize_counter
++	global gcc_runtest_parallelize_counter_minor
++	global gcc_runtest_parallelize_enable
++	global gcc_runtest_parallelize_dir
++	global gcc_runtest_parallelize_last
++
++	if { $gcc_runtest_parallelize_enable == 0 } {
++	    return 1
++	}
++
++	# Only test the filesystem every 10th iteration
++	incr gcc_runtest_parallelize_counter_minor
++	if { $gcc_runtest_parallelize_counter_minor == 10 } {
++	    set gcc_runtest_parallelize_counter_minor 0
++	}
++	if { $gcc_runtest_parallelize_counter_minor != 1 } {
++	    #verbose -log "gcc_parallel_test_run_p $testcase $gcc_runtest_parallelize_counter $gcc_runtest_parallelize_last"
++	    return $gcc_runtest_parallelize_last
++	}
++
++	set path $gcc_runtest_parallelize_dir/$gcc_runtest_parallelize_counter
++
++	if {![catch {open $path {RDWR CREAT EXCL} 0600} fd]} {
++	    close $fd
++	    set gcc_runtest_parallelize_last 1
++	    #verbose -log "gcc_parallel_test_run_p $testcase $gcc_runtest_parallelize_counter 1"
++	    incr gcc_runtest_parallelize_counter
++	    return 1
++	}
++	set gcc_runtest_parallelize_last 0
++	#verbose -log "gcc_parallel_test_run_p $testcase $gcc_runtest_parallelize_counter 0"
++	incr gcc_runtest_parallelize_counter
++	return 0
++    }
++
++    proc gcc_parallel_test_enable { val } {
++	global gcc_runtest_parallelize_enable
++	set gcc_runtest_parallelize_enable $val
++    }
++
++    rename runtest_file_p gcc_parallelize_saved_runtest_file_p
++    proc runtest_file_p { runtests testcase } {
++	if ![gcc_parallelize_saved_runtest_file_p $runtests $testcase] {
++	    return 0
++	}
++	return [gcc_parallel_test_run_p $testcase]
++    }
++
++} else {
++
++    proc gcc_parallel_test_run_p { testcase } {
++	return 1
++    }
++
++    proc gcc_parallel_test_enable { val } {
++    }
++
++}
+diff --git a/libstdc++-v3/testsuite/libstdc++-abi/abi.exp b/libstdc++-v3/testsuite/libstdc++-abi/abi.exp
+index eea39cf6a..82eb28c82 100644
+--- a/libstdc++-v3/testsuite/libstdc++-abi/abi.exp
++++ b/libstdc++-v3/testsuite/libstdc++-abi/abi.exp
+@@ -18,6 +18,12 @@
+ # this test. Or, hey, if we don't support this kind of symbol
+ # versioning test: don't run it.
+ 
++# Only run whole abi.exp in one instance, serially.
++if ![gcc_parallel_test_run_p abi] {
++    return
++}
++gcc_parallel_test_enable 0
++
+ if { [string match "*-*-darwin*" $target_triplet] } {
+     set lib $blddir/src/.libs/libstdc++.dylib
+ } else { 
+@@ -32,6 +38,7 @@ v3-build_support
+ if { (${v3-symver} == 0) || ![info exists baseline_dir] \
+ 	 || ![file exists $baseline_dir] \
+ 	 || ![file exists $lib] } {
++    gcc_parallel_test_enable 1
+     return
+ }
+ 
+@@ -42,12 +49,13 @@ if ![file exists $baseline_file] {
+     set baseline_file [file join $baseline_dir "baseline_symbols.txt"]
+ }
+ if ![file exists $baseline_file] {
++    gcc_parallel_test_enable 1
+     return
+ }
+ send_log "Checking $lib against $baseline_file\n"
+ 
+ # Figure out what symbols are defined by the active build of the library.
+-remote_exec "build" "$objdir/../scripts/extract_symvers" \
++remote_exec "build" "$blddir/scripts/extract_symvers" \
+     [list $lib "current_symbols.txt"]
+ 
+ # Build the abi_check program.
+@@ -62,3 +70,5 @@ set result [${tool}_load "./abi_check" \
+ 		[list "--check-verbose" "current_symbols.txt" \
+ 		     "baseline_symbols.txt"]]
+ [lindex $result 0] "libstdc++-abi/abi_check"
++
++gcc_parallel_test_enable 1
