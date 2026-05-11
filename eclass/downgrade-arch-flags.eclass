@@ -25,12 +25,10 @@ downgrade_arch_flags() {
 
 	case $(tc-arch) in
 	alpha)
-		if ! tc_version_is_at_least 2.9 ${bver}; then
-			filter-flags '-mcpu=*' '-mtune=*'
-			append-flags '-mcpu=ev5'
-		elif ! tc_version_is_at_least 3.0 ${bver}; then
-			filter-flags '-mcpu=*' '-mtune=*'
-			append-flags '-mcpu=ev6'
+		if tc_version_is_at_least 2.9 ${bver} && ! tc_version_is_at_least 3.0 ${bver}; then
+			replace-cpu-flags ev67 ev6
+		elif ! tc_version_is_at_least 2.9 ${bver} ; then
+			replace-cpu-flags ev67 ev5
 		fi
 		;;
 	loong)
@@ -45,29 +43,9 @@ downgrade_arch_flags() {
 		fi
 		;;
 	mips)
-		if ! tc_version_is_at_least 4.4 ${bver} ; then
-			filter-flags '-march=*' '-mtune=*' '-mips*'
-			if ! tc_version_is_at_least 3.1 ${bver} ; then
-				append-flags '-mips2' '-D_FILE_OFFSET_BITS=64'
-			elif ! tc_version_is_at_least 3.3 ${bver} ; then
-				if [[ ${ABI} == "n64" || ${ABI} == "n32" ]]; then
-					append-flags '-mips3' '-D_FILE_OFFSET_BITS=64'
-				else
-					append-flags '-mips2' '-D_FILE_OFFSET_BITS=64'
-				fi
-			elif ! tc_version_is_at_least 3.4 ${bver} ; then
-				if [[ ${ABI} == "n64" || ${ABI} == "n32" ]]; then
-					append-flags '-march=mips64' '-mtune=mips64' '-D_FILE_OFFSET_BITS=64'
-				else
-					append-flags '-march=mips32' '-mtune=mips32' '-D_FILE_OFFSET_BITS=64'
-				fi
-			else
-				if [[ ${ABI} == "n64" || ${ABI} == "n32" ]]; then
-					append-flags '-march=mips64' '-mtune=mips64'
-				else
-					append-flags '-march=mips32r2' '-mtune=mips32r2'
-				fi
-			fi
+		filter-flags '-march=*' '-mtune=*' '-mips*'
+		if ! tc_version_is_at_least 3.4 ${bver} ; then
+			append-flags '-D_FILE_OFFSET_BITS=64'
 		fi
 		;;
 	ppc64)
@@ -77,14 +55,11 @@ downgrade_arch_flags() {
 		;;
 	s390)
 		if tc_version_is_at_least 4.8 ${bver} && ! tc_version_is_at_least 5 ${bver} ; then
-			filter-flags '-march=*' '-mtune=*'
-			append-flags '-march=z196' '-mtune=z196'
+			replace-cpu-flags z13 z196
 		elif tc_version_is_at_least 4.4 ${bver} && ! tc_version_is_at_least 4.8 ${bver} ; then
-			filter-flags '-march=*' '-mtune=*'
-			append-flags '-march=z10' '-mtune=z10'
+			replace-cpu-flags z13 z10
 		elif tc_version_is_at_least 3.4 ${bver} && ! tc_version_is_at_least 4.4 ${bver} ; then
-			filter-flags '-march=*' '-mtune=*'
-			append-flags '-march=z990' '-mtune=z990'
+			replace-cpu-flags z13 z990
 		elif ! tc_version_is_at_least 3.4 ${bver} ; then
 			filter-flags '-march=*' '-mtune=*'
 		fi
@@ -94,11 +69,10 @@ downgrade_arch_flags() {
 			filter-flags -pipe
 		fi
 		if ! tc_version_is_at_least 3.1 ${bver} ; then
-			filter-flags '-mcpu=*' '-mtune=*'
 			if [[ ${ABI} == "sparc64" ]]; then
-				append-flags '-mcpu=v9'
+				replace-cpu-flags ultrasparc v9
 			else
-				append-flags '-mcpu=v8'
+				replace-cpu-flags ultrasparc v8
 			fi
 		fi
 		;;

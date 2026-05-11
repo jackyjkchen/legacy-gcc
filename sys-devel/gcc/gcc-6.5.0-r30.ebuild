@@ -128,7 +128,7 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/108_pr96197.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/109_pr95171.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/110_pr96097.patch
-	eapply "${FILESDIR}"/${PV}/postrelease/111_pr94780.patch
+	[[ $(tc-arch) != "mips" ]] && eapply "${FILESDIR}"/${PV}/postrelease/111_pr94780.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/112_pr94438.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/113_pr93073.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/114_pr103392.patch
@@ -279,6 +279,7 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/259_pr111039.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/260_pr115608.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/261_pr82774-100193.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/262_pr79150.patch
 
 	if use test ; then
 		rm -rf gcc/testsuite/gcc.c-torture/execute/vfprintf-chk-1.c gcc/testsuite/gcc.c-torture/execute/vprintf-chk-1.c
