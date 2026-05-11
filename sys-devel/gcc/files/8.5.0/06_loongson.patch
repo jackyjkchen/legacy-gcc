@@ -1,0 +1,3535 @@
+diff --git a/gcc/config.gcc b/gcc/config.gcc
+index 3545e425e..f292ebf67 100644
+--- a/gcc/config.gcc
++++ b/gcc/config.gcc
+@@ -439,7 +439,7 @@ microblaze*-*-*)
+         ;;
+ mips*-*-*)
+ 	cpu_type=mips
+-	extra_headers="loongson.h msa.h"
++	extra_headers="loongson.h loongson-mmiintrin.h msa.h"
+ 	extra_objs="frame-header-opt.o"
+ 	extra_options="${extra_options} g.opt fused-madd.opt mips/mips-tables.opt"
+ 	;;
+diff --git a/gcc/config/mips/gs264e.md b/gcc/config/mips/gs264e.md
+new file mode 100644
+index 000000000..8f1f9e17e
+--- /dev/null
++++ b/gcc/config/mips/gs264e.md
+@@ -0,0 +1,133 @@
++;; Pipeline model for Loongson gs264e cores.
++
++;; Copyright (C) 2018 Free Software Foundation, Inc.
++;;
++;; This file is part of GCC.
++;;
++;; GCC is free software; you can redistribute it and/or modify it
++;; under the terms of the GNU General Public License as published
++;; by the Free Software Foundation; either version 3, or (at your
++;; option) any later version.
++;;
++;; GCC is distributed in the hope that it will be useful, but WITHOUT
++;; ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
++;; or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public
++;; License for more details.
++;;
++;; You should have received a copy of the GNU General Public License
++;; along with GCC; see the file COPYING3.  If not see
++;; <http://www.gnu.org/licenses/>.
++
++;; Uncomment the following line to output automata for debugging.
++;; (automata_option "v")
++
++;; Automaton for integer instructions.
++(define_automaton "gs264e_a_alu")
++
++;; Automaton for floating-point instructions.
++(define_automaton "gs264e_a_falu")
++
++;; Automaton for memory operations.
++(define_automaton "gs264e_a_mem")
++
++;; Describe the resources.
++
++(define_cpu_unit "gs264e_alu1" "gs264e_a_alu")
++(define_cpu_unit "gs264e_mem1" "gs264e_a_mem")
++(define_cpu_unit "gs264e_falu1" "gs264e_a_falu")
++
++;; Describe instruction reservations.
++
++(define_insn_reservation "gs264e_arith" 1
++  (and (eq_attr "cpu" "gs264e")
++       (eq_attr "type" "arith,clz,const,logical,
++			move,nop,shift,signext,slt"))
++  "gs264e_alu1")
++
++(define_insn_reservation "gs264e_branch" 1
++  (and (eq_attr "cpu" "gs264e")
++       (eq_attr "type" "branch,jump,call,condmove,trap"))
++  "gs264e_alu1")
++
++(define_insn_reservation "gs264e_mfhilo" 1
++  (and (eq_attr "cpu" "gs264e")
++       (eq_attr "type" "mfhi,mflo,mthi,mtlo"))
++  "gs264e_alu1")
++
++;; Operation imul3nc is fully pipelined.
++(define_insn_reservation "gs264e_imul3nc" 7
++  (and (eq_attr "cpu" "gs264e")
++       (eq_attr "type" "imul3nc"))
++  "gs264e_alu1")
++
++(define_insn_reservation "gs264e_imul" 7
++  (and (eq_attr "cpu" "gs264e")
++       (eq_attr "type" "imul,imadd"))
++  "gs264e_alu1")
++
++(define_insn_reservation "gs264e_idiv_si" 12
++  (and (eq_attr "cpu" "gs264e")
++       (and (eq_attr "type" "idiv")
++	    (eq_attr "mode" "SI")))
++  "gs264e_alu1")
++
++(define_insn_reservation "gs264e_idiv_di" 25
++  (and (eq_attr "cpu" "gs264e")
++       (and (eq_attr "type" "idiv")
++	    (eq_attr "mode" "DI")))
++  "gs264e_alu1")
++
++(define_insn_reservation "gs264e_load" 4
++  (and (eq_attr "cpu" "gs264e")
++       (eq_attr "type" "load"))
++  "gs264e_mem1")
++
++(define_insn_reservation "gs264e_fpload" 4
++  (and (eq_attr "cpu" "gs264e")
++       (eq_attr "type" "load,mfc,mtc"))
++  "gs264e_mem1")
++
++(define_insn_reservation "gs264e_prefetch" 0
++  (and (eq_attr "cpu" "gs264e")
++       (eq_attr "type" "prefetch,prefetchx"))
++  "gs264e_mem1")
++
++(define_insn_reservation "gs264e_store" 0
++  (and (eq_attr "cpu" "gs264e")
++       (eq_attr "type" "store,fpstore,fpidxstore"))
++  "gs264e_mem1")
++
++(define_insn_reservation "gs264e_fadd" 4
++  (and (eq_attr "cpu" "gs264e")
++       (eq_attr "type" "fadd,fmul,fmadd"))
++  "gs264e_falu1")
++
++(define_insn_reservation "gs264e_fcmp" 2
++  (and (eq_attr "cpu" "gs264e")
++       (eq_attr "type" "fabs,fcmp,fmove,fneg"))
++  "gs264e_falu1")
++
++(define_insn_reservation "gs264e_fcvt" 4
++  (and (eq_attr "cpu" "gs264e")
++       (eq_attr "type" "fcvt"))
++  "gs264e_falu1")
++
++(define_insn_reservation "gs264e_fdiv_sf" 12
++  (and (eq_attr "cpu" "gs264e")
++       (and (eq_attr "type" "fdiv,frdiv,fsqrt,frsqrt")
++	    (eq_attr "mode" "SF")))
++  "gs264e_falu1")
++
++(define_insn_reservation "gs264e_fdiv_df" 19
++  (and (eq_attr "cpu" "gs264e")
++       (and (eq_attr "type" "fdiv,frdiv,fsqrt,frsqrt")
++	    (eq_attr "mode" "DF")))
++  "gs264e_falu1")
++
++;; Force single-dispatch for unknown or multi.
++(define_insn_reservation "gs264e_unknown" 1
++  (and (eq_attr "cpu" "gs264e")
++       (eq_attr "type" "unknown,multi,atomic,syncloop"))
++  "gs264e_alu1 + gs264e_falu1 + gs264e_mem1")
++
++;; End of DFA-based pipeline description for gs264e
+diff --git a/gcc/config/mips/gs464.md b/gcc/config/mips/gs464.md
+new file mode 100644
+index 000000000..82efb6678
+--- /dev/null
++++ b/gcc/config/mips/gs464.md
+@@ -0,0 +1,137 @@
++;; Pipeline model for Loongson gs464 cores.
++
++;; Copyright (C) 2011-2018 Free Software Foundation, Inc.
++;;
++;; This file is part of GCC.
++;;
++;; GCC is free software; you can redistribute it and/or modify it
++;; under the terms of the GNU General Public License as published
++;; by the Free Software Foundation; either version 3, or (at your
++;; option) any later version.
++;;
++;; GCC is distributed in the hope that it will be useful, but WITHOUT
++;; ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
++;; or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public
++;; License for more details.
++;;
++;; You should have received a copy of the GNU General Public License
++;; along with GCC; see the file COPYING3.  If not see
++;; <http://www.gnu.org/licenses/>.
++
++;; Uncomment the following line to output automata for debugging.
++;; (automata_option "v")
++
++;; Automaton for integer instructions.
++(define_automaton "gs464_a_alu")
++
++;; Automaton for floating-point instructions.
++(define_automaton "gs464_a_falu")
++
++;; Automaton for memory operations.
++(define_automaton "gs464_a_mem")
++
++;; Describe the resources.
++
++(define_cpu_unit "gs464_alu1" "gs464_a_alu")
++(define_cpu_unit "gs464_alu2" "gs464_a_alu")
++(define_cpu_unit "gs464_mem" "gs464_a_mem")
++(define_cpu_unit "gs464_falu1" "gs464_a_falu")
++(define_cpu_unit "gs464_falu2" "gs464_a_falu")
++
++;; Describe instruction reservations.
++
++(define_insn_reservation "gs464_arith" 1
++  (and (eq_attr "cpu" "gs464")
++       (eq_attr "type" "arith,clz,const,logical,
++			move,nop,shift,signext,slt"))
++  "gs464_alu1 | gs464_alu2")
++
++(define_insn_reservation "gs464_branch" 1
++  (and (eq_attr "cpu" "gs464")
++       (eq_attr "type" "branch,jump,call,condmove,trap"))
++  "gs464_alu1")
++
++(define_insn_reservation "gs464_mfhilo" 1
++  (and (eq_attr "cpu" "gs464")
++       (eq_attr "type" "mfhi,mflo,mthi,mtlo"))
++  "gs464_alu2")
++
++;; Operation imul3nc is fully pipelined.
++(define_insn_reservation "gs464_imul3nc" 5
++  (and (eq_attr "cpu" "gs464")
++       (eq_attr "type" "imul3nc"))
++  "gs464_alu2")
++
++(define_insn_reservation "gs464_imul" 7
++  (and (eq_attr "cpu" "gs464")
++       (eq_attr "type" "imul,imadd"))
++  "gs464_alu2 * 7")
++
++(define_insn_reservation "gs464_idiv_si" 12
++  (and (eq_attr "cpu" "gs464")
++       (and (eq_attr "type" "idiv")
++	    (eq_attr "mode" "SI")))
++  "gs464_alu2 * 12")
++
++(define_insn_reservation "gs464_idiv_di" 25
++  (and (eq_attr "cpu" "gs464")
++       (and (eq_attr "type" "idiv")
++	    (eq_attr "mode" "DI")))
++  "gs464_alu2 * 25")
++
++(define_insn_reservation "gs464_load" 3
++  (and (eq_attr "cpu" "gs464")
++       (eq_attr "type" "load"))
++  "gs464_mem")
++
++(define_insn_reservation "gs464_fpload" 4
++  (and (eq_attr "cpu" "gs464")
++       (eq_attr "type" "load,mfc,mtc"))
++  "gs464_mem")
++
++(define_insn_reservation "gs464_prefetch" 0
++  (and (eq_attr "cpu" "gs464")
++       (eq_attr "type" "prefetch,prefetchx"))
++  "gs464_mem")
++
++(define_insn_reservation "gs464_store" 0
++  (and (eq_attr "cpu" "gs464")
++       (eq_attr "type" "store,fpstore,fpidxstore"))
++  "gs464_mem")
++
++;; All the fp operations can be executed in FALU1.  Only fp add,
++;; sub, mul, madd can be executed in FALU2.  Try FALU2 firstly.
++(define_insn_reservation "gs464_fadd" 6
++  (and (eq_attr "cpu" "gs464")
++       (eq_attr "type" "fadd,fmul,fmadd"))
++  "gs464_falu2 | gs464_falu1")
++
++(define_insn_reservation "gs464_fcmp" 2
++  (and (eq_attr "cpu" "gs464")
++       (eq_attr "type" "fabs,fcmp,fmove,fneg"))
++  "gs464_falu1")
++
++(define_insn_reservation "gs464_fcvt" 4
++  (and (eq_attr "cpu" "gs464")
++       (eq_attr "type" "fcvt"))
++  "gs464_falu1")
++
++(define_insn_reservation "gs464_fdiv_sf" 12
++  (and (eq_attr "cpu" "gs464")
++       (and (eq_attr "type" "fdiv,frdiv,fsqrt,frsqrt")
++	    (eq_attr "mode" "SF")))
++  "gs464_falu1 * 12")
++
++(define_insn_reservation "gs464_fdiv_df" 19
++  (and (eq_attr "cpu" "gs464")
++       (and (eq_attr "type" "fdiv,frdiv,fsqrt,frsqrt")
++	    (eq_attr "mode" "DF")))
++  "gs464_falu1 * 19")
++
++;; Force single-dispatch for unknown or multi.
++(define_insn_reservation "gs464_unknown" 1
++  (and (eq_attr "cpu" "gs464")
++       (eq_attr "type" "unknown,multi,atomic,syncloop"))
++  "gs464_alu1 + gs464_alu2 + gs464_falu1 + gs464_falu2 + gs464_mem")
++
++;; End of DFA-based pipeline description for gs464
+diff --git a/gcc/config/mips/gs464e.md b/gcc/config/mips/gs464e.md
+new file mode 100644
+index 000000000..60e0e6b04
+--- /dev/null
++++ b/gcc/config/mips/gs464e.md
+@@ -0,0 +1,137 @@
++;; Pipeline model for Loongson gs464e cores.
++
++;; Copyright (C) 2018 Free Software Foundation, Inc.
++;;
++;; This file is part of GCC.
++;;
++;; GCC is free software; you can redistribute it and/or modify it
++;; under the terms of the GNU General Public License as published
++;; by the Free Software Foundation; either version 3, or (at your
++;; option) any later version.
++;;
++;; GCC is distributed in the hope that it will be useful, but WITHOUT
++;; ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
++;; or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public
++;; License for more details.
++;;
++;; You should have received a copy of the GNU General Public License
++;; along with GCC; see the file COPYING3.  If not see
++;; <http://www.gnu.org/licenses/>.
++
++;; Uncomment the following line to output automata for debugging.
++;; (automata_option "v")
++
++;; Automaton for integer instructions.
++(define_automaton "gs464e_a_alu")
++
++;; Automaton for floating-point instructions.
++(define_automaton "gs464e_a_falu")
++
++;; Automaton for memory operations.
++(define_automaton "gs464e_a_mem")
++
++;; Describe the resources.
++
++(define_cpu_unit "gs464e_alu1" "gs464e_a_alu")
++(define_cpu_unit "gs464e_alu2" "gs464e_a_alu")
++(define_cpu_unit "gs464e_mem1" "gs464e_a_mem")
++(define_cpu_unit "gs464e_mem2" "gs464e_a_mem")
++(define_cpu_unit "gs464e_falu1" "gs464e_a_falu")
++(define_cpu_unit "gs464e_falu2" "gs464e_a_falu")
++
++;; Describe instruction reservations.
++
++(define_insn_reservation "gs464e_arith" 1
++  (and (eq_attr "cpu" "gs464e")
++       (eq_attr "type" "arith,clz,const,logical,
++			move,nop,shift,signext,slt"))
++  "gs464e_alu1 | gs464e_alu2")
++
++(define_insn_reservation "gs464e_branch" 1
++  (and (eq_attr "cpu" "gs464e")
++       (eq_attr "type" "branch,jump,call,condmove,trap"))
++  "gs464e_alu1 | gs464e_alu2")
++
++(define_insn_reservation "gs464e_mfhilo" 1
++  (and (eq_attr "cpu" "gs464e")
++       (eq_attr "type" "mfhi,mflo,mthi,mtlo"))
++  "gs464e_alu1 | gs464e_alu2")
++
++;; Operation imul3nc is fully pipelined.
++(define_insn_reservation "gs464e_imul3nc" 5
++  (and (eq_attr "cpu" "gs464e")
++       (eq_attr "type" "imul3nc"))
++  "gs464e_alu1 | gs464e_alu2")
++
++(define_insn_reservation "gs464e_imul" 7
++  (and (eq_attr "cpu" "gs464e")
++       (eq_attr "type" "imul,imadd"))
++  "gs464e_alu1 | gs464e_alu2")
++
++(define_insn_reservation "gs464e_idiv_si" 12
++  (and (eq_attr "cpu" "gs464e")
++       (and (eq_attr "type" "idiv")
++	    (eq_attr "mode" "SI")))
++  "gs464e_alu1 | gs464e_alu2")
++
++(define_insn_reservation "gs464e_idiv_di" 25
++  (and (eq_attr "cpu" "gs464e")
++       (and (eq_attr "type" "idiv")
++	    (eq_attr "mode" "DI")))
++  "gs464e_alu1 | gs464e_alu2")
++
++(define_insn_reservation "gs464e_load" 4
++  (and (eq_attr "cpu" "gs464e")
++       (eq_attr "type" "load"))
++  "gs464e_mem1 | gs464e_mem2")
++
++(define_insn_reservation "gs464e_fpload" 5
++  (and (eq_attr "cpu" "gs464e")
++       (eq_attr "type" "load,mfc,mtc"))
++  "gs464e_mem1 | gs464e_mem2")
++
++(define_insn_reservation "gs464e_prefetch" 0
++  (and (eq_attr "cpu" "gs464e")
++       (eq_attr "type" "prefetch,prefetchx"))
++  "gs464e_mem1 | gs464e_mem2")
++
++(define_insn_reservation "gs464e_store" 0
++  (and (eq_attr "cpu" "gs464e")
++       (eq_attr "type" "store,fpstore,fpidxstore"))
++  "gs464e_mem1 | gs464e_mem2")
++
++(define_insn_reservation "gs464e_fadd" 4
++  (and (eq_attr "cpu" "gs464e")
++       (eq_attr "type" "fadd,fmul,fmadd"))
++  "gs464e_falu1 | gs464e_falu2")
++
++(define_insn_reservation "gs464e_fcmp" 2
++  (and (eq_attr "cpu" "gs464e")
++       (eq_attr "type" "fabs,fcmp,fmove,fneg"))
++  "gs464e_falu1 | gs464e_falu2")
++
++(define_insn_reservation "gs464e_fcvt" 4
++  (and (eq_attr "cpu" "gs464e")
++       (eq_attr "type" "fcvt"))
++  "gs464e_falu1 | gs464e_falu2")
++
++(define_insn_reservation "gs464e_fdiv_sf" 12
++  (and (eq_attr "cpu" "gs464e")
++       (and (eq_attr "type" "fdiv,frdiv,fsqrt,frsqrt")
++	    (eq_attr "mode" "SF")))
++  "gs464e_falu1 | gs464e_falu2")
++
++(define_insn_reservation "gs464e_fdiv_df" 19
++  (and (eq_attr "cpu" "gs464e")
++       (and (eq_attr "type" "fdiv,frdiv,fsqrt,frsqrt")
++	    (eq_attr "mode" "DF")))
++  "gs464e_falu1 | gs464e_falu2")
++
++;; Force single-dispatch for unknown or multi.
++(define_insn_reservation "gs464e_unknown" 1
++  (and (eq_attr "cpu" "gs464e")
++       (eq_attr "type" "unknown,multi,atomic,syncloop"))
++  "gs464e_alu1 + gs464e_alu2 + gs464e_falu1
++   + gs464e_falu2 + gs464e_mem1 + gs464e_mem2")
++
++;; End of DFA-based pipeline description for gs464e
+diff --git a/gcc/config/mips/loongson.md b/gcc/config/mips/loongson-mmi.md
+similarity index 88%
+rename from gcc/config/mips/loongson.md
+rename to gcc/config/mips/loongson-mmi.md
+index 38912acc8..d8da3534a 100644
+--- a/gcc/config/mips/loongson.md
++++ b/gcc/config/mips/loongson-mmi.md
+@@ -102,7 +102,7 @@
+ (define_expand "mov<mode>"
+   [(set (match_operand:VWHB 0)
+ 	(match_operand:VWHB 1))]
+-  "TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS"
++  "TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI"
+ {
+   if (mips_legitimize_move (<MODE>mode, operands[0], operands[1]))
+     DONE;
+@@ -112,7 +112,7 @@
+ (define_insn "mov<mode>_internal"
+   [(set (match_operand:VWHB 0 "nonimmediate_operand" "=m,f,d,f,  d,  m,  d")
+ 	(match_operand:VWHB 1 "move_operand"          "f,m,f,dYG,dYG,dYG,m"))]
+-  "TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS"
++  "TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI"
+   { return mips_output_move (operands[0], operands[1]); }
+   [(set_attr "move_type" "fpstore,fpload,mfc,mtc,move,store,load")
+    (set_attr "mode" "DI")])
+@@ -122,7 +122,7 @@
+ (define_expand "vec_init<mode><unitmode>"
+   [(set (match_operand:VWHB 0 "register_operand")
+ 	(match_operand 1 ""))]
+-  "TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS"
++  "TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI"
+ {
+   mips_expand_vector_init (operands[0], operands[1]);
+   DONE;
+@@ -135,7 +135,7 @@
+ 	(unspec:VHB [(truncate:<V_inner>
+ 		       (match_operand:DI 1 "reg_or_0_operand" "Jd"))]
+ 		    UNSPEC_LOONGSON_VINIT))]
+-  "TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS"
++  "TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI"
+   "dmtc1\t%z1,%0"
+   [(set_attr "move_type" "mtc")
+    (set_attr "mode" "DI")])
+@@ -146,7 +146,7 @@
+ 	(vec_concat:V2SI
+ 	  (match_operand:SI 1 "register_operand" "f")
+ 	  (match_operand:SI 2 "register_operand" "f")))]
+-  "TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS"
++  "TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI"
+   "punpcklwd\t%0,%1,%2"
+   [(set_attr "type" "fcvt")])
+ 
+@@ -160,7 +160,7 @@
+ 	  (match_operand:VWH 1 "register_operand" "f"))
+ 	 (ss_truncate:<V_squash>
+ 	  (match_operand:VWH 2 "register_operand" "f"))))]
+-  "TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS"
++  "TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI"
+   "packss<V_squash_double_suffix>\t%0,%1,%2"
+   [(set_attr "type" "fmul")])
+ 
+@@ -172,7 +172,7 @@
+ 	  (match_operand:VH 1 "register_operand" "f"))
+ 	 (us_truncate:<V_squash>
+ 	  (match_operand:VH 2 "register_operand" "f"))))]
+-  "TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS"
++  "TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI"
+   "packus<V_squash_double_suffix>\t%0,%1,%2"
+   [(set_attr "type" "fmul")])
+ 
+@@ -181,7 +181,7 @@
+   [(set (match_operand:VWHB 0 "register_operand" "=f")
+         (plus:VWHB (match_operand:VWHB 1 "register_operand" "f")
+ 		   (match_operand:VWHB 2 "register_operand" "f")))]
+-  "TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS"
++  "TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI"
+   "padd<V_suffix>\t%0,%1,%2"
+   [(set_attr "type" "fadd")])
+ 
+@@ -196,7 +196,7 @@
+         (unspec:DI [(match_operand:DI 1 "register_operand" "f")
+ 		    (match_operand:DI 2 "register_operand" "f")]
+ 		   UNSPEC_LOONGSON_PADDD))]
+-  "TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS"
++  "TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI"
+   "paddd\t%0,%1,%2"
+   [(set_attr "type" "fadd")])
+ 
+@@ -205,7 +205,7 @@
+   [(set (match_operand:VHB 0 "register_operand" "=f")
+         (ss_plus:VHB (match_operand:VHB 1 "register_operand" "f")
+ 		     (match_operand:VHB 2 "register_operand" "f")))]
+-  "TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS"
++  "TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI"
+   "padds<V_suffix>\t%0,%1,%2"
+   [(set_attr "type" "fadd")])
+ 
+@@ -214,7 +214,7 @@
+   [(set (match_operand:VHB 0 "register_operand" "=f")
+         (us_plus:VHB (match_operand:VHB 1 "register_operand" "f")
+ 		     (match_operand:VHB 2 "register_operand" "f")))]
+-  "TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS"
++  "TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI"
+   "paddus<V_suffix>\t%0,%1,%2"
+   [(set_attr "type" "fadd")])
+ 
+@@ -224,7 +224,7 @@
+         (and:VWHBDI
+ 	 (not:VWHBDI (match_operand:VWHBDI 1 "register_operand" "f"))
+ 	 (match_operand:VWHBDI 2 "register_operand" "f")))]
+-  "TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS"
++  "TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI"
+   "pandn\t%0,%1,%2"
+   [(set_attr "type" "fmul")])
+ 
+@@ -233,7 +233,7 @@
+   [(set (match_operand:VWHB 0 "register_operand" "=f")
+ 	(and:VWHB (match_operand:VWHB 1 "register_operand" "f")
+ 		  (match_operand:VWHB 2 "register_operand" "f")))]
+-  "TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS"
++  "TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI"
+   "and\t%0,%1,%2"
+   [(set_attr "type" "fmul")])
+ 
+@@ -242,7 +242,7 @@
+   [(set (match_operand:VWHB 0 "register_operand" "=f")
+ 	(ior:VWHB (match_operand:VWHB 1 "register_operand" "f")
+ 		  (match_operand:VWHB 2 "register_operand" "f")))]
+-  "TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS"
++  "TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI"
+   "or\t%0,%1,%2"
+   [(set_attr "type" "fcvt")])
+ 
+@@ -251,7 +251,7 @@
+   [(set (match_operand:VWHB 0 "register_operand" "=f")
+ 	(xor:VWHB (match_operand:VWHB 1 "register_operand" "f")
+ 		  (match_operand:VWHB 2 "register_operand" "f")))]
+-  "TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS"
++  "TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI"
+   "xor\t%0,%1,%2"
+   [(set_attr "type" "fmul")])
+ 
+@@ -261,7 +261,7 @@
+ 	(and:VWHB
+ 	  (not:VWHB (match_operand:VWHB 1 "register_operand" "f"))
+ 	  (not:VWHB (match_operand:VWHB 2 "register_operand" "f"))))]
+-  "TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS"
++  "TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI"
+   "nor\t%0,%1,%2"
+   [(set_attr "type" "fmul")])
+ 
+@@ -269,7 +269,7 @@
+ (define_insn "one_cmpl<mode>2"
+   [(set (match_operand:VWHB 0 "register_operand" "=f")
+ 	(not:VWHB (match_operand:VWHB 1 "register_operand" "f")))]
+-  "TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS"
++  "TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI"
+   "nor\t%0,%1,%1"
+   [(set_attr "type" "fmul")])
+ 
+@@ -279,7 +279,7 @@
+         (unspec:VHB [(match_operand:VHB 1 "register_operand" "f")
+ 		     (match_operand:VHB 2 "register_operand" "f")]
+ 		    UNSPEC_LOONGSON_PAVG))]
+-  "TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS"
++  "TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI"
+   "pavg<V_suffix>\t%0,%1,%2"
+   [(set_attr "type" "fadd")])
+ 
+@@ -289,7 +289,7 @@
+         (unspec:VWHB [(match_operand:VWHB 1 "register_operand" "f")
+ 		      (match_operand:VWHB 2 "register_operand" "f")]
+ 		     UNSPEC_LOONGSON_PCMPEQ))]
+-  "TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS"
++  "TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI"
+   "pcmpeq<V_suffix>\t%0,%1,%2"
+   [(set_attr "type" "fadd")])
+ 
+@@ -299,7 +299,7 @@
+         (unspec:VWHB [(match_operand:VWHB 1 "register_operand" "f")
+ 		      (match_operand:VWHB 2 "register_operand" "f")]
+ 		     UNSPEC_LOONGSON_PCMPGT))]
+-  "TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS"
++  "TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI"
+   "pcmpgt<V_suffix>\t%0,%1,%2"
+   [(set_attr "type" "fadd")])
+ 
+@@ -309,7 +309,7 @@
+         (unspec:V4HI [(match_operand:V4HI 1 "register_operand" "f")
+ 		      (match_operand:SI 2 "register_operand" "f")]
+ 		   UNSPEC_LOONGSON_PEXTR))]
+-  "TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS"
++  "TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI"
+   "pextrh\t%0,%1,%2"
+   [(set_attr "type" "fcvt")])
+ 
+@@ -322,7 +322,7 @@
+ 	    (match_operand:V4HI 2 "register_operand" "f"))
+ 	  (parallel [(const_int 4) (const_int 1)
+ 		     (const_int 2) (const_int 3)])))]
+-  "TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS"
++  "TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI"
+   "pinsrh_0\t%0,%1,%2"
+   [(set_attr "type" "fdiv")])
+ 
+@@ -334,7 +334,7 @@
+ 	    (match_operand:V4HI 2 "register_operand" "f"))
+ 	  (parallel [(const_int 0) (const_int 4)
+ 		     (const_int 2) (const_int 3)])))]
+-  "TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS"
++  "TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI"
+   "pinsrh_1\t%0,%1,%2"
+   [(set_attr "type" "fdiv")])
+ 
+@@ -346,7 +346,7 @@
+ 	    (match_operand:V4HI 2 "register_operand" "f"))
+ 	  (parallel [(const_int 0) (const_int 1)
+ 		     (const_int 4) (const_int 3)])))]
+-  "TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS"
++  "TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI"
+   "pinsrh_2\t%0,%1,%2"
+   [(set_attr "type" "fdiv")])
+ 
+@@ -358,7 +358,7 @@
+ 	    (match_operand:V4HI 2 "register_operand" "f"))
+ 	  (parallel [(const_int 0) (const_int 1)
+ 		     (const_int 2) (const_int 4)])))]
+-  "TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS"
++  "TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI"
+   "pinsrh_3\t%0,%1,%2"
+   [(set_attr "type" "fdiv")])
+ 
+@@ -368,7 +368,7 @@
+ 		      (match_operand:SI 2 "register_operand" "f")
+ 		      (match_operand:SI 3 "const_0_to_3_operand" "")]
+ 		     UNSPEC_LOONGSON_PINSRH))]
+-  "TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS"
++  "TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI"
+   "pinsrh_%3\t%0,%1,%2"
+   [(set_attr "type" "fdiv")])
+ 
+@@ -378,11 +378,11 @@
+ 		      (match_operand:HI 2 "register_operand" "f")
+ 		      (match_operand:SI 3 "const_0_to_3_operand" "")]
+ 		     UNSPEC_LOONGSON_PINSRH))]
+-  "TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS"
++  "TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI"
+ {
+   rtx ext = gen_reg_rtx (SImode);
+-  emit_move_insn (ext, gen_lowpart (SImode, operands[1]));
+-  operands[1] = ext;
++  emit_move_insn (ext, gen_lowpart (SImode, operands[2]));
++  operands[2] = ext;
+ })
+ 
+ ;; Multiply and add packed integers.
+@@ -391,7 +391,7 @@
+         (unspec:V2SI [(match_operand:V4HI 1 "register_operand" "f")
+ 		      (match_operand:V4HI 2 "register_operand" "f")]
+ 		     UNSPEC_LOONGSON_PMADD))]
+-  "TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS"
++  "TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI"
+   "pmaddhw\t%0,%1,%2"
+   [(set_attr "type" "fmul")])
+ 
+@@ -400,7 +400,7 @@
+    (match_operand:V4HI 1 "register_operand" "")
+    (match_operand:V4HI 2 "register_operand" "")
+    (match_operand:V2SI 3 "register_operand" "")]
+-  "TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS"
++  "TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI"
+ {
+   rtx t = gen_reg_rtx (V2SImode);
+   emit_insn (gen_loongson_pmaddhw (t, operands[1], operands[2]));
+@@ -413,7 +413,7 @@
+   [(set (match_operand:V4HI 0 "register_operand" "=f")
+         (smax:V4HI (match_operand:V4HI 1 "register_operand" "f")
+ 		   (match_operand:V4HI 2 "register_operand" "f")))]
+-  "TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS"
++  "TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI"
+   "pmaxsh\t%0,%1,%2"
+   [(set_attr "type" "fadd")])
+ 
+@@ -421,7 +421,7 @@
+   [(match_operand:VWB 0 "register_operand" "")
+    (match_operand:VWB 1 "register_operand" "")
+    (match_operand:VWB 2 "register_operand" "")]
+-  "TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS"
++  "TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI"
+ {
+   mips_expand_vec_minmax (operands[0], operands[1], operands[2],
+ 			  gen_loongson_pcmpgt<V_suffix>, false);
+@@ -433,7 +433,7 @@
+   [(set (match_operand:V8QI 0 "register_operand" "=f")
+         (umax:V8QI (match_operand:V8QI 1 "register_operand" "f")
+ 		   (match_operand:V8QI 2 "register_operand" "f")))]
+-  "TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS"
++  "TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI"
+   "pmaxub\t%0,%1,%2"
+   [(set_attr "type" "fadd")])
+ 
+@@ -442,7 +442,7 @@
+   [(set (match_operand:V4HI 0 "register_operand" "=f")
+         (smin:V4HI (match_operand:V4HI 1 "register_operand" "f")
+ 		   (match_operand:V4HI 2 "register_operand" "f")))]
+-  "TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS"
++  "TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI"
+   "pminsh\t%0,%1,%2"
+   [(set_attr "type" "fadd")])
+ 
+@@ -450,7 +450,7 @@
+   [(match_operand:VWB 0 "register_operand" "")
+    (match_operand:VWB 1 "register_operand" "")
+    (match_operand:VWB 2 "register_operand" "")]
+-  "TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS"
++  "TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI"
+ {
+   mips_expand_vec_minmax (operands[0], operands[1], operands[2],
+ 			  gen_loongson_pcmpgt<V_suffix>, true);
+@@ -462,7 +462,7 @@
+   [(set (match_operand:V8QI 0 "register_operand" "=f")
+         (umin:V8QI (match_operand:V8QI 1 "register_operand" "f")
+ 		   (match_operand:V8QI 2 "register_operand" "f")))]
+-  "TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS"
++  "TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI"
+   "pminub\t%0,%1,%2"
+   [(set_attr "type" "fadd")])
+ 
+@@ -471,7 +471,7 @@
+   [(set (match_operand:VB 0 "register_operand" "=f")
+         (unspec:VB [(match_operand:VB 1 "register_operand" "f")]
+ 		   UNSPEC_LOONGSON_PMOVMSK))]
+-  "TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS"
++  "TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI"
+   "pmovmsk<V_suffix>\t%0,%1"
+   [(set_attr "type" "fabs")])
+ 
+@@ -481,7 +481,7 @@
+         (unspec:VH [(match_operand:VH 1 "register_operand" "f")
+ 		    (match_operand:VH 2 "register_operand" "f")]
+ 		   UNSPEC_LOONGSON_PMULHU))]
+-  "TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS"
++  "TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI"
+   "pmulhu<V_suffix>\t%0,%1,%2"
+   [(set_attr "type" "fmul")])
+ 
+@@ -491,7 +491,7 @@
+         (unspec:VH [(match_operand:VH 1 "register_operand" "f")
+ 		    (match_operand:VH 2 "register_operand" "f")]
+ 		   UNSPEC_LOONGSON_PMULH))]
+-  "TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS"
++  "TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI"
+   "pmulh<V_suffix>\t%0,%1,%2"
+   [(set_attr "type" "fmul")])
+ 
+@@ -500,7 +500,7 @@
+   [(set (match_operand:VH 0 "register_operand" "=f")
+         (mult:VH (match_operand:VH 1 "register_operand" "f")
+                  (match_operand:VH 2 "register_operand" "f")))]
+-  "TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS"
++  "TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI"
+   "pmull<V_suffix>\t%0,%1,%2"
+   [(set_attr "type" "fmul")])
+ 
+@@ -510,7 +510,7 @@
+         (unspec:DI [(match_operand:VW 1 "register_operand" "f")
+ 		    (match_operand:VW 2 "register_operand" "f")]
+ 		   UNSPEC_LOONGSON_PMULU))]
+-  "TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS"
++  "TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI"
+   "pmulu<V_suffix>\t%0,%1,%2"
+   [(set_attr "type" "fmul")])
+ 
+@@ -520,7 +520,7 @@
+         (unspec:VB [(match_operand:VB 1 "register_operand" "f")
+ 		    (match_operand:VB 2 "register_operand" "f")]
+ 		   UNSPEC_LOONGSON_PASUBUB))]
+-  "TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS"
++  "TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI"
+   "pasubub\t%0,%1,%2"
+   [(set_attr "type" "fadd")])
+ 
+@@ -529,7 +529,7 @@
+   [(set (match_operand:<V_stretch_half> 0 "register_operand" "=f")
+         (unspec:<V_stretch_half> [(match_operand:VB 1 "register_operand" "f")]
+ 				 UNSPEC_LOONGSON_BIADD))]
+-  "TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS"
++  "TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI"
+   "biadd\t%0,%1"
+   [(set_attr "type" "fabs")])
+ 
+@@ -537,7 +537,7 @@
+   [(set (match_operand:V8QI 0 "register_operand" "=f")
+ 	(unspec:V8QI [(match_operand:V8QI 1 "register_operand" "f")]
+ 		     UNSPEC_LOONGSON_BIADD))]
+-  "TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS"
++  "TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI"
+   "biadd\t%0,%1"
+   [(set_attr "type" "fabs")])
+ 
+@@ -547,7 +547,7 @@
+         (unspec:<V_stretch_half> [(match_operand:VB 1 "register_operand" "f")
+ 				  (match_operand:VB 2 "register_operand" "f")]
+ 				 UNSPEC_LOONGSON_PSADBH))]
+-  "TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS"
++  "TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI"
+   "pasubub\t%0,%1,%2;biadd\t%0,%0"
+   [(set_attr "type" "fadd")])
+ 
+@@ -557,7 +557,7 @@
+         (unspec:VH [(match_operand:VH 1 "register_operand" "f")
+ 		    (match_operand:SI 2 "register_operand" "f")]
+ 		   UNSPEC_LOONGSON_PSHUFH))]
+-  "TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS"
++  "TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI"
+   "pshufh\t%0,%1,%2"
+   [(set_attr "type" "fmul")])
+ 
+@@ -566,7 +566,7 @@
+   [(set (match_operand:VWH 0 "register_operand" "=f")
+         (ashift:VWH (match_operand:VWH 1 "register_operand" "f")
+ 		    (match_operand:SI 2 "register_operand" "f")))]
+-  "TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS"
++  "TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI"
+   "psll<V_suffix>\t%0,%1,%2"
+   [(set_attr "type" "fcvt")])
+ 
+@@ -575,7 +575,7 @@
+   [(set (match_operand:VWH 0 "register_operand" "=f")
+         (ashiftrt:VWH (match_operand:VWH 1 "register_operand" "f")
+ 		      (match_operand:SI 2 "register_operand" "f")))]
+-  "TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS"
++  "TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI"
+   "psra<V_suffix>\t%0,%1,%2"
+   [(set_attr "type" "fcvt")])
+ 
+@@ -584,7 +584,7 @@
+   [(set (match_operand:VWH 0 "register_operand" "=f")
+         (lshiftrt:VWH (match_operand:VWH 1 "register_operand" "f")
+ 		      (match_operand:SI 2 "register_operand" "f")))]
+-  "TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS"
++  "TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI"
+   "psrl<V_suffix>\t%0,%1,%2"
+   [(set_attr "type" "fcvt")])
+ 
+@@ -593,7 +593,7 @@
+   [(set (match_operand:VWHB 0 "register_operand" "=f")
+         (minus:VWHB (match_operand:VWHB 1 "register_operand" "f")
+ 		    (match_operand:VWHB 2 "register_operand" "f")))]
+-  "TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS"
++  "TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI"
+   "psub<V_suffix>\t%0,%1,%2"
+   [(set_attr "type" "fadd")])
+ 
+@@ -606,7 +606,7 @@
+         (unspec:DI [(match_operand:DI 1 "register_operand" "f")
+ 		    (match_operand:DI 2 "register_operand" "f")]
+ 		   UNSPEC_LOONGSON_PSUBD))]
+-  "TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS"
++  "TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI"
+   "psubd\t%0,%1,%2"
+   [(set_attr "type" "fadd")])
+ 
+@@ -615,7 +615,7 @@
+   [(set (match_operand:VHB 0 "register_operand" "=f")
+         (ss_minus:VHB (match_operand:VHB 1 "register_operand" "f")
+ 		      (match_operand:VHB 2 "register_operand" "f")))]
+-  "TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS"
++  "TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI"
+   "psubs<V_suffix>\t%0,%1,%2"
+   [(set_attr "type" "fadd")])
+ 
+@@ -624,7 +624,7 @@
+   [(set (match_operand:VHB 0 "register_operand" "=f")
+         (us_minus:VHB (match_operand:VHB 1 "register_operand" "f")
+ 		      (match_operand:VHB 2 "register_operand" "f")))]
+-  "TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS"
++  "TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI"
+   "psubus<V_suffix>\t%0,%1,%2"
+   [(set_attr "type" "fadd")])
+ 
+@@ -639,7 +639,7 @@
+ 		     (const_int 5) (const_int 13)
+ 		     (const_int 6) (const_int 14)
+ 		     (const_int 7) (const_int 15)])))]
+-  "TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS"
++  "TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI"
+   "punpckhbh\t%0,%1,%2"
+   [(set_attr "type" "fdiv")])
+ 
+@@ -651,7 +651,7 @@
+ 	    (match_operand:V4HI 2 "register_operand" "f"))
+ 	  (parallel [(const_int 2) (const_int 6)
+ 		     (const_int 3) (const_int 7)])))]
+-  "TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS"
++  "TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI"
+   "punpckhhw\t%0,%1,%2"
+   [(set_attr "type" "fdiv")])
+ 
+@@ -665,7 +665,7 @@
+ 		     (const_int 12) (const_int 13)
+ 		     (const_int 6)  (const_int 7)
+ 		     (const_int 14) (const_int 15)])))]
+-  "TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS"
++  "TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI"
+   "punpckhhw\t%0,%1,%2"
+   [(set_attr "type" "fdiv")])
+ 
+@@ -676,7 +676,7 @@
+ 	    (match_operand:V2SI 1 "register_operand" "f")
+ 	    (match_operand:V2SI 2 "register_operand" "f"))
+ 	  (parallel [(const_int 1) (const_int 3)])))]
+-  "TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS"
++  "TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI"
+   "punpckhwd\t%0,%1,%2"
+   [(set_attr "type" "fcvt")])
+ 
+@@ -690,7 +690,7 @@
+ 		     (const_int 6) (const_int 7)
+ 		     (const_int 12) (const_int 13)
+ 		     (const_int 14) (const_int 15)])))]
+-  "TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS"
++  "TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI"
+   "punpckhwd\t%0,%1,%2"
+   [(set_attr "type" "fcvt")])
+ 
+@@ -702,7 +702,7 @@
+ 	    (match_operand:V4HI 2 "register_operand" "f"))
+ 	  (parallel [(const_int 2) (const_int 3)
+ 		     (const_int 6) (const_int 7)])))]
+-  "TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS"
++  "TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI"
+   "punpckhwd\t%0,%1,%2"
+   [(set_attr "type" "fcvt")])
+ 
+@@ -717,7 +717,7 @@
+ 		     (const_int 1) (const_int 9)
+ 		     (const_int 2) (const_int 10)
+ 		     (const_int 3) (const_int 11)])))]
+-  "TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS"
++  "TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI"
+   "punpcklbh\t%0,%1,%2"
+   [(set_attr "type" "fdiv")])
+ 
+@@ -729,7 +729,7 @@
+ 	    (match_operand:V4HI 2 "register_operand" "f"))
+ 	  (parallel [(const_int 0) (const_int 4)
+ 		     (const_int 1) (const_int 5)])))]
+-  "TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS"
++  "TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI"
+   "punpcklhw\t%0,%1,%2"
+   [(set_attr "type" "fdiv")])
+ 
+@@ -743,7 +743,7 @@
+ 		     (const_int 8)  (const_int 9)
+ 		     (const_int 2)  (const_int 3)
+ 		     (const_int 10) (const_int 11)])))]
+-  "TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS"
++  "TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI"
+   "punpcklhw\t%0,%1,%2"
+   [(set_attr "type" "fdiv")])
+ 
+@@ -754,7 +754,7 @@
+ 	    (match_operand:V2SI 1 "register_operand" "f")
+ 	    (match_operand:V2SI 2 "register_operand" "f"))
+ 	  (parallel [(const_int 0) (const_int 2)])))]
+-  "TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS"
++  "TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI"
+   "punpcklwd\t%0,%1,%2"
+   [(set_attr "type" "fcvt")])
+ 
+@@ -768,7 +768,7 @@
+ 		     (const_int 2) (const_int 3)
+ 		     (const_int 8) (const_int 9)
+ 		     (const_int 10) (const_int 11)])))]
+-  "TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS"
++  "TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI"
+   "punpcklwd\t%0,%1,%2"
+   [(set_attr "type" "fcvt")])
+ 
+@@ -780,14 +780,14 @@
+ 	    (match_operand:V4HI 2 "register_operand" "f"))
+ 	  (parallel [(const_int 0) (const_int 1)
+ 		     (const_int 4) (const_int 5)])))]
+-  "TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS"
++  "TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI"
+   "punpcklwd\t%0,%1,%2"
+   [(set_attr "type" "fcvt")])
+ 
+ (define_expand "vec_unpacks_lo_<mode>"
+   [(match_operand:<V_stretch_half> 0 "register_operand" "")
+    (match_operand:VHB 1 "register_operand" "")]
+-  "TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS"
++  "TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI"
+ {
+   mips_expand_vec_unpack (operands, false, false);
+   DONE;
+@@ -796,7 +796,7 @@
+ (define_expand "vec_unpacks_hi_<mode>"
+   [(match_operand:<V_stretch_half> 0 "register_operand" "")
+    (match_operand:VHB 1 "register_operand" "")]
+-  "TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS"
++  "TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI"
+ {
+   mips_expand_vec_unpack (operands, false, true);
+   DONE;
+@@ -805,7 +805,7 @@
+ (define_expand "vec_unpacku_lo_<mode>"
+   [(match_operand:<V_stretch_half> 0 "register_operand" "")
+    (match_operand:VHB 1 "register_operand" "")]
+-  "TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS"
++  "TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI"
+ {
+   mips_expand_vec_unpack (operands, true, false);
+   DONE;
+@@ -814,7 +814,7 @@
+ (define_expand "vec_unpacku_hi_<mode>"
+   [(match_operand:<V_stretch_half> 0 "register_operand" "")
+    (match_operand:VHB 1 "register_operand" "")]
+-  "TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS"
++  "TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI"
+ {
+   mips_expand_vec_unpack (operands, true, true);
+   DONE;
+@@ -826,7 +826,7 @@
+         (unspec:VWHBDI [(match_operand:VWHBDI 1 "register_operand" "f")
+                         (match_operand:SI 2 "register_operand" "f")]
+                        UNSPEC_LOONGSON_DSLL))]
+-  "TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS"
++  "TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI"
+   "dsll\t%0,%1,%2"
+   [(set_attr "type" "fcvt")])
+ 
+@@ -835,7 +835,7 @@
+         (unspec:VWHBDI [(match_operand:VWHBDI 1 "register_operand" "f")
+                         (match_operand:SI 2 "register_operand" "f")]
+                        UNSPEC_LOONGSON_DSRL))]
+-  "TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS"
++  "TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI"
+   "dsrl\t%0,%1,%2"
+   [(set_attr "type" "fcvt")])
+ 
+@@ -844,14 +844,14 @@
+         (vec_select:<V_inner>
+           (match_operand:VWHB 1 "register_operand" "f")
+           (parallel [(const_int 0)])))]
+-  "TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS"
++  "TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI"
+   "mfc1\t%0,%1"
+   [(set_attr "type" "mfc")])
+ 
+ (define_expand "reduc_plus_scal_<mode>"
+   [(match_operand:<V_inner> 0 "register_operand" "")
+    (match_operand:VWHB 1 "register_operand" "")]
+-  "TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS"
++  "TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI"
+ {
+   rtx tmp = gen_reg_rtx (GET_MODE (operands[1]));
+   mips_expand_vec_reduc (tmp, operands[1], gen_add<mode>3);
+@@ -862,7 +862,7 @@
+ (define_expand "reduc_smax_scal_<mode>"
+   [(match_operand:<V_inner> 0 "register_operand" "")
+    (match_operand:VWHB 1 "register_operand" "")]
+-  "TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS"
++  "TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI"
+ {
+   rtx tmp = gen_reg_rtx (GET_MODE (operands[1]));
+   mips_expand_vec_reduc (tmp, operands[1], gen_smax<mode>3);
+@@ -873,7 +873,7 @@
+ (define_expand "reduc_smin_scal_<mode>"
+   [(match_operand:<V_inner> 0 "register_operand" "")
+    (match_operand:VWHB 1 "register_operand" "")]
+-  "TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS"
++  "TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI"
+ {
+   rtx tmp = gen_reg_rtx (GET_MODE (operands[1]));
+   mips_expand_vec_reduc (tmp, operands[1], gen_smin<mode>3);
+@@ -884,7 +884,7 @@
+ (define_expand "reduc_umax_scal_<mode>"
+   [(match_operand:<V_inner> 0 "register_operand" "")
+    (match_operand:VB 1 "register_operand" "")]
+-  "TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS"
++  "TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI"
+ {
+   rtx tmp = gen_reg_rtx (GET_MODE (operands[1]));
+   mips_expand_vec_reduc (tmp, operands[1], gen_umax<mode>3);
+@@ -895,7 +895,7 @@
+ (define_expand "reduc_umin_scal_<mode>"
+   [(match_operand:<V_inner> 0 "register_operand" "")
+    (match_operand:VB 1 "register_operand" "")]
+-  "TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS"
++  "TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI"
+ {
+   rtx tmp = gen_reg_rtx (GET_MODE (operands[1]));
+   mips_expand_vec_reduc (tmp, operands[1], gen_umin<mode>3);
+diff --git a/gcc/config/mips/loongson-mmiintrin.h b/gcc/config/mips/loongson-mmiintrin.h
+new file mode 100644
+index 000000000..6f35fb5b8
+--- /dev/null
++++ b/gcc/config/mips/loongson-mmiintrin.h
+@@ -0,0 +1,691 @@
++/* Intrinsics for Loongson MultiMedia extension Instructions operations.
++
++   Copyright (C) 2008-2018 Free Software Foundation, Inc.
++   Contributed by CodeSourcery.
++
++   This file is part of GCC.
++
++   GCC is free software; you can redistribute it and/or modify it
++   under the terms of the GNU General Public License as published
++   by the Free Software Foundation; either version 3, or (at your
++   option) any later version.
++
++   GCC is distributed in the hope that it will be useful, but WITHOUT
++   ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
++   or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public
++   License for more details.
++
++   Under Section 7 of GPL version 3, you are granted additional
++   permissions described in the GCC Runtime Library Exception, version
++   3.1, as published by the Free Software Foundation.
++
++   You should have received a copy of the GNU General Public License and
++   a copy of the GCC Runtime Library Exception along with this program;
++   see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
++   <http://www.gnu.org/licenses/>.  */
++
++#ifndef _GCC_LOONGSON_MMIINTRIN_H
++#define _GCC_LOONGSON_MMIINTRIN_H
++
++#if !defined(__mips_loongson_mmi)
++# error "You must select -mloongson-mmi or -march=loongson2e/2f/3a to use
++	 loongson-mmiintrin.h"
++#endif
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++#include <stdint.h>
++
++/* Vectors of unsigned bytes, halfwords and words.  */
++typedef uint8_t uint8x8_t __attribute__((vector_size (8)));
++typedef uint16_t uint16x4_t __attribute__((vector_size (8)));
++typedef uint32_t uint32x2_t __attribute__((vector_size (8)));
++
++/* Vectors of signed bytes, halfwords and words.  */
++typedef int8_t int8x8_t __attribute__((vector_size (8)));
++typedef int16_t int16x4_t __attribute__((vector_size (8)));
++typedef int32_t int32x2_t __attribute__((vector_size (8)));
++
++/* SIMD intrinsics.
++   Unless otherwise noted, calls to the functions below will expand into
++   precisely one machine instruction, modulo any moves required to
++   satisfy register allocation constraints.  */
++
++/* Pack with signed saturation.  */
++__extension__ static __inline int16x4_t __attribute__ ((__always_inline__))
++packsswh (int32x2_t s, int32x2_t t)
++{
++  return __builtin_loongson_packsswh (s, t);
++}
++
++__extension__ static __inline int8x8_t __attribute__ ((__always_inline__))
++packsshb (int16x4_t s, int16x4_t t)
++{
++  return __builtin_loongson_packsshb (s, t);
++}
++
++/* Pack with unsigned saturation.  */
++__extension__ static __inline uint8x8_t __attribute__ ((__always_inline__))
++packushb (uint16x4_t s, uint16x4_t t)
++{
++  return __builtin_loongson_packushb (s, t);
++}
++
++/* Vector addition, treating overflow by wraparound.  */
++__extension__ static __inline uint32x2_t __attribute__ ((__always_inline__))
++paddw_u (uint32x2_t s, uint32x2_t t)
++{
++  return __builtin_loongson_paddw_u (s, t);
++}
++
++__extension__ static __inline uint16x4_t __attribute__ ((__always_inline__))
++paddh_u (uint16x4_t s, uint16x4_t t)
++{
++  return __builtin_loongson_paddh_u (s, t);
++}
++
++__extension__ static __inline uint8x8_t __attribute__ ((__always_inline__))
++paddb_u (uint8x8_t s, uint8x8_t t)
++{
++  return __builtin_loongson_paddb_u (s, t);
++}
++
++__extension__ static __inline int32x2_t __attribute__ ((__always_inline__))
++paddw_s (int32x2_t s, int32x2_t t)
++{
++  return __builtin_loongson_paddw_s (s, t);
++}
++
++__extension__ static __inline int16x4_t __attribute__ ((__always_inline__))
++paddh_s (int16x4_t s, int16x4_t t)
++{
++  return __builtin_loongson_paddh_s (s, t);
++}
++
++__extension__ static __inline int8x8_t __attribute__ ((__always_inline__))
++paddb_s (int8x8_t s, int8x8_t t)
++{
++  return __builtin_loongson_paddb_s (s, t);
++}
++
++/* Addition of doubleword integers, treating overflow by wraparound.  */
++__extension__ static __inline uint64_t __attribute__ ((__always_inline__))
++paddd_u (uint64_t s, uint64_t t)
++{
++  return __builtin_loongson_paddd_u (s, t);
++}
++
++__extension__ static __inline int64_t __attribute__ ((__always_inline__))
++paddd_s (int64_t s, int64_t t)
++{
++  return __builtin_loongson_paddd_s (s, t);
++}
++
++/* Vector addition, treating overflow by signed saturation.  */
++__extension__ static __inline int16x4_t __attribute__ ((__always_inline__))
++paddsh (int16x4_t s, int16x4_t t)
++{
++  return __builtin_loongson_paddsh (s, t);
++}
++
++__extension__ static __inline int8x8_t __attribute__ ((__always_inline__))
++paddsb (int8x8_t s, int8x8_t t)
++{
++  return __builtin_loongson_paddsb (s, t);
++}
++
++/* Vector addition, treating overflow by unsigned saturation.  */
++__extension__ static __inline uint16x4_t __attribute__ ((__always_inline__))
++paddush (uint16x4_t s, uint16x4_t t)
++{
++  return __builtin_loongson_paddush (s, t);
++}
++
++__extension__ static __inline uint8x8_t __attribute__ ((__always_inline__))
++paddusb (uint8x8_t s, uint8x8_t t)
++{
++  return __builtin_loongson_paddusb (s, t);
++}
++
++/* Logical AND NOT.  */
++__extension__ static __inline uint64_t __attribute__ ((__always_inline__))
++pandn_ud (uint64_t s, uint64_t t)
++{
++  return __builtin_loongson_pandn_ud (s, t);
++}
++
++__extension__ static __inline uint32x2_t __attribute__ ((__always_inline__))
++pandn_uw (uint32x2_t s, uint32x2_t t)
++{
++  return __builtin_loongson_pandn_uw (s, t);
++}
++
++__extension__ static __inline uint16x4_t __attribute__ ((__always_inline__))
++pandn_uh (uint16x4_t s, uint16x4_t t)
++{
++  return __builtin_loongson_pandn_uh (s, t);
++}
++
++__extension__ static __inline uint8x8_t __attribute__ ((__always_inline__))
++pandn_ub (uint8x8_t s, uint8x8_t t)
++{
++  return __builtin_loongson_pandn_ub (s, t);
++}
++
++__extension__ static __inline int64_t __attribute__ ((__always_inline__))
++pandn_sd (int64_t s, int64_t t)
++{
++  return __builtin_loongson_pandn_sd (s, t);
++}
++
++__extension__ static __inline int32x2_t __attribute__ ((__always_inline__))
++pandn_sw (int32x2_t s, int32x2_t t)
++{
++  return __builtin_loongson_pandn_sw (s, t);
++}
++
++__extension__ static __inline int16x4_t __attribute__ ((__always_inline__))
++pandn_sh (int16x4_t s, int16x4_t t)
++{
++  return __builtin_loongson_pandn_sh (s, t);
++}
++
++__extension__ static __inline int8x8_t __attribute__ ((__always_inline__))
++pandn_sb (int8x8_t s, int8x8_t t)
++{
++  return __builtin_loongson_pandn_sb (s, t);
++}
++
++/* Average.  */
++__extension__ static __inline uint16x4_t __attribute__ ((__always_inline__))
++pavgh (uint16x4_t s, uint16x4_t t)
++{
++  return __builtin_loongson_pavgh (s, t);
++}
++
++__extension__ static __inline uint8x8_t __attribute__ ((__always_inline__))
++pavgb (uint8x8_t s, uint8x8_t t)
++{
++  return __builtin_loongson_pavgb (s, t);
++}
++
++/* Equality test.  */
++__extension__ static __inline uint32x2_t __attribute__ ((__always_inline__))
++pcmpeqw_u (uint32x2_t s, uint32x2_t t)
++{
++  return __builtin_loongson_pcmpeqw_u (s, t);
++}
++
++__extension__ static __inline uint16x4_t __attribute__ ((__always_inline__))
++pcmpeqh_u (uint16x4_t s, uint16x4_t t)
++{
++  return __builtin_loongson_pcmpeqh_u (s, t);
++}
++
++__extension__ static __inline uint8x8_t __attribute__ ((__always_inline__))
++pcmpeqb_u (uint8x8_t s, uint8x8_t t)
++{
++  return __builtin_loongson_pcmpeqb_u (s, t);
++}
++
++__extension__ static __inline int32x2_t __attribute__ ((__always_inline__))
++pcmpeqw_s (int32x2_t s, int32x2_t t)
++{
++  return __builtin_loongson_pcmpeqw_s (s, t);
++}
++
++__extension__ static __inline int16x4_t __attribute__ ((__always_inline__))
++pcmpeqh_s (int16x4_t s, int16x4_t t)
++{
++  return __builtin_loongson_pcmpeqh_s (s, t);
++}
++
++__extension__ static __inline int8x8_t __attribute__ ((__always_inline__))
++pcmpeqb_s (int8x8_t s, int8x8_t t)
++{
++  return __builtin_loongson_pcmpeqb_s (s, t);
++}
++
++/* Greater-than test.  */
++__extension__ static __inline uint32x2_t __attribute__ ((__always_inline__))
++pcmpgtw_u (uint32x2_t s, uint32x2_t t)
++{
++  return __builtin_loongson_pcmpgtw_u (s, t);
++}
++
++__extension__ static __inline uint16x4_t __attribute__ ((__always_inline__))
++pcmpgth_u (uint16x4_t s, uint16x4_t t)
++{
++  return __builtin_loongson_pcmpgth_u (s, t);
++}
++
++__extension__ static __inline uint8x8_t __attribute__ ((__always_inline__))
++pcmpgtb_u (uint8x8_t s, uint8x8_t t)
++{
++  return __builtin_loongson_pcmpgtb_u (s, t);
++}
++
++__extension__ static __inline int32x2_t __attribute__ ((__always_inline__))
++pcmpgtw_s (int32x2_t s, int32x2_t t)
++{
++  return __builtin_loongson_pcmpgtw_s (s, t);
++}
++
++__extension__ static __inline int16x4_t __attribute__ ((__always_inline__))
++pcmpgth_s (int16x4_t s, int16x4_t t)
++{
++  return __builtin_loongson_pcmpgth_s (s, t);
++}
++
++__extension__ static __inline int8x8_t __attribute__ ((__always_inline__))
++pcmpgtb_s (int8x8_t s, int8x8_t t)
++{
++  return __builtin_loongson_pcmpgtb_s (s, t);
++}
++
++/* Extract halfword.  */
++__extension__ static __inline uint16x4_t __attribute__ ((__always_inline__))
++pextrh_u (uint16x4_t s, int field /* 0--3.  */)
++{
++  return __builtin_loongson_pextrh_u (s, field);
++}
++
++__extension__ static __inline int16x4_t __attribute__ ((__always_inline__))
++pextrh_s (int16x4_t s, int field /* 0--3.  */)
++{
++  return __builtin_loongson_pextrh_s (s, field);
++}
++
++/* Insert halfword.  */
++__extension__ static __inline uint16x4_t __attribute__ ((__always_inline__))
++pinsrh_0_u (uint16x4_t s, uint16x4_t t)
++{
++  return __builtin_loongson_pinsrh_0_u (s, t);
++}
++
++__extension__ static __inline uint16x4_t __attribute__ ((__always_inline__))
++pinsrh_1_u (uint16x4_t s, uint16x4_t t)
++{
++  return __builtin_loongson_pinsrh_1_u (s, t);
++}
++
++__extension__ static __inline uint16x4_t __attribute__ ((__always_inline__))
++pinsrh_2_u (uint16x4_t s, uint16x4_t t)
++{
++  return __builtin_loongson_pinsrh_2_u (s, t);
++}
++
++__extension__ static __inline uint16x4_t __attribute__ ((__always_inline__))
++pinsrh_3_u (uint16x4_t s, uint16x4_t t)
++{
++  return __builtin_loongson_pinsrh_3_u (s, t);
++}
++
++__extension__ static __inline int16x4_t __attribute__ ((__always_inline__))
++pinsrh_0_s (int16x4_t s, int16x4_t t)
++{
++  return __builtin_loongson_pinsrh_0_s (s, t);
++}
++
++__extension__ static __inline int16x4_t __attribute__ ((__always_inline__))
++pinsrh_1_s (int16x4_t s, int16x4_t t)
++{
++  return __builtin_loongson_pinsrh_1_s (s, t);
++}
++
++__extension__ static __inline int16x4_t __attribute__ ((__always_inline__))
++pinsrh_2_s (int16x4_t s, int16x4_t t)
++{
++  return __builtin_loongson_pinsrh_2_s (s, t);
++}
++
++__extension__ static __inline int16x4_t __attribute__ ((__always_inline__))
++pinsrh_3_s (int16x4_t s, int16x4_t t)
++{
++  return __builtin_loongson_pinsrh_3_s (s, t);
++}
++
++/* Multiply and add.  */
++__extension__ static __inline int32x2_t __attribute__ ((__always_inline__))
++pmaddhw (int16x4_t s, int16x4_t t)
++{
++  return __builtin_loongson_pmaddhw (s, t);
++}
++
++/* Maximum of signed halfwords.  */
++__extension__ static __inline int16x4_t __attribute__ ((__always_inline__))
++pmaxsh (int16x4_t s, int16x4_t t)
++{
++  return __builtin_loongson_pmaxsh (s, t);
++}
++
++/* Maximum of unsigned bytes.  */
++__extension__ static __inline uint8x8_t __attribute__ ((__always_inline__))
++pmaxub (uint8x8_t s, uint8x8_t t)
++{
++  return __builtin_loongson_pmaxub (s, t);
++}
++
++/* Minimum of signed halfwords.  */
++__extension__ static __inline int16x4_t __attribute__ ((__always_inline__))
++pminsh (int16x4_t s, int16x4_t t)
++{
++  return __builtin_loongson_pminsh (s, t);
++}
++
++/* Minimum of unsigned bytes.  */
++__extension__ static __inline uint8x8_t __attribute__ ((__always_inline__))
++pminub (uint8x8_t s, uint8x8_t t)
++{
++  return __builtin_loongson_pminub (s, t);
++}
++
++/* Move byte mask.  */
++__extension__ static __inline uint8x8_t __attribute__ ((__always_inline__))
++pmovmskb_u (uint8x8_t s)
++{
++  return __builtin_loongson_pmovmskb_u (s);
++}
++
++__extension__ static __inline int8x8_t __attribute__ ((__always_inline__))
++pmovmskb_s (int8x8_t s)
++{
++  return __builtin_loongson_pmovmskb_s (s);
++}
++
++/* Multiply unsigned integers and store high result.  */
++__extension__ static __inline uint16x4_t __attribute__ ((__always_inline__))
++pmulhuh (uint16x4_t s, uint16x4_t t)
++{
++  return __builtin_loongson_pmulhuh (s, t);
++}
++
++/* Multiply signed integers and store high result.  */
++__extension__ static __inline int16x4_t __attribute__ ((__always_inline__))
++pmulhh (int16x4_t s, int16x4_t t)
++{
++  return __builtin_loongson_pmulhh (s, t);
++}
++
++/* Multiply signed integers and store low result.  */
++__extension__ static __inline int16x4_t __attribute__ ((__always_inline__))
++pmullh (int16x4_t s, int16x4_t t)
++{
++  return __builtin_loongson_pmullh (s, t);
++}
++
++/* Multiply unsigned word integers.  */
++__extension__ static __inline int64_t __attribute__ ((__always_inline__))
++pmuluw (uint32x2_t s, uint32x2_t t)
++{
++  return __builtin_loongson_pmuluw (s, t);
++}
++
++/* Absolute difference.  */
++__extension__ static __inline uint8x8_t __attribute__ ((__always_inline__))
++pasubub (uint8x8_t s, uint8x8_t t)
++{
++  return __builtin_loongson_pasubub (s, t);
++}
++
++/* Sum of unsigned byte integers.  */
++__extension__ static __inline uint16x4_t __attribute__ ((__always_inline__))
++biadd (uint8x8_t s)
++{
++  return __builtin_loongson_biadd (s);
++}
++
++/* Sum of absolute differences.
++   Note that this intrinsic expands into two machine instructions:
++   PASUBUB followed by BIADD.  */
++__extension__ static __inline uint16x4_t __attribute__ ((__always_inline__))
++psadbh (uint8x8_t s, uint8x8_t t)
++{
++  return __builtin_loongson_psadbh (s, t);
++}
++
++/* Shuffle halfwords.  */
++__extension__ static __inline uint16x4_t __attribute__ ((__always_inline__))
++pshufh_u (uint16x4_t dest, uint16x4_t s, uint8_t order)
++{
++  return __builtin_loongson_pshufh_u (s, order);
++}
++
++__extension__ static __inline int16x4_t __attribute__ ((__always_inline__))
++pshufh_s (int16x4_t dest, int16x4_t s, uint8_t order)
++{
++  return __builtin_loongson_pshufh_s (s, order);
++}
++
++/* Shift left logical.  */
++__extension__ static __inline uint16x4_t __attribute__ ((__always_inline__))
++psllh_u (uint16x4_t s, uint8_t amount)
++{
++  return __builtin_loongson_psllh_u (s, amount);
++}
++
++__extension__ static __inline int16x4_t __attribute__ ((__always_inline__))
++psllh_s (int16x4_t s, uint8_t amount)
++{
++  return __builtin_loongson_psllh_s (s, amount);
++}
++
++__extension__ static __inline uint32x2_t __attribute__ ((__always_inline__))
++psllw_u (uint32x2_t s, uint8_t amount)
++{
++  return __builtin_loongson_psllw_u (s, amount);
++}
++
++__extension__ static __inline int32x2_t __attribute__ ((__always_inline__))
++psllw_s (int32x2_t s, uint8_t amount)
++{
++  return __builtin_loongson_psllw_s (s, amount);
++}
++
++/* Shift right logical.  */
++__extension__ static __inline uint16x4_t __attribute__ ((__always_inline__))
++psrlh_u (uint16x4_t s, uint8_t amount)
++{
++  return __builtin_loongson_psrlh_u (s, amount);
++}
++
++__extension__ static __inline int16x4_t __attribute__ ((__always_inline__))
++psrlh_s (int16x4_t s, uint8_t amount)
++{
++  return __builtin_loongson_psrlh_s (s, amount);
++}
++
++__extension__ static __inline uint32x2_t __attribute__ ((__always_inline__))
++psrlw_u (uint32x2_t s, uint8_t amount)
++{
++  return __builtin_loongson_psrlw_u (s, amount);
++}
++
++__extension__ static __inline int32x2_t __attribute__ ((__always_inline__))
++psrlw_s (int32x2_t s, uint8_t amount)
++{
++  return __builtin_loongson_psrlw_s (s, amount);
++}
++
++/* Shift right arithmetic.  */
++__extension__ static __inline uint16x4_t __attribute__ ((__always_inline__))
++psrah_u (uint16x4_t s, uint8_t amount)
++{
++  return __builtin_loongson_psrah_u (s, amount);
++}
++
++__extension__ static __inline int16x4_t __attribute__ ((__always_inline__))
++psrah_s (int16x4_t s, uint8_t amount)
++{
++  return __builtin_loongson_psrah_s (s, amount);
++}
++
++__extension__ static __inline uint32x2_t __attribute__ ((__always_inline__))
++psraw_u (uint32x2_t s, uint8_t amount)
++{
++  return __builtin_loongson_psraw_u (s, amount);
++}
++
++__extension__ static __inline int32x2_t __attribute__ ((__always_inline__))
++psraw_s (int32x2_t s, uint8_t amount)
++{
++  return __builtin_loongson_psraw_s (s, amount);
++}
++
++/* Vector subtraction, treating overflow by wraparound.  */
++__extension__ static __inline uint32x2_t __attribute__ ((__always_inline__))
++psubw_u (uint32x2_t s, uint32x2_t t)
++{
++  return __builtin_loongson_psubw_u (s, t);
++}
++
++__extension__ static __inline uint16x4_t __attribute__ ((__always_inline__))
++psubh_u (uint16x4_t s, uint16x4_t t)
++{
++  return __builtin_loongson_psubh_u (s, t);
++}
++
++__extension__ static __inline uint8x8_t __attribute__ ((__always_inline__))
++psubb_u (uint8x8_t s, uint8x8_t t)
++{
++  return __builtin_loongson_psubb_u (s, t);
++}
++
++__extension__ static __inline int32x2_t __attribute__ ((__always_inline__))
++psubw_s (int32x2_t s, int32x2_t t)
++{
++  return __builtin_loongson_psubw_s (s, t);
++}
++
++__extension__ static __inline int16x4_t __attribute__ ((__always_inline__))
++psubh_s (int16x4_t s, int16x4_t t)
++{
++  return __builtin_loongson_psubh_s (s, t);
++}
++
++__extension__ static __inline int8x8_t __attribute__ ((__always_inline__))
++psubb_s (int8x8_t s, int8x8_t t)
++{
++  return __builtin_loongson_psubb_s (s, t);
++}
++
++/* Subtraction of doubleword integers, treating overflow by wraparound.  */
++__extension__ static __inline uint64_t __attribute__ ((__always_inline__))
++psubd_u (uint64_t s, uint64_t t)
++{
++  return __builtin_loongson_psubd_u (s, t);
++}
++
++__extension__ static __inline int64_t __attribute__ ((__always_inline__))
++psubd_s (int64_t s, int64_t t)
++{
++  return __builtin_loongson_psubd_s (s, t);
++}
++
++/* Vector subtraction, treating overflow by signed saturation.  */
++__extension__ static __inline int16x4_t __attribute__ ((__always_inline__))
++psubsh (int16x4_t s, int16x4_t t)
++{
++  return __builtin_loongson_psubsh (s, t);
++}
++
++__extension__ static __inline int8x8_t __attribute__ ((__always_inline__))
++psubsb (int8x8_t s, int8x8_t t)
++{
++  return __builtin_loongson_psubsb (s, t);
++}
++
++/* Vector subtraction, treating overflow by unsigned saturation.  */
++__extension__ static __inline uint16x4_t __attribute__ ((__always_inline__))
++psubush (uint16x4_t s, uint16x4_t t)
++{
++  return __builtin_loongson_psubush (s, t);
++}
++
++__extension__ static __inline uint8x8_t __attribute__ ((__always_inline__))
++psubusb (uint8x8_t s, uint8x8_t t)
++{
++  return __builtin_loongson_psubusb (s, t);
++}
++
++/* Unpack high data.  */
++__extension__ static __inline uint32x2_t __attribute__ ((__always_inline__))
++punpckhwd_u (uint32x2_t s, uint32x2_t t)
++{
++  return __builtin_loongson_punpckhwd_u (s, t);
++}
++
++__extension__ static __inline uint16x4_t __attribute__ ((__always_inline__))
++punpckhhw_u (uint16x4_t s, uint16x4_t t)
++{
++  return __builtin_loongson_punpckhhw_u (s, t);
++}
++
++__extension__ static __inline uint8x8_t __attribute__ ((__always_inline__))
++punpckhbh_u (uint8x8_t s, uint8x8_t t)
++{
++  return __builtin_loongson_punpckhbh_u (s, t);
++}
++
++__extension__ static __inline int32x2_t __attribute__ ((__always_inline__))
++punpckhwd_s (int32x2_t s, int32x2_t t)
++{
++  return __builtin_loongson_punpckhwd_s (s, t);
++}
++
++__extension__ static __inline int16x4_t __attribute__ ((__always_inline__))
++punpckhhw_s (int16x4_t s, int16x4_t t)
++{
++  return __builtin_loongson_punpckhhw_s (s, t);
++}
++
++__extension__ static __inline int8x8_t __attribute__ ((__always_inline__))
++punpckhbh_s (int8x8_t s, int8x8_t t)
++{
++  return __builtin_loongson_punpckhbh_s (s, t);
++}
++
++/* Unpack low data.  */
++__extension__ static __inline uint32x2_t __attribute__ ((__always_inline__))
++punpcklwd_u (uint32x2_t s, uint32x2_t t)
++{
++  return __builtin_loongson_punpcklwd_u (s, t);
++}
++
++__extension__ static __inline uint16x4_t __attribute__ ((__always_inline__))
++punpcklhw_u (uint16x4_t s, uint16x4_t t)
++{
++  return __builtin_loongson_punpcklhw_u (s, t);
++}
++
++__extension__ static __inline uint8x8_t __attribute__ ((__always_inline__))
++punpcklbh_u (uint8x8_t s, uint8x8_t t)
++{
++  return __builtin_loongson_punpcklbh_u (s, t);
++}
++
++__extension__ static __inline int32x2_t __attribute__ ((__always_inline__))
++punpcklwd_s (int32x2_t s, int32x2_t t)
++{
++  return __builtin_loongson_punpcklwd_s (s, t);
++}
++
++__extension__ static __inline int16x4_t __attribute__ ((__always_inline__))
++punpcklhw_s (int16x4_t s, int16x4_t t)
++{
++  return __builtin_loongson_punpcklhw_s (s, t);
++}
++
++__extension__ static __inline int8x8_t __attribute__ ((__always_inline__))
++punpcklbh_s (int8x8_t s, int8x8_t t)
++{
++  return __builtin_loongson_punpcklbh_s (s, t);
++}
++
++#ifdef __cplusplus
++}
++#endif
++
++#endif
+diff --git a/gcc/config/mips/loongson.h b/gcc/config/mips/loongson.h
+index b4a26027c..3880e4cb7 100644
+--- a/gcc/config/mips/loongson.h
++++ b/gcc/config/mips/loongson.h
+@@ -1,4 +1,4 @@
+-/* Intrinsics for ST Microelectronics Loongson-2E/2F SIMD operations.
++/* Intrinsics for Loongson MultiMedia extension Instructions operations.
+ 
+    Copyright (C) 2008-2018 Free Software Foundation, Inc.
+    Contributed by CodeSourcery.
+@@ -24,667 +24,10 @@
+    see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+    <http://www.gnu.org/licenses/>.  */
+ 
+-#ifndef _GCC_LOONGSON_H
+-#define _GCC_LOONGSON_H
+-
+-#if !defined(__mips_loongson_vector_rev)
+-# error "You must select -march=loongson2e or -march=loongson2f to use loongson.h"
+-#endif
+-
+-#ifdef __cplusplus
+-extern "C" {
+-#endif
+-
+-#include <stdint.h>
+-
+-/* Vectors of unsigned bytes, halfwords and words.  */
+-typedef uint8_t uint8x8_t __attribute__((vector_size (8)));
+-typedef uint16_t uint16x4_t __attribute__((vector_size (8)));
+-typedef uint32_t uint32x2_t __attribute__((vector_size (8)));
+-
+-/* Vectors of signed bytes, halfwords and words.  */
+-typedef int8_t int8x8_t __attribute__((vector_size (8)));
+-typedef int16_t int16x4_t __attribute__((vector_size (8)));
+-typedef int32_t int32x2_t __attribute__((vector_size (8)));
+-
+-/* SIMD intrinsics.
+-   Unless otherwise noted, calls to the functions below will expand into
+-   precisely one machine instruction, modulo any moves required to
+-   satisfy register allocation constraints.  */
+-
+-/* Pack with signed saturation.  */
+-__extension__ static __inline int16x4_t __attribute__ ((__always_inline__))
+-packsswh (int32x2_t s, int32x2_t t)
+-{
+-  return __builtin_loongson_packsswh (s, t);
+-}
+-
+-__extension__ static __inline int8x8_t __attribute__ ((__always_inline__))
+-packsshb (int16x4_t s, int16x4_t t)
+-{
+-  return __builtin_loongson_packsshb (s, t);
+-}
+-
+-/* Pack with unsigned saturation.  */
+-__extension__ static __inline uint8x8_t __attribute__ ((__always_inline__))
+-packushb (uint16x4_t s, uint16x4_t t)
+-{
+-  return __builtin_loongson_packushb (s, t);
+-}
+-
+-/* Vector addition, treating overflow by wraparound.  */
+-__extension__ static __inline uint32x2_t __attribute__ ((__always_inline__))
+-paddw_u (uint32x2_t s, uint32x2_t t)
+-{
+-  return __builtin_loongson_paddw_u (s, t);
+-}
+-
+-__extension__ static __inline uint16x4_t __attribute__ ((__always_inline__))
+-paddh_u (uint16x4_t s, uint16x4_t t)
+-{
+-  return __builtin_loongson_paddh_u (s, t);
+-}
+-
+-__extension__ static __inline uint8x8_t __attribute__ ((__always_inline__))
+-paddb_u (uint8x8_t s, uint8x8_t t)
+-{
+-  return __builtin_loongson_paddb_u (s, t);
+-}
+-
+-__extension__ static __inline int32x2_t __attribute__ ((__always_inline__))
+-paddw_s (int32x2_t s, int32x2_t t)
+-{
+-  return __builtin_loongson_paddw_s (s, t);
+-}
+-
+-__extension__ static __inline int16x4_t __attribute__ ((__always_inline__))
+-paddh_s (int16x4_t s, int16x4_t t)
+-{
+-  return __builtin_loongson_paddh_s (s, t);
+-}
+-
+-__extension__ static __inline int8x8_t __attribute__ ((__always_inline__))
+-paddb_s (int8x8_t s, int8x8_t t)
+-{
+-  return __builtin_loongson_paddb_s (s, t);
+-}
+-
+-/* Addition of doubleword integers, treating overflow by wraparound.  */
+-__extension__ static __inline uint64_t __attribute__ ((__always_inline__))
+-paddd_u (uint64_t s, uint64_t t)
+-{
+-  return __builtin_loongson_paddd_u (s, t);
+-}
+-
+-__extension__ static __inline int64_t __attribute__ ((__always_inline__))
+-paddd_s (int64_t s, int64_t t)
+-{
+-  return __builtin_loongson_paddd_s (s, t);
+-}
+-
+-/* Vector addition, treating overflow by signed saturation.  */
+-__extension__ static __inline int16x4_t __attribute__ ((__always_inline__))
+-paddsh (int16x4_t s, int16x4_t t)
+-{
+-  return __builtin_loongson_paddsh (s, t);
+-}
+-
+-__extension__ static __inline int8x8_t __attribute__ ((__always_inline__))
+-paddsb (int8x8_t s, int8x8_t t)
+-{
+-  return __builtin_loongson_paddsb (s, t);
+-}
+-
+-/* Vector addition, treating overflow by unsigned saturation.  */
+-__extension__ static __inline uint16x4_t __attribute__ ((__always_inline__))
+-paddush (uint16x4_t s, uint16x4_t t)
+-{
+-  return __builtin_loongson_paddush (s, t);
+-}
+-
+-__extension__ static __inline uint8x8_t __attribute__ ((__always_inline__))
+-paddusb (uint8x8_t s, uint8x8_t t)
+-{
+-  return __builtin_loongson_paddusb (s, t);
+-}
+-
+-/* Logical AND NOT.  */
+-__extension__ static __inline uint64_t __attribute__ ((__always_inline__))
+-pandn_ud (uint64_t s, uint64_t t)
+-{
+-  return __builtin_loongson_pandn_ud (s, t);
+-}
+-
+-__extension__ static __inline uint32x2_t __attribute__ ((__always_inline__))
+-pandn_uw (uint32x2_t s, uint32x2_t t)
+-{
+-  return __builtin_loongson_pandn_uw (s, t);
+-}
+-
+-__extension__ static __inline uint16x4_t __attribute__ ((__always_inline__))
+-pandn_uh (uint16x4_t s, uint16x4_t t)
+-{
+-  return __builtin_loongson_pandn_uh (s, t);
+-}
+-
+-__extension__ static __inline uint8x8_t __attribute__ ((__always_inline__))
+-pandn_ub (uint8x8_t s, uint8x8_t t)
+-{
+-  return __builtin_loongson_pandn_ub (s, t);
+-}
+-
+-__extension__ static __inline int64_t __attribute__ ((__always_inline__))
+-pandn_sd (int64_t s, int64_t t)
+-{
+-  return __builtin_loongson_pandn_sd (s, t);
+-}
+-
+-__extension__ static __inline int32x2_t __attribute__ ((__always_inline__))
+-pandn_sw (int32x2_t s, int32x2_t t)
+-{
+-  return __builtin_loongson_pandn_sw (s, t);
+-}
+-
+-__extension__ static __inline int16x4_t __attribute__ ((__always_inline__))
+-pandn_sh (int16x4_t s, int16x4_t t)
+-{
+-  return __builtin_loongson_pandn_sh (s, t);
+-}
+-
+-__extension__ static __inline int8x8_t __attribute__ ((__always_inline__))
+-pandn_sb (int8x8_t s, int8x8_t t)
+-{
+-  return __builtin_loongson_pandn_sb (s, t);
+-}
+-
+-/* Average.  */
+-__extension__ static __inline uint16x4_t __attribute__ ((__always_inline__))
+-pavgh (uint16x4_t s, uint16x4_t t)
+-{
+-  return __builtin_loongson_pavgh (s, t);
+-}
+-
+-__extension__ static __inline uint8x8_t __attribute__ ((__always_inline__))
+-pavgb (uint8x8_t s, uint8x8_t t)
+-{
+-  return __builtin_loongson_pavgb (s, t);
+-}
+-
+-/* Equality test.  */
+-__extension__ static __inline uint32x2_t __attribute__ ((__always_inline__))
+-pcmpeqw_u (uint32x2_t s, uint32x2_t t)
+-{
+-  return __builtin_loongson_pcmpeqw_u (s, t);
+-}
+-
+-__extension__ static __inline uint16x4_t __attribute__ ((__always_inline__))
+-pcmpeqh_u (uint16x4_t s, uint16x4_t t)
+-{
+-  return __builtin_loongson_pcmpeqh_u (s, t);
+-}
+-
+-__extension__ static __inline uint8x8_t __attribute__ ((__always_inline__))
+-pcmpeqb_u (uint8x8_t s, uint8x8_t t)
+-{
+-  return __builtin_loongson_pcmpeqb_u (s, t);
+-}
+-
+-__extension__ static __inline int32x2_t __attribute__ ((__always_inline__))
+-pcmpeqw_s (int32x2_t s, int32x2_t t)
+-{
+-  return __builtin_loongson_pcmpeqw_s (s, t);
+-}
+-
+-__extension__ static __inline int16x4_t __attribute__ ((__always_inline__))
+-pcmpeqh_s (int16x4_t s, int16x4_t t)
+-{
+-  return __builtin_loongson_pcmpeqh_s (s, t);
+-}
+-
+-__extension__ static __inline int8x8_t __attribute__ ((__always_inline__))
+-pcmpeqb_s (int8x8_t s, int8x8_t t)
+-{
+-  return __builtin_loongson_pcmpeqb_s (s, t);
+-}
+-
+-/* Greater-than test.  */
+-__extension__ static __inline uint32x2_t __attribute__ ((__always_inline__))
+-pcmpgtw_u (uint32x2_t s, uint32x2_t t)
+-{
+-  return __builtin_loongson_pcmpgtw_u (s, t);
+-}
+-
+-__extension__ static __inline uint16x4_t __attribute__ ((__always_inline__))
+-pcmpgth_u (uint16x4_t s, uint16x4_t t)
+-{
+-  return __builtin_loongson_pcmpgth_u (s, t);
+-}
+-
+-__extension__ static __inline uint8x8_t __attribute__ ((__always_inline__))
+-pcmpgtb_u (uint8x8_t s, uint8x8_t t)
+-{
+-  return __builtin_loongson_pcmpgtb_u (s, t);
+-}
+-
+-__extension__ static __inline int32x2_t __attribute__ ((__always_inline__))
+-pcmpgtw_s (int32x2_t s, int32x2_t t)
+-{
+-  return __builtin_loongson_pcmpgtw_s (s, t);
+-}
+-
+-__extension__ static __inline int16x4_t __attribute__ ((__always_inline__))
+-pcmpgth_s (int16x4_t s, int16x4_t t)
+-{
+-  return __builtin_loongson_pcmpgth_s (s, t);
+-}
+-
+-__extension__ static __inline int8x8_t __attribute__ ((__always_inline__))
+-pcmpgtb_s (int8x8_t s, int8x8_t t)
+-{
+-  return __builtin_loongson_pcmpgtb_s (s, t);
+-}
+-
+-/* Extract halfword.  */
+-__extension__ static __inline uint16x4_t __attribute__ ((__always_inline__))
+-pextrh_u (uint16x4_t s, int field /* 0--3 */)
+-{
+-  return __builtin_loongson_pextrh_u (s, field);
+-}
+-
+-__extension__ static __inline int16x4_t __attribute__ ((__always_inline__))
+-pextrh_s (int16x4_t s, int field /* 0--3 */)
+-{
+-  return __builtin_loongson_pextrh_s (s, field);
+-}
+-
+-/* Insert halfword.  */
+-__extension__ static __inline uint16x4_t __attribute__ ((__always_inline__))
+-pinsrh_0_u (uint16x4_t s, uint16x4_t t)
+-{
+-  return __builtin_loongson_pinsrh_0_u (s, t);
+-}
+-
+-__extension__ static __inline uint16x4_t __attribute__ ((__always_inline__))
+-pinsrh_1_u (uint16x4_t s, uint16x4_t t)
+-{
+-  return __builtin_loongson_pinsrh_1_u (s, t);
+-}
+-
+-__extension__ static __inline uint16x4_t __attribute__ ((__always_inline__))
+-pinsrh_2_u (uint16x4_t s, uint16x4_t t)
+-{
+-  return __builtin_loongson_pinsrh_2_u (s, t);
+-}
+-
+-__extension__ static __inline uint16x4_t __attribute__ ((__always_inline__))
+-pinsrh_3_u (uint16x4_t s, uint16x4_t t)
+-{
+-  return __builtin_loongson_pinsrh_3_u (s, t);
+-}
+-
+-__extension__ static __inline int16x4_t __attribute__ ((__always_inline__))
+-pinsrh_0_s (int16x4_t s, int16x4_t t)
+-{
+-  return __builtin_loongson_pinsrh_0_s (s, t);
+-}
+-
+-__extension__ static __inline int16x4_t __attribute__ ((__always_inline__))
+-pinsrh_1_s (int16x4_t s, int16x4_t t)
+-{
+-  return __builtin_loongson_pinsrh_1_s (s, t);
+-}
+-
+-__extension__ static __inline int16x4_t __attribute__ ((__always_inline__))
+-pinsrh_2_s (int16x4_t s, int16x4_t t)
+-{
+-  return __builtin_loongson_pinsrh_2_s (s, t);
+-}
+-
+-__extension__ static __inline int16x4_t __attribute__ ((__always_inline__))
+-pinsrh_3_s (int16x4_t s, int16x4_t t)
+-{
+-  return __builtin_loongson_pinsrh_3_s (s, t);
+-}
+-
+-/* Multiply and add.  */
+-__extension__ static __inline int32x2_t __attribute__ ((__always_inline__))
+-pmaddhw (int16x4_t s, int16x4_t t)
+-{
+-  return __builtin_loongson_pmaddhw (s, t);
+-}
+-
+-/* Maximum of signed halfwords.  */
+-__extension__ static __inline int16x4_t __attribute__ ((__always_inline__))
+-pmaxsh (int16x4_t s, int16x4_t t)
+-{
+-  return __builtin_loongson_pmaxsh (s, t);
+-}
+-
+-/* Maximum of unsigned bytes.  */
+-__extension__ static __inline uint8x8_t __attribute__ ((__always_inline__))
+-pmaxub (uint8x8_t s, uint8x8_t t)
+-{
+-  return __builtin_loongson_pmaxub (s, t);
+-}
+-
+-/* Minimum of signed halfwords.  */
+-__extension__ static __inline int16x4_t __attribute__ ((__always_inline__))
+-pminsh (int16x4_t s, int16x4_t t)
+-{
+-  return __builtin_loongson_pminsh (s, t);
+-}
+-
+-/* Minimum of unsigned bytes.  */
+-__extension__ static __inline uint8x8_t __attribute__ ((__always_inline__))
+-pminub (uint8x8_t s, uint8x8_t t)
+-{
+-  return __builtin_loongson_pminub (s, t);
+-}
+-
+-/* Move byte mask.  */
+-__extension__ static __inline uint8x8_t __attribute__ ((__always_inline__))
+-pmovmskb_u (uint8x8_t s)
+-{
+-  return __builtin_loongson_pmovmskb_u (s);
+-}
+-
+-__extension__ static __inline int8x8_t __attribute__ ((__always_inline__))
+-pmovmskb_s (int8x8_t s)
+-{
+-  return __builtin_loongson_pmovmskb_s (s);
+-}
+-
+-/* Multiply unsigned integers and store high result.  */
+-__extension__ static __inline uint16x4_t __attribute__ ((__always_inline__))
+-pmulhuh (uint16x4_t s, uint16x4_t t)
+-{
+-  return __builtin_loongson_pmulhuh (s, t);
+-}
+-
+-/* Multiply signed integers and store high result.  */
+-__extension__ static __inline int16x4_t __attribute__ ((__always_inline__))
+-pmulhh (int16x4_t s, int16x4_t t)
+-{
+-  return __builtin_loongson_pmulhh (s, t);
+-}
+-
+-/* Multiply signed integers and store low result.  */
+-__extension__ static __inline int16x4_t __attribute__ ((__always_inline__))
+-pmullh (int16x4_t s, int16x4_t t)
+-{
+-  return __builtin_loongson_pmullh (s, t);
+-}
+-
+-/* Multiply unsigned word integers.  */
+-__extension__ static __inline int64_t __attribute__ ((__always_inline__))
+-pmuluw (uint32x2_t s, uint32x2_t t)
+-{
+-  return __builtin_loongson_pmuluw (s, t);
+-}
+-
+-/* Absolute difference.  */
+-__extension__ static __inline uint8x8_t __attribute__ ((__always_inline__))
+-pasubub (uint8x8_t s, uint8x8_t t)
+-{
+-  return __builtin_loongson_pasubub (s, t);
+-}
+-
+-/* Sum of unsigned byte integers.  */
+-__extension__ static __inline uint16x4_t __attribute__ ((__always_inline__))
+-biadd (uint8x8_t s)
+-{
+-  return __builtin_loongson_biadd (s);
+-}
+-
+-/* Sum of absolute differences.
+-   Note that this intrinsic expands into two machine instructions:
+-   PASUBUB followed by BIADD.  */
+-__extension__ static __inline uint16x4_t __attribute__ ((__always_inline__))
+-psadbh (uint8x8_t s, uint8x8_t t)
+-{
+-  return __builtin_loongson_psadbh (s, t);
+-}
+-
+-/* Shuffle halfwords.  */
+-__extension__ static __inline uint16x4_t __attribute__ ((__always_inline__))
+-pshufh_u (uint16x4_t dest, uint16x4_t s, uint8_t order)
+-{
+-  return __builtin_loongson_pshufh_u (s, order);
+-}
+-
+-__extension__ static __inline int16x4_t __attribute__ ((__always_inline__))
+-pshufh_s (int16x4_t dest, int16x4_t s, uint8_t order)
+-{
+-  return __builtin_loongson_pshufh_s (s, order);
+-}
+-
+-/* Shift left logical.  */
+-__extension__ static __inline uint16x4_t __attribute__ ((__always_inline__))
+-psllh_u (uint16x4_t s, uint8_t amount)
+-{
+-  return __builtin_loongson_psllh_u (s, amount);
+-}
+-
+-__extension__ static __inline int16x4_t __attribute__ ((__always_inline__))
+-psllh_s (int16x4_t s, uint8_t amount)
+-{
+-  return __builtin_loongson_psllh_s (s, amount);
+-}
+-
+-__extension__ static __inline uint32x2_t __attribute__ ((__always_inline__))
+-psllw_u (uint32x2_t s, uint8_t amount)
+-{
+-  return __builtin_loongson_psllw_u (s, amount);
+-}
+-
+-__extension__ static __inline int32x2_t __attribute__ ((__always_inline__))
+-psllw_s (int32x2_t s, uint8_t amount)
+-{
+-  return __builtin_loongson_psllw_s (s, amount);
+-}
+-
+-/* Shift right logical.  */
+-__extension__ static __inline uint16x4_t __attribute__ ((__always_inline__))
+-psrlh_u (uint16x4_t s, uint8_t amount)
+-{
+-  return __builtin_loongson_psrlh_u (s, amount);
+-}
+-
+-__extension__ static __inline int16x4_t __attribute__ ((__always_inline__))
+-psrlh_s (int16x4_t s, uint8_t amount)
+-{
+-  return __builtin_loongson_psrlh_s (s, amount);
+-}
+-
+-__extension__ static __inline uint32x2_t __attribute__ ((__always_inline__))
+-psrlw_u (uint32x2_t s, uint8_t amount)
+-{
+-  return __builtin_loongson_psrlw_u (s, amount);
+-}
+-
+-__extension__ static __inline int32x2_t __attribute__ ((__always_inline__))
+-psrlw_s (int32x2_t s, uint8_t amount)
+-{
+-  return __builtin_loongson_psrlw_s (s, amount);
+-}
+-
+-/* Shift right arithmetic.  */
+-__extension__ static __inline uint16x4_t __attribute__ ((__always_inline__))
+-psrah_u (uint16x4_t s, uint8_t amount)
+-{
+-  return __builtin_loongson_psrah_u (s, amount);
+-}
+-
+-__extension__ static __inline int16x4_t __attribute__ ((__always_inline__))
+-psrah_s (int16x4_t s, uint8_t amount)
+-{
+-  return __builtin_loongson_psrah_s (s, amount);
+-}
+-
+-__extension__ static __inline uint32x2_t __attribute__ ((__always_inline__))
+-psraw_u (uint32x2_t s, uint8_t amount)
+-{
+-  return __builtin_loongson_psraw_u (s, amount);
+-}
+-
+-__extension__ static __inline int32x2_t __attribute__ ((__always_inline__))
+-psraw_s (int32x2_t s, uint8_t amount)
+-{
+-  return __builtin_loongson_psraw_s (s, amount);
+-}
+-
+-/* Vector subtraction, treating overflow by wraparound.  */
+-__extension__ static __inline uint32x2_t __attribute__ ((__always_inline__))
+-psubw_u (uint32x2_t s, uint32x2_t t)
+-{
+-  return __builtin_loongson_psubw_u (s, t);
+-}
+-
+-__extension__ static __inline uint16x4_t __attribute__ ((__always_inline__))
+-psubh_u (uint16x4_t s, uint16x4_t t)
+-{
+-  return __builtin_loongson_psubh_u (s, t);
+-}
+-
+-__extension__ static __inline uint8x8_t __attribute__ ((__always_inline__))
+-psubb_u (uint8x8_t s, uint8x8_t t)
+-{
+-  return __builtin_loongson_psubb_u (s, t);
+-}
+-
+-__extension__ static __inline int32x2_t __attribute__ ((__always_inline__))
+-psubw_s (int32x2_t s, int32x2_t t)
+-{
+-  return __builtin_loongson_psubw_s (s, t);
+-}
+-
+-__extension__ static __inline int16x4_t __attribute__ ((__always_inline__))
+-psubh_s (int16x4_t s, int16x4_t t)
+-{
+-  return __builtin_loongson_psubh_s (s, t);
+-}
+-
+-__extension__ static __inline int8x8_t __attribute__ ((__always_inline__))
+-psubb_s (int8x8_t s, int8x8_t t)
+-{
+-  return __builtin_loongson_psubb_s (s, t);
+-}
+-
+-/* Subtraction of doubleword integers, treating overflow by wraparound.  */
+-__extension__ static __inline uint64_t __attribute__ ((__always_inline__))
+-psubd_u (uint64_t s, uint64_t t)
+-{
+-  return __builtin_loongson_psubd_u (s, t);
+-}
+-
+-__extension__ static __inline int64_t __attribute__ ((__always_inline__))
+-psubd_s (int64_t s, int64_t t)
+-{
+-  return __builtin_loongson_psubd_s (s, t);
+-}
+-
+-/* Vector subtraction, treating overflow by signed saturation.  */
+-__extension__ static __inline int16x4_t __attribute__ ((__always_inline__))
+-psubsh (int16x4_t s, int16x4_t t)
+-{
+-  return __builtin_loongson_psubsh (s, t);
+-}
+-
+-__extension__ static __inline int8x8_t __attribute__ ((__always_inline__))
+-psubsb (int8x8_t s, int8x8_t t)
+-{
+-  return __builtin_loongson_psubsb (s, t);
+-}
+-
+-/* Vector subtraction, treating overflow by unsigned saturation.  */
+-__extension__ static __inline uint16x4_t __attribute__ ((__always_inline__))
+-psubush (uint16x4_t s, uint16x4_t t)
+-{
+-  return __builtin_loongson_psubush (s, t);
+-}
+-
+-__extension__ static __inline uint8x8_t __attribute__ ((__always_inline__))
+-psubusb (uint8x8_t s, uint8x8_t t)
+-{
+-  return __builtin_loongson_psubusb (s, t);
+-}
+-
+-/* Unpack high data.  */
+-__extension__ static __inline uint32x2_t __attribute__ ((__always_inline__))
+-punpckhwd_u (uint32x2_t s, uint32x2_t t)
+-{
+-  return __builtin_loongson_punpckhwd_u (s, t);
+-}
+-
+-__extension__ static __inline uint16x4_t __attribute__ ((__always_inline__))
+-punpckhhw_u (uint16x4_t s, uint16x4_t t)
+-{
+-  return __builtin_loongson_punpckhhw_u (s, t);
+-}
+-
+-__extension__ static __inline uint8x8_t __attribute__ ((__always_inline__))
+-punpckhbh_u (uint8x8_t s, uint8x8_t t)
+-{
+-  return __builtin_loongson_punpckhbh_u (s, t);
+-}
+-
+-__extension__ static __inline int32x2_t __attribute__ ((__always_inline__))
+-punpckhwd_s (int32x2_t s, int32x2_t t)
+-{
+-  return __builtin_loongson_punpckhwd_s (s, t);
+-}
+-
+-__extension__ static __inline int16x4_t __attribute__ ((__always_inline__))
+-punpckhhw_s (int16x4_t s, int16x4_t t)
+-{
+-  return __builtin_loongson_punpckhhw_s (s, t);
+-}
+-
+-__extension__ static __inline int8x8_t __attribute__ ((__always_inline__))
+-punpckhbh_s (int8x8_t s, int8x8_t t)
+-{
+-  return __builtin_loongson_punpckhbh_s (s, t);
+-}
+-
+-/* Unpack low data.  */
+-__extension__ static __inline uint32x2_t __attribute__ ((__always_inline__))
+-punpcklwd_u (uint32x2_t s, uint32x2_t t)
+-{
+-  return __builtin_loongson_punpcklwd_u (s, t);
+-}
+-
+-__extension__ static __inline uint16x4_t __attribute__ ((__always_inline__))
+-punpcklhw_u (uint16x4_t s, uint16x4_t t)
+-{
+-  return __builtin_loongson_punpcklhw_u (s, t);
+-}
+-
+-__extension__ static __inline uint8x8_t __attribute__ ((__always_inline__))
+-punpcklbh_u (uint8x8_t s, uint8x8_t t)
+-{
+-  return __builtin_loongson_punpcklbh_u (s, t);
+-}
+-
+-__extension__ static __inline int32x2_t __attribute__ ((__always_inline__))
+-punpcklwd_s (int32x2_t s, int32x2_t t)
+-{
+-  return __builtin_loongson_punpcklwd_s (s, t);
+-}
+-
+-__extension__ static __inline int16x4_t __attribute__ ((__always_inline__))
+-punpcklhw_s (int16x4_t s, int16x4_t t)
+-{
+-  return __builtin_loongson_punpcklhw_s (s, t);
+-}
+-
+-__extension__ static __inline int8x8_t __attribute__ ((__always_inline__))
+-punpcklbh_s (int8x8_t s, int8x8_t t)
+-{
+-  return __builtin_loongson_punpcklbh_s (s, t);
+-}
+-
+-#ifdef __cplusplus
+-}
+-#endif
+ 
++#if !defined(_GCC_LOONGSON_MMIINTRIN_H)
++#warning  \
++  loongson.h will be deprecated without further notice at a future date. \
++  Please use loongson-mmiintrin.h instead.
++#include "loongson-mmiintrin.h"
+ #endif
+diff --git a/gcc/config/mips/mips-cpus.def b/gcc/config/mips/mips-cpus.def
+index d0640e52b..e0551176f 100644
+--- a/gcc/config/mips/mips-cpus.def
++++ b/gcc/config/mips/mips-cpus.def
+@@ -162,7 +162,10 @@ MIPS_CPU ("sr71000", PROCESSOR_SR71000, 64, PTF_AVOID_BRANCHLIKELY_SPEED)
+ MIPS_CPU ("xlr", PROCESSOR_XLR, 64, PTF_AVOID_BRANCHLIKELY_SPEED)
+ 
+ /* MIPS64 Release 2 processors.  */
+-MIPS_CPU ("loongson3a", PROCESSOR_LOONGSON_3A, 65, PTF_AVOID_BRANCHLIKELY_SPEED)
++MIPS_CPU ("loongson3a", PROCESSOR_GS464, 65, PTF_AVOID_BRANCHLIKELY_SPEED)
++MIPS_CPU ("gs464", PROCESSOR_GS464, 65, PTF_AVOID_BRANCHLIKELY_SPEED)
++MIPS_CPU ("gs464e", PROCESSOR_GS464E, 65, PTF_AVOID_BRANCHLIKELY_SPEED)
++MIPS_CPU ("gs264e", PROCESSOR_GS264E, 65, PTF_AVOID_BRANCHLIKELY_SPEED)
+ MIPS_CPU ("octeon", PROCESSOR_OCTEON, 65, PTF_AVOID_BRANCHLIKELY_SPEED)
+ MIPS_CPU ("octeon+", PROCESSOR_OCTEON, 65, PTF_AVOID_BRANCHLIKELY_SPEED)
+ MIPS_CPU ("octeon2", PROCESSOR_OCTEON2, 65, PTF_AVOID_BRANCHLIKELY_SPEED)
+diff --git a/gcc/config/mips/mips-msa.md b/gcc/config/mips/mips-msa.md
+index 3b95ef40c..eaa0a5bb3 100644
+--- a/gcc/config/mips/mips-msa.md
++++ b/gcc/config/mips/mips-msa.md
+@@ -580,6 +580,24 @@
+   operands[2] = reg;
+ })
+ 
++(define_insn_and_split "neg<mode>2_insn"
++  [(set (match_operand:MSA 0 "register_operand" "=f")
++	(neg:MSA (match_operand:MSA 1 "register_operand" "f")))]
++  "ISA_HAS_MSA"
++{
++    return "#";
++}
++  "ISA_HAS_MSA"
++  [(const_int 0)]
++{
++  rtx reg = gen_reg_rtx (<MODE>mode);
++  emit_move_insn (reg, CONST0_RTX (<MODE>mode));
++  emit_insn(gen_sub<mode>3(operands[0], reg, operands[1]));
++  DONE;
++}
++  [(set_attr "type" "simd_logic")
++   (set_attr "mode" "<MODE>")])
++
+ (define_expand "msa_ldi<mode>"
+   [(match_operand:IMSA 0 "register_operand")
+    (match_operand 1 "const_imm10_operand")]
+diff --git a/gcc/config/mips/mips-protos.h b/gcc/config/mips/mips-protos.h
+index d9d6e92cb..cec96c243 100644
+--- a/gcc/config/mips/mips-protos.h
++++ b/gcc/config/mips/mips-protos.h
+@@ -214,7 +214,7 @@ extern bool mips_legitimize_move (machine_mode, rtx, rtx);
+ 
+ extern rtx mips_subword (rtx, bool);
+ extern bool mips_split_move_p (rtx, rtx, enum mips_split_type);
+-extern void mips_split_move (rtx, rtx, enum mips_split_type);
++extern void mips_split_move (rtx, rtx, enum mips_split_type, rtx);
+ extern bool mips_split_move_insn_p (rtx, rtx, rtx);
+ extern void mips_split_move_insn (rtx, rtx, rtx);
+ extern void mips_split_128bit_move (rtx, rtx);
+@@ -323,6 +323,7 @@ extern bool mips_linked_madd_p (rtx_insn *, rtx_insn *);
+ extern bool mips_store_data_bypass_p (rtx_insn *, rtx_insn *);
+ extern int mips_dspalu_bypass_p (rtx, rtx);
+ extern rtx mips_prefetch_cookie (rtx, rtx);
++extern rtx mips_loongson_ext2_prefetch_cookie (rtx, rtx);
+ 
+ extern const char *current_section_name (void);
+ extern unsigned int current_section_flags (void);
+diff --git a/gcc/config/mips/mips-tables.opt b/gcc/config/mips/mips-tables.opt
+index daccefb1c..bfbe25799 100644
+--- a/gcc/config/mips/mips-tables.opt
++++ b/gcc/config/mips/mips-tables.opt
+@@ -679,20 +679,28 @@ EnumValue
+ Enum(mips_arch_opt_value) String(loongson3a) Value(96) Canonical
+ 
+ EnumValue
+-Enum(mips_arch_opt_value) String(octeon) Value(97) Canonical
++Enum(mips_arch_opt_value) String(gs464) Value(97) Canonical
+ 
+ EnumValue
+-Enum(mips_arch_opt_value) String(octeon+) Value(98) Canonical
++Enum(mips_arch_opt_value) String(gs464e) Value(98) Canonical
+ 
+ EnumValue
+-Enum(mips_arch_opt_value) String(octeon2) Value(99) Canonical
++Enum(mips_arch_opt_value) String(gs264e) Value(99) Canonical
+ 
+ EnumValue
+-Enum(mips_arch_opt_value) String(octeon3) Value(100) Canonical
++Enum(mips_arch_opt_value) String(octeon) Value(100) Canonical
+ 
+ EnumValue
+-Enum(mips_arch_opt_value) String(xlp) Value(101) Canonical
++Enum(mips_arch_opt_value) String(octeon+) Value(101) Canonical
+ 
+ EnumValue
+-Enum(mips_arch_opt_value) String(i6400) Value(102) Canonical
++Enum(mips_arch_opt_value) String(octeon2) Value(102) Canonical
+ 
++EnumValue
++Enum(mips_arch_opt_value) String(octeon3) Value(103) Canonical
++
++EnumValue
++Enum(mips_arch_opt_value) String(xlp) Value(104) Canonical
++
++EnumValue
++Enum(mips_arch_opt_value) String(i6400) Value(105) Canonical
+diff --git a/gcc/config/mips/mips.c b/gcc/config/mips/mips.c
+index e7d65ad7a..05129fc53 100644
+--- a/gcc/config/mips/mips.c
++++ b/gcc/config/mips/mips.c
+@@ -826,7 +826,13 @@ static const struct mips_rtx_cost_data
+   { /* Loongson-2F */
+     DEFAULT_COSTS
+   },
+-  { /* Loongson-3A */
++  { /* Loongson gs464.  */
++    DEFAULT_COSTS
++  },
++  { /* Loongson gs464e.  */
++    DEFAULT_COSTS
++  },
++  { /* Loongson gs264e.  */
+     DEFAULT_COSTS
+   },
+   { /* M4k */
+@@ -3002,7 +3008,7 @@ static void
+ mips_emit_move_or_split (rtx dest, rtx src, enum mips_split_type split_type)
+ {
+   if (mips_split_move_p (dest, src, split_type))
+-    mips_split_move (dest, src, split_type);
++    mips_split_move (dest, src, split_type, NULL);
+   else
+     mips_emit_move (dest, src);
+ }
+@@ -4754,7 +4760,7 @@ mips_split_move_p (rtx dest, rtx src, enum mips_split_type split_type)
+    SPLIT_TYPE describes the split condition.  */
+ 
+ void
+-mips_split_move (rtx dest, rtx src, enum mips_split_type split_type)
++mips_split_move (rtx dest, rtx src, enum mips_split_type split_type, rtx insn_)
+ {
+   rtx low_dest;
+ 
+@@ -4814,6 +4820,32 @@ mips_split_move (rtx dest, rtx src, enum mips_split_type split_type)
+ 	  mips_emit_move (mips_subword (dest, true), mips_subword (src, true));
+ 	}
+     }
++
++  /* This is a hack.  See if the next insn uses DEST and if so, see if we
++     can forward SRC for DEST.  This is most useful if the next insn is a
++     simple store.   */
++  rtx_insn *insn = (rtx_insn *)insn_;
++  struct mips_address_info addr = {};
++  if (insn)
++    {
++      rtx_insn *next = next_nonnote_nondebug_insn_bb (insn);
++      if (next)
++	{
++	  rtx set = single_set (next);
++	  if (set && SET_SRC (set) == dest)
++	    {
++	      if (MEM_P (src))
++		{
++		  rtx tmp = XEXP (src, 0);
++		  mips_classify_address (&addr, tmp, GET_MODE (tmp), true);
++		  if (addr.reg && REGNO (addr.reg) != REGNO (dest))
++		    validate_change (next, &SET_SRC (set), src, false);
++		}
++	      else
++		validate_change (next, &SET_SRC (set), src, false);
++	    }
++	}
++    }
+ }
+ 
+ /* Return the split type for instruction INSN.  */
+@@ -5041,7 +5073,7 @@ mips_split_move_insn_p (rtx dest, rtx src, rtx insn)
+ void
+ mips_split_move_insn (rtx dest, rtx src, rtx insn)
+ {
+-  mips_split_move (dest, src, mips_insn_split_type (insn));
++  mips_split_move (dest, src, mips_insn_split_type (insn), insn);
+ }
+ 
+ /* Return the appropriate instructions to move SRC into DEST.  Assume
+@@ -12774,8 +12806,9 @@ mips_hard_regno_mode_ok_uncached (unsigned int regno, machine_mode mode)
+       if (mode == CCFmode)
+ 	return !(TARGET_FLOATXX && (regno & 1) != 0);
+ 
+-      /* Allow 64-bit vector modes for Loongson-2E/2F.  */
+-      if (TARGET_LOONGSON_VECTORS
++      /* Allow 64-bit vector modes for Loongson MultiMedia extensions
++	 Instructions (MMI).  */
++      if (TARGET_LOONGSON_MMI
+ 	  && (mode == V2SImode
+ 	      || mode == V4HImode
+ 	      || mode == V8QImode
+@@ -13345,7 +13378,7 @@ mips_vector_mode_supported_p (machine_mode mode)
+     case E_V2SImode:
+     case E_V4HImode:
+     case E_V8QImode:
+-      return TARGET_LOONGSON_VECTORS;
++      return TARGET_LOONGSON_MMI;
+ 
+     default:
+       return MSA_SUPPORTED_MODE_P (mode);
+@@ -14578,6 +14611,7 @@ mips_issue_rate (void)
+     case PROCESSOR_OCTEON2:
+     case PROCESSOR_OCTEON3:
+     case PROCESSOR_I6400:
++    case PROCESSOR_GS264E:
+       return 2;
+ 
+     case PROCESSOR_SB1:
+@@ -14590,7 +14624,8 @@ mips_issue_rate (void)
+ 
+     case PROCESSOR_LOONGSON_2E:
+     case PROCESSOR_LOONGSON_2F:
+-    case PROCESSOR_LOONGSON_3A:
++    case PROCESSOR_GS464:
++    case PROCESSOR_GS464E:
+     case PROCESSOR_P5600:
+       return 4;
+ 
+@@ -14721,10 +14756,10 @@ mips_multipass_dfa_lookahead (void)
+   if (TUNE_SB1)
+     return 4;
+ 
+-  if (TUNE_LOONGSON_2EF || TUNE_LOONGSON_3A)
++  if (TUNE_LOONGSON_2EF || TUNE_GS464 || TUNE_GS464E)
+     return 4;
+ 
+-  if (TUNE_OCTEON)
++  if (TUNE_OCTEON || TUNE_GS264E)
+     return 2;
+ 
+   if (TUNE_P5600 || TUNE_I6400)
+@@ -15117,6 +15152,24 @@ mips_prefetch_cookie (rtx write, rtx locality)
+   /* store_retained / load_retained.  */
+   return GEN_INT (INTVAL (write) + 6);
+ }
++
++/* Loongson EXT2 only implements pref hint=0 (prefetch for load) and hint=1
++   (prefetch for store), other hint just scale to hint = 0 and hint = 1.  */
++
++rtx
++mips_loongson_ext2_prefetch_cookie (rtx write, rtx)
++{
++  /* store.  */
++  if (INTVAL (write) == 1)
++    return GEN_INT (INTVAL (write));
++
++  /* load.  */
++  if (INTVAL (write) == 0)
++    return GEN_INT (INTVAL (write));
++
++  gcc_unreachable ();
++}
++
+ 
+ /* Flags that indicate when a built-in function is available.
+ 
+@@ -15179,7 +15232,7 @@ AVAIL_NON_MIPS16 (dspr2, TARGET_DSPR2)
+ AVAIL_NON_MIPS16 (dsp_32, !TARGET_64BIT && TARGET_DSP)
+ AVAIL_NON_MIPS16 (dsp_64, TARGET_64BIT && TARGET_DSP)
+ AVAIL_NON_MIPS16 (dspr2_32, !TARGET_64BIT && TARGET_DSPR2)
+-AVAIL_NON_MIPS16 (loongson, TARGET_LOONGSON_VECTORS)
++AVAIL_NON_MIPS16 (loongson, TARGET_LOONGSON_MMI)
+ AVAIL_NON_MIPS16 (cache, TARGET_CACHE_BUILTIN)
+ AVAIL_NON_MIPS16 (msa, TARGET_MSA)
+ 
+@@ -20085,6 +20138,24 @@ mips_option_override (void)
+       TARGET_DSPR2 = false;
+     }
+ 
++  /* Make sure that when TARGET_LOONGSON_MMI is true, TARGET_HARD_FLOAT_ABI
++     is true.  In o32 pairs of floating-point registers provide 64-bit
++     values.  */
++  if (TARGET_LOONGSON_MMI &&  !TARGET_HARD_FLOAT_ABI)
++    error ("%<-mloongson-mmi%> must be used with %<-mhard-float%>");
++
++  /* If TARGET_LOONGSON_EXT2, enable TARGET_LOONGSON_EXT.  */
++  if (TARGET_LOONGSON_EXT2)
++    {
++      /* Make sure that when TARGET_LOONGSON_EXT2 is true, TARGET_LOONGSON_EXT
++	 is true.  If a user explicitly says -mloongson-ext2 -mno-loongson-ext
++	 then that is an error.  */
++      if (!TARGET_LOONGSON_EXT
++	  && (target_flags_explicit & MASK_LOONGSON_EXT) != 0)
++	error ("%<-mloongson-ext2%> must be used with %<-mloongson-ext%>");
++      target_flags |= MASK_LOONGSON_EXT;
++    }
++
+   /* .eh_frame addresses should be the same width as a C pointer.
+      Most MIPS ABIs support only one pointer size, so the assembler
+      will usually know exactly how big an .eh_frame address is.
+@@ -21070,12 +21141,12 @@ void mips_function_profiler (FILE *file)
+ 
+ /* Implement TARGET_SHIFT_TRUNCATION_MASK.  We want to keep the default
+    behavior of TARGET_SHIFT_TRUNCATION_MASK for non-vector modes even
+-   when TARGET_LOONGSON_VECTORS is true.  */
++   when TARGET_LOONGSON_MMI is true.  */
+ 
+ static unsigned HOST_WIDE_INT
+ mips_shift_truncation_mask (machine_mode mode)
+ {
+-  if (TARGET_LOONGSON_VECTORS && VECTOR_MODE_P (mode))
++  if (TARGET_LOONGSON_MMI && VECTOR_MODE_P (mode))
+     return 0;
+ 
+   return GET_MODE_BITSIZE (mode) - 1;
+@@ -21176,7 +21247,7 @@ mips_expand_vpc_loongson_even_odd (struct expand_vec_perm_d *d)
+   unsigned i, odd, nelt = d->nelt;
+   rtx t0, t1, t2, t3;
+ 
+-  if (!(TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS))
++  if (!(TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI))
+     return false;
+   /* Even-odd for V2SI/V2SFmode is matched by interleave directly.  */
+   if (nelt < 4)
+@@ -21233,7 +21304,7 @@ mips_expand_vpc_loongson_pshufh (struct expand_vec_perm_d *d)
+   unsigned i, mask;
+   rtx rmask;
+ 
+-  if (!(TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS))
++  if (!(TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI))
+     return false;
+   if (d->vmode != V4HImode)
+     return false;
+@@ -21285,7 +21356,7 @@ mips_expand_vpc_loongson_bcast (struct expand_vec_perm_d *d)
+   unsigned i, elt;
+   rtx t0, t1;
+ 
+-  if (!(TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS))
++  if (!(TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI))
+     return false;
+   /* Note that we've already matched V2SI via punpck and V4HI via pshufh.  */
+   if (d->vmode != V8QImode)
+@@ -21879,7 +21950,7 @@ mips_expand_vector_init (rtx target, rtx vals)
+     }
+ 
+   /* Loongson is the only cpu with vectors with more elements.  */
+-  gcc_assert (TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS);
++  gcc_assert (TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI);
+ 
+   /* If all values are identical, broadcast the value.  */
+   if (all_same)
+diff --git a/gcc/config/mips/mips.h b/gcc/config/mips/mips.h
+index 84ae67527..f7645ce00 100644
+--- a/gcc/config/mips/mips.h
++++ b/gcc/config/mips/mips.h
+@@ -266,7 +266,9 @@ struct mips_cpu_info {
+ #define TARGET_LOONGSON_2E          (mips_arch == PROCESSOR_LOONGSON_2E)
+ #define TARGET_LOONGSON_2F          (mips_arch == PROCESSOR_LOONGSON_2F)
+ #define TARGET_LOONGSON_2EF         (TARGET_LOONGSON_2E || TARGET_LOONGSON_2F)
+-#define TARGET_LOONGSON_3A          (mips_arch == PROCESSOR_LOONGSON_3A)
++#define TARGET_GS464		    (mips_arch == PROCESSOR_GS464)
++#define TARGET_GS464E		    (mips_arch == PROCESSOR_GS464E)
++#define TARGET_GS264E		    (mips_arch == PROCESSOR_GS264E)
+ #define TARGET_MIPS3900             (mips_arch == PROCESSOR_R3900)
+ #define TARGET_MIPS4000             (mips_arch == PROCESSOR_R4000)
+ #define TARGET_MIPS4120             (mips_arch == PROCESSOR_R4120)
+@@ -298,7 +300,9 @@ struct mips_cpu_info {
+ 				     || mips_tune == PROCESSOR_74KF3_2)
+ #define TUNE_LOONGSON_2EF           (mips_tune == PROCESSOR_LOONGSON_2E	\
+ 				     || mips_tune == PROCESSOR_LOONGSON_2F)
+-#define TUNE_LOONGSON_3A            (mips_tune == PROCESSOR_LOONGSON_3A)
++#define TUNE_GS464		    (mips_tune == PROCESSOR_GS464)
++#define TUNE_GS464E		    (mips_tune == PROCESSOR_GS464E)
++#define TUNE_GS264E		    (mips_tune == PROCESSOR_GS264E)
+ #define TUNE_MIPS3000               (mips_tune == PROCESSOR_R3000)
+ #define TUNE_MIPS3900               (mips_tune == PROCESSOR_R3900)
+ #define TUNE_MIPS4000               (mips_tune == PROCESSOR_R4000)
+@@ -318,13 +322,6 @@ struct mips_cpu_info {
+ #define TUNE_P5600                  (mips_tune == PROCESSOR_P5600)
+ #define TUNE_I6400                  (mips_tune == PROCESSOR_I6400)
+ 
+-/* Whether vector modes and intrinsics for ST Microelectronics
+-   Loongson-2E/2F processors should be enabled.  In o32 pairs of
+-   floating-point registers provide 64-bit values.  */
+-#define TARGET_LOONGSON_VECTORS	    (TARGET_HARD_FLOAT_ABI		\
+-				     && (TARGET_LOONGSON_2EF		\
+-					 || TARGET_LOONGSON_3A))
+-
+ /* True if the pre-reload scheduler should try to create chains of
+    multiply-add or multiply-subtract instructions.  For example,
+    suppose we have:
+@@ -595,9 +592,25 @@ struct mips_cpu_info {
+       if (TARGET_ABICALLS)						\
+ 	builtin_define ("__mips_abicalls");				\
+ 									\
+-      /* Whether Loongson vector modes are enabled.  */                 \
+-      if (TARGET_LOONGSON_VECTORS)					\
+-        builtin_define ("__mips_loongson_vector_rev");                  \
++      /* Whether Loongson vector modes are enabled.  */			\
++      if (TARGET_LOONGSON_MMI)						\
++	{								\
++	  builtin_define ("__mips_loongson_vector_rev");		\
++	  builtin_define ("__mips_loongson_mmi");			\
++	}								\
++									\
++      /* Whether Loongson EXT modes are enabled.  */			\
++      if (TARGET_LOONGSON_EXT)						\
++	{								\
++	  builtin_define ("__mips_loongson_ext");			\
++	  if (TARGET_LOONGSON_EXT2)					\
++	    {								\
++	      builtin_define ("__mips_loongson_ext2");			\
++	      builtin_define ("__mips_loongson_ext_rev=2");		\
++	    }								\
++	  else								\
++	      builtin_define ("__mips_loongson_ext_rev=1");		\
++	}								\
+ 									\
+       /* Historical Octeon macro.  */					\
+       if (TARGET_OCTEON)						\
+@@ -779,7 +792,8 @@ struct mips_cpu_info {
+      %{march=mips32r6: -mips32r6} \
+      %{march=mips64|march=5k*|march=20k*|march=sb1*|march=sr71000 \
+        |march=xlr: -mips64} \
+-     %{march=mips64r2|march=loongson3a|march=octeon|march=xlp: -mips64r2} \
++     %{march=mips64r2|march=loongson3a|march=gs464|march=gs464e|march=gs264e \
++       |march=octeon|march=xlp: -mips64r2} \
+      %{march=mips64r3: -mips64r3} \
+      %{march=mips64r5: -mips64r5} \
+      %{march=mips64r6|march=i6400: -mips64r6}}"
+@@ -876,14 +890,36 @@ struct mips_cpu_info {
+ 
+ /* A spec that infers the:
+    -mnan=2008 setting from a -mips argument,
+-   -mdsp setting from a -march argument.  */
+-#define BASE_DRIVER_SELF_SPECS \
+-  MIPS_ISA_NAN2008_SPEC,       \
++   -mdsp setting from a -march argument.
++   -mloongson-mmi setting from a -march argument.  */
++#define BASE_DRIVER_SELF_SPECS	\
++  MIPS_ISA_NAN2008_SPEC,	\
++  MIPS_ASE_DSP_SPEC, 		\
++  MIPS_ASE_LOONGSON_MMI_SPEC,	\
++  MIPS_ASE_LOONGSON_EXT_SPEC,	\
++  MIPS_ASE_MSA_SPEC
++
++
++#define MIPS_ASE_DSP_SPEC \
+   "%{!mno-dsp: \
+      %{march=24ke*|march=34kc*|march=34kf*|march=34kx*|march=1004k* \
+        |march=interaptiv: -mdsp} \
+      %{march=74k*|march=m14ke*: %{!mno-dspr2: -mdspr2 -mdsp}}}"
+ 
++#define MIPS_ASE_LOONGSON_MMI_SPEC						\
++  "%{!mno-loongson-mmi:								\
++     %{march=loongson2e|march=loongson2f|march=loongson3a: -mloongson-mmi}}"
++
++#define MIPS_ASE_LOONGSON_EXT_SPEC						\
++  "%{!mno-loongson-ext:								\
++     %{march=loongson3a|march=gs464: -mloongson-ext}				\
++     %{march=gs464e|march=gs264e: %{!mno-loongson-ext2:			\
++       -mloongson-ext2 -mloongson-ext}}}"
++
++#define MIPS_ASE_MSA_SPEC						\
++  "%{!mno-msa:								\
++     %{march=gs264e: -mmsa}}"
++
+ #define DRIVER_SELF_SPECS \
+   MIPS_ISA_LEVEL_SPEC,	  \
+   BASE_DRIVER_SELF_SPECS
+@@ -935,7 +971,7 @@ struct mips_cpu_info {
+ 
+ /* ISA has 32 single-precision registers.  */
+ #define ISA_HAS_ODD_SPREG	((mips_isa_rev >= 1			\
+-				  && !TARGET_LOONGSON_3A)		\
++				  && !TARGET_GS464)			\
+ 				 || TARGET_FLOAT64			\
+ 				 || TARGET_MIPS5900)
+ 
+@@ -978,7 +1014,7 @@ struct mips_cpu_info {
+    because the former are faster and can also have the effect of reducing
+    code size.  */
+ #define ISA_AVOID_DIV_HILO	((TARGET_LOONGSON_2EF			\
+-				  || TARGET_LOONGSON_3A)		\
++				  || TARGET_GS464)			\
+ 				 && !TARGET_MIPS16)
+ 
+ /* ISA supports instructions DDIV and DDIVU. */
+@@ -1071,14 +1107,18 @@ struct mips_cpu_info {
+    'd = [+-] (a * b [+-] c)'.  */
+ #define ISA_HAS_FUSED_MADD4	(mips_madd4				\
+ 				 && (TARGET_MIPS8000			\
+-				     || TARGET_LOONGSON_3A))
++				     || TARGET_GS464			\
++				     || TARGET_GS464E			\
++				     || TARGET_GS264E))
+ 
+ /* ISA has 4 operand unfused madd instructions of the form
+    'd = [+-] (a * b [+-] c)'.  */
+ #define ISA_HAS_UNFUSED_MADD4	(mips_madd4				\
+ 				 && ISA_HAS_FP4				\
+ 				 && !TARGET_MIPS8000			\
+-				 && !TARGET_LOONGSON_3A)
++				 && !TARGET_GS464			\
++				 && !TARGET_GS464E			\
++				 && !TARGET_GS264E)
+ 
+ /* ISA has 3 operand r6 fused madd instructions of the form
+    'c = c [+-] (a * b)'.  */
+@@ -1114,6 +1154,9 @@ struct mips_cpu_info {
+ /* ISA has count leading zeroes/ones instruction (not implemented).  */
+ #define ISA_HAS_CLZ_CLO		(mips_isa_rev >= 1 && !TARGET_MIPS16)
+ 
++/* ISA has count trailing zeroes/ones instruction.  */
++#define ISA_HAS_CTZ_CTO		(TARGET_LOONGSON_EXT2)
++
+ /* ISA has three operand multiply instructions that put
+    the high part in an accumulator: mulhi or mulhiu.  */
+ #define ISA_HAS_MULHI		((TARGET_MIPS5400			 \
+@@ -1175,7 +1218,9 @@ struct mips_cpu_info {
+    'prefx', along with TARGET_HARD_FLOAT and TARGET_DOUBLE_FLOAT.
+    (prefx is a cop1x instruction, so can only be used if FP is
+    enabled.)  */
+-#define ISA_HAS_PREFETCHX	ISA_HAS_FP4
++#define ISA_HAS_PREFETCHX	(ISA_HAS_FP4				\
++				 || TARGET_LOONGSON_EXT			\
++				 || TARGET_LOONGSON_EXT2)
+ 
+ /* True if trunc.w.s and trunc.w.d are real (not synthetic)
+    instructions.  Both require TARGET_HARD_FLOAT, and trunc.w.d
+@@ -1355,6 +1400,9 @@ struct mips_cpu_info {
+ %{mvirt} %{mno-virt} \
+ %{mxpa} %{mno-xpa} \
+ %{mmsa} %{mno-msa} \
++%{mloongson-mmi} %{mno-loongson-mmi} \
++%{mloongson-ext} %{mno-loongson-ext} \
++%{mloongson-ext2} %{mno-loongson-ext2} \
+ %{msmartmips} %{mno-smartmips} \
+ %{mmt} %{mno-mt} \
+ %{mfix-rm7000} %{mno-fix-rm7000} \
+@@ -2631,9 +2679,9 @@ typedef struct mips_args {
+ #define SLOW_BYTE_ACCESS (!TARGET_MIPS16)
+ 
+ /* Standard MIPS integer shifts truncate the shift amount to the
+-   width of the shifted operand.  However, Loongson vector shifts
++   width of the shifted operand.  However, Loongson MMI shifts
+    do not truncate the shift amount at all.  */
+-#define SHIFT_COUNT_TRUNCATED (!TARGET_LOONGSON_VECTORS)
++#define SHIFT_COUNT_TRUNCATED (!TARGET_LOONGSON_MMI)
+ 
+ 
+ /* Specify the machine mode that pointers have.
+diff --git a/gcc/config/mips/mips.md b/gcc/config/mips/mips.md
+index c3fe8d9dd..c1827b9df 100644
+--- a/gcc/config/mips/mips.md
++++ b/gcc/config/mips/mips.md
+@@ -37,7 +37,9 @@
+   74kf3_2
+   loongson_2e
+   loongson_2f
+-  loongson_3a
++  gs464
++  gs464e
++  gs264e
+   m4k
+   octeon
+   octeon2
+@@ -833,9 +835,9 @@
+ (define_mode_iterator MOVE64
+   [DI DF
+    (V2SF "TARGET_HARD_FLOAT && TARGET_PAIRED_SINGLE_FLOAT")
+-   (V2SI "TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS")
+-   (V4HI "TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS")
+-   (V8QI "TARGET_HARD_FLOAT && TARGET_LOONGSON_VECTORS")])
++   (V2SI "TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI")
++   (V4HI "TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI")
++   (V8QI "TARGET_HARD_FLOAT && TARGET_LOONGSON_MMI")])
+ 
+ ;; 128-bit modes for which we provide move patterns on 64-bit targets.
+ (define_mode_iterator MOVE128 [TI TF])
+@@ -862,9 +864,9 @@
+   [(DF "!TARGET_64BIT && TARGET_DOUBLE_FLOAT")
+    (DI "!TARGET_64BIT && TARGET_DOUBLE_FLOAT")
+    (V2SF "!TARGET_64BIT && TARGET_PAIRED_SINGLE_FLOAT")
+-   (V2SI "!TARGET_64BIT && TARGET_LOONGSON_VECTORS")
+-   (V4HI "!TARGET_64BIT && TARGET_LOONGSON_VECTORS")
+-   (V8QI "!TARGET_64BIT && TARGET_LOONGSON_VECTORS")
++   (V2SI "!TARGET_64BIT && TARGET_LOONGSON_MMI")
++   (V4HI "!TARGET_64BIT && TARGET_LOONGSON_MMI")
++   (V8QI "!TARGET_64BIT && TARGET_LOONGSON_MMI")
+    (TF "TARGET_64BIT && TARGET_FLOAT64")])
+ 
+ ;; In GPR templates, a string like "<d>subu" will expand to "subu" in the
+@@ -1171,7 +1173,9 @@
+ (include "9000.md")
+ (include "10000.md")
+ (include "loongson2ef.md")
+-(include "loongson3a.md")
++(include "gs464.md")
++(include "gs464e.md")
++(include "gs264e.md")
+ (include "octeon.md")
+ (include "sb1.md")
+ (include "sr71k.md")
+@@ -1597,7 +1601,7 @@
+ {
+   rtx lo;
+ 
+-  if (TARGET_LOONGSON_2EF || TARGET_LOONGSON_3A || ISA_HAS_R6<D>MUL)
++  if (TARGET_LOONGSON_2EF || TARGET_LOONGSON_EXT || ISA_HAS_R6<D>MUL)
+     emit_insn (gen_mul<mode>3_mul3_nohilo (operands[0], operands[1],
+ 					   operands[2]));
+   else if (ISA_HAS_<D>MUL3)
+@@ -1620,11 +1624,11 @@
+   [(set (match_operand:GPR 0 "register_operand" "=d")
+         (mult:GPR (match_operand:GPR 1 "register_operand" "d")
+                   (match_operand:GPR 2 "register_operand" "d")))]
+-  "TARGET_LOONGSON_2EF || TARGET_LOONGSON_3A || ISA_HAS_R6<D>MUL"
++  "TARGET_LOONGSON_2EF || TARGET_LOONGSON_EXT || ISA_HAS_R6<D>MUL"
+ {
+   if (TARGET_LOONGSON_2EF)
+     return "<d>multu.g\t%0,%1,%2";
+-  else if (TARGET_LOONGSON_3A)
++  else if (TARGET_LOONGSON_EXT)
+     return "gs<d>multu\t%0,%1,%2";
+   else
+     return "<d>mul\t%0,%1,%2";
+@@ -3014,11 +3018,11 @@
+   [(set (match_operand:GPR 0 "register_operand" "=&d")
+ 	(any_div:GPR (match_operand:GPR 1 "register_operand" "d")
+ 		     (match_operand:GPR 2 "register_operand" "d")))]
+-  "TARGET_LOONGSON_2EF || TARGET_LOONGSON_3A || ISA_HAS_R6<D>DIV"
++  "TARGET_LOONGSON_2EF || TARGET_LOONGSON_EXT || ISA_HAS_R6<D>DIV"
+   {
+     if (TARGET_LOONGSON_2EF)
+       return mips_output_division ("<d>div<u>.g\t%0,%1,%2", operands);
+-    else if (TARGET_LOONGSON_3A)
++    else if (TARGET_LOONGSON_EXT)
+       return mips_output_division ("gs<d>div<u>\t%0,%1,%2", operands);
+     else
+       return mips_output_division ("<d>div<u>\t%0,%1,%2", operands);
+@@ -3030,11 +3034,11 @@
+   [(set (match_operand:GPR 0 "register_operand" "=&d")
+ 	(any_mod:GPR (match_operand:GPR 1 "register_operand" "d")
+ 		     (match_operand:GPR 2 "register_operand" "d")))]
+-  "TARGET_LOONGSON_2EF || TARGET_LOONGSON_3A || ISA_HAS_R6<D>DIV"
++  "TARGET_LOONGSON_2EF || TARGET_LOONGSON_EXT || ISA_HAS_R6<D>DIV"
+   {
+     if (TARGET_LOONGSON_2EF)
+       return mips_output_division ("<d>mod<u>.g\t%0,%1,%2", operands);
+-    else if (TARGET_LOONGSON_3A)
++    else if (TARGET_LOONGSON_EXT)
+       return mips_output_division ("gs<d>mod<u>\t%0,%1,%2", operands);
+     else
+       return mips_output_division ("<d>mod<u>\t%0,%1,%2", operands);
+@@ -3144,6 +3148,23 @@
+   [(set_attr "type" "clz")
+    (set_attr "mode" "<MODE>")])
+ 
++;;
++;;  ...................
++;;
++;;  Count trailing zeroes.
++;;
++;;  ...................
++;;
++
++(define_insn "ctz<mode>2"
++  [(set (match_operand:GPR 0 "register_operand" "=d")
++	(ctz:GPR (match_operand:GPR 1 "register_operand" "d")))]
++  "ISA_HAS_CTZ_CTO"
++  "<d>ctz\t%0,%1"
++  [(set_attr "type" "clz")
++   (set_attr "mode" "<MODE>")])
++
++
+ ;;
+ ;;  ...................
+ ;;
+@@ -5381,8 +5402,8 @@
+    (set (match_dup 0) (match_dup 5))]
+ {
+   operands[3] = gen_rtx_HIGH (Pmode, operands[1]);
+-  operands[4] = gen_rtx_PLUS (Pmode, operands[0], operands[2]);
+-  operands[5] = gen_rtx_LO_SUM (Pmode, operands[0], operands[1]);
++  operands[4] = gen_rtx_LO_SUM (Pmode, operands[0], operands[1]);
++  operands[5] = gen_rtx_PLUS (Pmode, operands[0], operands[2]);
+ }
+   [(set_attr "type" "ghost")])
+ 
+@@ -7134,13 +7155,20 @@
+ 	     (match_operand 2 "const_int_operand" "n"))]
+   "ISA_HAS_PREFETCH && TARGET_EXPLICIT_RELOCS"
+ {
+-  if (TARGET_LOONGSON_2EF || TARGET_LOONGSON_3A)
++  if (TARGET_LOONGSON_2EF || TARGET_LOONGSON_EXT)
+     {
+-      /* Loongson 2[ef] and Loongson 3a use load to $0 for prefetching.  */
++      /* Loongson 2[ef] and Loongson ext use load to $0 for prefetching.  */
+       if (TARGET_64BIT)
+-        return "ld\t$0,%a0";
++	return "ld\t$0,%a0";
+       else
+-        return "lw\t$0,%a0";
++	return "lw\t$0,%a0";
++    }
++  /* Loongson ext2 implementation pref instructions.  */
++  if (TARGET_LOONGSON_EXT2)
++    {
++      operands[1] = mips_loongson_ext2_prefetch_cookie (operands[1],
++							operands[2]);
++      return "pref\t%1, %a0";
+     }
+   operands[1] = mips_prefetch_cookie (operands[1], operands[2]);
+   return "pref\t%1,%a0";
+@@ -7154,6 +7182,21 @@
+ 	     (match_operand 3 "const_int_operand" "n"))]
+   "ISA_HAS_PREFETCHX && TARGET_HARD_FLOAT && TARGET_DOUBLE_FLOAT"
+ {
++  if (TARGET_LOONGSON_EXT)
++    {
++      /* Loongson Loongson ext use index load to $0 for prefetching.  */
++      if (TARGET_64BIT)
++	return "gsldx\t$0,0(%0,%1)";
++      else
++	return "gslwx\t$0,0(%0,%1)";
++    }
++  /* Loongson ext2 implementation pref instructions.  */
++  if (TARGET_LOONGSON_EXT2)
++    {
++      operands[2] = mips_loongson_ext2_prefetch_cookie (operands[2],
++							operands[3]);
++      return "prefx\t%2,%1(%0)";
++    }
+   operands[2] = mips_prefetch_cookie (operands[2], operands[3]);
+   return "prefx\t%2,%1(%0)";
+ }
+@@ -7688,8 +7731,8 @@
+ ; microMIPS patterns.
+ (include "micromips.md")
+ 
+-; ST-Microelectronics Loongson-2E/2F-specific patterns.
+-(include "loongson.md")
++; Loongson MultiMedia extensions Instructions (MMI) patterns.
++(include "loongson-mmi.md")
+ 
+ ; The MIPS MSA Instructions.
+ (include "mips-msa.md")
+diff --git a/gcc/config/mips/mips.opt b/gcc/config/mips/mips.opt
+index 545da5473..7064caa13 100644
+--- a/gcc/config/mips/mips.opt
++++ b/gcc/config/mips/mips.opt
+@@ -300,7 +300,7 @@ Target Report Mask(MICROMIPS)
+ Use microMIPS instructions.
+ 
+ mmsa
+-Target Report Var(TARGET_MSA)
++Target Report Mask(MSA)
+ Use MIPS MSA Extension instructions.
+ 
+ mmt
+@@ -451,3 +451,15 @@ Enum(mips_cb_setting) String(optimal) Value(MIPS_CB_OPTIMAL)
+ 
+ EnumValue
+ Enum(mips_cb_setting) String(always) Value(MIPS_CB_ALWAYS)
++
++mloongson-mmi
++Target Report Mask(LOONGSON_MMI)
++Use Loongson MultiMedia extensions Instructions (MMI) instructions.
++
++mloongson-ext
++Target Report Mask(LOONGSON_EXT)
++Use Loongson EXTension (EXT) instructions.
++
++mloongson-ext2
++Target Report Mask(LOONGSON_EXT2)
++Use Loongson EXTension R2 (EXT2) instructions.
+diff --git a/gcc/testsuite/gcc.target/mips/loongson-ctz.c b/gcc/testsuite/gcc.target/mips/loongson-ctz.c
+new file mode 100644
+index 000000000..7238fe2f2
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/mips/loongson-ctz.c
+@@ -0,0 +1,11 @@
++/* Test cases for Loongson EXT2 instructions.  */
++
++/* { dg-do compile } */
++/* { dg-options "-mloongson-ext2" } */
++
++unsigned int foo(unsigned int x)
++{
++  return __builtin_ctz (x);
++}
++
++/* { dg-final { scan-assembler "ctz\t" } } */
+diff --git a/gcc/testsuite/gcc.target/mips/loongson-dctz.c b/gcc/testsuite/gcc.target/mips/loongson-dctz.c
+new file mode 100644
+index 000000000..f0c42f8a0
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/mips/loongson-dctz.c
+@@ -0,0 +1,11 @@
++/* Test cases for Loongson EXT2 instructions.  */
++
++/* { dg-do compile } */
++/* { dg-options "-mloongson-ext2" } */
++
++unsigned long long foo(unsigned long long x)
++{
++  return __builtin_ctzl (x);
++}
++
++/* { dg-final { scan-assembler "dctz\t" } } */
+diff --git a/gcc/testsuite/gcc.target/mips/loongson-shift-count-truncated-1.c b/gcc/testsuite/gcc.target/mips/loongson-shift-count-truncated-1.c
+index baed48cf5..6e22c0e11 100644
+--- a/gcc/testsuite/gcc.target/mips/loongson-shift-count-truncated-1.c
++++ b/gcc/testsuite/gcc.target/mips/loongson-shift-count-truncated-1.c
+@@ -4,11 +4,11 @@
+ /* loongson.h does not handle or check for MIPS16ness.  There doesn't
+    seem any good reason for it to, given that the Loongson processors
+    do not support MIPS16.  */
+-/* { dg-options "isa=loongson -mhard-float -mno-mips16 (REQUIRES_STDLIB)" } */
++/* { dg-options "-mloongson-mmi -mhard-float -mno-mips16 (REQUIRES_STDLIB)" } */
+ /* See PR 52155.  */
+-/* { dg-options "isa=loongson -mhard-float -mno-mips16 -mlong64" { mips*-*-elf* && ilp32 } } */
++/* { dg-options "-mloongson-mmi -mhard-float -mno-mips16 -mlong64" { mips*-*-elf* && ilp32 } } */
+ 
+-#include "loongson.h"
++#include "loongson-mmiintrin.h"
+ #include <assert.h>
+ 
+ typedef union { int32x2_t v; int32_t a[2]; } int32x2_encap_t;
+diff --git a/gcc/testsuite/gcc.target/mips/loongson-simd.c b/gcc/testsuite/gcc.target/mips/loongson-simd.c
+index f263b4393..34fdcecc6 100644
+--- a/gcc/testsuite/gcc.target/mips/loongson-simd.c
++++ b/gcc/testsuite/gcc.target/mips/loongson-simd.c
+@@ -26,9 +26,9 @@ along with GCC; see the file COPYING3.  If not see
+    because inclusion of some system headers e.g. stdint.h will fail due to not
+    finding stubs-o32_hard.h.  */
+ /* { dg-require-effective-target mips_nanlegacy } */
+-/* { dg-options "isa=loongson -mhard-float -mno-micromips -mno-mips16 -flax-vector-conversions (REQUIRES_STDLIB)" } */
++/* { dg-options "-mloongson-mmi -mhard-float -mno-micromips -mno-mips16 -flax-vector-conversions (REQUIRES_STDLIB)" } */
+ 
+-#include "loongson.h"
++#include "loongson-mmiintrin.h"
+ #include <stdio.h>
+ #include <stdint.h>
+ #include <assert.h>
+diff --git a/gcc/testsuite/gcc.target/mips/mips.exp b/gcc/testsuite/gcc.target/mips/mips.exp
+index 9db4fbe29..002cc280e 100644
+--- a/gcc/testsuite/gcc.target/mips/mips.exp
++++ b/gcc/testsuite/gcc.target/mips/mips.exp
+@@ -296,6 +296,9 @@ foreach option {
+     mcount-ra-address
+     odd-spreg
+     msa
++    loongson-mmi
++    loongson-ext
++    loongson-ext2
+ } {
+     lappend mips_option_groups $option "-m(no-|)$option"
+ }
+@@ -883,6 +886,12 @@ proc mips-dg-init {} {
+ 	    "-mno-msa"
+ 	    #endif
+ 
++	    #ifdef __mips_loongson_mmi
++	    "-mloongson-mmi"
++	    #else
++	    "-mno-loongson-mmi"
++	    #endif
++
+ 	    0
+ 	};
+     } 0]
+@@ -1046,6 +1055,19 @@ proc mips-dg-options { args } {
+     mips_option_dependency options "-mabicalls" "-G0"
+     mips_option_dependency options "-mno-gpopt" "-mexplicit-relocs"
+ 
++    if { [check_configured_with "with-arch=loongson3a"] 
++	 || [check_configured_with "with-arch=gs464"]
++	 || [check_configured_with "with-arch=gs464e"]
++	 || [check_configured_with "with-arch=gs264e"] } {
++	mips_option_dependency options "-msoft-float" "-mno-loongson-mmi"
++	mips_option_dependency options "-mips16" "-mno-loongson-mmi"
++	mips_option_dependency options "-mips16" "-mno-loongson-ext"
++	mips_option_dependency options "-mips16" "-mno-loongson-ext2"
++	mips_option_dependency options "-mmicromips" "-mno-loongson-mmi"
++	mips_option_dependency options "-mmicromips" "-mno-loongson-ext"
++	mips_option_dependency options "-mmicromips" "-mno-loongson-ext2"
++    }
++
+     # Work out information about the current ABI.
+     set abi_test_option_p [mips_test_option_p options abi]
+     set abi [mips_option options abi]
+diff --git a/gcc/testsuite/lib/target-supports.exp b/gcc/testsuite/lib/target-supports.exp
+index bdc3cd3b6..1060c5e53 100644
+--- a/gcc/testsuite/lib/target-supports.exp
++++ b/gcc/testsuite/lib/target-supports.exp
+@@ -1902,20 +1902,20 @@ proc check_mpaired_single_hw_available { } {
+ # Return 1 if the target supports executing Loongson vector instructions,
+ # 0 otherwise.  Cache the result.
+ 
+-proc check_mips_loongson_hw_available { } {
+-    return [check_cached_effective_target mips_loongson_hw_available {
++proc check_mips_loongson_mmi_hw_available { } {
++    return [check_cached_effective_target mips_loongson_mmi_hw_available {
+ 	# If this is not the right target then we can skip the test.
+ 	if { !([istarget mips*-*-*]) } {
+ 	    expr 0
+ 	} else {
+-	    check_runtime_nocache mips_loongson_hw_available {
+-	      #include <loongson.h>
++	    check_runtime_nocache mips_loongson_mmi_hw_available {
++	      #include <loongson-mmiintrin.h>
+ 	      int main()
+ 	      {
+ 		asm volatile ("paddw $f2,$f4,$f6");
+ 		return 0;
+ 	      }
+-	    } ""
++	    } "-mloongson-mmi"
+ 	}
+     }]
+ }
+@@ -1969,9 +1969,9 @@ proc check_effective_target_mpaired_single_runtime { } {
+ 
+ # Return 1 if the target supports running Loongson executables, 0 otherwise.
+ 
+-proc check_effective_target_mips_loongson_runtime { } {
+-    if { [check_effective_target_mips_loongson]
+-	 && [check_mips_loongson_hw_available] } {
++proc check_effective_target_mips_loongson_mmi_runtime { } {
++    if { [check_effective_target_mips_loongson_mmi]
++	 && [check_mips_loongson_mmi_hw_available] } {
+ 	return 1
+     }
+     return 0
+@@ -3086,7 +3086,7 @@ proc check_effective_target_vect_int { } {
+ 	     || [istarget aarch64*-*-*]
+ 	     || [is-effective-target arm_neon]
+ 	     || ([istarget mips*-*-*]
+-		 && ([et-is-effective-target mips_loongson]
++		 && ([et-is-effective-target mips_loongson_mmi]
+ 		     || [et-is-effective-target mips_msa]))
+ 	     || ([istarget s390*-*-*]
+ 		 && [check_effective_target_s390_vx]) } {
+@@ -4845,11 +4845,24 @@ proc add_options_for_mips_msa { flags } {
+   return "$flags -mmsa"
+ }
+ 
++# Add the options needed for MIPS Loongson MMI Architecture.
++
++proc add_options_for_mips_loongson_mmi { flags } {
++  if { ! [check_effective_target_mips_loongson_mmi] } {
++    return "$flags"
++  }
++  return "$flags -mloongson-mmi"
++}
++
++
+ # Return 1 if this a Loongson-2E or -2F target using an ABI that supports
+ # the Loongson vector modes.
+ 
+-proc check_effective_target_mips_loongson { } {
++proc check_effective_target_mips_loongson_mmi { } {
+     return [check_no_compiler_messages loongson assembly {
++	#if !defined(__mips_loongson_mmi)
++	#error !__mips_loongson_mmi
++	#endif
+ 	#if !defined(__mips_loongson_vector_rev)
+ 	#error !__mips_loongson_vector_rev
+ 	#endif
+@@ -5437,7 +5450,7 @@ proc check_effective_target_vect_shift { } {
+ 	     || [is-effective-target arm_neon]
+ 	     || ([istarget mips*-*-*]
+ 		 && ([et-is-effective-target mips_msa]
+-		     || [et-is-effective-target mips_loongson]))
++		     || [et-is-effective-target mips_loongson_mmi]))
+ 	     || ([istarget s390*-*-*]
+ 		 && [check_effective_target_s390_vx]) } {
+ 	   set et_vect_shift_saved($et_index) 1
+@@ -5457,7 +5470,7 @@ proc check_effective_target_whole_vector_shift { } {
+ 	 || ([is-effective-target arm_neon]
+ 	     && [check_effective_target_arm_little_endian])
+ 	 || ([istarget mips*-*-*]
+-	     && [et-is-effective-target mips_loongson])
++	     && [et-is-effective-target mips_loongson_mmi])
+ 	 || ([istarget s390*-*-*]
+ 	     && [check_effective_target_s390_vx]) } {
+ 	set answer 1
+@@ -5663,7 +5676,7 @@ proc check_effective_target_vect_no_int_min_max { } {
+ 	     || [istarget spu-*-*]
+ 	     || [istarget alpha*-*-*]
+ 	     || ([istarget mips*-*-*]
+-		 && [et-is-effective-target mips_loongson]) } {
++		 && [et-is-effective-target mips_loongson_mmi]) } {
+ 	    set et_vect_no_int_min_max_saved($et_index) 1
+ 	}
+     }
+@@ -6434,7 +6447,7 @@ proc check_effective_target_vect_no_align { } {
+ 	     || [check_effective_target_arm_vect_no_misalign]
+ 	     || ([istarget powerpc*-*-*] && [check_p8vector_hw_available])
+ 	     || ([istarget mips*-*-*]
+-		 && [et-is-effective-target mips_loongson]) } {
++		 && [et-is-effective-target mips_loongson_mmi]) } {
+ 	    set et_vect_no_align_saved($et_index) 1
+ 	}
+     }
+@@ -6764,7 +6777,7 @@ proc check_effective_target_vect_short_mult { } {
+ 	     || [check_effective_target_arm32]
+ 	     || ([istarget mips*-*-*]
+ 		 && ([et-is-effective-target mips_msa]
+-		     || [et-is-effective-target mips_loongson]))
++		     || [et-is-effective-target mips_loongson_mmi]))
+ 	     || ([istarget s390*-*-*]
+ 		 && [check_effective_target_s390_vx]) } {
+ 	   set et_vect_short_mult_saved($et_index) 1
+@@ -8579,8 +8592,8 @@ proc check_vect_support_and_set_flags { } {
+ 	if { [check_effective_target_mpaired_single] } {
+ 	    lappend EFFECTIVE_TARGETS mpaired_single
+ 	}
+-	if { [check_effective_target_mips_loongson] } {
+-	    lappend EFFECTIVE_TARGETS mips_loongson
++	if { [check_effective_target_mips_loongson_mmi] } {
++	    lappend EFFECTIVE_TARGETS mips_loongson_mmi
+ 	}
+ 	if { [check_effective_target_mips_msa] } {
+ 	    lappend EFFECTIVE_TARGETS mips_msa

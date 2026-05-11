@@ -1,0 +1,2188 @@
+diff --git a/gcc/builtin-attrs.def b/gcc/builtin-attrs.def
+index 300ba657c..e245e4d9c 100644
+--- a/gcc/builtin-attrs.def
++++ b/gcc/builtin-attrs.def
+@@ -129,6 +129,8 @@ DEF_ATTR_TREE_LIST (ATTR_NOTHROW_LIST, ATTR_NOTHROW, ATTR_NULL, ATTR_NULL)
+ 
+ DEF_ATTR_TREE_LIST (ATTR_NOTHROW_LEAF_LIST, ATTR_LEAF, ATTR_NULL, ATTR_NOTHROW_LIST)
+ 
++DEF_ATTR_TREE_LIST (ATTR_NOVOPS_NOTHROW_LEAF_LIST, ATTR_NOVOPS, \
++		        ATTR_NULL, ATTR_NOTHROW_LEAF_LIST)
+ DEF_ATTR_TREE_LIST (ATTR_CONST_NOTHROW_LIST, ATTR_CONST,	\
+ 			ATTR_NULL, ATTR_NOTHROW_LIST)
+ DEF_ATTR_TREE_LIST (ATTR_CONST_NOTHROW_LEAF_LIST, ATTR_CONST,	\
+diff --git a/gcc/builtin-types.def b/gcc/builtin-types.def
+index 8f3d796bc..718f0cd1d 100644
+--- a/gcc/builtin-types.def
++++ b/gcc/builtin-types.def
+@@ -764,6 +764,12 @@ DEF_FUNCTION_TYPE_VAR_1 (BT_FN_VOID_LONG_VAR,
+ 			 BT_VOID, BT_LONG)
+ DEF_FUNCTION_TYPE_VAR_1 (BT_FN_VOID_ULL_VAR,
+ 			 BT_VOID, BT_ULONGLONG)
++DEF_FUNCTION_TYPE_VAR_1 (BT_FN_PTR_PTR_VAR, BT_PTR, BT_PTR)
++DEF_FUNCTION_TYPE_VAR_1 (BT_FN_I1_I1_VAR, BT_I1, BT_I1)
++DEF_FUNCTION_TYPE_VAR_1 (BT_FN_I2_I2_VAR, BT_I2, BT_I2)
++DEF_FUNCTION_TYPE_VAR_1 (BT_FN_I4_I4_VAR, BT_I4, BT_I4)
++DEF_FUNCTION_TYPE_VAR_1 (BT_FN_I8_I8_VAR, BT_I8, BT_I8)
++DEF_FUNCTION_TYPE_VAR_1 (BT_FN_I16_I16_VAR, BT_I16, BT_I16)
+ 
+ DEF_FUNCTION_TYPE_VAR_2 (BT_FN_INT_FILEPTR_CONST_STRING_VAR,
+ 			 BT_INT, BT_FILEPTR, BT_CONST_STRING)
+diff --git a/gcc/builtins.c b/gcc/builtins.c
+index 14624a641..8527a67e2 100644
+--- a/gcc/builtins.c
++++ b/gcc/builtins.c
+@@ -6629,6 +6629,55 @@ expand_stack_save (void)
+ }
+ 
+ 
++/* Expand a call to __builtin_speculation_safe_value_<N>.  MODE
++   represents the size of the first argument to that call, or VOIDmode
++   if the argument is a pointer.  IGNORE will be true if the result
++   isn't used.  */
++static rtx
++expand_speculation_safe_value (machine_mode mode, tree exp, rtx target,
++			       bool ignore)
++{
++  rtx val, failsafe;
++  unsigned nargs = call_expr_nargs (exp);
++
++  tree arg0 = CALL_EXPR_ARG (exp, 0);
++
++  if (mode == VOIDmode)
++    {
++      mode = TYPE_MODE (TREE_TYPE (arg0));
++      gcc_assert (GET_MODE_CLASS (mode) == MODE_INT);
++    }
++
++  val = expand_expr (arg0, NULL_RTX, mode, EXPAND_NORMAL);
++
++  /* An optional second argument can be used as a failsafe value on
++     some machines.  If it isn't present, then the failsafe value is
++     assumed to be 0.  */
++  if (nargs > 1)
++    {
++      tree arg1 = CALL_EXPR_ARG (exp, 1);
++      failsafe = expand_expr (arg1, NULL_RTX, mode, EXPAND_NORMAL);
++    }
++  else
++    failsafe = const0_rtx;
++
++  /* If the result isn't used, the behavior is undefined.  It would be
++     nice to emit a warning here, but path splitting means this might
++     happen with legitimate code.  So simply drop the builtin
++     expansion in that case; we've handled any side-effects above.  */
++  if (ignore)
++    return const0_rtx;
++
++  /* If we don't have a suitable target, create one to hold the result.  */
++  if (target == NULL || GET_MODE (target) != mode)
++    target = gen_reg_rtx (mode);
++
++  if (GET_MODE (val) != mode && GET_MODE (val) != VOIDmode)
++    val = convert_modes (mode, VOIDmode, val, false);
++
++  return targetm.speculation_safe_value (mode, target, val, failsafe);
++}
++
+ /* Expand an expression EXP that calls a built-in function,
+    with result going to TARGET if that's convenient
+    (and in mode MODE if that's convenient).
+@@ -7758,6 +7807,17 @@ expand_builtin (tree exp, rtx target, rtx subtarget, machine_mode mode,
+ 	 folding.  */
+       break;
+ 
++    case BUILT_IN_SPECULATION_SAFE_VALUE_PTR:
++      return expand_speculation_safe_value (VOIDmode, exp, target, ignore);
++
++    case BUILT_IN_SPECULATION_SAFE_VALUE_1:
++    case BUILT_IN_SPECULATION_SAFE_VALUE_2:
++    case BUILT_IN_SPECULATION_SAFE_VALUE_4:
++    case BUILT_IN_SPECULATION_SAFE_VALUE_8:
++    case BUILT_IN_SPECULATION_SAFE_VALUE_16:
++      mode = get_builtin_sync_mode (fcode - BUILT_IN_SPECULATION_SAFE_VALUE_1);
++      return expand_speculation_safe_value (mode, exp, target, ignore);
++
+     default:	/* just do library call, if unknown builtin */
+       break;
+     }
+diff --git a/gcc/builtins.def b/gcc/builtins.def
+index 17f825da3..744925758 100644
+--- a/gcc/builtins.def
++++ b/gcc/builtins.def
+@@ -1017,6 +1017,28 @@ DEF_BUILTIN (BUILT_IN_EMUTLS_REGISTER_COMMON,
+ 	     true, true, true, ATTR_NOTHROW_LEAF_LIST, false,
+ 	     !targetm.have_tls)
+ 
++/* Suppressing speculation.  Users are expected to use the first (N)
++   variant, which will be translated internally into one of the other
++   types.  */
++
++DEF_GCC_BUILTIN (BUILT_IN_SPECULATION_SAFE_VALUE_N, "speculation_safe_value",
++		 BT_FN_VOID_VAR, ATTR_NOVOPS_NOTHROW_LEAF_LIST)
++
++DEF_GCC_BUILTIN (BUILT_IN_SPECULATION_SAFE_VALUE_PTR,
++		 "speculation_safe_value_ptr", BT_FN_PTR_PTR_VAR,
++		 ATTR_NOVOPS_NOTHROW_LEAF_LIST)
++DEF_GCC_BUILTIN (BUILT_IN_SPECULATION_SAFE_VALUE_1, "speculation_safe_value_1",
++		 BT_FN_I1_I1_VAR, ATTR_NOVOPS_NOTHROW_LEAF_LIST)
++DEF_GCC_BUILTIN (BUILT_IN_SPECULATION_SAFE_VALUE_2, "speculation_safe_value_2",
++		 BT_FN_I2_I2_VAR, ATTR_NOVOPS_NOTHROW_LEAF_LIST)
++DEF_GCC_BUILTIN (BUILT_IN_SPECULATION_SAFE_VALUE_4, "speculation_safe_value_4",
++		 BT_FN_I4_I4_VAR, ATTR_NOVOPS_NOTHROW_LEAF_LIST)
++DEF_GCC_BUILTIN (BUILT_IN_SPECULATION_SAFE_VALUE_8, "speculation_safe_value_8",
++		 BT_FN_I8_I8_VAR, ATTR_NOVOPS_NOTHROW_LEAF_LIST)
++DEF_GCC_BUILTIN (BUILT_IN_SPECULATION_SAFE_VALUE_16,
++		 "speculation_safe_value_16", BT_FN_I16_I16_VAR,
++		 ATTR_NOVOPS_NOTHROW_LEAF_LIST)
++
+ /* Exception support.  */
+ DEF_BUILTIN_STUB (BUILT_IN_UNWIND_RESUME, "__builtin_unwind_resume")
+ DEF_BUILTIN_STUB (BUILT_IN_CXA_END_CLEANUP, "__builtin_cxa_end_cleanup")
+diff --git a/gcc/c-family/c-common.c b/gcc/c-family/c-common.c
+index d68987c48..2f5b93784 100644
+--- a/gcc/c-family/c-common.c
++++ b/gcc/c-family/c-common.c
+@@ -6458,6 +6458,122 @@ builtin_type_for_size (int size, bool unsignedp)
+   return type ? type : error_mark_node;
+ }
+ 
++/* Work out the size of the first argument of a call to
++   __builtin_speculation_safe_value.  Only pointers and integral types
++   are permitted.  Return -1 if the argument type is not supported or
++   the size is too large; 0 if the argument type is a pointer or the
++   size if it is integral.  */
++static enum built_in_function
++speculation_safe_value_resolve_call (tree function, vec<tree, va_gc> *params)
++{
++  /* Type of the argument.  */
++  tree type;
++  int size;
++
++  if (vec_safe_is_empty (params))
++    {
++      error ("too few arguments to function %qE", function);
++      return BUILT_IN_NONE;
++    }
++
++  type = TREE_TYPE ((*params)[0]);
++  if (TREE_CODE (type) == ARRAY_TYPE && c_dialect_cxx ())
++    {
++      /* Force array-to-pointer decay for C++.   */
++      (*params)[0] = default_conversion ((*params)[0]);
++      type = TREE_TYPE ((*params)[0]);
++    }
++
++  if (POINTER_TYPE_P (type))
++    return BUILT_IN_SPECULATION_SAFE_VALUE_PTR;
++
++  if (!INTEGRAL_TYPE_P (type))
++    goto incompatible;
++
++  if (!COMPLETE_TYPE_P (type))
++    goto incompatible;
++
++  size = tree_to_uhwi (TYPE_SIZE_UNIT (type));
++  if (size == 1 || size == 2 || size == 4 || size == 8 || size == 16)
++    return ((enum built_in_function)
++	    ((int) BUILT_IN_SPECULATION_SAFE_VALUE_1 + exact_log2 (size)));
++
++ incompatible:
++  /* Issue the diagnostic only if the argument is valid, otherwise
++     it would be redundant at best and could be misleading.  */
++  if (type != error_mark_node)
++    error ("operand type %qT is incompatible with argument %d of %qE",
++	   type, 1, function);
++
++  return BUILT_IN_NONE;
++}
++
++/* Validate and coerce PARAMS, the arguments to ORIG_FUNCTION to fit
++   the prototype for FUNCTION.  The first argument is mandatory, a second
++   argument, if present, must be type compatible with the first.  */
++static bool
++speculation_safe_value_resolve_params (location_t loc, tree orig_function,
++				       vec<tree, va_gc> *params)
++{
++  tree val;
++
++  if (params->length () == 0)
++    {
++      error_at (loc, "too few arguments to function %qE", orig_function);
++      return false;
++    }
++
++  else if (params->length () > 2)
++    {
++      error_at (loc, "too many arguments to function %qE", orig_function);
++      return false;
++    }
++
++  val = (*params)[0];
++  if (TREE_CODE (TREE_TYPE (val)) == ARRAY_TYPE)
++    val = default_conversion (val);
++  if (!(TREE_CODE (TREE_TYPE (val)) == POINTER_TYPE
++	|| TREE_CODE (TREE_TYPE (val)) == INTEGER_TYPE))
++    {
++      error_at (loc,
++		"expecting argument of type pointer or of type integer "
++		"for argument 1");
++      return false;
++    }
++  (*params)[0] = val;
++
++  if (params->length () == 2)
++    {
++      tree val2 = (*params)[1];
++      if (TREE_CODE (TREE_TYPE (val2)) == ARRAY_TYPE)
++	val2 = default_conversion (val2);
++      if (!(TREE_TYPE (val) == TREE_TYPE (val2)
++	    || useless_type_conversion_p (TREE_TYPE (val), TREE_TYPE (val2))))
++	{
++	  error_at (loc, "both arguments must be compatible");
++	  return false;
++	}
++      (*params)[1] = val2;
++    }
++
++  return true;
++}
++
++/* Cast the result of the builtin back to the type of the first argument,
++   preserving any qualifiers that it might have.  */
++static tree
++speculation_safe_value_resolve_return (tree first_param, tree result)
++{
++  tree ptype = TREE_TYPE (first_param);
++  tree rtype = TREE_TYPE (result);
++  ptype = TYPE_MAIN_VARIANT (ptype);
++
++  if (tree_int_cst_equal (TYPE_SIZE (ptype), TYPE_SIZE (rtype)))
++    return convert (ptype, result);
++
++  return result;
++}
++
+ /* A helper function for resolve_overloaded_builtin in resolving the
+    overloaded __sync_ builtins.  Returns a positive power of 2 if the
+    first operand of PARAMS is a pointer to a supported data type.
+@@ -7119,6 +7235,54 @@ resolve_overloaded_builtin (location_t loc, tree function,
+   /* Handle BUILT_IN_NORMAL here.  */
+   switch (orig_code)
+     {
++    case BUILT_IN_SPECULATION_SAFE_VALUE_N:
++      {
++	tree new_function, first_param, result;
++	enum built_in_function fncode
++	  = speculation_safe_value_resolve_call (function, params);;
++
++	first_param = (*params)[0];
++	if (fncode == BUILT_IN_NONE
++	    || !speculation_safe_value_resolve_params (loc, function, params))
++	  return error_mark_node;
++
++	if (targetm.have_speculation_safe_value (true))
++	  {
++	    new_function = builtin_decl_explicit (fncode);
++	    result = build_function_call_vec (loc, vNULL, new_function, params,
++					      NULL);
++
++	    if (result == error_mark_node)
++	      return result;
++
++	    return speculation_safe_value_resolve_return (first_param, result);
++	  }
++	else
++	  {
++	    /* This target doesn't have, or doesn't need, active mitigation
++	       against incorrect speculative execution.  Simply return the
++	       first parameter to the builtin.  */
++	    if (!targetm.have_speculation_safe_value (false))
++	      /* The user has invoked __builtin_speculation_safe_value
++		 even though __HAVE_SPECULATION_SAFE_VALUE is not
++		 defined: emit a warning.  */
++	      warning_at (input_location, 0,
++			  "this target does not define a speculation barrier; "
++			  "your program will still execute correctly, "
++			  "but incorrect speculation may not be be "
++			  "restricted");
++
++	    /* If the optional second argument is present, handle any side
++	       effects now.  */
++	    if (params->length () == 2
++		&& TREE_SIDE_EFFECTS ((*params)[1]))
++	      return build2 (COMPOUND_EXPR, TREE_TYPE (first_param),
++			     (*params)[1], first_param);
++
++	    return first_param;
++	  }
++      }
++
+     case BUILT_IN_ATOMIC_EXCHANGE:
+     case BUILT_IN_ATOMIC_COMPARE_EXCHANGE:
+     case BUILT_IN_ATOMIC_LOAD:
+diff --git a/gcc/c-family/c-cppbuiltin.c b/gcc/c-family/c-cppbuiltin.c
+index fc9646af1..3a703c105 100644
+--- a/gcc/c-family/c-cppbuiltin.c
++++ b/gcc/c-family/c-cppbuiltin.c
+@@ -1371,7 +1371,12 @@ c_cpp_builtins (cpp_reader *pfile)
+     cpp_define (pfile, "__WCHAR_UNSIGNED__");
+ 
+   cpp_atomic_builtins (pfile);
+-    
++
++  /* Show support for __builtin_speculation_safe_value () if the target
++     has been updated to fully support it.  */
++  if (targetm.have_speculation_safe_value (false))
++    cpp_define (pfile, "__HAVE_SPECULATION_SAFE_VALUE");
++
+ #ifdef DWARF2_UNWIND_INFO
+   if (dwarf2out_do_cfi_asm ())
+     cpp_define (pfile, "__GCC_HAVE_DWARF2_CFI_ASM");
+diff --git a/gcc/config.gcc b/gcc/config.gcc
+index 3545e425e..e98c55d08 100644
+--- a/gcc/config.gcc
++++ b/gcc/config.gcc
+@@ -304,7 +304,7 @@ aarch64*-*-*)
+ 	extra_headers="arm_fp16.h arm_neon.h arm_acle.h"
+ 	c_target_objs="aarch64-c.o"
+ 	cxx_target_objs="aarch64-c.o"
+-	extra_objs="aarch64-builtins.o aarch-common.o cortex-a57-fma-steering.o"
++	extra_objs="aarch64-builtins.o aarch-common.o cortex-a57-fma-steering.o aarch64-speculation.o"
+ 	target_gtfiles="\$(srcdir)/config/aarch64/aarch64-builtins.c"
+ 	target_has_targetm_common=yes
+ 	;;
+diff --git a/gcc/config/aarch64/aarch64-passes.def b/gcc/config/aarch64/aarch64-passes.def
+index 87747b420..3d6a25419 100644
+--- a/gcc/config/aarch64/aarch64-passes.def
++++ b/gcc/config/aarch64/aarch64-passes.def
+@@ -19,3 +19,4 @@
+    <http://www.gnu.org/licenses/>.  */
+ 
+ INSERT_PASS_AFTER (pass_regrename, 1, pass_fma_steering);
++INSERT_PASS_BEFORE (pass_reorder_blocks, 1, pass_track_speculation);
+diff --git a/gcc/config/aarch64/aarch64-protos.h b/gcc/config/aarch64/aarch64-protos.h
+index ba0c5a55f..e1d62baf1 100644
+--- a/gcc/config/aarch64/aarch64-protos.h
++++ b/gcc/config/aarch64/aarch64-protos.h
+@@ -545,7 +545,8 @@ enum aarch64_parse_opt_result aarch64_parse_extension (const char *,
+ std::string aarch64_get_extension_string_for_isa_flags (unsigned long,
+ 							unsigned long);
+ 
+-rtl_opt_pass *make_pass_fma_steering (gcc::context *ctxt);
++rtl_opt_pass *make_pass_fma_steering (gcc::context *);
++rtl_opt_pass *make_pass_track_speculation (gcc::context *);
+ 
+ poly_uint64 aarch64_regmode_natural_size (machine_mode);
+ 
+diff --git a/gcc/config/aarch64/aarch64-speculation.cc b/gcc/config/aarch64/aarch64-speculation.cc
+new file mode 100644
+index 000000000..2dd06ae24
+--- /dev/null
++++ b/gcc/config/aarch64/aarch64-speculation.cc
+@@ -0,0 +1,494 @@
++/* Speculation tracking and mitigation (e.g. CVE 2017-5753) for AArch64.
++   Copyright (C) 2018 Free Software Foundation, Inc.
++   Contributed by ARM Ltd.
++
++   This file is part of GCC.
++
++   GCC is free software; you can redistribute it and/or modify it
++   under the terms of the GNU General Public License as published by
++   the Free Software Foundation; either version 3, or (at your option)
++   any later version.
++
++   GCC is distributed in the hope that it will be useful, but
++   WITHOUT ANY WARRANTY; without even the implied warranty of
++   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++   General Public License for more details.
++
++   You should have received a copy of the GNU General Public License
++   along with GCC; see the file COPYING3.  If not see
++   <http://www.gnu.org/licenses/>.  */
++
++#include "config.h"
++#include "system.h"
++#include "coretypes.h"
++#include "target.h"
++#include "rtl.h"
++#include "tree-pass.h"
++#include "profile-count.h"
++#include "cfg.h"
++#include "cfgbuild.h"
++#include "print-rtl.h"
++#include "cfgrtl.h"
++#include "function.h"
++#include "basic-block.h"
++#include "memmodel.h"
++#include "emit-rtl.h"
++#include "insn-attr.h"
++#include "df.h"
++#include "tm_p.h"
++#include "insn-config.h"
++#include "recog.h"
++
++/* This pass scans the RTL just before the final branch
++   re-organisation pass.  The aim is to identify all places where
++   there is conditional control flow and to insert code that tracks
++   any speculative execution of a conditional branch.
++
++   To do this we reserve a call-clobbered register (so that it can be
++   initialized very early in the function prologue) that can then be
++   updated each time there is a conditional branch.  At each such
++   branch we then generate a code sequence that uses conditional
++   select operations that are not subject to speculation themselves
++   (we ignore for the moment situations where that might not always be
++   strictly true).  For example, a branch sequence such as:
++
++	B.EQ	<dst>
++	...
++   <dst>:
++
++   is transformed to:
++
++	B.EQ	<dst>
++	CSEL	tracker, tracker, XZr, ne
++	...
++   <dst>:
++	CSEL	tracker, tracker, XZr, eq
++
++   Since we start with the tracker initialized to all bits one, if at any
++   time the predicted control flow diverges from the architectural program
++   behavior, then the tracker will become zero (but not otherwise).
++
++   The tracker value can be used at any time at which a value needs
++   guarding against incorrect speculation.  This can be done in
++   several ways, but they all amount to the same thing.  For an
++   untrusted address, or an untrusted offset to a trusted address, we
++   can simply mask the address with the tracker with the untrusted
++   value.  If the CPU is not speculating, or speculating correctly,
++   then the value will remain unchanged, otherwise it will be clamped
++   to zero.  For more complex scenarios we can compare the tracker
++   against zero and use the flags to form a new selection with an
++   alternate safe value.
++
++   On implementations where the data processing instructions may
++   themselves produce speculative values, the architecture requires
++   that a CSDB instruction will resolve such data speculation, so each
++   time we use the tracker for protecting a vulnerable value we also
++   emit a CSDB: we do not need to do that each time the tracker itself
++   is updated.
++
++   At function boundaries, we need to communicate the speculation
++   tracking state with the caller or the callee.  This is tricky
++   because there is no register available for such a purpose without
++   creating a new ABI.  We deal with this by relying on the principle
++   that in all real programs the stack pointer, SP will never be NULL
++   at a function boundary; we can thus encode the speculation state in
++   SP by clearing SP if the speculation tracker itself is NULL.  After
++   the call we recover the tracking state back from SP into the
++   tracker register.  The results is that a function call sequence is
++   transformed to
++
++	MOV	tmp, SP
++	AND	tmp, tmp, tracker
++	MOV	SP, tmp
++	BL	<callee>
++	CMP	SP, #0
++	CSETM	tracker, ne
++
++   The additional MOV instructions in the pre-call sequence are needed
++   because SP cannot be used directly with the AND instruction.
++
++   The code inside a function body uses the post-call sequence in the
++   prologue to establish the tracker and the pre-call sequence in the
++   epilogue to re-encode the state for the return.
++
++   The code sequences have the nice property that if called from, or
++   calling a function that does not track speculation then the stack pointer
++   will always be non-NULL and hence the tracker will be initialized to all
++   bits one as we need: we lose the ability to fully track speculation in that
++   case, but we are still architecturally safe.
++
++   Tracking speculation in this way is quite expensive, both in code
++   size and execution time.  We employ a number of tricks to try to
++   limit this:
++
++   1) Simple leaf functions with no conditional branches (or use of
++   the tracker) do not need to establish a new tracker: they simply
++   carry the tracking state through SP for the duration of the call.
++   The same is also true for leaf functions that end in a tail-call.
++
++   2) Back-to-back function calls in a single basic block also do not
++   need to re-establish the tracker between the calls.  Again, we can
++   carry the tracking state in SP for this period of time unless the
++   tracker value is needed at that point in time.
++
++   We run the pass just before the final branch reorganization pass so
++   that we can handle most of the conditional branch cases using the
++   standard edge insertion code.  The reorg pass will hopefully clean
++   things up for afterwards so that the results aren't too
++   horrible.  */
++
++/* Generate a code sequence to clobber SP if speculating incorreclty.  */
++static rtx_insn *
++aarch64_speculation_clobber_sp ()
++{
++  rtx sp = gen_rtx_REG (DImode, SP_REGNUM);
++  rtx tracker = gen_rtx_REG (DImode, SPECULATION_TRACKER_REGNUM);
++  rtx scratch = gen_rtx_REG (DImode, SPECULATION_SCRATCH_REGNUM);
++
++  start_sequence ();
++  emit_insn (gen_rtx_SET (scratch, sp));
++  emit_insn (gen_anddi3 (scratch, scratch, tracker));
++  emit_insn (gen_rtx_SET (sp, scratch));
++  rtx_insn *seq = get_insns ();
++  end_sequence ();
++  return seq;
++}
++
++/* Generate a code sequence to establish the tracker variable from the
++   contents of SP.  */
++static rtx_insn *
++aarch64_speculation_establish_tracker ()
++{
++  rtx sp = gen_rtx_REG (DImode, SP_REGNUM);
++  rtx tracker = gen_rtx_REG (DImode, SPECULATION_TRACKER_REGNUM);
++  start_sequence ();
++  rtx cc = aarch64_gen_compare_reg (EQ, sp, const0_rtx);
++  emit_insn (gen_cstoredi_neg (tracker,
++			       gen_rtx_NE (CCmode, cc, const0_rtx), cc));
++  rtx_insn *seq = get_insns ();
++  end_sequence ();
++  return seq;
++}
++
++/* Main speculation tracking pass.  */
++unsigned int
++aarch64_do_track_speculation ()
++{
++  basic_block bb;
++  bool needs_tracking = false;
++  bool need_second_pass = false;
++  rtx_insn *insn;
++  int fixups_pending = 0;
++
++  FOR_EACH_BB_FN (bb, cfun)
++    {
++      insn = BB_END (bb);
++
++      if (dump_file)
++	fprintf (dump_file, "Basic block %d:\n", bb->index);
++
++      while (insn != BB_HEAD (bb)
++	     && NOTE_P (insn))
++	insn = PREV_INSN (insn);
++
++      if (control_flow_insn_p (insn))
++	{
++	  if (any_condjump_p (insn))
++	    {
++	      if (dump_file)
++		{
++		  fprintf (dump_file, "  condjump\n");
++		  dump_insn_slim (dump_file, insn);
++		}
++
++	      rtx src = SET_SRC (pc_set (insn));
++
++	      /* Check for an inverted jump, where the fall-through edge
++		 appears first.  */
++	      bool inverted = GET_CODE (XEXP (src, 2)) != PC;
++	      /* The other edge must be the PC (we assume that we don't
++		 have conditional return instructions).  */
++	      gcc_assert (GET_CODE (XEXP (src, 1 + !inverted)) == PC);
++
++	      rtx cond = copy_rtx (XEXP (src, 0));
++	      gcc_assert (COMPARISON_P (cond)
++			  && REG_P (XEXP (cond, 0))
++			  && REGNO (XEXP (cond, 0)) == CC_REGNUM
++			  && XEXP (cond, 1) == const0_rtx);
++	      enum rtx_code inv_cond_code
++		= reversed_comparison_code (cond, insn);
++	      /* We should be able to reverse all conditions.  */
++	      gcc_assert (inv_cond_code != UNKNOWN);
++	      rtx inv_cond = gen_rtx_fmt_ee (inv_cond_code, GET_MODE (cond),
++					     copy_rtx (XEXP (cond, 0)),
++					     copy_rtx (XEXP (cond, 1)));
++	      if (inverted)
++		std::swap (cond, inv_cond);
++
++	      insert_insn_on_edge (gen_speculation_tracker (cond),
++				   BRANCH_EDGE (bb));
++	      insert_insn_on_edge (gen_speculation_tracker (inv_cond),
++				   FALLTHRU_EDGE (bb));
++	      needs_tracking = true;
++	    }
++	  else if (GET_CODE (PATTERN (insn)) == RETURN)
++	    {
++	      /* If we already know we'll need a second pass, don't put
++		 out the return sequence now, or we might end up with
++		 two copies.  Instead, we'll do all return statements
++		 during the second pass.  However, if this is the
++		 first return insn we've found and we already
++		 know that we'll need to emit the code, we can save a
++		 second pass by emitting the code now.  */
++	      if (needs_tracking && ! need_second_pass)
++		{
++		  rtx_insn *seq = aarch64_speculation_clobber_sp ();
++		  emit_insn_before (seq, insn);
++		}
++	      else
++		{
++		  fixups_pending++;
++		  need_second_pass = true;
++		}
++	    }
++	  else if (find_reg_note (insn, REG_NON_LOCAL_GOTO, NULL_RTX))
++	    {
++	      rtx_insn *seq = aarch64_speculation_clobber_sp ();
++	      emit_insn_before (seq, insn);
++	      needs_tracking = true;
++	    }
++	}
++      else
++	{
++	  if (dump_file)
++	    {
++	      fprintf (dump_file, "  other\n");
++	      dump_insn_slim (dump_file, insn);
++	    }
++	}
++    }
++
++  FOR_EACH_BB_FN (bb, cfun)
++    {
++      rtx_insn *end = BB_END (bb);
++      rtx_insn *call_insn = NULL;
++
++      if (bb->flags & BB_NON_LOCAL_GOTO_TARGET)
++	{
++	  rtx_insn *label = NULL;
++	  /* For non-local goto targets we have to recover the
++	     speculation state from SP.  Find the last code label at
++	     the head of the block and place the fixup sequence after
++	     that.  */
++	  for (insn = BB_HEAD (bb); insn != end; insn = NEXT_INSN (insn))
++	    {
++	      if (LABEL_P (insn))
++		label = insn;
++	      /* Never put anything before the basic block note.  */
++	      if (NOTE_INSN_BASIC_BLOCK_P (insn))
++		label = insn;
++	      if (INSN_P (insn))
++		break;
++	    }
++
++	  gcc_assert (label);
++	  emit_insn_after (aarch64_speculation_establish_tracker (), label);
++	}
++
++      /* Scan the insns looking for calls.  We need to pass the
++	 speculation tracking state encoded in to SP.  After a call we
++	 restore the speculation tracking into the tracker register.
++	 To avoid unnecessary transfers we look for two or more calls
++	 within a single basic block and eliminate, where possible,
++	 any redundant operations.  */
++      for (insn = BB_HEAD (bb); ; insn = NEXT_INSN (insn))
++	{
++	  if (NONDEBUG_INSN_P (insn)
++	      && recog_memoized (insn) >= 0
++	      && (get_attr_speculation_barrier (insn)
++		  == SPECULATION_BARRIER_TRUE))
++	    {
++	      if (call_insn)
++		{
++		  /* This instruction requires the speculation
++		     tracking to be in the tracker register.  If there
++		     was an earlier call in this block, we need to
++		     copy the speculation tracking back there.  */
++		  emit_insn_after (aarch64_speculation_establish_tracker (),
++				   call_insn);
++		  call_insn = NULL;
++		}
++
++	      needs_tracking = true;
++	    }
++
++	  if (CALL_P (insn))
++	    {
++	      bool tailcall
++		= (SIBLING_CALL_P (insn)
++		   || find_reg_note (insn, REG_NORETURN, NULL_RTX));
++
++	      /* Tailcalls are like returns, we can eliminate the
++		 transfer between the tracker register and SP if we
++		 know that this function does not itself need
++		 tracking.  */
++	      if (tailcall && (need_second_pass || !needs_tracking))
++		{
++		  /* Don't clear call_insn if it is set - needs_tracking
++		     will be true in that case and so we will end
++		     up putting out mitigation sequences.  */
++		  fixups_pending++;
++		  need_second_pass = true;
++		  break;
++		}
++
++	      needs_tracking = true;
++
++	      /* We always need a transfer before the first call in a BB.  */
++	      if (!call_insn)
++		emit_insn_before (aarch64_speculation_clobber_sp (), insn);
++
++	      /* Tail-calls and no-return calls don't need any post-call
++		 reestablishment of the tracker.  */
++	      if (! tailcall)
++		call_insn = insn;
++	      else
++		call_insn = NULL;
++	    }
++
++	  if (insn == end)
++	    break;
++	}
++
++      if (call_insn)
++	{
++	  rtx_insn *seq = aarch64_speculation_establish_tracker ();
++
++	  /* Handle debug insns at the end of the BB.  Put the extra
++	     insns after them.  This ensures that we have consistent
++	     behaviour for the placement of the extra insns between
++	     debug and non-debug builds.  */
++	  for (insn = call_insn;
++	       insn != end && DEBUG_INSN_P (NEXT_INSN (insn));
++	       insn = NEXT_INSN (insn))
++	    ;
++
++	  if (insn == end)
++	    {
++	      edge e = find_fallthru_edge (bb->succs);
++	      /* We need to be very careful about some calls that
++		 appear at the end of a basic block.  If the call
++		 involves exceptions, then the compiler may depend on
++		 this being the last instruction in the block.  The
++		 easiest way to handle this is to commit the new
++		 instructions on the fall-through edge and to let
++		 commit_edge_insertions clean things up for us.
++
++		 Sometimes, eg with OMP, there may not even be an
++		 outgoing edge after the call.  In that case, there's
++		 not much we can do, presumably the compiler has
++		 decided that the call can never return in this
++		 context.  */
++	      if (e)
++		{
++		  /* We need to set the location lists explicitly in
++		     this case.  */
++		  if (! INSN_P (seq))
++		    {
++		      start_sequence ();
++		      emit_insn (seq);
++		      seq = get_insns ();
++		      end_sequence ();
++		    }
++
++		  for (rtx_insn *list = seq; list; list = NEXT_INSN (list))
++		    INSN_LOCATION (list) = INSN_LOCATION (call_insn);
++
++		  insert_insn_on_edge (seq, e);
++		}
++	    }
++	  else
++	    emit_insn_after (seq, call_insn);
++	}
++    }
++
++  if (needs_tracking)
++    {
++      if (need_second_pass)
++	{
++	  /* We found a return instruction before we found out whether
++	     or not we need to emit the tracking code, but we now
++	     know we do.  Run quickly over the basic blocks and
++	     fix up the return insns.  */
++	  FOR_EACH_BB_FN (bb, cfun)
++	    {
++	      insn = BB_END (bb);
++
++	      while (insn != BB_HEAD (bb)
++		     && NOTE_P (insn))
++		insn = PREV_INSN (insn);
++
++	      if ((control_flow_insn_p (insn)
++		   && GET_CODE (PATTERN (insn)) == RETURN)
++		  || (CALL_P (insn)
++		      && (SIBLING_CALL_P (insn)
++			  || find_reg_note (insn, REG_NORETURN, NULL_RTX))))
++		{
++		  rtx_insn *seq = aarch64_speculation_clobber_sp ();
++		  emit_insn_before (seq, insn);
++		  fixups_pending--;
++		}
++	    }
++	  gcc_assert (fixups_pending == 0);
++	}
++
++      /* Set up the initial value of the tracker, using the incoming SP.  */
++      insert_insn_on_edge (aarch64_speculation_establish_tracker (),
++			   single_succ_edge (ENTRY_BLOCK_PTR_FOR_FN (cfun)));
++      commit_edge_insertions ();
++    }
++
++  return 0;
++}
++
++namespace {
++
++const pass_data pass_data_aarch64_track_speculation =
++{
++  RTL_PASS,		/* type.  */
++  "speculation",	/* name.  */
++  OPTGROUP_NONE,	/* optinfo_flags.  */
++  TV_MACH_DEP,		/* tv_id.  */
++  0,			/* properties_required.  */
++  0,			/* properties_provided.  */
++  0,			/* properties_destroyed.  */
++  0,			/* todo_flags_start.  */
++  0			/* todo_flags_finish.  */
++};
++
++class pass_track_speculation : public rtl_opt_pass
++{
++ public:
++  pass_track_speculation(gcc::context *ctxt)
++    : rtl_opt_pass(pass_data_aarch64_track_speculation, ctxt)
++    {}
++
++  /* opt_pass methods:  */
++  virtual bool gate (function *)
++    {
++      return aarch64_track_speculation;
++    }
++
++  virtual unsigned int execute (function *)
++    {
++      return aarch64_do_track_speculation ();
++    }
++}; // class pass_track_speculation.
++} // anon namespace.
++
++/* Create a new pass instance.  */
++rtl_opt_pass *
++make_pass_track_speculation (gcc::context *ctxt)
++{
++  return new pass_track_speculation (ctxt);
++}
+diff --git a/gcc/config/aarch64/aarch64.c b/gcc/config/aarch64/aarch64.c
+index 4ad732203..2643ef39f 100644
+--- a/gcc/config/aarch64/aarch64.c
++++ b/gcc/config/aarch64/aarch64.c
+@@ -6828,6 +6828,12 @@ aarch64_print_operand (FILE *f, rtx x, int code)
+       break;
+ 
+     case 'H':
++      if (x == const0_rtx)
++	{
++	  asm_fprintf (f, "xzr");
++	  break;
++	}
++
+       if (!REG_P (x) || !GP_REGNUM_P (REGNO (x) + 1))
+ 	{
+ 	  output_operand_lossage ("invalid operand for '%%%c'", code);
+@@ -12687,6 +12693,19 @@ aarch64_conditional_register_usage (void)
+ 	fixed_regs[i] = 1;
+ 	call_used_regs[i] = 1;
+       }
++
++  /* When tracking speculation, we need a couple of call-clobbered registers
++     to track the speculation state.  It would be nice to just use
++     IP0 and IP1, but currently there are numerous places that just
++     assume these registers are free for other uses (eg pointer
++     authentication).  */
++  if (aarch64_track_speculation)
++    {
++      fixed_regs[SPECULATION_TRACKER_REGNUM] = 1;
++      call_used_regs[SPECULATION_TRACKER_REGNUM] = 1;
++      fixed_regs[SPECULATION_SCRATCH_REGNUM] = 1;
++      call_used_regs[SPECULATION_SCRATCH_REGNUM] = 1;
++    }
+ }
+ 
+ /* Walk down the type tree of TYPE counting consecutive base elements.
+@@ -14612,7 +14631,16 @@ aarch64_split_compare_and_swap (rtx operands[])
+ 
+   if (!is_weak)
+     {
+-      x = gen_rtx_NE (VOIDmode, scratch, const0_rtx);
++      if (aarch64_track_speculation)
++	{
++	  /* Emit an explicit compare instruction, so that we can correctly
++	     track the condition codes.  */
++	  rtx cc_reg = aarch64_gen_compare_reg (NE, scratch, const0_rtx);
++	  x = gen_rtx_NE (GET_MODE (cc_reg), cc_reg, const0_rtx);
++	}
++      else
++	x = gen_rtx_NE (VOIDmode, scratch, const0_rtx);
++
+       x = gen_rtx_IF_THEN_ELSE (VOIDmode, x,
+ 				gen_rtx_LABEL_REF (Pmode, label1), pc_rtx);
+       aarch64_emit_unlikely_jump (gen_rtx_SET (pc_rtx, x));
+@@ -14699,7 +14727,16 @@ aarch64_split_atomic_op (enum rtx_code code, rtx old_out, rtx new_out, rtx mem,
+   aarch64_emit_store_exclusive (mode, cond, mem,
+ 				gen_lowpart (mode, new_out), model_rtx);
+ 
+-  x = gen_rtx_NE (VOIDmode, cond, const0_rtx);
++  if (aarch64_track_speculation)
++    {
++      /* Emit an explicit compare instruction, so that we can correctly
++	 track the condition codes.  */
++      rtx cc_reg = aarch64_gen_compare_reg (NE, cond, const0_rtx);
++      x = gen_rtx_NE (GET_MODE (cc_reg), cc_reg, const0_rtx);
++    }
++  else
++    x = gen_rtx_NE (VOIDmode, cond, const0_rtx);
++
+   x = gen_rtx_IF_THEN_ELSE (VOIDmode, x,
+ 			    gen_rtx_LABEL_REF (Pmode, label), pc_rtx);
+   aarch64_emit_unlikely_jump (gen_rtx_SET (pc_rtx, x));
+@@ -17379,6 +17416,45 @@ aarch64_select_early_remat_modes (sbitmap modes)
+     }
+ }
+ 
++/* Override the default target speculation_safe_value.  */
++static rtx
++aarch64_speculation_safe_value (machine_mode mode,
++				rtx result, rtx val, rtx failval)
++{
++  /* Maybe we should warn if falling back to hard barriers.  They are
++     likely to be noticably more expensive than the alternative below.  */
++  if (!aarch64_track_speculation)
++    return default_speculation_safe_value (mode, result, val, failval);
++
++  if (!REG_P (val))
++    val = copy_to_mode_reg (mode, val);
++
++  if (!aarch64_reg_or_zero (failval, mode))
++    failval = copy_to_mode_reg (mode, failval);
++
++  switch (mode)
++    {
++    case E_QImode:
++      emit_insn (gen_despeculate_copyqi (result, val, failval));
++      break;
++    case E_HImode:
++      emit_insn (gen_despeculate_copyhi (result, val, failval));
++      break;
++    case E_SImode:
++      emit_insn (gen_despeculate_copysi (result, val, failval));
++      break;
++    case E_DImode:
++      emit_insn (gen_despeculate_copydi (result, val, failval));
++      break;
++    case E_TImode:
++      emit_insn (gen_despeculate_copyti (result, val, failval));
++      break;
++    default:
++      gcc_unreachable ();
++    }
++  return result;
++}
++
+ /* Target-specific selftests.  */
+ 
+ #if CHECKING_P
+@@ -17848,6 +17924,9 @@ aarch64_libgcc_floating_mode_supported_p
+ #undef TARGET_SELECT_EARLY_REMAT_MODES
+ #define TARGET_SELECT_EARLY_REMAT_MODES aarch64_select_early_remat_modes
+ 
++#undef TARGET_SPECULATION_SAFE_VALUE
++#define TARGET_SPECULATION_SAFE_VALUE aarch64_speculation_safe_value
++
+ #if CHECKING_P
+ #undef TARGET_RUN_TARGET_SELFTESTS
+ #define TARGET_RUN_TARGET_SELFTESTS selftest::aarch64_run_selftests
+diff --git a/gcc/config/aarch64/aarch64.md b/gcc/config/aarch64/aarch64.md
+index bfcc1a2a1..430e32fe3 100644
+--- a/gcc/config/aarch64/aarch64.md
++++ b/gcc/config/aarch64/aarch64.md
+@@ -88,6 +88,10 @@
+     (P13_REGNUM		81)
+     (P14_REGNUM		82)
+     (P15_REGNUM		83)
++    ;; A couple of call-clobbered registers that we need to reserve when
++    ;; tracking speculation this is not ABI, so is subject to change.
++    (SPECULATION_TRACKER_REGNUM 15)
++    (SPECULATION_SCRATCH_REGNUM 14)
+   ]
+ )
+ 
+@@ -190,6 +194,7 @@
+     UNSPEC_CLASTB
+     UNSPEC_FADDA
+     UNSPEC_REV_SUBREG
++    UNSPEC_SPECULATION_TRACKER
+     UNSPEC_COPYSIGN
+ ])
+ 
+@@ -201,6 +206,7 @@
+     UNSPECV_SET_FPSR		; Represent assign of FPSR content.
+     UNSPECV_BLOCKAGE		; Represent a blockage
+     UNSPECV_PROBE_STACK_RANGE	; Represent stack range probing.
++    UNSPECV_SPECULATION_BARRIER ; Represent speculation barrier.
+     UNSPEC_RNDR			; Represent RNDR
+     UNSPEC_RNDRRS		; Represent RNDRRS
+   ]
+@@ -279,6 +285,11 @@
+ ;; no predicated insns.
+ (define_attr "predicated" "yes,no" (const_string "no"))
+ 
++;; Set to true on an insn that requires the speculation tracking state to be
++;; in the tracking register before the insn issues.  Otherwise the compiler
++;; may chose to hold the tracking state encoded in SP.
++(define_attr "speculation_barrier" "true,false" (const_string "false"))
++
+ ;; -------------------------------------------------------------------
+ ;; Pipeline descriptions and scheduling
+ ;; -------------------------------------------------------------------
+@@ -682,7 +693,7 @@
+ 				(const_int 0))
+ 			   (label_ref (match_operand 1 "" ""))
+ 			   (pc)))]
+-  ""
++  "!aarch64_track_speculation"
+   {
+     if (get_attr_length (insn) == 8)
+       return aarch64_gen_far_branch (operands, 1, "Lcb", "<inv_cb>\\t%<w>0, ");
+@@ -712,7 +723,7 @@
+ 	     (label_ref (match_operand 2 "" ""))
+ 	     (pc)))
+    (clobber (reg:CC CC_REGNUM))]
+-  ""
++  "!aarch64_track_speculation"
+   {
+     if (get_attr_length (insn) == 8)
+       {
+@@ -748,7 +759,7 @@
+ 			   (label_ref (match_operand 1 "" ""))
+ 			   (pc)))
+    (clobber (reg:CC CC_REGNUM))]
+-  ""
++  "!aarch64_track_speculation"
+   {
+     if (get_attr_length (insn) == 8)
+       {
+@@ -3146,7 +3157,7 @@
+ 
+ (define_insn "cmp<mode>"
+   [(set (reg:CC CC_REGNUM)
+-	(compare:CC (match_operand:GPI 0 "register_operand" "r,r,r")
++	(compare:CC (match_operand:GPI 0 "register_operand" "rk,rk,rk")
+ 		    (match_operand:GPI 1 "aarch64_plus_operand" "r,I,J")))]
+   ""
+   "@
+@@ -6098,6 +6109,21 @@
+   DONE;
+ })
+ 
++;; Track speculation through conditional branches.  We assume that
++;; SPECULATION_TRACKER_REGNUM is reserved for this purpose when necessary.
++(define_insn "speculation_tracker"
++  [(set (reg:DI SPECULATION_TRACKER_REGNUM)
++	(unspec [(reg:DI SPECULATION_TRACKER_REGNUM) (match_operand 0)]
++	 UNSPEC_SPECULATION_TRACKER))]
++  ""
++  {
++    operands[1] = gen_rtx_REG (DImode, SPECULATION_TRACKER_REGNUM);
++    output_asm_insn ("csel\\t%1, %1, xzr, %m0", operands);
++    return "";
++  }
++  [(set_attr "type" "csel")]
++)
++
+ ;; Helper for aarch64.c code.
+ (define_expand "set_clobber_cc"
+   [(parallel [(set (match_operand 0)
+@@ -6124,6 +6150,113 @@
+   [(set_attr "type" "mrs")]
+ )
+ 
++;; Hard speculation barrier.
++(define_insn "speculation_barrier"
++  [(unspec_volatile [(const_int 0)] UNSPECV_SPECULATION_BARRIER)]
++  ""
++  "isb\;dsb\\tsy"
++  [(set_attr "length" "8")
++   (set_attr "type" "block")
++   (set_attr "speculation_barrier" "true")]
++)
++
++;; Support for __builtin_speculation_safe_value when we have speculation
++;; tracking enabled.  Use the speculation tracker to decide whether to
++;; copy operand 1 to the target, or to copy the fail value (operand 2).
++(define_expand "despeculate_copy<ALLI_TI:mode>"
++  [(set (match_operand:ALLI_TI 0 "register_operand" "=r")
++	(unspec_volatile:ALLI_TI
++	 [(match_operand:ALLI_TI 1 "register_operand" "r")
++	  (match_operand:ALLI_TI 2 "aarch64_reg_or_zero" "rZ")
++	  (use (reg:DI SPECULATION_TRACKER_REGNUM))
++	  (clobber (reg:CC CC_REGNUM))] UNSPECV_SPECULATION_BARRIER))]
++  ""
++  "
++  {
++    if (operands[2] == const0_rtx)
++      {
++	rtx tracker;
++	if (<MODE>mode == TImode)
++	  tracker = gen_rtx_REG (DImode, SPECULATION_TRACKER_REGNUM);
++	else
++	  tracker = gen_rtx_REG (<MODE>mode, SPECULATION_TRACKER_REGNUM);
++
++	emit_insn (gen_despeculate_simple<mode> (operands[0], operands[1],
++						 tracker));
++	DONE;
++      }
++  }
++  "
++)
++
++;; Patterns to match despeculate_copy<mode>.  Note that "hint 0x14" is the
++;; encoding for CSDB, but will work in older versions of the assembler.
++(define_insn "*despeculate_copy<ALLI:mode>_insn"
++  [(set (match_operand:ALLI 0 "register_operand" "=r")
++	(unspec_volatile:ALLI
++	 [(match_operand:ALLI 1 "register_operand" "r")
++	  (match_operand:ALLI 2 "aarch64_reg_or_zero" "rZ")
++	  (use (reg:DI SPECULATION_TRACKER_REGNUM))
++	  (clobber (reg:CC CC_REGNUM))] UNSPECV_SPECULATION_BARRIER))]
++  ""
++  {
++    operands[3] = gen_rtx_REG (DImode, SPECULATION_TRACKER_REGNUM);
++    output_asm_insn ("cmp\\t%3, #0\;csel\\t%<w>0, %<w>1, %<w>2, ne\;hint\t0x14 // csdb",
++		     operands);
++    return "";
++  }
++  [(set_attr "length" "12")
++   (set_attr "type" "block")
++   (set_attr "speculation_barrier" "true")]
++)
++
++;; Pattern to match despeculate_copyti
++(define_insn "*despeculate_copyti_insn"
++  [(set (match_operand:TI 0 "register_operand" "=r")
++	(unspec_volatile:TI
++	 [(match_operand:TI 1 "register_operand" "r")
++	  (match_operand:TI 2 "aarch64_reg_or_zero" "rZ")
++	  (use (reg:DI SPECULATION_TRACKER_REGNUM))
++	  (clobber (reg:CC CC_REGNUM))] UNSPECV_SPECULATION_BARRIER))]
++  ""
++  {
++    operands[3] = gen_rtx_REG (DImode, SPECULATION_TRACKER_REGNUM);
++    output_asm_insn
++      ("cmp\\t%3, #0\;csel\\t%0, %1, %2, ne\;csel\\t%H0, %H1, %H2, ne\;hint\t0x14 // csdb",
++       operands);
++    return "";
++  }
++  [(set_attr "length" "16")
++   (set_attr "type" "block")
++   (set_attr "speculation_barrier" "true")]
++)
++
++(define_insn "despeculate_simple<ALLI:mode>"
++  [(set (match_operand:ALLI 0 "register_operand" "=r")
++	(unspec_volatile:ALLI
++	 [(match_operand:ALLI 1 "register_operand" "r")
++	  (use (match_operand:ALLI 2 "register_operand" ""))]
++	 UNSPECV_SPECULATION_BARRIER))]
++  ""
++  "and\\t%<w>0, %<w>1, %<w>2\;hint\t0x14 // csdb"
++  [(set_attr "type" "block")
++   (set_attr "length" "8")
++   (set_attr "speculation_barrier" "true")]
++)
++
++(define_insn "despeculate_simpleti"
++  [(set (match_operand:TI 0 "register_operand" "=r")
++	(unspec_volatile:TI
++	 [(match_operand:TI 1 "register_operand" "r")
++	  (use (match_operand:DI 2 "register_operand" ""))]
++	 UNSPECV_SPECULATION_BARRIER))]
++  ""
++  "and\\t%0, %1, %2\;and\\t%H0, %H1, %2\;hint\t0x14 // csdb"
++  [(set_attr "type" "block")
++   (set_attr "length" "12")
++   (set_attr "speculation_barrier" "true")]
++)
++
+ ;; AdvSIMD Stuff
+ (include "aarch64-simd.md")
+ 
+diff --git a/gcc/config/aarch64/aarch64.opt b/gcc/config/aarch64/aarch64.opt
+index b4970b736..c93d52cae 100644
+--- a/gcc/config/aarch64/aarch64.opt
++++ b/gcc/config/aarch64/aarch64.opt
+@@ -215,6 +215,10 @@ mverbose-cost-dump
+ Common Undocumented Var(flag_aarch64_verbose_cost)
+ Enables verbose cost model dumping in the debug dump files.
+ 
++mtrack-speculation
++Target Var(aarch64_track_speculation)
++Generate code to track when the CPU might be speculating incorrectly.
++
+ moutline-atomics
+ Target Report Mask(OUTLINE_ATOMICS) Save
+ Generate local calls to out-of-line atomic operations.
+diff --git a/gcc/config/aarch64/t-aarch64 b/gcc/config/aarch64/t-aarch64
+index 0be1f0d63..5d54853c2 100644
+--- a/gcc/config/aarch64/t-aarch64
++++ b/gcc/config/aarch64/t-aarch64
+@@ -67,6 +67,16 @@ cortex-a57-fma-steering.o: $(srcdir)/config/aarch64/cortex-a57-fma-steering.c \
+ 	$(COMPILER) -c $(ALL_COMPILERFLAGS) $(ALL_CPPFLAGS) $(INCLUDES) \
+ 		$(srcdir)/config/aarch64/cortex-a57-fma-steering.c
+ 
++aarch64-speculation.o: $(srcdir)/config/aarch64/aarch64-speculation.cc \
++    $(CONFIG_H) \
++    $(SYSTEM_H) \
++    $(TM_H) \
++    $(TARGET_H) \
++    $(RTL_BASE_H) \
++    $(TREE_PASS_H)
++	$(COMPILER) -c $(ALL_COMPILERFLAGS) $(ALL_SPPFLAGS) $(INCLUDES) \
++	  $(srcdir)/config/aarch64/aarch64-speculation.cc
++
+ comma=,
+ MULTILIB_OPTIONS    = $(subst $(comma),/, $(patsubst %, mabi=%, $(subst $(comma),$(comma)mabi=,$(TM_MULTILIB_CONFIG))))
+ MULTILIB_DIRNAMES   = $(subst $(comma), ,$(TM_MULTILIB_CONFIG))
+diff --git a/gcc/config/arm/arm-protos.h b/gcc/config/arm/arm-protos.h
+index 87e01e352..7aa35be59 100644
+--- a/gcc/config/arm/arm-protos.h
++++ b/gcc/config/arm/arm-protos.h
+@@ -56,6 +56,8 @@ extern void arm_atomic_assign_expand_fenv (tree *hold, tree *clear, tree *update
+ extern rtx arm_simd_vect_par_cnst_half (machine_mode mode, bool high);
+ extern bool arm_simd_check_vect_par_cnst_half_p (rtx op, machine_mode mode,
+ 						 bool high);
++extern void arm_emit_speculation_barrier_function (void);
++
+ #ifdef RTX_CODE
+ extern void arm_gen_unlikely_cbranch (enum rtx_code, machine_mode cc_mode,
+ 				      rtx label_ref);
+diff --git a/gcc/config/arm/arm.c b/gcc/config/arm/arm.c
+index 55e54c9c3..2cdebacaf 100644
+--- a/gcc/config/arm/arm.c
++++ b/gcc/config/arm/arm.c
+@@ -2472,8 +2472,9 @@ arm_set_fixed_conv_libfunc (convert_optab optable, machine_mode to,
+   set_conv_libfunc (optable, to, from, buffer);
+ }
+ 
+-/* Set up library functions unique to ARM.  */
++static GTY(()) rtx speculation_barrier_libfunc;
+ 
++/* Set up library functions unique to ARM.  */
+ static void
+ arm_init_libfuncs (void)
+ {
+@@ -2759,6 +2760,8 @@ arm_init_libfuncs (void)
+ 
+   if (TARGET_AAPCS_BASED)
+     synchronize_libfunc = init_one_libfunc ("__sync_synchronize");
++
++  speculation_barrier_libfunc = init_one_libfunc ("__speculation_barrier");
+ }
+ 
+ /* On AAPCS systems, this is the "struct __va_list".  */
+@@ -31664,6 +31667,16 @@ arm_gen_far_branch (rtx * operands, int pos_label, const char * dest,
+   return "";
+ }
+ 
++/* Emit a speculation barrier on target architectures that do not have
++   DSB/ISB directly.  Such systems probably don't need a barrier
++   themselves, but if the code is ever run on a later architecture, it
++   might become a problem.  */
++void
++arm_emit_speculation_barrier_function ()
++{
++  emit_library_call (speculation_barrier_libfunc, LCT_NORMAL, VOIDmode);
++}
++
+ #if CHECKING_P
+ namespace selftest {
+ 
+diff --git a/gcc/config/arm/arm.md b/gcc/config/arm/arm.md
+index 81c96658d..ea04c5051 100644
+--- a/gcc/config/arm/arm.md
++++ b/gcc/config/arm/arm.md
+@@ -12070,6 +12070,33 @@
+   [(set_attr "length" "4")
+    (set_attr "type" "coproc")])
+ 
++(define_expand "speculation_barrier"
++  [(unspec_volatile [(const_int 0)] VUNSPEC_SPECULATION_BARRIER)]
++  "TARGET_EITHER"
++  "
++  /* For thumb1 (except Armv8 derivatives), and for pre-Armv7 we don't
++     have a usable barrier (and probably don't need one in practice).
++     But to be safe if such code is run on later architectures, call a
++     helper function in libgcc that will do the thing for the active
++     system.  */
++  if (!(arm_arch7 || arm_arch8))
++    {
++      arm_emit_speculation_barrier_function ();
++      DONE;
++    }
++  "
++)
++
++;; Generate a hard speculation barrier when we have not enabled speculation
++;; tracking.
++(define_insn "*speculation_barrier_insn"
++  [(unspec_volatile [(const_int 0)] VUNSPEC_SPECULATION_BARRIER)]
++  "arm_arch7 || arm_arch8"
++  "isb\;dsb\\tsy"
++  [(set_attr "type" "block")
++   (set_attr "length" "8")]
++)
++
+ ;; Vector bits common to IWMMXT and Neon
+ (include "vec-common.md")
+ ;; Load the Intel Wireless Multimedia Extension patterns
+diff --git a/gcc/config/arm/unspecs.md b/gcc/config/arm/unspecs.md
+index b05f85e10..19416736e 100644
+--- a/gcc/config/arm/unspecs.md
++++ b/gcc/config/arm/unspecs.md
+@@ -168,6 +168,7 @@
+   VUNSPEC_MCRR2		; Represent the coprocessor mcrr2 instruction.
+   VUNSPEC_MRRC		; Represent the coprocessor mrrc instruction.
+   VUNSPEC_MRRC2		; Represent the coprocessor mrrc2 instruction.
++  VUNSPEC_SPECULATION_BARRIER ; Represents an unconditional speculation barrier.
+ ])
+ 
+ ;; Enumerators for NEON unspecs.
+diff --git a/gcc/config/fr30/fr30.c b/gcc/config/fr30/fr30.c
+index d49429bbc..9d8bc380f 100644
+--- a/gcc/config/fr30/fr30.c
++++ b/gcc/config/fr30/fr30.c
+@@ -195,6 +195,9 @@ static int fr30_num_arg_regs (machine_mode, const_tree);
+ #undef TARGET_CONSTANT_ALIGNMENT
+ #define TARGET_CONSTANT_ALIGNMENT constant_alignment_word_strings
+ 
++#undef  TARGET_HAVE_SPECULATION_SAFE_VALUE
++#define TARGET_HAVE_SPECULATION_SAFE_VALUE speculation_safe_value_not_needed
++
+ struct gcc_target targetm = TARGET_INITIALIZER;
+ 
+ 
+diff --git a/gcc/config/frv/frv.c b/gcc/config/frv/frv.c
+index 56027bd67..0f9aa2760 100644
+--- a/gcc/config/frv/frv.c
++++ b/gcc/config/frv/frv.c
+@@ -528,6 +528,9 @@ static bool frv_modes_tieable_p			(machine_mode, machine_mode);
+ #undef TARGET_CONSTANT_ALIGNMENT
+ #define TARGET_CONSTANT_ALIGNMENT constant_alignment_word_strings
+ 
++#undef  TARGET_HAVE_SPECULATION_SAFE_VALUE
++#define TARGET_HAVE_SPECULATION_SAFE_VALUE speculation_safe_value_not_needed
++
+ struct gcc_target targetm = TARGET_INITIALIZER;
+ 
+ #define FRV_SYMBOL_REF_TLS_P(RTX) \
+diff --git a/gcc/config/h8300/h8300.c b/gcc/config/h8300/h8300.c
+index 697041e47..f422828ea 100644
+--- a/gcc/config/h8300/h8300.c
++++ b/gcc/config/h8300/h8300.c
+@@ -6148,4 +6148,7 @@ h8300_push_rounding (poly_int64 bytes)
+ #undef TARGET_MODE_DEPENDENT_ADDRESS_P
+ #define TARGET_MODE_DEPENDENT_ADDRESS_P h8300_mode_dependent_address_p
+ 
++#undef TARGET_HAVE_SPECULATION_SAFE_VALUE
++#define TARGET_HAVE_SPECULATION_SAFE_VALUE speculation_safe_value_not_needed
++
+ struct gcc_target targetm = TARGET_INITIALIZER;
+diff --git a/gcc/config/i386/i386.md b/gcc/config/i386/i386.md
+index c17ae94f9..b4be56535 100644
+--- a/gcc/config/i386/i386.md
++++ b/gcc/config/i386/i386.md
+@@ -293,6 +293,9 @@
+   UNSPECV_WRUSS
+   UNSPECV_SETSSBSY
+   UNSPECV_CLRSSBSY
++
++  ;; For Speculation Barrier support
++  UNSPECV_SPECULATION_BARRIER
+ ])
+ 
+ ;; Constants to represent rounding modes in the ROUND instruction
+@@ -20799,6 +20802,13 @@
+   "movdir64b\t{%1, %0|%0, %1}"
+   [(set_attr "type" "other")])
+ 
++(define_insn "speculation_barrier"
++  [(unspec_volatile [(const_int 0)] UNSPECV_SPECULATION_BARRIER)]
++  ""
++  "lfence"
++  [(set_attr "type" "other")
++   (set_attr "length" "3")])
++
+ (include "mmx.md")
+ (include "sse.md")
+ (include "sync.md")
+diff --git a/gcc/config/iq2000/iq2000.c b/gcc/config/iq2000/iq2000.c
+index ee89ced0e..4b30a44a4 100644
+--- a/gcc/config/iq2000/iq2000.c
++++ b/gcc/config/iq2000/iq2000.c
+@@ -274,6 +274,9 @@ static HOST_WIDE_INT iq2000_starting_frame_offset (void);
+ #undef  TARGET_STARTING_FRAME_OFFSET
+ #define TARGET_STARTING_FRAME_OFFSET	iq2000_starting_frame_offset
+ 
++#undef  TARGET_HAVE_SPECULATION_SAFE_VALUE
++#define TARGET_HAVE_SPECULATION_SAFE_VALUE speculation_safe_value_not_needed
++
+ struct gcc_target targetm = TARGET_INITIALIZER;
+ 
+ /* Return nonzero if we split the address into high and low parts.  */
+diff --git a/gcc/config/m32r/m32r.c b/gcc/config/m32r/m32r.c
+index 06c8085b0..a2bd289b2 100644
+--- a/gcc/config/m32r/m32r.c
++++ b/gcc/config/m32r/m32r.c
+@@ -226,6 +226,9 @@ static const struct attribute_spec m32r_attribute_table[] =
+ #undef TARGET_STARTING_FRAME_OFFSET
+ #define TARGET_STARTING_FRAME_OFFSET m32r_starting_frame_offset
+ 
++#undef  TARGET_HAVE_SPECULATION_SAFE_VALUE
++#define TARGET_HAVE_SPECULATION_SAFE_VALUE speculation_safe_value_not_needed
++
+ struct gcc_target targetm = TARGET_INITIALIZER;
+ 
+ /* Called by m32r_option_override to initialize various things.  */
+diff --git a/gcc/config/m68k/m68k.c b/gcc/config/m68k/m68k.c
+index 495a80b75..6d84c3713 100644
+--- a/gcc/config/m68k/m68k.c
++++ b/gcc/config/m68k/m68k.c
+@@ -352,6 +352,9 @@ static machine_mode m68k_promote_function_mode (const_tree, machine_mode,
+ #undef TARGET_PROMOTE_FUNCTION_MODE
+ #define TARGET_PROMOTE_FUNCTION_MODE m68k_promote_function_mode
+ 
++#undef  TARGET_HAVE_SPECULATION_SAFE_VALUE
++#define TARGET_HAVE_SPECULATION_SAFE_VALUE speculation_safe_value_not_needed
++
+ static const struct attribute_spec m68k_attribute_table[] =
+ {
+   /* { name, min_len, max_len, decl_req, type_req, fn_type_req,
+diff --git a/gcc/config/mcore/mcore.c b/gcc/config/mcore/mcore.c
+index 88ea3ff73..6df464d3f 100644
+--- a/gcc/config/mcore/mcore.c
++++ b/gcc/config/mcore/mcore.c
+@@ -253,6 +253,9 @@ static const struct attribute_spec mcore_attribute_table[] =
+ #undef TARGET_CONSTANT_ALIGNMENT
+ #define TARGET_CONSTANT_ALIGNMENT constant_alignment_word_strings
+ 
++#undef  TARGET_HAVE_SPECULATION_SAFE_VALUE
++#define TARGET_HAVE_SPECULATION_SAFE_VALUE speculation_safe_value_not_needed
++
+ struct gcc_target targetm = TARGET_INITIALIZER;
+ 
+ /* Adjust the stack and return the number of bytes taken to do it.  */
+diff --git a/gcc/config/mn10300/mn10300.c b/gcc/config/mn10300/mn10300.c
+index 1247f32e3..a7e5e6b24 100644
+--- a/gcc/config/mn10300/mn10300.c
++++ b/gcc/config/mn10300/mn10300.c
+@@ -3437,4 +3437,7 @@ mn10300_reorg (void)
+ #undef  TARGET_MODES_TIEABLE_P
+ #define TARGET_MODES_TIEABLE_P mn10300_modes_tieable_p
+ 
++#undef  TARGET_HAVE_SPECULATION_SAFE_VALUE
++#define TARGET_HAVE_SPECULATION_SAFE_VALUE speculation_safe_value_not_needed
++
+ struct gcc_target targetm = TARGET_INITIALIZER;
+diff --git a/gcc/config/msp430/msp430.c b/gcc/config/msp430/msp430.c
+index a8fed123f..fcd6f8e6a 100644
+--- a/gcc/config/msp430/msp430.c
++++ b/gcc/config/msp430/msp430.c
+@@ -3845,6 +3845,9 @@ msp430_can_change_mode_class (machine_mode from, machine_mode to, reg_class_t)
+   return true;
+ }
+ 
++#undef  TARGET_HAVE_SPECULATION_SAFE_VALUE
++#define TARGET_HAVE_SPECULATION_SAFE_VALUE speculation_safe_value_not_needed
++
+ struct gcc_target targetm = TARGET_INITIALIZER;
+ 
+ #include "gt-msp430.h"
+diff --git a/gcc/config/nios2/nios2.c b/gcc/config/nios2/nios2.c
+index 3581ad934..17f7d2490 100644
+--- a/gcc/config/nios2/nios2.c
++++ b/gcc/config/nios2/nios2.c
+@@ -5572,6 +5572,9 @@ nios2_adjust_reg_alloc_order (void)
+ #undef TARGET_CONSTANT_ALIGNMENT
+ #define TARGET_CONSTANT_ALIGNMENT constant_alignment_word_strings
+ 
++#undef TARGET_HAVE_SPECULATION_SAFE_VALUE
++#define TARGET_HAVE_SPECULATION_SAFE_VALUE speculation_safe_value_not_needed
++
+ struct gcc_target targetm = TARGET_INITIALIZER;
+ 
+ #include "gt-nios2.h"
+diff --git a/gcc/config/nvptx/nvptx.c b/gcc/config/nvptx/nvptx.c
+index 011551852..00a5df164 100644
+--- a/gcc/config/nvptx/nvptx.c
++++ b/gcc/config/nvptx/nvptx.c
+@@ -5864,6 +5864,9 @@ nvptx_can_change_mode_class (machine_mode, machine_mode, reg_class_t)
+ #undef TARGET_CAN_CHANGE_MODE_CLASS
+ #define TARGET_CAN_CHANGE_MODE_CLASS nvptx_can_change_mode_class
+ 
++#undef TARGET_HAVE_SPECULATION_SAFE_VALUE
++#define TARGET_HAVE_SPECULATION_SAFE_VALUE speculation_safe_value_not_needed
++
+ struct gcc_target targetm = TARGET_INITIALIZER;
+ 
+ #include "gt-nvptx.h"
+diff --git a/gcc/config/pa/pa.c b/gcc/config/pa/pa.c
+index 649daf1ca..40e617531 100644
+--- a/gcc/config/pa/pa.c
++++ b/gcc/config/pa/pa.c
+@@ -424,6 +424,9 @@ static size_t n_deferred_plabels = 0;
+ #undef TARGET_STARTING_FRAME_OFFSET
+ #define TARGET_STARTING_FRAME_OFFSET pa_starting_frame_offset
+ 
++#undef TARGET_HAVE_SPECULATION_SAFE_VALUE
++#define TARGET_HAVE_SPECULATION_SAFE_VALUE speculation_safe_value_not_needed
++
+ struct gcc_target targetm = TARGET_INITIALIZER;
+ 
+ /* Parse the -mfixed-range= option string.  */
+diff --git a/gcc/config/pdp11/pdp11.c b/gcc/config/pdp11/pdp11.c
+index 3c4351477..46a1a639f 100644
+--- a/gcc/config/pdp11/pdp11.c
++++ b/gcc/config/pdp11/pdp11.c
+@@ -251,6 +251,9 @@ static bool pdp11_scalar_mode_supported_p (scalar_mode);
+ 
+ #undef  TARGET_CAN_CHANGE_MODE_CLASS
+ #define TARGET_CAN_CHANGE_MODE_CLASS pdp11_can_change_mode_class
++
++#undef TARGET_HAVE_SPECULATION_SAFE_VALUE
++#define TARGET_HAVE_SPECULATION_SAFE_VALUE speculation_safe_value_not_needed
+ 
+ /* A helper function to determine if REGNO should be saved in the
+    current function's stack frame.  */
+diff --git a/gcc/config/rs6000/rs6000.c b/gcc/config/rs6000/rs6000.c
+index 891c4c54e..8c1ba8847 100644
+--- a/gcc/config/rs6000/rs6000.c
++++ b/gcc/config/rs6000/rs6000.c
+@@ -17106,7 +17106,7 @@ rs6000_expand_builtin (tree exp, rtx target, rtx subtarget ATTRIBUTE_UNUSED,
+ 
+     case MISC_BUILTIN_SPEC_BARRIER:
+       {
+-	emit_insn (gen_rs6000_speculation_barrier ());
++	emit_insn (gen_speculation_barrier ());
+ 	return NULL_RTX;
+       }
+ 
+diff --git a/gcc/config/rs6000/rs6000.md b/gcc/config/rs6000/rs6000.md
+index 4dbe8e5d1..26c701027 100644
+--- a/gcc/config/rs6000/rs6000.md
++++ b/gcc/config/rs6000/rs6000.md
+@@ -12597,7 +12597,7 @@
+   return "ori %0,%0,0";
+ })
+ 
+-(define_insn "rs6000_speculation_barrier"
++(define_insn "speculation_barrier"
+   [(unspec_volatile:BLK [(const_int 0)] UNSPECV_SPEC_BARRIER)]
+   ""
+ {
+diff --git a/gcc/config/rx/rx.c b/gcc/config/rx/rx.c
+index fe467f7bd..559919467 100644
+--- a/gcc/config/rx/rx.c
++++ b/gcc/config/rx/rx.c
+@@ -3785,6 +3785,9 @@ rx_modes_tieable_p (machine_mode mode1, machine_mode mode2)
+ #undef  TARGET_RTX_COSTS
+ #define TARGET_RTX_COSTS rx_rtx_costs
+ 
++#undef  TARGET_HAVE_SPECULATION_SAFE_VALUE
++#define TARGET_HAVE_SPECULATION_SAFE_VALUE speculation_safe_value_not_needed
++
+ struct gcc_target targetm = TARGET_INITIALIZER;
+ 
+ #include "gt-rx.h"
+diff --git a/gcc/config/spu/spu.c b/gcc/config/spu/spu.c
+index 539357954..dadf57cf3 100644
+--- a/gcc/config/spu/spu.c
++++ b/gcc/config/spu/spu.c
+@@ -7458,6 +7458,9 @@ static const struct attribute_spec spu_attribute_table[] =
+ #undef TARGET_CONSTANT_ALIGNMENT
+ #define TARGET_CONSTANT_ALIGNMENT spu_constant_alignment
+ 
++#undef  TARGET_HAVE_SPECULATION_SAFE_VALUE
++#define TARGET_HAVE_SPECULATION_SAFE_VALUE speculation_safe_value_not_needed
++
+ struct gcc_target targetm = TARGET_INITIALIZER;
+ 
+ #include "gt-spu.h"
+diff --git a/gcc/config/stormy16/stormy16.c b/gcc/config/stormy16/stormy16.c
+index 25f7ce052..6fbbbe2e9 100644
+--- a/gcc/config/stormy16/stormy16.c
++++ b/gcc/config/stormy16/stormy16.c
+@@ -2728,6 +2728,9 @@ xstormy16_push_rounding (poly_int64 bytes)
+ #undef TARGET_CONSTANT_ALIGNMENT
+ #define TARGET_CONSTANT_ALIGNMENT constant_alignment_word_strings
+ 
++#undef  TARGET_HAVE_SPECULATION_SAFE_VALUE
++#define TARGET_HAVE_SPECULATION_SAFE_VALUE speculation_safe_value_not_needed
++
+ struct gcc_target targetm = TARGET_INITIALIZER;
+ 
+ #include "gt-stormy16.h"
+diff --git a/gcc/config/v850/v850.c b/gcc/config/v850/v850.c
+index 720cce860..beaaf507e 100644
+--- a/gcc/config/v850/v850.c
++++ b/gcc/config/v850/v850.c
+@@ -3374,6 +3374,9 @@ v850_modes_tieable_p (machine_mode mode1, machine_mode mode2)
+ #undef  TARGET_MODES_TIEABLE_P
+ #define TARGET_MODES_TIEABLE_P v850_modes_tieable_p
+ 
++#undef  TARGET_HAVE_SPECULATION_SAFE_VALUE
++#define TARGET_HAVE_SPECULATION_SAFE_VALUE speculation_safe_value_not_needed
++
+ struct gcc_target targetm = TARGET_INITIALIZER;
+ 
+ #include "gt-v850.h"
+diff --git a/gcc/configure b/gcc/configure
+index 75713ee57..b7e0440a2 100755
+--- a/gcc/configure
++++ b/gcc/configure
+@@ -1729,7 +1729,8 @@ Optional Packages:
+   --with-stabs            arrange to use stabs instead of host debug format
+   --with-dwarf2           force the default debug format to be DWARF 2
+   --with-specs=SPECS      add SPECS to driver command-line processing
+-  --with-pkgversion=PKG   Use PKG in the version string in place of "GCC"
++  --with-pkgversion=PKG   Use PKG in the version string in place of "Linaro
++                          GCC `cat $srcdir/LINARO-VERSION`"
+   --with-bugurl=URL       Direct users to URL to report a bug
+   --with-multilib-list    select multilibs (AArch64, SH and x86-64 only)
+   --with-gnu-ld           assume the C compiler uses GNU ld default=no
+@@ -7652,7 +7653,7 @@ if test "${with_pkgversion+set}" = set; then :
+       *)   PKGVERSION="($withval) " ;;
+      esac
+ else
+-  PKGVERSION="(GCC) "
++  PKGVERSION="(Linaro GCC `cat $srcdir/LINARO-VERSION`) "
+ 
+ fi
+ 
+diff --git a/gcc/configure.ac b/gcc/configure.ac
+index 8b9ec3191..1ce40598f 100644
+--- a/gcc/configure.ac
++++ b/gcc/configure.ac
+@@ -929,7 +929,7 @@ AC_ARG_WITH(specs,
+ )
+ AC_SUBST(CONFIGURE_SPECS)
+ 
+-ACX_PKGVERSION([GCC])
++ACX_PKGVERSION([Linaro GCC `cat $srcdir/LINARO-VERSION`])
+ ACX_BUGURL([https://gcc.gnu.org/bugs/])
+ 
+ # Sanity check enable_languages in case someone does not run the toplevel
+diff --git a/gcc/doc/cpp.texi b/gcc/doc/cpp.texi
+index 6c6ab06b4..aec73a8ac 100644
+--- a/gcc/doc/cpp.texi
++++ b/gcc/doc/cpp.texi
+@@ -2381,6 +2381,10 @@ If GCC cannot determine the current date, it will emit a warning message
+ These macros are defined when the target processor supports atomic compare
+ and swap operations on operands 1, 2, 4, 8 or 16 bytes in length, respectively.
+ 
++@item __HAVE_SPECULATION_SAFE_VALUE
++This macro is defined with the value 1 to show that this version of GCC
++supports @code{__builtin_speculation_safe_value}.
++
+ @item __GCC_HAVE_DWARF2_CFI_ASM
+ This macro is defined when the compiler is emitting DWARF CFI directives
+ to the assembler.  When this is defined, it is possible to emit those same
+diff --git a/gcc/doc/extend.texi b/gcc/doc/extend.texi
+index 7984606b9..77f69e48a 100644
+--- a/gcc/doc/extend.texi
++++ b/gcc/doc/extend.texi
+@@ -11389,6 +11389,7 @@ the built-in function returns -1.
+ @findex __builtin_powi
+ @findex __builtin_powif
+ @findex __builtin_powil
++@findex __builtin_speculation_safe_value
+ @findex _Exit
+ @findex _exit
+ @findex abort
+@@ -12032,6 +12033,96 @@ check its compatibility with @var{size}.
+ 
+ @end deftypefn
+ 
++@deftypefn {Built-in Function} @var{type} __builtin_speculation_safe_value (@var{type} val, @var{type} failval)
++
++This built-in function can be used to help mitigate against unsafe
++speculative execution.  @var{type} may be any integral type or any
++pointer type.
++
++@enumerate
++@item
++If the CPU is not speculatively executing the code, then @var{val}
++is returned.
++@item
++If the CPU is executing speculatively then either:
++@itemize
++@item
++The function may cause execution to pause until it is known that the
++code is no-longer being executed speculatively (in which case
++@var{val} can be returned, as above); or
++@item
++The function may use target-dependent speculation tracking state to cause
++@var{failval} to be returned when it is known that speculative
++execution has incorrectly predicted a conditional branch operation.
++@end itemize
++@end enumerate
++
++The second argument, @var{failval}, is optional and defaults to zero
++if omitted.
++
++GCC defines the preprocessor macro
++@code{__HAVE_BUILTIN_SPECULATION_SAFE_VALUE} for targets that have been
++updated to support this builtin.
++
++The built-in function can be used where a variable appears to be used in a
++safe way, but the CPU, due to speculative execution may temporarily ignore
++the bounds checks.  Consider, for example, the following function:
++
++@smallexample
++int array[500];
++int f (unsigned untrusted_index)
++@{
++  if (untrusted_index < 500)
++    return array[untrusted_index];
++  return 0;
++@}
++@end smallexample
++
++If the function is called repeatedly with @code{untrusted_index} less
++than the limit of 500, then a branch predictor will learn that the
++block of code that returns a value stored in @code{array} will be
++executed.  If the function is subsequently called with an
++out-of-range value it will still try to execute that block of code
++first until the CPU determines that the prediction was incorrect
++(the CPU will unwind any incorrect operations at that point).
++However, depending on how the result of the function is used, it might be
++possible to leave traces in the cache that can reveal what was stored
++at the out-of-bounds location.  The built-in function can be used to
++provide some protection against leaking data in this way by changing
++the code to:
++
++@smallexample
++int array[500];
++int f (unsigned untrusted_index)
++@{
++  if (untrusted_index < 500)
++    return array[__builtin_speculation_safe_value (untrusted_index)];
++  return 0;
++@}
++@end smallexample
++
++The built-in function will either cause execution to stall until the
++conditional branch has been fully resolved, or it may permit
++speculative execution to continue, but using 0 instead of
++@code{untrusted_value} if that exceeds the limit.
++
++If accessing any memory location is potentially unsafe when speculative
++execution is incorrect, then the code can be rewritten as
++
++@smallexample
++int array[500];
++int f (unsigned untrusted_index)
++@{
++  if (untrusted_index < 500)
++    return *__builtin_speculation_safe_value (&array[untrusted_index], NULL);
++  return 0;
++@}
++@end smallexample
++
++which will cause a @code{NULL} pointer to be used for the unsafe case.
++
++@end deftypefn
++
+ @deftypefn {Built-in Function} int __builtin_types_compatible_p (@var{type1}, @var{type2})
+ 
+ You can use the built-in function @code{__builtin_types_compatible_p} to
+diff --git a/gcc/doc/invoke.texi b/gcc/doc/invoke.texi
+index 78ca7738d..59bca31e7 100644
+--- a/gcc/doc/invoke.texi
++++ b/gcc/doc/invoke.texi
+@@ -605,7 +605,7 @@ Objective-C and Objective-C++ Dialects}.
+ -msign-return-address=@var{scope} @gol
+ -march=@var{name}  -mcpu=@var{name}  -mtune=@var{name}  @gol
+ -moverride=@var{string}  -mverbose-cost-dump @gol
+--moutline-atomics }
++-moutline-atomics -mtrack-speculation}
+ 
+ @emph{Adapteva Epiphany Options}
+ @gccoptlist{-mhalf-reg-file  -mprefer-short-insn-regs @gol
+@@ -14726,6 +14726,14 @@ or @option{-march=armv8-a+lse}, the ARMv8.1-Atomics instructions will be
+ used directly.  The same applies when using @option{-mcpu=} when the
+ selected cpu supports the @samp{lse} feature.
+ 
++@item -mtrack-speculation
++@itemx -mno-track-speculation
++Enable or disable generation of additional code to track speculative
++execution through conditional branches.  The tracking state can then
++be used by the compiler when expanding calls to
++@code{__builtin_speculation_safe_copy} to permit a more efficient code
++sequence to be generated.
++
+ @item -march=@var{name}
+ @opindex march
+ Specify the name of the target architecture and, optionally, one or
+diff --git a/gcc/doc/md.texi b/gcc/doc/md.texi
+index 48a76ac73..687716539 100644
+--- a/gcc/doc/md.texi
++++ b/gcc/doc/md.texi
+@@ -6955,6 +6955,21 @@ should be defined to an instruction that orders both loads and stores
+ before the instruction with respect to loads and stores after the instruction.
+ This pattern has no operands.
+ 
++@cindex @code{speculation_barrier} instruction pattern
++@item @samp{speculation_barrier}
++If the target can support speculative execution, then this pattern should
++be defined to an instruction that will block subsequent execution until
++any prior speculation conditions has been resolved.  The pattern must also
++ensure that the compiler cannot move memory operations past the barrier,
++so it needs to be an UNSPEC_VOLATILE pattern.  The pattern has no
++operands.
++
++If this pattern is not defined then the default expansion of
++@code{__builtin_speculation_safe_value} will emit a warning.  You can
++suppress this warning by defining this pattern with a final condition
++of @code{0} (zero), which tells the compiler that a speculation
++barrier is not needed for this target.
++
+ @cindex @code{sync_compare_and_swap@var{mode}} instruction pattern
+ @item @samp{sync_compare_and_swap@var{mode}}
+ This pattern, if defined, emits code for an atomic compare-and-swap
+diff --git a/gcc/doc/tm.texi b/gcc/doc/tm.texi
+index 340e856c4..99bad563d 100644
+--- a/gcc/doc/tm.texi
++++ b/gcc/doc/tm.texi
+@@ -12010,6 +12010,42 @@ maintainer is familiar with.
+ 
+ @end defmac
+ 
++@deftypefn {Target Hook} bool TARGET_HAVE_SPECULATION_SAFE_VALUE (bool @var{active})
++This hook is used to determine the level of target support for
++ @code{__builtin_speculation_safe_value}.  If called with an argument
++ of false, it returns true if the target has been modified to support
++ this builtin.  If called with an argument of true, it returns true
++ if the target requires active mitigation execution might be speculative.
++ 
++ The default implementation returns false if the target does not define
++ a pattern named @code{speculation_barrier}.  Else it returns true
++ for the first case and whether the pattern is enabled for the current
++ compilation for the second case.
++ 
++ For targets that have no processors that can execute instructions
++ speculatively an alternative implemenation of this hook is available:
++ simply redefine this hook to @code{speculation_safe_value_not_needed}
++ along with your other target hooks.
++@end deftypefn
++
++@deftypefn {Target Hook} rtx TARGET_SPECULATION_SAFE_VALUE (machine_mode @var{mode}, rtx @var{result}, rtx @var{val}, rtx @var{failval})
++This target hook can be used to generate a target-specific code
++ sequence that implements the @code{__builtin_speculation_safe_value}
++ built-in function.  The function must always return @var{val} in
++ @var{result} in mode @var{mode} when the cpu is not executing
++ speculatively, but must never return that when speculating until it
++ is known that the speculation will not be unwound.  The hook supports
++ two primary mechanisms for implementing the requirements.  The first
++ is to emit a speculation barrier which forces the processor to wait
++ until all prior speculative operations have been resolved; the second
++ is to use a target-specific mechanism that can track the speculation
++ state and to return @var{failval} if it can determine that
++ speculation must be unwound at a later time.
++ 
++ The default implementation simply copies @var{val} to @var{result} and
++ emits a @code{speculation_barrier} instruction if that is defined.
++@end deftypefn
++
+ @deftypefn {Target Hook} void TARGET_RUN_TARGET_SELFTESTS (void)
+ If selftests are enabled, run any selftests for this target.
+ @end deftypefn
+diff --git a/gcc/doc/tm.texi.in b/gcc/doc/tm.texi.in
+index 70e0d7f8e..8109db679 100644
+--- a/gcc/doc/tm.texi.in
++++ b/gcc/doc/tm.texi.in
+@@ -8112,4 +8112,8 @@ maintainer is familiar with.
+ 
+ @end defmac
+ 
++@hook TARGET_HAVE_SPECULATION_SAFE_VALUE
++
++@hook TARGET_SPECULATION_SAFE_VALUE
++
+ @hook TARGET_RUN_TARGET_SELFTESTS
+diff --git a/gcc/target.def b/gcc/target.def
+index c5b2a1e7e..155f6c440 100644
+--- a/gcc/target.def
++++ b/gcc/target.def
+@@ -4255,6 +4255,46 @@ DEFHOOK
+  bool, (void),
+  hook_bool_void_true)
+ 
++DEFHOOK
++(have_speculation_safe_value,
++"This hook is used to determine the level of target support for\n\
++ @code{__builtin_speculation_safe_value}.  If called with an argument\n\
++ of false, it returns true if the target has been modified to support\n\
++ this builtin.  If called with an argument of true, it returns true\n\
++ if the target requires active mitigation execution might be speculative.\n\
++ \n\
++ The default implementation returns false if the target does not define\n\
++ a pattern named @code{speculation_barrier}.  Else it returns true\n\
++ for the first case and whether the pattern is enabled for the current\n\
++ compilation for the second case.\n\
++ \n\
++ For targets that have no processors that can execute instructions\n\
++ speculatively an alternative implemenation of this hook is available:\n\
++ simply redefine this hook to @code{speculation_safe_value_not_needed}\n\
++ along with your other target hooks.",
++bool, (bool active), default_have_speculation_safe_value)
++
++DEFHOOK
++(speculation_safe_value,
++"This target hook can be used to generate a target-specific code\n\
++ sequence that implements the @code{__builtin_speculation_safe_value}\n\
++ built-in function.  The function must always return @var{val} in\n\
++ @var{result} in mode @var{mode} when the cpu is not executing\n\
++ speculatively, but must never return that when speculating until it\n\
++ is known that the speculation will not be unwound.  The hook supports\n\
++ two primary mechanisms for implementing the requirements.  The first\n\
++ is to emit a speculation barrier which forces the processor to wait\n\
++ until all prior speculative operations have been resolved; the second\n\
++ is to use a target-specific mechanism that can track the speculation\n\
++ state and to return @var{failval} if it can determine that\n\
++ speculation must be unwound at a later time.\n\
++ \n\
++ The default implementation simply copies @var{val} to @var{result} and\n\
++ emits a @code{speculation_barrier} instruction if that is defined.",
++rtx, (machine_mode mode, rtx result, rtx val, rtx failval),
++ default_speculation_safe_value)
++ 
++
+ DEFHOOK
+ (can_use_doloop_p,
+  "Return true if it is possible to use low-overhead loops (@code{doloop_end}\n\
+diff --git a/gcc/targhooks.c b/gcc/targhooks.c
+index fafcc6c51..e18a775c8 100644
+--- a/gcc/targhooks.c
++++ b/gcc/targhooks.c
+@@ -2336,4 +2336,43 @@ default_select_early_remat_modes (sbitmap)
+ {
+ }
+ 
++/* Default implementation of TARGET_HAVE_SPECULATION_SAFE_VALUE.  */
++bool
++default_have_speculation_safe_value (bool active ATTRIBUTE_UNUSED)
++{
++#ifdef HAVE_speculation_barrier
++  return active ? HAVE_speculation_barrier : true;
++#else
++  return false;
++#endif
++}
++/* Alternative implementation of TARGET_HAVE_SPECULATION_SAFE_VALUE
++   that can be used on targets that never have speculative execution.  */
++bool
++speculation_safe_value_not_needed (bool active)
++{
++  return !active;
++}
++
++/* Default implementation of the speculation-safe-load builtin.  This
++   implementation simply copies val to result and generates a
++   speculation_barrier insn, if such a pattern is defined.  */
++rtx
++default_speculation_safe_value (machine_mode mode ATTRIBUTE_UNUSED,
++				rtx result, rtx val,
++				rtx failval ATTRIBUTE_UNUSED)
++{
++  emit_move_insn (result, val);
++
++#ifdef HAVE_speculation_barrier
++  /* Assume the target knows what it is doing: if it defines a
++     speculation barrier, but it is not enabled, then assume that one
++     isn't needed.  */
++  if (HAVE_speculation_barrier)
++    emit_insn (gen_speculation_barrier ());
++#endif
++
++  return result;
++}
++
+ #include "gt-targhooks.h"
+diff --git a/gcc/targhooks.h b/gcc/targhooks.h
+index 8a4393f2b..dff1214f5 100644
+--- a/gcc/targhooks.h
++++ b/gcc/targhooks.h
+@@ -289,4 +289,8 @@ default_excess_precision (enum excess_precision_type ATTRIBUTE_UNUSED);
+ extern bool default_stack_clash_protection_final_dynamic_probe (rtx);
+ extern void default_select_early_remat_modes (sbitmap);
+ 
++extern bool default_have_speculation_safe_value (bool);
++extern bool speculation_safe_value_not_needed (bool);
++extern rtx default_speculation_safe_value (machine_mode, rtx, rtx, rtx);
++
+ #endif /* GCC_TARGHOOKS_H */
+diff --git a/gcc/testsuite/c-c++-common/spec-barrier-1.c b/gcc/testsuite/c-c++-common/spec-barrier-1.c
+new file mode 100644
+index 000000000..e4b44f2af
+--- /dev/null
++++ b/gcc/testsuite/c-c++-common/spec-barrier-1.c
+@@ -0,0 +1,38 @@
++/* { dg-do run } */
++/* { dg-options "-O" } */
++
++/* Test that __builtin_speculation_safe_value returns the correct value.  */
++/* This test will cause an unfiltered warning to be emitted on targets
++   that have not implemented support for speculative execution
++   barriers.  They should fix that rather than disabling this
++   test.  */
++char a = 1;
++short b = 2;
++int c = 3;
++long d = 4;
++long long e = 5;
++int *f = (int*) &c;
++#ifdef __SIZEOF_INT128__
++__int128 g = 9;
++#endif
++
++int main ()
++{
++  if (__builtin_speculation_safe_value (a) != 1)
++    __builtin_abort ();
++  if (__builtin_speculation_safe_value (b) != 2)
++    __builtin_abort ();
++  if (__builtin_speculation_safe_value (c) != 3)
++    __builtin_abort ();
++  if (__builtin_speculation_safe_value (d) != 4)
++    __builtin_abort ();
++  if (__builtin_speculation_safe_value (e) != 5)
++    __builtin_abort ();
++  if (__builtin_speculation_safe_value (f) != &c)
++    __builtin_abort ();
++#ifdef __SIZEOF_INT128__
++  if (__builtin_speculation_safe_value (g) != 9)
++    __builtin_abort ();
++#endif
++  return 0;
++}
+diff --git a/gcc/testsuite/c-c++-common/spec-barrier-2.c b/gcc/testsuite/c-c++-common/spec-barrier-2.c
+new file mode 100644
+index 000000000..b09567e62
+--- /dev/null
++++ b/gcc/testsuite/c-c++-common/spec-barrier-2.c
+@@ -0,0 +1,17 @@
++/* { dg-do run } */
++
++/* Even on targets that don't need the optional failval parameter,
++   side-effects on the operand should still be calculated.  */
++
++int x = 3;
++volatile int y = 9;
++
++int main ()
++{
++  int z = __builtin_speculation_safe_value (x, y++);
++  if (z != 3 || y != 10)
++    __builtin_abort ();
++  return 0;
++}
++
++/* { dg-prune-output "this target does not define a speculation barrier;" } */
+diff --git a/gcc/testsuite/gcc.dg/spec-barrier-3.c b/gcc/testsuite/gcc.dg/spec-barrier-3.c
+new file mode 100644
+index 000000000..3ed4d3906
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/spec-barrier-3.c
+@@ -0,0 +1,13 @@
++/* { dg-do compile } */
++/* { dg-options "-Wpedantic" } */
++
++/* __builtin_speculation_safe_value returns a value with the same type
++   as its first argument.  There should be a warning if that isn't
++   type-compatible with the use.  */
++int *
++f (int x)
++{
++  return __builtin_speculation_safe_value (x);  /* { dg-warning "returning 'int' from a function with return type 'int \\*' makes pointer from integer without a cast" } */
++}
++
++/* { dg-prune-output "this target does not define a speculation barrier;" } */
+diff --git a/libgcc/config/arm/lib1funcs.S b/libgcc/config/arm/lib1funcs.S
+index 04c1b773a..9a4ce3a6f 100644
+--- a/libgcc/config/arm/lib1funcs.S
++++ b/libgcc/config/arm/lib1funcs.S
+@@ -1576,6 +1576,50 @@ LSYM(Lover12):
+ #error "This is only for ARM EABI GNU/Linux"
+ #endif
+ #endif /* L_clear_cache */
++
++#ifdef L_speculation_barrier
++	FUNC_START speculation_barrier
++#if __ARM_ARCH >= 7
++	isb
++	dsb sy
++#elif defined __ARM_EABI__ && defined __linux__
++	/* We don't have a speculation barrier directly for this
++	   platform/architecture variant.  But we can use a kernel
++	   clear_cache service routine which will emit such instructions
++	   if run on a later version of the architecture.  We don't
++	   really want to flush the cache, but we must give it a valid
++	   address, so just clear pc..pc+1.  */
++#if defined __thumb__ && !defined __thumb2__
++	push	{r7}
++	mov	r7, #0xf
++	lsl	r7, #16
++	add	r7, #2
++	adr	r0, . + 4
++	add	r1, r0, #1
++	mov	r2, #0
++	svc	0
++	pop	{r7}
++#else
++	do_push	{r7}
++#ifdef __ARM_ARCH_6T2__
++	movw	r7, #2
++	movt	r7, #0xf
++#else
++	mov	r7, #0xf0000
++	add	r7, r7, #2
++#endif
++	add	r0, pc, #0	/* ADR.  */
++	add	r1, r0, #1
++	mov	r2, #0
++	svc	0
++	do_pop	{r7}
++#endif /* Thumb1 only */
++#else
++#warning "No speculation barrier defined for this platform"
++#endif
++	RET
++	FUNC_END speculation_barrier
++#endif
+ /* ------------------------------------------------------------------------ */
+ /* Dword shift operations.  */
+ /* All the following Dword shift variants rely on the fact that
+diff --git a/libgcc/config/arm/t-arm b/libgcc/config/arm/t-arm
+index 9e85ac06b..274bf2a8e 100644
+--- a/libgcc/config/arm/t-arm
++++ b/libgcc/config/arm/t-arm
+@@ -1,6 +1,6 @@
+ LIB1ASMSRC = arm/lib1funcs.S
+ LIB1ASMFUNCS = _thumb1_case_sqi _thumb1_case_uqi _thumb1_case_shi \
+-	_thumb1_case_uhi _thumb1_case_si
++	_thumb1_case_uhi _thumb1_case_si _speculation_barrier
+ 
+ HAVE_CMSE:=$(findstring __ARM_FEATURE_CMSE,$(shell $(gcc_compile_bare) -dM -E - </dev/null))
+ ifneq ($(shell $(gcc_compile_bare) -E -mcmse - </dev/null 2>/dev/null),)

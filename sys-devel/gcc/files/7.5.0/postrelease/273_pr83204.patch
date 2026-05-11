@@ -1,0 +1,48 @@
+diff --git a/gcc/cp/pt.c b/gcc/cp/pt.c
+index faa26c053..711ff7dfa 100644
+--- a/gcc/cp/pt.c
++++ b/gcc/cp/pt.c
+@@ -16955,8 +16955,8 @@ tsubst_copy_and_build (tree t,
+ 	  r = build_x_indirect_ref (input_location, r, RO_UNARY_STAR,
+ 				    complain|decltype_flag);
+ 
+-	if (TREE_CODE (r) == INDIRECT_REF)
+-	  REF_PARENTHESIZED_P (r) = REF_PARENTHESIZED_P (t);
++	if (REF_PARENTHESIZED_P (t))
++	  r = force_paren_expr (r);
+ 
+ 	RETURN (r);
+       }
+diff --git a/gcc/testsuite/g++.dg/cpp0x/lambda/lambda-ice25.C b/gcc/testsuite/g++.dg/cpp0x/lambda/lambda-ice25.C
+new file mode 100644
+index 000000000..1a33fb163
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/lambda/lambda-ice25.C
+@@ -0,0 +1,27 @@
++// PR c++/83204
++// { dg-do compile { target c++11 } }
++
++int rand();
++
++template<typename T>
++struct s
++{
++    int count() { return rand(); }
++};
++
++template<typename v>
++void f(s<v> a)
++{
++    int const x = a.count();
++    int r = 0;
++    auto l = [&](int& r)
++    {
++        for(int y = 0, yend = (x); y < yend; ++y)
++        {
++            r += y;
++        }
++    };
++    l(r);
++}
++
++template void f(s<float>);

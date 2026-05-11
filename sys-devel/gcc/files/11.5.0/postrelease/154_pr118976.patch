@@ -1,0 +1,42 @@
+diff --git a/gcc/config/aarch64/aarch64.c b/gcc/config/aarch64/aarch64.c
+index e83d3e2fd..f798d3575 100644
+--- a/gcc/config/aarch64/aarch64.c
++++ b/gcc/config/aarch64/aarch64.c
+@@ -26210,6 +26210,16 @@ aarch64_test_fractional_cost ()
+   ASSERT_EQ (cf (1, 2).as_double (), 0.5);
+ }
+ 
++/* Test SVE arithmetic folding.  */
++
++static void
++aarch64_test_sve_folding ()
++{
++  tree res = fold_unary (BIT_NOT_EXPR, ssizetype,
++			 ssize_int (poly_int64 (1, 1)));
++  ASSERT_TRUE (operand_equal_p (res, ssize_int (poly_int64 (-2, -1))));
++}
++
+ /* Run all target-specific selftests.  */
+ 
+ static void
+@@ -26217,6 +26227,7 @@ aarch64_run_selftests (void)
+ {
+   aarch64_test_loading_full_dump ();
+   aarch64_test_fractional_cost ();
++  aarch64_test_sve_folding ();
+ }
+ 
+ } // namespace selftest
+diff --git a/gcc/fold-const.c b/gcc/fold-const.c
+index 3b1da8d8c..91508b930 100644
+--- a/gcc/fold-const.c
++++ b/gcc/fold-const.c
+@@ -1792,7 +1792,7 @@ const_unop (enum tree_code code, tree type, tree arg0)
+       if (TREE_CODE (arg0) == INTEGER_CST)
+ 	return fold_not_const (arg0, type);
+       else if (POLY_INT_CST_P (arg0))
+-	return wide_int_to_tree (type, -poly_int_cst_value (arg0));
++	return wide_int_to_tree (type, ~poly_int_cst_value (arg0));
+       /* Perform BIT_NOT_EXPR on each element individually.  */
+       else if (TREE_CODE (arg0) == VECTOR_CST)
+ 	{

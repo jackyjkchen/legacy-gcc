@@ -1,0 +1,348 @@
+diff --git a/include/demangle.h b/include/demangle.h
+index 1d7cadf4b..bf0406366 100644
+--- a/include/demangle.h
++++ b/include/demangle.h
+@@ -467,6 +467,11 @@ struct demangle_component
+   /* The type of this component.  */
+   enum demangle_component_type type;
+ 
++  /* Guard against recursive component printing.
++     Initialize to zero.  Private to d_print_comp.
++     All other fields are final after initialization.  */
++  int d_printing;
++
+   union
+   {
+     /* For DEMANGLE_COMPONENT_NAME.  */
+@@ -661,7 +666,7 @@ cplus_demangle_v3_components (const char *mangled, int options, void **mem);
+ 
+ extern char *
+ cplus_demangle_print (int options,
+-                      const struct demangle_component *tree,
++                      struct demangle_component *tree,
+                       int estimated_length,
+                       size_t *p_allocated_size);
+ 
+@@ -681,7 +686,7 @@ cplus_demangle_print (int options,
+ 
+ extern int
+ cplus_demangle_print_callback (int options,
+-                               const struct demangle_component *tree,
++                               struct demangle_component *tree,
+                                demangle_callbackref callback, void *opaque);
+ 
+ #ifdef __cplusplus
+diff --git a/libiberty/cp-demangle.c b/libiberty/cp-demangle.c
+index 78e597884..5ae90d84e 100644
+--- a/libiberty/cp-demangle.c
++++ b/libiberty/cp-demangle.c
+@@ -173,10 +173,10 @@ static struct demangle_component *d_mangled_name (struct d_info *, int);
+ static struct demangle_component *d_type (struct d_info *);
+ 
+ #define cplus_demangle_print d_print
+-static char *d_print (int, const struct demangle_component *, int, size_t *);
++static char *d_print (int, struct demangle_component *, int, size_t *);
+ 
+ #define cplus_demangle_print_callback d_print_callback
+-static int d_print_callback (int, const struct demangle_component *,
++static int d_print_callback (int, struct demangle_component *,
+                              demangle_callbackref, void *);
+ 
+ #define cplus_demangle_init_info d_init_info
+@@ -265,7 +265,7 @@ struct d_print_mod
+      in which they appeared in the mangled string.  */
+   struct d_print_mod *next;
+   /* The modifier.  */
+-  const struct demangle_component *mod;
++  struct demangle_component *mod;
+   /* Whether this modifier was printed.  */
+   int printed;
+   /* The list of templates which applies to this modifier.  */
+@@ -321,6 +321,9 @@ struct d_info_checkpoint
+   int expansion;
+ };
+ 
++/* Maximum number of times d_print_comp may be called recursively.  */
++#define MAX_RECURSION_COUNT 1024
++
+ enum { D_PRINT_BUFFER_LENGTH = 256 };
+ struct d_print_info
+ {
+@@ -343,6 +346,9 @@ struct d_print_info
+   struct d_print_mod *modifiers;
+   /* Set to 1 if we saw a demangling error.  */
+   int demangle_failure;
++  /* Number of times d_print_comp was recursively called.  Should not
++     be bigger than MAX_RECURSION_COUNT.  */
++  int recursion;
+   /* Non-zero if we're printing a lambda argument.  A template
+      parameter reference actually means 'auto'.  */
+   int is_lambda_arg;
+@@ -529,7 +535,7 @@ static inline void d_append_string (struct d_print_info *, const char *);
+ static inline char d_last_char (struct d_print_info *);
+ 
+ static void
+-d_print_comp (struct d_print_info *, int, const struct demangle_component *);
++d_print_comp (struct d_print_info *, int, struct demangle_component *);
+ 
+ static void
+ d_print_java_identifier (struct d_print_info *, const char *, int);
+@@ -538,25 +544,25 @@ static void
+ d_print_mod_list (struct d_print_info *, int, struct d_print_mod *, int);
+ 
+ static void
+-d_print_mod (struct d_print_info *, int, const struct demangle_component *);
++d_print_mod (struct d_print_info *, int, struct demangle_component *);
+ 
+ static void
+ d_print_function_type (struct d_print_info *, int,
+-                       const struct demangle_component *,
++                       struct demangle_component *,
+                        struct d_print_mod *);
+ 
+ static void
+ d_print_array_type (struct d_print_info *, int,
+-                    const struct demangle_component *,
++                    struct demangle_component *,
+                     struct d_print_mod *);
+ 
+ static void
+-d_print_expr_op (struct d_print_info *, int, const struct demangle_component *);
++d_print_expr_op (struct d_print_info *, int, struct demangle_component *);
+ 
+ static void d_print_cast (struct d_print_info *, int,
+-			  const struct demangle_component *);
++			  struct demangle_component *);
+ static void d_print_conversion (struct d_print_info *, int,
+-				const struct demangle_component *);
++				struct demangle_component *);
+ 
+ static int d_demangle_callback (const char *, int,
+                                 demangle_callbackref, void *);
+@@ -896,6 +902,7 @@ d_make_empty (struct d_info *di)
+   if (di->next_comp >= di->num_comps)
+     return NULL;
+   p = &di->comps[di->next_comp];
++  p->d_printing = 0;
+   ++di->next_comp;
+   return p;
+ }
+@@ -4057,6 +4064,7 @@ d_print_init (struct d_print_info *dpi, demangle_callbackref callback,
+   dpi->opaque = opaque;
+ 
+   dpi->demangle_failure = 0;
++  dpi->recursion = 0;
+   dpi->is_lambda_arg = 0;
+ 
+   dpi->component_stack = NULL;
+@@ -4154,7 +4162,7 @@ d_last_char (struct d_print_info *dpi)
+ CP_STATIC_IF_GLIBCPP_V3
+ int
+ cplus_demangle_print_callback (int options,
+-                               const struct demangle_component *dc,
++                               struct demangle_component *dc,
+                                demangle_callbackref callback, void *opaque)
+ {
+   struct d_print_info dpi;
+@@ -4193,7 +4201,7 @@ cplus_demangle_print_callback (int options,
+ 
+ CP_STATIC_IF_GLIBCPP_V3
+ char *
+-cplus_demangle_print (int options, const struct demangle_component *dc,
++cplus_demangle_print (int options, struct demangle_component *dc,
+                       int estimate, size_t *palc)
+ {
+   struct d_growable_string dgs;
+@@ -4353,7 +4361,7 @@ d_args_length (struct d_print_info *dpi, const struct demangle_component *dc)
+ 
+ static void
+ d_print_subexpr (struct d_print_info *dpi, int options,
+-		 const struct demangle_component *dc)
++		 struct demangle_component *dc)
+ {
+   int simple = 0;
+   if (dc->type == DEMANGLE_COMPONENT_NAME
+@@ -4429,9 +4437,9 @@ d_get_saved_scope (struct d_print_info *dpi,
+ 
+ static int
+ d_maybe_print_fold_expression (struct d_print_info *dpi, int options,
+-			       const struct demangle_component *dc)
++			       struct demangle_component *dc)
+ {
+-  const struct demangle_component *ops, *operator_, *op1, *op2;
++  struct demangle_component *ops, *operator_, *op1, *op2;
+   int save_idx;
+ 
+   const char *fold_code = d_left (dc)->u.s_operator.op->code;
+@@ -4492,11 +4500,11 @@ d_maybe_print_fold_expression (struct d_print_info *dpi, int options,
+ 
+ static void
+ d_print_comp_inner (struct d_print_info *dpi, int options,
+-		  const struct demangle_component *dc)
++		  struct demangle_component *dc)
+ {
+   /* Magic variable to let reference smashing skip over the next modifier
+      without needing to modify *dc.  */
+-  const struct demangle_component *mod_inner = NULL;
++  struct demangle_component *mod_inner = NULL;
+ 
+   /* Variable used to store the current templates while a previously
+      captured scope is used.  */
+@@ -4892,7 +4900,7 @@ d_print_comp_inner (struct d_print_info *dpi, int options,
+     case DEMANGLE_COMPONENT_RVALUE_REFERENCE:
+       {
+ 	/* Handle reference smashing: & + && = &.  */
+-	const struct demangle_component *sub = d_left (dc);
++	struct demangle_component *sub = d_left (dc);
+ 	if (!dpi->is_lambda_arg
+ 	    && sub->type == DEMANGLE_COMPONENT_TEMPLATE_PARAM)
+ 	  {
+@@ -5600,9 +5608,17 @@ d_print_comp_inner (struct d_print_info *dpi, int options,
+ 
+ static void
+ d_print_comp (struct d_print_info *dpi, int options,
+-	      const struct demangle_component *dc)
++	      struct demangle_component *dc)
+ {
+   struct d_component_stack self;
++  if (dc == NULL || dc->d_printing > 1 || dpi->recursion > MAX_RECURSION_COUNT)
++    {
++      d_print_error (dpi);
++      return;
++    }
++
++  dc->d_printing++;
++  dpi->recursion++;
+ 
+   self.dc = dc;
+   self.parent = dpi->component_stack;
+@@ -5611,6 +5627,8 @@ d_print_comp (struct d_print_info *dpi, int options,
+   d_print_comp_inner (dpi, options, dc);
+ 
+   dpi->component_stack = self.parent;
++  dc->d_printing--;
++  dpi->recursion--;
+ }
+ 
+ /* Print a Java dentifier.  For Java we try to handle encoded extended
+@@ -5763,7 +5781,7 @@ d_print_mod_list (struct d_print_info *dpi, int options,
+ 
+ static void
+ d_print_mod (struct d_print_info *dpi, int options,
+-             const struct demangle_component *mod)
++             struct demangle_component *mod)
+ {
+   switch (mod->type)
+     {
+@@ -5835,7 +5853,7 @@ d_print_mod (struct d_print_info *dpi, int options,
+ 
+ static void
+ d_print_function_type (struct d_print_info *dpi, int options,
+-                       const struct demangle_component *dc,
++                       struct demangle_component *dc,
+                        struct d_print_mod *mods)
+ {
+   int need_paren;
+@@ -5918,7 +5936,7 @@ d_print_function_type (struct d_print_info *dpi, int options,
+ 
+ static void
+ d_print_array_type (struct d_print_info *dpi, int options,
+-                    const struct demangle_component *dc,
++                    struct demangle_component *dc,
+                     struct d_print_mod *mods)
+ {
+   int need_space;
+@@ -5972,7 +5990,7 @@ d_print_array_type (struct d_print_info *dpi, int options,
+ 
+ static void
+ d_print_expr_op (struct d_print_info *dpi, int options,
+-                 const struct demangle_component *dc)
++                 struct demangle_component *dc)
+ {
+   if (dc->type == DEMANGLE_COMPONENT_OPERATOR)
+     d_append_buffer (dpi, dc->u.s_operator.op->name,
+@@ -5985,7 +6003,7 @@ d_print_expr_op (struct d_print_info *dpi, int options,
+ 
+ static void
+ d_print_cast (struct d_print_info *dpi, int options,
+-		    const struct demangle_component *dc)
++	      struct demangle_component *dc)
+ {
+   d_print_comp (dpi, options, d_left (dc));
+ }
+@@ -5994,7 +6012,7 @@ d_print_cast (struct d_print_info *dpi, int options,
+ 
+ static void
+ d_print_conversion (struct d_print_info *dpi, int options,
+-		    const struct demangle_component *dc)
++		    struct demangle_component *dc)
+ {
+   struct d_print_template dpt;
+ 
+diff --git a/libiberty/cp-demint.c b/libiberty/cp-demint.c
+index efcc5b7f5..e619efbcd 100644
+--- a/libiberty/cp-demint.c
++++ b/libiberty/cp-demint.c
+@@ -123,6 +123,7 @@ cplus_demangle_fill_component (struct demangle_component *p,
+   p->type = type;
+   p->u.s_binary.left = left;
+   p->u.s_binary.right = right;
++  p->d_printing = 0;
+ 
+   return 1;
+ }
+@@ -146,6 +147,7 @@ cplus_demangle_fill_builtin_type (struct demangle_component *p,
+ 	{
+ 	  p->type = DEMANGLE_COMPONENT_BUILTIN_TYPE;
+ 	  p->u.s_builtin.type = &cplus_demangle_builtin_types[i];
++	  p->d_printing = 0;
+ 	  return 1;
+ 	}
+     }
+@@ -172,6 +174,7 @@ cplus_demangle_fill_operator (struct demangle_component *p,
+ 	{
+ 	  p->type = DEMANGLE_COMPONENT_OPERATOR;
+ 	  p->u.s_operator.op = &cplus_demangle_operators[i];
++	  p->d_printing = 0;
+ 	  return 1;
+ 	}
+     }
+diff --git a/libiberty/testsuite/demangle-expected b/libiberty/testsuite/demangle-expected
+index 157d2ee96..4f0eda7d4 100644
+--- a/libiberty/testsuite/demangle-expected
++++ b/libiberty/testsuite/demangle-expected
+@@ -4491,3 +4491,34 @@ void eat<int*, Foo()::{lambda(auto:1*, auto:2*)#6}>(int*&, Foo()::{lambda(auto:1
+ 
+ _Z3eatIPiZ3BarIsEvvEUlPsPT_PT0_E0_EvRS3_RS5_
+ void eat<int*, void Bar<short>()::{lambda(short*, auto:1*, auto:2*)#2}>(int*&, void Bar<short>()::{lambda(short*, auto:1*, auto:2*)#2}&)
++
++#
++# Test recursion PR67264
++_Z1KIStcvT_E
++_Z1KIStcvT_E
++
++_ZcvT_IIS0_EE
++_ZcvT_IIS0_EE
++
++_ZcvT_IZcvT_E1fE
++_ZcvT_IZcvT_E1fE
++
++_Z1gINcvT_EE
++_Z1gINcvT_EE
++
++_ZcvT_ILZcvDTT_EEE
++_ZcvT_ILZcvDTT_EEE
++
++_Z1gIJOOT_EEOT_c
++_Z1gIJOOT_EEOT_c
++
++_Z1KMMMMMMMMMMMMMMMA_xooooooooooooooo
++_Z1KMMMMMMMMMMMMMMMA_xooooooooooooooo
++
++_ZdvMMMMMMMMMMMMMrrrrA_DTdvfp_fp_Eededilfdfdfdfd
++_ZdvMMMMMMMMMMMMMrrrrA_DTdvfp_fp_Eededilfdfdfdfd
++#
++# Test for Infinite Recursion PR70909
++
++_Z1MA_aMMMMA_MMA_MMMMMMMMSt1MS_o11T0000000000t2M0oooozoooo
++_Z1MA_aMMMMA_MMA_MMMMMMMMSt1MS_o11T0000000000t2M0oooozoooo

@@ -741,6 +741,88 @@ index ae5877082..12f6d9c9c 100644
  // { dg-final { scan-assembler "jmp" { target i?86-*-* x86_64-*-* } } }
  
  struct A { };
+diff --git a/gcc/testsuite/gcc.dg/tls/pr78796.c b/gcc/testsuite/gcc.dg/tls/pr78796.c
+index 038e5366e..96f87d47b 100644
+--- a/gcc/testsuite/gcc.dg/tls/pr78796.c
++++ b/gcc/testsuite/gcc.dg/tls/pr78796.c
+@@ -1,7 +1,7 @@
+ /* PR target/78796 */
+ /* { dg-do run } */
+ /* { dg-options "-O2" } */
+-/* { dg-additional-options "-mcmodel=large" { target aarch64-*-* } } */
++/* { dg-additional-options "-mcmodel=large -fno-pie -no-pie" { target aarch64-*-* } } */
+ /* { dg-require-effective-target tls_runtime } */
+ /* { dg-add-options tls } */
+ 
+diff --git a/gcc/testsuite/gcc.dg/torture/builtin-math-6.c b/gcc/testsuite/gcc.dg/torture/builtin-math-6.c
+index 462c7d3ee..eaa9cf3e6 100644
+--- a/gcc/testsuite/gcc.dg/torture/builtin-math-6.c
++++ b/gcc/testsuite/gcc.dg/torture/builtin-math-6.c
+@@ -155,26 +155,47 @@ extern void link_error(int, int);
+     link_error(__LINE__, VAL_NUM); \
+   } while (0)
+ 
+-/* For complex numbers, call the TESTIT_COMPLEX_R2 macro for all
++/* Similar to TESTIT_COMPLEX_R2, but doesn't check sign of imag part
++   if imag part is zero.  MPC between 1.3.1 and 1.4.0 changed the
++   handling of it.  */
++#define TESTIT_COMPLEX_R2_ISZ(VAL_NUM, FUNC, ARG0, ARG1, RES) do { \
++  if (COMPLEX_DIFF1PCT_F (__builtin_##FUNC##f(ARG0, ARG1), (RES)) \
++      || CKSGN_F (__real__ (__builtin_##FUNC##f(ARG0, ARG1)), __real__ (RES)) \
++      || (__imag__ (RES) != 0 \
++	  && CKSGN_F (__imag__ (__builtin_##FUNC##f(ARG0, ARG1)), __imag__ (RES)))) \
++    link_error(__LINE__, VAL_NUM); \
++  if (COMPLEX_DIFF1PCT (__builtin_##FUNC(ARG0, ARG1), (RES)) \
++      || CKSGN (__real__ (__builtin_##FUNC(ARG0, ARG1)), __real__ (RES)) \
++      || (__imag__ (RES) != 0 \
++	  && CKSGN (__imag__ (__builtin_##FUNC(ARG0, ARG1)), __imag__ (RES)))) \
++    link_error(__LINE__, VAL_NUM); \
++  if (COMPLEX_DIFF1PCT_L (__builtin_##FUNC##l(ARG0, ARG1), (RES)) \
++      || CKSGN_L (__real__ (__builtin_##FUNC##l(ARG0, ARG1)), __real__ (RES)) \
++      || (__imag__ (RES) != 0 \
++	  && CKSGN_L (__imag__ (__builtin_##FUNC##l(ARG0, ARG1)), __imag__ (RES)))) \
++    link_error(__LINE__, VAL_NUM); \
++  } while (0)
++
++/* For complex numbers, call the TESTIT_COMPLEX_R2_ISZ macro for all
+    combinations of neg and conj.  */
+ #define TESTIT_COMPLEX_R2_ALLNEG(FUNC, ARG0, ARG1, RES1, RES2, RES3, RES4, RES5,\
+  RES6, RES7, RES8, RES9, RES10, RES11, RES12, RES13, RES14, RES15, RES16) do{ \
+-  TESTIT_COMPLEX_R2(1, FUNC, (_Complex float)(ARG0),(_Complex float)(ARG1), RES1);\
+-  TESTIT_COMPLEX_R2(2, FUNC, (_Complex float)(ARG0),CONJ(ARG1), RES2); \
+-  TESTIT_COMPLEX_R2(3, FUNC, (_Complex float)(ARG0),-(_Complex float)(ARG1), RES3); \
+-  TESTIT_COMPLEX_R2(4, FUNC, (_Complex float)(ARG0),-CONJ(ARG1), RES4); \
+-  TESTIT_COMPLEX_R2(5, FUNC, -(_Complex float)(ARG0),(_Complex float)(ARG1), RES5); \
+-  TESTIT_COMPLEX_R2(6, FUNC, -(_Complex float)(ARG0),CONJ(ARG1), RES6); \
+-  TESTIT_COMPLEX_R2(7, FUNC, -(_Complex float)(ARG0),-(_Complex float)(ARG1), RES7); \
+-  TESTIT_COMPLEX_R2(8, FUNC, -(_Complex float)(ARG0),-CONJ(ARG1), RES8); \
+-  TESTIT_COMPLEX_R2(9, FUNC, CONJ(ARG0),(_Complex float)(ARG1), RES9); \
+-  TESTIT_COMPLEX_R2(10, FUNC, CONJ(ARG0),CONJ(ARG1), RES10); \
+-  TESTIT_COMPLEX_R2(11, FUNC, CONJ(ARG0),-(_Complex float)(ARG1), RES11); \
+-  TESTIT_COMPLEX_R2(12, FUNC, CONJ(ARG0),-CONJ(ARG1), RES12); \
+-  TESTIT_COMPLEX_R2(13, FUNC, -CONJ(ARG0),(_Complex float)(ARG1), RES13); \
+-  TESTIT_COMPLEX_R2(14, FUNC, -CONJ(ARG0),CONJ(ARG1), RES14); \
+-  TESTIT_COMPLEX_R2(15, FUNC, -CONJ(ARG0),-(_Complex float)(ARG1), RES15); \
+-  TESTIT_COMPLEX_R2(16, FUNC, -CONJ(ARG0),-CONJ(ARG1), RES16); \
++  TESTIT_COMPLEX_R2_ISZ(1, FUNC, (_Complex float)(ARG0),(_Complex float)(ARG1), RES1);\
++  TESTIT_COMPLEX_R2_ISZ(2, FUNC, (_Complex float)(ARG0),CONJ(ARG1), RES2); \
++  TESTIT_COMPLEX_R2_ISZ(3, FUNC, (_Complex float)(ARG0),-(_Complex float)(ARG1), RES3); \
++  TESTIT_COMPLEX_R2_ISZ(4, FUNC, (_Complex float)(ARG0),-CONJ(ARG1), RES4); \
++  TESTIT_COMPLEX_R2_ISZ(5, FUNC, -(_Complex float)(ARG0),(_Complex float)(ARG1), RES5); \
++  TESTIT_COMPLEX_R2_ISZ(6, FUNC, -(_Complex float)(ARG0),CONJ(ARG1), RES6); \
++  TESTIT_COMPLEX_R2_ISZ(7, FUNC, -(_Complex float)(ARG0),-(_Complex float)(ARG1), RES7); \
++  TESTIT_COMPLEX_R2_ISZ(8, FUNC, -(_Complex float)(ARG0),-CONJ(ARG1), RES8); \
++  TESTIT_COMPLEX_R2_ISZ(9, FUNC, CONJ(ARG0),(_Complex float)(ARG1), RES9); \
++  TESTIT_COMPLEX_R2_ISZ(10, FUNC, CONJ(ARG0),CONJ(ARG1), RES10); \
++  TESTIT_COMPLEX_R2_ISZ(11, FUNC, CONJ(ARG0),-(_Complex float)(ARG1), RES11); \
++  TESTIT_COMPLEX_R2_ISZ(12, FUNC, CONJ(ARG0),-CONJ(ARG1), RES12); \
++  TESTIT_COMPLEX_R2_ISZ(13, FUNC, -CONJ(ARG0),(_Complex float)(ARG1), RES13); \
++  TESTIT_COMPLEX_R2_ISZ(14, FUNC, -CONJ(ARG0),CONJ(ARG1), RES14); \
++  TESTIT_COMPLEX_R2_ISZ(15, FUNC, -CONJ(ARG0),-(_Complex float)(ARG1), RES15); \
++  TESTIT_COMPLEX_R2_ISZ(16, FUNC, -CONJ(ARG0),-CONJ(ARG1), RES16); \
+ } while (0)
+ 
+ int main (void)
 diff --git a/gcc/testsuite/gcc.dg/torture/builtin-self.c b/gcc/testsuite/gcc.dg/torture/builtin-self.c
 index 6d1719f75..56188fcc4 100644
 --- a/gcc/testsuite/gcc.dg/torture/builtin-self.c
@@ -1116,6 +1198,87 @@ index 360a9892a..a1d26b013 100644
    a.sixteen = 7531;
    return a;
  }
+diff --git a/gcc/testsuite/gcc.target/aarch64/pr63304_1.c b/gcc/testsuite/gcc.target/aarch64/pr63304_1.c
+index 9f1ed9478..5d519d817 100644
+--- a/gcc/testsuite/gcc.target/aarch64/pr63304_1.c
++++ b/gcc/testsuite/gcc.target/aarch64/pr63304_1.c
+@@ -1,6 +1,6 @@
+ /* { dg-do assemble } */
+ /* { dg-require-effective-target lp64 } */
+-/* { dg-options "-O1 --save-temps" } */
++/* { dg-options "-O1 --save-temps -fno-pie" } */
+ #pragma GCC push_options
+ #pragma GCC target ("+nothing+simd,cmodel=small")
+ 
+diff --git a/gcc/testsuite/gcc.target/aarch64/pr70120-2.c b/gcc/testsuite/gcc.target/aarch64/pr70120-2.c
+index 663bf2ed1..8f5cdc93f 100644
+--- a/gcc/testsuite/gcc.target/aarch64/pr70120-2.c
++++ b/gcc/testsuite/gcc.target/aarch64/pr70120-2.c
+@@ -1,6 +1,6 @@
+ /* { dg-do compile } */
+ /* { dg-require-effective-target lp64 } */
+-/* { dg-options "-Og -freorder-functions -g3 -mcmodel=large" } */
++/* { dg-options "-Og -freorder-functions -g3 -mcmodel=large -fno-pie" } */
+ 
+ typedef short v32u16 __attribute__ ((vector_size (32)));
+ typedef int v32u32 __attribute__ ((vector_size (32)));
+diff --git a/gcc/testsuite/gcc.target/aarch64/pr78733.c b/gcc/testsuite/gcc.target/aarch64/pr78733.c
+index 4695b5c1b..8556ef3f3 100644
+--- a/gcc/testsuite/gcc.target/aarch64/pr78733.c
++++ b/gcc/testsuite/gcc.target/aarch64/pr78733.c
+@@ -1,5 +1,5 @@
+ /* { dg-do compile } */
+-/* { dg-options "-O2 -mcmodel=large -mpc-relative-literal-loads" } */
++/* { dg-options "-O2 -mcmodel=large -mpc-relative-literal-loads -fno-pie" } */
+ /* { dg-require-effective-target lp64 } */
+ /* { dg-skip-if "-mcmodel=large, no support for -fpic" { aarch64-*-* }  { "-fpic" } { "" } } */
+ 
+diff --git a/gcc/testsuite/gcc.target/aarch64/pr79041-2.c b/gcc/testsuite/gcc.target/aarch64/pr79041-2.c
+index 4695b5c1b..8556ef3f3 100644
+--- a/gcc/testsuite/gcc.target/aarch64/pr79041-2.c
++++ b/gcc/testsuite/gcc.target/aarch64/pr79041-2.c
+@@ -1,5 +1,5 @@
+ /* { dg-do compile } */
+-/* { dg-options "-O2 -mcmodel=large -mpc-relative-literal-loads" } */
++/* { dg-options "-O2 -mcmodel=large -mpc-relative-literal-loads -fno-pie" } */
+ /* { dg-require-effective-target lp64 } */
+ /* { dg-skip-if "-mcmodel=large, no support for -fpic" { aarch64-*-* }  { "-fpic" } { "" } } */
+ 
+diff --git a/gcc/testsuite/gcc.target/aarch64/pr94530.c b/gcc/testsuite/gcc.target/aarch64/pr94530.c
+index 2797d116d..5dfdbe331 100644
+--- a/gcc/testsuite/gcc.target/aarch64/pr94530.c
++++ b/gcc/testsuite/gcc.target/aarch64/pr94530.c
+@@ -1,6 +1,6 @@
+ /* { dg-do compile } */
+ /* { dg-require-effective-target lp64 } */
+-/* { dg-options "-Os -mcpu=falkor -mpc-relative-literal-loads -mcmodel=large" } */
++/* { dg-options "-Os -mcpu=falkor -mpc-relative-literal-loads -mcmodel=large -fno-pie" } */
+ 
+ extern void bar(const char *);
+ 
+diff --git a/gcc/testsuite/gcc.target/aarch64/pr94577.c b/gcc/testsuite/gcc.target/aarch64/pr94577.c
+index 6f2d3612c..d51799fb0 100644
+--- a/gcc/testsuite/gcc.target/aarch64/pr94577.c
++++ b/gcc/testsuite/gcc.target/aarch64/pr94577.c
+@@ -1,5 +1,5 @@
+ /* { dg-do compile } */
+-/* { dg-options "-mcmodel=large -mabi=ilp32" } */
++/* { dg-options "-mcmodel=large -mabi=ilp32 -fno-pie" } */
+ 
+ void
+ foo ()
+diff --git a/gcc/testsuite/gcc.target/aarch64/reload-valid-spoff.c b/gcc/testsuite/gcc.target/aarch64/reload-valid-spoff.c
+index 7b1982abb..37e00ac9a 100644
+--- a/gcc/testsuite/gcc.target/aarch64/reload-valid-spoff.c
++++ b/gcc/testsuite/gcc.target/aarch64/reload-valid-spoff.c
+@@ -1,6 +1,6 @@
+ /* { dg-do compile } */
+ /* { dg-require-effective-target lp64 } */
+-/* { dg-options "-O2 -mcmodel=large -fno-builtin" }  */
++/* { dg-options "-O2 -mcmodel=large -fno-builtin -fno-pie" }  */
+ /* { dg-skip-if "-mcmodel=large -fPIC not currently supported" { aarch64-*-* }  { "-fPIC" } { "" } } */
+ 
+ typedef long unsigned int size_t;
 diff --git a/gcc/testsuite/gcc.target/arm/acle/dsp_arith.c b/gcc/testsuite/gcc.target/arm/acle/dsp_arith.c
 index 9ebd55a12..7bf458e8f 100644
 --- a/gcc/testsuite/gcc.target/arm/acle/dsp_arith.c

@@ -1,0 +1,89 @@
+diff --git a/gcc/config.in b/gcc/config.in
+index 00850dbff..5058918dc 100644
+--- a/gcc/config.in
++++ b/gcc/config.in
+@@ -1525,6 +1525,12 @@
+ #endif
+ 
+ 
++/* Define if your linker supports --push-state/--pop-state */
++#ifndef USED_FOR_TARGET
++#undef HAVE_LD_PUSHPOPSTATE_SUPPORT
++#endif
++
++
+ /* Define if your linker links a mix of read-only and read-write sections into
+    a read-write section. */
+ #ifndef USED_FOR_TARGET
+diff --git a/gcc/config/i386/linux-common.h b/gcc/config/i386/linux-common.h
+index 4b9910fa9..22731706a 100644
+--- a/gcc/config/i386/linux-common.h
++++ b/gcc/config/i386/linux-common.h
+@@ -79,13 +79,23 @@ along with GCC; see the file COPYING3.  If not see
+ #endif
+ #endif
+ 
++#ifdef HAVE_LD_PUSHPOPSTATE_SUPPORT
++#define MPX_LD_AS_NEEDED_GUARD_PUSH "--push-state --no-as-needed"
++#define MPX_LD_AS_NEEDED_GUARD_POP "--pop-state"
++#else
++#define MPX_LD_AS_NEEDED_GUARD_PUSH ""
++#define MPX_LD_AS_NEEDED_GUARD_POP ""
++#endif
++
+ #ifndef LIBMPX_SPEC
+ #if defined(HAVE_LD_STATIC_DYNAMIC)
+ #define LIBMPX_SPEC "\
+ %{mmpx:%{fcheck-pointer-bounds:\
+     %{static:--whole-archive -lmpx --no-whole-archive" LIBMPX_LIBS "}\
+     %{!static:%{static-libmpx:" LD_STATIC_OPTION " --whole-archive}\
+-    -lmpx %{static-libmpx:--no-whole-archive " LD_DYNAMIC_OPTION \
++    %{!static-libmpx:" MPX_LD_AS_NEEDED_GUARD_PUSH "} -lmpx \
++    %{!static-libmpx:" MPX_LD_AS_NEEDED_GUARD_POP "} \
++    %{static-libmpx:--no-whole-archive " LD_DYNAMIC_OPTION \
+     LIBMPX_LIBS "}}}}"
+ #else
+ #define LIBMPX_SPEC "\
+@@ -98,8 +108,8 @@ along with GCC; see the file COPYING3.  If not see
+ #define LIBMPXWRAPPERS_SPEC "\
+ %{mmpx:%{fcheck-pointer-bounds:%{!fno-chkp-use-wrappers:\
+     %{static:-lmpxwrappers}\
+-    %{!static:%{static-libmpxwrappers:" LD_STATIC_OPTION " --whole-archive}\
+-    -lmpxwrappers %{static-libmpxwrappers:--no-whole-archive "\
++    %{!static:%{static-libmpxwrappers:" LD_STATIC_OPTION "}\
++    -lmpxwrappers %{static-libmpxwrappers: "\
+     LD_DYNAMIC_OPTION "}}}}}"
+ #else
+ #define LIBMPXWRAPPERS_SPEC "\
+diff --git a/gcc/configure.ac b/gcc/configure.ac
+index f667aa4a7..86b1d8d7f 100644
+--- a/gcc/configure.ac
++++ b/gcc/configure.ac
+@@ -6197,6 +6197,27 @@ if test x"$ld_bndplt_support" = xyes; then
+ fi
+ AC_MSG_RESULT($ld_bndplt_support)
+ 
++# Check linker supports '--push-state'/'--pop-state'
++ld_pushpopstate_support=no
++AC_MSG_CHECKING(linker --push-state/--pop-state options)
++if test x"$ld_is_gold" = xno; then
++  if test $in_tree_ld = yes ; then
++    if test "$gcc_cv_gld_major_version" -eq 2 -a "$gcc_cv_gld_minor_version" -ge 25 -o "$gcc_cv_gld_major_version" -gt 2; then
++      ld_pushpopstate_support=yes
++    fi
++  elif test x$gcc_cv_ld != x; then
++    # Check if linker supports --push-state/--pop-state options
++    if $gcc_cv_ld --help 2>/dev/null | grep -- '--push-state' > /dev/null; then
++      ld_pushpopstate_support=yes
++    fi
++  fi
++fi
++if test x"$ld_pushpopstate_support" = xyes; then
++  AC_DEFINE(HAVE_LD_PUSHPOPSTATE_SUPPORT, 1,
++	[Define if your linker supports --push-state/--pop-state])
++fi
++AC_MSG_RESULT($ld_pushpopstate_support)
++
+ # Configure the subdirectories
+ # AC_CONFIG_SUBDIRS($subdirs)
+ 
