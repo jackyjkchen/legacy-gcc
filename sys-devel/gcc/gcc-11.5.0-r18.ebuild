@@ -36,6 +36,8 @@ src_prepare() {
 
 	use vanilla && return 0
 
+	[[ $(tc-arch) == "arm" ]] && eapply "${FILESDIR}"/${PV}/04_gcc-arm.patch
+
 	eapply "${FILESDIR}"/${PV}/postrelease/000_pr98645-98688-111224.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/001_pr100130.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/002_pr93444-107833-107839.patch
@@ -190,7 +192,7 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/152_pr120123.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/153_pr105225.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/154_pr118976.patch
-	eapply "${FILESDIR}"/${PV}/postrelease/155_pr93371.patch
+	is_cygwin || eapply "${FILESDIR}"/${PV}/postrelease/155_pr93371.patch
 
 	if use test ; then
 		rm -rf gcc/testsuite/gcc.c-torture/execute/vfprintf-chk-1.c gcc/testsuite/gcc.c-torture/execute/vprintf-chk-1.c gcc/testsuite/c-c++-common/Warray-bounds-2.c gcc/testsuite/c-c++-common/Wrestrict-2.c gcc/testsuite/g++.dg/warn/Wstringop-truncation-1.C gcc/testsuite/gcc.target/aarch64/cpunative/native_cpu_18.c

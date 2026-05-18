@@ -291,7 +291,7 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/265_pr83204.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/266_pr70909.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/267_pr77267.patch
-	eapply "${FILESDIR}"/${PV}/postrelease/268_pr77857.patch
+	is_djgpp || eapply "${FILESDIR}"/${PV}/postrelease/268_pr77857.patch
 
 	if use test ; then
 		rm -rf gcc/testsuite/gcc.c-torture/execute/vfprintf-chk-1.c gcc/testsuite/gcc.c-torture/execute/vprintf-chk-1.c

@@ -1,0 +1,70 @@
+diff --git a/gcc/gimple-ssa-warn-access.cc b/gcc/gimple-ssa-warn-access.cc
+index 6edb754f6..edc8fe469 100644
+--- a/gcc/gimple-ssa-warn-access.cc
++++ b/gcc/gimple-ssa-warn-access.cc
+@@ -4496,7 +4496,8 @@ pass_waccess::check_dangling_stores (basic_block bb,
+ 	   use the escaped locals.  */
+ 	return;
+ 
+-      if (!is_gimple_assign (stmt) || gimple_clobber_p (stmt))
++      if (!is_gimple_assign (stmt) || gimple_clobber_p (stmt)
++	  || !gimple_store_p (stmt))
+ 	continue;
+ 
+       access_ref lhs_ref;
+diff --git a/gcc/testsuite/c-c++-common/Wdangling-pointer-5.c b/gcc/testsuite/c-c++-common/Wdangling-pointer-5.c
+index 2a165cea7..cb6da9e86 100644
+--- a/gcc/testsuite/c-c++-common/Wdangling-pointer-5.c
++++ b/gcc/testsuite/c-c++-common/Wdangling-pointer-5.c
+@@ -75,9 +75,9 @@ void nowarn_store_arg_store (void **vpp)
+ 
+ void* nowarn_store_arg_store_arg (void **vpp1, void **vpp2)
+ {
+-  int x;
++  int x;              // { dg-message "'x' declared here" }
+   void **p = (void**)sink (0);
+-  *vpp1 = &x;         // warn here?
++  *vpp1 = &x;         // { dg-warning "storing the address of local variable 'x' in '\\*vpp1'" }
+   *vpp2 = 0;          // might overwrite *vpp1
+   return p;
+ }
+diff --git a/gcc/testsuite/g++.dg/warn/Wdangling-pointer.C b/gcc/testsuite/g++.dg/warn/Wdangling-pointer.C
+index 22c559e4a..a94477a64 100644
+--- a/gcc/testsuite/g++.dg/warn/Wdangling-pointer.C
++++ b/gcc/testsuite/g++.dg/warn/Wdangling-pointer.C
+@@ -35,7 +35,34 @@ void warn_init_ref_member ()
+     { }
+   } ai;
+ 
+-  sink (&as, &ai);
++  struct Al
++  {
++    const S &sref;
++    Al ():
++      // The temporary S object is destroyed when Al::Al() returns.
++      sref (S ())  // { dg-warning "storing the address" }
++    {
++      // Copying this to an SSA_NAME used to disable the warning:
++      Al *ptr = this;
++      asm ("" : "+r" (ptr));
++    }
++  } al;
++
++  struct An
++  {
++    An *next;
++    const S &sref;
++    An ():
++      next (0),
++      // The temporary S object is destroyed when An::An() returns.
++      sref (S ())  // { dg-warning "storing the address" "" { xfail *-*-* } }
++    {
++      // ??? Writing to another part of *this disables the warning:
++      next = 0;
++    }
++  } an;
++
++  sink (&as, &ai, &al, &an);
+ }
+ 
+ 

@@ -1021,7 +1021,7 @@ tc_enable_hardened_gcc() {
 		hardened_gcc_flags+=" -DDEF_GENTOO_ZNOW"
 	fi
 
-	if _tc_use_if_iuse cet && [[ -z ${CLANG_DISABLE_CET_HACK} && ${CTARGET} == *x86_64*-linux-gnu* ]] ; then
+	if tc_version_is_at_least 12 && _tc_use_if_iuse cet && _tc_use_if_iuse hardened && [[ -z ${CLANG_DISABLE_CET_HACK} && ${CTARGET} == x86_64*-linux-gnu* ]] ; then
 		einfo "Updating gcc to use x86-64 control flow protection by default ..."
 		hardened_gcc_flags+=" -DEXTRA_OPTIONS_CF"
 	fi
@@ -1716,7 +1716,7 @@ toolchain_src_configure() {
 		BUILD_CONFIG_TARGETS+=( bootstrap-lto )
 	fi
 
-	if tc_version_is_at_least 12 && _tc_use_if_iuse cet && [[ -z ${CLANG_DISABLE_CET_HACK} && ${CTARGET} == x86_64-*-gnu* ]] ; then
+	if tc_version_is_at_least 12 && _tc_use_if_iuse cet && _tc_use_if_iuse hardened && [[ -z ${CLANG_DISABLE_CET_HACK} && ${CTARGET} == x86_64*-linux-gnu* ]] ; then
 		BUILD_CONFIG_TARGETS+=( bootstrap-cet )
 	fi
 

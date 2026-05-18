@@ -1,0 +1,933 @@
+diff --git a/gcc/config/arm/arm.c b/gcc/config/arm/arm.c
+index b152aeed7..9b406e522 100644
+--- a/gcc/config/arm/arm.c
++++ b/gcc/config/arm/arm.c
+@@ -8506,8 +8506,7 @@ thumb2_legitimate_address_p (machine_mode mode, rtx x, int strict_p)
+   bool use_ldrd;
+   enum rtx_code code = GET_CODE (x);
+ 
+-  if (TARGET_HAVE_MVE
+-      && (mode == V8QImode || mode == E_V4QImode || mode == V4HImode))
++  if (TARGET_HAVE_MVE && VALID_MVE_MODE (mode))
+     return mve_vector_mem_operand (mode, x, strict_p);
+ 
+   if (arm_address_register_rtx_p (x, strict_p))
+@@ -13405,53 +13404,49 @@ mve_vector_mem_operand (machine_mode mode, rtx op, bool strict)
+       || code == PRE_INC || code == POST_DEC)
+     {
+       reg_no = REGNO (XEXP (op, 0));
+-      return (((mode == E_V8QImode || mode == E_V4QImode || mode == E_V4HImode)
+-	       ? reg_no <= LAST_LO_REGNUM
+-	       :(reg_no < LAST_ARM_REGNUM && reg_no != SP_REGNUM))
+-	      || (!strict && reg_no >= FIRST_PSEUDO_REGISTER));
+-    }
+-  else if ((code == POST_MODIFY || code == PRE_MODIFY)
+-	   && GET_CODE (XEXP (op, 1)) == PLUS && REG_P (XEXP (XEXP (op, 1), 1)))
++      return ((mode == E_V8QImode || mode == E_V4QImode || mode == E_V4HImode)
++	      ? reg_no <= LAST_LO_REGNUM
++	      :(reg_no < LAST_ARM_REGNUM && reg_no != SP_REGNUM))
++	|| reg_no >= FIRST_PSEUDO_REGISTER;
++    }
++  else if (((code == POST_MODIFY || code == PRE_MODIFY)
++	    && GET_CODE (XEXP (op, 1)) == PLUS
++	    && XEXP (op, 0) == XEXP (XEXP (op, 1), 0)
++	    && REG_P (XEXP (op, 0))
++	    && GET_CODE (XEXP (XEXP (op, 1), 1)) == CONST_INT)
++	   /* Make sure to only accept PLUS after reload_completed, otherwise
++	      this will interfere with auto_inc's pattern detection.  */
++	   || (reload_completed && code == PLUS && REG_P (XEXP (op, 0))
++	       && GET_CODE (XEXP (op, 1)) == CONST_INT))
+     {
+       reg_no = REGNO (XEXP (op, 0));
+-      val = INTVAL (XEXP ( XEXP (op, 1), 1));
++      if (code == PLUS)
++	val = INTVAL (XEXP (op, 1));
++      else
++	val = INTVAL (XEXP(XEXP (op, 1), 1));
++
+       switch (mode)
+ 	{
+ 	  case E_V16QImode:
+-	    if (abs (val) <= 127)
+-	      return ((reg_no < LAST_ARM_REGNUM && reg_no != SP_REGNUM)
+-		      || (!strict && reg_no >= FIRST_PSEUDO_REGISTER));
+-	    return FALSE;
+-	  case E_V8HImode:
+-	  case E_V8HFmode:
+-	    if (abs (val) <= 255)
+-	      return ((reg_no < LAST_ARM_REGNUM && reg_no != SP_REGNUM)
+-		      || (!strict && reg_no >= FIRST_PSEUDO_REGISTER));
+-	    return FALSE;
+ 	  case E_V8QImode:
+ 	  case E_V4QImode:
+ 	    if (abs (val) <= 127)
+-	      return (reg_no <= LAST_LO_REGNUM
+-		      || (!strict && reg_no >= FIRST_PSEUDO_REGISTER));
++	      return (reg_no < LAST_ARM_REGNUM && reg_no != SP_REGNUM)
++		|| reg_no >= FIRST_PSEUDO_REGISTER;
+ 	    return FALSE;
++	  case E_V8HImode:
++	  case E_V8HFmode:
+ 	  case E_V4HImode:
+ 	  case E_V4HFmode:
+ 	    if (val % 2 == 0 && abs (val) <= 254)
+-	      return (reg_no <= LAST_LO_REGNUM
+-		      || (!strict && reg_no >= FIRST_PSEUDO_REGISTER));
++	      return reg_no <= LAST_LO_REGNUM
++		|| reg_no >= FIRST_PSEUDO_REGISTER;
+ 	    return FALSE;
+ 	  case E_V4SImode:
+ 	  case E_V4SFmode:
+ 	    if (val % 4 == 0 && abs (val) <= 508)
+-	      return ((reg_no < LAST_ARM_REGNUM && reg_no != SP_REGNUM)
+-		      || (!strict && reg_no >= FIRST_PSEUDO_REGISTER));
+-	    return FALSE;
+-	  case E_V2DImode:
+-	  case E_V2DFmode:
+-	  case E_TImode:
+-	    if (val % 4 == 0 && val >= 0 && val <= 1020)
+-	      return ((reg_no < LAST_ARM_REGNUM && reg_no != SP_REGNUM)
+-		      || (!strict && reg_no >= FIRST_PSEUDO_REGISTER));
++	      return (reg_no < LAST_ARM_REGNUM && reg_no != SP_REGNUM)
++		|| reg_no >= FIRST_PSEUDO_REGISTER;
+ 	    return FALSE;
+ 	  default:
+ 	    return FALSE;
+@@ -24351,7 +24346,7 @@ arm_print_operand (FILE *stream, rtx x, int code)
+ 	else if (code == POST_MODIFY || code == PRE_MODIFY)
+ 	  {
+ 	    asm_fprintf (stream, "[%r", REGNO (XEXP (addr, 0)));
+-	    postinc_reg = XEXP ( XEXP (x, 1), 1);
++	    postinc_reg = XEXP (XEXP (addr, 1), 1);
+ 	    if (postinc_reg && CONST_INT_P (postinc_reg))
+ 	      {
+ 		if (code == POST_MODIFY)
+diff --git a/gcc/config/arm/mve.md b/gcc/config/arm/mve.md
+index c5424973b..6beaa1a10 100644
+--- a/gcc/config/arm/mve.md
++++ b/gcc/config/arm/mve.md
+@@ -7897,7 +7897,7 @@
+ ;;
+ (define_insn "mve_vldrwq_fv4sf"
+   [(set (match_operand:V4SF 0 "s_register_operand" "=w")
+-	(unspec:V4SF [(match_operand:V4SI 1 "memory_operand" "Ux")]
++	(unspec:V4SF [(match_operand:V4SI 1 "mve_memory_operand" "Ux")]
+ 	 VLDRWQ_F))
+   ]
+   "TARGET_HAVE_MVE && TARGET_HAVE_MVE_FLOAT"
+@@ -7916,7 +7916,7 @@
+ ;;
+ (define_insn "mve_vldrwq_<supf>v4si"
+   [(set (match_operand:V4SI 0 "s_register_operand" "=w")
+-	(unspec:V4SI [(match_operand:V4SI 1 "memory_operand" "Ux")]
++	(unspec:V4SI [(match_operand:V4SI 1 "mve_memory_operand" "Ux")]
+ 	 VLDRWQ))
+   ]
+   "TARGET_HAVE_MVE"
+@@ -7935,7 +7935,7 @@
+ ;;
+ (define_insn "mve_vldrwq_z_fv4sf"
+   [(set (match_operand:V4SF 0 "s_register_operand" "=w")
+-	(unspec:V4SF [(match_operand:V4SI 1 "memory_operand" "Ux")
++	(unspec:V4SF [(match_operand:V4SI 1 "mve_memory_operand" "Ux")
+ 	(match_operand:HI 2 "vpr_register_operand" "Up")]
+ 	 VLDRWQ_F))
+   ]
+@@ -7955,7 +7955,7 @@
+ ;;
+ (define_insn "mve_vldrwq_z_<supf>v4si"
+   [(set (match_operand:V4SI 0 "s_register_operand" "=w")
+-	(unspec:V4SI [(match_operand:V4SI 1 "memory_operand" "Ux")
++	(unspec:V4SI [(match_operand:V4SI 1 "mve_memory_operand" "Ux")
+ 	(match_operand:HI 2 "vpr_register_operand" "Up")]
+ 	 VLDRWQ))
+   ]
+@@ -8609,7 +8609,7 @@
+ ;; [vstrwq_f]
+ ;;
+ (define_insn "mve_vstrwq_fv4sf"
+-  [(set (match_operand:V4SI 0 "memory_operand" "=Ux")
++  [(set (match_operand:V4SI 0 "mve_memory_operand" "=Ux")
+ 	(unspec:V4SI [(match_operand:V4SF 1 "s_register_operand" "w")]
+ 	 VSTRWQ_F))
+   ]
+@@ -8628,7 +8628,7 @@
+ ;; [vstrwq_p_f]
+ ;;
+ (define_insn "mve_vstrwq_p_fv4sf"
+-  [(set (match_operand:V4SI 0 "memory_operand" "=Ux")
++  [(set (match_operand:V4SI 0 "mve_memory_operand" "=Ux")
+ 	(unspec:V4SI [(match_operand:V4SF 1 "s_register_operand" "w")
+ 		      (match_operand:HI 2 "vpr_register_operand" "Up")]
+ 	 VSTRWQ_F))
+@@ -8648,7 +8648,7 @@
+ ;; [vstrwq_p_s vstrwq_p_u]
+ ;;
+ (define_insn "mve_vstrwq_p_<supf>v4si"
+-  [(set (match_operand:V4SI 0 "memory_operand" "=Ux")
++  [(set (match_operand:V4SI 0 "mve_memory_operand" "=Ux")
+ 	(unspec:V4SI [(match_operand:V4SI 1 "s_register_operand" "w")
+ 		      (match_operand:HI 2 "vpr_register_operand" "Up")]
+ 	 VSTRWQ))
+@@ -8668,7 +8668,7 @@
+ ;; [vstrwq_s vstrwq_u]
+ ;;
+ (define_insn "mve_vstrwq_<supf>v4si"
+-  [(set (match_operand:V4SI 0 "memory_operand" "=Ux")
++  [(set (match_operand:V4SI 0 "mve_memory_operand" "=Ux")
+ 	(unspec:V4SI [(match_operand:V4SI 1 "s_register_operand" "w")]
+ 	 VSTRWQ))
+   ]
+diff --git a/gcc/testsuite/gcc.target/arm/mve/mve.exp b/gcc/testsuite/gcc.target/arm/mve/mve.exp
+index d09fc2776..a858e52d9 100644
+--- a/gcc/testsuite/gcc.target/arm/mve/mve.exp
++++ b/gcc/testsuite/gcc.target/arm/mve/mve.exp
+@@ -44,6 +44,9 @@ dg-init
+ dg-runtest [lsort [glob -nocomplain $srcdir/$subdir/intrinsics/*.\[cCS\]]] \
+ 	"" $DEFAULT_CFLAGS
+ 
++dg-runtest [lsort [glob -nocomplain $srcdir/$subdir/*.\[cCS\]]] \
++	"" $DEFAULT_CFLAGS
++
+ # All done.
+ set dg_runtest_extra_prunes ""
+ dg-finish
+diff --git a/gcc/testsuite/gcc.target/arm/mve/mve_load_memory_modes.c b/gcc/testsuite/gcc.target/arm/mve/mve_load_memory_modes.c
+new file mode 100644
+index 000000000..816980d12
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/arm/mve/mve_load_memory_modes.c
+@@ -0,0 +1,357 @@
++/* { dg-require-effective-target arm_v8_1m_mve_fp_ok } */
++/* { dg-add-options arm_v8_1m_mve_fp } */
++/* { dg-additional-options "-O2" } */
++/* { dg-final { check-function-bodies "**" "" } } */
++
++#include "arm_mve.h"
++/*
++**off_load8_0:
++**	...
++**	vldrb.8	q[0-7], \[r0, #16\]
++**	...
++*/
++int8x16_t off_load8_0 (int8_t * a)
++{
++  return vld1q_s8 (a + 16);
++}
++
++/*
++**off_load8_1:
++**	...
++**	vldrb.u16	q[0-7], \[r0, #1\]
++**	...
++*/
++uint16x8_t off_load8_1 (uint8_t * a)
++{
++  return vldrbq_u16 (a + 1);
++}
++
++/*
++**off_load8_2:
++**	...
++**	vldrb.s32	q[0-7], \[r0, #127\]
++**	...
++*/
++int32x4_t off_load8_2 (int8_t * a)
++{
++  return vldrbq_s32 (a + 127);
++}
++
++/*
++**off_load8_3:
++**	...
++**	vldrb.8	q[0-7], \[r0, #-127\]
++**	...
++*/
++uint8x16_t off_load8_3 (uint8_t * a)
++{
++  return vldrbq_u8 (a - 127);
++}
++
++/*
++**not_off_load8_0:
++**	...
++**	vldrb.8	q[0-7], \[r[0-7]+\]
++**	...
++*/
++int8x16_t not_off_load8_0 (int8_t * a)
++{
++  return vld1q_s8 (a + 128);
++}
++
++/*
++**off_loadfp16_0:
++**	...
++**	vldrh.16	q[0-7], \[r0, #-244\]
++**	...
++*/
++float16x8_t off_loadfp16_0 (float16_t *a)
++{
++  return vld1q_f16 (a - 122);
++}
++
++/*
++**off_load16_0:
++**	...
++**	vldrh.16	q[0-7], \[r0, #-2\]
++**	...
++*/
++uint16x8_t off_load16_0 (uint16_t * a)
++{
++  return vld1q_u16 (a - 1);
++}
++
++/*
++**off_load16_1:
++**	...
++**	vldrh.u32	q[0-7], \[r0, #254\]
++**	...
++*/
++uint32x4_t off_load16_1 (uint16_t * a)
++{
++  return vldrhq_u32 (a + 127);
++}
++
++/*
++**not_off_load16_0:
++**	...
++**	vldrh.16	q[0-7], \[r[0-7]+\]
++**	...
++*/
++int16x8_t not_off_load16_0 (int8_t * a)
++{
++  return vld1q_s16 ((int16_t *)(a + 1));
++}
++
++/*
++**not_off_load16_1:
++**	...
++**	vldrh.u32	q[0-7], \[r[0-7]+\]
++**	...
++*/
++uint32x4_t not_off_load16_1 (uint16_t * a)
++{
++  return vldrhq_u32 ((a - 128));
++}
++
++/*
++**off_loadfp32_0:
++**	...
++**	vldrw.32	q[0-7], \[r0, #24\]
++**	...
++*/
++float32x4_t off_loadfp32_0 (float32_t *a)
++{
++  return vld1q_f32 (a + 6);
++}
++
++/*
++**off_load32_0:
++**	...
++**	vldrw.32	q[0-7], \[r0, #4\]
++**	...
++*/
++uint32x4_t off_load32_0 (uint32_t * a)
++{
++  return vld1q_u32 (a + 1);
++}
++
++/*
++**off_load32_1:
++**	...
++**	vldrw.32	q[0-7], \[r0, #-508\]
++**	...
++*/
++int32x4_t off_load32_1 (int32_t * a)
++{
++  return vldrwq_s32 (a - 127);
++}
++/*
++**pre_load8_0:
++**	...
++**	vldrb.8	q[0-7], \[r0, #16\]!
++**	...
++*/
++int8_t* pre_load8_0 (int8_t * a, int8x16_t *v)
++{
++  a += 16;
++  *v = vld1q_s8 (a);
++  return a;
++}
++
++/*
++**pre_load8_1:
++**	...
++**	vldrb.u16	q[0-7], \[r0, #4\]!
++**	...
++*/
++uint8_t* pre_load8_1 (uint8_t * a, uint16x8_t *v)
++{
++  a += 4;
++  *v = vldrbq_u16 (a);
++  return a;
++}
++
++/*
++**pre_loadfp16_0:
++**	...
++**	vldrh.16	q[0-7], \[r0, #128\]!
++**	...
++*/
++float16_t* pre_loadfp16_0 (float16_t *a, float16x8_t *v)
++{
++  a += 64;
++  *v = vld1q_f16 (a);
++  return a;
++}
++
++/*
++**pre_load16_0:
++**	...
++**	vldrh.16	q[0-7], \[r0, #-254\]!
++**	...
++*/
++int16_t* pre_load16_0 (int16_t * a, int16x8_t *v)
++{
++  a -= 127;
++  *v = vldrhq_s16 (a);
++  return a;
++}
++
++/*
++**pre_load16_1:
++**	...
++**	vldrh.s32	q[0-7], \[r0, #52\]!
++**	...
++*/
++int16_t* pre_load16_1 (int16_t * a, int32x4_t *v)
++{
++  a += 26;
++  *v = vldrhq_s32 (a);
++  return a;
++}
++
++/*
++**pre_loadfp32_0:
++**	...
++**	vldrw.32	q[0-7], \[r0, #-72\]!
++**	...
++*/
++float32_t* pre_loadfp32_0 (float32_t *a, float32x4_t *v)
++{
++  a -= 18;
++  *v = vld1q_f32 (a);
++  return a;
++}
++
++
++/*
++**pre_load32_0:
++**	...
++**	vldrw.32	q[0-7], \[r0, #-4\]!
++**	...
++*/
++uint32_t* pre_load32_0 (uint32_t * a, uint32x4_t *v)
++{
++  a -= 1;
++  *v = vld1q_u32 (a);
++  return a;
++}
++
++
++/*
++**post_load8_0:
++**	...
++**	vldrb.8	q[0-7], \[r0\], #26
++**	...
++*/
++uint8_t* post_load8_0 (uint8_t * a, uint8x16_t *v)
++{
++  *v = vld1q_u8 (a);
++  a += 26;
++  return a;
++}
++
++/*
++**post_load8_1:
++**	...
++**	vldrb.s16	q[0-7], \[r0\], #-1
++**	...
++*/
++int8_t* post_load8_1 (int8_t * a, int16x8_t *v)
++{
++  *v = vldrbq_s16 (a);
++  a--;
++  return a;
++}
++
++/*
++**post_load8_2:
++**	...
++**	vldrb.8	q[0-7], \[r0\], #26
++**	...
++*/
++uint8_t* post_load8_2 (uint8_t * a, uint8x16_t *v)
++{
++  *v = vld1q_u8 (a);
++  a += 26;
++  return a;
++}
++
++/*
++**post_load8_3:
++**	...
++**	vldrb.s16	q[0-7], \[r0\], #-1
++**	...
++*/
++int8_t* post_load8_3 (int8_t * a, int16x8_t *v)
++{
++  *v = vldrbq_s16 (a);
++  a--;
++  return a;
++}
++
++/*
++**post_loadfp16_0:
++**	...
++**	vldrh.16	q[0-7], \[r0\], #-24
++**	...
++*/
++float16_t* post_loadfp16_0 (float16_t *a, float16x8_t *v)
++{
++  *v = vld1q_f16 (a);
++  a -= 12;
++  return a;
++}
++
++/*
++**post_load16_0:
++**	...
++**	vldrh.16	q[0-7], \[r0\], #-126
++**	...
++*/
++uint16_t* post_load16_0 (uint16_t * a, uint16x8_t *v)
++{
++  *v = vldrhq_u16 (a);
++  a -= 63;
++  return a;
++}
++
++/*
++**post_load16_1:
++**	...
++**	vldrh.u32	q[0-7], \[r0\], #16
++**	...
++*/
++uint16_t* post_load16_1 (uint16_t * a, uint32x4_t *v)
++{
++  *v = vldrhq_u32 (a);
++  a += 8;
++  return a;
++}
++
++/*
++**post_loadfp32_0:
++**	...
++**	vldrw.32	q[0-7], \[r0\], #4
++**	...
++*/
++float32_t* post_loadfp32_0 (float32_t *a, float32x4_t *v)
++{
++  *v = vld1q_f32 (a);
++  a++;
++  return a;
++}
++
++/*
++**post_load32_0:
++**	...
++**	vldrw.32	q[0-7], \[r0\], #-16
++**	...
++*/
++int32_t* post_load32_0 (int32_t * a, int32x4_t *v)
++{
++  *v = vld1q_s32 (a);
++  a -= 4;
++  return a;
++}
+diff --git a/gcc/testsuite/gcc.target/arm/mve/mve_store_memory_modes.c b/gcc/testsuite/gcc.target/arm/mve/mve_store_memory_modes.c
+new file mode 100644
+index 000000000..11df11440
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/arm/mve/mve_store_memory_modes.c
+@@ -0,0 +1,370 @@
++/* { dg-require-effective-target arm_v8_1m_mve_fp_ok } */
++/* { dg-add-options arm_v8_1m_mve_fp } */
++/* { dg-additional-options "-O2" } */
++/* { dg-final { check-function-bodies "**" "" } } */
++
++#include "arm_mve.h"
++/*
++**off_store8_0:
++**	...
++**	vstrb.8	q[0-7], \[r0, #16\]
++**	...
++*/
++uint8_t *off_store8_0 (uint8_t * a, uint8x16_t v)
++{
++  vst1q_u8 (a + 16, v);
++  return a;
++}
++
++/*
++**off_store8_1:
++**	...
++**	vstrb.16	q[0-7], \[r0, #-1\]
++**	...
++*/
++int8_t *off_store8_1 (int8_t * a, int16x8_t v)
++{
++  vstrbq_s16 (a - 1, v);
++  return a;
++}
++
++/*
++**off_store8_2:
++**	...
++**	vstrb.32	q[0-7], \[r0, #-127\]
++**	...
++*/
++uint8_t *off_store8_2 (uint8_t * a, uint32x4_t v)
++{
++  vstrbq_u32 (a - 127, v);
++  return a;
++}
++
++/*
++**off_store8_3:
++**	...
++**	vstrb.8	q[0-7], \[r0, #127\]
++**	...
++*/
++int8_t *off_store8_3 (int8_t * a, int8x16_t v)
++{
++  vstrbq_s8 (a + 127, v);
++  return a;
++}
++
++/*
++**not_off_store8_0:
++**	...
++**	vstrb.8	q[0-7], \[r[0-7]+\]
++**	...
++*/
++uint8_t *not_off_store8_0 (uint8_t * a, uint8x16_t v)
++{
++  vst1q_u8 (a - 128, v);
++  return a;
++}
++
++/*
++**off_storefp16_0:
++**	...
++**	vstrh.16	q[0-7], \[r0, #250\]
++**	...
++*/
++float16_t *off_storefp16_0 (float16_t *a, float16x8_t v)
++{
++  vst1q_f16 (a + 125, v);
++  return a;
++}
++
++/*
++**off_store16_0:
++**	...
++**	vstrh.16	q[0-7], \[r0, #4\]
++**	...
++*/
++int16_t *off_store16_0 (int16_t * a, int16x8_t v)
++{
++  vst1q_s16 (a + 2, v);
++  return a;
++}
++
++/*
++**off_store16_1:
++**	...
++**	vstrh.32	q[0-7], \[r0, #-254\]
++**	...
++*/
++int16_t *off_store16_1 (int16_t * a, int32x4_t v)
++{
++  vstrhq_s32 (a - 127, v);
++  return a;
++}
++
++/*
++**not_off_store16_0:
++**	...
++**	vstrh.16	q[0-7], \[r[0-7]+\]
++**	...
++*/
++uint8_t *not_off_store16_0 (uint8_t * a, uint16x8_t v)
++{
++  vst1q_u16 ((uint16_t *)(a - 1), v);
++  return a;
++}
++
++/*
++**not_off_store16_1:
++**	...
++**	vstrh.32	q[0-7], \[r[0-7]+\]
++**	...
++*/
++int16_t *not_off_store16_1 (int16_t * a, int32x4_t v)
++{
++  vstrhq_s32 ((a + 128), v);
++  return a;
++}
++
++/*
++**off_storefp32_0:
++**	...
++**	vstrw.32	q[0-7], \[r0, #-412\]
++**	...
++*/
++float32_t *off_storefp32_0 (float32_t *a, float32x4_t v)
++{
++  vst1q_f32 (a - 103, v);
++  return a;
++}
++
++/*
++**off_store32_0:
++**	...
++**	vstrw.32	q[0-7], \[r0, #-4\]
++**	...
++*/
++int32_t *off_store32_0 (int32_t * a, int32x4_t v)
++{
++  vst1q_s32 (a - 1, v);
++  return a;
++}
++
++/*
++**off_store32_1:
++**	...
++**	vstrw.32	q[0-7], \[r0, #508\]
++**	...
++*/
++uint32_t *off_store32_1 (uint32_t * a, uint32x4_t v)
++{
++  vstrwq_u32 (a + 127, v);
++  return a;
++}
++
++/*
++**pre_store8_0:
++**	...
++**	vstrb.8	q[0-7], \[r0, #-16\]!
++**	...
++*/
++uint8_t* pre_store8_0 (uint8_t * a, uint8x16_t v)
++{
++  a -= 16;
++  vst1q_u8 (a, v);
++  return a;
++}
++
++/*
++**pre_store8_1:
++**	...
++**	vstrb.16	q[0-7], \[r0, #4\]!
++**	...
++*/
++int8_t* pre_store8_1 (int8_t * a, int16x8_t v)
++{
++  a += 4;
++  vstrbq_s16 (a, v);
++  return a;
++}
++
++/*
++**pre_storefp16_0:
++**	...
++**	vstrh.16	q[0-7], \[r0, #8\]!
++**	...
++*/
++float16_t *pre_storefp16_0 (float16_t *a, float16x8_t v)
++{
++  a += 4;
++  vst1q_f16 (a, v);
++  return a;
++}
++
++/*
++**pre_store16_0:
++**	...
++**	vstrh.16	q[0-7], \[r0, #254\]!
++**	...
++*/
++uint16_t* pre_store16_0 (uint16_t * a, uint16x8_t v)
++{
++  a += 127;
++  vstrhq_u16 (a, v);
++  return a;
++}
++
++/*
++**pre_store16_1:
++**	...
++**	vstrh.32	q[0-7], \[r0, #-52\]!
++**	...
++*/
++int16_t* pre_store16_1 (int16_t * a, int32x4_t v)
++{
++  a -= 26;
++  vstrhq_s32 (a, v);
++  return a;
++}
++
++/*
++**pre_storefp32_0:
++**	...
++**	vstrw.32	q[0-7], \[r0, #-4\]!
++**	...
++*/
++float32_t *pre_storefp32_0 (float32_t *a, float32x4_t v)
++{
++  a--;
++  vst1q_f32 (a, v);
++  return a;
++}
++
++/*
++**pre_store32_0:
++**	...
++**	vstrw.32	q[0-7], \[r0, #4\]!
++**	...
++*/
++int32_t* pre_store32_0 (int32_t * a, int32x4_t v)
++{
++  a += 1;
++  vst1q_s32 (a, v);
++  return a;
++}
++
++
++/*
++**post_store8_0:
++**	...
++**	vstrb.8	q[0-7], \[r0\], #-26
++**	...
++*/
++int8_t* post_store8_0 (int8_t * a, int8x16_t v)
++{
++  vst1q_s8 (a, v);
++  a -= 26;
++  return a;
++}
++
++/*
++**post_store8_1:
++**	...
++**	vstrb.16	q[0-7], \[r0\], #1
++**	...
++*/
++uint8_t* post_store8_1 (uint8_t * a, uint16x8_t v)
++{
++  vstrbq_u16 (a, v);
++  a++;
++  return a;
++}
++
++/*
++**post_store8_2:
++**	...
++**	vstrb.8	q[0-7], \[r0\], #-26
++**	...
++*/
++int8_t* post_store8_2 (int8_t * a, int8x16_t v)
++{
++  vst1q_s8 (a, v);
++  a -= 26;
++  return a;
++}
++
++/*
++**post_store8_3:
++**	...
++**	vstrb.16	q[0-7], \[r0\], #7
++**	...
++*/
++uint8_t* post_store8_3 (uint8_t * a, uint16x8_t v)
++{
++  vstrbq_u16 (a, v);
++  a += 7;
++  return a;
++}
++
++/*
++**post_storefp16_0:
++**	...
++**	vstrh.16	q[0-7], \[r0\], #-16
++**	...
++*/
++float16_t *post_storefp16_0 (float16_t *a, float16x8_t v)
++{
++  vst1q_f16 (a, v);
++  a -= 8;
++  return a;
++}
++
++/*
++**post_store16_0:
++**	...
++**	vstrh.16	q[0-7], \[r0\], #126
++**	...
++*/
++int16_t* post_store16_0 (int16_t * a, int16x8_t v)
++{
++  vstrhq_s16 (a, v);
++  a += 63;
++  return a;
++}
++
++/*
++**post_store16_1:
++**	...
++**	vstrh.32	q[0-7], \[r0\], #-16
++**	...
++*/
++uint16_t* post_store16_1 (uint16_t * a, uint32x4_t v)
++{
++  vstrhq_u32 (a, v);
++  a -= 8;
++  return a;
++}
++
++/*
++**post_storefp32_0:
++**	...
++**	vstrw.32	q[0-7], \[r0\], #-16
++**	...
++*/
++float32_t* post_storefp32_0 (float32_t * a, float32x4_t v)
++{
++  vst1q_f32 (a, v);
++  a -= 4;
++  return a;
++}
++
++/*
++**post_store32_0:
++**	...
++**	vstrw.32	q[0-7], \[r0\], #16
++**	...
++*/
++int32_t* post_store32_0 (int32_t * a, int32x4_t v)
++{
++  vst1q_s32 (a, v);
++  a += 4;
++  return a;
++}

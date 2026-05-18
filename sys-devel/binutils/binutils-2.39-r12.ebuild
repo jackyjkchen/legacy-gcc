@@ -12,7 +12,7 @@ KEYWORDS="loong"
 src_prepare() {
 	toolchain-binutils_src_prepare
 
-	eapply "${FILESDIR}"/${PV}/00_disable-test-warning.patch
+	eapply "${FILESDIR}"/${PV}/00_disable-warning-for-gcc-testing.patch
 	eapply "${FILESDIR}"/${PV}/01_support-lsx-lasx-lvz-lbt.patch
 }
 

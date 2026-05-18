@@ -39,6 +39,8 @@ src_prepare() {
 
 	use vanilla && return 0
 
+	[[ $(tc-arch) == "arm" ]] && eapply "${FILESDIR}"/${PV}/04_gcc-arm.patch
+
 	eapply "${FILESDIR}"/${PV}/postrelease/000_pr98645-98688-111224.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/001_pr83782.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/002_pr85620.patch
@@ -110,11 +112,11 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/068_pr87497.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/069_revert-pr117763-109345.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/070_pr105225.patch
-	eapply "${FILESDIR}"/${PV}/postrelease/071_pr93371.patch
+	is_cygwin || eapply "${FILESDIR}"/${PV}/postrelease/071_pr93371.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/072_pr104290.patch
 
 	if use test ; then
-		rm -rf gcc/testsuite/gcc.c-torture/execute/vfprintf-chk-1.c gcc/testsuite/gcc.c-torture/execute/vprintf-chk-1.c gcc/testsuite/c-c++-common/Warray-bounds-2.c gcc/testsuite/c-c++-common/Wrestrict-2.c gcc/testsuite/g++.dg/warn/Wstringop-truncation-1.C gcc/testsuite/gcc.target/aarch64/cpunative/native_cpu_18.c
+		rm -rf gcc/testsuite/gcc.c-torture/execute/vfprintf-chk-1.c gcc/testsuite/gcc.c-torture/execute/vprintf-chk-1.c gcc/testsuite/c-c++-common/Warray-bounds-2.c gcc/testsuite/c-c++-common/Wrestrict-2.c gcc/testsuite/g++.dg/warn/Wstringop-truncation-1.C gcc/testsuite/gcc.target/aarch64/cpunative/native_cpu_18.c gcc/testsuite/gcc.target/arm/asm-flag-7.c
 		eapply "${FILESDIR}"/${PV}/postrelease/900_fix-known-test-fail.patch
 		[[ $(tc-arch) == "arm64" ]] && eapply "${FILESDIR}"/${PV}/postrelease/901_fix-aarch64-test-fail.patch
 		[[ $(tc-arch) == "arm" ]] && eapply "${FILESDIR}"/${PV}/postrelease/902_fix-arm-test-fail.patch
