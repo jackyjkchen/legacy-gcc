@@ -114,6 +114,10 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/070_pr105225.patch
 	is_cygwin || eapply "${FILESDIR}"/${PV}/postrelease/071_pr93371.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/072_pr104290.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/073_pr123102.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/074_pr121733.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/075_pr124315.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/076_pr83865.patch
 
 	if use test ; then
 		rm -rf gcc/testsuite/gcc.c-torture/execute/vfprintf-chk-1.c gcc/testsuite/gcc.c-torture/execute/vprintf-chk-1.c gcc/testsuite/c-c++-common/Warray-bounds-2.c gcc/testsuite/c-c++-common/Wrestrict-2.c gcc/testsuite/g++.dg/warn/Wstringop-truncation-1.C gcc/testsuite/gcc.target/aarch64/cpunative/native_cpu_18.c gcc/testsuite/gcc.target/arm/asm-flag-7.c

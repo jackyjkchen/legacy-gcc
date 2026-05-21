@@ -1,0 +1,610 @@
+diff --git a/gcc/opts.c b/gcc/opts.c
+index 28030881e..336defe8b 100644
+--- a/gcc/opts.c
++++ b/gcc/opts.c
+@@ -523,9 +523,9 @@ static const struct default_options default_options_table[] =
+     { OPT_LEVELS_2_PLUS, OPT_fipa_ra, NULL, 1 },
+     { OPT_LEVELS_2_PLUS, OPT_flra_remat, NULL, 1 },
+     { OPT_LEVELS_2_PLUS, OPT_fstore_merging, NULL, 1 },
++    { OPT_LEVELS_2_PLUS, OPT_ftree_loop_distribute_patterns, NULL, 1 },
+ 
+     /* -O3 optimizations.  */
+-    { OPT_LEVELS_3_PLUS, OPT_ftree_loop_distribute_patterns, NULL, 1 },
+     { OPT_LEVELS_3_PLUS, OPT_ftree_loop_distribution, NULL, 1 },
+     { OPT_LEVELS_3_PLUS, OPT_floop_interchange, NULL, 1 },
+     { OPT_LEVELS_3_PLUS, OPT_fpredictive_commoning, NULL, 1 },
+diff --git a/gcc/testsuite/g++.dg/tree-ssa/pr78847.C b/gcc/testsuite/g++.dg/tree-ssa/pr78847.C
+index d5a839438..e72e516d8 100644
+--- a/gcc/testsuite/g++.dg/tree-ssa/pr78847.C
++++ b/gcc/testsuite/g++.dg/tree-ssa/pr78847.C
+@@ -1,6 +1,6 @@
+ /* { dg-do compile } */
+ /* { dg-require-effective-target c++14 } */
+-/* { dg-options "-O3 -fdump-tree-ldist" } */
++/* { dg-options "-O3 -fdump-tree-ldist-optimized" } */
+ 
+ #include <stddef.h>
+ #include <cstring>
+@@ -23,4 +23,4 @@ void testWithLoopValue(const Foo foo, size_t ptr, char *buf_) {
+       buf_[ptr++] = c;
+ }
+ 
+-/* { dg-final { scan-tree-dump "memcpy\[^\n\r\]*, 9\\);" "ldist" } } */
++/* { dg-final { scan-tree-dump "split to 0 loops and 1 library calls" "ldist" } } */
+diff --git a/gcc/testsuite/gcc.dg/autopar/pr39500-1.c b/gcc/testsuite/gcc.dg/autopar/pr39500-1.c
+index 28f47897b..80ae92522 100644
+--- a/gcc/testsuite/gcc.dg/autopar/pr39500-1.c
++++ b/gcc/testsuite/gcc.dg/autopar/pr39500-1.c
+@@ -1,7 +1,7 @@
+ /* pr39500: autopar fails to parallel */
+ /* origin: nemokingdom@gmail.com(LiFeng) */
+ /* { dg-do compile } */
+-/* { dg-options "-O2 -ftree-parallelize-loops=4 -fdump-tree-parloops2-details" } */
++/* { dg-options "-O2 -fno-tree-loop-distribute-patterns -ftree-parallelize-loops=4 -fdump-tree-parloops2-details" } */
+ 
+ void abort (void);
+ 
+diff --git a/gcc/testsuite/gcc.dg/autopar/reduc-1char.c b/gcc/testsuite/gcc.dg/autopar/reduc-1char.c
+index 0d611b96e..a340240b8 100644
+--- a/gcc/testsuite/gcc.dg/autopar/reduc-1char.c
++++ b/gcc/testsuite/gcc.dg/autopar/reduc-1char.c
+@@ -61,5 +61,5 @@ int main (void)
+ 
+ 
+ /* { dg-final { scan-tree-dump-times "Detected reduction" 3 "parloops2" } } */
+-/* { dg-final { scan-tree-dump-times "SUCCESS: may be parallelized" 4 "parloops2" } } */
++/* { dg-final { scan-tree-dump-times "SUCCESS: may be parallelized" 3 "parloops2" } } */
+ 
+diff --git a/gcc/testsuite/gcc.dg/autopar/reduc-7.c b/gcc/testsuite/gcc.dg/autopar/reduc-7.c
+index efae736db..85b943729 100644
+--- a/gcc/testsuite/gcc.dg/autopar/reduc-7.c
++++ b/gcc/testsuite/gcc.dg/autopar/reduc-7.c
+@@ -85,5 +85,5 @@ int main (void)
+ 
+ 
+ /* { dg-final { scan-tree-dump-times "Detected reduction" 2 "parloops2" } } */
+-/* { dg-final { scan-tree-dump-times "SUCCESS: may be parallelized" 3 "parloops2" } } */
++/* { dg-final { scan-tree-dump-times "SUCCESS: may be parallelized" 2 "parloops2" } } */
+ 
+diff --git a/gcc/testsuite/gcc.dg/pr53265.c b/gcc/testsuite/gcc.dg/pr53265.c
+index d6418228c..a72721194 100644
+--- a/gcc/testsuite/gcc.dg/pr53265.c
++++ b/gcc/testsuite/gcc.dg/pr53265.c
+@@ -38,7 +38,8 @@ fn3 (void)
+   for (i = 0; i < (int) (sizeof (a) / sizeof (a[0])); i++)	/* { dg-message "note: within this loop" } */
+     {
+       c[i + 8] = b[i];	/* { dg-warning "8 invokes undefined behavior" } */
+-      a[i + 8] = b[i + 8];
++	/* { dg-warning "out of the bounds" "" { target *-*-* } .-1 } */
++      a[i + 8] = b[i + 8]; /* { dg-warning "out of the bounds" } */
+     }
+   bar (a);
+   bar (c);
+diff --git a/gcc/testsuite/gcc.dg/tree-ssa/gen-vect-2.c b/gcc/testsuite/gcc.dg/tree-ssa/gen-vect-2.c
+index a2691294b..42171a2fb 100644
+--- a/gcc/testsuite/gcc.dg/tree-ssa/gen-vect-2.c
++++ b/gcc/testsuite/gcc.dg/tree-ssa/gen-vect-2.c
+@@ -1,6 +1,6 @@
+ /* { dg-do run { target vect_cmdline_needed } } */
+-/* { dg-options "-O2 -ftree-vectorize -fdump-tree-vect-details -fvect-cost-model=dynamic" } */
+-/* { dg-options "-O2 -ftree-vectorize -fdump-tree-vect-details -fvect-cost-model=dynamic -mno-sse" { target { i?86-*-* x86_64-*-* } } } */
++/* { dg-options "-O2 -fno-tree-loop-distribute-patterns -ftree-vectorize -fdump-tree-vect-details -fvect-cost-model=dynamic" } */
++/* { dg-additional-options "-mno-sse" { target { i?86-*-* x86_64-*-* } } } */
+ 
+ #include <stdlib.h>
+ 
+diff --git a/gcc/testsuite/gcc.dg/tree-ssa/gen-vect-26.c b/gcc/testsuite/gcc.dg/tree-ssa/gen-vect-26.c
+index 8e5f14106..242316893 100644
+--- a/gcc/testsuite/gcc.dg/tree-ssa/gen-vect-26.c
++++ b/gcc/testsuite/gcc.dg/tree-ssa/gen-vect-26.c
+@@ -1,6 +1,6 @@
+ /* { dg-do run { target vect_cmdline_needed } } */
+-/* { dg-options "-O2 -ftree-vectorize -fdump-tree-vect-details -fvect-cost-model=dynamic" } */
+-/* { dg-options "-O2 -ftree-vectorize -fdump-tree-vect-details -fvect-cost-model=dynamic -mno-sse" { target { i?86-*-* x86_64-*-* } } } */
++/* { dg-options "-O2 -fno-tree-loop-distribute-patterns -ftree-vectorize -fdump-tree-vect-details -fvect-cost-model=dynamic" } */
++/* { dg-additional-options "-mno-sse" { target { i?86-*-* x86_64-*-* } } } */
+ 
+ #include <stdlib.h>
+ 
+diff --git a/gcc/testsuite/gcc.dg/tree-ssa/gen-vect-28.c b/gcc/testsuite/gcc.dg/tree-ssa/gen-vect-28.c
+index ce97e0970..24853e0e0 100644
+--- a/gcc/testsuite/gcc.dg/tree-ssa/gen-vect-28.c
++++ b/gcc/testsuite/gcc.dg/tree-ssa/gen-vect-28.c
+@@ -1,6 +1,6 @@
+ /* { dg-do run { target vect_cmdline_needed } } */
+-/* { dg-options "-O2 -ftree-vectorize -fdump-tree-vect-details -fvect-cost-model=dynamic" } */
+-/* { dg-options "-O2 -ftree-vectorize -fdump-tree-vect-details -fvect-cost-model=dynamic -mno-sse" { target { i?86-*-* x86_64-*-* } } } */
++/* { dg-options "-O2 -fno-tree-loop-distribute-patterns -ftree-vectorize -fdump-tree-vect-details -fvect-cost-model=dynamic" } */
++/* { dg-additional-options "-mno-sse" { target { i?86-*-* x86_64-*-* } } } */
+ 
+ #include <stdlib.h>
+ 
+diff --git a/gcc/testsuite/gcc.dg/tree-ssa/gen-vect-32.c b/gcc/testsuite/gcc.dg/tree-ssa/gen-vect-32.c
+index 8fce4385d..c4bee19b7 100644
+--- a/gcc/testsuite/gcc.dg/tree-ssa/gen-vect-32.c
++++ b/gcc/testsuite/gcc.dg/tree-ssa/gen-vect-32.c
+@@ -1,5 +1,5 @@
+ /* { dg-do run { target vect_cmdline_needed } } */
+-/* { dg-options "-O2 -ftree-vectorize -fdump-tree-vect-details -fno-vect-cost-model" } */
++/* { dg-options "-O2 -fno-tree-loop-distribute-patterns -ftree-vectorize -fdump-tree-vect-details -fno-vect-cost-model" } */
+ /* { dg-additional-options "-mno-sse" { target { i?86-*-* x86_64-*-* } } } */
+ 
+ #include <stdlib.h>
+diff --git a/gcc/testsuite/gcc.dg/tree-ssa/ivopts-lt-2.c b/gcc/testsuite/gcc.dg/tree-ssa/ivopts-lt-2.c
+index 634f1dd51..bdbdbff19 100644
+--- a/gcc/testsuite/gcc.dg/tree-ssa/ivopts-lt-2.c
++++ b/gcc/testsuite/gcc.dg/tree-ssa/ivopts-lt-2.c
+@@ -1,5 +1,5 @@
+ /* { dg-do compile } */
+-/* { dg-options "-O2 -fdump-tree-ivopts" } */
++/* { dg-options "-O2 -fno-tree-loop-distribute-patterns -fdump-tree-ivopts" } */
+ /* { dg-skip-if "PR68644" { hppa*-*-* powerpc*-*-* } } */
+ 
+ void
+diff --git a/gcc/testsuite/gcc.dg/tree-ssa/ivopts-lt.c b/gcc/testsuite/gcc.dg/tree-ssa/ivopts-lt.c
+index 171c85ab3..7d5859b3f 100644
+--- a/gcc/testsuite/gcc.dg/tree-ssa/ivopts-lt.c
++++ b/gcc/testsuite/gcc.dg/tree-ssa/ivopts-lt.c
+@@ -1,5 +1,5 @@
+ /* { dg-do compile } */
+-/* { dg-options "-O2 -fdump-tree-ivopts" } */
++/* { dg-options "-O2 -fno-tree-loop-distribute-patterns -fdump-tree-ivopts" } */
+ /* { dg-require-effective-target stdint_types } */
+ 
+ #include "stdint.h"
+diff --git a/gcc/testsuite/gcc.dg/tree-ssa/ldist-37.c b/gcc/testsuite/gcc.dg/tree-ssa/ldist-37.c
+new file mode 100644
+index 000000000..9aae43283
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/tree-ssa/ldist-37.c
+@@ -0,0 +1,10 @@
++/* { dg-do compile } */
++/* { dg-options "-Os -fdump-tree-ldist-optimized" } */
++
++void foo(char* restrict dst, const char* buf)
++{
++  for (int i=0; i<8; ++i)
++    *dst++ = *buf++;
++}
++
++/* { dg-final { scan-tree-dump "split to 0 loops and 1 library calls" "ldist" } } */
+diff --git a/gcc/testsuite/gcc.dg/tree-ssa/ldist-38.c b/gcc/testsuite/gcc.dg/tree-ssa/ldist-38.c
+new file mode 100644
+index 000000000..e296e8295
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/tree-ssa/ldist-38.c
+@@ -0,0 +1,10 @@
++/* { dg-do compile } */
++/* { dg-options "-O2 -fdump-tree-ldist-optimized" } */
++
++void foo(char* restrict dst, const char* buf)
++{
++  for (int i=0; i<8; ++i)
++    *dst++ = *buf++;
++}
++
++/* { dg-final { scan-tree-dump "split to 0 loops and 1 library calls" "ldist" } } */
+diff --git a/gcc/testsuite/gcc.dg/tree-ssa/predcom-dse-1.c b/gcc/testsuite/gcc.dg/tree-ssa/predcom-dse-1.c
+index d3a2339e5..b61b651fc 100644
+--- a/gcc/testsuite/gcc.dg/tree-ssa/predcom-dse-1.c
++++ b/gcc/testsuite/gcc.dg/tree-ssa/predcom-dse-1.c
+@@ -1,5 +1,5 @@
+ /* { dg-do run } */
+-/* { dg-options "-O2 -fno-inline -fpredictive-commoning -fdump-tree-pcom-details" } */
++/* { dg-options "-O2 -fno-inline -fno-tree-loop-distribute-patterns -fpredictive-commoning -fdump-tree-pcom-details" } */
+ 
+ int arr[105] = {2, 3, 5, 7, 11};
+ int result0[10] = {2, 3, 5, 7, 11};
+diff --git a/gcc/testsuite/gcc.dg/tree-ssa/predcom-dse-2.c b/gcc/testsuite/gcc.dg/tree-ssa/predcom-dse-2.c
+index c48d438e9..7f959a833 100644
+--- a/gcc/testsuite/gcc.dg/tree-ssa/predcom-dse-2.c
++++ b/gcc/testsuite/gcc.dg/tree-ssa/predcom-dse-2.c
+@@ -1,5 +1,5 @@
+ /* { dg-do run } */
+-/* { dg-options "-O2 -fno-inline -fpredictive-commoning -fdump-tree-pcom-details" } */
++/* { dg-options "-O2 -fno-inline -fno-tree-loop-distribute-patterns -fpredictive-commoning -fdump-tree-pcom-details" } */
+ 
+ int arr[105] = {2, 3, 5, 7, 11};
+ int result0[10] = {2, 3, 5, 7, 11};
+diff --git a/gcc/testsuite/gcc.dg/tree-ssa/predcom-dse-3.c b/gcc/testsuite/gcc.dg/tree-ssa/predcom-dse-3.c
+index 9c2736cd0..ec08d6c03 100644
+--- a/gcc/testsuite/gcc.dg/tree-ssa/predcom-dse-3.c
++++ b/gcc/testsuite/gcc.dg/tree-ssa/predcom-dse-3.c
+@@ -1,5 +1,5 @@
+ /* { dg-do run } */
+-/* { dg-options "-O2 -fno-inline -fpredictive-commoning -fdump-tree-pcom-details" } */
++/* { dg-options "-O2 -fno-inline -fno-tree-loop-distribute-patterns -fpredictive-commoning -fdump-tree-pcom-details" } */
+ 
+ int arr1[105] = {2, 3, 5, 7, 11, 13, 0};
+ int arr2[105] = {2, 3, 5, 7, 11, 13, 0};
+diff --git a/gcc/testsuite/gcc.dg/tree-ssa/predcom-dse-4.c b/gcc/testsuite/gcc.dg/tree-ssa/predcom-dse-4.c
+index 302425a17..f97d32f4b 100644
+--- a/gcc/testsuite/gcc.dg/tree-ssa/predcom-dse-4.c
++++ b/gcc/testsuite/gcc.dg/tree-ssa/predcom-dse-4.c
+@@ -1,5 +1,5 @@
+ /* { dg-do run } */
+-/* { dg-options "-O2 -fno-inline -fpredictive-commoning -fdump-tree-pcom-details" } */
++/* { dg-options "-O2 -fno-inline -fno-tree-loop-distribute-patterns -fpredictive-commoning -fdump-tree-pcom-details" } */
+ 
+ int arr[105] = {2, 3, 5, 7, 11};
+ int result0[10] = {2, 3, 5, 7, 11};
+diff --git a/gcc/testsuite/gcc.dg/tree-ssa/prefetch-7.c b/gcc/testsuite/gcc.dg/tree-ssa/prefetch-7.c
+index c9f702718..26de8719d 100644
+--- a/gcc/testsuite/gcc.dg/tree-ssa/prefetch-7.c
++++ b/gcc/testsuite/gcc.dg/tree-ssa/prefetch-7.c
+@@ -1,5 +1,5 @@
+ /* { dg-do compile { target { i?86-*-* x86_64-*-* } } } */
+-/* { dg-options "-O2 -fprefetch-loop-arrays -march=amdfam10 --param simultaneous-prefetches=100 -fdump-tree-aprefetch-details -fdump-tree-optimized" } */
++/* { dg-options "-O2 -fno-tree-loop-distribute-patterns -fprefetch-loop-arrays -march=amdfam10 --param simultaneous-prefetches=100 -fdump-tree-aprefetch-details -fdump-tree-optimized" } */
+ 
+ #define K 1000000
+ int a[K];
+diff --git a/gcc/testsuite/gcc.dg/tree-ssa/prefetch-8.c b/gcc/testsuite/gcc.dg/tree-ssa/prefetch-8.c
+index fe433ac3a..cbd6a80d3 100644
+--- a/gcc/testsuite/gcc.dg/tree-ssa/prefetch-8.c
++++ b/gcc/testsuite/gcc.dg/tree-ssa/prefetch-8.c
+@@ -1,5 +1,5 @@
+ /* { dg-do compile { target { i?86-*-* x86_64-*-* } } } */
+-/* { dg-options "-O2 -fprefetch-loop-arrays -march=amdfam10 --param simultaneous-prefetches=100 -fdump-tree-aprefetch-details -fdump-tree-optimized" } */
++/* { dg-options "-O2 -fno-tree-loop-distribute-patterns -fprefetch-loop-arrays -march=amdfam10 --param simultaneous-prefetches=100 -fdump-tree-aprefetch-details -fdump-tree-optimized" } */
+ 
+ #define K 1000000
+ int a[K];
+diff --git a/gcc/testsuite/gcc.dg/tree-ssa/prefetch-9.c b/gcc/testsuite/gcc.dg/tree-ssa/prefetch-9.c
+index 5be9282c9..da4847320 100644
+--- a/gcc/testsuite/gcc.dg/tree-ssa/prefetch-9.c
++++ b/gcc/testsuite/gcc.dg/tree-ssa/prefetch-9.c
+@@ -1,5 +1,5 @@
+ /* { dg-do compile { target { i?86-*-* x86_64-*-* } } } */
+-/* { dg-options "-O2 -fprefetch-loop-arrays -march=amdfam10 --param simultaneous-prefetches=100 -fdump-tree-aprefetch-details -fdump-tree-optimized" } */
++/* { dg-options "-O2 -fno-tree-loop-distribute-patterns -fprefetch-loop-arrays -march=amdfam10 --param simultaneous-prefetches=100 -fdump-tree-aprefetch-details -fdump-tree-optimized" } */
+ 
+ #define K 1000000
+ int a[K], b[K];
+diff --git a/gcc/testsuite/gcc.dg/tree-ssa/scev-11.c b/gcc/testsuite/gcc.dg/tree-ssa/scev-11.c
+index c665fd7f2..233623965 100644
+--- a/gcc/testsuite/gcc.dg/tree-ssa/scev-11.c
++++ b/gcc/testsuite/gcc.dg/tree-ssa/scev-11.c
+@@ -15,7 +15,7 @@ foo (int n)
+     {
+       unsigned char uc = (unsigned char)i;
+       a[i] = i;
+-      b[uc] = 0;
++      b[uc] = 1;
+     }
+ 
+   bar (a);
+diff --git a/gcc/testsuite/gcc.dg/vect/costmodel/i386/costmodel-vect-31.c b/gcc/testsuite/gcc.dg/vect/costmodel/i386/costmodel-vect-31.c
+index 133ab0edc..cc50a5bde 100644
+--- a/gcc/testsuite/gcc.dg/vect/costmodel/i386/costmodel-vect-31.c
++++ b/gcc/testsuite/gcc.dg/vect/costmodel/i386/costmodel-vect-31.c
+@@ -1,4 +1,5 @@
+ /* { dg-require-effective-target vect_int } */
++/* { dg-additional-options "-fno-tree-loop-distribute-patterns" } */
+ 
+ #include <stdarg.h>
+ #include "../../tree-vect.h"
+diff --git a/gcc/testsuite/gcc.dg/vect/costmodel/i386/costmodel-vect-33.c b/gcc/testsuite/gcc.dg/vect/costmodel/i386/costmodel-vect-33.c
+index 242427dc4..b82b8916b 100644
+--- a/gcc/testsuite/gcc.dg/vect/costmodel/i386/costmodel-vect-33.c
++++ b/gcc/testsuite/gcc.dg/vect/costmodel/i386/costmodel-vect-33.c
+@@ -1,5 +1,6 @@
+ /* { dg-do compile } */
+ /* { dg-require-effective-target vect_int } */
++/* { dg-additional-options "-fno-tree-loop-distribute-patterns" } */
+ 
+ #include <stdarg.h>
+ #include "../../tree-vect.h"
+diff --git a/gcc/testsuite/gcc.dg/vect/costmodel/x86_64/costmodel-vect-31.c b/gcc/testsuite/gcc.dg/vect/costmodel/x86_64/costmodel-vect-31.c
+index 133ab0edc..cc50a5bde 100644
+--- a/gcc/testsuite/gcc.dg/vect/costmodel/x86_64/costmodel-vect-31.c
++++ b/gcc/testsuite/gcc.dg/vect/costmodel/x86_64/costmodel-vect-31.c
+@@ -1,4 +1,5 @@
+ /* { dg-require-effective-target vect_int } */
++/* { dg-additional-options "-fno-tree-loop-distribute-patterns" } */
+ 
+ #include <stdarg.h>
+ #include "../../tree-vect.h"
+diff --git a/gcc/testsuite/gcc.dg/vect/costmodel/x86_64/costmodel-vect-33.c b/gcc/testsuite/gcc.dg/vect/costmodel/x86_64/costmodel-vect-33.c
+index 33bf7f1a5..5e4affae7 100644
+--- a/gcc/testsuite/gcc.dg/vect/costmodel/x86_64/costmodel-vect-33.c
++++ b/gcc/testsuite/gcc.dg/vect/costmodel/x86_64/costmodel-vect-33.c
+@@ -1,5 +1,6 @@
+ /* { dg-do compile } */
+ /* { dg-require-effective-target vect_int } */
++/* { dg-additional-options "-fno-tree-loop-distribute-patterns" } */
+ 
+ #include <stdarg.h>
+ #include "../../tree-vect.h"
+diff --git a/gcc/testsuite/gcc.dg/vect/vect.exp b/gcc/testsuite/gcc.dg/vect/vect.exp
+index 369ece755..69179d32e 100644
+--- a/gcc/testsuite/gcc.dg/vect/vect.exp
++++ b/gcc/testsuite/gcc.dg/vect/vect.exp
+@@ -45,7 +45,7 @@ if ![check_vect_support_and_set_flags] {
+ }
+ 
+ # These flags are used for all targets.
+-lappend DEFAULT_VECTCFLAGS "-ftree-vectorize" "-fno-vect-cost-model" "-fno-common"
++lappend DEFAULT_VECTCFLAGS "-ftree-vectorize" "-fno-tree-loop-distribute-patterns" "-fno-vect-cost-model" "-fno-common"
+ 
+ # Initialize `dg'.
+ dg-init
+diff --git a/gcc/testsuite/gcc.target/aarch64/sve/index_offset_1.c b/gcc/testsuite/gcc.target/aarch64/sve/index_offset_1.c
+index 31d46aab9..a26be32f0 100644
+--- a/gcc/testsuite/gcc.target/aarch64/sve/index_offset_1.c
++++ b/gcc/testsuite/gcc.target/aarch64/sve/index_offset_1.c
+@@ -1,5 +1,5 @@
+ /* { dg-do compile } */
+-/* { dg-options "-O2 -ftree-vectorize -msve-vector-bits=256" } */
++/* { dg-options "-O2 -ftree-vectorize -msve-vector-bits=256 -fno-tree-loop-distribute-patterns" } */
+ 
+ #define SIZE (15 * 8 + 3)
+ 
+diff --git a/gcc/testsuite/gcc.target/aarch64/sve/single_1.c b/gcc/testsuite/gcc.target/aarch64/sve/single_1.c
+index a5dd5ebfa..8e686e32f 100644
+--- a/gcc/testsuite/gcc.target/aarch64/sve/single_1.c
++++ b/gcc/testsuite/gcc.target/aarch64/sve/single_1.c
+@@ -1,5 +1,5 @@
+ /* { dg-do compile } */
+-/* { dg-options "-O2 -ftree-vectorize -fopenmp-simd -msve-vector-bits=256" } */
++/* { dg-options "-O2 -ftree-vectorize -fopenmp-simd -msve-vector-bits=256 -fno-tree-loop-distribute-patterns" } */
+ 
+ #ifndef N
+ #define N 32
+diff --git a/gcc/testsuite/gcc.target/aarch64/sve/single_2.c b/gcc/testsuite/gcc.target/aarch64/sve/single_2.c
+index 1ef72b62e..78530c07a 100644
+--- a/gcc/testsuite/gcc.target/aarch64/sve/single_2.c
++++ b/gcc/testsuite/gcc.target/aarch64/sve/single_2.c
+@@ -1,5 +1,5 @@
+ /* { dg-do compile } */
+-/* { dg-options "-O2 -ftree-vectorize -fopenmp-simd -msve-vector-bits=512" } */
++/* { dg-options "-O2 -ftree-vectorize -fopenmp-simd -msve-vector-bits=512 -fno-tree-loop-distribute-patterns" } */
+ 
+ #define N 64
+ #include "single_1.c"
+diff --git a/gcc/testsuite/gcc.target/aarch64/sve/single_3.c b/gcc/testsuite/gcc.target/aarch64/sve/single_3.c
+index fefbfbf39..4cd1c8f99 100644
+--- a/gcc/testsuite/gcc.target/aarch64/sve/single_3.c
++++ b/gcc/testsuite/gcc.target/aarch64/sve/single_3.c
+@@ -1,5 +1,5 @@
+ /* { dg-do compile } */
+-/* { dg-options "-O2 -ftree-vectorize -fopenmp-simd -msve-vector-bits=1024" } */
++/* { dg-options "-O2 -ftree-vectorize -fopenmp-simd -msve-vector-bits=1024 -fno-tree-loop-distribute-patterns" } */
+ 
+ #define N 128
+ #include "single_1.c"
+diff --git a/gcc/testsuite/gcc.target/aarch64/sve/single_4.c b/gcc/testsuite/gcc.target/aarch64/sve/single_4.c
+index c1b1af611..6e733bd2f 100644
+--- a/gcc/testsuite/gcc.target/aarch64/sve/single_4.c
++++ b/gcc/testsuite/gcc.target/aarch64/sve/single_4.c
+@@ -1,5 +1,5 @@
+ /* { dg-do compile } */
+-/* { dg-options "-O2 -ftree-vectorize -fopenmp-simd -msve-vector-bits=2048" } */
++/* { dg-options "-O2 -ftree-vectorize -fopenmp-simd -msve-vector-bits=2048 -fno-tree-loop-distribute-patterns" } */
+ 
+ #define N 256
+ #include "single_1.c"
+diff --git a/gcc/testsuite/gcc.target/aarch64/sve/vec_init_1.c b/gcc/testsuite/gcc.target/aarch64/sve/vec_init_1.c
+index 6042606f7..1624ab141 100644
+--- a/gcc/testsuite/gcc.target/aarch64/sve/vec_init_1.c
++++ b/gcc/testsuite/gcc.target/aarch64/sve/vec_init_1.c
+@@ -1,5 +1,5 @@
+ /* { dg-do compile } */
+-/* { dg-options "-O2 -ftree-vectorize" } */
++/* { dg-options "-O2 -ftree-vectorize -fno-tree-loop-distribute-patterns" } */
+ 
+ #include <stdint.h>
+ 
+diff --git a/gcc/testsuite/gcc.target/aarch64/vect-fmovd-zero.c b/gcc/testsuite/gcc.target/aarch64/vect-fmovd-zero.c
+index c987f5fb8..a51aa33c2 100644
+--- a/gcc/testsuite/gcc.target/aarch64/vect-fmovd-zero.c
++++ b/gcc/testsuite/gcc.target/aarch64/vect-fmovd-zero.c
+@@ -1,5 +1,5 @@
+ /* { dg-do compile } */
+-/* { dg-options "-O2 -ftree-vectorize -fdump-tree-vect-all -fno-vect-cost-model" } */
++/* { dg-options "-O2 -ftree-vectorize -fdump-tree-vect-all -fno-vect-cost-model -fno-tree-loop-distribute-patterns" } */
+ 
+ #pragma GCC target "+nosve"
+ 
+diff --git a/gcc/testsuite/gcc.target/aarch64/vect-fmovf-zero.c b/gcc/testsuite/gcc.target/aarch64/vect-fmovf-zero.c
+index 22a053543..8dfd26b51 100644
+--- a/gcc/testsuite/gcc.target/aarch64/vect-fmovf-zero.c
++++ b/gcc/testsuite/gcc.target/aarch64/vect-fmovf-zero.c
+@@ -1,5 +1,5 @@
+ /* { dg-do compile } */
+-/* { dg-options "-O2 -ftree-vectorize -fdump-tree-vect-all -fno-vect-cost-model" } */
++/* { dg-options "-O2 -ftree-vectorize -fdump-tree-vect-all -fno-vect-cost-model -fno-tree-loop-distribute-patterns" } */
+ 
+ #pragma GCC target "+nosve"
+ 
+diff --git a/gcc/testsuite/gcc.target/arm/ivopts.c b/gcc/testsuite/gcc.target/arm/ivopts.c
+index 2bb6cc493..5d272405e 100644
+--- a/gcc/testsuite/gcc.target/arm/ivopts.c
++++ b/gcc/testsuite/gcc.target/arm/ivopts.c
+@@ -1,5 +1,5 @@
+ /* { dg-do assemble } */
+-/* { dg-options "-Os -fdump-tree-ivopts -save-temps" } */
++/* { dg-options "-Os -fdump-tree-ivopts -save-temps -fno-tree-loop-distribute-patterns" } */
+ 
+ void
+ tr5 (short array[], int n)
+diff --git a/gcc/testsuite/gcc.target/i386/pr30970.c b/gcc/testsuite/gcc.target/i386/pr30970.c
+index b1fc2d3ec..263db5e05 100644
+--- a/gcc/testsuite/gcc.target/i386/pr30970.c
++++ b/gcc/testsuite/gcc.target/i386/pr30970.c
+@@ -1,5 +1,5 @@
+ /* { dg-do compile }
+-/* { dg-options "-msse2 -O2 -ftree-vectorize -mtune=generic" } */
++/* { dg-options "-msse2 -O2 -fno-tree-loop-distribute-patterns -ftree-vectorize -mtune=generic" } */
+ 
+ #define N 256
+ int b[N];
+diff --git a/gcc/testsuite/gcc.target/i386/vect-double-1.c b/gcc/testsuite/gcc.target/i386/vect-double-1.c
+index c44e669b0..180274c20 100644
+--- a/gcc/testsuite/gcc.target/i386/vect-double-1.c
++++ b/gcc/testsuite/gcc.target/i386/vect-double-1.c
+@@ -1,6 +1,6 @@
+ /* { dg-do compile } */
+ /* { dg-skip-if "" { *-*-* } { "-march=*" } { "-march=core2" } } */
+-/* { dg-options "-O2 -ftree-vectorize -mfpmath=sse -march=core2 -fdump-tree-vect-stats" } */
++/* { dg-options "-O2 -ftree-vectorize -fno-tree-loop-distribute-patterns -mfpmath=sse -march=core2 -fdump-tree-vect-stats" } */
+ /* { dg-add-options bind_pic_locally } */
+ 
+ extern void abort (void);
+diff --git a/gcc/testsuite/gcc.target/i386/vect-double-2.c b/gcc/testsuite/gcc.target/i386/vect-double-2.c
+index f6a437494..eea53bfa6 100644
+--- a/gcc/testsuite/gcc.target/i386/vect-double-2.c
++++ b/gcc/testsuite/gcc.target/i386/vect-double-2.c
+@@ -1,5 +1,5 @@
+ /* { dg-do compile } */
+-/* { dg-options "-O2 -ftree-vectorize -mfpmath=sse -msse2 -mtune=atom -fdump-tree-vect-stats" } */
++/* { dg-options "-O2 -ftree-vectorize -fno-tree-loop-distribute-patterns -mfpmath=sse -msse2 -mtune=atom -fdump-tree-vect-stats" } */
+ 
+ extern void abort (void);
+ 
+diff --git a/gcc/testsuite/gfortran.dg/vect/vect-5.f90 b/gcc/testsuite/gfortran.dg/vect/vect-5.f90
+index de283e8b8..b11cabaee 100644
+--- a/gcc/testsuite/gfortran.dg/vect/vect-5.f90
++++ b/gcc/testsuite/gfortran.dg/vect/vect-5.f90
+@@ -1,5 +1,5 @@
+ ! { dg-require-effective-target vect_int }
+-! { dg-additional-options "--param vect-max-peeling-for-alignment=0" }
++! { dg-additional-options "-fno-tree-loop-distribute-patterns --param vect-max-peeling-for-alignment=0" }
+ 
+         Subroutine foo (N, M)
+         Integer N
+diff --git a/gcc/testsuite/gfortran.dg/vect/vect-8.f90 b/gcc/testsuite/gfortran.dg/vect/vect-8.f90
+index 0ac5f1c39..e26cdf95e 100644
+--- a/gcc/testsuite/gfortran.dg/vect/vect-8.f90
++++ b/gcc/testsuite/gfortran.dg/vect/vect-8.f90
+@@ -1,6 +1,6 @@
+ ! { dg-do compile }
+ ! { dg-require-effective-target vect_double }
+-! { dg-additional-options "-finline-matmul-limit=0" }
++! { dg-additional-options "-fno-tree-loop-distribute-patterns -finline-matmul-limit=0" }
+ 
+ module lfk_prec
+  integer, parameter :: dp=kind(1.d0)
+diff --git a/gcc/tree-loop-distribution.c b/gcc/tree-loop-distribution.c
+index 761d577f3..89e4b31c4 100644
+--- a/gcc/tree-loop-distribution.c
++++ b/gcc/tree-loop-distribution.c
+@@ -117,6 +117,7 @@ along with GCC; see the file COPYING3.  If not see
+ #include "tree-vectorizer.h"
+ #include "tree-eh.h"
+ #include "tree-affine.h"
++#include "gimple-fold.h"
+ 
+ 
+ #define MAX_DATAREFS_NUM \
+@@ -633,6 +634,7 @@ struct partition
+   bitmap stmts;
+   /* True if the partition defines variable which is used outside of loop.  */
+   bool reduction_p;
++  location_t loc;
+   enum partition_kind kind;
+   enum partition_type type;
+   /* Data references in the partition.  */
+@@ -650,7 +652,9 @@ partition_alloc (void)
+   partition *partition = XCNEW (struct partition);
+   partition->stmts = BITMAP_ALLOC (NULL);
+   partition->reduction_p = false;
++  partition->loc = UNKNOWN_LOCATION;
+   partition->kind = PKIND_NORMAL;
++  partition->type = PTYPE_PARALLEL;
+   partition->datarefs = BITMAP_ALLOC (NULL);
+   return partition;
+ }
+@@ -1025,7 +1029,9 @@ generate_memset_builtin (struct loop *loop, partition *partition)
+ 
+   fn = build_fold_addr_expr (builtin_decl_implicit (BUILT_IN_MEMSET));
+   fn_call = gimple_build_call (fn, 3, mem, val, nb_bytes);
++  gimple_set_location (fn_call, partition->loc);
+   gsi_insert_after (&gsi, fn_call, GSI_CONTINUE_LINKING);
++  fold_stmt (&gsi);
+ 
+   if (dump_file && (dump_flags & TDF_DETAILS))
+     {
+@@ -1080,7 +1086,9 @@ generate_memcpy_builtin (struct loop *loop, partition *partition)
+ 				  false, GSI_CONTINUE_LINKING);
+   fn = build_fold_addr_expr (builtin_decl_implicit (kind));
+   fn_call = gimple_build_call (fn, 3, dest, src, nb_bytes);
++  gimple_set_location (fn_call, partition->loc);
+   gsi_insert_after (&gsi, fn_call, GSI_CONTINUE_LINKING);
++  fold_stmt (&gsi);
+ 
+   if (dump_file && (dump_flags & TDF_DETAILS))
+     {
+@@ -1686,6 +1694,8 @@ classify_partition (loop_p loop, struct graph *rdg, partition *partition,
+   if (!find_single_drs (loop, rdg, partition, &single_st, &single_ld))
+     return;
+ 
++  partition->loc = gimple_location (DR_STMT (single_st));
++
+   /* Classify the builtin kind.  */
+   if (single_ld == NULL)
+     classify_builtin_st (loop, partition, single_st);
+@@ -2729,7 +2739,8 @@ finalize_partitions (struct loop *loop, vec<struct partition *> *partitions,
+ 
+ static int
+ distribute_loop (struct loop *loop, vec<gimple *> stmts,
+-		 control_dependences *cd, int *nb_calls, bool *destroy_p)
++		 control_dependences *cd, int *nb_calls, bool *destroy_p,
++		 bool only_patterns_p)
+ {
+   ddrs_table = new hash_table<ddr_hasher> (389);
+   struct graph *rdg;
+@@ -2802,7 +2813,7 @@ distribute_loop (struct loop *loop, vec<gimple *> stmts,
+ 
+   /* If we are only distributing patterns but did not detect any,
+      simply bail out.  */
+-  if (!flag_tree_loop_distribution
++  if (only_patterns_p
+       && !any_builtin)
+     {
+       nbp = 0;
+@@ -2814,7 +2825,7 @@ distribute_loop (struct loop *loop, vec<gimple *> stmts,
+      a loop into pieces, separated by builtin calls.  That is, we
+      only want no or a single loop body remaining.  */
+   struct partition *into;
+-  if (!flag_tree_loop_distribution)
++  if (only_patterns_p)
+     {
+       for (i = 0; partitions.iterate (i, &into); ++i)
+ 	if (!partition_builtin_p (into))
+@@ -3038,7 +3049,6 @@ prepare_perfect_loop_nest (struct loop *loop)
+ 	 && loop_outer (outer)
+ 	 && outer->inner == loop && loop->next == NULL
+ 	 && single_exit (outer)
+-	 && optimize_loop_for_speed_p (outer)
+ 	 && !chrec_contains_symbols_defined_in_loop (niters, outer->num)
+ 	 && (niters = number_of_latch_executions (outer)) != NULL_TREE
+ 	 && niters != chrec_dont_know)
+@@ -3092,9 +3102,11 @@ pass_loop_distribution::execute (function *fun)
+      walking to innermost loops.  */
+   FOR_EACH_LOOP (loop, LI_ONLY_INNERMOST)
+     {
+-      /* Don't distribute multiple exit edges loop, or cold loop.  */
++      /* Don't distribute multiple exit edges loop, or cold loop when
++         not doing pattern detection.  */
+       if (!single_exit (loop)
+-	  || !optimize_loop_for_speed_p (loop))
++	  || (!flag_tree_loop_distribute_patterns
++	      && !optimize_loop_for_speed_p (loop)))
+ 	continue;
+ 
+       /* Don't distribute loop if niters is unknown.  */
+@@ -3122,9 +3134,10 @@ pass_loop_distribution::execute (function *fun)
+ 
+ 	  bool destroy_p;
+ 	  int nb_generated_loops, nb_generated_calls;
+-	  nb_generated_loops = distribute_loop (loop, work_list, cd,
+-						&nb_generated_calls,
+-						&destroy_p);
++	  nb_generated_loops
++	    = distribute_loop (loop, work_list, cd, &nb_generated_calls,
++			       &destroy_p, (!optimize_loop_for_speed_p (loop)
++					    || !flag_tree_loop_distribution));
+ 	  if (destroy_p)
+ 	    loops_to_be_destroyed.safe_push (loop);
+ 

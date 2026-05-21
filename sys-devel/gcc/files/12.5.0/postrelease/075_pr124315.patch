@@ -1,0 +1,79 @@
+diff --git a/gcc/config/i386/sse.md b/gcc/config/i386/sse.md
+index 3721b438e..49f6190a6 100644
+--- a/gcc/config/i386/sse.md
++++ b/gcc/config/i386/sse.md
+@@ -5996,7 +5996,7 @@
+ 	  (match_dup 3)
+ 	  (const_int 1)))]
+   "TARGET_AVX512F"
+-  "vfmadd231<ssescalarmodesuffix>\t{<round_op5>%2, %1, %0%{%4%}|%0%{%4%}, %<iptr>3, %<iptr>2<round_op5>}"
++  "vfmadd231<ssescalarmodesuffix>\t{<round_op5>%2, %1, %0%{%4%}|%0%{%4%}, %<iptr>1, %<iptr>2<round_op5>}"
+   [(set_attr "type" "ssemuladd")
+    (set_attr "mode" "<MODE>")])
+ 
+@@ -6067,7 +6067,7 @@
+ 	  (match_dup 3)
+ 	  (const_int 1)))]
+   "TARGET_AVX512F"
+-  "vfmsub231<ssescalarmodesuffix>\t{<round_op5>%2, %1, %0%{%4%}|%0%{%4%}, %<iptr>3, %<iptr>2<round_op5>}"
++  "vfmsub231<ssescalarmodesuffix>\t{<round_op5>%2, %1, %0%{%4%}|%0%{%4%}, %<iptr>1, %<iptr>2<round_op5>}"
+   [(set_attr "type" "ssemuladd")
+    (set_attr "mode" "<MODE>")])
+ 
+@@ -6125,7 +6125,7 @@
+ 	  (match_dup 3)
+ 	  (const_int 1)))]
+   "TARGET_AVX512F"
+-  "vfnmadd231<ssescalarmodesuffix>\t{<round_op5>%2, %1, %0%{%4%}|%0%{%4%}, %<iptr>3, %<iptr>2<round_op5>}"
++  "vfnmadd231<ssescalarmodesuffix>\t{<round_op5>%2, %1, %0%{%4%}|%0%{%4%}, %<iptr>1, %<iptr>2<round_op5>}"
+   [(set_attr "type" "ssemuladd")
+    (set_attr "mode" "<MODE>")])
+ 
+@@ -6199,7 +6199,7 @@
+ 	  (match_dup 3)
+ 	  (const_int 1)))]
+   "TARGET_AVX512F"
+-  "vfnmsub231<ssescalarmodesuffix>\t{<round_op5>%2, %1, %0%{%4%}|%0%{%4%}, %<iptr>3, %<iptr>2<round_op5>}"
++  "vfnmsub231<ssescalarmodesuffix>\t{<round_op5>%2, %1, %0%{%4%}|%0%{%4%}, %<iptr>1, %<iptr>2<round_op5>}"
+   [(set_attr "type" "ssemuladd")
+    (set_attr "mode" "<MODE>")])
+ 
+diff --git a/gcc/testsuite/gcc.target/i386/avx512f-pr124315.c b/gcc/testsuite/gcc.target/i386/avx512f-pr124315.c
+new file mode 100644
+index 000000000..13d6cadd8
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/i386/avx512f-pr124315.c
+@@ -0,0 +1,33 @@
++/* PR target/124315 */
++/* { dg-do compile { target masm_intel } } */
++/* { dg-options "-O2 -mavx512f -masm=intel" } */
++/* { dg-final { scan-assembler "\tvfmadd231sd\txmm0{k\[0-7]}, xmm1, xmm2, {ru-sae}" } } */
++/* { dg-final { scan-assembler "\tvfmsub231sd\txmm0{k\[0-7]}, xmm1, xmm2, {ru-sae}" } } */
++/* { dg-final { scan-assembler "\tvfnmadd231sd\txmm0{k\[0-7]}, xmm1, xmm2, {ru-sae}" } } */
++/* { dg-final { scan-assembler "\tvfnmsub231sd\txmm0{k\[0-7]}, xmm1, xmm2, {ru-sae}" } } */
++
++#include <x86intrin.h>
++
++__m128d
++foo (__m128d b, __m128d w, __m128d a,  __mmask8 u)
++{
++  return _mm_mask3_fmadd_round_sd (w, a, b, u, _MM_FROUND_TO_POS_INF | _MM_FROUND_NO_EXC);
++}
++
++__m128d
++bar (__m128d b, __m128d w, __m128d a, __mmask8 u)
++{
++  return _mm_mask3_fmsub_round_sd (w, a, b, u, _MM_FROUND_TO_POS_INF | _MM_FROUND_NO_EXC);
++}
++
++__m128d
++baz (__m128d b, __m128d w, __m128d a,  __mmask8 u)
++{
++  return _mm_mask3_fnmadd_round_sd (w, a, b, u, _MM_FROUND_TO_POS_INF | _MM_FROUND_NO_EXC);
++}
++
++__m128d
++qux (__m128d b, __m128d w, __m128d a,  __mmask8 u)
++{
++  return _mm_mask3_fnmsub_round_sd (w, a, b, u, _MM_FROUND_TO_POS_INF | _MM_FROUND_NO_EXC);
++}

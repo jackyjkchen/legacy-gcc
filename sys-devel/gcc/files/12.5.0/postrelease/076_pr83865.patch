@@ -1,0 +1,54 @@
+diff --git a/gcc/fortran/trans-stmt.cc b/gcc/fortran/trans-stmt.cc
+index 79096816c..1aba835a7 100644
+--- a/gcc/fortran/trans-stmt.cc
++++ b/gcc/fortran/trans-stmt.cc
+@@ -6350,8 +6350,9 @@ gfc_trans_allocate (gfc_code * code)
+       else
+ 	gfc_add_block_to_block (&post, &se.post);
+ 
+-      /* Special case when string in expr3 is zero.  */
++      /* Special case when string in expr3 is scalar and has length zero.  */
+       if (code->expr3->ts.type == BT_CHARACTER
++	  && code->expr3->rank == 0
+ 	  && integer_zerop (se.string_length))
+ 	{
+ 	  gfc_init_se (&se, NULL);
+diff --git a/gcc/testsuite/gfortran.dg/allocate_with_source_32.f90 b/gcc/testsuite/gfortran.dg/allocate_with_source_32.f90
+new file mode 100644
+index 000000000..4a9bd46da
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/allocate_with_source_32.f90
+@@ -0,0 +1,33 @@
++! { dg-do run }
++!
++! PR fortran/83865
++!
++! Test ALLOCATE with SOURCE= of deferred length character, where
++! the source-expression is an array of character with length 0.
++
++program p
++  implicit none
++  character(:), allocatable :: z(:)
++  character(1) :: cc(4) = ""
++  allocate (z, source=[''])
++  if (len (z) /= 0 .or. size (z) /= 1) stop 1
++  deallocate (z)
++  allocate (z, source=['',''])
++  if (len (z) /= 0 .or. size (z) /= 2) stop 2
++  deallocate (z)
++  allocate (z, source=[ character(0) :: 'a','b','c'])
++  if (len (z) /= 0 .or. size (z) /= 3) stop 3
++  deallocate (z)
++  allocate (z, source=[ character(0) :: cc ])
++  if (len (z) /= 0 .or. size (z) /= 4) stop 4
++  deallocate (z)
++  associate (x => f())
++    if (len (x) /= 0 .or. size (x) /= 1) stop 5
++    if (x(1) /= '') stop 6
++  end associate
++contains
++  function f() result(z)
++    character(:), allocatable :: z(:)
++    allocate (z, source=[''])
++  end function f
++end
