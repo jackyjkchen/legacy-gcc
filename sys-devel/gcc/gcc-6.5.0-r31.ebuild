@@ -286,12 +286,11 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/260_pr115608.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/261_pr82774-100193.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/262_pr79150.patch
-	eapply "${FILESDIR}"/${PV}/postrelease/263_pr64735.patch
+	is_djgpp || eapply "${FILESDIR}"/${PV}/postrelease/263_pr77857.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/264_pr65618.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/265_pr83204.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/266_pr70909.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/267_pr77267.patch
-	is_djgpp || eapply "${FILESDIR}"/${PV}/postrelease/268_pr77857.patch
 
 	if use test ; then
 		rm -rf gcc/testsuite/gcc.c-torture/execute/vfprintf-chk-1.c gcc/testsuite/gcc.c-torture/execute/vprintf-chk-1.c

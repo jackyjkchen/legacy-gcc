@@ -51998,3 +51998,1491 @@ index 438157a98..a625c4dbc 100644
    AC_CHECK_LIB(rt, clock_gettime,
      [AC_DEFINE(HAVE_CLOCK_GETTIME_LIBRT, 1,
                 [Define to 1 if you have the `clock_gettime' function in librt.])])
+diff --git a/libstdc++-v3/include/std/future b/libstdc++-v3/include/std/future
+index 6523cea8e..c407d0a12 100644
+--- a/libstdc++-v3/include/std/future
++++ b/libstdc++-v3/include/std/future
+@@ -176,7 +176,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
+     async(_Fn&& __fn, _Args&&... __args);
+ 
+ #if defined(_GLIBCXX_HAS_GTHREADS) && defined(_GLIBCXX_USE_C99_STDINT_TR1) \
+-  && (ATOMIC_INT_LOCK_FREE > 1)
++  && ((ATOMIC_INT_LOCK_FREE > 1) || (defined(__ARM_EABI__) && !defined(__ARM_PCS_VFP)))
+ 
+   /// Base class and enclosing scope.
+   struct __future_base
+diff --git a/libstdc++-v3/libsupc++/eh_atomics.h b/libstdc++-v3/libsupc++/eh_atomics.h
+new file mode 100644
+index 000000000..71b42a4b8
+--- /dev/null
++++ b/libstdc++-v3/libsupc++/eh_atomics.h
+@@ -0,0 +1,84 @@
++// Exception Handling support header for -*- C++ -*-
++
++// Copyright (C) 2016 Free Software Foundation, Inc.
++//
++// This file is part of GCC.
++//
++// GCC is free software; you can redistribute it and/or modify
++// it under the terms of the GNU General Public License as published by
++// the Free Software Foundation; either version 3, or (at your option)
++// any later version.
++//
++// GCC is distributed in the hope that it will be useful,
++// but WITHOUT ANY WARRANTY; without even the implied warranty of
++// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++// GNU General Public License for more details.
++//
++// Under Section 7 of GPL version 3, you are granted additional
++// permissions described in the GCC Runtime Library Exception, version
++// 3.1, as published by the Free Software Foundation.
++
++// You should have received a copy of the GNU General Public License and
++// a copy of the GCC Runtime Library Exception along with this program;
++// see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
++// <http://www.gnu.org/licenses/>.
++
++/** @file eh_atomics.h
++ *  This is an internal header file, included by library source files.
++ *  Do not attempt to use it directly.
++ */
++
++#ifndef _EH_ATOMICS_H
++#define _EH_ATOMICS_H 1
++
++#include <bits/c++config.h>
++#include <bits/atomic_word.h>
++#include <bits/atomic_lockfree_defines.h>
++#if ATOMIC_INT_LOCK_FREE <= 1
++# include <ext/atomicity.h>
++#endif
++
++#pragma GCC visibility push(default)
++extern "C++" {
++namespace __gnu_cxx
++{
++  void
++  __eh_atomic_inc (_Atomic_word* __count) __attribute__((always_inline));
++
++  bool
++  __eh_atomic_dec (_Atomic_word* __count) __attribute__((always_inline));
++
++  // Increments the count.
++  inline void
++  __eh_atomic_inc (_Atomic_word* __count)
++  {
++#if ATOMIC_INT_LOCK_FREE > 1
++    __atomic_add_fetch (__count, 1, __ATOMIC_ACQ_REL);
++#else
++    _GLIBCXX_SYNCHRONIZATION_HAPPENS_BEFORE (__count);
++    __gnu_cxx::__atomic_add_dispatch (__count, 1);
++    _GLIBCXX_SYNCHRONIZATION_HAPPENS_AFTER (__count);
++#endif
++  }
++
++  // Decrements the count and returns true if it reached zero.
++  inline bool
++  __eh_atomic_dec (_Atomic_word* __count)
++  {
++#if ATOMIC_INT_LOCK_FREE > 1
++    return __atomic_sub_fetch (__count, 1, __ATOMIC_ACQ_REL) == 0;
++#else
++    _GLIBCXX_SYNCHRONIZATION_HAPPENS_BEFORE (__count);
++    if (__gnu_cxx::__exchange_and_add_dispatch (__count, -1) == 1)
++      {
++	_GLIBCXX_SYNCHRONIZATION_HAPPENS_AFTER (__count);
++	return true;
++      }
++    return false;
++#endif
++  }
++} // namespace __gnu_cxx
++}
++#pragma GCC visibility pop
++
++#endif // _EH_ATOMICS_H
+diff --git a/libstdc++-v3/libsupc++/eh_ptr.cc b/libstdc++-v3/libsupc++/eh_ptr.cc
+index 076adf7e4..69d26ab3e 100644
+--- a/libstdc++-v3/libsupc++/eh_ptr.cc
++++ b/libstdc++-v3/libsupc++/eh_ptr.cc
+@@ -23,9 +23,7 @@
+ // <http://www.gnu.org/licenses/>.
+ 
+ #include <bits/c++config.h>
+-#include <bits/atomic_lockfree_defines.h>
+-
+-#if ATOMIC_INT_LOCK_FREE > 1
++#include "eh_atomics.h"
+ 
+ #define _GLIBCXX_EH_PTR_COMPAT
+ 
+@@ -103,7 +101,7 @@ std::__exception_ptr::exception_ptr::_M_addref() _GLIBCXX_USE_NOEXCEPT
+     {
+       __cxa_refcounted_exception *eh =
+ 	__get_refcounted_exception_header_from_obj (_M_exception_object);
+-      __atomic_add_fetch (&eh->referenceCount, 1, __ATOMIC_ACQ_REL);
++      __gnu_cxx::__eh_atomic_inc (&eh->referenceCount);
+     }
+ }
+ 
+@@ -115,7 +113,7 @@ std::__exception_ptr::exception_ptr::_M_release() _GLIBCXX_USE_NOEXCEPT
+     {
+       __cxa_refcounted_exception *eh =
+ 	__get_refcounted_exception_header_from_obj (_M_exception_object);
+-      if (__atomic_sub_fetch (&eh->referenceCount, 1, __ATOMIC_ACQ_REL) == 0)
++      if (__gnu_cxx::__eh_atomic_dec (&eh->referenceCount))
+         {
+ 	  if (eh->exc.exceptionDestructor)
+ 	    eh->exc.exceptionDestructor (_M_exception_object);
+@@ -219,7 +217,7 @@ __gxx_dependent_exception_cleanup(_Unwind_Reason_Code code,
+ 
+   __cxa_free_dependent_exception (dep);
+ 
+-  if (__atomic_sub_fetch (&header->referenceCount, 1, __ATOMIC_ACQ_REL) == 0)
++  if (__gnu_cxx::__eh_atomic_dec (&header->referenceCount))
+     {
+       if (header->exc.exceptionDestructor)
+ 	header->exc.exceptionDestructor (header + 1);
+@@ -238,7 +236,7 @@ std::rethrow_exception(std::exception_ptr ep)
+ 
+   __cxa_dependent_exception *dep = __cxa_allocate_dependent_exception ();
+   dep->primaryException = obj;
+-  __atomic_add_fetch (&eh->referenceCount, 1,  __ATOMIC_ACQ_REL);
++  __gnu_cxx::__eh_atomic_inc (&eh->referenceCount);
+ 
+   dep->unexpectedHandler = get_unexpected ();
+   dep->terminateHandler = get_terminate ();
+@@ -260,5 +258,3 @@ std::rethrow_exception(std::exception_ptr ep)
+ }
+ 
+ #undef _GLIBCXX_EH_PTR_COMPAT
+-
+-#endif
+diff --git a/libstdc++-v3/libsupc++/eh_throw.cc b/libstdc++-v3/libsupc++/eh_throw.cc
+index e9a34e292..6dbb4a25d 100644
+--- a/libstdc++-v3/libsupc++/eh_throw.cc
++++ b/libstdc++-v3/libsupc++/eh_throw.cc
+@@ -24,6 +24,7 @@
+ 
+ #include <bits/c++config.h>
+ #include "unwind-cxx.h"
++#include "eh_atomics.h"
+ 
+ using namespace __cxxabiv1;
+ 
+@@ -42,17 +43,13 @@ __gxx_exception_cleanup (_Unwind_Reason_Code code, _Unwind_Exception *exc)
+   if (code != _URC_FOREIGN_EXCEPTION_CAUGHT && code != _URC_NO_REASON)
+     __terminate (header->exc.terminateHandler);
+ 
+-#if ATOMIC_INT_LOCK_FREE > 1
+-  if (__atomic_sub_fetch (&header->referenceCount, 1, __ATOMIC_ACQ_REL) == 0)
++  if (__gnu_cxx::__eh_atomic_dec (&header->referenceCount))
+     {
+-#endif
+       if (header->exc.exceptionDestructor)
+ 	header->exc.exceptionDestructor (header + 1);
+ 
+       __cxa_free_exception (header + 1);
+-#if ATOMIC_INT_LOCK_FREE > 1
+     }
+-#endif
+ }
+ 
+ 
+diff --git a/libstdc++-v3/libsupc++/eh_tm.cc b/libstdc++-v3/libsupc++/eh_tm.cc
+index f9e674b31..00bc15788 100644
+--- a/libstdc++-v3/libsupc++/eh_tm.cc
++++ b/libstdc++-v3/libsupc++/eh_tm.cc
+@@ -24,6 +24,7 @@
+ 
+ #include <cstdlib>
+ #include "unwind-cxx.h"
++#include "eh_atomics.h"
+ 
+ using namespace __cxxabiv1;
+ 
+@@ -45,9 +46,7 @@ free_any_cxa_exception (_Unwind_Exception *eo)
+       __cxa_free_dependent_exception (dep);
+     }
+ 
+-#if __GCC_ATOMIC_INT_LOCK_FREE > 1
+-  if (__atomic_sub_fetch (&h->referenceCount, 1, __ATOMIC_ACQ_REL) == 0)
+-#endif
++  if (__gnu_cxx::__eh_atomic_dec (&h->referenceCount))
+     __cxa_free_exception (h + 1);
+ }
+ 
+diff --git a/libstdc++-v3/libsupc++/exception b/libstdc++-v3/libsupc++/exception
+index 2d787d0c7..242d94ace 100644
+--- a/libstdc++-v3/libsupc++/exception
++++ b/libstdc++-v3/libsupc++/exception
+@@ -35,7 +35,9 @@
+ #pragma GCC visibility push(default)
+ 
+ #include <bits/c++config.h>
++#if !(defined(__ARM_EABI__) && !defined(__ARM_PCS_VFP))
+ #include <bits/atomic_lockfree_defines.h>
++#endif
+ 
+ extern "C++" {
+ 
+@@ -158,7 +160,7 @@ _GLIBCXX_END_NAMESPACE_VERSION
+ 
+ #pragma GCC visibility pop
+ 
+-#if (__cplusplus >= 201103L) && (ATOMIC_INT_LOCK_FREE > 1)
++#if (__cplusplus >= 201103L) && ((ATOMIC_INT_LOCK_FREE > 1) || (defined(__ARM_EABI__) && !defined(__ARM_PCS_VFP)))
+ #include <bits/exception_ptr.h>
+ #include <bits/nested_exception.h>
+ #endif
+diff --git a/libstdc++-v3/libsupc++/exception_ptr.h b/libstdc++-v3/libsupc++/exception_ptr.h
+index 9ba0de4e3..a3eb2776b 100644
+--- a/libstdc++-v3/libsupc++/exception_ptr.h
++++ b/libstdc++-v3/libsupc++/exception_ptr.h
+@@ -36,9 +36,11 @@
+ #include <bits/c++config.h>
+ #include <bits/exception_defines.h>
+ 
++#if !(defined(__ARM_EABI__) && !defined(__ARM_PCS_VFP))
+ #if ATOMIC_INT_LOCK_FREE < 2
+ #  error This platform does not support exception propagation.
+ #endif
++#endif
+ 
+ extern "C++" {
+ 
+diff --git a/libstdc++-v3/libsupc++/guard.cc b/libstdc++-v3/libsupc++/guard.cc
+index 54f745876..59afcc847 100644
+--- a/libstdc++-v3/libsupc++/guard.cc
++++ b/libstdc++-v3/libsupc++/guard.cc
+@@ -30,6 +30,7 @@
+ #include <new>
+ #include <ext/atomicity.h>
+ #include <ext/concurrence.h>
++#include <bits/atomic_lockfree_defines.h>
+ #if defined(__GTHREADS) && defined(__GTHREAD_HAS_COND) \
+   && (ATOMIC_INT_LOCK_FREE > 1) && defined(_GLIBCXX_HAVE_LINUX_FUTEX)
+ # include <climits>
+diff --git a/libstdc++-v3/libsupc++/nested_exception.cc b/libstdc++-v3/libsupc++/nested_exception.cc
+index 4540bfe75..cf7c9dd68 100644
+--- a/libstdc++-v3/libsupc++/nested_exception.cc
++++ b/libstdc++-v3/libsupc++/nested_exception.cc
+@@ -25,7 +25,5 @@
+ 
+ namespace std 
+ {
+-#if ATOMIC_INT_LOCK_FREE > 1
+   nested_exception::~nested_exception() noexcept = default;
+-#endif
+ } // namespace std
+diff --git a/libstdc++-v3/libsupc++/nested_exception.h b/libstdc++-v3/libsupc++/nested_exception.h
+index 7e2b2f264..7b3c0f051 100644
+--- a/libstdc++-v3/libsupc++/nested_exception.h
++++ b/libstdc++-v3/libsupc++/nested_exception.h
+@@ -38,9 +38,11 @@
+ 
+ #include <bits/c++config.h>
+ 
++#if !(defined(__ARM_EABI__) && !defined(__ARM_PCS_VFP))
+ #if ATOMIC_INT_LOCK_FREE < 2
+ #  error This platform does not support exception propagation.
+ #endif
++#endif
+ 
+ extern "C++" {
+ 
+diff --git a/libstdc++-v3/src/c++11/future.cc b/libstdc++-v3/src/c++11/future.cc
+index 6ffab18d4..bde78270a 100644
+--- a/libstdc++-v3/src/c++11/future.cc
++++ b/libstdc++-v3/src/c++11/future.cc
+@@ -77,8 +77,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
+   const char*
+   future_error::what() const noexcept { return _M_code.message().c_str(); }
+ 
+-#if defined(_GLIBCXX_HAS_GTHREADS) && defined(_GLIBCXX_USE_C99_STDINT_TR1) \
+-  && (ATOMIC_INT_LOCK_FREE > 1)
++#if defined(_GLIBCXX_HAS_GTHREADS) && defined(_GLIBCXX_USE_C99_STDINT_TR1)
+   __future_base::_Result_base::_Result_base() = default;
+ 
+   __future_base::_Result_base::~_Result_base() = default;
+diff --git a/libstdc++-v3/testsuite/18_support/exception_ptr/40296.cc b/libstdc++-v3/testsuite/18_support/exception_ptr/40296.cc
+index d0538aaff..1b7c2d3ed 100644
+--- a/libstdc++-v3/testsuite/18_support/exception_ptr/40296.cc
++++ b/libstdc++-v3/testsuite/18_support/exception_ptr/40296.cc
+@@ -1,6 +1,5 @@
+ // { dg-do compile }
+ // { dg-options "-std=gnu++0x" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2009-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/18_support/exception_ptr/60612-terminate.cc b/libstdc++-v3/testsuite/18_support/exception_ptr/60612-terminate.cc
+index 19f8fd23f..26f0a46e7 100644
+--- a/libstdc++-v3/testsuite/18_support/exception_ptr/60612-terminate.cc
++++ b/libstdc++-v3/testsuite/18_support/exception_ptr/60612-terminate.cc
+@@ -1,5 +1,4 @@
+ // { dg-options "-std=gnu++11" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/18_support/exception_ptr/60612-unexpected.cc b/libstdc++-v3/testsuite/18_support/exception_ptr/60612-unexpected.cc
+index 708f7486b..71b30457b 100644
+--- a/libstdc++-v3/testsuite/18_support/exception_ptr/60612-unexpected.cc
++++ b/libstdc++-v3/testsuite/18_support/exception_ptr/60612-unexpected.cc
+@@ -1,5 +1,4 @@
+ // { dg-options "-std=gnu++11" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/18_support/exception_ptr/62258.cc b/libstdc++-v3/testsuite/18_support/exception_ptr/62258.cc
+index 3734f193b..d9eb9fc8d 100644
+--- a/libstdc++-v3/testsuite/18_support/exception_ptr/62258.cc
++++ b/libstdc++-v3/testsuite/18_support/exception_ptr/62258.cc
+@@ -1,5 +1,4 @@
+ // { dg-options "-std=gnu++11" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2015 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/18_support/exception_ptr/current_exception.cc b/libstdc++-v3/testsuite/18_support/exception_ptr/current_exception.cc
+index 42fa024e0..af4fbdaae 100644
+--- a/libstdc++-v3/testsuite/18_support/exception_ptr/current_exception.cc
++++ b/libstdc++-v3/testsuite/18_support/exception_ptr/current_exception.cc
+@@ -1,5 +1,4 @@
+ // { dg-options "-std=gnu++0x" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // 2008-05-25  Sebastian Redl  <sebastian.redl@getdesigned.at>
+ 
+diff --git a/libstdc++-v3/testsuite/18_support/exception_ptr/lifespan.cc b/libstdc++-v3/testsuite/18_support/exception_ptr/lifespan.cc
+index f7377d35b..0c7ac7be0 100644
+--- a/libstdc++-v3/testsuite/18_support/exception_ptr/lifespan.cc
++++ b/libstdc++-v3/testsuite/18_support/exception_ptr/lifespan.cc
+@@ -1,5 +1,4 @@
+ // { dg-options "-std=gnu++0x" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // 2008-05-25  Sebastian Redl  <sebastian.redl@getdesigned.at>
+ 
+diff --git a/libstdc++-v3/testsuite/18_support/exception_ptr/make_exception_ptr.cc b/libstdc++-v3/testsuite/18_support/exception_ptr/make_exception_ptr.cc
+index 62ed4f75e..a73f4fa34 100644
+--- a/libstdc++-v3/testsuite/18_support/exception_ptr/make_exception_ptr.cc
++++ b/libstdc++-v3/testsuite/18_support/exception_ptr/make_exception_ptr.cc
+@@ -1,5 +1,4 @@
+ // { dg-options "-std=gnu++0x" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2010-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/18_support/exception_ptr/move.cc b/libstdc++-v3/testsuite/18_support/exception_ptr/move.cc
+index 9ee2c2dd7..f40564dcc 100644
+--- a/libstdc++-v3/testsuite/18_support/exception_ptr/move.cc
++++ b/libstdc++-v3/testsuite/18_support/exception_ptr/move.cc
+@@ -1,5 +1,4 @@
+ // { dg-options "-std=gnu++0x" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2009-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/18_support/exception_ptr/requirements.cc b/libstdc++-v3/testsuite/18_support/exception_ptr/requirements.cc
+index e342e5442..5b24b18a0 100644
+--- a/libstdc++-v3/testsuite/18_support/exception_ptr/requirements.cc
++++ b/libstdc++-v3/testsuite/18_support/exception_ptr/requirements.cc
+@@ -1,5 +1,4 @@
+ // { dg-options "-std=gnu++0x" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2010-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/18_support/exception_ptr/requirements_neg.cc b/libstdc++-v3/testsuite/18_support/exception_ptr/requirements_neg.cc
+index 6a5d52c11..f119d58d3 100644
+--- a/libstdc++-v3/testsuite/18_support/exception_ptr/requirements_neg.cc
++++ b/libstdc++-v3/testsuite/18_support/exception_ptr/requirements_neg.cc
+@@ -1,6 +1,5 @@
+ // { dg-do compile }
+ // { dg-options "-std=gnu++0x" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2010-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/18_support/exception_ptr/rethrow_exception.cc b/libstdc++-v3/testsuite/18_support/exception_ptr/rethrow_exception.cc
+index 21e345e6d..13508b824 100644
+--- a/libstdc++-v3/testsuite/18_support/exception_ptr/rethrow_exception.cc
++++ b/libstdc++-v3/testsuite/18_support/exception_ptr/rethrow_exception.cc
+@@ -1,5 +1,4 @@
+ // { dg-options "-std=gnu++0x" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // 2008-05-25  Sebastian Redl  <sebastian.redl@getdesigned.at>
+ 
+diff --git a/libstdc++-v3/testsuite/18_support/nested_exception/51438.cc b/libstdc++-v3/testsuite/18_support/nested_exception/51438.cc
+index 45c3fa357..fc0d6cb2c 100644
+--- a/libstdc++-v3/testsuite/18_support/nested_exception/51438.cc
++++ b/libstdc++-v3/testsuite/18_support/nested_exception/51438.cc
+@@ -1,6 +1,5 @@
+ // { dg-do compile }
+ // { dg-options "-std=gnu++0x" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2011-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/18_support/nested_exception/cons.cc b/libstdc++-v3/testsuite/18_support/nested_exception/cons.cc
+index 3d3ad0f91..68185ea15 100644
+--- a/libstdc++-v3/testsuite/18_support/nested_exception/cons.cc
++++ b/libstdc++-v3/testsuite/18_support/nested_exception/cons.cc
+@@ -1,5 +1,4 @@
+ // { dg-options "-std=gnu++0x" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2009-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/18_support/nested_exception/nested_ptr.cc b/libstdc++-v3/testsuite/18_support/nested_exception/nested_ptr.cc
+index fcac82ef2..94e3e435f 100644
+--- a/libstdc++-v3/testsuite/18_support/nested_exception/nested_ptr.cc
++++ b/libstdc++-v3/testsuite/18_support/nested_exception/nested_ptr.cc
+@@ -1,5 +1,4 @@
+ // { dg-options "-std=gnu++0x" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2009-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/18_support/nested_exception/rethrow_if_nested.cc b/libstdc++-v3/testsuite/18_support/nested_exception/rethrow_if_nested.cc
+index c3c0031a9..3a2170671 100644
+--- a/libstdc++-v3/testsuite/18_support/nested_exception/rethrow_if_nested.cc
++++ b/libstdc++-v3/testsuite/18_support/nested_exception/rethrow_if_nested.cc
+@@ -1,5 +1,4 @@
+ // { dg-options "-std=gnu++0x" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2009-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/18_support/nested_exception/rethrow_nested.cc b/libstdc++-v3/testsuite/18_support/nested_exception/rethrow_nested.cc
+index 8182fd4ad..a40eb5968 100644
+--- a/libstdc++-v3/testsuite/18_support/nested_exception/rethrow_nested.cc
++++ b/libstdc++-v3/testsuite/18_support/nested_exception/rethrow_nested.cc
+@@ -1,5 +1,4 @@
+ // { dg-options "-std=gnu++0x" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2009-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/18_support/nested_exception/throw_with_nested.cc b/libstdc++-v3/testsuite/18_support/nested_exception/throw_with_nested.cc
+index 95853f92a..be6895035 100644
+--- a/libstdc++-v3/testsuite/18_support/nested_exception/throw_with_nested.cc
++++ b/libstdc++-v3/testsuite/18_support/nested_exception/throw_with_nested.cc
+@@ -1,5 +1,4 @@
+ // { dg-options "-std=gnu++0x" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2009-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/30_threads/async/42819.cc b/libstdc++-v3/testsuite/30_threads/async/42819.cc
+index 587403556..79757652c 100644
+--- a/libstdc++-v3/testsuite/30_threads/async/42819.cc
++++ b/libstdc++-v3/testsuite/30_threads/async/42819.cc
+@@ -4,7 +4,6 @@
+ // { dg-options " -std=gnu++0x " { target *-*-cygwin *-*-darwin* } }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2010-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/30_threads/async/49668.cc b/libstdc++-v3/testsuite/30_threads/async/49668.cc
+index a13a1a22d..d91f348de 100644
+--- a/libstdc++-v3/testsuite/30_threads/async/49668.cc
++++ b/libstdc++-v3/testsuite/30_threads/async/49668.cc
+@@ -4,7 +4,6 @@
+ // { dg-options " -std=gnu++0x " { target *-*-cygwin *-*-darwin* } }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2011-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/30_threads/async/54297.cc b/libstdc++-v3/testsuite/30_threads/async/54297.cc
+index d760363ae..efeb02788 100644
+--- a/libstdc++-v3/testsuite/30_threads/async/54297.cc
++++ b/libstdc++-v3/testsuite/30_threads/async/54297.cc
+@@ -4,7 +4,6 @@
+ // { dg-options " -std=gnu++0x " { target *-*-cygwin *-*-darwin* } }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ // { dg-require-sleep "" }
+ 
+ // Copyright (C) 2012-2014 Free Software Foundation, Inc.
+diff --git a/libstdc++-v3/testsuite/30_threads/async/any.cc b/libstdc++-v3/testsuite/30_threads/async/any.cc
+index 733f345b3..79d3c067e 100644
+--- a/libstdc++-v3/testsuite/30_threads/async/any.cc
++++ b/libstdc++-v3/testsuite/30_threads/async/any.cc
+@@ -4,7 +4,6 @@
+ // { dg-options " -std=gnu++0x " { target *-*-cygwin *-*-darwin* } }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2010-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/30_threads/async/async.cc b/libstdc++-v3/testsuite/30_threads/async/async.cc
+index 3bd3da129..da73db3ca 100644
+--- a/libstdc++-v3/testsuite/30_threads/async/async.cc
++++ b/libstdc++-v3/testsuite/30_threads/async/async.cc
+@@ -4,7 +4,6 @@
+ // { dg-options " -std=gnu++0x " { target *-*-cygwin *-*-darwin* } }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2010-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/30_threads/async/forced_unwind.cc b/libstdc++-v3/testsuite/30_threads/async/forced_unwind.cc
+index 7b0a49280..a34a0a665 100644
+--- a/libstdc++-v3/testsuite/30_threads/async/forced_unwind.cc
++++ b/libstdc++-v3/testsuite/30_threads/async/forced_unwind.cc
+@@ -2,7 +2,6 @@
+ // { dg-options " -std=gnu++11 -pthread" { target *-*-linux* *-*-gnu* } }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/30_threads/async/launch.cc b/libstdc++-v3/testsuite/30_threads/async/launch.cc
+index 2dfaf571f..145b5798b 100644
+--- a/libstdc++-v3/testsuite/30_threads/async/launch.cc
++++ b/libstdc++-v3/testsuite/30_threads/async/launch.cc
+@@ -4,7 +4,6 @@
+ // { dg-options " -std=gnu++0x " { target *-*-cygwin *-*-darwin* } }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2011-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/30_threads/async/sync.cc b/libstdc++-v3/testsuite/30_threads/async/sync.cc
+index 89ae51423..ac5654f0c 100644
+--- a/libstdc++-v3/testsuite/30_threads/async/sync.cc
++++ b/libstdc++-v3/testsuite/30_threads/async/sync.cc
+@@ -4,7 +4,6 @@
+ // { dg-options " -std=gnu++0x " { target *-*-cygwin *-*-darwin* } }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2010-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/30_threads/future/cons/assign_neg.cc b/libstdc++-v3/testsuite/30_threads/future/cons/assign_neg.cc
+index e24cad1a7..545a6165e 100644
+--- a/libstdc++-v3/testsuite/30_threads/future/cons/assign_neg.cc
++++ b/libstdc++-v3/testsuite/30_threads/future/cons/assign_neg.cc
+@@ -2,7 +2,6 @@
+ // { dg-options "-std=gnu++0x" }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2009-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/30_threads/future/cons/constexpr.cc b/libstdc++-v3/testsuite/30_threads/future/cons/constexpr.cc
+index be31f91bb..2a49f3bbd 100644
+--- a/libstdc++-v3/testsuite/30_threads/future/cons/constexpr.cc
++++ b/libstdc++-v3/testsuite/30_threads/future/cons/constexpr.cc
+@@ -2,7 +2,6 @@
+ // { dg-options "-std=gnu++0x -fno-inline -save-temps -g0" }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ // { dg-final { scan-assembler-not "_ZNSt6futureIvEC2Ev" } }
+ // { dg-final { scan-assembler-not "_ZNSt6futureIiEC2Ev" } }
+ 
+diff --git a/libstdc++-v3/testsuite/30_threads/future/cons/copy_neg.cc b/libstdc++-v3/testsuite/30_threads/future/cons/copy_neg.cc
+index 03edc22d0..b9c1954d7 100644
+--- a/libstdc++-v3/testsuite/30_threads/future/cons/copy_neg.cc
++++ b/libstdc++-v3/testsuite/30_threads/future/cons/copy_neg.cc
+@@ -2,7 +2,6 @@
+ // { dg-options "-std=gnu++0x" }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2009-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/30_threads/future/cons/default.cc b/libstdc++-v3/testsuite/30_threads/future/cons/default.cc
+index 32183bc33..f4773c95f 100644
+--- a/libstdc++-v3/testsuite/30_threads/future/cons/default.cc
++++ b/libstdc++-v3/testsuite/30_threads/future/cons/default.cc
+@@ -1,7 +1,6 @@
+ // { dg-options "-std=gnu++0x" }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2010-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/30_threads/future/cons/move.cc b/libstdc++-v3/testsuite/30_threads/future/cons/move.cc
+index d8d4f492a..675e9fe66 100644
+--- a/libstdc++-v3/testsuite/30_threads/future/cons/move.cc
++++ b/libstdc++-v3/testsuite/30_threads/future/cons/move.cc
+@@ -4,7 +4,6 @@
+ // { dg-options " -std=gnu++0x " { target *-*-cygwin *-*-darwin* } }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2009-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/30_threads/future/cons/move_assign.cc b/libstdc++-v3/testsuite/30_threads/future/cons/move_assign.cc
+index 644cc6c19..4e2f6b15a 100644
+--- a/libstdc++-v3/testsuite/30_threads/future/cons/move_assign.cc
++++ b/libstdc++-v3/testsuite/30_threads/future/cons/move_assign.cc
+@@ -1,7 +1,6 @@
+ // { dg-options "-std=gnu++0x" }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2010-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/30_threads/future/members/45133.cc b/libstdc++-v3/testsuite/30_threads/future/members/45133.cc
+index a1685f78d..215422cc4 100644
+--- a/libstdc++-v3/testsuite/30_threads/future/members/45133.cc
++++ b/libstdc++-v3/testsuite/30_threads/future/members/45133.cc
+@@ -4,7 +4,6 @@
+ // { dg-options " -std=gnu++0x " { target *-*-cygwin *-*-darwin* } }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2010-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/30_threads/future/members/get.cc b/libstdc++-v3/testsuite/30_threads/future/members/get.cc
+index 367b00912..6b561a797 100644
+--- a/libstdc++-v3/testsuite/30_threads/future/members/get.cc
++++ b/libstdc++-v3/testsuite/30_threads/future/members/get.cc
+@@ -4,7 +4,6 @@
+ // { dg-options " -std=gnu++0x " { target *-*-cygwin *-*-darwin* } }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2009-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/30_threads/future/members/get2.cc b/libstdc++-v3/testsuite/30_threads/future/members/get2.cc
+index 6e54df075..c524d08e3 100644
+--- a/libstdc++-v3/testsuite/30_threads/future/members/get2.cc
++++ b/libstdc++-v3/testsuite/30_threads/future/members/get2.cc
+@@ -4,7 +4,6 @@
+ // { dg-options " -std=gnu++0x " { target *-*-cygwin *-*-darwin* } }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2009-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/30_threads/future/members/share.cc b/libstdc++-v3/testsuite/30_threads/future/members/share.cc
+index 074404a49..ae386a31b 100644
+--- a/libstdc++-v3/testsuite/30_threads/future/members/share.cc
++++ b/libstdc++-v3/testsuite/30_threads/future/members/share.cc
+@@ -4,7 +4,6 @@
+ // { dg-options " -std=gnu++0x " { target *-*-cygwin *-*-darwin* } }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2011-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/30_threads/future/members/valid.cc b/libstdc++-v3/testsuite/30_threads/future/members/valid.cc
+index de1446ad1..9bf16e3fc 100644
+--- a/libstdc++-v3/testsuite/30_threads/future/members/valid.cc
++++ b/libstdc++-v3/testsuite/30_threads/future/members/valid.cc
+@@ -4,7 +4,6 @@
+ // { dg-options " -std=gnu++0x " { target *-*-cygwin *-*-darwin* } }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2010-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/30_threads/future/members/wait.cc b/libstdc++-v3/testsuite/30_threads/future/members/wait.cc
+index f2fb97803..c74528820 100644
+--- a/libstdc++-v3/testsuite/30_threads/future/members/wait.cc
++++ b/libstdc++-v3/testsuite/30_threads/future/members/wait.cc
+@@ -4,7 +4,6 @@
+ // { dg-options " -std=gnu++0x " { target *-*-cygwin *-*-darwin* } }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2009-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/30_threads/future/members/wait_for.cc b/libstdc++-v3/testsuite/30_threads/future/members/wait_for.cc
+index 05623c715..3d6a2c2be 100644
+--- a/libstdc++-v3/testsuite/30_threads/future/members/wait_for.cc
++++ b/libstdc++-v3/testsuite/30_threads/future/members/wait_for.cc
+@@ -4,7 +4,6 @@
+ // { dg-options " -std=gnu++0x " { target *-*-cygwin *-*-darwin* } }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2009-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/30_threads/future/members/wait_until.cc b/libstdc++-v3/testsuite/30_threads/future/members/wait_until.cc
+index 88ff4c48f..00bcfe741 100644
+--- a/libstdc++-v3/testsuite/30_threads/future/members/wait_until.cc
++++ b/libstdc++-v3/testsuite/30_threads/future/members/wait_until.cc
+@@ -4,7 +4,6 @@
+ // { dg-options " -std=gnu++0x " { target *-*-cygwin *-*-darwin* } }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2009-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/30_threads/future/requirements/explicit_instantiation.cc b/libstdc++-v3/testsuite/30_threads/future/requirements/explicit_instantiation.cc
+index d730a64b1..451688725 100644
+--- a/libstdc++-v3/testsuite/30_threads/future/requirements/explicit_instantiation.cc
++++ b/libstdc++-v3/testsuite/30_threads/future/requirements/explicit_instantiation.cc
+@@ -2,7 +2,6 @@
+ // { dg-options "-std=gnu++0x" }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2009-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/30_threads/headers/future/types_std_c++0x.cc b/libstdc++-v3/testsuite/30_threads/headers/future/types_std_c++0x.cc
+index 4732c44b1..8560e8cdb 100644
+--- a/libstdc++-v3/testsuite/30_threads/headers/future/types_std_c++0x.cc
++++ b/libstdc++-v3/testsuite/30_threads/headers/future/types_std_c++0x.cc
+@@ -2,7 +2,6 @@
+ // { dg-options "-std=gnu++0x" }
+ // { dg-require-cstdint "" } 
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2009-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/30_threads/packaged_task/49668.cc b/libstdc++-v3/testsuite/30_threads/packaged_task/49668.cc
+index 05fac3dce..08b6d701b 100644
+--- a/libstdc++-v3/testsuite/30_threads/packaged_task/49668.cc
++++ b/libstdc++-v3/testsuite/30_threads/packaged_task/49668.cc
+@@ -4,7 +4,6 @@
+ // { dg-options " -std=gnu++0x " { target *-*-cygwin *-*-darwin* } }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2011-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/30_threads/packaged_task/60564.cc b/libstdc++-v3/testsuite/30_threads/packaged_task/60564.cc
+index 956d506d7..0ad95d9eb 100644
+--- a/libstdc++-v3/testsuite/30_threads/packaged_task/60564.cc
++++ b/libstdc++-v3/testsuite/30_threads/packaged_task/60564.cc
+@@ -4,7 +4,6 @@
+ // { dg-options " -std=gnu++11 " { target *-*-cygwin *-*-darwin* } }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/30_threads/packaged_task/cons/1.cc b/libstdc++-v3/testsuite/30_threads/packaged_task/cons/1.cc
+index 3128b6356..ff689ae88 100644
+--- a/libstdc++-v3/testsuite/30_threads/packaged_task/cons/1.cc
++++ b/libstdc++-v3/testsuite/30_threads/packaged_task/cons/1.cc
+@@ -4,7 +4,6 @@
+ // { dg-options " -std=gnu++0x " { target *-*-cygwin *-*-darwin* } }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2009-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/30_threads/packaged_task/cons/2.cc b/libstdc++-v3/testsuite/30_threads/packaged_task/cons/2.cc
+index 62f951e01..6a9c755f0 100644
+--- a/libstdc++-v3/testsuite/30_threads/packaged_task/cons/2.cc
++++ b/libstdc++-v3/testsuite/30_threads/packaged_task/cons/2.cc
+@@ -4,7 +4,6 @@
+ // { dg-options " -std=gnu++0x " { target *-*-cygwin *-*-darwin* } }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2009-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/30_threads/packaged_task/cons/3.cc b/libstdc++-v3/testsuite/30_threads/packaged_task/cons/3.cc
+index 9238753e7..e8ce0ebfa 100644
+--- a/libstdc++-v3/testsuite/30_threads/packaged_task/cons/3.cc
++++ b/libstdc++-v3/testsuite/30_threads/packaged_task/cons/3.cc
+@@ -4,7 +4,6 @@
+ // { dg-options " -std=gnu++0x " { target *-*-cygwin *-*-darwin* } }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2011-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/30_threads/packaged_task/cons/56492.cc b/libstdc++-v3/testsuite/30_threads/packaged_task/cons/56492.cc
+index c256565fd..232e11d44 100644
+--- a/libstdc++-v3/testsuite/30_threads/packaged_task/cons/56492.cc
++++ b/libstdc++-v3/testsuite/30_threads/packaged_task/cons/56492.cc
+@@ -4,7 +4,6 @@
+ // { dg-options " -std=gnu++11 " { target *-*-cygwin *-*-darwin* } }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2013-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/30_threads/packaged_task/cons/alloc.cc b/libstdc++-v3/testsuite/30_threads/packaged_task/cons/alloc.cc
+index 9de283e9c..e2a1f7400 100644
+--- a/libstdc++-v3/testsuite/30_threads/packaged_task/cons/alloc.cc
++++ b/libstdc++-v3/testsuite/30_threads/packaged_task/cons/alloc.cc
+@@ -4,7 +4,6 @@
+ // { dg-options " -std=gnu++0x " { target *-*-cygwin *-*-darwin* } }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2010-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/30_threads/packaged_task/cons/alloc2.cc b/libstdc++-v3/testsuite/30_threads/packaged_task/cons/alloc2.cc
+index 3c27d6176..e91125472 100644
+--- a/libstdc++-v3/testsuite/30_threads/packaged_task/cons/alloc2.cc
++++ b/libstdc++-v3/testsuite/30_threads/packaged_task/cons/alloc2.cc
+@@ -2,7 +2,6 @@
+ // { dg-options "-std=gnu++0x" }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2011-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/30_threads/packaged_task/cons/alloc_min.cc b/libstdc++-v3/testsuite/30_threads/packaged_task/cons/alloc_min.cc
+index 904000bb6..788670c85 100644
+--- a/libstdc++-v3/testsuite/30_threads/packaged_task/cons/alloc_min.cc
++++ b/libstdc++-v3/testsuite/30_threads/packaged_task/cons/alloc_min.cc
+@@ -2,7 +2,6 @@
+ // { dg-options "-std=gnu++0x" }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2011-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/30_threads/packaged_task/cons/assign_neg.cc b/libstdc++-v3/testsuite/30_threads/packaged_task/cons/assign_neg.cc
+index c7a97f5c4..bed059fcf 100644
+--- a/libstdc++-v3/testsuite/30_threads/packaged_task/cons/assign_neg.cc
++++ b/libstdc++-v3/testsuite/30_threads/packaged_task/cons/assign_neg.cc
+@@ -2,7 +2,6 @@
+ // { dg-options "-std=gnu++0x" }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2009-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/30_threads/packaged_task/cons/copy_neg.cc b/libstdc++-v3/testsuite/30_threads/packaged_task/cons/copy_neg.cc
+index cb75a3eb0..d4483a4d8 100644
+--- a/libstdc++-v3/testsuite/30_threads/packaged_task/cons/copy_neg.cc
++++ b/libstdc++-v3/testsuite/30_threads/packaged_task/cons/copy_neg.cc
+@@ -2,7 +2,6 @@
+ // { dg-options "-std=gnu++0x" }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2009-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/30_threads/packaged_task/cons/move.cc b/libstdc++-v3/testsuite/30_threads/packaged_task/cons/move.cc
+index 263e0f050..86f01bbd4 100644
+--- a/libstdc++-v3/testsuite/30_threads/packaged_task/cons/move.cc
++++ b/libstdc++-v3/testsuite/30_threads/packaged_task/cons/move.cc
+@@ -4,7 +4,6 @@
+ // { dg-options " -std=gnu++0x " { target *-*-cygwin *-*-darwin* } }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2009-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/30_threads/packaged_task/cons/move_assign.cc b/libstdc++-v3/testsuite/30_threads/packaged_task/cons/move_assign.cc
+index dcde7ef4f..0c7d683dd 100644
+--- a/libstdc++-v3/testsuite/30_threads/packaged_task/cons/move_assign.cc
++++ b/libstdc++-v3/testsuite/30_threads/packaged_task/cons/move_assign.cc
+@@ -4,7 +4,6 @@
+ // { dg-options " -std=gnu++0x " { target *-*-cygwin *-*-darwin* } }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2009-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/30_threads/packaged_task/forced_unwind.cc b/libstdc++-v3/testsuite/30_threads/packaged_task/forced_unwind.cc
+index 235ab178f..fdf472837 100644
+--- a/libstdc++-v3/testsuite/30_threads/packaged_task/forced_unwind.cc
++++ b/libstdc++-v3/testsuite/30_threads/packaged_task/forced_unwind.cc
+@@ -2,7 +2,6 @@
+ // { dg-options " -std=gnu++11 -pthread" { target *-*-linux* *-*-gnu* } }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/30_threads/packaged_task/members/get_future.cc b/libstdc++-v3/testsuite/30_threads/packaged_task/members/get_future.cc
+index f12ab2d9d..cd708817c 100644
+--- a/libstdc++-v3/testsuite/30_threads/packaged_task/members/get_future.cc
++++ b/libstdc++-v3/testsuite/30_threads/packaged_task/members/get_future.cc
+@@ -4,7 +4,6 @@
+ // { dg-options " -std=gnu++0x " { target *-*-cygwin *-*-darwin* } }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2009-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/30_threads/packaged_task/members/get_future2.cc b/libstdc++-v3/testsuite/30_threads/packaged_task/members/get_future2.cc
+index 544a0c371..3b3eea2f8 100644
+--- a/libstdc++-v3/testsuite/30_threads/packaged_task/members/get_future2.cc
++++ b/libstdc++-v3/testsuite/30_threads/packaged_task/members/get_future2.cc
+@@ -4,7 +4,6 @@
+ // { dg-options " -std=gnu++0x " { target *-*-cygwin *-*-darwin* } }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2009-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/30_threads/packaged_task/members/invoke.cc b/libstdc++-v3/testsuite/30_threads/packaged_task/members/invoke.cc
+index 26d2267df..a51091571 100644
+--- a/libstdc++-v3/testsuite/30_threads/packaged_task/members/invoke.cc
++++ b/libstdc++-v3/testsuite/30_threads/packaged_task/members/invoke.cc
+@@ -4,7 +4,6 @@
+ // { dg-options " -std=gnu++0x " { target *-*-cygwin *-*-darwin* } }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2009-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/30_threads/packaged_task/members/invoke2.cc b/libstdc++-v3/testsuite/30_threads/packaged_task/members/invoke2.cc
+index 4afe37f1a..19f1c3d63 100644
+--- a/libstdc++-v3/testsuite/30_threads/packaged_task/members/invoke2.cc
++++ b/libstdc++-v3/testsuite/30_threads/packaged_task/members/invoke2.cc
+@@ -4,7 +4,6 @@
+ // { dg-options " -std=gnu++0x " { target *-*-cygwin *-*-darwin* } }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2009-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/30_threads/packaged_task/members/invoke3.cc b/libstdc++-v3/testsuite/30_threads/packaged_task/members/invoke3.cc
+index b977b84aa..b6f2c1d82 100644
+--- a/libstdc++-v3/testsuite/30_threads/packaged_task/members/invoke3.cc
++++ b/libstdc++-v3/testsuite/30_threads/packaged_task/members/invoke3.cc
+@@ -4,7 +4,6 @@
+ // { dg-options " -std=gnu++0x " { target *-*-cygwin *-*-darwin* } }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2009-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/30_threads/packaged_task/members/invoke4.cc b/libstdc++-v3/testsuite/30_threads/packaged_task/members/invoke4.cc
+index 3b0104301..2c113e02d 100644
+--- a/libstdc++-v3/testsuite/30_threads/packaged_task/members/invoke4.cc
++++ b/libstdc++-v3/testsuite/30_threads/packaged_task/members/invoke4.cc
+@@ -4,7 +4,6 @@
+ // { dg-options " -std=gnu++0x " { target *-*-cygwin *-*-darwin* } }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2009-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/30_threads/packaged_task/members/invoke5.cc b/libstdc++-v3/testsuite/30_threads/packaged_task/members/invoke5.cc
+index bb991f0fe..94917bafe 100644
+--- a/libstdc++-v3/testsuite/30_threads/packaged_task/members/invoke5.cc
++++ b/libstdc++-v3/testsuite/30_threads/packaged_task/members/invoke5.cc
+@@ -4,7 +4,6 @@
+ // { dg-options " -std=gnu++0x " { target *-*-cygwin *-*-darwin* } }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2009-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/30_threads/packaged_task/members/reset.cc b/libstdc++-v3/testsuite/30_threads/packaged_task/members/reset.cc
+index 331c3a4b0..d8ddd6692 100644
+--- a/libstdc++-v3/testsuite/30_threads/packaged_task/members/reset.cc
++++ b/libstdc++-v3/testsuite/30_threads/packaged_task/members/reset.cc
+@@ -4,7 +4,6 @@
+ // { dg-options " -std=gnu++0x " { target *-*-cygwin *-*-darwin* } }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2009-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/30_threads/packaged_task/members/reset2.cc b/libstdc++-v3/testsuite/30_threads/packaged_task/members/reset2.cc
+index 6b418f028..96a2562eb 100644
+--- a/libstdc++-v3/testsuite/30_threads/packaged_task/members/reset2.cc
++++ b/libstdc++-v3/testsuite/30_threads/packaged_task/members/reset2.cc
+@@ -4,7 +4,6 @@
+ // { dg-options " -std=gnu++0x " { target *-*-cygwin *-*-darwin* } }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2009-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/30_threads/packaged_task/members/swap.cc b/libstdc++-v3/testsuite/30_threads/packaged_task/members/swap.cc
+index d68aa5472..88a07ce32 100644
+--- a/libstdc++-v3/testsuite/30_threads/packaged_task/members/swap.cc
++++ b/libstdc++-v3/testsuite/30_threads/packaged_task/members/swap.cc
+@@ -4,7 +4,6 @@
+ // { dg-options " -std=gnu++0x " { target *-*-cygwin *-*-darwin* } }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2009-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/30_threads/packaged_task/members/valid.cc b/libstdc++-v3/testsuite/30_threads/packaged_task/members/valid.cc
+index 6515f9b87..4caa96c6c 100644
+--- a/libstdc++-v3/testsuite/30_threads/packaged_task/members/valid.cc
++++ b/libstdc++-v3/testsuite/30_threads/packaged_task/members/valid.cc
+@@ -4,7 +4,6 @@
+ // { dg-options " -std=gnu++0x " { target *-*-cygwin *-*-darwin* } }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2011-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/30_threads/packaged_task/requirements/explicit_instantiation.cc b/libstdc++-v3/testsuite/30_threads/packaged_task/requirements/explicit_instantiation.cc
+index 55be22dd6..1827acff7 100644
+--- a/libstdc++-v3/testsuite/30_threads/packaged_task/requirements/explicit_instantiation.cc
++++ b/libstdc++-v3/testsuite/30_threads/packaged_task/requirements/explicit_instantiation.cc
+@@ -2,7 +2,6 @@
+ // { dg-options "-std=gnu++0x" }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2009-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/30_threads/packaged_task/uses_allocator.cc b/libstdc++-v3/testsuite/30_threads/packaged_task/uses_allocator.cc
+index 73abd6242..71d85840d 100644
+--- a/libstdc++-v3/testsuite/30_threads/packaged_task/uses_allocator.cc
++++ b/libstdc++-v3/testsuite/30_threads/packaged_task/uses_allocator.cc
+@@ -2,7 +2,6 @@
+ // { dg-options "-std=gnu++0x" }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2011-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/30_threads/promise/60966.cc b/libstdc++-v3/testsuite/30_threads/promise/60966.cc
+index 269268b98..5b26f03bc 100644
+--- a/libstdc++-v3/testsuite/30_threads/promise/60966.cc
++++ b/libstdc++-v3/testsuite/30_threads/promise/60966.cc
+@@ -4,7 +4,6 @@
+ // { dg-options " -std=gnu++11 " { target *-*-cygwin *-*-darwin* } }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/30_threads/promise/cons/1.cc b/libstdc++-v3/testsuite/30_threads/promise/cons/1.cc
+index 891306016..ea99922fb 100644
+--- a/libstdc++-v3/testsuite/30_threads/promise/cons/1.cc
++++ b/libstdc++-v3/testsuite/30_threads/promise/cons/1.cc
+@@ -4,7 +4,6 @@
+ // { dg-options " -std=gnu++0x " { target *-*-cygwin *-*-darwin* } }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2009-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/30_threads/promise/cons/alloc.cc b/libstdc++-v3/testsuite/30_threads/promise/cons/alloc.cc
+index 10fa8824c..2371b3dea 100644
+--- a/libstdc++-v3/testsuite/30_threads/promise/cons/alloc.cc
++++ b/libstdc++-v3/testsuite/30_threads/promise/cons/alloc.cc
+@@ -4,7 +4,6 @@
+ // { dg-options " -std=gnu++0x " { target *-*-cygwin *-*-darwin* } }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2010-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/30_threads/promise/cons/alloc2.cc b/libstdc++-v3/testsuite/30_threads/promise/cons/alloc2.cc
+index 178f37c30..91c81ec74 100644
+--- a/libstdc++-v3/testsuite/30_threads/promise/cons/alloc2.cc
++++ b/libstdc++-v3/testsuite/30_threads/promise/cons/alloc2.cc
+@@ -2,7 +2,6 @@
+ // { dg-options "-std=gnu++0x" }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2011-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/30_threads/promise/cons/alloc_min.cc b/libstdc++-v3/testsuite/30_threads/promise/cons/alloc_min.cc
+index 297d5a8bd..6286494f5 100644
+--- a/libstdc++-v3/testsuite/30_threads/promise/cons/alloc_min.cc
++++ b/libstdc++-v3/testsuite/30_threads/promise/cons/alloc_min.cc
+@@ -2,7 +2,6 @@
+ // { dg-options "-std=gnu++0x" }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2011-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/30_threads/promise/cons/assign_neg.cc b/libstdc++-v3/testsuite/30_threads/promise/cons/assign_neg.cc
+index 2863856ab..28531c556 100644
+--- a/libstdc++-v3/testsuite/30_threads/promise/cons/assign_neg.cc
++++ b/libstdc++-v3/testsuite/30_threads/promise/cons/assign_neg.cc
+@@ -2,7 +2,6 @@
+ // { dg-options "-std=gnu++0x" }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2009-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/30_threads/promise/cons/copy_neg.cc b/libstdc++-v3/testsuite/30_threads/promise/cons/copy_neg.cc
+index 4a8cce19d..66143167f 100644
+--- a/libstdc++-v3/testsuite/30_threads/promise/cons/copy_neg.cc
++++ b/libstdc++-v3/testsuite/30_threads/promise/cons/copy_neg.cc
+@@ -2,7 +2,6 @@
+ // { dg-options "-std=gnu++0x" }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2009-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/30_threads/promise/cons/move.cc b/libstdc++-v3/testsuite/30_threads/promise/cons/move.cc
+index 7196e93e0..fd3443ac6 100644
+--- a/libstdc++-v3/testsuite/30_threads/promise/cons/move.cc
++++ b/libstdc++-v3/testsuite/30_threads/promise/cons/move.cc
+@@ -4,7 +4,6 @@
+ // { dg-options " -std=gnu++0x " { target *-*-cygwin *-*-darwin* } }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2009-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/30_threads/promise/cons/move_assign.cc b/libstdc++-v3/testsuite/30_threads/promise/cons/move_assign.cc
+index 1bfbd3560..ee6e62a6c 100644
+--- a/libstdc++-v3/testsuite/30_threads/promise/cons/move_assign.cc
++++ b/libstdc++-v3/testsuite/30_threads/promise/cons/move_assign.cc
+@@ -4,7 +4,6 @@
+ // { dg-options " -std=gnu++0x " { target *-*-cygwin *-*-darwin* } }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2009-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/30_threads/promise/members/get_future.cc b/libstdc++-v3/testsuite/30_threads/promise/members/get_future.cc
+index 3f0e37a0a..da7521542 100644
+--- a/libstdc++-v3/testsuite/30_threads/promise/members/get_future.cc
++++ b/libstdc++-v3/testsuite/30_threads/promise/members/get_future.cc
+@@ -4,7 +4,6 @@
+ // { dg-options " -std=gnu++0x " { target *-*-cygwin *-*-darwin* } }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2009-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/30_threads/promise/members/get_future2.cc b/libstdc++-v3/testsuite/30_threads/promise/members/get_future2.cc
+index 6e0814636..72a6312c4 100644
+--- a/libstdc++-v3/testsuite/30_threads/promise/members/get_future2.cc
++++ b/libstdc++-v3/testsuite/30_threads/promise/members/get_future2.cc
+@@ -4,7 +4,6 @@
+ // { dg-options " -std=gnu++0x " { target *-*-cygwin *-*-darwin* } }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2009-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/30_threads/promise/members/set_exception.cc b/libstdc++-v3/testsuite/30_threads/promise/members/set_exception.cc
+index e07893e48..a146eb54e 100644
+--- a/libstdc++-v3/testsuite/30_threads/promise/members/set_exception.cc
++++ b/libstdc++-v3/testsuite/30_threads/promise/members/set_exception.cc
+@@ -4,7 +4,6 @@
+ // { dg-options " -std=gnu++0x " { target *-*-cygwin *-*-darwin* } }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2009-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/30_threads/promise/members/set_exception2.cc b/libstdc++-v3/testsuite/30_threads/promise/members/set_exception2.cc
+index 949702c56..ee69cd689 100644
+--- a/libstdc++-v3/testsuite/30_threads/promise/members/set_exception2.cc
++++ b/libstdc++-v3/testsuite/30_threads/promise/members/set_exception2.cc
+@@ -4,7 +4,6 @@
+ // { dg-options " -std=gnu++0x " { target *-*-cygwin *-*-darwin* } }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2009-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/30_threads/promise/members/set_value.cc b/libstdc++-v3/testsuite/30_threads/promise/members/set_value.cc
+index a670ab0d8..b83bd03d5 100644
+--- a/libstdc++-v3/testsuite/30_threads/promise/members/set_value.cc
++++ b/libstdc++-v3/testsuite/30_threads/promise/members/set_value.cc
+@@ -4,7 +4,6 @@
+ // { dg-options " -std=gnu++0x " { target *-*-cygwin *-*-darwin* } }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2009-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/30_threads/promise/members/set_value2.cc b/libstdc++-v3/testsuite/30_threads/promise/members/set_value2.cc
+index 3764d11b2..848537510 100644
+--- a/libstdc++-v3/testsuite/30_threads/promise/members/set_value2.cc
++++ b/libstdc++-v3/testsuite/30_threads/promise/members/set_value2.cc
+@@ -4,7 +4,6 @@
+ // { dg-options " -std=gnu++0x " { target *-*-cygwin *-*-darwin* } }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2009-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/30_threads/promise/members/set_value3.cc b/libstdc++-v3/testsuite/30_threads/promise/members/set_value3.cc
+index e7bd13f5f..26aacddf8 100644
+--- a/libstdc++-v3/testsuite/30_threads/promise/members/set_value3.cc
++++ b/libstdc++-v3/testsuite/30_threads/promise/members/set_value3.cc
+@@ -4,7 +4,6 @@
+ // { dg-options " -std=gnu++0x " { target *-*-cygwin *-*-darwin* } }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2009-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/30_threads/promise/members/swap.cc b/libstdc++-v3/testsuite/30_threads/promise/members/swap.cc
+index c003a4047..6c3acac08 100644
+--- a/libstdc++-v3/testsuite/30_threads/promise/members/swap.cc
++++ b/libstdc++-v3/testsuite/30_threads/promise/members/swap.cc
+@@ -4,7 +4,6 @@
+ // { dg-options " -std=gnu++0x " { target *-*-cygwin *-*-darwin* } }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2009-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/30_threads/promise/requirements/explicit_instantiation.cc b/libstdc++-v3/testsuite/30_threads/promise/requirements/explicit_instantiation.cc
+index 033b7b836..a99b5f1fd 100644
+--- a/libstdc++-v3/testsuite/30_threads/promise/requirements/explicit_instantiation.cc
++++ b/libstdc++-v3/testsuite/30_threads/promise/requirements/explicit_instantiation.cc
+@@ -2,7 +2,6 @@
+ // { dg-options "-std=gnu++0x" }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2009-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/30_threads/promise/uses_allocator.cc b/libstdc++-v3/testsuite/30_threads/promise/uses_allocator.cc
+index 4c9c55f0e..67623ef78 100644
+--- a/libstdc++-v3/testsuite/30_threads/promise/uses_allocator.cc
++++ b/libstdc++-v3/testsuite/30_threads/promise/uses_allocator.cc
+@@ -2,7 +2,6 @@
+ // { dg-options "-std=gnu++0x" }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2011-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/30_threads/shared_future/cons/assign.cc b/libstdc++-v3/testsuite/30_threads/shared_future/cons/assign.cc
+index 7b19aa191..4b2990e5f 100644
+--- a/libstdc++-v3/testsuite/30_threads/shared_future/cons/assign.cc
++++ b/libstdc++-v3/testsuite/30_threads/shared_future/cons/assign.cc
+@@ -1,7 +1,6 @@
+ // { dg-options "-std=gnu++0x" }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2010-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/30_threads/shared_future/cons/constexpr.cc b/libstdc++-v3/testsuite/30_threads/shared_future/cons/constexpr.cc
+index ab7f85c1c..8d399f131 100644
+--- a/libstdc++-v3/testsuite/30_threads/shared_future/cons/constexpr.cc
++++ b/libstdc++-v3/testsuite/30_threads/shared_future/cons/constexpr.cc
+@@ -2,7 +2,6 @@
+ // { dg-options "-std=gnu++0x -fno-inline -save-temps -g0" }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ // { dg-final { scan-assembler-not "_ZNSt13shared_futureIvEC2Ev" } }
+ // { dg-final { scan-assembler-not "_ZNSt13shared_futureIiEC2Ev" } }
+ 
+diff --git a/libstdc++-v3/testsuite/30_threads/shared_future/cons/copy.cc b/libstdc++-v3/testsuite/30_threads/shared_future/cons/copy.cc
+index 57a0cfdc3..71b6ff214 100644
+--- a/libstdc++-v3/testsuite/30_threads/shared_future/cons/copy.cc
++++ b/libstdc++-v3/testsuite/30_threads/shared_future/cons/copy.cc
+@@ -2,7 +2,6 @@
+ // { dg-options "-std=gnu++0x" }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2009-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/30_threads/shared_future/cons/default.cc b/libstdc++-v3/testsuite/30_threads/shared_future/cons/default.cc
+index 2e78590d8..74fdf6e40 100644
+--- a/libstdc++-v3/testsuite/30_threads/shared_future/cons/default.cc
++++ b/libstdc++-v3/testsuite/30_threads/shared_future/cons/default.cc
+@@ -1,7 +1,6 @@
+ // { dg-options "-std=gnu++0x" }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2010-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/30_threads/shared_future/cons/move.cc b/libstdc++-v3/testsuite/30_threads/shared_future/cons/move.cc
+index de67e3a10..b9388b006 100644
+--- a/libstdc++-v3/testsuite/30_threads/shared_future/cons/move.cc
++++ b/libstdc++-v3/testsuite/30_threads/shared_future/cons/move.cc
+@@ -4,7 +4,6 @@
+ // { dg-options " -std=gnu++0x " { target *-*-cygwin *-*-darwin* } }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2009-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/30_threads/shared_future/cons/move_assign.cc b/libstdc++-v3/testsuite/30_threads/shared_future/cons/move_assign.cc
+index 3b9f867ab..a462db093 100644
+--- a/libstdc++-v3/testsuite/30_threads/shared_future/cons/move_assign.cc
++++ b/libstdc++-v3/testsuite/30_threads/shared_future/cons/move_assign.cc
+@@ -1,7 +1,6 @@
+ // { dg-options "-std=gnu++0x" }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2010-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/30_threads/shared_future/members/45133.cc b/libstdc++-v3/testsuite/30_threads/shared_future/members/45133.cc
+index 5723d64c0..02c4b8150 100644
+--- a/libstdc++-v3/testsuite/30_threads/shared_future/members/45133.cc
++++ b/libstdc++-v3/testsuite/30_threads/shared_future/members/45133.cc
+@@ -4,7 +4,6 @@
+ // { dg-options " -std=gnu++0x " { target *-*-cygwin *-*-darwin* } }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2010-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/30_threads/shared_future/members/get.cc b/libstdc++-v3/testsuite/30_threads/shared_future/members/get.cc
+index 590c7183a..ce1f96446 100644
+--- a/libstdc++-v3/testsuite/30_threads/shared_future/members/get.cc
++++ b/libstdc++-v3/testsuite/30_threads/shared_future/members/get.cc
+@@ -4,7 +4,6 @@
+ // { dg-options " -std=gnu++0x " { target *-*-cygwin *-*-darwin* } }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2009-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/30_threads/shared_future/members/get2.cc b/libstdc++-v3/testsuite/30_threads/shared_future/members/get2.cc
+index 3c593d8ce..d33efff59 100644
+--- a/libstdc++-v3/testsuite/30_threads/shared_future/members/get2.cc
++++ b/libstdc++-v3/testsuite/30_threads/shared_future/members/get2.cc
+@@ -4,7 +4,6 @@
+ // { dg-options " -std=gnu++0x " { target *-*-cygwin *-*-darwin* } }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2009-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/30_threads/shared_future/members/valid.cc b/libstdc++-v3/testsuite/30_threads/shared_future/members/valid.cc
+index 078073ee2..f0065f73a 100644
+--- a/libstdc++-v3/testsuite/30_threads/shared_future/members/valid.cc
++++ b/libstdc++-v3/testsuite/30_threads/shared_future/members/valid.cc
+@@ -4,7 +4,6 @@
+ // { dg-options " -std=gnu++0x " { target *-*-cygwin *-*-darwin* } }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2010-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/30_threads/shared_future/members/wait.cc b/libstdc++-v3/testsuite/30_threads/shared_future/members/wait.cc
+index 702b26f0a..ebcaec883 100644
+--- a/libstdc++-v3/testsuite/30_threads/shared_future/members/wait.cc
++++ b/libstdc++-v3/testsuite/30_threads/shared_future/members/wait.cc
+@@ -4,7 +4,6 @@
+ // { dg-options " -std=gnu++0x " { target *-*-cygwin *-*-darwin* } }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2009-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/30_threads/shared_future/members/wait_for.cc b/libstdc++-v3/testsuite/30_threads/shared_future/members/wait_for.cc
+index a3fae991d..360f6301c 100644
+--- a/libstdc++-v3/testsuite/30_threads/shared_future/members/wait_for.cc
++++ b/libstdc++-v3/testsuite/30_threads/shared_future/members/wait_for.cc
+@@ -4,7 +4,6 @@
+ // { dg-options " -std=gnu++0x " { target *-*-cygwin *-*-darwin* } }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2009-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/30_threads/shared_future/members/wait_until.cc b/libstdc++-v3/testsuite/30_threads/shared_future/members/wait_until.cc
+index 37384e973..e09586126 100644
+--- a/libstdc++-v3/testsuite/30_threads/shared_future/members/wait_until.cc
++++ b/libstdc++-v3/testsuite/30_threads/shared_future/members/wait_until.cc
+@@ -4,7 +4,6 @@
+ // { dg-options " -std=gnu++0x " { target *-*-cygwin *-*-darwin* } }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2009-2014 Free Software Foundation, Inc.
+ //
+diff --git a/libstdc++-v3/testsuite/30_threads/shared_future/requirements/explicit_instantiation.cc b/libstdc++-v3/testsuite/30_threads/shared_future/requirements/explicit_instantiation.cc
+index 06876b0ca..3aee66b08 100644
+--- a/libstdc++-v3/testsuite/30_threads/shared_future/requirements/explicit_instantiation.cc
++++ b/libstdc++-v3/testsuite/30_threads/shared_future/requirements/explicit_instantiation.cc
+@@ -2,7 +2,6 @@
+ // { dg-options "-std=gnu++0x" }
+ // { dg-require-cstdint "" }
+ // { dg-require-gthreads "" }
+-// { dg-require-atomic-builtins "" }
+ 
+ // Copyright (C) 2009-2014 Free Software Foundation, Inc.
+ //

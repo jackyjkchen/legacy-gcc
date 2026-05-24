@@ -7,6 +7,10 @@ inherit toolchain
 
 KEYWORDS="alpha amd64 arm arm64 hppa m68k mips ppc ppc64 s390 sh sparc x86"
 
+use_linaro() {
+	[[ $(tc-arch) == "arm" || $(tc-arch) == "arm64" ]]
+}
+
 src_prepare() {
 	eapply "${FILESDIR}"/${PV}/00_gentoo-patchset.patch
 	toolchain_src_prepare
@@ -23,6 +27,8 @@ src_prepare() {
 	is_glibc217 && eapply "${FILESDIR}"/${PV}/06_fake-c17.patch
 
 	use vanilla && return 0
+
+	use_linaro && eapply "${FILESDIR}"/${PV}/07_gcc-linaro.patch
 
 	eapply "${FILESDIR}"/${PV}/postrelease/000_pr94460.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/001_pr85257.patch
@@ -268,8 +274,7 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/241_pr117296.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/242_pr111039.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/243_pr115608.patch
-	eapply "${FILESDIR}"/${PV}/postrelease/244_pr64735.patch
-	eapply "${FILESDIR}"/${PV}/postrelease/245_pr65618.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/244_pr65618.patch
 
 	if use test ; then
 		rm -rf gcc/testsuite/gcc.c-torture/execute/vfprintf-chk-1.c gcc/testsuite/gcc.c-torture/execute/vprintf-chk-1.c
