@@ -1,0 +1,330 @@
+diff --git a/gcc/cp/decl.c b/gcc/cp/decl.c
+index bd1f66b06..61866ccfb 100644
+--- a/gcc/cp/decl.c
++++ b/gcc/cp/decl.c
+@@ -16337,6 +16337,7 @@ finish_function (bool inline_p)
+ 	      && same_type_ignoring_top_level_qualifiers_p
+ 		  (TREE_TYPE (valtype), TREE_TYPE (current_class_ref))
+ 	      && global_dc->option_enabled (OPT_Wreturn_type,
++					    global_dc->lang_mask,
+ 					    global_dc->option_state))
+ 	    add_return_star_this_fixit (&richloc, fndecl);
+ 	}
+diff --git a/gcc/diagnostic.c b/gcc/diagnostic.c
+index be6b65722..bc7fb9d9d 100644
+--- a/gcc/diagnostic.c
++++ b/gcc/diagnostic.c
+@@ -34,6 +34,7 @@ along with GCC; see the file COPYING3.  If not see
+ #include "edit-context.h"
+ #include "selftest.h"
+ #include "selftest-diagnostic.h"
++#include "opts.h"
+ 
+ #ifdef HAVE_TERMIOS_H
+ # include <termios.h>
+@@ -689,6 +690,7 @@ diagnostic_classify_diagnostic (diagnostic_context *context,
+       if (old_kind == DK_UNSPECIFIED)
+ 	{
+ 	  old_kind = !context->option_enabled (option_index,
++					       context->lang_mask,
+ 					       context->option_state)
+ 	    ? DK_IGNORED : (context->warning_as_error_requested
+ 			    ? DK_ERROR : DK_WARNING);
+@@ -950,6 +952,7 @@ diagnostic_report_diagnostic (diagnostic_context *context,
+       /* This tests if the user provided the appropriate -Wfoo or
+ 	 -Wno-foo option.  */
+       if (! context->option_enabled (diagnostic->option_index,
++				     context->lang_mask,
+ 				     context->option_state))
+ 	return false;
+ 
+diff --git a/gcc/diagnostic.h b/gcc/diagnostic.h
+index 46c3b50a5..530acb45b 100644
+--- a/gcc/diagnostic.h
++++ b/gcc/diagnostic.h
+@@ -180,7 +180,7 @@ struct diagnostic_context
+ 
+   /* Client hook to say whether the option controlling a diagnostic is
+      enabled.  Returns nonzero if enabled, zero if disabled.  */
+-  int (*option_enabled) (int, void *);
++  int (*option_enabled) (int, unsigned, void *);
+ 
+   /* Client information to pass as second argument to
+      option_enabled.  */
+@@ -206,6 +206,9 @@ struct diagnostic_context
+ 
+   int lock;
+ 
++  /* A copy of lang_hooks.option_lang_mask ().  */
++  unsigned lang_mask;
++
+   bool inhibit_notes_p;
+ 
+   /* When printing source code, should the characters at carets and ranges
+diff --git a/gcc/ipa-pure-const.c b/gcc/ipa-pure-const.c
+index 1cc69cd05..558a5c03b 100644
+--- a/gcc/ipa-pure-const.c
++++ b/gcc/ipa-pure-const.c
+@@ -199,7 +199,7 @@ suggest_attribute (int option, tree decl, bool known_finite,
+ 		   hash_set<tree> *warned_about,
+ 		   const char * attrib_name)
+ {
+-  if (!option_enabled (option, &global_options))
++  if (!option_enabled (option, lang_hooks.option_lang_mask (), &global_options))
+     return warned_about;
+   if (TREE_THIS_VOLATILE (decl)
+       || (known_finite && function_always_visible_to_compiler_p (decl)))
+diff --git a/gcc/opts-common.c b/gcc/opts-common.c
+index fb48005b6..18bccb84b 100644
+--- a/gcc/opts-common.c
++++ b/gcc/opts-common.c
+@@ -1526,9 +1526,17 @@ option_flag_var (int opt_index, struct gcc_options *opts)
+    or -1 if it isn't a simple on-off switch.  */
+ 
+ int
+-option_enabled (int opt_idx, void *opts)
++option_enabled (int opt_idx, unsigned lang_mask, void *opts)
+ {
+   const struct cl_option *option = &(cl_options[opt_idx]);
++
++  /* A language-specific option can only be considered enabled when it's
++     valid for the current language.  */
++  if (!(option->flags & CL_COMMON)
++      && (option->flags & CL_LANG_ALL)
++      && !(option->flags & lang_mask))
++    return 0;
++
+   struct gcc_options *optsg = (struct gcc_options *) opts;
+   void *flag_var = option_flag_var (opt_idx, optsg);
+ 
+@@ -1598,7 +1606,7 @@ get_option_state (struct gcc_options *opts, int option,
+ 
+     case CLVC_BIT_CLEAR:
+     case CLVC_BIT_SET:
+-      state->ch = option_enabled (option, opts);
++      state->ch = option_enabled (option, -1, opts);
+       state->data = &state->ch;
+       state->size = 1;
+       break;
+diff --git a/gcc/opts.c b/gcc/opts.c
+index b346552d7..58f684c3d 100644
+--- a/gcc/opts.c
++++ b/gcc/opts.c
+@@ -31,6 +31,7 @@ along with GCC; see the file COPYING3.  If not see
+ #include "insn-attr-common.h"
+ #include "common/common-target.h"
+ #include "spellcheck.h"
++#include "diagnostic-color.h"
+ 
+ static void set_Wstrict_aliasing (struct gcc_options *opts, int onoff);
+ 
+@@ -1451,10 +1452,37 @@ print_filtered_help (unsigned int include_flags,
+ 	  else
+ 	    strcpy (new_help, "\t");
+ 
++	  /* Set to print whether the option is enabled or disabled,
++	     or, if it's an alias for another option, the name of
++	     the aliased option.  */
++	  bool print_state = false;
++
+ 	  if (flag_var != NULL
+ 	      && option->var_type != CLVC_DEFER)
+ 	    {
+-	      if (option->flags & CL_JOINED)
++	      /* If OPTION is only available for a specific subset
++		 of languages other than this one, mention them.  */
++	      bool avail_for_lang = true;
++	      if (unsigned langset = option->flags & CL_LANG_ALL)
++		{
++		  if (!(langset & lang_mask))
++		    {
++		      avail_for_lang = false;
++		      strcat (new_help, _("[available in "));
++		      for (unsigned i = 0, n = 0; (1U << i) < CL_LANG_ALL; ++i)
++			if (langset & (1U << i))
++			  {
++			    if (n++)
++			      strcat (new_help, ", ");
++			    strcat (new_help, lang_names[i]);
++			  }
++		      strcat (new_help, "]");
++		    }
++		}
++	      if (!avail_for_lang)
++		; /* Print nothing else if the option is not available
++		     in the current language.  */
++	      else if (option->flags & CL_JOINED)
+ 		{
+ 		  if (option->var_type == CLVC_STRING)
+ 		    {
+@@ -1478,12 +1506,50 @@ print_filtered_help (unsigned int include_flags,
+ 				"%s", arg);
+ 		    }
+ 		  else
+-		    sprintf (new_help + strlen (new_help),
+-			     "%d", * (int *) flag_var);
++		    {
++		      if (option->cl_host_wide_int)
++			sprintf (new_help + strlen (new_help),
++				 _("%llu bytes"), (unsigned long long)
++				 *(unsigned HOST_WIDE_INT *) flag_var);
++		      else
++			sprintf (new_help + strlen (new_help),
++				 "%i", * (int *) flag_var);
++		    }
++		}
++	      else
++		print_state = true;
++	    }
++	  else
++	    /* When there is no argument, print the option state only
++	       if the option takes no argument.  */
++	    print_state = !(option->flags & CL_JOINED);
++
++	  if (print_state)
++	    {
++	      if (option->alias_target < N_OPTS
++		  && option->alias_target != OPT_SPECIAL_deprecated
++		  && option->alias_target != OPT_SPECIAL_ignore
++		  && option->alias_target != OPT_SPECIAL_input_file
++		  && option->alias_target != OPT_SPECIAL_program_name
++		  && option->alias_target != OPT_SPECIAL_unknown)
++		{
++		  const struct cl_option *target
++		    = &cl_options[option->alias_target];
++		  sprintf (new_help + strlen (new_help), "%s%s",
++			   target->opt_text,
++			   option->alias_arg ? option->alias_arg : "");
+ 		}
++	      else if (option->alias_target == OPT_SPECIAL_ignore)
++		strcat (new_help, ("[ignored]"));
+ 	      else
+-		strcat (new_help, option_enabled (i, opts)
+-			? _("[enabled]") : _("[disabled]"));
++		{
++		  /* Print the state for an on/off option.  */
++		  int ena = option_enabled (i, lang_mask, opts);
++		  if (ena > 0)
++		    strcat (new_help, _("[enabled]"));
++		  else if (ena == 0)
++		    strcat (new_help, _("[disabled]"));
++		}
+ 	    }
+ 
+ 	  help = new_help;
+diff --git a/gcc/opts.h b/gcc/opts.h
+index c517458dd..877feefd8 100644
+--- a/gcc/opts.h
++++ b/gcc/opts.h
+@@ -359,7 +359,8 @@ extern void decode_options (struct gcc_options *opts,
+ 			    location_t loc,
+ 			    diagnostic_context *dc,
+ 			    void (*target_option_override_hook) (void));
+-extern int option_enabled (int opt_idx, void *opts);
++extern int option_enabled (int opt_idx, unsigned lang_mask, void *opts);
++
+ extern bool get_option_state (struct gcc_options *, int,
+ 			      struct cl_option_state *);
+ extern void set_option (struct gcc_options *opts,
+diff --git a/gcc/testsuite/gcc.misc-tests/help.exp b/gcc/testsuite/gcc.misc-tests/help.exp
+index 307f1e9c3..63c29ee5b 100644
+--- a/gcc/testsuite/gcc.misc-tests/help.exp
++++ b/gcc/testsuite/gcc.misc-tests/help.exp
+@@ -91,6 +91,29 @@ maximum number of
+ -O
+ } "" ""
+ 
++# Verify that a C++/Objective C++ only option is indicated as such
++# by the C compiler.
++check_for_options c "-Q --help=warnings" {
++-Wclass-memaccess[ \t]+\[available in C\+\+, ObjC\+\+\]
++} "" ""
++
++# Verify that an option that's an alias for another option is shown
++# with the other option as the value.
++check_for_options c "-Q --help=warnings" {
++--all-warnings[ \t]+\-Wall
++-W[ \t]+-Wextra
++-Wmissing-format-attribute[ \t]+-Wsuggest-attribute=format
++-Wno-alloc-size-larger-than[ \t]+-Walloc-size-larger-than=[1-9][0-9]+
++-Wno-vla-larger-than[ \t]+-Wvla-larger-than=[1-9][0-9]+
++} "" ""
++
++# Verify that an option that expects a byte-size argument is shown with
++# a meaningful byte-size argument as the value.
++check_for_options c "-Q --help=warnings" {
++-Walloc-size-larger-than=[ \t]+[1-9][0-9]+ bytes
++-Wlarger-than=[^\n\r]+[1-9][0-9]+ bytes
++} "" ""
++
+ # Ensure PR 37805 is fixed.
+ # Specify patterns (arguments 3 and later) that match option names
+ # at the beginning of the line and not when they are referenced by
+diff --git a/gcc/testsuite/lib/options.exp b/gcc/testsuite/lib/options.exp
+index b8503078c..c8f0c705e 100644
+--- a/gcc/testsuite/lib/options.exp
++++ b/gcc/testsuite/lib/options.exp
+@@ -34,21 +34,30 @@ proc check_for_options_with_filter { language gcc_options exclude \
+ 					 compiler_patterns \
+ 					 compiler_non_patterns \
+ 					 expected_failure } {
+-    set filename test-[pid]
+-    set fd [open $filename.c w]
+-    puts $fd "int main (void) { return 0; }"
+-    close $fd
+-    remote_download host $filename.c
+-
+     set test "compiler driver $gcc_options option(s):"
+     set gcc_options "\{additional_flags=$gcc_options\}"
+ 
+     switch "$language" {
+-	"c" { set compiler cc1 }
++	"c" {
++	    set compiler cc1
++	    set suffix c
++	}
++	"c++" {
++	    set compiler cc1plus
++	    set suffix cc
++	}
+ 	default { error "unknown language" }
+     }
+-    set gcc_output [gcc_target_compile $filename.c $filename.x executable $gcc_options]
+-    remote_file build delete $filename.c $filename.x $filename.gcno
++
++    set filebase test-[pid]
++    set srcfname $filebase.$suffix
++    set fd [open $srcfname w]
++    puts $fd "int main (void) { return 0; }"
++    close $fd
++    remote_download host $srcfname
++
++    set gcc_output [gcc_target_compile $srcfname $filebase.x executable $gcc_options]
++    remote_file build delete $srcfname $filebase.x $filebase.gcno
+ 
+     if { $exclude != "" } {
+ 	set lines [split $gcc_output "\n"]
+diff --git a/gcc/toplev.c b/gcc/toplev.c
+index 067676352..d3c9458be 100644
+--- a/gcc/toplev.c
++++ b/gcc/toplev.c
+@@ -836,9 +836,10 @@ print_switch_values (print_switch_fn_type print_fn)
+   pos = print_single_switch (print_fn, 0,
+ 			     SWITCH_TYPE_DESCRIPTIVE, _("options enabled: "));
+ 
++  unsigned lang_mask = lang_hooks.option_lang_mask ();
+   for (j = 0; j < cl_options_count; j++)
+     if (cl_options[j].cl_report
+-	&& option_enabled (j, &global_options) > 0)
++	&& option_enabled (j, lang_mask, &global_options) > 0)
+       pos = print_single_switch (print_fn, pos,
+ 				 SWITCH_TYPE_ENABLED, cl_options[j].opt_text);
+ 
+@@ -1109,6 +1110,7 @@ general_init (const char *argv0, bool init_signals)
+   /* Initialize the diagnostics reporting machinery, so option parsing
+      can give warnings and errors.  */
+   diagnostic_initialize (global_dc, N_OPTS);
++  global_dc->lang_mask = lang_hooks.option_lang_mask ();
+   /* Set a default printer.  Language specific initializations will
+      override it later.  */
+   tree_diagnostics_defaults (global_dc);

@@ -36,7 +36,7 @@ src_prepare() {
 
 	use vanilla && return 0
 
-	[[ $(tc-arch) == "arm" ]] && eapply "${FILESDIR}"/${PV}/04_gcc-arm.patch
+	[[ $(tc-arch) == "arm64" || $(tc-arch) == "arm" ]] && eapply "${FILESDIR}"/${PV}/04_gcc-arm.patch
 
 	eapply "${FILESDIR}"/${PV}/postrelease/000_pr98645-98688-111224.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/001_pr100130.patch

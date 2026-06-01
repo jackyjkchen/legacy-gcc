@@ -1,0 +1,752 @@
+diff --git a/gcc/cp/decl.c b/gcc/cp/decl.c
+index b27902f62..2209b95b5 100644
+--- a/gcc/cp/decl.c
++++ b/gcc/cp/decl.c
+@@ -51,6 +51,7 @@ along with GCC; see the file COPYING3.  If not see
+ #include "builtins.h"
+ #include "gimplify.h"
+ #include "asan.h"
++#include "gcc-rich-location.h"
+ 
+ /* Possible cases of bad specifiers type used by bad_specifiers. */
+ enum bad_spec_place {
+@@ -15818,6 +15819,22 @@ maybe_save_function_definition (tree fun)
+     register_constexpr_fundef (fun, DECL_SAVED_TREE (fun));
+ }
+ 
++/* Attempt to add a fix-it hint to RICHLOC suggesting the insertion
++   of "return *this;" immediately before its location, using FNDECL's
++   first statement (if any) to give the indentation, if appropriate.  */
++
++static void
++add_return_star_this_fixit (gcc_rich_location *richloc, tree fndecl)
++{
++  location_t indent = UNKNOWN_LOCATION;
++  tree stmts = expr_first (DECL_SAVED_TREE (fndecl));
++  if (stmts)
++    indent = EXPR_LOCATION (stmts);
++  richloc->add_fixit_insert_formatted ("return *this;",
++				       richloc->get_loc (),
++				       indent);
++}
++
+ /* Finish up a function declaration and compile that function
+    all the way to assembler language output.  The free the storage
+    for the function definition. INLINE_P is TRUE if we just
+@@ -16012,8 +16029,23 @@ finish_function (bool inline_p)
+       && !DECL_DESTRUCTOR_P (fndecl)
+       && targetm.warn_func_return (fndecl))
+     {
+-      warning (OPT_Wreturn_type,
+- 	       "no return statement in function returning non-void");
++      gcc_rich_location richloc (input_location);
++      /* Potentially add a "return *this;" fix-it hint for
++	 assignment operators.  */
++      if (IDENTIFIER_ASSIGN_OP_P (DECL_NAME (fndecl)))
++	{
++	  tree valtype = TREE_TYPE (DECL_RESULT (fndecl));
++	  if (TREE_CODE (valtype) == REFERENCE_TYPE
++	      && current_class_ref
++	      && same_type_ignoring_top_level_qualifiers_p
++		  (TREE_TYPE (valtype), TREE_TYPE (current_class_ref))
++	      && global_dc->option_enabled (OPT_Wreturn_type,
++					    global_dc->lang_mask,
++					    global_dc->option_state))
++	    add_return_star_this_fixit (&richloc, fndecl);
++	}
++      warning_at (&richloc, OPT_Wreturn_type,
++		  "no return statement in function returning non-void");
+       TREE_NO_WARNING (fndecl) = 1;
+     }
+ 
+diff --git a/gcc/diagnostic.c b/gcc/diagnostic.c
+index c61e0c457..095ea2408 100644
+--- a/gcc/diagnostic.c
++++ b/gcc/diagnostic.c
+@@ -34,6 +34,7 @@ along with GCC; see the file COPYING3.  If not see
+ #include "edit-context.h"
+ #include "selftest.h"
+ #include "selftest-diagnostic.h"
++#include "opts.h"
+ 
+ #ifdef HAVE_TERMIOS_H
+ # include <termios.h>
+@@ -666,6 +667,7 @@ diagnostic_classify_diagnostic (diagnostic_context *context,
+       if (old_kind == DK_UNSPECIFIED)
+ 	{
+ 	  old_kind = !context->option_enabled (option_index,
++					       context->lang_mask,
+ 					       context->option_state)
+ 	    ? DK_IGNORED : (context->warning_as_error_requested
+ 			    ? DK_ERROR : DK_WARNING);
+@@ -927,6 +929,7 @@ diagnostic_report_diagnostic (diagnostic_context *context,
+       /* This tests if the user provided the appropriate -Wfoo or
+ 	 -Wno-foo option.  */
+       if (! context->option_enabled (diagnostic->option_index,
++				     context->lang_mask,
+ 				     context->option_state))
+ 	return false;
+ 
+diff --git a/gcc/diagnostic.h b/gcc/diagnostic.h
+index cf3a610f3..8eafbec8c 100644
+--- a/gcc/diagnostic.h
++++ b/gcc/diagnostic.h
+@@ -167,7 +167,7 @@ struct diagnostic_context
+ 
+   /* Client hook to say whether the option controlling a diagnostic is
+      enabled.  Returns nonzero if enabled, zero if disabled.  */
+-  int (*option_enabled) (int, void *);
++  int (*option_enabled) (int, unsigned, void *);
+ 
+   /* Client information to pass as second argument to
+      option_enabled.  */
+@@ -193,6 +193,9 @@ struct diagnostic_context
+ 
+   int lock;
+ 
++  /* A copy of lang_hooks.option_lang_mask ().  */
++  unsigned lang_mask;
++
+   bool inhibit_notes_p;
+ 
+   /* When printing source code, should the characters at carets and ranges
+diff --git a/gcc/gcc-rich-location.c b/gcc/gcc-rich-location.c
+index 348142525..9ad3bbd2e 100644
+--- a/gcc/gcc-rich-location.c
++++ b/gcc/gcc-rich-location.c
+@@ -69,3 +69,115 @@ gcc_rich_location::add_fixit_misspelled_id (location_t misspelled_token_loc,
+ 
+   add_fixit_replace (misspelled_token_loc, IDENTIFIER_POINTER (hint_id));
+ }
++
++/* Return true if there is nothing on LOC's line before LOC.  */
++
++static bool
++blank_line_before_p (location_t loc)
++{
++  expanded_location exploc = expand_location (loc);
++  int line_len = 0;
++  const char *line = location_get_source_line (exploc.file, exploc.line, &line_len);
++  if (line == NULL)
++    return false;
++  if (line_len < exploc.column)
++    return false;
++  /* Columns are 1-based.  */
++  for (int column = 1; column < exploc.column; ++column)
++    if (!ISSPACE (line[column - 1]))
++      return false;
++  return true;
++}
++
++/* Subroutine of gcc_rich_location::add_fixit_insert_formatted.
++   Return true if we should add the content on its own line,
++   false otherwise.
++   If true is returned then *OUT_START_OF_LINE is written to.  */
++
++static bool
++use_new_line (location_t insertion_point, location_t indent,
++	      location_t *out_start_of_line)
++{
++  if (indent == UNKNOWN_LOCATION)
++    return false;
++  const line_map *indent_map = linemap_lookup (line_table, indent);
++  if (linemap_macro_expansion_map_p (indent_map))
++    return false;
++
++  if (!blank_line_before_p (insertion_point))
++    return false;
++
++  /* Locate the start of the line containing INSERTION_POINT.  */
++  const line_map *insertion_point_map
++    = linemap_lookup (line_table, insertion_point);
++  if (linemap_macro_expansion_map_p (insertion_point_map))
++    return false;
++  const line_map_ordinary *ordmap
++    = linemap_check_ordinary (insertion_point_map);
++  expanded_location exploc_insertion_point = expand_location (insertion_point);
++  location_t start_of_line
++    = linemap_position_for_line_and_column (line_table, ordmap,
++					    exploc_insertion_point.line, 1);
++  *out_start_of_line = start_of_line;
++  return true;
++}
++
++/* Add a fix-it hint suggesting the insertion of CONTENT before
++   INSERTION_POINT.
++
++   Attempt to handle formatting: if INSERTION_POINT is the first thing on
++   its line, and INDENT is sufficiently sane, then add CONTENT on its own
++   line, using the indentation of INDENT.
++   Otherwise, add CONTENT directly before INSERTION_POINT.
++
++   For example, adding "CONTENT;" with the closing brace as the insertion
++   point and "INDENT;" as the indentation point:
++
++   if ()
++     {
++       INDENT;
++     }
++
++  would lead to:
++
++   if ()
++     {
++       INDENT;
++       CONTENT;
++     }
++
++  but adding it to:
++
++    if () {INDENT;}
++
++  would lead to:
++
++    if () {INDENT;CONTENT;}
++*/
++
++void
++gcc_rich_location::add_fixit_insert_formatted (const char *content,
++					       location_t insertion_point,
++					       location_t indent)
++{
++  location_t start_of_line;
++  if (use_new_line (insertion_point, indent, &start_of_line))
++    {
++      /* Add CONTENT on its own line, using the indentation of INDENT.  */
++
++      /* Generate an insertion string, indenting by the amount INDENT
++	 was indented.  */
++      int indent_column = LOCATION_COLUMN (get_start (indent));
++      pretty_printer tmp_pp;
++      pretty_printer *pp = &tmp_pp;
++      /* Columns are 1-based.  */
++      for (int column = 1; column < indent_column; ++column)
++	pp_space (pp);
++      pp_string (pp, content);
++      pp_newline (pp);
++
++      add_fixit_insert_before (start_of_line, pp_formatted_text (pp));
++    }
++  else
++    add_fixit_insert_before (insertion_point, content);
++}
+diff --git a/gcc/gcc-rich-location.h b/gcc/gcc-rich-location.h
+index bdcf8aee8..9c705c86a 100644
+--- a/gcc/gcc-rich-location.h
++++ b/gcc/gcc-rich-location.h
+@@ -61,6 +61,42 @@ class gcc_rich_location : public rich_location
+      Implemented in diagnostic-show-locus.c.  */
+ 
+   bool add_location_if_nearby (location_t loc);
++
++  /* Add a fix-it hint suggesting the insertion of CONTENT before
++     INSERTION_POINT.
++
++     Attempt to handle formatting: if INSERTION_POINT is the first thing on
++     its line, and INDENT is sufficiently sane, then add CONTENT on its own
++     line, using the indentation of INDENT.
++     Otherwise, add CONTENT directly before INSERTION_POINT.
++
++     For example, adding "CONTENT;" with the closing brace as the insertion
++     point and using "INDENT;" for indentation:
++
++       if ()
++         {
++           INDENT;
++         }
++
++     would lead to:
++
++       if ()
++         {
++           INDENT;
++           CONTENT;
++         }
++
++     but adding it to:
++
++       if () {INDENT;}
++
++     would lead to:
++
++       if () {INDENT;CONTENT;}
++  */
++  void add_fixit_insert_formatted (const char *content,
++				   location_t insertion_point,
++				   location_t indent);
+ };
+ 
+ #endif /* GCC_RICH_LOCATION_H */
+diff --git a/gcc/ipa-pure-const.c b/gcc/ipa-pure-const.c
+index 1017252d9..29527120b 100644
+--- a/gcc/ipa-pure-const.c
++++ b/gcc/ipa-pure-const.c
+@@ -187,7 +187,7 @@ suggest_attribute (int option, tree decl, bool known_finite,
+ 		   hash_set<tree> *warned_about,
+ 		   const char * attrib_name)
+ {
+-  if (!option_enabled (option, &global_options))
++  if (!option_enabled (option, lang_hooks.option_lang_mask (), &global_options))
+     return warned_about;
+   if (TREE_THIS_VOLATILE (decl)
+       || (known_finite && function_always_visible_to_compiler_p (decl)))
+diff --git a/gcc/opts-common.c b/gcc/opts-common.c
+index 39c275ea4..c1783568a 100644
+--- a/gcc/opts-common.c
++++ b/gcc/opts-common.c
+@@ -1398,9 +1398,17 @@ option_flag_var (int opt_index, struct gcc_options *opts)
+    or -1 if it isn't a simple on-off switch.  */
+ 
+ int
+-option_enabled (int opt_idx, void *opts)
++option_enabled (int opt_idx, unsigned lang_mask, void *opts)
+ {
+   const struct cl_option *option = &(cl_options[opt_idx]);
++
++  /* A language-specific option can only be considered enabled when it's
++     valid for the current language.  */
++  if (!(option->flags & CL_COMMON)
++      && (option->flags & CL_LANG_ALL)
++      && !(option->flags & lang_mask))
++    return 0;
++
+   struct gcc_options *optsg = (struct gcc_options *) opts;
+   void *flag_var = option_flag_var (opt_idx, optsg);
+ 
+@@ -1460,7 +1468,7 @@ get_option_state (struct gcc_options *opts, int option,
+ 
+     case CLVC_BIT_CLEAR:
+     case CLVC_BIT_SET:
+-      state->ch = option_enabled (option, opts);
++      state->ch = option_enabled (option, -1, opts);
+       state->data = &state->ch;
+       state->size = 1;
+       break;
+diff --git a/gcc/opts.c b/gcc/opts.c
+index 336defe8b..122bd48d4 100644
+--- a/gcc/opts.c
++++ b/gcc/opts.c
+@@ -31,6 +31,7 @@ along with GCC; see the file COPYING3.  If not see
+ #include "insn-attr-common.h"
+ #include "common/common-target.h"
+ #include "spellcheck.h"
++#include "diagnostic-color.h"
+ 
+ static void set_Wstrict_aliasing (struct gcc_options *opts, int onoff);
+ 
+@@ -1287,10 +1288,37 @@ print_filtered_help (unsigned int include_flags,
+ 	  else
+ 	    strcpy (new_help, "\t");
+ 
++	  /* Set to print whether the option is enabled or disabled,
++	     or, if it's an alias for another option, the name of
++	     the aliased option.  */
++	  bool print_state = false;
++
+ 	  if (flag_var != NULL
+ 	      && option->var_type != CLVC_DEFER)
+ 	    {
+-	      if (option->flags & CL_JOINED)
++	      /* If OPTION is only available for a specific subset
++		 of languages other than this one, mention them.  */
++	      bool avail_for_lang = true;
++	      if (unsigned langset = option->flags & CL_LANG_ALL)
++		{
++		  if (!(langset & lang_mask))
++		    {
++		      avail_for_lang = false;
++		      strcat (new_help, _("[available in "));
++		      for (unsigned i = 0, n = 0; (1U << i) < CL_LANG_ALL; ++i)
++			if (langset & (1U << i))
++			  {
++			    if (n++)
++			      strcat (new_help, ", ");
++			    strcat (new_help, lang_names[i]);
++			  }
++		      strcat (new_help, "]");
++		    }
++		}
++	      if (!avail_for_lang)
++		; /* Print nothing else if the option is not available
++		     in the current language.  */
++	      else if (option->flags & CL_JOINED)
+ 		{
+ 		  if (option->var_type == CLVC_STRING)
+ 		    {
+@@ -1314,12 +1342,49 @@ print_filtered_help (unsigned int include_flags,
+ 				"%s", arg);
+ 		    }
+ 		  else
+-		    sprintf (new_help + strlen (new_help),
+-			     "%d", * (int *) flag_var);
++		    {
++		      if (option->cl_host_wide_int)
++			sprintf (new_help + strlen (new_help),
++				 _("%llu bytes"), (unsigned long long)
++				 *(unsigned HOST_WIDE_INT *) flag_var);
++		      else
++			sprintf (new_help + strlen (new_help),
++				 "%i", * (int *) flag_var);
++		    }
++		}
++	      else
++		print_state = true;
++	    }
++	  else
++	    /* When there is no argument, print the option state only
++	       if the option takes no argument.  */
++	    print_state = !(option->flags & CL_JOINED);
++
++	  if (print_state)
++	    {
++	      if (option->alias_target < N_OPTS
++		  && option->alias_target != OPT_SPECIAL_ignore
++		  && option->alias_target != OPT_SPECIAL_input_file
++		  && option->alias_target != OPT_SPECIAL_program_name
++		  && option->alias_target != OPT_SPECIAL_unknown)
++		{
++		  const struct cl_option *target
++		    = &cl_options[option->alias_target];
++		  sprintf (new_help + strlen (new_help), "%s%s",
++			   target->opt_text,
++			   option->alias_arg ? option->alias_arg : "");
+ 		}
++	      else if (option->alias_target == OPT_SPECIAL_ignore)
++		strcat (new_help, ("[ignored]"));
+ 	      else
+-		strcat (new_help, option_enabled (i, opts)
+-			? _("[enabled]") : _("[disabled]"));
++		{
++		  /* Print the state for an on/off option.  */
++		  int ena = option_enabled (i, lang_mask, opts);
++		  if (ena > 0)
++		    strcat (new_help, _("[enabled]"));
++		  else if (ena == 0)
++		    strcat (new_help, _("[disabled]"));
++		}
+ 	    }
+ 
+ 	  help = new_help;
+diff --git a/gcc/opts.h b/gcc/opts.h
+index 484fc1c39..7676c505a 100644
+--- a/gcc/opts.h
++++ b/gcc/opts.h
+@@ -351,7 +351,8 @@ extern void decode_options (struct gcc_options *opts,
+ 			    location_t loc,
+ 			    diagnostic_context *dc,
+ 			    void (*target_option_override_hook) (void));
+-extern int option_enabled (int opt_idx, void *opts);
++extern int option_enabled (int opt_idx, unsigned lang_mask, void *opts);
++
+ extern bool get_option_state (struct gcc_options *, int,
+ 			      struct cl_option_state *);
+ extern void set_option (struct gcc_options *opts,
+diff --git a/gcc/testsuite/g++.dg/pr85523.C b/gcc/testsuite/g++.dg/pr85523.C
+new file mode 100644
+index 000000000..9cd939be5
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/pr85523.C
+@@ -0,0 +1,88 @@
++/* { dg-options "-fdiagnostics-show-caret" } */
++
++/* Verify that we emit a "return *this;" fix-it hint for
++   a missing return in an assignment operator.  */
++
++struct s1 {
++  s1& operator=(const s1&) { } // { dg-warning "no return statement in function returning non-void" }
++  /* { dg-begin-multiline-output "" }
++   s1& operator=(const s1&) { }
++                              ^
++                              return *this;
++     { dg-end-multiline-output "" } */
++};
++
++/* Likewise for +=.  */
++
++struct s2 {
++  s2& operator+=(const s2&) {} // { dg-warning "no return statement in function returning non-void" }
++  /* { dg-begin-multiline-output "" }
++   s2& operator+=(const s2&) {}
++                              ^
++                              return *this;
++     { dg-end-multiline-output "" } */
++};
++
++/* No warning for "void" return.  */
++
++struct s3 {
++  void operator=(const s3&) { }
++};
++
++/* We shouldn't issue the fix-it hint if the return type isn't right.  */
++
++struct s4 {
++  int operator=(int) { } // { dg-warning "no return statement in function returning non-void" }
++  /* { dg-begin-multiline-output "" }
++   int operator=(int) { }
++                        ^
++     { dg-end-multiline-output "" } */
++};
++
++/* Example of a multi-line fix-it hint.  */
++
++struct s5 {
++  int i;
++  s5& operator=(const s5& z) {
++    i = z.i;
++  } // { dg-warning "no return statement in function returning non-void" }
++  /* { dg-begin-multiline-output "" }
+++    return *this;
++   }
++   ^
++     { dg-end-multiline-output "" } */
++};
++
++/* Example of a multi-line fix-it hint with other statements.  */
++
++extern void log (const char *);
++struct s6 {
++  int i;
++  s6& operator=(const s6& z) {
++    log ("operator=\n");
++    i = z.i;
++  } // { dg-warning "no return statement in function returning non-void" }
++  /* { dg-begin-multiline-output "" }
+++    return *this;
++   }
++   ^
++     { dg-end-multiline-output "" } */
++};
++
++/* Another example of a multi-line fix-it hint with other statements.  */
++
++struct s7 {
++  int i;
++  s7& operator=(const s6& z) {
++    if (z.i)
++      log ("operator=\n");
++    else
++      log ("operator=\n");
++    i = z.i;
++  } // { dg-warning "no return statement in function returning non-void" }
++  /* { dg-begin-multiline-output "" }
+++    return *this;
++   }
++   ^
++     { dg-end-multiline-output "" } */
++};
+diff --git a/gcc/testsuite/g++.dg/warn/Wreturn-type-11.C b/gcc/testsuite/g++.dg/warn/Wreturn-type-11.C
+new file mode 100644
+index 000000000..35d05eb60
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/warn/Wreturn-type-11.C
+@@ -0,0 +1,11 @@
++// PR c++/88554
++// { dg-do compile }
++// { dg-options "-Wreturn-type" }
++
++struct X {
++  friend X & operator+= (X &, int) { }	// { dg-warning "no return statement in function returning non-void" }
++					// { dg-bogus "return \\*this;" "" { target *-*-* } .-1 }
++};
++struct Y {};
++Y & operator += (Y &, Y &) { }		// { dg-warning "no return statement in function returning non-void" }
++					// { dg-bogus "return \\*this;" "" { target *-*-* } .-1 }
+diff --git a/gcc/testsuite/gcc.dg/plugin/diagnostic-test-show-locus-generate-patch.c b/gcc/testsuite/gcc.dg/plugin/diagnostic-test-show-locus-generate-patch.c
+index f1963dd20..cfdc20819 100644
+--- a/gcc/testsuite/gcc.dg/plugin/diagnostic-test-show-locus-generate-patch.c
++++ b/gcc/testsuite/gcc.dg/plugin/diagnostic-test-show-locus-generate-patch.c
+@@ -64,6 +64,21 @@ void test_mutually_exclusive_suggestions (void)
+ #endif
+ }
+ 
++/* Unit tests for add_fixit_insert_formatted.  */
++
++void test_add_fixit_insert_formatted_single_line (void)
++{
++  {}
++}
++
++void test_add_fixit_insert_formatted_multiline (void)
++{
++  if (1)
++    {
++    }
++}
++
++
+ /* Verify the output from -fdiagnostics-generate-patch.
+    We expect a header, containing the filename.  This is the absolute path,
+    so we can only capture it via regexps.  */
+@@ -108,4 +123,21 @@ void test_mutually_exclusive_suggestions (void)
+      case 'b':
+        x = b;
+      }
++@@ -68,7 +69,7 @@
++ 
++ void test_add_fixit_insert_formatted_single_line (void)
++ {
++-  {}
+++  {INSERTED-CONTENT}
++ }
++ 
++ void test_add_fixit_insert_formatted_multiline (void)
++@@ -76,6 +77,7 @@
++   if (1)
++     {
++     }
+++  INSERTED-CONTENT
++ }
++ 
++ 
+    { dg-end-multiline-output "" } */
+diff --git a/gcc/testsuite/gcc.dg/plugin/diagnostic_plugin_test_show_locus.c b/gcc/testsuite/gcc.dg/plugin/diagnostic_plugin_test_show_locus.c
+index 3908b922b..fa7b40239 100644
+--- a/gcc/testsuite/gcc.dg/plugin/diagnostic_plugin_test_show_locus.c
++++ b/gcc/testsuite/gcc.dg/plugin/diagnostic_plugin_test_show_locus.c
+@@ -60,6 +60,7 @@
+ #include "diagnostic.h"
+ #include "context.h"
+ #include "print-tree.h"
++#include "gcc-rich-location.h"
+ 
+ int plugin_is_GPL_compatible;
+ 
+@@ -333,6 +334,29 @@ test_show_locus (function *fun)
+       }
+     }  
+ 
++  /* Tests of gcc_rich_location::add_fixit_insert_formatted.  */
++
++  if (0 == strcmp (fnname, "test_add_fixit_insert_formatted_single_line"))
++    {
++      const int line = fnstart_line + 1;
++      location_t insertion_point = get_loc (line, 3);
++      location_t indent = get_loc (line, 2);
++      gcc_rich_location richloc (insertion_point);
++      richloc.add_fixit_insert_formatted ("INSERTED-CONTENT",
++					  insertion_point, indent);
++      inform (&richloc, "single-line insertion");
++    }
++
++  if (0 == strcmp (fnname, "test_add_fixit_insert_formatted_multiline"))
++    {
++      location_t insertion_point = fun->function_end_locus;
++      location_t indent = get_loc (fnstart_line + 1, 2);
++      gcc_rich_location richloc (insertion_point);
++      richloc.add_fixit_insert_formatted ("INSERTED-CONTENT",
++					  insertion_point, indent);
++      inform (&richloc, "multiline insertion");
++    }
++
+   /* Example of two carets where both carets appear to have an off-by-one
+      error appearing one column early.
+      Seen with gfortran.dg/associate_5.f03.
+diff --git a/gcc/testsuite/lib/options.exp b/gcc/testsuite/lib/options.exp
+index 824d91276..61a4fa563 100644
+--- a/gcc/testsuite/lib/options.exp
++++ b/gcc/testsuite/lib/options.exp
+@@ -26,27 +26,54 @@ if { [ishost "*-*-cygwin*"] } {
+ }
+ 
+ # Run the LANGUAGE compiler with GCC_OPTIONS and inspect the compiler
+-# output to make sure that they match the newline-separated patterns
+-# in COMPILER_PATTERNS but not the patterns in COMPILER_NON_PATTERNS.
+-# In case of failure, xfail if XFAIL is nonempty.
+-
+-proc check_for_options {language gcc_options compiler_patterns compiler_non_patterns expected_failure} {
+-    set filename test-[pid]
+-    set fd [open $filename.c w]
+-    puts $fd "int main (void) { return 0; }"
+-    close $fd
+-    remote_download host $filename.c
++# output excluding EXCLUDE lines to make sure that they match the
++# newline-separated patterns in COMPILER_PATTERNS but not the patterns in
++# COMPILER_NON_PATTERNS.  In case of failure, xfail if XFAIL is nonempty.
+ 
++proc check_for_options_with_filter { language gcc_options exclude \
++					 compiler_patterns \
++					 compiler_non_patterns \
++					 expected_failure } {
+     set test "compiler driver $gcc_options option(s):"
+     set gcc_options "\{additional_flags=$gcc_options\}"
+ 
+     switch "$language" {
+-	"c" { set compiler cc1 }
++	"c" {
++	    set compiler cc1
++	    set suffix c
++	}
++	"c++" {
++	    set compiler cc1plus
++	    set suffix cc
++	}
+ 	default { error "unknown language" }
+     }
+-    set gcc_output [gcc_target_compile $filename.c $filename.x executable $gcc_options]
+-    remote_file build delete $filename.c $filename.x $filename.gcno
+ 
++    set filebase test-[pid]
++    set srcfname $filebase.$suffix
++    set fd [open $srcfname w]
++    puts $fd "int main (void) { return 0; }"
++    close $fd
++    remote_download host $srcfname
++
++    set gcc_output [gcc_target_compile $srcfname $filebase.x executable $gcc_options]
++    remote_file build delete $srcfname $filebase.x $filebase.gcno
++
++    if { $exclude != "" } {
++	set lines [split $gcc_output "\n"]
++	set gcc_output ""
++	foreach line $lines {
++	    if {[regexp -line -- "$exclude" $line]} {
++		continue
++	    }
++	    if { $gcc_output == "" } {
++		set gcc_output "$line"
++	    } else {
++		set gcc_output "$gcc_output\n$line"
++	    }
++	}	
++   }
++    
+     # Verify that COMPILER_PATTERRNS appear in gcc output.
+     foreach pattern [split $compiler_patterns "\n"] {
+ 	if {$pattern != ""} {
+@@ -79,3 +106,11 @@ proc check_for_options {language gcc_options compiler_patterns compiler_non_patt
+ 	}
+     }
+ }
++
++# As check_for_options_with_filter, but without the EXCLUDE parameter.
++
++proc check_for_options { language gcc_options compiler_patterns \
++			     compiler_non_patterns expected_failure } {
++    check_for_options_with_filter $language $gcc_options "" $compiler_patterns \
++	$compiler_non_patterns $expected_failure
++}
+diff --git a/gcc/toplev.c b/gcc/toplev.c
+index 54f1e65b1..1f96258cc 100644
+--- a/gcc/toplev.c
++++ b/gcc/toplev.c
+@@ -833,9 +833,10 @@ print_switch_values (print_switch_fn_type print_fn)
+   pos = print_single_switch (print_fn, 0,
+ 			     SWITCH_TYPE_DESCRIPTIVE, _("options enabled: "));
+ 
++  unsigned lang_mask = lang_hooks.option_lang_mask ();
+   for (j = 0; j < cl_options_count; j++)
+     if (cl_options[j].cl_report
+-	&& option_enabled (j, &global_options) > 0)
++	&& option_enabled (j, lang_mask, &global_options) > 0)
+       pos = print_single_switch (print_fn, pos,
+ 				 SWITCH_TYPE_ENABLED, cl_options[j].opt_text);
+ 
+@@ -1106,6 +1107,7 @@ general_init (const char *argv0, bool init_signals)
+   /* Initialize the diagnostics reporting machinery, so option parsing
+      can give warnings and errors.  */
+   diagnostic_initialize (global_dc, N_OPTS);
++  global_dc->lang_mask = lang_hooks.option_lang_mask ();
+   /* Set a default printer.  Language specific initializations will
+      override it later.  */
+   tree_diagnostics_defaults (global_dc);

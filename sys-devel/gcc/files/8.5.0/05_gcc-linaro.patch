@@ -1,3 +1,109 @@
+diff --git a/gcc/alias.c b/gcc/alias.c
+index 900e4e379..afae4f25c 100644
+--- a/gcc/alias.c
++++ b/gcc/alias.c
+@@ -158,7 +158,8 @@ static tree decl_for_component_ref (tree);
+ static int write_dependence_p (const_rtx,
+ 			       const_rtx, machine_mode, rtx,
+ 			       bool, bool, bool);
+-static int compare_base_symbol_refs (const_rtx, const_rtx);
++static int compare_base_symbol_refs (const_rtx, const_rtx,
++				     HOST_WIDE_INT * = NULL);
+ 
+ static void memory_modified_1 (rtx, const_rtx, void *);
+ 
+@@ -1798,7 +1799,11 @@ rtx_equal_for_memref_p (const_rtx x, const_rtx y)
+       return label_ref_label (x) == label_ref_label (y);
+ 
+     case SYMBOL_REF:
+-      return compare_base_symbol_refs (x, y) == 1;
++      {
++	HOST_WIDE_INT distance = 0;
++	return (compare_base_symbol_refs (x, y, &distance) == 1
++		&& distance == 0);
++      }
+ 
+     case ENTRY_VALUE:
+       /* This is magic, don't go through canonicalization et al.  */
+@@ -2126,10 +2131,20 @@ compare_base_decls (tree base1, tree base2)
+   return ret;
+ }
+ 
+-/* Same as compare_base_decls but for SYMBOL_REF.  */
++/* Compare SYMBOL_REFs X_BASE and Y_BASE.
++
++   - Return 1 if Y_BASE - X_BASE is constant, adding that constant
++     to *DISTANCE if DISTANCE is nonnull.
++
++   - Return 0 if no accesses based on X_BASE can alias Y_BASE.
++
++   - Return -1 if one of the two results applies, but we can't tell
++     which at compile time.  Update DISTANCE in the same way as
++     for a return value of 1, for the case in which that holds.  */
+ 
+ static int
+-compare_base_symbol_refs (const_rtx x_base, const_rtx y_base)
++compare_base_symbol_refs (const_rtx x_base, const_rtx y_base,
++			  HOST_WIDE_INT *distance)
+ {
+   tree x_decl = SYMBOL_REF_DECL (x_base);
+   tree y_decl = SYMBOL_REF_DECL (y_base);
+@@ -2146,8 +2161,8 @@ compare_base_symbol_refs (const_rtx x_base, const_rtx y_base)
+ 	  std::swap (x_decl, y_decl);
+ 	  std::swap (x_base, y_base);
+ 	}
+-      /* We handle specially only section anchors and assume that other
+- 	 labels may overlap with user variables in an arbitrary way.  */
++      /* We handle specially only section anchors.  Other symbols are
++	 either equal (via aliasing) or refer to different objects.  */
+       if (!SYMBOL_REF_HAS_BLOCK_INFO_P (y_base))
+         return -1;
+       /* Anchors contains static VAR_DECLs and CONST_DECLs.  We are safe
+@@ -2176,14 +2191,13 @@ compare_base_symbol_refs (const_rtx x_base, const_rtx y_base)
+     {
+       if (SYMBOL_REF_BLOCK (x_base) != SYMBOL_REF_BLOCK (y_base))
+ 	return 0;
+-      if (SYMBOL_REF_BLOCK_OFFSET (x_base) == SYMBOL_REF_BLOCK_OFFSET (y_base))
+-	return binds_def ? 1 : -1;
+-      if (SYMBOL_REF_ANCHOR_P (x_base) != SYMBOL_REF_ANCHOR_P (y_base))
+-	return -1;
+-      return 0;
++      if (distance)
++	*distance += (SYMBOL_REF_BLOCK_OFFSET (y_base)
++		      - SYMBOL_REF_BLOCK_OFFSET (x_base));
++      return binds_def ? 1 : -1;
+     }
+-  /* In general we assume that memory locations pointed to by different labels
+-     may overlap in undefined ways.  */
++  /* Either the symbols are equal (via aliasing) or they refer to
++     different objects.  */
+   return -1;
+ }
+ 
+@@ -2466,11 +2480,12 @@ memrefs_conflict_p (poly_int64 xsize, rtx x, poly_int64 ysize, rtx y,
+ 
+   if (GET_CODE (x) == SYMBOL_REF && GET_CODE (y) == SYMBOL_REF)
+     {
+-      int cmp = compare_base_symbol_refs (x,y);
++      HOST_WIDE_INT distance = 0;
++      int cmp = compare_base_symbol_refs (x, y, &distance);
+ 
+       /* If both decls are the same, decide by offsets.  */
+       if (cmp == 1)
+-        return offset_overlap_p (c, xsize, ysize);
++	return offset_overlap_p (c + distance, xsize, ysize);
+       /* Assume a potential overlap for symbolic addresses that went
+ 	 through alignment adjustments (i.e., that have negative
+ 	 sizes), because we can't know how far they are from each
+@@ -2479,7 +2494,7 @@ memrefs_conflict_p (poly_int64 xsize, rtx x, poly_int64 ysize, rtx y,
+ 	return -1;
+       /* If decls are different or we know by offsets that there is no overlap,
+ 	 we win.  */
+-      if (!cmp || !offset_overlap_p (c, xsize, ysize))
++      if (!cmp || !offset_overlap_p (c + distance, xsize, ysize))
+ 	return 0;
+       /* Decls may or may not be different and offsets overlap....*/
+       return -1;
 diff --git a/gcc/builtin-attrs.def b/gcc/builtin-attrs.def
 index 300ba657c..e245e4d9c 100644
 --- a/gcc/builtin-attrs.def
@@ -1309,6 +1415,19 @@ index 55e54c9c3..2cdebacaf 100644
  #if CHECKING_P
  namespace selftest {
  
+diff --git a/gcc/config/arm/arm.h b/gcc/config/arm/arm.h
+index b12ae3858..febd6b033 100644
+--- a/gcc/config/arm/arm.h
++++ b/gcc/config/arm/arm.h
+@@ -211,7 +211,7 @@ extern tree arm_fp16_type_node;
+ #define TARGET_NEON_RDMA (TARGET_NEON && arm_arch8_1)
+ 
+ /* Supports the Dot Product AdvSIMD extensions.  */
+-#define TARGET_DOTPROD (TARGET_NEON					\
++#define TARGET_DOTPROD (TARGET_NEON && TARGET_VFP5			\
+ 			&& bitmap_bit_p (arm_active_target.isa,		\
+ 					isa_bit_dotprod)		\
+ 			&& arm_arch8_2)
 diff --git a/gcc/config/arm/arm.md b/gcc/config/arm/arm.md
 index 81c96658d..ea04c5051 100644
 --- a/gcc/config/arm/arm.md
@@ -2119,6 +2238,18 @@ index 000000000..3ed4d3906
 +}
 +
 +/* { dg-prune-output "this target does not define a speculation barrier;" } */
+diff --git a/gcc/testsuite/lib/target-supports.exp b/gcc/testsuite/lib/target-supports.exp
+index bdc3cd3b6..deb9513ba 100644
+--- a/gcc/testsuite/lib/target-supports.exp
++++ b/gcc/testsuite/lib/target-supports.exp
+@@ -4531,6 +4531,7 @@ proc check_effective_target_arm_v8_2a_dotprod_neon_ok_nocache { } {
+     foreach flags {"" "-mfloat-abi=softfp -mfpu=neon-fp-armv8" "-mfloat-abi=hard -mfpu=neon-fp-armv8"} {
+         if { [check_no_compiler_messages_nocache \
+                   arm_v8_2a_dotprod_neon_ok object {
++	    #include <stdint.h>
+             #if !defined (__ARM_FEATURE_DOTPROD)
+             #error "__ARM_FEATURE_DOTPROD not defined"
+             #endif
 diff --git a/libgcc/config/arm/lib1funcs.S b/libgcc/config/arm/lib1funcs.S
 index 04c1b773a..9a4ce3a6f 100644
 --- a/libgcc/config/arm/lib1funcs.S
