@@ -33,13 +33,12 @@ src_prepare() {
 
 	toolchain_src_prepare
 
-	eapply "${FILESDIR}"/${PV}/01_fix-libbacktrace.patch
-	eapply "${FILESDIR}"/${PV}/02_fix-werror.patch
-	eapply "${FILESDIR}"/${PV}/03_fix-aarch64-fcsel_1.patch
-
 	use vanilla && return 0
 
-	[[ $(tc-arch) == "arm64" || $(tc-arch) == "arm" ]] && eapply "${FILESDIR}"/${PV}/04_gcc-arm.patch
+	eapply "${FILESDIR}"/${PV}/10_fix-libbacktrace.patch
+	eapply "${FILESDIR}"/${PV}/11_fix-werror.patch
+	eapply "${FILESDIR}"/${PV}/12_fix-aarch64-fcsel_1.patch
+	[[ $(tc-arch) == "arm64" || $(tc-arch) == "arm" ]] && eapply "${FILESDIR}"/${PV}/13_gcc-arm.patch
 
 	eapply "${FILESDIR}"/${PV}/postrelease/000_pr98645-98688-111224.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/001_pr83782.patch

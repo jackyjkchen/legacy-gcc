@@ -14,13 +14,14 @@ src_prepare() {
 	sed -i 's/use_fixproto=yes/:/' gcc/config.gcc #PR33200
 
 	[[ $(tc-arch) == "mips" && ${DEFAULT_ABI} == "n64" ]] && eapply "${FILESDIR}"/${PV}/01_mips64-default-n64-abi.patch
-	eapply "${FILESDIR}"/${PV}/02_fix-werror.patch
-	eapply "${FILESDIR}"/${PV}/03_backport-static-libstdc++-option.patch
-	eapply "${FILESDIR}"/${PV}/04_support-__builtin_isinf_sign.patch
-	eapply "${FILESDIR}"/${PV}/05_enable-libobjc-in-arm-eabi.patch
-	eapply "${FILESDIR}"/${PV}/06_fix-dw2-hang.patch
 
 	use vanilla && return 0
+
+	eapply "${FILESDIR}"/${PV}/10_fix-werror.patch
+	eapply "${FILESDIR}"/${PV}/11_backport-static-libstdc++-option.patch
+	eapply "${FILESDIR}"/${PV}/12_support-__builtin_isinf_sign.patch
+	eapply "${FILESDIR}"/${PV}/13_enable-libobjc-in-arm-eabi.patch
+	eapply "${FILESDIR}"/${PV}/14_fix-dw2-hang.patch
 
 	eapply "${FILESDIR}"/${PV}/postrelease/000_pr36282.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/001_pr50109.patch

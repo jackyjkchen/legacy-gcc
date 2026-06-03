@@ -15,15 +15,15 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/00_gentoo-patchset.patch
 	toolchain_src_prepare
 
-	eapply "${FILESDIR}"/${PV}/01_riscv-fix-multilib.patch
+	is_djgpp || eapply "${FILESDIR}"/${PV}/01_fix-sanitizer-glibc-2.42.patch
 	is_djgpp || eapply "${FILESDIR}"/${PV}/02_fix-ia32-sanitizer-malloc.patch
-	eapply "${FILESDIR}"/${PV}/03_fix-werror.patch
-	is_djgpp || eapply "${FILESDIR}"/${PV}/04_fix-sanitizer-glibc-2.42.patch
 
 	use vanilla && return 0
 
-	use_linaro && eapply "${FILESDIR}"/${PV}/05_gcc-linaro.patch
-	[[ $(tc-arch) == "mips" ]] && eapply "${FILESDIR}"/${PV}/06_loongson.patch
+	eapply "${FILESDIR}"/${PV}/10_riscv-fix-multilib.patch
+	eapply "${FILESDIR}"/${PV}/11_fix-werror.patch
+	use_linaro && eapply "${FILESDIR}"/${PV}/12_gcc-linaro.patch
+	[[ $(tc-arch) == "mips" ]] && eapply "${FILESDIR}"/${PV}/13_loongson.patch
 
 	eapply "${FILESDIR}"/${PV}/postrelease/000_pr101384.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/001_pr104510.patch

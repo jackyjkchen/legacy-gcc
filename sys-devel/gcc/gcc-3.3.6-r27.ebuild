@@ -29,9 +29,11 @@ src_prepare() {
 			eapply "${FILESDIR}"/${PV}/06_fix-for-sh4.patch
 			;;
 	esac
-	eapply "${FILESDIR}"/${PV}/07_add-__LP64__.patch
 
 	use vanilla && return 0
+
+	eapply "${FILESDIR}"/${PV}/10_add-__LP64__.patch
+
 	eapply "${FILESDIR}"/${PV}/postrelease/000_pr13685.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/001_pr45262.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/002_pr26729.patch

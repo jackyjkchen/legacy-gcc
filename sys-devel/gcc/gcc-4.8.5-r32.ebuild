@@ -16,12 +16,12 @@ src_prepare() {
 	toolchain_src_prepare
 
 	[[ $(tc-arch) == "mips" && ${DEFAULT_ABI} == "n64" ]] && eapply "${FILESDIR}"/${PV}/01_mips64-default-n64-abi.patch
-	eapply "${FILESDIR}"/${PV}/02_fix-werror.patch
 
 	use vanilla && return 0
 
-	use_linaro && eapply "${FILESDIR}"/${PV}/03_gcc-linaro.patch
-	use test && eapply "${FILESDIR}"/${PV}/04_support-parallel-test.patch
+	eapply "${FILESDIR}"/${PV}/10_fix-werror.patch
+	use_linaro && eapply "${FILESDIR}"/${PV}/11_gcc-linaro.patch
+	use test && eapply "${FILESDIR}"/${PV}/12_support-parallel-test.patch
 
 	eapply "${FILESDIR}"/${PV}/postrelease/000_pr77450-77605-78185-78333.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/001_pr77943.patch

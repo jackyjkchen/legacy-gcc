@@ -15,11 +15,12 @@ src_prepare() {
 
 	[[ $(tc-arch) == "arm" ]] && eapply "${FILESDIR}"/${PV}/01_support-armhf.patch
 	[[ $(tc-arch) == "mips" && ${DEFAULT_ABI} == "n64" ]] && eapply "${FILESDIR}"/${PV}/02_mips64-default-n64-abi.patch
-	eapply "${FILESDIR}"/${PV}/03_remove-combine.patch
-	eapply "${FILESDIR}"/${PV}/04_fix-werror.patch
-	eapply "${FILESDIR}"/${PV}/05_remove-useless-checking.patch
 
 	use vanilla && return 0
+
+	eapply "${FILESDIR}"/${PV}/10_remove-combine.patch
+	eapply "${FILESDIR}"/${PV}/11_fix-werror.patch
+	eapply "${FILESDIR}"/${PV}/12_remove-useless-checking.patch
 
 	eapply "${FILESDIR}"/${PV}/postrelease/000_pr78185.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/001_pr58726.patch

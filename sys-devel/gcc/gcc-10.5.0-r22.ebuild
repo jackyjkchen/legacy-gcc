@@ -19,11 +19,10 @@ src_prepare() {
 
 	toolchain_src_prepare
 
-	eapply "${FILESDIR}"/${PV}/01_riscv-fix-multilib.patch
-	eapply "${FILESDIR}"/${PV}/02_fix-werror.patch
-
 	use vanilla && return 0
 
+	eapply "${FILESDIR}"/${PV}/01_riscv-fix-multilib.patch
+	eapply "${FILESDIR}"/${PV}/02_fix-werror.patch
 	[[ $(tc-arch) == "arm64" || $(tc-arch) == "arm" ]] && eapply "${FILESDIR}"/${PV}/03_gcc-arm.patch
 
 	eapply "${FILESDIR}"/${PV}/postrelease/000_pr97164.patch

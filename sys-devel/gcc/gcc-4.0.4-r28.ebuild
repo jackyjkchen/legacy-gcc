@@ -16,12 +16,13 @@ src_prepare() {
 	[[ $(tc-arch) == "hppa" ]] && eapply "${FILESDIR}"/${PV}/03_hppa-fix-build.patch
 	[[ $(tc-arch) == "mips" ]] && eapply "${FILESDIR}"/${PV}/04_mips-fix-build.patch
 	! is_crosscompile && eapply "${FILESDIR}"/${PV}/05_workaround-bootstrap.patch
-	eapply "${FILESDIR}"/${PV}/06_backport-static-libstdc++-option.patch
-	eapply "${FILESDIR}"/${PV}/07_fix-werror.patch
-	eapply "${FILESDIR}"/${PV}/08_fix-random-build-break.patch
-	eapply "${FILESDIR}"/${PV}/09_fix-dw2-hang.patch
+	eapply "${FILESDIR}"/${PV}/06_fix-random-build-break.patch
 
 	use vanilla && return 0
+
+	eapply "${FILESDIR}"/${PV}/10_backport-static-libstdc++-option.patch
+	eapply "${FILESDIR}"/${PV}/11_fix-werror.patch
+	eapply "${FILESDIR}"/${PV}/12_fix-dw2-hang.patch
 
 	eapply "${FILESDIR}"/${PV}/postrelease/000_pr13685.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/001_pr32245.patch

@@ -19,12 +19,13 @@ src_prepare() {
 	[[ $(tc-arch) == "arm" ]] && eapply "${FILESDIR}"/${PV}/06_add-.note.GNU-stack.patch
 	[[ $(tc-arch) == "mips" ]] && eapply "${FILESDIR}"/${PV}/07_mips-fix-build.patch
 	! is_crosscompile && eapply "${FILESDIR}"/${PV}/08_workaround-bootstrap.patch
-	eapply "${FILESDIR}"/${PV}/09_Unset-_M_init.patch
+
+	use vanilla && return 0
+
 	eapply "${FILESDIR}"/${PV}/10_backport-static-libstdc++-option.patch
 	eapply "${FILESDIR}"/${PV}/11_fix-dw2-hang.patch
 	! is_djgpp && eapply "${FILESDIR}"/${PV}/12_support-negative-opts.patch
-
-	use vanilla && return 0
+	eapply "${FILESDIR}"/${PV}/13_Unset-_M_init.patch
 
 	eapply "${FILESDIR}"/${PV}/postrelease/000_pr33619.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/001_pr36013.patch

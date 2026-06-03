@@ -22,13 +22,13 @@ src_prepare() {
 	esac
 	use go && eapply "${FILESDIR}"/${PV}/02_fix-libgo-for-new-glibc.patch
 	eapply "${FILESDIR}"/${PV}/03_fix-building-on-ppc64.patch
-	eapply "${FILESDIR}"/${PV}/04_fix-werror.patch
-	eapply "${FILESDIR}"/${PV}/05_fix-broadwell-test.patch
-	is_glibc217 && eapply "${FILESDIR}"/${PV}/06_fake-c17.patch
+	is_glibc217 && eapply "${FILESDIR}"/${PV}/04_fake-c17.patch
 
 	use vanilla && return 0
 
-	use_linaro && eapply "${FILESDIR}"/${PV}/07_gcc-linaro.patch
+	eapply "${FILESDIR}"/${PV}/10_fix-werror.patch
+	eapply "${FILESDIR}"/${PV}/11_fix-broadwell-test.patch
+	use_linaro && eapply "${FILESDIR}"/${PV}/12_gcc-linaro.patch
 
 	eapply "${FILESDIR}"/${PV}/postrelease/000_pr94460.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/001_pr85257.patch

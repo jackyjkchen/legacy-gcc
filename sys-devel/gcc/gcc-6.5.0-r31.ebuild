@@ -16,12 +16,12 @@ src_prepare() {
 	toolchain_src_prepare
 
 	use graphite && eapply "${FILESDIR}"/${PV}/01_compat-new-isl.patch
-	eapply "${FILESDIR}"/${PV}/02_fix-werror.patch
-	is_glibc217 && eapply "${FILESDIR}"/${PV}/03_fake-c17.patch
+	is_glibc217 && eapply "${FILESDIR}"/${PV}/02_fake-c17.patch
 
 	use vanilla && return 0
 
-	use_linaro && eapply "${FILESDIR}"/${PV}/04_gcc-linaro.patch
+	eapply "${FILESDIR}"/${PV}/10_fix-werror.patch
+	use_linaro && eapply "${FILESDIR}"/${PV}/11_gcc-linaro.patch
 
 	eapply "${FILESDIR}"/${PV}/postrelease/000_pr94460.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/001_pr80693-81019-81020.patch

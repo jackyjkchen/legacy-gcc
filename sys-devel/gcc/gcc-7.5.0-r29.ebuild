@@ -15,13 +15,13 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/00_gentoo-patchset.patch
 	toolchain_src_prepare
 
-	eapply "${FILESDIR}"/${PV}/01_riscv-fix-multilib.patch
-	eapply "${FILESDIR}"/${PV}/02_fix-werror.patch
-	is_glibc217 && eapply "${FILESDIR}"/${PV}/03_fake-c17.patch
+	is_glibc217 && eapply "${FILESDIR}"/${PV}/01_fake-c17.patch
 
 	use vanilla && return 0
 
-	use_linaro && eapply "${FILESDIR}"/${PV}/04_gcc-linaro.patch
+	eapply "${FILESDIR}"/${PV}/10_riscv-fix-multilib.patch
+	eapply "${FILESDIR}"/${PV}/11_fix-werror.patch
+	use_linaro && eapply "${FILESDIR}"/${PV}/12_gcc-linaro.patch
 
 	eapply "${FILESDIR}"/${PV}/postrelease/000_pr94460.patch
 	[[ $(tc-arch) == "arm64" ]] && eapply "${FILESDIR}"/${PV}/postrelease/001_pr94383.patch

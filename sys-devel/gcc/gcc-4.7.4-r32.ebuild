@@ -17,13 +17,13 @@ src_prepare() {
 
 	[[ $(tc-arch) == "mips" && ${DEFAULT_ABI} == "n64" ]] && eapply "${FILESDIR}"/${PV}/01_mips64-default-n64-abi.patch
 	[[ $(tc-arch) == "alpha" ]] && eapply "${FILESDIR}"/${PV}/02_fix-alpha-bootstrap.patch
-	eapply "${FILESDIR}"/${PV}/03_remove-matrix-reorg.patch
-	eapply "${FILESDIR}"/${PV}/04_fix-werror.patch
 
 	use vanilla && return 0
 
-	use_linaro && eapply "${FILESDIR}"/${PV}/05_gcc-linaro.patch
-	use test && eapply "${FILESDIR}"/${PV}/06_support-parallel-test.patch
+	eapply "${FILESDIR}"/${PV}/10_remove-matrix-reorg.patch
+	eapply "${FILESDIR}"/${PV}/11_fix-werror.patch
+	use_linaro && eapply "${FILESDIR}"/${PV}/12_gcc-linaro.patch
+	use test && eapply "${FILESDIR}"/${PV}/13_support-parallel-test.patch
 
 	eapply "${FILESDIR}"/${PV}/postrelease/000_pr77605-78185-78333.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/001_pr58943.patch

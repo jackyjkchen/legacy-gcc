@@ -1633,14 +1633,13 @@ toolchain_src_configure() {
 	if tc_version_is_at_least 3.4 ; then
 		case $(tc-arch) in
 			amd64|x86|arm64|alpha|hppa|loong|m68k|mips|ppc|ppc64|riscv|s390|sparc)
-				ENABLE_WERROR="yes"
+				! _tc_use_if_iuse vanilla && ENABLE_WERROR="yes"
 				;;
 			arm)
 				if [[ ${CTARGET} == arm*-*-linux-gnueabihf ]] ; then
-					tc_version_is_at_least 4.5&& ENABLE_WERROR="yes"
-				fi
-				if [[ ${CTARGET} == arm*-*-linux-gnueabi ]] ; then
-					ENABLE_WERROR="yes"
+					! _tc_use_if_iuse vanilla && tc_version_is_at_least 4.5 && ENABLE_WERROR="yes"
+				elif [[ ${CTARGET} == arm*-*-linux-gnueabi ]] ; then
+					! _tc_use_if_iuse vanilla && ENABLE_WERROR="yes"
 				fi
 				;;
 			*)

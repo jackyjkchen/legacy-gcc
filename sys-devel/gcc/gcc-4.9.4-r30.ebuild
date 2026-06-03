@@ -21,13 +21,13 @@ src_prepare() {
 			;;
 	esac
 	[[ $(tc-arch) == "mips" && ${DEFAULT_ABI} == "n64" ]] && eapply "${FILESDIR}"/${PV}/02_mips64-default-n64-abi.patch
-	eapply "${FILESDIR}"/${PV}/03_fix-werror.patch
-	is_glibc217 && eapply "${FILESDIR}"/${PV}/04_fake-c17.patch
+	is_glibc217 && eapply "${FILESDIR}"/${PV}/03_fake-c17.patch
 
 	use vanilla && return 0
 
-	use_linaro && eapply "${FILESDIR}"/${PV}/05_gcc-linaro.patch
-	use test && eapply "${FILESDIR}"/${PV}/06_support-parallel-test.patch
+	eapply "${FILESDIR}"/${PV}/10_fix-werror.patch
+	use_linaro && eapply "${FILESDIR}"/${PV}/11_gcc-linaro.patch
+	use test && eapply "${FILESDIR}"/${PV}/12_support-parallel-test.patch
 
 	eapply "${FILESDIR}"/${PV}/postrelease/000_pr77450-77605-78185-78333.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/001_pr81395.patch

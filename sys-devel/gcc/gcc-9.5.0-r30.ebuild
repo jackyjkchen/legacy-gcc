@@ -11,14 +11,14 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/00_gentoo-patchset.patch
 	toolchain_src_prepare
 
-	eapply "${FILESDIR}"/${PV}/01_riscv-fix-multilib.patch
-	eapply "${FILESDIR}"/${PV}/02_fix-werror.patch
-	is_djgpp || eapply "${FILESDIR}"/${PV}/03_fix-sanitizer-glibc-2.42.patch
+	is_djgpp || eapply "${FILESDIR}"/${PV}/01_fix-sanitizer-glibc-2.42.patch
 
 	use vanilla && return 0
 
-	[[ $(tc-arch) == "mips" ]] && eapply "${FILESDIR}"/${PV}/04_loongson.patch
-	[[ $(tc-arch) == "arm64" || $(tc-arch) == "arm" ]] && eapply "${FILESDIR}"/${PV}/05_gcc-arm.patch
+	eapply "${FILESDIR}"/${PV}/10_fix-werror.patch
+	eapply "${FILESDIR}"/${PV}/11_riscv-fix-multilib.patch
+	[[ $(tc-arch) == "mips" ]] && eapply "${FILESDIR}"/${PV}/12_loongson.patch
+	[[ $(tc-arch) == "arm64" || $(tc-arch) == "arm" ]] && eapply "${FILESDIR}"/${PV}/13_gcc-arm.patch
 
 	eapply "${FILESDIR}"/${PV}/postrelease/000_pr90320.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/001_pr106513.patch

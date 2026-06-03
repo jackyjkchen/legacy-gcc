@@ -12,10 +12,12 @@ src_prepare() {
 	toolchain-oldlibc_src_prepare
 
 	eapply "${FILESDIR}"/${PV}/01_gcc-${PV}-workaround-for-new-glibc.patch
-	eapply "${FILESDIR}"/${PV}/02_sjlj-exception-default.patch
 	eapply "${FILESDIR}"/${PV}/10_fix-for-libc5.patch
 
 	use vanilla && return 0
+
+	eapply "${FILESDIR}"/${PV}/10_sjlj-exception-default.patch
+
 	eapply "${FILESDIR}"/${PV}/postrelease/00_pr45262.patch
 }
 

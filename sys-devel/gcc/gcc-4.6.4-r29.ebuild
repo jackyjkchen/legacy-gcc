@@ -13,13 +13,13 @@ src_prepare() {
 
 	[[ $(tc-arch) == "arm" ]] && eapply "${FILESDIR}"/${PV}/01_support-armhf.patch
 	[[ $(tc-arch) == "mips" && ${DEFAULT_ABI} == "n64" ]] && eapply "${FILESDIR}"/${PV}/02_mips64-default-n64-abi.patch
-	eapply "${FILESDIR}"/${PV}/03_remove-struct-matrix-reorg.patch
-	eapply "${FILESDIR}"/${PV}/04_fix-werror.patch
-	eapply "${FILESDIR}"/${PV}/05_fix-sparc-build.patch
+	eapply "${FILESDIR}"/${PV}/03_fix-sparc-build.patch
 
 	use vanilla && return 0
 
-	use test && eapply "${FILESDIR}"/${PV}/06_support-parallel-test.patch
+	eapply "${FILESDIR}"/${PV}/10_remove-struct-matrix-reorg.patch
+	eapply "${FILESDIR}"/${PV}/11_fix-werror.patch
+	use test && eapply "${FILESDIR}"/${PV}/12_support-parallel-test.patch
 
 	eapply "${FILESDIR}"/${PV}/postrelease/000_pr77605-78185-78333.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/001_pr58726.patch
