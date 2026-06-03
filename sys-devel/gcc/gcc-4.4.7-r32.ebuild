@@ -18,6 +18,7 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/03_fix-werror.patch
 	eapply "${FILESDIR}"/${PV}/04_backport-static-libstdc++-option.patch
 	use test && [[ ${CTARGET} == arm*-*-*eabi ]] && eapply "${FILESDIR}"/${PV}/05_workaround-abi-warning-in-test.patch
+	[[ $(tc-arch) == "arm" ]] && eapply "${FILESDIR}"/${PV}/06_gcc-arm.patch
 
 	use vanilla && return 0
 

@@ -1,0 +1,167 @@
+diff --git a/gcc/config/arm/arm.c b/gcc/config/arm/arm.c
+index eed5cfd1d..905bd4879 100644
+--- a/gcc/config/arm/arm.c
++++ b/gcc/config/arm/arm.c
+@@ -1663,6 +1663,16 @@ arm_override_options (void)
+   if (TARGET_AAPCS_BASED)
+     flag_dwarf2_cfi_asm = 0;
+ 
++  /* Hot/Cold partitioning is not currently supported, since we can't
++     handle literal pool placement in that case.  */
++  if (flag_reorder_blocks_and_partition)
++    {
++      inform (input_location,
++	      "-freorder-blocks-and-partition not supported on this architecture");
++      flag_reorder_blocks_and_partition = 0;
++      flag_reorder_blocks = 1;
++    }
++
+   /* Register global variables with the garbage collector.  */
+   arm_add_gc_roots ();
+ }
+diff --git a/gcc/fortran/Make-lang.in b/gcc/fortran/Make-lang.in
+index 1600d18b3..2d683d448 100644
+--- a/gcc/fortran/Make-lang.in
++++ b/gcc/fortran/Make-lang.in
+@@ -313,7 +313,8 @@ GFORTRAN_TRANS_DEPS = fortran/gfortran.h fortran/libgfortran.h \
+ 
+ fortran/f95-lang.o: $(GFORTRAN_TRANS_DEPS) fortran/mathbuiltins.def \
+   gt-fortran-f95-lang.h gtype-fortran.h $(CGRAPH_H) $(TARGET_H) fortran/cpp.h \
+-  $(BUILTINS_DEF) fortran/types.def
++  $(BUILTINS_DEF) fortran/types.def \
++  libfuncs.h expr.h except.h
+ fortran/scanner.o: toplev.h fortran/cpp.h
+ fortran/convert.o: $(GFORTRAN_TRANS_DEPS)
+ fortran/trans.o: $(GFORTRAN_TRANS_DEPS) tree-iterator.h
+diff --git a/gcc/fortran/f95-lang.c b/gcc/fortran/f95-lang.c
+index 28de139c1..f45ea0f62 100644
+--- a/gcc/fortran/f95-lang.c
++++ b/gcc/fortran/f95-lang.c
+@@ -43,6 +43,10 @@ along with GCC; see the file COPYING3.  If not see
+ #include "diagnostic.h"
+ #include "tree-dump.h"
+ #include "cgraph.h"
++/* For gfc_maybe_initialize_eh.  */
++#include "libfuncs.h"
++#include "expr.h"
++#include "except.h"
+ 
+ #include "gfortran.h"
+ #include "cpp.h"
+@@ -170,6 +174,10 @@ static GTY(()) struct binding_level *free_binding_level;
+    It is indexed by a RID_... value.  */
+ tree *ridpointers = NULL;
+ 
++/* True means we've initialized exception handling.  */
++bool gfc_eh_initialized_p;
++
++
+ /* Prepare expr to be an argument of a TRUTH_NOT_EXPR,
+    or validate its data type for an `if' or `while' statement or ?..: exp.
+ 
+@@ -725,19 +733,20 @@ build_builtin_fntypes (tree *fntype, tree type)
+   /* type (*) (type, type) */
+   tmp = tree_cons (NULL_TREE, type, tmp);
+   fntype[1] = build_function_type (type, tmp);
+-  /* type (*) (int, type) */
++  /* type (*) (type, int) */
+   tmp = tree_cons (NULL_TREE, integer_type_node, void_list_node);
+   tmp = tree_cons (NULL_TREE, type, tmp);
+   fntype[2] = build_function_type (type, tmp);
+   /* type (*) (void) */
+   fntype[3] = build_function_type (type, void_list_node);
+   /* type (*) (type, &int) */
+-  tmp = tree_cons (NULL_TREE, type, void_list_node);
+-  tmp = tree_cons (NULL_TREE, build_pointer_type (integer_type_node), tmp);
++  tmp = tree_cons (NULL_TREE, build_pointer_type (integer_type_node),
++                   void_list_node);
++  tmp = tree_cons (NULL_TREE, type, tmp);
+   fntype[4] = build_function_type (type, tmp);
+   /* type (*) (type, int) */
+-  tmp = tree_cons (NULL_TREE, type, void_list_node);
+-  tmp = tree_cons (NULL_TREE, integer_type_node, tmp);
++  tmp = tree_cons (NULL_TREE, integer_type_node, void_list_node);
++  tmp = tree_cons (NULL_TREE, type, tmp);
+   fntype[5] = build_function_type (type, tmp);
+ }
+ 
+@@ -1230,5 +1239,21 @@ gfc_init_ts (void)
+   tree_contains_struct[NAMESPACE_DECL][TS_DECL_MINIMAL] = 1;
+ }
+ 
++void
++gfc_maybe_initialize_eh (void)
++{
++  if (!flag_exceptions || gfc_eh_initialized_p)
++    return;
++
++  gfc_eh_initialized_p = true;
++  eh_personality_libfunc
++    = init_one_libfunc (USING_SJLJ_EXCEPTIONS
++                       ? "__gcc_personality_sj0"
++                       : "__gcc_personality_v0");
++  default_init_unwind_resume_libfunc ();
++  using_eh_for_cleanups ();
++}
++
++
+ #include "gt-fortran-f95-lang.h"
+ #include "gtype-fortran.h"
+diff --git a/gcc/fortran/gfortran.h b/gcc/fortran/gfortran.h
+index 6de23cbb8..91a4d6791 100644
+--- a/gcc/fortran/gfortran.h
++++ b/gcc/fortran/gfortran.h
+@@ -2168,6 +2168,9 @@ unsigned int gfc_init_options (unsigned int, const char **);
+ int gfc_handle_option (size_t, const char *, int);
+ bool gfc_post_options (const char **);
+ 
++/* f95-lang.c */
++void gfc_maybe_initialize_eh (void);
++
+ /* iresolve.c */
+ const char * gfc_get_string (const char *, ...) ATTRIBUTE_PRINTF_1;
+ bool gfc_find_sym_in_expr (gfc_symbol *, gfc_expr *);
+diff --git a/gcc/fortran/misc.c b/gcc/fortran/misc.c
+index 136b751a1..94d61c9ec 100644
+--- a/gcc/fortran/misc.c
++++ b/gcc/fortran/misc.c
+@@ -42,22 +42,15 @@ gfc_getmem (size_t n)
+ }
+ 
+ 
+-/* gfortran.h defines free to something that triggers a syntax error,
+-   but we need free() here.  */
+-
+-#define temp free
+-#undef free
+-
+ void
+ gfc_free (void *p)
+ {
++  /* The parentheses around free are needed in order to call not
++     the redefined free of gfortran.h.  */
+   if (p != NULL)
+-    free (p);
++    (free) (p);
+ }
+ 
+-#define free temp
+-#undef temp
+-
+ 
+ /* Get terminal width.  */
+ 
+diff --git a/gcc/fortran/openmp.c b/gcc/fortran/openmp.c
+index dbb4ded4d..86c2f99e7 100644
+--- a/gcc/fortran/openmp.c
++++ b/gcc/fortran/openmp.c
+@@ -1506,6 +1506,9 @@ resolve_omp_do (gfc_code *code)
+ void
+ gfc_resolve_omp_directive (gfc_code *code, gfc_namespace *ns ATTRIBUTE_UNUSED)
+ {
++  if (code->op != EXEC_OMP_ATOMIC)
++    gfc_maybe_initialize_eh ();
++
+   switch (code->op)
+     {
+     case EXEC_OMP_DO:
