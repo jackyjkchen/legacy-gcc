@@ -2061,6 +2061,22 @@ index d40e640dd..9e33b5a61 100644
  ACX_BUGURL([http://gcc.gnu.org/bugs.html])
  
  # Sanity check enable_languages in case someone does not run the toplevel
+diff --git a/gcc/doc/sourcebuild.texi b/gcc/doc/sourcebuild.texi
+index ea6fedb23..5cd757fc1 100644
+--- a/gcc/doc/sourcebuild.texi
++++ b/gcc/doc/sourcebuild.texi
+@@ -1488,6 +1488,11 @@ ARM target generates 32-bit code.
+ @item arm_eabi
+ ARM target adheres to the ABI for the ARM Architecture.
+ 
++@item arm_hf_eabi
++ARM target adheres to the VFP and Advanced SIMD Register Arguments
++variant of the ABI for the ARM Architecture (as selected with
++@code{-mfloat-abi=hard}).
++
+ @item arm_hard_vfp_ok
+ ARM target supports @code{-mfpu=vfp -mfloat-abi=hard}.
+ Some multilibs may be incompatible with these options.
 diff --git a/gcc/flag-types.h b/gcc/flag-types.h
 index f757423e5..eb2da4ffe 100644
 --- a/gcc/flag-types.h
@@ -4286,6 +4302,20 @@ index 8e9488809..268eddcfd 100644
      {
        sched_init_region_reg_pressure_info ();
        for (bb = 0; bb < current_nr_blocks; bb++)
+diff --git a/gcc/testsuite/gcc.dg/builtin-apply2.c b/gcc/testsuite/gcc.dg/builtin-apply2.c
+index c5b841a84..332f3659f 100644
+--- a/gcc/testsuite/gcc.dg/builtin-apply2.c
++++ b/gcc/testsuite/gcc.dg/builtin-apply2.c
+@@ -17,6 +17,9 @@
+    E, F and G are passed on stack.  So the size of the stack argument
+    data is 20.  */
+ #define STACK_ARGUMENTS_SIZE  20
++#elif defined __MMIX__
++/* No parameters on stack for bar.  */
++#define STACK_ARGUMENTS_SIZE 0
+ #else
+ #define STACK_ARGUMENTS_SIZE  64
+ #endif
 diff --git a/gcc/testsuite/gcc.dg/builtin-unreachable-5.c b/gcc/testsuite/gcc.dg/builtin-unreachable-5.c
 new file mode 100644
 index 000000000..f6fb4ac6f
@@ -4342,6 +4372,29 @@ index 000000000..26b5ac753
 +/* { dg-final { scan-tree-dump-times "lab:" 1 "fab" } } */
 +/* { dg-final { scan-tree-dump-times "__builtin_unreachable" 1 "fab" } } */
 +/* { dg-final { cleanup-tree-dump "fab" } } */
+diff --git a/gcc/testsuite/gcc.dg/torture/stackalign/builtin-apply-2.c b/gcc/testsuite/gcc.dg/torture/stackalign/builtin-apply-2.c
+index 89c71a99d..cbb38efc8 100644
+--- a/gcc/testsuite/gcc.dg/torture/stackalign/builtin-apply-2.c
++++ b/gcc/testsuite/gcc.dg/torture/stackalign/builtin-apply-2.c
+@@ -5,6 +5,8 @@
+    with pre-pushed arguments (e.g. SPARC).  */
+ 
+ /* { dg-do run } */
++
++/* { dg-skip-if "Variadic funcs use Base AAPCS.  Normal funcs use VFP variant." { arm_hf_eabi } } */
+    
+ 
+ #define INTEGER_ARG  5
+@@ -14,6 +16,9 @@
+    E, F and G are passed on stack.  So the size of the stack argument
+    data is 20.  */
+ #define STACK_ARGUMENTS_SIZE  20
++#elif defined __MMIX__
++/* No parameters on stack for bar.  */
++#define STACK_ARGUMENTS_SIZE 0
+ #else
+ #define STACK_ARGUMENTS_SIZE  64
+ #endif
 diff --git a/gcc/testsuite/gcc.dg/vect/bb-slp-pattern-1.c b/gcc/testsuite/gcc.dg/vect/bb-slp-pattern-1.c
 new file mode 100644
 index 000000000..ff520c06f
@@ -6068,6 +6121,30 @@ index 000000000..d51827aa7
 +
 +/* { dg-final { scan-assembler "lslne" } } */
 +/* { dg-final { scan-assembler "asrne" } } */
+diff --git a/gcc/testsuite/lib/target-supports.exp b/gcc/testsuite/lib/target-supports.exp
+index d3898d601..5189038dd 100644
+--- a/gcc/testsuite/lib/target-supports.exp
++++ b/gcc/testsuite/lib/target-supports.exp
+@@ -2346,6 +2346,19 @@ proc check_effective_target_arm_eabi { } {
+     }]
+ }
+ 
++# Return 1 if this is an ARM target that adheres to the hard-float variant of
++# the ABI for the ARM Architecture (e.g. -mfloat-abi=hard).
++
++proc check_effective_target_arm_hf_eabi { } {
++    return [check_no_compiler_messages arm_hf_eabi object {
++	#if !defined(__ARM_EABI__) || !defined(__ARM_PCS_VFP)
++	#error not hard-float EABI
++	#else
++	int dummy;
++	#endif
++    }]
++}
++
+ # Return 1 if this is an ARM target supporting -mcpu=iwmmxt.
+ # Some multilibs may be incompatible with this option.
+ 
 diff --git a/gcc/tree-ssa-ccp.c b/gcc/tree-ssa-ccp.c
 index ac544d3e2..057fca904 100644
 --- a/gcc/tree-ssa-ccp.c
