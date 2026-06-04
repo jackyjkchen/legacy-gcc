@@ -22,6 +22,7 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/12_support-__builtin_isinf_sign.patch
 	eapply "${FILESDIR}"/${PV}/13_enable-libobjc-in-arm-eabi.patch
 	eapply "${FILESDIR}"/${PV}/14_fix-dw2-hang.patch
+	[[ $(tc-arch) == "arm" ]] && eapply "${FILESDIR}"/${PV}/15_gcc-arm.patch
 
 	eapply "${FILESDIR}"/${PV}/postrelease/000_pr36282.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/001_pr50109.patch
