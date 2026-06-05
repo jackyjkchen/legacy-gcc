@@ -1,0 +1,187 @@
+diff --git a/gcc/testsuite/gcc.dg/uninit-13.c b/gcc/testsuite/gcc.dg/uninit-13.c
+index 631e8de3a..5e88a8a94 100644
+--- a/gcc/testsuite/gcc.dg/uninit-13.c
++++ b/gcc/testsuite/gcc.dg/uninit-13.c
+@@ -5,6 +5,6 @@ typedef _Complex float C;
+ C foo()
+ {
+   C f;
+-  __imag__ f = 0;	/* { dg-warning "is used" "unconditional" } */
+-  return f;
++  __imag__ f = 0;
++  return f;	/* { dg-warning "is used" "unconditional" } */
+ }
+diff --git a/gcc/tree-complex.c b/gcc/tree-complex.c
+index 4a657c068..fc1454990 100644
+--- a/gcc/tree-complex.c
++++ b/gcc/tree-complex.c
+@@ -831,12 +831,15 @@ expand_complex_move (gimple_stmt_iterator *gsi, tree type)
+     {
+       tree x;
+       gimple t;
++      location_t loc;
+ 
++      loc = gimple_location (stmt);
+       r = extract_component (gsi, rhs, 0, false);
+       i = extract_component (gsi, rhs, 1, false);
+ 
+       x = build1 (REALPART_EXPR, inner_type, unshare_expr (lhs));
+       t = gimple_build_assign (x, r);
++      gimple_set_location (t, loc);
+       gsi_insert_before (gsi, t, GSI_SAME_STMT);
+ 
+       if (stmt == gsi_stmt (*gsi))
+@@ -849,6 +852,7 @@ expand_complex_move (gimple_stmt_iterator *gsi, tree type)
+ 	{
+ 	  x = build1 (IMAGPART_EXPR, inner_type, unshare_expr (lhs));
+ 	  t = gimple_build_assign (x, i);
++	  gimple_set_location (t, loc);
+ 	  gsi_insert_before (gsi, t, GSI_SAME_STMT);
+ 
+ 	  stmt = gsi_stmt (*gsi);
+diff --git a/gcc/tree-ssa-uninit.c b/gcc/tree-ssa-uninit.c
+index eee83f79a..da67c6d5e 100644
+--- a/gcc/tree-ssa-uninit.c
++++ b/gcc/tree-ssa-uninit.c
+@@ -123,17 +123,25 @@ uninit_undefined_value_p (tree t) {
+ 
+ /* Emit a warning for EXPR based on variable VAR at the point in the
+    program T, an SSA_NAME, is used being uninitialized.  The exact
+-   warning text is in MSGID and LOCUS may contain a location or be null.
+-   WC is the warning code.  */
++   warning text is in MSGID and DATA is the gimple stmt with info about
++   the location in source code. When DATA is a GIMPLE_PHI, PHIARG_IDX
++   gives which argument of the phi node to take the location from.  WC
++   is the warning code.  */
+ 
+ static void
+-warn_uninit (enum opt_code wc, tree t,
+-	     tree expr, tree var, const char *gmsgid, void *data)
++warn_uninit (enum opt_code wc, tree t, tree expr, tree var,
++	     const char *gmsgid, void *data, location_t phiarg_loc)
+ {
+   gimple context = (gimple) data;
+   location_t location, cfun_loc;
+   expanded_location xloc, floc;
+ 
++  /* Ignore COMPLEX_EXPR as initializing only a part of a complex
++     turns in a COMPLEX_EXPR with the not initialized part being
++     set to its previous (undefined) value.  */
++  if (is_gimple_assign (context)
++      && gimple_assign_rhs_code (context) == COMPLEX_EXPR)
++    return;
+   if (!has_undefined_value_p (t))
+     return;
+ 
+@@ -146,9 +154,12 @@ warn_uninit (enum opt_code wc, tree t,
+       || TREE_NO_WARNING (expr))
+     return;
+ 
+-  location = (context != NULL && gimple_has_location (context))
+-	     ? gimple_location (context)
+-	     : DECL_SOURCE_LOCATION (var);
++  if (context != NULL && gimple_has_location (context))
++    location = gimple_location (context);
++  else if (phiarg_loc != UNKNOWN_LOCATION)
++    location = phiarg_loc;
++  else
++    location = DECL_SOURCE_LOCATION (var);
+   location = linemap_resolve_location (line_table, location,
+ 				       LRK_SPELLING_LOCATION,
+ 				       NULL);
+@@ -200,12 +211,12 @@ warn_uninitialized_vars (bool warn_possibly_uninitialized)
+ 		warn_uninit (OPT_Wuninitialized, use,
+ 			     SSA_NAME_VAR (use), SSA_NAME_VAR (use),
+ 			     "%qD is used uninitialized in this function",
+-			     stmt);
++			     stmt, UNKNOWN_LOCATION);
+ 	      else if (warn_possibly_uninitialized)
+ 		warn_uninit (OPT_Wmaybe_uninitialized, use,
+ 			     SSA_NAME_VAR (use), SSA_NAME_VAR (use),
+ 			     "%qD may be used uninitialized in this function",
+-			     stmt);
++			     stmt, UNKNOWN_LOCATION);
+ 	    }
+ 
+ 	  /* For memory the only cheap thing we can do is see if we
+@@ -237,12 +248,12 @@ warn_uninitialized_vars (bool warn_possibly_uninitialized)
+ 		warn_uninit (OPT_Wuninitialized, use,
+ 			     gimple_assign_rhs1 (stmt), base,
+ 			     "%qE is used uninitialized in this function",
+-			     stmt);
++			     stmt, UNKNOWN_LOCATION);
+ 	      else if (warn_possibly_uninitialized)
+ 		warn_uninit (OPT_Wmaybe_uninitialized, use,
+ 			     gimple_assign_rhs1 (stmt), base,
+ 			     "%qE may be used uninitialized in this function",
+-			     stmt);
++			     stmt, UNKNOWN_LOCATION);
+ 	    }
+ 	}
+     }
+@@ -2248,6 +2259,8 @@ warn_uninitialized_phi (gimple phi, vec<gimple> *worklist,
+   unsigned uninit_opnds;
+   gimple uninit_use_stmt = 0;
+   tree uninit_op;
++  int phiarg_index;
++  location_t loc;
+ 
+   /* Don't look at virtual operands.  */
+   if (virtual_operand_p (gimple_phi_result (phi)))
+@@ -2272,13 +2285,18 @@ warn_uninitialized_phi (gimple phi, vec<gimple> *worklist,
+   if (!uninit_use_stmt)
+     return;
+ 
+-  uninit_op = gimple_phi_arg_def (phi, MASK_FIRST_SET_BIT (uninit_opnds));
++  phiarg_index = MASK_FIRST_SET_BIT (uninit_opnds);
++  uninit_op = gimple_phi_arg_def (phi, phiarg_index);
+   if (SSA_NAME_VAR (uninit_op) == NULL_TREE)
+     return;
++  if (gimple_phi_arg_has_location (phi, phiarg_index))
++    loc = gimple_phi_arg_location (phi, phiarg_index);
++  else
++    loc = UNKNOWN_LOCATION;
+   warn_uninit (OPT_Wmaybe_uninitialized, uninit_op, SSA_NAME_VAR (uninit_op),
+ 	       SSA_NAME_VAR (uninit_op),
+                "%qD may be used uninitialized in this function",
+-               uninit_use_stmt);
++               uninit_use_stmt, loc);
+ 
+ }
+ 
+diff --git a/gcc/tree-ssa.c b/gcc/tree-ssa.c
+index 3d3ffaa89..67df5a8b6 100644
+--- a/gcc/tree-ssa.c
++++ b/gcc/tree-ssa.c
+@@ -1248,6 +1248,7 @@ tree_ssa_strip_useless_type_conversions (tree exp)
+ bool
+ ssa_undefined_value_p (tree t)
+ {
++  gimple def_stmt;
+   tree var = SSA_NAME_VAR (t);
+ 
+   if (!var)
+@@ -1264,7 +1265,22 @@ ssa_undefined_value_p (tree t)
+     return false;
+ 
+   /* The value is undefined iff its definition statement is empty.  */
+-  return gimple_nop_p (SSA_NAME_DEF_STMT (t));
++  def_stmt = SSA_NAME_DEF_STMT (t);
++  if (gimple_nop_p (def_stmt))
++    return true;
++
++  /* Check if the complex was not only partially defined.  */
++  if (is_gimple_assign (def_stmt)
++      && gimple_assign_rhs_code (def_stmt) == COMPLEX_EXPR)
++    {
++      tree rhs1, rhs2;
++
++      rhs1 = gimple_assign_rhs1 (def_stmt);
++      rhs2 = gimple_assign_rhs2 (def_stmt);
++      return (TREE_CODE (rhs1) == SSA_NAME && ssa_undefined_value_p (rhs1))
++	     || (TREE_CODE (rhs2) == SSA_NAME && ssa_undefined_value_p (rhs2));
++    }
++  return false;
+ }
+ 
+ 
