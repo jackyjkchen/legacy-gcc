@@ -1,0 +1,60 @@
+diff --git a/gcc/testsuite/gcc.dg/attr-alloc_size-11.c b/gcc/testsuite/gcc.dg/attr-alloc_size-11.c
+index a3d95c4e5..6346d5e08 100644
+--- a/gcc/testsuite/gcc.dg/attr-alloc_size-11.c
++++ b/gcc/testsuite/gcc.dg/attr-alloc_size-11.c
+@@ -47,8 +47,8 @@ typedef __SIZE_TYPE__    size_t;
+ 
+ /* The following tests fail because of missing range information.  The xfail
+    exclusions are PR79356.  */
+-TEST (signed char, SCHAR_MIN + 2, ALLOC_MAX);   /* { dg-warning "argument 1 range \\\[13, \[0-9\]+\\\] exceeds maximum object size 12" "missing range info for signed char" { xfail { ! { aarch64*-*-* arm*-*-* avr-*-* alpha*-*-* ia64-*-* mips*-*-* or1k*-*-* pdp11*-*-* powerpc*-*-* sparc*-*-* s390*-*-* visium-*-* msp430-*-* } } } } */
+-TEST (short, SHRT_MIN + 2, ALLOC_MAX); /* { dg-warning "argument 1 range \\\[13, \[0-9\]+\\\] exceeds maximum object size 12" "missing range info for short" { xfail { ! { aarch64*-*-* arm*-*-* alpha*-*-* avr-*-* ia64-*-* mips*-*-* or1k*-*-* pdp11*-*-* powerpc*-*-* sparc*-*-* s390x-*-* visium-*-* msp430-*-* } } } } */
++TEST (signed char, SCHAR_MIN + 2, ALLOC_MAX);   /* { dg-warning "argument 1 range \\\[13, \[0-9\]+\\\] exceeds maximum object size 12" "missing range info for signed char" { xfail { ! { aarch64*-*-* arm*-*-* avr-*-* alpha*-*-* cris-*-* ia64-*-* mips*-*-* or1k*-*-* pdp11*-*-* powerpc*-*-* riscv*-*-* sparc*-*-* s390*-*-* visium-*-* msp430-*-* nvptx*-*-*} } } } */
++TEST (short, SHRT_MIN + 2, ALLOC_MAX); /* { dg-warning "argument 1 range \\\[13, \[0-9\]+\\\] exceeds maximum object size 12" "missing range info for short" { xfail { ! { aarch64*-*-* arm*-*-* alpha*-*-* avr-*-* cris-*-* ia64-*-* mips*-*-* or1k*-*-* pdp11*-*-* powerpc*-*-* riscv*-*-* sparc*-*-* s390x-*-* visium-*-* msp430-*-* nvptx*-*-* } } } } */
+ TEST (int, INT_MIN + 2, ALLOC_MAX);    /* { dg-warning "argument 1 range \\\[13, \[0-9\]+\\\] exceeds maximum object size 12" } */
+ TEST (int, -3, ALLOC_MAX);             /* { dg-warning "argument 1 range \\\[13, \[0-9\]+\\\] exceeds maximum object size 12" } */
+ TEST (int, -2, ALLOC_MAX);             /* { dg-warning "argument 1 range \\\[13, \[0-9\]+\\\] exceeds maximum object size 12" } */
+diff --git a/gcc/testsuite/gcc.dg/tree-ssa/ssa-fre-3.c b/gcc/testsuite/gcc.dg/tree-ssa/ssa-fre-3.c
+index eda711822..a287dad07 100644
+--- a/gcc/testsuite/gcc.dg/tree-ssa/ssa-fre-3.c
++++ b/gcc/testsuite/gcc.dg/tree-ssa/ssa-fre-3.c
+@@ -18,4 +18,4 @@ foo (int a, int b)
+   return aa + bb;
+ }
+ 
+-/* { dg-final { scan-tree-dump "Replaced \\\(int\\\) aa_.*with a_" "fre1" { xfail { riscv*-*-* && lp64 } } } } */
++/* { dg-final { scan-tree-dump "Replaced \\\(int\\\) aa_.*with a_" "fre1" } } */
+diff --git a/libgomp/testsuite/lib/libgomp.exp b/libgomp/testsuite/lib/libgomp.exp
+index bee273df3..8f6b7a9ca 100644
+--- a/libgomp/testsuite/lib/libgomp.exp
++++ b/libgomp/testsuite/lib/libgomp.exp
+@@ -174,6 +174,20 @@ proc libgomp_init { args } {
+     # For build-tree testing, also consider the library paths used for builing.
+     # For installed testing, we assume all that to be provided in the sysroot.
+     if { $blddir != "" } {
++	# The `-fopenacc' and `-fopenmp' options imply `-pthread', and
++	# that implies `-latomic' on some hosts, so wire in libatomic
++	# build directories.
++	if [ishost "riscv*-*-linux*"] {
++	    set shlib_ext [get_shlib_extension]
++	    set atomic_library_path "${blddir}/../libatomic/.libs"
++	    if { [file exists "${atomic_library_path}/libatomic.a"]
++		 || [file exists \
++		     "${atomic_library_path}/libatomic.${shlib_ext}"] } {
++		lappend ALWAYS_CFLAGS \
++		    "additional_flags=-L${atomic_library_path}"
++		append always_ld_library_path ":${atomic_library_path}"
++	    }
++	}
+ 	global cuda_driver_include
+ 	global cuda_driver_lib
+ 	if { $cuda_driver_include != "" } {
+diff --git a/libgomp/testsuite/libgomp-test-support.exp.in b/libgomp/testsuite/libgomp-test-support.exp.in
+index 98fb442b5..6ec10c728 100644
+--- a/libgomp/testsuite/libgomp-test-support.exp.in
++++ b/libgomp/testsuite/libgomp-test-support.exp.in
+@@ -1,3 +1,5 @@
++set GCC_UNDER_TEST {@CC@}
++
+ set cuda_driver_include "@CUDA_DRIVER_INCLUDE@"
+ set cuda_driver_lib "@CUDA_DRIVER_LIB@"
+ set hsa_runtime_lib "@HSA_RUNTIME_LIB@"

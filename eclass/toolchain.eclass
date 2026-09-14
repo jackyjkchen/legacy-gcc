@@ -2920,11 +2920,9 @@ toolchain_src_test() {
 		#
 		# TODO: Should we try pass in the regular user flags for the non-RUNTESTFLAGS
 		# instances below for building e.g. libbacktrace?
-		local cpunum=
+		local cpunum=$((`cat /sys/devices/system/cpu/online |awk -F '-' '{print$2}'` + 1))
 		if tc_version_is_between 4.9 9 && [[ is_multilib || $(tc-arch) == "x86" || $(tc-arch) == "arm" ]] ; then
-			cpunum=$((`cat /sys/devices/system/cpu/online |awk -F '-' '{print$2}'` + 1))
 			[[ $cpunum -gt 16 ]] && cpunum=16
-			[[ $cpunum -eq 1 ]] && cpunum=
 		fi
 		nonfatal emake -C "${WORKDIR}"/build -k "${GCC_TESTS_CHECK_TARGET}" \
 			RUNTESTFLAGS=" \

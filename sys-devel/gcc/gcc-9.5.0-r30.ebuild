@@ -19,6 +19,7 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/11_riscv-fix-multilib.patch
 	[[ $(tc-arch) == "mips" ]] && eapply "${FILESDIR}"/${PV}/12_loongson.patch
 	[[ $(tc-arch) == "arm64" || $(tc-arch) == "arm" ]] && eapply "${FILESDIR}"/${PV}/13_gcc-arm.patch
+	eapply "${FILESDIR}"/${PV}/14_remove-riscv_cmodel_pic.patch
 
 	eapply "${FILESDIR}"/${PV}/postrelease/000_pr90320.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/001_pr106513.patch
@@ -231,5 +232,6 @@ src_prepare() {
 		[[ $(tc-arch) == "loong" ]] && eapply "${FILESDIR}"/${PV}/postrelease/903_fix-loong-test-fail.patch
 		[[ $(tc-arch) == "mips" ]] && eapply "${FILESDIR}"/${PV}/postrelease/904_fix-mips-test-fail.patch && \
 			rm -rf gcc/testsuite/gcc.target/mips/mips-nonpic gcc/testsuite/gcc.target/mips/interrupt_handler-5.c
+		[[ $(tc-arch) == "riscv" ]] && eapply "${FILESDIR}"/${PV}/postrelease/905_fix-riscv-test-fail.patch
 	fi
 }

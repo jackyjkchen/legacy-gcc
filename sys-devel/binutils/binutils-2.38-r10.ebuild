@@ -18,7 +18,7 @@ src_prepare() {
 	[[ $(tc-arch) == "arm" ]] && eapply "${FILESDIR}"/${PV}/03_disable-ignoring-incorrect-section-type-warn.patch
 	eapply "${FILESDIR}"/${PV}/04_support-R_386_GOT32X.patch
 	eapply "${FILESDIR}"/${PV}/05_fix-c23.patch
-	[[ $(tc-arch) == "mips" ]] && eapply "${FILESDIR}"/${PV}/06_disable-warning-for-gcc4-testing.patch
+	[[ $(tc-arch) == "mips" || $(tc-arch) == "riscv" ]] && eapply "${FILESDIR}"/${PV}/06_disable-warning-for-gcc-testing.patch
 }
 
 src_configure() {

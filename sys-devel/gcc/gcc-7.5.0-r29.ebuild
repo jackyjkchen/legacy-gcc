@@ -305,5 +305,6 @@ src_prepare() {
 		[[ $(tc-arch) == "arm" ]] && eapply "${FILESDIR}"/${PV}/postrelease/902_fix-arm-test-fail.patch
 		[[ $(tc-arch) == "mips" ]] && eapply "${FILESDIR}"/${PV}/postrelease/903_fix-mips-test-fail.patch && \
 			rm -rf gcc/testsuite/gcc.target/mips/mips-nonpic gcc/testsuite/gcc.target/mips/interrupt_handler-5.c
+		[[ $(tc-arch) == "riscv" ]] && eapply "${FILESDIR}"/${PV}/postrelease/904_fix-riscv-test-fail.patch
 	fi
 }

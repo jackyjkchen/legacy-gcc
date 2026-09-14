@@ -21,9 +21,10 @@ src_prepare() {
 
 	use vanilla && return 0
 
-	eapply "${FILESDIR}"/${PV}/01_riscv-fix-multilib.patch
-	eapply "${FILESDIR}"/${PV}/02_fix-werror.patch
-	[[ $(tc-arch) == "arm64" || $(tc-arch) == "arm" ]] && eapply "${FILESDIR}"/${PV}/03_gcc-arm.patch
+	eapply "${FILESDIR}"/${PV}/10_riscv-fix-multilib.patch
+	eapply "${FILESDIR}"/${PV}/11_fix-werror.patch
+	[[ $(tc-arch) == "arm64" || $(tc-arch) == "arm" ]] && eapply "${FILESDIR}"/${PV}/12_gcc-arm.patch
+	eapply "${FILESDIR}"/${PV}/13_remove-riscv_cmodel_pic.patch
 
 	eapply "${FILESDIR}"/${PV}/postrelease/000_pr97164.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/001_pr92815.patch
@@ -238,5 +239,6 @@ src_prepare() {
 		[[ $(tc-arch) == "loong" ]] && eapply "${FILESDIR}"/${PV}/postrelease/903_fix-loong-test-fail.patch
 		[[ $(tc-arch) == "mips" ]] && eapply "${FILESDIR}"/${PV}/postrelease/904_fix-mips-test-fail.patch && \
 			rm -rf gcc/testsuite/gcc.target/mips/mips-nonpic gcc/testsuite/gcc.target/mips/interrupt_handler-5.c
+		[[ $(tc-arch) == "riscv" ]] && eapply "${FILESDIR}"/${PV}/postrelease/905_fix-riscv-test-fail.patch
 	fi
 }
