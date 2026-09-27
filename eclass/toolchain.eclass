@@ -376,15 +376,15 @@ case $(tc-arch) in
 		tc_version_is_at_least 9.1 && IUSE+=" lto"
 		;;
 esac
+tc_version_is_at_least 8 && IUSE+=" ieee-long-double"
 tc_version_is_at_least 10 && IUSE+=" cet"
 tc_version_is_at_least 10 && IUSE+=" zstd" TC_FEATURES+=( zstd )
 tc_version_is_at_least 11 && IUSE+=" valgrind" TC_FEATURES+=( valgrind )
 tc_version_is_at_least 11 && IUSE+=" custom-cflags"
-tc_version_is_at_least 12 && IUSE+=" ieee-long-double"
-tc_version_is_at_least 12 && IUSE+=" default-znow"
-tc_version_is_at_least 12 && IUSE+=" default-stack-clash-protection"
-tc_version_is_at_least 13 && IUSE+=" modula2"
-tc_version_is_at_least 13 && IUSE+=" time64"
+tc_version_is_at_least 11.5 && IUSE+=" time64"
+tc_version_is_at_least 12.3 && IUSE+=" default-znow"
+tc_version_is_at_least 12.3 && IUSE+=" default-stack-clash-protection"
+tc_version_is_at_least 13.1 && IUSE+=" modula2"
 
 SLOT="${GCC_CONFIG_VER}"
 
@@ -707,7 +707,7 @@ get_gcc_src_uri() {
 		GCC_SRC_URI="http://gcc.gnu.org/pub/gcc/old-releases/gcc-1/gcc-${GCC_PV}.tar.bz2"
 	fi
 
-	if tc_version_is_at_least 13 ; then
+	if tc_version_is_at_least 14 ; then
 		[[ -n ${PATCH_VER} ]] && \
 			GCC_SRC_URI+=" $(gentoo_urls gcc-${PATCH_GCC_VER}-patches-${PATCH_VER}.tar.${TOOLCHAIN_PATCH_SUFFIX})"
 		[[ -n ${MUSL_VER} ]] && \
@@ -748,6 +748,19 @@ toolchain_pkg_pretend() {
 		_tc_use_if_iuse objc++ && \
 			ewarn 'Obj-C++ requires a C++ compiler, disabled due to USE="-cxx"'
 	fi
+
+	# Do the check for pure source builds only, since the override
+	# cannot work with binary packages, see https://bugs.gentoo.org/944198
+	if [[ ${BUILD_TYPE} == source ]] && in_iuse time64 && ! use time64 &&
+		has_version -r "${CATEGORY}/${PN}[time64(-)]" &&
+		[[ ! ${TC_FORCE_TIME32} ]]
+	then
+		eerror "Attempting to build USE=-time64 version of gcc when at least"
+		eerror "one USE=time64 version is installed. Did you accidentally"
+		eerror "switch back to a non-time64 profile? If this is really"
+		eerror "desirable, set TC_FORCE_TIME32=1 to force the build."
+		die "Attempting to build USE=-time64 on a USE=time64 system"
+	fi
 }
 
 #---->> pkg_setup <<----
@@ -777,7 +790,7 @@ git_init_src() {
 
 toolchain_src_unpack() {
 	default_src_unpack
-	tc_version_is_at_least 13 || unpack_gcc_patchset
+	tc_version_is_at_least 14 || unpack_gcc_patchset
 	#tc_version_is_at_least 4.7 || git_init_src
 }
 
@@ -1464,7 +1477,7 @@ toolchain_src_configure() {
 	downgrade_arch_flags ${GCC_BRANCH_VER}
 	gcc_do_filter_flags
 
-	if [[ ${PN} != kgcc64 && ${PN} != gcc-* ]] && tc_version_is_at_least 13; then
+	if [[ ${PN} != kgcc64 && ${PN} != gcc-* ]] && tc_version_is_at_least 11.5; then
 		append-cppflags "-D_GENTOO_TIME64_FORCE=$(usex time64 1 0)"
 	fi
 
@@ -2859,13 +2872,6 @@ toolchain_src_test() {
 
 	# Use a subshell to allow meddling with flags just for the testsuite
 	(
-		# Workaround our -Wformat-security default which breaks
-		# various tests as it adds unexpected warning output.
-		if tc_version_is_at_least 13 ; then
-			GCC_TESTS_CFLAGS+=" -Wno-format-security -Wno-format"
-			GCC_TESTS_CXXFLAGS+=" -Wno-format-security -Wno-format"
-		fi
-
 		# Workaround our -Wtrampolines default which breaks
 		# tests too.
 		if tc_version_is_at_least 4.7 ; then
@@ -2877,12 +2883,6 @@ toolchain_src_test() {
 			GCC_TESTS_LDFLAGS+=" -Wl,--no-warn-execstack"
 		elif [[ $(tc-arch) == "loong" ]] ; then
 			GCC_TESTS_LDFLAGS+=" -Wl,--no-warn-execstack"
-		fi
-		# Avoid confusing tests like Fortran/C interop ones where
-		# CFLAGS are used.
-		if tc_version_is_at_least 13 ; then
-			GCC_TESTS_CFLAGS+=" -Wno-complain-wrong-lang"
-			GCC_TESTS_CXXFLAGS+=" -Wno-complain-wrong-lang"
 		fi
 
 		# Issues with Ada tests:
