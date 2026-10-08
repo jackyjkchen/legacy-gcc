@@ -1,0 +1,39 @@
+diff --git a/gcc/testsuite/g++.dg/torture/pr121870.C b/gcc/testsuite/g++.dg/torture/pr121870.C
+new file mode 100644
+index 000000000..8f4e7ab50
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/torture/pr121870.C
+@@ -0,0 +1,20 @@
++__attribute__((noreturn)) void f1(void)
++{
++    while(true) {}
++}
++static void (*fptr)(void) = f1;
++struct s1
++{
++    ~s1() {
++        fptr();
++    }
++    void DoInner() {
++        fptr();
++    }
++};
++
++void f()
++{
++    s1 xxx;
++    xxx.DoInner();
++}
+diff --git a/gcc/tree-ssa-propagate.c b/gcc/tree-ssa-propagate.c
+index c8cf0783e..c8dbe80ba 100644
+--- a/gcc/tree-ssa-propagate.c
++++ b/gcc/tree-ssa-propagate.c
+@@ -1244,6 +1244,8 @@ substitute_and_fold (ssa_prop_get_value_fn get_value_fn,
+   while (!walker.stmts_to_fixup.is_empty ())
+     {
+       gimple *stmt = walker.stmts_to_fixup.pop ();
++      if (!gimple_bb (stmt))
++	continue;
+       if (dump_file && dump_flags & TDF_DETAILS)
+ 	{
+ 	  fprintf (dump_file, "Fixing up noreturn call ");

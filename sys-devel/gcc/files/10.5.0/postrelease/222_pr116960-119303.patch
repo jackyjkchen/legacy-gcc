@@ -1,0 +1,78 @@
+diff --git a/gcc/diagnostic.c b/gcc/diagnostic.c
+index ed52bc03d..dc7dd04cd 100644
+--- a/gcc/diagnostic.c
++++ b/gcc/diagnostic.c
+@@ -1067,18 +1067,6 @@ diagnostic_report_diagnostic (diagnostic_context *context,
+   if (diagnostic->kind == DK_NOTE && context->inhibit_notes_p)
+     return false;
+ 
+-  if (context->lock > 0)
+-    {
+-      /* If we're reporting an ICE in the middle of some other error,
+-	 try to flush out the previous error, then let this one
+-	 through.  Don't do this more than once.  */
+-      if ((diagnostic->kind == DK_ICE || diagnostic->kind == DK_ICE_NOBT)
+-	  && context->lock == 1)
+-	pp_newline_and_flush (context->printer);
+-      else
+-	error_recursion (context);
+-    }
+-
+   /* If the user requested that warnings be treated as errors, so be
+      it.  Note that we do this before the next block so that
+      individual warnings can be overridden back to warnings with
+@@ -1118,6 +1106,18 @@ diagnostic_report_diagnostic (diagnostic_context *context,
+   if (diagnostic->kind != DK_NOTE)
+     diagnostic_check_max_errors (context);
+ 
++  if (context->lock > 0)
++    {
++      /* If we're reporting an ICE in the middle of some other error,
++	 try to flush out the previous error, then let this one
++	 through.  Don't do this more than once.  */
++      if ((diagnostic->kind == DK_ICE || diagnostic->kind == DK_ICE_NOBT)
++	  && context->lock == 1)
++	pp_newline_and_flush (context->printer);
++      else
++	error_recursion (context);
++    }
++
+   context->lock++;
+ 
+   if (diagnostic->kind == DK_ICE || diagnostic->kind == DK_ICE_NOBT)
+diff --git a/gcc/testsuite/g++.dg/cpp2a/lambda-uneval26.C b/gcc/testsuite/g++.dg/cpp2a/lambda-uneval26.C
+new file mode 100644
+index 000000000..3e3097bed
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp2a/lambda-uneval26.C
+@@ -0,0 +1,10 @@
++// PR c++/116960
++// { dg-do compile { target c++20 } }
++
++template<auto>
++using Foo = decltype([](auto) { return 0; }(0));
++
++template<typename...>
++Foo<[] {}> foo() {}   // { dg-warning "no return statement" }
++
++auto t = foo();
+diff --git a/gcc/testsuite/g++.dg/warn/undefined2.C b/gcc/testsuite/g++.dg/warn/undefined2.C
+new file mode 100644
+index 000000000..1b2ec353a
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/warn/undefined2.C
+@@ -0,0 +1,14 @@
++// PR c++/119303
++
++template <class> struct c {
++  enum { d = 4 };
++};
++template <bool> struct e {
++  typedef void g;
++};
++template <class _Tp>
++inline typename e<!c<_Tp>::d>::g bar(_Tp); // { dg-warning "used but never defined" }
++
++int x;
++
++void foo() { bar(x); }

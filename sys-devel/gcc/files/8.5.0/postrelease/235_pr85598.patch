@@ -1,0 +1,58 @@
+diff --git a/gcc/gimple-ssa-sprintf.c b/gcc/gimple-ssa-sprintf.c
+index 7b22ef769..6161639bc 100644
+--- a/gcc/gimple-ssa-sprintf.c
++++ b/gcc/gimple-ssa-sprintf.c
+@@ -65,6 +65,8 @@ along with GCC; see the file COPYING3.  If not see
+ #include "tree-ssa-propagate.h"
+ #include "calls.h"
+ #include "cfgloop.h"
++#include "tree-scalar-evolution.h"
++#include "tree-ssa-loop.h"
+ #include "intl.h"
+ #include "langhooks.h"
+ 
+@@ -4123,10 +4125,22 @@ pass_sprintf_length::execute (function *fun)
+   init_target_to_host_charmap ();
+ 
+   calculate_dominance_info (CDI_DOMINATORS);
++  bool use_scev = optimize > 0 && flag_printf_return_value;
++  if (use_scev)
++    {
++      loop_optimizer_init (LOOPS_NORMAL);
++      scev_initialize ();
++    }
+ 
+   sprintf_dom_walker sprintf_dom_walker;
+   sprintf_dom_walker.walk (ENTRY_BLOCK_PTR_FOR_FN (fun));
+ 
++  if (use_scev)
++    {
++      scev_finalize ();
++      loop_optimizer_finalize ();
++    }
++
+   /* Clean up object size info.  */
+   fini_object_sizes ();
+   return 0;
+diff --git a/gcc/testsuite/gcc.dg/pr85598.c b/gcc/testsuite/gcc.dg/pr85598.c
+new file mode 100644
+index 000000000..c84b63f80
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr85598.c
+@@ -0,0 +1,16 @@
++/* { dg-do compile } */
++/* { dg-options "-O2 -Wall" } */
++
++typedef __SIZE_TYPE__ size_t;
++extern void __chk_fail (void);
++extern int snprintf (char *, size_t, const char *, ...);
++
++int main()
++{
++    char temp[100];
++    unsigned int x;
++    char *str = temp;
++    for(x=0; x<256; ++x) {
++      snprintf(str, 4, "%%%02X", x);
++    }
++}

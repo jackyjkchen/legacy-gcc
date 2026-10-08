@@ -1,0 +1,90 @@
+diff --git a/libstdc++-v3/include/std/tuple b/libstdc++-v3/include/std/tuple
+index b93252e43..b5ff8fb82 100644
+--- a/libstdc++-v3/include/std/tuple
++++ b/libstdc++-v3/include/std/tuple
+@@ -724,14 +724,14 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
+       template<bool _NotEmpty = (sizeof...(_Elements) >= 1),
+ 	       _ImplicitCtor<_NotEmpty, const _Elements&...> = true>
+ 	constexpr
+-	tuple(const _Elements&... __elements)
++	tuple(const __type_identity_t<_Elements>&... __elements)
+ 	noexcept(__nothrow_constructible<const _Elements&...>())
+ 	: _Inherited(__elements...) { }
+ 
+       template<bool _NotEmpty = (sizeof...(_Elements) >= 1),
+ 	       _ExplicitCtor<_NotEmpty, const _Elements&...> = false>
+ 	explicit constexpr
+-	tuple(const _Elements&... __elements)
++	tuple(const __type_identity_t<_Elements>&... __elements)
+ 	noexcept(__nothrow_constructible<const _Elements&...>())
+ 	: _Inherited(__elements...) { }
+ 
+@@ -812,7 +812,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
+ 	       _ImplicitCtor<_NotEmpty, const _Elements&...> = true>
+ 	_GLIBCXX20_CONSTEXPR
+ 	tuple(allocator_arg_t __tag, const _Alloc& __a,
+-	      const _Elements&... __elements)
++	      const __type_identity_t<_Elements>&... __elements)
+ 	: _Inherited(__tag, __a, __elements...) { }
+ 
+       template<typename _Alloc, bool _NotEmpty = (sizeof...(_Elements) >= 1),
+@@ -820,7 +820,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
+ 	_GLIBCXX20_CONSTEXPR
+ 	explicit
+ 	tuple(allocator_arg_t __tag, const _Alloc& __a,
+-	      const _Elements&... __elements)
++	      const __type_identity_t<_Elements>&... __elements)
+ 	: _Inherited(__tag, __a, __elements...) { }
+ 
+       template<typename _Alloc, typename... _UElements,
+diff --git a/libstdc++-v3/testsuite/20_util/tuple/cons/121771.cc b/libstdc++-v3/testsuite/20_util/tuple/cons/121771.cc
+new file mode 100644
+index 000000000..40bb37ace
+--- /dev/null
++++ b/libstdc++-v3/testsuite/20_util/tuple/cons/121771.cc
+@@ -0,0 +1,45 @@
++// { dg-do compile { target c++17 } }
++
++// Bug 121771 - std::tuple CTAD fails for lvalue reference to function type
++
++#include <tuple>
++#include <memory>
++
++void func();
++
++std::tuple t(func);
++std::tuple<void (*)()>& r = t;
++
++struct Explicit {
++    Explicit();
++    explicit Explicit(const Explicit&);
++} ex;
++
++std::tuple t2(func, 1);
++std::tuple<void (*)(), int>& r2 = t2;
++
++std::tuple t2x(ex, func);
++std::tuple<Explicit, void (*)()>& r2x = t2x;
++
++std::tuple t3(1, func, 3);
++std::tuple<int, void (*)(), int>& r3 = t3;
++
++std::tuple t3x(ex, 2, func);
++std::tuple<Explicit, int, void (*)()>& r3x = t3x;
++
++std::allocator<int> alloc;
++
++std::tuple ta(std::allocator_arg, alloc, func);
++std::tuple<void (*)()>& ra = ta;
++
++std::tuple ta2(std::allocator_arg, alloc, func, 1);
++std::tuple<void (*)(), int>& ra2 = ta2;
++
++std::tuple ta2x(std::allocator_arg, alloc, ex, func);
++std::tuple<Explicit, void (*)()>& ra2x = ta2x;
++
++std::tuple ta3(std::allocator_arg, alloc, 1, func, 3);
++std::tuple<int, void (*)(), int>& ra3 = ta3;
++
++std::tuple ta3x(std::allocator_arg, alloc, ex, 2, func);
++std::tuple<Explicit, int, void (*)()>& ra3x = ta3x;

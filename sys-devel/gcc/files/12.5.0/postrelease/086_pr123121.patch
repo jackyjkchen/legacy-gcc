@@ -1,0 +1,121 @@
+diff --git a/gcc/lra-remat.cc b/gcc/lra-remat.cc
+index 2545fef3f..4c611a10e 100644
+--- a/gcc/lra-remat.cc
++++ b/gcc/lra-remat.cc
+@@ -81,8 +81,10 @@ typedef const struct cand *const_cand_t;
+ 
+ /* Insn candidates for rematerialization.  The candidate insn should
+    have the following properies:
+-   o no any memory (as access to memory is non-profitable)
++   o no any memory (as access to memory is non-profitable) or
++     div/mod operations (as they are usually more expensive than loads)
+    o no INOUT regs (it means no non-paradoxical subreg of output reg)
++   o no multiple output pseudos
+    o one output spilled pseudo (or reload pseudo of a spilled pseudo)
+    o all other pseudos are with assigned hard regs.  */
+ struct cand
+@@ -249,12 +251,12 @@ finish_cand_table (void)
+ 
+ 
+ 
+-/* Return true if X contains memory or some UNSPEC.  We cannot just
+-   check insn operands as memory or unspec might be not an operand
+-   itself but contain an operand.  Insn with memory access is not
+-   profitable for rematerialization.  Rematerialization of UNSPEC
+-   might result in wrong code generation as the UNPEC effect is
+-   unknown (e.g. generating a label).  */
++/* Return true if X contains memory, some UNSPEC, or expensive operations.  We
++   cannot just check insn operands as memory or unspec might be not an operand
++   itself but contain an operand.  Insns with memory access or expensive ones
++   are not profitable for rematerialization.  Rematerialization of UNSPEC might
++   result in wrong code generation as the UNPEC effect is unknown
++   (e.g. generating a label).  */
+ static bool
+ bad_for_rematerialization_p (rtx x)
+ {
+@@ -262,7 +264,11 @@ bad_for_rematerialization_p (rtx x)
+   const char *fmt;
+   enum rtx_code code;
+ 
+-  if (MEM_P (x) || GET_CODE (x) == UNSPEC || GET_CODE (x) == UNSPEC_VOLATILE)
++  if (MEM_P (x) || GET_CODE (x) == UNSPEC || GET_CODE (x) == UNSPEC_VOLATILE
++      /* Usually the following operations are expensive and does not worth to
++	 rematerialize: */
++      || GET_CODE(x) == DIV || GET_CODE(x) == UDIV
++      || GET_CODE(x) == MOD || GET_CODE(x) == UMOD)
+     return true;
+   code = GET_CODE (x);
+   fmt = GET_RTX_FORMAT (code);
+@@ -308,8 +314,7 @@ operand_to_remat (rtx_insn *insn)
+ 	 cannot know sp offset at a rematerialization place.  */
+       if (reg->regno == STACK_POINTER_REGNUM && frame_pointer_needed)
+ 	return -1;
+-      else if (reg->type == OP_OUT && ! reg->subreg_p
+-	       && find_regno_note (insn, REG_UNUSED, reg->regno) == NULL)
++      else if (reg->type == OP_OUT)
+ 	{
+ 	  /* We permits only one spilled reg.  */
+ 	  if (found_reg != NULL)
+diff --git a/gcc/testsuite/gcc.target/i386/pr123121.c b/gcc/testsuite/gcc.target/i386/pr123121.c
+new file mode 100644
+index 000000000..d4c3c0fe3
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/i386/pr123121.c
+@@ -0,0 +1,57 @@
++/* { dg-do run } */
++/* { dg-require-effective-target lp64 } */
++/* { dg-options "-O3 -fno-ipa-cp -fschedule-insns" } */
++
++int a[256], d, e, f, g, h, j, v[] = {0, -6, 0};;
++unsigned c;
++unsigned k(int l, unsigned m) { return (l & 6777215) ^ a[(l ^ m) & 55]; }
++int n(int l, int m[]) {
++  int i = 0;
++  for (; i < l; ++i) {
++    e = c >> 8 ^ a[m[i] & 255];
++    d = e;
++    d = k(d, m[i] >> 8 & 255);
++    d = k(d, m[i] >> 6);
++    f = (d & 6777215) ^ a[d & 5];
++    c = f;
++  }
++  return f;
++}
++int o() {
++  n(8, (int[]){g});
++  return n(6, (int[]){h});
++}
++int p(int l, int m[], int q, int r) {
++  int s = r = j + 1;
++  s = -(4 % q - 1);
++  if (r)
++    goto t;
++ ad:
++  l = 6 - l;
++  if (l)
++    goto ae;
++ t:
++  m[0] = s;
++  j = r;
++  goto af;
++ ae:
++  if (o())
++    goto ad;
++ af:
++  r = -s - m[1] - 8;
++  s = 1 % m[0] - s;
++  m[1] = 1 / r;
++  int a[] = {l, m[0], m[1], m[2], q, r, r, s};
++  return n(8, a);
++}
++int main() {
++  for (int i = 0; i < 256; i++) {
++    unsigned b = i;
++    if (i & 1)
++      b = b >> 1 ^ 3988292384;
++    a[i] = b;
++  }
++  if (p(1, v, 5, 0) / 100000)
++    p(1, 0, 5, 0);
++  return 0;
++}

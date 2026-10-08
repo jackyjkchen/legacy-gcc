@@ -1,0 +1,81 @@
+diff --git a/gcc/cp/constexpr.cc b/gcc/cp/constexpr.cc
+index 53803dbc1..cfa479364 100644
+--- a/gcc/cp/constexpr.cc
++++ b/gcc/cp/constexpr.cc
+@@ -2228,22 +2228,30 @@ is_std_construct_at (const constexpr_call *call)
+ 	  && is_std_construct_at (call->fundef->decl));
+ }
+ 
+-/* True if CTX is an instance of std::allocator.  */
++/* True if CTX is an instance of std::NAME class.  */
+ 
+ bool
+-is_std_allocator (tree ctx)
++is_std_class (tree ctx, const char *name)
+ {
+   if (ctx == NULL_TREE || !CLASS_TYPE_P (ctx) || !TYPE_MAIN_DECL (ctx))
+     return false;
+ 
+   tree decl = TYPE_MAIN_DECL (ctx);
+-  tree name = DECL_NAME (decl);
+-  if (name == NULL_TREE || !id_equal (name, "allocator"))
++  tree dname = DECL_NAME (decl);
++  if (dname == NULL_TREE || !id_equal (dname, name))
+     return false;
+ 
+   return decl_in_std_namespace_p (decl);
+ }
+ 
++/* True if CTX is an instance of std::allocator.  */
++
++bool
++is_std_allocator (tree ctx)
++{
++  return is_std_class (ctx, "allocator");
++}
++
+ /* Return true if FNDECL is std::allocator<T>::{,de}allocate.  */
+ 
+ static inline bool
+@@ -8347,6 +8355,15 @@ cxx_eval_outermost_constant_expr (tree t, bool allow_non_constant,
+ 	  tree fndecl = cp_get_callee_fndecl_nofold (x);
+ 	  if (fndecl && DECL_IMMEDIATE_FUNCTION_P (fndecl))
+ 	    is_consteval = true;
++      /* Don't try to evaluate a std::vector constructor taking an integer, it
++	 will fail in the 'if (heap_var)' block below after doing all the work
++	 (c++/113835).  This will need adjustment if P3554 is accepted.  Note
++	 that evaluation of e.g. the vector default constructor can succeed, so
++	 we don't shortcut all vector constructors.  */
++      if (fndecl && DECL_CONSTRUCTOR_P (fndecl) && allow_non_constant
++	  && is_std_class (type, "vector") && call_expr_nargs (x) > 1
++	  && TREE_CODE (TREE_TYPE (get_nth_callarg (x, 1))) == INTEGER_TYPE)
++	return t;
+ 	}
+     }
+   if (AGGREGATE_TYPE_P (type) || VECTOR_TYPE_P (type))
+diff --git a/gcc/cp/cp-tree.h b/gcc/cp/cp-tree.h
+index 0e619ae78..4033ca910 100644
+--- a/gcc/cp/cp-tree.h
++++ b/gcc/cp/cp-tree.h
+@@ -8488,6 +8488,7 @@ extern bool is_rvalue_constant_expression (tree);
+ extern bool is_nondependent_constant_expression (tree);
+ extern bool is_nondependent_static_init_expression (tree);
+ extern bool is_static_init_expression    (tree);
++extern bool is_std_class (tree, const char *);
+ extern bool is_std_allocator (tree);
+ extern bool potential_rvalue_constant_expression (tree);
+ extern bool require_potential_constant_expression (tree);
+diff --git a/gcc/testsuite/g++.dg/cpp2a/constexpr-vector1.C b/gcc/testsuite/g++.dg/cpp2a/constexpr-vector1.C
+new file mode 100644
+index 000000000..196c6ec51
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp2a/constexpr-vector1.C
+@@ -0,0 +1,8 @@
++// PR c++/113835
++// { dg-timeout-factor 0.05 }
++// { dg-do compile { target c++20_only } }
++
++#include <vector>
++const std::size_t N = 1'000'000;
++std::vector<int> x(N);
++int main() {}

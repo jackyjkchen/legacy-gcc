@@ -1,0 +1,56 @@
+diff --git a/gcc/fortran/trans-array.cc b/gcc/fortran/trans-array.cc
+index 45787ee00..6d4e52775 100644
+--- a/gcc/fortran/trans-array.cc
++++ b/gcc/fortran/trans-array.cc
+@@ -9459,13 +9459,13 @@ structure_alloc_comps (gfc_symbol * der_type, tree decl, tree dest,
+ 	  if (c->ts.type == BT_CLASS)
+ 	    {
+ 	      attr = &CLASS_DATA (c)->attr;
+-	      if (attr->class_pointer)
++	      if (attr->class_pointer || c->attr.proc_pointer)
+ 		continue;
+ 	    }
+ 	  else
+ 	    {
+ 	      attr = &c->attr;
+-	      if (attr->pointer)
++	      if (attr->pointer || attr->proc_pointer)
+ 		continue;
+ 	    }
+ 
+diff --git a/gcc/testsuite/gfortran.dg/proc_ptr_comp_54.f90 b/gcc/testsuite/gfortran.dg/proc_ptr_comp_54.f90
+new file mode 100644
+index 000000000..73abc590e
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/proc_ptr_comp_54.f90
+@@ -0,0 +1,30 @@
++!{ dg-do run }
++
++! Check that components of procedure pointer aren't freeed.
++! Contributed by Damian Rouson  <damian@archaeologic.codes>
++
++  implicit none
++
++  type foo_t
++    integer, allocatable :: i_
++    procedure(f), pointer, nopass :: f_
++    procedure(c), pointer, nopass :: c_
++  end type
++
++  class(foo_t), allocatable :: ff
++
++  associate(foo => foo_t(1,f))
++  end associate
++
++contains
++
++  function f()
++    logical, allocatable :: f
++    f = .true.
++  end function
++
++  function c()
++    class(foo_t), allocatable :: c
++    allocate(c)
++  end function
++end

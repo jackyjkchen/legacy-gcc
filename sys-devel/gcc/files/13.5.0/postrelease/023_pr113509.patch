@@ -1,0 +1,85 @@
+diff --git a/gcc/analyzer/checker-event.cc b/gcc/analyzer/checker-event.cc
+index 3cb2fb917..6af8daf81 100644
+--- a/gcc/analyzer/checker-event.cc
++++ b/gcc/analyzer/checker-event.cc
+@@ -417,25 +417,48 @@ state_change_event::get_desc (bool can_colorize) const
+ 	      meaning.dump_to_pp (&meaning_pp);
+ 
+ 	      /* Append debug version.  */
+-	      if (m_origin)
+-		return make_label_text
+-		  (can_colorize,
+-		   "%s (state of %qE: %qs -> %qs, origin: %qE, meaning: %s)",
+-		   custom_desc.get (),
+-		   var,
+-		   m_from->get_name (),
+-		   m_to->get_name (),
+-		   origin,
+-		   pp_formatted_text (&meaning_pp));
++	      if (var)
++		{
++		  if (m_origin)
++		    return make_label_text
++		      (can_colorize,
++		       "%s (state of %qE: %qs -> %qs, origin: %qE, meaning: %s)",
++		       custom_desc.get (),
++		       var,
++		       m_from->get_name (),
++		       m_to->get_name (),
++		       origin,
++		       pp_formatted_text (&meaning_pp));
++		  else
++		    return make_label_text
++		      (can_colorize,
++		       "%s (state of %qE: %qs -> %qs, NULL origin, meaning: %s)",
++		       custom_desc.get (),
++		       var,
++		       m_from->get_name (),
++		       m_to->get_name (),
++		       pp_formatted_text (&meaning_pp));
++		}
+ 	      else
+-		return make_label_text
+-		  (can_colorize,
+-		   "%s (state of %qE: %qs -> %qs, NULL origin, meaning: %s)",
+-		   custom_desc.get (),
+-		   var,
+-		   m_from->get_name (),
+-		   m_to->get_name (),
+-		   pp_formatted_text (&meaning_pp));
++		{
++		  if (m_origin)
++		    return make_label_text
++		      (can_colorize,
++		       "%s (state: %qs -> %qs, origin: %qE, meaning: %s)",
++		       custom_desc.get (),
++		       m_from->get_name (),
++		       m_to->get_name (),
++		       origin,
++		       pp_formatted_text (&meaning_pp));
++		  else
++		    return make_label_text
++		      (can_colorize,
++		       "%s (state: %qs -> %qs, NULL origin, meaning: %s)",
++		       custom_desc.get (),
++		       m_from->get_name (),
++		       m_to->get_name (),
++		       pp_formatted_text (&meaning_pp));
++		}
+ 	    }
+ 	  else
+ 	    return custom_desc;
+diff --git a/gcc/testsuite/c-c++-common/analyzer/stdarg-pr113509.c b/gcc/testsuite/c-c++-common/analyzer/stdarg-pr113509.c
+new file mode 100644
+index 000000000..553480821
+--- /dev/null
++++ b/gcc/testsuite/c-c++-common/analyzer/stdarg-pr113509.c
+@@ -0,0 +1,8 @@
++/* Regression test for ICE with -fanalyzer-verbose-state-changes.  */
++
++/* { dg-additional-options " -fanalyzer-verbose-state-changes" } */
++
++__builtin_va_list FOO_showfatal_ap;
++void FOO_showfatal(char fmta, ...) {
++  __builtin_va_start(FOO_showfatal_ap, fmta); /* { dg-message "'va_start' called here" } */
++} /* { dg-warning "missing call to 'va_end'" } */

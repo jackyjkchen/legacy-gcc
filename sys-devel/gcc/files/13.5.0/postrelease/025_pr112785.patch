@@ -1,0 +1,61 @@
+diff --git a/gcc/cfgrtl.cc b/gcc/cfgrtl.cc
+index 6c5f7f440..c93a700f1 100644
+--- a/gcc/cfgrtl.cc
++++ b/gcc/cfgrtl.cc
+@@ -4397,7 +4397,7 @@ duplicate_insn_chain (rtx_insn *from, rtx_insn *to,
+ 			  {
+ 			    gcc_assert
+ 			      (MR_DEPENDENCE_CLIQUE (op) <= cfun->last_clique);
+-			    newc = ++cfun->last_clique;
++			    newc = get_new_clique (cfun);
+ 			  }
+ 			/* We cannot adjust MR_DEPENDENCE_CLIQUE in-place
+ 			   since MEM_EXPR is shared so make a copy and
+diff --git a/gcc/function.h b/gcc/function.h
+index d4ce8a7c6..19f58410c 100644
+--- a/gcc/function.h
++++ b/gcc/function.h
+@@ -518,6 +518,17 @@ set_loops_for_fn (struct function *fn, struct loops *loops)
+   fn->x_current_loops = loops;
+ }
+ 
++/* Get a new unique dependence clique or zero if none is left.  */
++
++inline unsigned short
++get_new_clique (function *fn)
++{
++  unsigned short clique = fn->last_clique + 1;
++  if (clique != 0)
++    fn->last_clique = clique;
++  return clique;
++}
++
+ /* For backward compatibility... eventually these should all go away.  */
+ #define current_function_funcdef_no (cfun->funcdef_no)
+ 
+diff --git a/gcc/tree-cfg.cc b/gcc/tree-cfg.cc
+index 9a11ab132..c392c37fa 100644
+--- a/gcc/tree-cfg.cc
++++ b/gcc/tree-cfg.cc
+@@ -6546,7 +6546,7 @@ gimple_duplicate_bb (basic_block bb, copy_bb_data *id)
+ 		if (!existed)
+ 		  {
+ 		    gcc_assert (MR_DEPENDENCE_CLIQUE (op) <= cfun->last_clique);
+-		    newc = ++cfun->last_clique;
++		    newc = get_new_clique (cfun);
+ 		  }
+ 		MR_DEPENDENCE_CLIQUE (op) = newc;
+ 	      }
+diff --git a/gcc/tree-inline.cc b/gcc/tree-inline.cc
+index d52eb5289..ce26a44d9 100644
+--- a/gcc/tree-inline.cc
++++ b/gcc/tree-inline.cc
+@@ -1003,7 +1003,7 @@ remap_dependence_clique (copy_body_data *id, unsigned short clique)
+       /* Clique 1 is reserved for local ones set by PTA.  */
+       if (cfun->last_clique == 0)
+ 	cfun->last_clique = 1;
+-      newc = ++cfun->last_clique;
++      newc = get_new_clique (cfun);
+     }
+   return newc;
+ }

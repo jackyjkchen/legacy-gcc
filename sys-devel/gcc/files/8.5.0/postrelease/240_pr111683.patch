@@ -1,0 +1,106 @@
+diff --git a/gcc/testsuite/gcc.dg/pr111683-1.c b/gcc/testsuite/gcc.dg/pr111683-1.c
+new file mode 100644
+index 000000000..e0dc189a9
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr111683-1.c
+@@ -0,0 +1,22 @@
++/* PR middle-end/111683 */
++/* { dg-do run } */
++/* { dg-options "-O2" } */
++
++long long b[6] = { 3, 4, 5, 6, 7, 8 }, c[16];
++long long d[9] = { 3, 7, 12, 18, 22, 26, 21, 15, 8 };
++typedef long long U __attribute__ ((vector_size(16), may_alias, aligned(1)));
++typedef long long V __attribute__ ((vector_size(16), may_alias));
++
++int
++main ()
++{
++  for (int f = 0; f < 6; f++)
++    {
++      *(U *) &c[f] = *(U *) &c[f] + (V) { b[f], b[f] };
++      *(U *) &c[f + 2] = *(U *) &c[f + 2] + (V) { b[f], b[f] };
++    }
++  for (int f = 0; f < 9; f++)
++    if (c[f] != d[f])
++      __builtin_abort ();
++  return 0;
++}
+diff --git a/gcc/testsuite/gcc.dg/pr111683-2.c b/gcc/testsuite/gcc.dg/pr111683-2.c
+new file mode 100644
+index 000000000..6861d157e
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr111683-2.c
+@@ -0,0 +1,27 @@
++/* PR middle-end/111683 */
++/* { dg-do run } */
++/* { dg-options "-O2" } */
++
++int b[6] = { 3, 4, 5, 6, 7, 8 }, c[12];
++int d[16] = { 0, 1, 3, 6, 10, 14, 12, 9, 5, 0, 0, 0 };
++
++int
++main ()
++{
++  int i;
++  if (sizeof (int) * 2 != sizeof (long long))
++    return 0;
++  for (i = 0; i < 6; i++)
++    {
++      long long a;
++      __builtin_memcpy (&a, &c[i], sizeof (a));
++      a += (((long long) i) << (sizeof (int) * __CHAR_BIT__)) + i;
++      __builtin_memcpy (&c[i], &a, sizeof (a));
++      __builtin_memcpy (&a, &c[i + 2], sizeof (a));
++      a += (((long long) i) << (sizeof (int) * __CHAR_BIT__)) + i;
++      __builtin_memcpy (&c[i + 2], &a, sizeof (a));
++    }
++  if (__builtin_memcmp (&c[0], &d[0], sizeof (c)))
++    __builtin_abort ();
++  return 0;
++}
+diff --git a/gcc/tree-predcom.c b/gcc/tree-predcom.c
+index fd3f2202f..b9f241642 100644
+--- a/gcc/tree-predcom.c
++++ b/gcc/tree-predcom.c
+@@ -976,8 +976,39 @@ suitable_component_p (struct loop *loop, struct component *comp)
+   gcc_assert (ok);
+   first->offset = 0;
+ 
+-  for (i = 1; comp->refs.iterate (i, &a); i++)
++  FOR_EACH_VEC_ELT (comp->refs, i, a)
+     {
++      if (has_write && comp->comp_step == RS_NONZERO)
++	{
++	  /* Punt for non-invariant references where step isn't a multiple
++	     of reference size.  If step is smaller than reference size,
++	     it overlaps the access in next iteration, if step is larger,
++	     but not multiple of the access size, there could be overlap
++	     in some later iteration.  There might be more latent issues
++	     about this in predcom or data reference analysis.  If the
++	     reference is a COMPONENT_REF, also check if step isn't a
++	     multiple of the containg aggregate size.  See PR111683.  */
++	  tree ref = DR_REF (a->ref);
++	  tree step = DR_STEP (a->ref);
++	  if (TREE_CODE (ref) == COMPONENT_REF
++	      && DECL_BIT_FIELD (TREE_OPERAND (ref, 1)))
++	    ref = TREE_OPERAND (ref, 0);
++	  do
++	    {
++	      tree sz = TYPE_SIZE_UNIT (TREE_TYPE (ref));
++	      if (TREE_CODE (sz) != INTEGER_CST)
++		return false;
++	      if (wi::multiple_of_p (wi::to_offset (step),
++				     wi::to_offset (sz), SIGNED))
++		break;
++	      if (TREE_CODE (ref) != COMPONENT_REF)
++		return false;
++	      ref = TREE_OPERAND (ref, 0);
++	    }
++	  while (1);
++	}
++      if (i == 0)
++	continue;
+       /* Polynomial offsets are no use, since we need to know the
+ 	 gap between iteration numbers at compile time.  */
+       poly_widest_int offset;

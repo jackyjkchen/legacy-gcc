@@ -1,0 +1,84 @@
+diff --git a/libstdc++-v3/include/std/chrono b/libstdc++-v3/include/std/chrono
+index 2a0ab6bb3..61dbfede9 100644
+--- a/libstdc++-v3/include/std/chrono
++++ b/libstdc++-v3/include/std/chrono
+@@ -2438,17 +2438,10 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
+ 	    { return {}; }
+ 	  };
+ 
+-	// True if the maximum constructor argument can be represented in _Tp.
+-	template<typename _Tp>
+-	  static constexpr bool __fits
+-	    = duration_values<typename _Duration::rep>::max()
+-		<= duration_values<_Tp>::max();
+-
+ 	template<typename _Rep, typename _Period>
+ 	  requires (!treat_as_floating_point_v<_Rep>)
+ 	    && ratio_less_v<_Period, ratio<1, 1>>
+-	    && (ratio_greater_equal_v<_Period, ratio<1, 250>>
+-		  || __fits<unsigned char>)
++	    && ratio_greater_equal_v<_Period, ratio<1, 250>>
+ 	  struct __subseconds<duration<_Rep, _Period>>
+ 	  {
+ 	    unsigned char _M_r{};
+@@ -2461,8 +2454,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
+ 	template<typename _Rep, typename _Period>
+ 	  requires (!treat_as_floating_point_v<_Rep>)
+ 	    && ratio_less_v<_Period, ratio<1, 250>>
+-	    && (ratio_greater_equal_v<_Period, ratio<1, 4000000000>>
+-		  || __fits<uint_least32_t>)
++	    && ratio_greater_equal_v<_Period, ratio<1, 4000000000>>
+ 	  struct __subseconds<duration<_Rep, _Period>>
+ 	  {
+ 	    uint_least32_t _M_r{};
+diff --git a/libstdc++-v3/testsuite/std/time/hh_mm_ss/1.cc b/libstdc++-v3/testsuite/std/time/hh_mm_ss/1.cc
+index f8a3e115a..85f991c5e 100644
+--- a/libstdc++-v3/testsuite/std/time/hh_mm_ss/1.cc
++++ b/libstdc++-v3/testsuite/std/time/hh_mm_ss/1.cc
+@@ -109,8 +109,8 @@ size()
+   static_assert(sizeof(hh_mm_ss<duration<int, std::centi>>) == sizeof(S1));
+   struct S2 { long long h; char m, s; bool neg; int ss; };
+   static_assert(sizeof(hh_mm_ss<duration<int, std::milli>>) == sizeof(S2));
+-  static_assert(sizeof(hh_mm_ss<duration<int, std::pico>>) == sizeof(S2));
+   struct S3 { long long h; char m, s; bool neg; long long ss; };
++  static_assert(sizeof(hh_mm_ss<duration<int, std::pico>>) == sizeof(S3));
+   static_assert(sizeof(hh_mm_ss<duration<long long, std::pico>>) == sizeof(S3));
+   struct S4 { long long h; char m, s; bool neg; double ss; };
+   static_assert(sizeof(hh_mm_ss<duration<double, std::micro>>) == sizeof(S4));
+diff --git a/libstdc++-v3/testsuite/std/time/hh_mm_ss/109772.cc b/libstdc++-v3/testsuite/std/time/hh_mm_ss/109772.cc
+new file mode 100644
+index 000000000..36137f283
+--- /dev/null
++++ b/libstdc++-v3/testsuite/std/time/hh_mm_ss/109772.cc
+@@ -0,0 +1,31 @@
++// { dg-options "-std=gnu++20" }
++// { dg-do compile { target c++20 } }
++
++// PR libstdc++/109772 Memory layout optimization of chrono::hh_mm_ss is wrong
++
++#include <chrono>
++#include <testsuite_hooks.h>
++
++using std::chrono::hh_mm_ss;
++using std::chrono::duration;
++using std::ratio;
++
++constexpr bool
++test_truncated()
++{
++  using int_1_1024 = duration<int, ratio<1, 1024>>;
++  static_assert( hh_mm_ss<int_1_1024>::fractional_width == 10 );
++
++  hh_mm_ss<int_1_1024> t1(int_1_1024(487));
++  VERIFY( t1.subseconds().count() == (10'000'000'000 * 487 / 1024) );
++
++  hh_mm_ss<int_1_1024> t2(int_1_1024(1023));
++  VERIFY( t2.subseconds().count() == (10'000'000'000 * 1023 / 1024) );
++
++  return true;
++}
++
++static_assert( test_truncated() );
++
++// Check for ambiguous partial specializations of hh_mm_ss::__subseconds:
++static_assert( hh_mm_ss<duration<char, ratio<1, 11>>>::fractional_width == 6 );

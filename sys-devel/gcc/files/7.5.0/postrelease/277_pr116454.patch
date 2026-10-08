@@ -1,0 +1,84 @@
+diff --git a/gcc/fold-const.c b/gcc/fold-const.c
+index 17764aeed..953a95bf4 100644
+--- a/gcc/fold-const.c
++++ b/gcc/fold-const.c
+@@ -9900,17 +9900,29 @@ fold_binary_loc (location_t loc, enum tree_code code, tree type,
+ 	    {
+ 	      tree rtype = TREE_TYPE (TREE_TYPE (arg0));
+ 	      if (real_onep (TREE_IMAGPART (arg1)))
+-		return
+-		  fold_build2_loc (loc, COMPLEX_EXPR, type,
+-			       negate_expr (fold_build1_loc (loc, IMAGPART_EXPR,
+-							     rtype, arg0)),
+-			       fold_build1_loc (loc, REALPART_EXPR, rtype, arg0));
++		{
++		  if (TREE_CODE (arg0) != COMPLEX_EXPR)
++		    arg0 = save_expr (arg0);
++		  tree iarg0 = fold_build1_loc (loc, IMAGPART_EXPR,
++						rtype, arg0);
++		  tree rarg0 = fold_build1_loc (loc, REALPART_EXPR,
++						rtype, arg0);
++		  return fold_build2_loc (loc, COMPLEX_EXPR, type,
++					  negate_expr (iarg0),
++					  rarg0);
++		}
+ 	      else if (real_minus_onep (TREE_IMAGPART (arg1)))
+-		return
+-		  fold_build2_loc (loc, COMPLEX_EXPR, type,
+-			       fold_build1_loc (loc, IMAGPART_EXPR, rtype, arg0),
+-			       negate_expr (fold_build1_loc (loc, REALPART_EXPR,
+-							     rtype, arg0)));
++		{
++		  if (TREE_CODE (arg0) != COMPLEX_EXPR)
++		    arg0 = save_expr (arg0);
++		  tree iarg0 = fold_build1_loc (loc, IMAGPART_EXPR,
++						rtype, arg0);
++		  tree rarg0 = fold_build1_loc (loc, REALPART_EXPR,
++						rtype, arg0);
++		  return fold_build2_loc (loc, COMPLEX_EXPR, type,
++					  iarg0,
++					  negate_expr (rarg0));
++		}
+ 	    }
+ 
+ 	  /* Optimize z * conj(z) for floating point complex numbers.
+diff --git a/gcc/testsuite/gcc.dg/torture/pr116454-1.c b/gcc/testsuite/gcc.dg/torture/pr116454-1.c
+new file mode 100644
+index 000000000..6210dcce4
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/torture/pr116454-1.c
+@@ -0,0 +1,16 @@
++/* { dg-do run } */
++/* { dg-additional-options "-ffast-math" } */
++
++static int t = 0;
++_Complex float f()
++{
++        t++;
++        return 0;
++}
++int main() {
++	t = 0;
++	/* Would cause f() to be incorrectly invoked twice. */
++	f() * 1j;
++	if (t != 1)
++          __builtin_abort();
++}
+diff --git a/gcc/testsuite/gcc.dg/torture/pr116454-2.c b/gcc/testsuite/gcc.dg/torture/pr116454-2.c
+new file mode 100644
+index 000000000..a1e1604e6
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/torture/pr116454-2.c
+@@ -0,0 +1,12 @@
++/* { dg-do run } */
++/* { dg-additional-options "-ffast-math" } */
++_Complex float arr[2];
++
++int main() {
++  _Complex float *ptr;
++  ptr = arr;
++  *++ptr * 1j; 
++  /* ptr should only increment once, not twice. */
++  if (ptr != arr + 1)
++    __builtin_abort ();
++}

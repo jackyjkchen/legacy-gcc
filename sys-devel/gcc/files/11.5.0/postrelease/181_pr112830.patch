@@ -1,0 +1,123 @@
+diff --git a/gcc/builtins.c b/gcc/builtins.c
+index 30e2ebfdf..a1fb65906 100644
+--- a/gcc/builtins.c
++++ b/gcc/builtins.c
+@@ -2113,6 +2113,9 @@ get_memory_rtx (tree exp, tree len)
+   tree orig_exp = exp, base;
+   rtx addr, mem;
+ 
++  gcc_checking_assert
++    (ADDR_SPACE_GENERIC_P (TYPE_ADDR_SPACE (TREE_TYPE (TREE_TYPE (exp)))));
++
+   /* When EXP is not resolved SAVE_EXPR, MEM_ATTRS can be still derived
+      from its expression, for expr->a.b only <variable>.a.b is recorded.  */
+   if (TREE_CODE (exp) == SAVE_EXPR && !SAVE_EXPR_RESOLVED_P (exp))
+diff --git a/gcc/gimplify.c b/gcc/gimplify.c
+index bc71abe9b..9ebf69449 100644
+--- a/gcc/gimplify.c
++++ b/gcc/gimplify.c
+@@ -4361,6 +4361,8 @@ gimplify_modify_expr_to_memcpy (tree *expr_p, tree size, bool want_value,
+ 
+   to = TREE_OPERAND (*expr_p, 0);
+   from = TREE_OPERAND (*expr_p, 1);
++  gcc_assert (ADDR_SPACE_GENERIC_P (TYPE_ADDR_SPACE (TREE_TYPE (to)))
++	      && ADDR_SPACE_GENERIC_P (TYPE_ADDR_SPACE (TREE_TYPE (from))));
+ 
+   /* Mark the RHS addressable.  Beware that it may not be possible to do so
+      directly if a temporary has been created by the gimplification.  */
+@@ -4419,6 +4421,7 @@ gimplify_modify_expr_to_memset (tree *expr_p, tree size, bool want_value,
+ 
+   /* Now proceed.  */
+   to = TREE_OPERAND (*expr_p, 0);
++  gcc_assert (ADDR_SPACE_GENERIC_P (TYPE_ADDR_SPACE (TREE_TYPE (to))));
+ 
+   to_ptr = build_fold_addr_expr_loc (loc, to);
+   gimplify_arg (&to_ptr, seq_p, loc);
+@@ -5896,8 +5899,9 @@ gimplify_modify_expr (tree *expr_p, gimple_seq *pre_p, gimple_seq *post_p,
+ 
+       if (TREE_CODE (from) == CONSTRUCTOR)
+ 	return gimplify_modify_expr_to_memset (expr_p, size, want_value, pre_p);
+-
+-      if (is_gimple_addressable (from))
++      else if (is_gimple_addressable (from)
++	       && ADDR_SPACE_GENERIC_P (TYPE_ADDR_SPACE (TREE_TYPE (*to_p)))
++	       && ADDR_SPACE_GENERIC_P (TYPE_ADDR_SPACE (TREE_TYPE (from))))
+ 	{
+ 	  *from_p = from;
+ 	  return gimplify_modify_expr_to_memcpy (expr_p, size, want_value,
+diff --git a/gcc/testsuite/gcc.target/avr/pr112830.c b/gcc/testsuite/gcc.target/avr/pr112830.c
+new file mode 100644
+index 000000000..c305daed0
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/avr/pr112830.c
+@@ -0,0 +1,12 @@
++/* { dg-do compile } */
++/* { dg-options "" } */
++
++typedef __SIZE_TYPE__ size_t;
++
++void copy_n (void *vdst, const __memx void *vsrc, size_t n)
++{
++  typedef struct { char a[n]; } T;
++  T *dst = (T*) vdst;
++  const __memx T *src = (const __memx T*) vsrc;
++  *dst = *src;
++}
+diff --git a/gcc/testsuite/gcc.target/i386/pr112830.c b/gcc/testsuite/gcc.target/i386/pr112830.c
+new file mode 100644
+index 000000000..2ba610404
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/i386/pr112830.c
+@@ -0,0 +1,9 @@
++/* { dg-do compile } */
++/* { dg-options "" } */
++
++void
++foo (int n, __seg_fs void *p, __seg_gs void *q)
++{
++  typedef struct { char t[n]; } T;
++  *(__seg_fs T *)p = *(__seg_gs T *)q;
++}
+diff --git a/gcc/tree-cfg.c b/gcc/tree-cfg.c
+index ccd807859..247b0d528 100644
+--- a/gcc/tree-cfg.c
++++ b/gcc/tree-cfg.c
+@@ -4522,6 +4522,16 @@ verify_gimple_assign_single (gassign *stmt)
+       error ("%qs in gimple IL", code_name);
+       return true;
+ 
++    case WITH_SIZE_EXPR:
++      if (!is_gimple_val (TREE_OPERAND (rhs1, 1)))
++	{
++	  error ("invalid %qs size argument in load", code_name);
++	  debug_generic_stmt (lhs);
++	  debug_generic_stmt (rhs1);
++	  return true;
++	}
++      rhs1 = TREE_OPERAND (rhs1, 0);
++      /* Fallthru.  */
+     case COMPONENT_REF:
+     case BIT_FIELD_REF:
+     case ARRAY_REF:
+@@ -4671,7 +4681,6 @@ verify_gimple_assign_single (gassign *stmt)
+       break;
+ 
+     case OBJ_TYPE_REF:
+-    case WITH_SIZE_EXPR:
+       /* FIXME.  */
+       return res;
+ 
+diff --git a/gcc/tree-ssa-dce.c b/gcc/tree-ssa-dce.c
+index e556a7996..9f639ea4c 100644
+--- a/gcc/tree-ssa-dce.c
++++ b/gcc/tree-ssa-dce.c
+@@ -453,7 +453,8 @@ find_obviously_necessary_stmts (bool aggressive)
+ static bool
+ ref_may_be_aliased (tree ref)
+ {
+-  gcc_assert (TREE_CODE (ref) != WITH_SIZE_EXPR);
++  if (TREE_CODE (ref) == WITH_SIZE_EXPR)
++    ref = TREE_OPERAND (ref, 0);
+   while (handled_component_p (ref))
+     ref = TREE_OPERAND (ref, 0);
+   if (TREE_CODE (ref) == MEM_REF

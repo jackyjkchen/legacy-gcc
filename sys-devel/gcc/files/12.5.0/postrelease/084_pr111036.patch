@@ -1,0 +1,43 @@
+diff --git a/gcc/match.pd b/gcc/match.pd
+index 9b7c9f3f0..fba75aa81 100644
+--- a/gcc/match.pd
++++ b/gcc/match.pd
+@@ -7790,3 +7790,8 @@ and,
+ 	       == TYPE_UNSIGNED (TREE_TYPE (@3))))
+        && single_use (@4)
+        && single_use (@5))))
++
++/* Strip nop-conversions __builtin_constant_p arguments.  */
++(simplify
++ (BUILT_IN_CONSTANT_P (nop_convert@1 @0))
++ (BUILT_IN_CONSTANT_P @0))
+diff --git a/gcc/testsuite/gcc.dg/torture/pr111036.c b/gcc/testsuite/gcc.dg/torture/pr111036.c
+new file mode 100644
+index 000000000..f3a0e6170
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/torture/pr111036.c
+@@ -0,0 +1,24 @@
++/* { dg-do run } */
++
++#include <stdlib.h>
++
++__attribute__((aligned(32))) static struct
++{
++  unsigned long long available_cmd_ids_per_core[2];
++} _rl2c_cmd_id_data;
++
++static inline void __attribute__((always_inline))
++foo (void *base, size_t length)
++{
++  unsigned long int p = (unsigned long int) base;
++  if (__builtin_constant_p(p) && (p & 31) == 0) { exit (0); } 
++  else if (__builtin_constant_p(length)) { exit (0); } 
++  else { exit (0); }
++}
++
++int main(int argc, char **argv)
++{
++  foo(&_rl2c_cmd_id_data, sizeof(*(&_rl2c_cmd_id_data)));
++  return 0;
++}
++

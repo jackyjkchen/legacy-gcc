@@ -1,0 +1,41 @@
+diff --git a/gcc/testsuite/gcc.dg/torture/pr112487.c b/gcc/testsuite/gcc.dg/torture/pr112487.c
+new file mode 100644
+index 000000000..bc2838ee3
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/torture/pr112487.c
+@@ -0,0 +1,18 @@
++/* { dg-do compile } */
++/* { dg-additional-options "-w -std=gnu89" } */
++
++struct A { char i; };
++struct B {
++  struct C *p;
++  struct A *q;
++};
++struct C { struct B a[1]; };
++struct T { struct U *ptr; };
++
++volatile struct T v;
++void f1(volatile struct T v) { f2(v); }
++void f2(volatile struct T *const v) { }
++void bar() {
++  struct U *ptr;
++  f1(v);
++}
+diff --git a/gcc/tree-inline.cc b/gcc/tree-inline.cc
+index ca84b5fef..d52eb5289 100644
+--- a/gcc/tree-inline.cc
++++ b/gcc/tree-inline.cc
+@@ -3571,7 +3571,11 @@ setup_one_parameter (copy_body_data *id, tree p, tree value, tree fn,
+      it.  */
+   if (optimize && gimple_in_ssa_p (cfun) && !def && is_gimple_reg (p))
+     {
+-      gcc_assert (!value || !TREE_SIDE_EFFECTS (value));
++      /* When there's a gross type mismatch between the passed value
++	 and the declared argument type drop it on the floor and do
++	 not bother to insert a debug bind.  */
++      if (value && !is_gimple_reg_type (TREE_TYPE (value)))
++	return NULL;
+       return insert_init_debug_bind (id, bb, var, rhs, NULL);
+     }
+ 

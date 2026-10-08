@@ -1,0 +1,56 @@
+diff --git a/gcc/fortran/trans-expr.cc b/gcc/fortran/trans-expr.cc
+index 6e8882a46..b01b9da58 100644
+--- a/gcc/fortran/trans-expr.cc
++++ b/gcc/fortran/trans-expr.cc
+@@ -5147,7 +5147,9 @@ gfc_conv_subref_array_arg (gfc_se *se, gfc_expr * expr, int g77,
+ 
+   gcc_assert (lse.ss == gfc_ss_terminator);
+ 
+-  tmp = gfc_trans_scalar_assign (&lse, &rse, expr->ts, false, true);
++  /* Do not do deallocations when we are looking at a g77-style argument.  */
++
++  tmp = gfc_trans_scalar_assign (&lse, &rse, expr->ts, false, !g77);
+   gfc_add_expr_to_block (&body, tmp);
+ 
+   /* Generate the copying loops.  */
+diff --git a/gcc/testsuite/gfortran.dg/pr115260.f90 b/gcc/testsuite/gfortran.dg/pr115260.f90
+new file mode 100644
+index 000000000..ee040f866
+--- /dev/null
++++ b/gcc/testsuite/gfortran.dg/pr115260.f90
+@@ -0,0 +1,35 @@
++! { dg-do run }
++! PR 115260 - this got corrupted output.
++! Original test case by Steve Mullerworth
++
++program usegnufields
++  implicit none
++  type :: field_type
++    real,    allocatable :: data(:)
++    integer, allocatable :: idata(:)
++  end type field_type
++  type :: fieldholder
++    type(field_type) :: fieldset(2,4)
++  end type fieldholder
++  type(fieldholder) :: myfields
++
++  allocate(myfields%fieldset(2,1)%data(3))
++  allocate(myfields%fieldset(2,1)%idata(3))
++  myfields%fieldset(2,1)%data =1.0
++  myfields%fieldset(2,1)%idata=2
++
++  call setfields (myfields%fieldset(2,1:4))
++!  print *,'After calling setfields with fieldset(2,1:4)'
++!  print *,myfields%fieldset(2,1)%data
++!  print *,myfields%fieldset(2,1)%idata
++  if (any (myfields%fieldset(2,1)%data  /= 1.0)) stop 1
++  if (any (myfields%fieldset(2,1)%idata /= 2  )) stop 2
++
++contains
++  subroutine setfields (fieldset)
++    type(field_type), intent(inout) :: fieldset(1:4) ! corruption with -O
++!    print *,'In setfields:'
++!    print *,fieldset(1)%data
++!    print *,fieldset(1)%idata
++  end subroutine setfields
++end

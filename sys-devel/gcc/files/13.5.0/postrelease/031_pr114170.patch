@@ -1,0 +1,66 @@
+diff --git a/gcc/cp/module.cc b/gcc/cp/module.cc
+index 254992b27..478230995 100644
+--- a/gcc/cp/module.cc
++++ b/gcc/cp/module.cc
+@@ -11499,9 +11499,11 @@ has_definition (tree decl)
+       break;
+ 
+     case VAR_DECL:
++      /* DECL_INITIALIZED_P might not be set on a dependent VAR_DECL.  */
+       if (DECL_LANG_SPECIFIC (decl)
+-	  && DECL_TEMPLATE_INFO (decl))
+-	return DECL_INITIAL (decl);
++	  && DECL_TEMPLATE_INFO (decl)
++	  && DECL_INITIAL (decl))
++	return true;
+       else
+ 	{
+ 	  if (!DECL_INITIALIZED_P (decl))
+@@ -17408,13 +17410,14 @@ module_state::write_inits (elf_out *to, depset::hash &table, unsigned *crc_ptr)
+   tree list = static_aggregates;
+   for (int passes = 0; passes != 2; passes++)
+     {
+-      for (tree init = list; init; init = TREE_CHAIN (init), count++)
++      for (tree init = list; init; init = TREE_CHAIN (init))
+ 	if (TREE_LANG_FLAG_0 (init))
+ 	  {
+ 	    tree decl = TREE_VALUE (init);
+ 
+ 	    dump ("Initializer:%u for %N", count, decl);
+ 	    sec.tree_node (decl);
++	    ++count;
+ 	  }
+ 
+       list = tls_aggregates;
+diff --git a/gcc/testsuite/g++.dg/modules/var-tpl-2_a.H b/gcc/testsuite/g++.dg/modules/var-tpl-2_a.H
+new file mode 100644
+index 000000000..607fc0b80
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/modules/var-tpl-2_a.H
+@@ -0,0 +1,10 @@
++// PR c++/114170
++// { dg-additional-options "-fmodule-header" }
++// { dg-module-cmi {} }
++
++inline int f() { return 42; }
++
++template<class>
++inline int v = f();
++
++inline int g() { return v<int>; }
+diff --git a/gcc/testsuite/g++.dg/modules/var-tpl-2_b.C b/gcc/testsuite/g++.dg/modules/var-tpl-2_b.C
+new file mode 100644
+index 000000000..6d2ef4004
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/modules/var-tpl-2_b.C
+@@ -0,0 +1,10 @@
++// PR c++/114170
++// { dg-module-do run }
++// { dg-additional-options "-fmodules-ts" }
++
++import "var-tpl-2_a.H";
++
++int main() {
++  if (v<int> != 42)
++    __builtin_abort();
++}
