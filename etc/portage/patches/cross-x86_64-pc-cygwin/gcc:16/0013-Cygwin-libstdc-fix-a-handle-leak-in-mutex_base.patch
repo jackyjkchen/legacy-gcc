@@ -1,0 +1,40 @@
+From 02339a6653672a19f8728d76bf51d031064eac46 Mon Sep 17 00:00:00 2001
+From: Achim Gratz <Achim.Gratz@Stromeko.DE>
+Date: Sat, 21 Mar 2026 12:37:28 +0100
+Subject: [PATCH 13/13] Cygwin: libstdc++: fix a handle leak in mutex_base
+
+Cygwin's pthreads implementation uses a non-trivial type for the
+mutex, so it needs a destructor.  Failing to do that will leak the
+underlying system handle, eventually producing an exception when
+several million of them have been created.
+
+The code as written assumes a trivial type that needs no such cleanup
+when __GTHREAD_MUTEX_INIT (translated to PTHREAD_MUTEX_INITIALIZER) is
+defined, but that assumption is not valid for Cygwin at least even if
+it holds for other pthreads implementations (e.g. Linux').  So this
+arguably needs a more general fix that conveys that information via a
+feature test or configury macro.
+
+Reported-by: Frank Eskesen <feskesen@hvc.rr.com>
+Suggested-by: Corinna Vinschen <corinna-cygwin@cygwin.com>
+---
+ libstdc++-v3/include/bits/std_mutex.h | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/libstdc++-v3/include/bits/std_mutex.h b/libstdc++-v3/include/bits/std_mutex.h
+index 7ef33fe5d0d..f060c75abf2 100644
+--- a/libstdc++-v3/include/bits/std_mutex.h
++++ b/libstdc++-v3/include/bits/std_mutex.h
+@@ -68,6 +68,9 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
+     __native_type  _M_mutex = __GTHREAD_MUTEX_INIT;
+ 
+     constexpr __mutex_base() noexcept = default;
++#ifdef __CYGWIN__
++    ~__mutex_base() noexcept { __gthread_mutex_destroy(&_M_mutex); }
++#endif
+ #else
+     __native_type  _M_mutex;
+ 
+-- 
+2.51.0
+

@@ -24,10 +24,10 @@ esac
 
 DESCRIPTION=""
 HOMEPAGE=""
-SRC_URI="https://mirrors.tuna.tsinghua.edu.cn/cygwin/x86_64/release/w32api-headers/w32api-headers-12.0.0-1.tar.xz -> w32api-headers-12.0.0-1-x86_64.tar.xz
-		https://mirrors.tuna.tsinghua.edu.cn/cygwin/x86_64/release/w32api-runtime/w32api-runtime-12.0.0-1.tar.xz -> w32api-runtime-12.0.0-1-x86_64.tar.xz
-		https://mirrors.tuna.tsinghua.edu.cn/cygwin/x86_64/release/cygwin/cygwin-${PV}-1.tar.xz -> cygwin-${PV}-1-x86_64.tar.xz
-		https://mirrors.tuna.tsinghua.edu.cn/cygwin/x86_64/release/cygwin/cygwin-devel/cygwin-devel-${PV}-1.tar.xz -> cygwin-devel-${PV}-1-x86_64.tar.xz"
+SRC_URI="https://mirrors.tuna.tsinghua.edu.cn/cygwin/x86_64/release/w32api-headers/w32api-headers-14.0.0-1-${cygwin_arch}.tar.xz
+		https://mirrors.tuna.tsinghua.edu.cn/cygwin/x86_64/release/w32api-runtime/w32api-runtime-14.0.0-1-${cygwin_arch}.tar.xz
+		https://mirrors.tuna.tsinghua.edu.cn/cygwin/x86_64/release/cygwin/cygwin-${PV}-1-${cygwin_arch}.tar.xz
+		https://mirrors.tuna.tsinghua.edu.cn/cygwin/x86_64/release/cygwin/cygwin-devel/cygwin-devel-${PV}-1-${cygwin_arch}.tar.xz"
 
 LICENSE=""
 SLOT="0"
@@ -48,8 +48,8 @@ pkg_setup() {
 
 src_unpack() {
 	mkdir -p "${S}" || die
-	tar -pxf "${DISTDIR}"/w32api-headers-12.0.0-1-${cygwin_arch}.tar.xz -C "${S}" || die
-	tar -pxf "${DISTDIR}"/w32api-runtime-12.0.0-1-${cygwin_arch}.tar.xz -C "${S}" || die
+	tar -pxf "${DISTDIR}"/w32api-headers-14.0.0-1-${cygwin_arch}.tar.xz -C "${S}" || die
+	tar -pxf "${DISTDIR}"/w32api-runtime-14.0.0-1-${cygwin_arch}.tar.xz -C "${S}" || die
 	tar -pxf "${DISTDIR}"/cygwin-${PV}-1-${cygwin_arch}.tar.xz -C "${S}" || die
 	tar -pxf "${DISTDIR}"/cygwin-devel-${PV}-1-${cygwin_arch}.tar.xz -C "${S}" || die
 }
@@ -57,7 +57,7 @@ src_unpack() {
 src_prepare() {
 	pushd "${S}" > /dev/null
 	default
-	eapply "${FILESDIR}"/01_fix-gcc-47-cygwin35.patch
+	eapply "${FILESDIR}"/01_fix-gcc-47-cygwin36.patch
 	popd > /dev/null
 }
 

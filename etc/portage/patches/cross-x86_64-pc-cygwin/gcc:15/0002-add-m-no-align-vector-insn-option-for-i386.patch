@@ -1,7 +1,7 @@
-From 2c546a53be9c5890be33aa799ea4f67d193b4ac3 Mon Sep 17 00:00:00 2001
+From ac688bf96193d7c008d6b8b0edf7e24454b3dd7b Mon Sep 17 00:00:00 2001
 From: Kai Tietz <ktietz@anaconda.com>
 Date: Wed, 21 Apr 2021 07:54:59 +0200
-Subject: [PATCH 02/12] add -m(no-)align-vector-insn option for i386
+Subject: [PATCH 02/13] add -m(no-)align-vector-insn option for i386
 
 ---
  gcc/config/i386/i386-options.cc |  9 +++++--
@@ -12,10 +12,10 @@ Subject: [PATCH 02/12] add -m(no-)align-vector-insn option for i386
  5 files changed, 55 insertions(+), 9 deletions(-)
 
 diff --git a/gcc/config/i386/i386-options.cc b/gcc/config/i386/i386-options.cc
-index 964449fa8cd..2acace11f0a 100644
+index 8bddc36a2e8..46c3bfd141b 100644
 --- a/gcc/config/i386/i386-options.cc
 +++ b/gcc/config/i386/i386-options.cc
-@@ -422,6 +422,7 @@ ix86_target_string (HOST_WIDE_INT isa, HOST_WIDE_INT isa2,
+@@ -426,6 +426,7 @@ ix86_target_string (HOST_WIDE_INT isa, HOST_WIDE_INT isa2,
      { "-minline-stringops-dynamically",	MASK_INLINE_STRINGOPS_DYNAMICALLY },
      { "-mms-bitfields",			MASK_MS_BITFIELD_LAYOUT },
      { "-mno-align-stringops",		MASK_NO_ALIGN_STRINGOPS },
@@ -23,7 +23,7 @@ index 964449fa8cd..2acace11f0a 100644
      { "-mno-fancy-math-387",		MASK_NO_FANCY_MATH_387 },
      { "-mno-push-args",			MASK_NO_PUSH_ARGS },
      { "-mno-red-zone",			MASK_NO_RED_ZONE },
-@@ -1174,8 +1175,12 @@ ix86_valid_target_attribute_inner_p (tree fndecl, tree args, char *p_strings[],
+@@ -1181,8 +1182,12 @@ ix86_valid_target_attribute_inner_p (tree fndecl, tree args, char *p_strings[],
  		   MASK_INLINE_STRINGOPS_DYNAMICALLY),
  
      IX86_ATTR_NO ("align-stringops",
@@ -65,10 +65,10 @@ index 27d34bd64ea..639aa84b1e5 100644
  Target RejectNegative Joined UInteger Var(ix86_preferred_stack_boundary_arg)
  Attempt to keep stack aligned to this power of 2.
 diff --git a/gcc/config/i386/predicates.md b/gcc/config/i386/predicates.md
-index 3d3848c0a22..7b08cc48675 100644
+index ee0e81554d6..99bd7a65597 100644
 --- a/gcc/config/i386/predicates.md
 +++ b/gcc/config/i386/predicates.md
-@@ -1715,7 +1715,7 @@
+@@ -1719,7 +1719,7 @@
  ;; less than its natural alignment.
  (define_predicate "misaligned_operand"
    (and (match_code "mem")
@@ -78,10 +78,10 @@ index 3d3848c0a22..7b08cc48675 100644
  ;; Return true if OP is a parallel for an mov{d,q,dqa,ps,pd} vec_select,
  ;; where one of the two operands of the vec_concat is const0_operand.
 diff --git a/gcc/config/i386/sse.md b/gcc/config/i386/sse.md
-index b280676eee6..98adb8ad90f 100644
+index 1af120b1c6d..46676679ea3 100644
 --- a/gcc/config/i386/sse.md
 +++ b/gcc/config/i386/sse.md
-@@ -1952,7 +1952,8 @@
+@@ -1947,7 +1947,8 @@
  	(vec_concat:V2DF (vec_select:DF (match_dup 2)
  					(parallel [(const_int 0)]))
  			 (match_operand:DF 3 "memory_operand")))]
@@ -91,7 +91,7 @@ index b280676eee6..98adb8ad90f 100644
     && ix86_operands_ok_for_move_multiple (operands, true, DFmode)"
    [(set (match_dup 2) (match_dup 5))]
    "operands[5] = adjust_address (operands[1], V2DFmode, 0);")
-@@ -1963,7 +1964,8 @@
+@@ -1958,7 +1959,8 @@
     (set (match_operand:V2DF 2 "sse_reg_operand")
  	(vec_concat:V2DF (match_operand:DF 4 "sse_reg_operand")
  			 (match_operand:DF 3 "memory_operand")))]
@@ -101,7 +101,7 @@ index b280676eee6..98adb8ad90f 100644
     && REGNO (operands[4]) == REGNO (operands[2])
     && ix86_operands_ok_for_move_multiple (operands, true, DFmode)"
    [(set (match_dup 2) (match_dup 5))]
-@@ -1977,7 +1979,8 @@
+@@ -1972,7 +1974,8 @@
     (set (match_operand:DF 2 "memory_operand")
  	(vec_select:DF (match_operand:V2DF 3 "sse_reg_operand")
  		       (parallel [(const_int 1)])))]
@@ -111,7 +111,7 @@ index b280676eee6..98adb8ad90f 100644
     && ix86_operands_ok_for_move_multiple (operands, false, DFmode)"
    [(set (match_dup 4) (match_dup 1))]
    "operands[4] = adjust_address (operands[0], V2DFmode, 0);")
-@@ -11622,7 +11625,8 @@
+@@ -11658,7 +11661,8 @@
  	(vec_select:V2SF
  	  (match_operand:V4SF 1 "nonimmediate_operand" " v,v,m")
  	  (parallel [(const_int 0) (const_int 1)])))]
@@ -121,7 +121,7 @@ index b280676eee6..98adb8ad90f 100644
    "@
     %vmovlps\t{%1, %0|%q0, %1}
     %vmovaps\t{%1, %0|%0, %1}
-@@ -11631,6 +11635,21 @@
+@@ -11667,6 +11671,21 @@
     (set_attr "prefix" "maybe_vex")
     (set_attr "mode" "V2SF,V4SF,V2SF")])
  
@@ -143,7 +143,7 @@ index b280676eee6..98adb8ad90f 100644
  (define_expand "sse_loadlps_exp"
    [(set (match_operand:V4SF 0 "nonimmediate_operand")
  	(vec_concat:V4SF
-@@ -14662,7 +14681,7 @@
+@@ -14712,7 +14731,7 @@
  	(vec_select:DF
  	  (match_operand:V2DF 1 "nonimmediate_operand" "x,x,m")
  	  (parallel [(const_int 0)])))]
@@ -152,7 +152,7 @@ index b280676eee6..98adb8ad90f 100644
     && !(MEM_P (operands[0]) && MEM_P (operands[1]))"
    "@
     movlps\t{%1, %0|%0, %1}
-@@ -14671,6 +14690,20 @@
+@@ -14721,6 +14740,20 @@
    [(set_attr "type" "ssemov")
     (set_attr "mode" "V2SF,V4SF,V2SF")])
  
@@ -187,5 +187,5 @@ index 10bcd293527..a08de5a8a93 100644
  #ifdef TARGET_USING_MCFGTHREAD
  #define DEFINE_THREAD_MODEL  builtin_define ("__USING_MCFGTHREAD__");
 -- 
-2.45.1
+2.51.0
 
