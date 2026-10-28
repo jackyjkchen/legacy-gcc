@@ -1,0 +1,407 @@
+diff --git a/gcc/config/i386/i386.md b/gcc/config/i386/i386.md
+index f8b0575f4..f0d943012 100644
+--- a/gcc/config/i386/i386.md
++++ b/gcc/config/i386/i386.md
+@@ -5495,16 +5495,17 @@
+ 	      (symbol_ref "!TARGET_PARTIAL_REG_STALL")]
+ 	   (symbol_ref "true")))])
+ 
+-(define_insn "*add<mode>_1_slp"
+-  [(set (strict_low_part (match_operand:SWI12 0 "register_operand" "+<r>"))
+-	(plus:SWI12 (match_operand:SWI12 1 "nonimmediate_operand" "%0")
+-		    (match_operand:SWI12 2 "general_operand" "<r>mn")))
++;; Alternative 1 is needed to work around LRA limitation, see PR82524.
++(define_insn_and_split "*add<mode>_1_slp"
++  [(set (strict_low_part (match_operand:SWI12 0 "register_operand" "+<r>,<r>"))
++	(plus:SWI12 (match_operand:SWI12 1 "nonimmediate_operand" "%0,!<r>")
++		    (match_operand:SWI12 2 "general_operand" "<r>mn,<r>mn")))
+    (clobber (reg:CC FLAGS_REG))]
+-  "(!TARGET_PARTIAL_REG_STALL || optimize_function_for_size_p (cfun))
+-   /* FIXME: without this LRA can't reload this pattern, see PR82524.  */
+-   && (rtx_equal_p (operands[0], operands[1])
+-       || rtx_equal_p (operands[0], operands[2]))"
++  "!TARGET_PARTIAL_REG_STALL || optimize_function_for_size_p (cfun)"
+ {
++  if (which_alternative)
++    return "#";
++
+   switch (get_attr_type (insn))
+     {
+     case TYPE_INCDEC:
+@@ -5523,6 +5524,13 @@
+       return "add{<imodesuffix>}\t{%2, %0|%0, %2}";
+     }
+ }
++  "&& reload_completed"
++  [(set (strict_low_part (match_dup 0)) (match_dup 1))
++   (parallel
++     [(set (strict_low_part (match_dup 0))
++	   (plus:SWI12 (match_dup 0) (match_dup 2)))
++      (clobber (reg:CC FLAGS_REG))])]
++  ""
+   [(set (attr "type")
+      (if_then_else (match_operand:QI 2 "incdec_operand")
+ 	(const_string "incdec")
+@@ -6441,15 +6449,23 @@
+   [(set_attr "type" "alu")
+    (set_attr "mode" "SI")])
+ 
+-(define_insn "*sub<mode>_1_slp"
+-  [(set (strict_low_part (match_operand:SWI12 0 "register_operand" "+<r>"))
+-	(minus:SWI12 (match_operand:SWI12 1 "register_operand" "0")
+-		     (match_operand:SWI12 2 "general_operand" "<r>mn")))
++;; Alternative 1 is needed to work around LRA limitation, see PR82524.
++(define_insn_and_split "*sub<mode>_1_slp"
++  [(set (strict_low_part (match_operand:SWI12 0 "register_operand" "+<r>,<r>"))
++	(minus:SWI12 (match_operand:SWI12 1 "register_operand" "0,!<r>")
++		     (match_operand:SWI12 2 "general_operand" "<r>mn,<r>mn")))
+    (clobber (reg:CC FLAGS_REG))]
+-  "(!TARGET_PARTIAL_REG_STALL || optimize_function_for_size_p (cfun))
+-   /* FIXME: without this LRA can't reload this pattern, see PR82524.  */
+-   && rtx_equal_p (operands[0], operands[1])"
+-  "sub{<imodesuffix>}\t{%2, %0|%0, %2}"
++  "!TARGET_PARTIAL_REG_STALL || optimize_function_for_size_p (cfun)"
++  "@
++   sub{<imodesuffix>}\t{%2, %0|%0, %2}
++   #"
++  "&& reload_completed"
++  [(set (strict_low_part (match_dup 0)) (match_dup 1))
++   (parallel
++     [(set (strict_low_part (match_dup 0))
++	   (minus:SWI12 (match_dup 0) (match_dup 2)))
++      (clobber (reg:CC FLAGS_REG))])]
++  ""
+   [(set_attr "type" "alu")
+    (set_attr "mode" "<MODE>")])
+ 
+@@ -9247,16 +9263,23 @@
+ 	      (symbol_ref "!TARGET_PARTIAL_REG_STALL")]
+ 	   (symbol_ref "true")))])
+ 
+-(define_insn "*and<mode>_1_slp"
+-  [(set (strict_low_part (match_operand:SWI12 0 "register_operand" "+<r>"))
+-	(and:SWI12 (match_operand:SWI12 1 "nonimmediate_operand" "%0")
+-		   (match_operand:SWI12 2 "general_operand" "<r>mn")))
++;; Alternative 1 is needed to work around LRA limitation, see PR82524.
++(define_insn_and_split "*and<mode>_1_slp"
++  [(set (strict_low_part (match_operand:SWI12 0 "register_operand" "+<r>,<r>"))
++	(and:SWI12 (match_operand:SWI12 1 "nonimmediate_operand" "%0,!<r>")
++		   (match_operand:SWI12 2 "general_operand" "<r>mn,<r>mn")))
+    (clobber (reg:CC FLAGS_REG))]
+-  "(!TARGET_PARTIAL_REG_STALL || optimize_function_for_size_p (cfun))
+-   /* FIXME: without this LRA can't reload this pattern, see PR82524.  */
+-   && (rtx_equal_p (operands[0], operands[1])
+-       || rtx_equal_p (operands[0], operands[2]))"
+-  "and{<imodesuffix>}\t{%2, %0|%0, %2}"
++  "!TARGET_PARTIAL_REG_STALL || optimize_function_for_size_p (cfun)"
++  "@
++   and{<imodesuffix>}\t{%2, %0|%0, %2}
++   #"
++  "&& reload_completed"
++  [(set (strict_low_part (match_dup 0)) (match_dup 1))
++   (parallel
++     [(set (strict_low_part (match_dup 0))
++	   (and:SWI12 (match_dup 0) (match_dup 2)))
++      (clobber (reg:CC FLAGS_REG))])]
++  ""
+   [(set_attr "type" "alu")
+    (set_attr "mode" "<MODE>")])
+ 
+@@ -9840,16 +9863,23 @@
+ 	      (symbol_ref "!TARGET_PARTIAL_REG_STALL")]
+ 	   (symbol_ref "true")))])
+ 
+-(define_insn "*<code><mode>_1_slp"
+-  [(set (strict_low_part (match_operand:SWI12 0 "register_operand" "+<r>"))
+-	(any_or:SWI12 (match_operand:SWI12 1 "nonimmediate_operand" "%0")
+-		      (match_operand:SWI12 2 "general_operand" "<r>mn")))
++;; Alternative 1 is needed to work around LRA limitation, see PR82524.
++(define_insn_and_split "*<code><mode>_1_slp"
++  [(set (strict_low_part (match_operand:SWI12 0 "register_operand" "+<r>,<r>"))
++	(any_or:SWI12 (match_operand:SWI12 1 "nonimmediate_operand" "%0,!<r>")
++		      (match_operand:SWI12 2 "general_operand" "<r>mn,<r>mn")))
+    (clobber (reg:CC FLAGS_REG))]
+-  "(!TARGET_PARTIAL_REG_STALL || optimize_function_for_size_p (cfun))
+-   /* FIXME: without this LRA can't reload this pattern, see PR82524.  */
+-   && (rtx_equal_p (operands[0], operands[1])
+-       || rtx_equal_p (operands[0], operands[2]))"
+-  "<logic>{<imodesuffix>}\t{%2, %0|%0, %2}"
++  "!TARGET_PARTIAL_REG_STALL || optimize_function_for_size_p (cfun)"
++  "@
++   <logic>{<imodesuffix>}\t{%2, %0|%0, %2}
++   #"
++  "&& reload_completed"
++  [(set (strict_low_part (match_dup 0)) (match_dup 1))
++   (parallel
++     [(set (strict_low_part (match_dup 0))
++	   (any_or:SWI12 (match_dup 0) (match_dup 2)))
++      (clobber (reg:CC FLAGS_REG))])]
++  ""
+   [(set_attr "type" "alu")
+    (set_attr "mode" "<MODE>")])
+ 
+@@ -10112,6 +10142,25 @@
+   [(set_attr "type" "negnot")
+    (set_attr "mode" "SI")])
+ 
++;; Alternative 1 is needed to work around LRA limitation, see PR82524.
++(define_insn_and_split "*neg<mode>_1_slp"
++  [(set (strict_low_part (match_operand:SWI12 0 "register_operand" "+<r>,<r>"))
++	(neg:SWI12 (match_operand:SWI12 1 "register_operand" "0,!<r>")))
++   (clobber (reg:CC FLAGS_REG))]
++  "!TARGET_PARTIAL_REG_STALL || optimize_function_for_size_p (cfun)"
++  "@
++   neg{<imodesuffix>}\t%0
++   #"
++  "&& reload_completed"
++  [(set (strict_low_part (match_dup 0)) (match_dup 1))
++   (parallel
++     [(set (strict_low_part (match_dup 0))
++	   (neg:SWI12 (match_dup 0)))
++      (clobber (reg:CC FLAGS_REG))])]
++  ""
++  [(set_attr "type" "negnot")
++   (set_attr "mode" "<MODE>")])
++
+ (define_insn "*neg<mode>_2"
+   [(set (reg FLAGS_REG)
+ 	(compare
+@@ -10628,6 +10677,22 @@
+ 	      (symbol_ref "!TARGET_PARTIAL_REG_STALL")]
+ 	   (symbol_ref "true")))])
+ 
++;; Alternative 1 is needed to work around LRA limitation, see PR82524.
++(define_insn_and_split "*one_cmpl<mode>_1_slp"
++  [(set (strict_low_part (match_operand:SWI12 0 "register_operand" "+<r>,<r>"))
++	(not:SWI12 (match_operand:SWI12 1 "register_operand" "0,!<r>")))]
++  "!TARGET_PARTIAL_REG_STALL || optimize_function_for_size_p (cfun)"
++  "@
++   not{<imodesuffix>}\t%0
++   #"
++  "&& reload_completed"
++  [(set (strict_low_part (match_dup 0)) (match_dup 1))
++   (set (strict_low_part (match_dup 0))
++	(not:SWI12 (match_dup 0)))]
++  ""
++  [(set_attr "type" "negnot")
++   (set_attr "mode" "<MODE>")])
++
+ (define_insn "*one_cmpl<mode>2_2"
+   [(set (reg FLAGS_REG)
+ 	(compare (not:SWI (match_operand:SWI 1 "nonimmediate_operand" "0"))
+@@ -11195,15 +11260,17 @@
+ 	      (symbol_ref "!TARGET_PARTIAL_REG_STALL")]
+ 	   (symbol_ref "true")))])
+ 
+-(define_insn "*ashl<mode>3_1_slp"
+-  [(set (strict_low_part (match_operand:SWI12 0 "register_operand" "+<r>"))
+-	(ashift:SWI12 (match_operand:SWI12 1 "register_operand" "0")
+-		      (match_operand:QI 2 "nonmemory_operand" "cI")))
++;; Alternative 1 is needed to work around LRA limitation, see PR82524.
++(define_insn_and_split "*ashl<mode>3_1_slp"
++  [(set (strict_low_part (match_operand:SWI12 0 "register_operand" "+<r>,<r>"))
++	(ashift:SWI12 (match_operand:SWI12 1 "register_operand" "0,!<r>")
++		      (match_operand:QI 2 "nonmemory_operand" "cI,cI")))
+    (clobber (reg:CC FLAGS_REG))]
+-  "(!TARGET_PARTIAL_REG_STALL || optimize_function_for_size_p (cfun))
+-   /* FIXME: without this LRA can't reload this pattern, see PR82524.  */
+-   && rtx_equal_p (operands[0], operands[1])"
++  "!TARGET_PARTIAL_REG_STALL || optimize_function_for_size_p (cfun)"
+ {
++  if (which_alternative)
++    return "#";
++
+   switch (get_attr_type (insn))
+     {
+     case TYPE_ALU:
+@@ -11218,6 +11285,13 @@
+ 	return "sal{<imodesuffix>}\t{%2, %0|%0, %2}";
+     }
+ }
++  "&& reload_completed"
++  [(set (strict_low_part (match_dup 0)) (match_dup 1))
++   (parallel
++     [(set (strict_low_part (match_dup 0))
++	   (ashift:SWI12 (match_dup 0) (match_dup 2)))
++      (clobber (reg:CC FLAGS_REG))])]
++  ""
+   [(set (attr "type")
+      (cond [(and (match_test "TARGET_DOUBLE_WITH_ADD")
+ 		 (match_operand 2 "const1_operand"))
+@@ -11811,21 +11885,30 @@
+        (const_string "*")))
+    (set_attr "mode" "<MODE>")])
+ 
+-(define_insn "*<insn><mode>3_1_slp"
+-  [(set (strict_low_part (match_operand:SWI12 0 "register_operand" "+<r>"))
+-	(any_shiftrt:SWI12 (match_operand:SWI12 1 "register_operand" "0")
+-			   (match_operand:QI 2 "nonmemory_operand" "cI")))
++;; Alternative 1 is needed to work around LRA limitation, see PR82524.
++(define_insn_and_split "*<insn><mode>3_1_slp"
++  [(set (strict_low_part (match_operand:SWI12 0 "register_operand" "+<r>,<r>"))
++	(any_shiftrt:SWI12 (match_operand:SWI12 1 "register_operand" "0,!<r>")
++			   (match_operand:QI 2 "nonmemory_operand" "cI,cI")))
+    (clobber (reg:CC FLAGS_REG))]
+-  "(!TARGET_PARTIAL_REG_STALL || optimize_function_for_size_p (cfun))
+-   /* FIXME: without this LRA can't reload this pattern, see PR82524.  */
+-   && rtx_equal_p (operands[0], operands[1])"
++  "!TARGET_PARTIAL_REG_STALL || optimize_function_for_size_p (cfun)"
+ {
++  if (which_alternative)
++    return "#";
++
+   if (operands[2] == const1_rtx
+       && (TARGET_SHIFT1 || optimize_function_for_size_p (cfun)))
+     return "<shift>{<imodesuffix>}\t%0";
+   else
+     return "<shift>{<imodesuffix>}\t{%2, %0|%0, %2}";
+ }
++  "&& reload_completed"
++  [(set (strict_low_part (match_dup 0)) (match_dup 1))
++   (parallel
++     [(set (strict_low_part (match_dup 0))
++	   (any_shiftrt:SWI12 (match_dup 0) (match_dup 2)))
++      (clobber (reg:CC FLAGS_REG))])]
++  ""
+   [(set_attr "type" "ishift")
+    (set (attr "length_immediate")
+      (if_then_else
+@@ -12269,21 +12352,30 @@
+        (const_string "*")))
+    (set_attr "mode" "<MODE>")])
+ 
+-(define_insn "*<insn><mode>3_1_slp"
+-  [(set (strict_low_part (match_operand:SWI12 0 "register_operand" "+<r>"))
+-	(any_rotate:SWI12 (match_operand:SWI12 1 "register_operand" "0")
+-			  (match_operand:QI 2 "nonmemory_operand" "cI")))
++;; Alternative 1 is needed to work around LRA limitation, see PR82524.
++(define_insn_and_split "*<insn><mode>3_1_slp"
++  [(set (strict_low_part (match_operand:SWI12 0 "register_operand" "+<r>,<r>"))
++	(any_rotate:SWI12 (match_operand:SWI12 1 "register_operand" "0,!<r>")
++			  (match_operand:QI 2 "nonmemory_operand" "cI,cI")))
+    (clobber (reg:CC FLAGS_REG))]
+-  "(!TARGET_PARTIAL_REG_STALL || optimize_function_for_size_p (cfun))
+-   /* FIXME: without this LRA can't reload this pattern, see PR82524.  */
+-   && rtx_equal_p (operands[0], operands[1])"
++  "!TARGET_PARTIAL_REG_STALL || optimize_function_for_size_p (cfun)"
+ {
++  if (which_alternative)
++    return "#";
++
+   if (operands[2] == const1_rtx
+       && (TARGET_SHIFT1 || optimize_function_for_size_p (cfun)))
+     return "<rotate>{<imodesuffix>}\t%0";
+   else
+     return "<rotate>{<imodesuffix>}\t{%2, %0|%0, %2}";
+ }
++  "&& reload_completed"
++  [(set (strict_low_part (match_dup 0)) (match_dup 1))
++   (parallel
++     [(set (strict_low_part (match_dup 0))
++	   (any_rotate:SWI12 (match_dup 0) (match_dup 2)))
++      (clobber (reg:CC FLAGS_REG))])]
++  ""
+   [(set_attr "type" "rotate")
+    (set (attr "length_immediate")
+      (if_then_else
+diff --git a/gcc/testsuite/gcc.target/i386/pr85730.c b/gcc/testsuite/gcc.target/i386/pr85730.c
+new file mode 100644
+index 000000000..b27901666
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/i386/pr85730.c
+@@ -0,0 +1,95 @@
++/* PR target/85730 */
++/* { dg-do compile } */
++/* { dg-options "-O2 -mno-sse4" } */
++
++typedef char V __attribute__((vector_size(4)));
++
++V
++test_and (V v, char c)
++{
++  v[0] &= c;
++
++  return v;
++}
++
++/* { dg-final { scan-assembler "\[ \t\]andb" } } */
++
++V
++test_or (V v, char c)
++{
++  v[0] |= c;
++
++  return v;
++}
++
++/* { dg-final { scan-assembler "\[ \t\]orb" } } */
++
++V
++test_xor (V v, char c)
++{
++  v[0] ^= c;
++
++  return v;
++}
++
++/* { dg-final { scan-assembler "\[ \t\]xorb" } } */
++
++V
++test_not (V v)
++{
++  v[0] = ~v[0];
++
++  return v;
++}
++
++/* { dg-final { scan-assembler "\[ \t\]notb" } } */
++
++V
++test_sal (V v)
++{
++  v[0] <<= 3;
++
++  return v;
++}
++
++/* { dg-final { scan-assembler "\[ \t\]salb" } } */
++
++V
++test_sar (V v)
++{
++  v[0] >>= 3;
++
++  return v;
++}
++
++/* { dg-final { scan-assembler "\[ \t\]sarb" } } */
++
++V
++test_add (V v, char c)
++{
++  v[0] += c;
++
++  return v;
++}
++
++/* { dg-final { scan-assembler "\[ \t\]addb" } } */
++
++V
++test_sub (V v, char c)
++{
++  v[0] -= c;
++
++  return v;
++}
++
++/* { dg-final { scan-assembler "\[ \t\]subb" } } */
++
++V
++test_neg (V v)
++{
++  v[0] = -v[0];
++
++  return v;
++}
++
++/* { dg-final { scan-assembler "\[ \t\]negb" } } */

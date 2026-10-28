@@ -1,0 +1,73 @@
+diff --git a/libstdc++-v3/include/bits/uniform_int_dist.h b/libstdc++-v3/include/bits/uniform_int_dist.h
+index 7884f4962..e7cb37cde 100644
+--- a/libstdc++-v3/include/bits/uniform_int_dist.h
++++ b/libstdc++-v3/include/bits/uniform_int_dist.h
+@@ -251,18 +251,19 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
+ 	  static_assert(!_Wp_traits::__is_signed, "W must be unsigned");
+ 	  static_assert(_Wp_traits::__digits == (2 * _Up_traits::__digits),
+ 			"W must be twice as wide as U");
++	  constexpr auto __min = _Urbg::min();
+ 
+ 	  // reference: Fast Random Integer Generation in an Interval
+ 	  // ACM Transactions on Modeling and Computer Simulation 29 (1), 2019
+ 	  // https://arxiv.org/abs/1805.10941
+-	  _Wp __product = _Wp(__g()) * _Wp(__range);
++	  _Wp __product = _Wp(__g() - __min) * _Wp(__range);
+ 	  _Up __low = _Up(__product);
+ 	  if (__low < __range)
+ 	    {
+ 	      _Up __threshold = -__range % __range;
+ 	      while (__low < __threshold)
+ 		{
+-		  __product = _Wp(__g()) * _Wp(__range);
++		  __product = _Wp(__g() - __min) * _Wp(__range);
+ 		  __low = _Up(__product);
+ 		}
+ 	    }
+diff --git a/libstdc++-v3/testsuite/26_numerics/random/uniform_int_distribution/operators/values.cc b/libstdc++-v3/testsuite/26_numerics/random/uniform_int_distribution/operators/values.cc
+index ee1ea7ebe..5d7bca866 100644
+--- a/libstdc++-v3/testsuite/26_numerics/random/uniform_int_distribution/operators/values.cc
++++ b/libstdc++-v3/testsuite/26_numerics/random/uniform_int_distribution/operators/values.cc
+@@ -21,6 +21,7 @@
+ // 26.5.8.2.1 Class template uniform_int_distribution [rand.dist.uni.int]
+ 
+ #include <random>
++#include <cstdint>
+ #include <functional>
+ #include <testsuite_random.h>
+ 
+@@ -32,6 +33,19 @@
+ # define ARGS
+ #endif
+ 
++template<std::uint64_t Offset>
++struct shifted
++{
++  using result_type = std::uint64_t;
++  static constexpr result_type min() { return Offset; }
++  static constexpr result_type max() { return Offset + std::mt19937::max(); }
++
++  result_type operator()()
++  { return Offset + eng(); }
++
++  std::mt19937 eng;
++};
++
+ void test01()
+ {
+   using namespace __gnu_test;
+@@ -49,6 +63,14 @@ void test01()
+   std::uniform_int_distribution<> uid3(1, 20);
+   auto buid3 = std::bind(uid3, eng);
+   testDiscreteDist<ARGS>(buid3, [](int n) { return uniform_int_pdf(n, 1, 20); } );
++
++  shifted<(std::uint64_t(1) << 16)> s16e;
++  auto buid4 = std::bind(uid3, s16e);
++  testDiscreteDist<ARGS>(buid4, [](int n) { return uniform_int_pdf(n, 1, 20); } );
++
++  shifted<(std::uint64_t(1) << 32)> s32e;
++  auto buid5 = std::bind(uid3, s32e);
++  testDiscreteDist<ARGS>(buid5, [](int n) { return uniform_int_pdf(n, 1, 20); } );
+ }
+ 
+ int main()

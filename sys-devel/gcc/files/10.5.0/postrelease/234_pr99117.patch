@@ -1,0 +1,42 @@
+diff --git a/libstdc++-v3/include/std/valarray b/libstdc++-v3/include/std/valarray
+index df001b5b7..0fdd7b5ae 100644
+--- a/libstdc++-v3/include/std/valarray
++++ b/libstdc++-v3/include/std/valarray
+@@ -838,7 +838,13 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
+       // _GLIBCXX_RESOLVE_LIB_DEFECTS
+       // 630. arrays of valarray.
+       if (_M_size == __e.size())
+-	std::__valarray_copy(__e, _M_size, _Array<_Tp>(_M_data));
++	{
++	  // Copy manually instead of using __valarray_copy, because __e might
++	  // alias _M_data and the _Array param type of __valarray_copy uses
++	  // restrict which doesn't allow aliasing.
++	  for (size_t __i = 0; __i < _M_size; ++__i)
++	    _M_data[__i] = __e[__i];
++	}
+       else
+ 	{
+ 	  if (_M_data)
+diff --git a/libstdc++-v3/testsuite/26_numerics/valarray/99117.cc b/libstdc++-v3/testsuite/26_numerics/valarray/99117.cc
+new file mode 100644
+index 000000000..81621bd07
+--- /dev/null
++++ b/libstdc++-v3/testsuite/26_numerics/valarray/99117.cc
+@@ -0,0 +1,17 @@
++// { dg-do run { target c++11 } }
++
++// PR libstdc++/99117 cannot accumulate std::valarray
++
++#include <valarray>
++#include <vector>
++#include <testsuite_hooks.h>
++
++int main()
++{
++    std::vector<std::valarray<int>> v = {{1,1}, {2,2}};
++    std::valarray<int> sum(2);
++    for (const auto& e : v)
++      sum = sum + e;
++    VERIFY(sum[0]==3);
++    VERIFY(sum[1]==3);
++}

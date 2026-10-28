@@ -1,0 +1,87 @@
+diff --git a/gcc/alias.c b/gcc/alias.c
+index 49bd7b379..b67ef6d69 100644
+--- a/gcc/alias.c
++++ b/gcc/alias.c
+@@ -2056,31 +2056,13 @@ find_base_term (rtx x, vec<std::pair<cselib_val *,
+ 	if (tmp1 == pic_offset_table_rtx && CONSTANT_P (tmp2))
+ 	  return find_base_term (tmp2, visited_vals);
+ 
+-	/* If either operand is known to be a pointer, then prefer it
+-	   to determine the base term.  */
+-	if (REG_P (tmp1) && REG_POINTER (tmp1))
+-	  ;
+-	else if (REG_P (tmp2) && REG_POINTER (tmp2))
+-	  std::swap (tmp1, tmp2);
+-	/* If second argument is constant which has base term, prefer it
+-	   over variable tmp1.  See PR64025.  */
+-	else if (CONSTANT_P (tmp2) && !CONST_INT_P (tmp2))
++	if (CONST_INT_P (tmp1))
+ 	  std::swap (tmp1, tmp2);
+ 
+-	/* Go ahead and find the base term for both operands.  If either base
+-	   term is from a pointer or is a named object or a special address
+-	   (like an argument or stack reference), then use it for the
+-	   base term.  */
+-	rtx base = find_base_term (tmp1, visited_vals);
+-	if (base != NULL_RTX
+-	    && ((REG_P (tmp1) && REG_POINTER (tmp1))
+-		 || known_base_value_p (base)))
+-	  return base;
+-	base = find_base_term (tmp2, visited_vals);
+-	if (base != NULL_RTX
+-	    && ((REG_P (tmp2) && REG_POINTER (tmp2))
+-		 || known_base_value_p (base)))
+-	  return base;
++	/* We can only handle binary operators when one of the operands
++	   never leads to a base value.  */
++	if (CONST_INT_P (tmp2))
++	  return find_base_term (tmp1, visited_vals);
+ 
+ 	/* We could not determine which of the two operands was the
+ 	   base register and which was the index.  So we can determine
+diff --git a/gcc/config/i386/i386-expand.c b/gcc/config/i386/i386-expand.c
+index bb8383f9e..139971a63 100644
+--- a/gcc/config/i386/i386-expand.c
++++ b/gcc/config/i386/i386-expand.c
+@@ -6716,7 +6716,7 @@ expand_set_or_cpymem_prologue_epilogue_by_misaligned_moves (rtx destmem, rtx src
+       /* See how many bytes we skipped.  */
+       saveddest = expand_simple_binop (GET_MODE (*destptr), MINUS, saveddest,
+ 				       *destptr,
+-				       saveddest, 1, OPTAB_DIRECT);
++				       NULL_RTX, 1, OPTAB_DIRECT);
+       /* Adjust srcptr and count.  */
+       if (!issetmem)
+ 	*srcptr = expand_simple_binop (GET_MODE (*srcptr), MINUS, *srcptr,
+diff --git a/gcc/testsuite/gcc.dg/torture/pr113255.c b/gcc/testsuite/gcc.dg/torture/pr113255.c
+new file mode 100644
+index 000000000..78af6a5a5
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/torture/pr113255.c
+@@ -0,0 +1,27 @@
++/* { dg-do run } */
++/* { dg-additional-options "-mtune=k8 -mstringop-strategy=rep_8byte" { target { { i?86-*-* x86_64-*-* } && { ! ia32 } } } } */
++
++struct S { unsigned a[10]; unsigned y; unsigned b[6]; } g[2];
++
++__attribute__((noinline, noclone)) int
++test (int x)
++{
++  struct S e[2] = { g[0], g[1] };
++  int r = 0;
++  if (x >= 0)
++    {
++      r++;
++      e[1].y++;
++    }
++  g[1] = e[1];
++  return r;
++}
++
++int
++main ()
++{
++  test (1);
++  if (g[1].y != 1)
++    __builtin_abort ();
++  return 0;
++}

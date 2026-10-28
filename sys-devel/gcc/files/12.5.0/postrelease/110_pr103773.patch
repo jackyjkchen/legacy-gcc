@@ -1,0 +1,189 @@
+diff --git a/gcc/config/i386/i386.md b/gcc/config/i386/i386.md
+index 1bdbfbb95..0504723b8 100644
+--- a/gcc/config/i386/i386.md
++++ b/gcc/config/i386/i386.md
+@@ -2036,22 +2036,32 @@
+    (set_attr "mode" "SI")
+    (set_attr "length_immediate" "0")])
+ 
+-(define_insn "*mov<mode>_and"
++;; Generate shorter "and $0,mem" for -Oz.  Split it to "mov $0,mem"
++;; otherwise.
++(define_insn_and_split "*mov<mode>_and"
+   [(set (match_operand:SWI248 0 "memory_operand" "=m")
+ 	(match_operand:SWI248 1 "const0_operand"))
+    (clobber (reg:CC FLAGS_REG))]
+   "reload_completed"
+   "and{<imodesuffix>}\t{%1, %0|%0, %1}"
++  "&& !(optimize_insn_for_size_p () && optimize_size > 1)"
++  [(set (match_dup 0) (match_dup 1))]
++  ""
+   [(set_attr "type" "alu1")
+    (set_attr "mode" "<MODE>")
+    (set_attr "length_immediate" "1")])
+ 
+-(define_insn "*mov<mode>_or"
++;; Generate shorter "or $-1,mem" for -Oz.  Split it to "mov $-1,mem"
++;; otherwise.
++(define_insn_and_split "*mov<mode>_or"
+   [(set (match_operand:SWI248 0 "nonimmediate_operand" "=rm")
+ 	(match_operand:SWI248 1 "constm1_operand"))
+    (clobber (reg:CC FLAGS_REG))]
+   "reload_completed"
+   "or{<imodesuffix>}\t{%1, %0|%0, %1}"
++  "&& !(optimize_insn_for_size_p () && optimize_size > 1)"
++  [(set (match_dup 0) (match_dup 1))]
++  ""
+   [(set_attr "type" "alu1")
+    (set_attr "mode" "<MODE>")
+    (set_attr "length_immediate" "1")])
+@@ -2532,6 +2542,7 @@
+ 	(match_operand:SWI248 1 "const_int_operand"))]
+   "optimize_insn_for_size_p () && optimize_size > 1
+    && operands[1] != const0_rtx
++   && operands[1] != constm1_rtx
+    && IN_RANGE (INTVAL (operands[1]), -128, 127)
+    && !ix86_red_zone_used
+    && REGNO (operands[0]) != SP_REG"
+diff --git a/gcc/testsuite/gcc.target/i386/cold-attribute-4.c b/gcc/testsuite/gcc.target/i386/cold-attribute-4.c
+index 37a41e954..e0808c539 100644
+--- a/gcc/testsuite/gcc.target/i386/cold-attribute-4.c
++++ b/gcc/testsuite/gcc.target/i386/cold-attribute-4.c
+@@ -1,5 +1,5 @@
+ /* { dg-do compile } */
+-/* { dg-options "-O2" } */
++/* { dg-options "-Oz" } */
+ #include <string.h>
+ 
+ int
+diff --git a/gcc/testsuite/gcc.target/i386/pr120427-1.c b/gcc/testsuite/gcc.target/i386/pr120427-1.c
+new file mode 100644
+index 000000000..7f1690e49
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/i386/pr120427-1.c
+@@ -0,0 +1,28 @@
++/* { dg-do compile } */
++/* { dg-options "-O2 -mtune=sapphirerapids" } */
++/* { dg-final { scan-assembler-not "and\[lq\]?\[\\t \]+\\\$0, \[0-9\]*\\(" } } */
++
++struct __pthread_mutex_s
++{
++  int __lock;
++  unsigned int __count;
++  int __owner;
++  unsigned int __nusers;
++  int __kind;
++  short __spins;
++  short __elision;
++  void *p[2];
++};
++typedef union
++{
++  struct __pthread_mutex_s __data;
++  char __size[40];
++  long int __align;
++} pthread_mutex_t;
++typedef struct { pthread_mutex_t mutex; } __rtld_lock_recursive_t;
++void
++foo (__rtld_lock_recursive_t *lock, int i)
++{
++  lock[i] = (__rtld_lock_recursive_t) {{ { 0, 0, 0, 0, 1,
++      0, 0, { ((void *)0) , ((void *)0) } } }};
++}
+diff --git a/gcc/testsuite/gcc.target/i386/pr120427-2.c b/gcc/testsuite/gcc.target/i386/pr120427-2.c
+new file mode 100644
+index 000000000..a380c128c
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/i386/pr120427-2.c
+@@ -0,0 +1,28 @@
++/* { dg-do compile } */
++/* { dg-options "-O2 -mtune=sapphirerapids" } */
++/* { dg-final { scan-assembler-not "or\[lq\]?\[\\t \]+\\\$-1, \[0-9\]*\\(" } } */
++
++struct __pthread_mutex_s
++{
++  int __lock;
++  unsigned int __count;
++  int __owner;
++  unsigned int __nusers;
++  int __kind;
++  short __spins;
++  short __elision;
++  void *p[2];
++};
++typedef union
++{
++  struct __pthread_mutex_s __data;
++  char __size[40];
++  long int __align;
++} pthread_mutex_t;
++typedef struct { pthread_mutex_t mutex; } __rtld_lock_recursive_t;
++void
++foo (__rtld_lock_recursive_t *lock, int i)
++{
++  lock[i] = (__rtld_lock_recursive_t) {{ { -1, -1, -1, -1, 1,
++      -1, -1, { ((void *)-1) , ((void *)-1) } } }};
++}
+diff --git a/gcc/testsuite/gcc.target/i386/pr120427-3.c b/gcc/testsuite/gcc.target/i386/pr120427-3.c
+new file mode 100644
+index 000000000..951cb1f5d
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/i386/pr120427-3.c
+@@ -0,0 +1,45 @@
++/* { dg-do compile } */
++/* { dg-options "-O2" } */
++
++typedef int SItype __attribute__ ((mode (SI)));
++typedef unsigned int USItype __attribute__ ((mode (SI)));
++typedef unsigned int UDItype __attribute__ ((mode (DI)));
++typedef UDItype __attribute__ ((__may_alias__)) bar_t;
++
++static inline __attribute__((__always_inline__)) SItype
++bar (const bar_t **p, SItype prec)
++{
++  bar_t mslimb = 0;
++  SItype i = 20;
++  SItype n = ((USItype) prec) % 4;
++  if (n)
++    {
++      prec -= n;
++      if (prec == 0)
++	return 1;
++      mslimb = (*p)[i];
++    }
++  while (mslimb == 0)
++    {
++      prec -= 4;
++      if (prec == 0)
++	return 1;
++      --i;
++      mslimb = (*p)[i];
++    }
++  return prec;
++}
++UDItype
++foo (const bar_t *i, SItype iprec)
++{
++  iprec = bar (&i, iprec);
++  USItype aiprec = iprec < 0 ? -iprec : iprec;
++  bar_t msb = *i;
++  UDItype mantissa = 0;
++  if (aiprec % 4)
++    msb &= ((bar_t) 1 << aiprec) - 1;
++  if (aiprec >= 54)
++    mantissa = (UDItype) msb << 32;
++
++  return (mantissa ^ (UDItype) 0x20000000000000);
++}
+diff --git a/gcc/testsuite/gcc.target/i386/pr120427-4.c b/gcc/testsuite/gcc.target/i386/pr120427-4.c
+new file mode 100644
+index 000000000..2b453b787
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/i386/pr120427-4.c
+@@ -0,0 +1,6 @@
++/* { dg-do compile } */
++/* { dg-options "-O2" } */
++
++#include "cold-attribute-4.c"
++
++/* { dg-final { scan-assembler "movl" } } */

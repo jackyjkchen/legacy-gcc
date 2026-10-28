@@ -266,6 +266,16 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/240_pr111683.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/241_pr125025.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/242_pr86869.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/243_pr122206.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/244_pr113976.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/245_pr84674-117730.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/246_pr116621.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/247_pr111837.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/248_pr118915.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/249_pr123818.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/250_pr114525.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/251_pr114876.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/252_pr121776.patch
 
 	if use test ; then
 		rm -rf gcc/testsuite/gcc.c-torture/execute/vfprintf-chk-1.c gcc/testsuite/gcc.c-torture/execute/vprintf-chk-1.c gcc/testsuite/c-c++-common/Warray-bounds-2.c gcc/testsuite/c-c++-common/Wrestrict-2.c gcc/testsuite/g++.dg/warn/Wstringop-truncation-1.C

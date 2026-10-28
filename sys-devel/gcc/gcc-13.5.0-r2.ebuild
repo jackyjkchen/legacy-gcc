@@ -73,6 +73,12 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/030_pr118400.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/031_pr114170.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/032_pr109772.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/033_pr113255.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/034_pr118665.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/035_pr112305.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/036_pr122206.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/037_pr70413-107906.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/038_pr125683.patch
 
 	if use test ; then
 		rm -rf gcc/testsuite/gcc.c-torture/execute/vfprintf-chk-1.c gcc/testsuite/gcc.c-torture/execute/vprintf-chk-1.c gcc/testsuite/c-c++-common/Warray-bounds-2.c gcc/testsuite/c-c++-common/Wrestrict-2.c gcc/testsuite/g++.dg/warn/Wstringop-truncation-1.C gcc/testsuite/gcc.target/aarch64/cpunative/native_cpu_18.c gcc/testsuite/gcc.target/arm/asm-flag-7.c

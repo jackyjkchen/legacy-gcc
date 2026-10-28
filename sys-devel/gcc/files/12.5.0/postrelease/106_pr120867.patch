@@ -1,0 +1,56 @@
+diff --git a/gcc/cp/pt.cc b/gcc/cp/pt.cc
+index e4c0e2847..72073e82d 100644
+--- a/gcc/cp/pt.cc
++++ b/gcc/cp/pt.cc
+@@ -16672,6 +16672,15 @@ tsubst_baselink (tree baselink, tree object_type,
+       bool maybe_incomplete = BASELINK_FUNCTIONS_MAYBE_INCOMPLETE_P (baselink);
+       baselink = lookup_fnfields (qualifying_scope, name, /*protect=*/1,
+ 				  complain);
++      if (!baselink)
++	{
++	  if ((complain & tf_error)
++	      && constructor_name_p (name, qualifying_scope))
++	    error ("cannot call constructor %<%T::%D%> directly",
++		   qualifying_scope, name);
++	  return error_mark_node;
++	}
++
+       if (maybe_incomplete)
+ 	{
+ 	  /* Filter out from the new lookup set those functions which didn't
+@@ -16685,15 +16694,6 @@ tsubst_baselink (tree baselink, tree object_type,
+ 	  BASELINK_FUNCTIONS_MAYBE_INCOMPLETE_P (baselink) = true;
+ 	}
+ 
+-      if (!baselink)
+-	{
+-	  if ((complain & tf_error)
+-	      && constructor_name_p (name, qualifying_scope))
+-	    error ("cannot call constructor %<%T::%D%> directly",
+-		   qualifying_scope, name);
+-	  return error_mark_node;
+-	}
+-
+       fns = BASELINK_FUNCTIONS (baselink);
+     }
+   else
+diff --git a/gcc/testsuite/g++.dg/parse/crash81.C b/gcc/testsuite/g++.dg/parse/crash81.C
+new file mode 100644
+index 000000000..632ab0428
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/parse/crash81.C
+@@ -0,0 +1,14 @@
++// PR c++/120876
++// { dg-do compile { target c++11 } }
++
++template <typename T>
++struct S {
++  static bool foo (decltype (bar (T {})));	// { dg-error "'bar' was not declared in this scope; did you mean 'baz'\\\?" }
++  static constexpr bool s = foo (0);
++};
++
++void
++baz ()
++{
++  S <int>::s;
++}

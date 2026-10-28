@@ -1,0 +1,478 @@
+diff --git a/libstdc++-v3/include/bits/ranges_algobase.h b/libstdc++-v3/include/bits/ranges_algobase.h
+index d5dd43ec4..22c6a87b8 100644
+--- a/libstdc++-v3/include/bits/ranges_algobase.h
++++ b/libstdc++-v3/include/bits/ranges_algobase.h
+@@ -202,6 +202,16 @@ namespace ranges
+ 			      copy_backward_result<_Iter, _Out>>
+     __copy_or_move_backward(_Iter __first, _Sent __last, _Out __result);
+ 
++  template<bool _IsMove, typename _Iter, typename _Out>
++    constexpr void
++    __assign_one(_Iter& __iter, _Out& __result)
++    {
++      if constexpr (_IsMove)
++	  *__result = std::move(*__iter);
++      else
++	  *__result = *__iter;
++    }
++
+   template<bool _IsMove,
+ 	   input_iterator _Iter, sentinel_for<_Iter> _Sent,
+ 	   weakly_incrementable _Out>
+@@ -256,23 +266,19 @@ namespace ranges
+ 	      if constexpr (__memcpyable<_Iter, _Out>::__value)
+ 		{
+ 		  using _ValueTypeI = iter_value_t<_Iter>;
+-		  static_assert(_IsMove
+-		      ? is_move_assignable_v<_ValueTypeI>
+-		      : is_copy_assignable_v<_ValueTypeI>);
+ 		  auto __num = __last - __first;
+-		  if (__num)
++		  if (__num > 1) [[likely]]
+ 		    __builtin_memmove(__result, __first,
+-			sizeof(_ValueTypeI) * __num);
++				      sizeof(_ValueTypeI) * __num);
++		  else if (__num == 1)
++		    ranges::__assign_one<_IsMove>(__first, __result);
+ 		  return {__first + __num, __result + __num};
+ 		}
+ 	    }
+ 
+ 	  for (auto __n = __last - __first; __n > 0; --__n)
+ 	    {
+-	      if constexpr (_IsMove)
+-		*__result = std::move(*__first);
+-	      else
+-		*__result = *__first;
++	      ranges::__assign_one<_IsMove>(__first, __result);
+ 	      ++__first;
+ 	      ++__result;
+ 	    }
+@@ -282,10 +288,7 @@ namespace ranges
+ 	{
+ 	  while (__first != __last)
+ 	    {
+-	      if constexpr (_IsMove)
+-		*__result = std::move(*__first);
+-	      else
+-		*__result = *__first;
++	      ranges::__assign_one<_IsMove>(__first, __result);
+ 	      ++__first;
+ 	      ++__result;
+ 	    }
+@@ -391,14 +394,14 @@ namespace ranges
+ 	      if constexpr (__memcpyable<_Out, _Iter>::__value)
+ 		{
+ 		  using _ValueTypeI = iter_value_t<_Iter>;
+-		  static_assert(_IsMove
+-		      ? is_move_assignable_v<_ValueTypeI>
+-		      : is_copy_assignable_v<_ValueTypeI>);
+ 		  auto __num = __last - __first;
+-		  if (__num)
+-		    __builtin_memmove(__result - __num, __first,
++		  __result -= __num;
++		  if (__num > 1) [[likely]]
++		    __builtin_memmove(__result, __first,
+ 				      sizeof(_ValueTypeI) * __num);
+-		  return {__first + __num, __result - __num};
++		  else if (__num == 1)
++		    ranges::__assign_one<_IsMove>(__first, __result);
++		  return {__first + __num, __result};
+ 		}
+ 	    }
+ 
+@@ -409,10 +412,7 @@ namespace ranges
+ 	    {
+ 	      --__tail;
+ 	      --__result;
+-	      if constexpr (_IsMove)
+-		*__result = std::move(*__tail);
+-	      else
+-		*__result = *__tail;
++	      ranges::__assign_one<_IsMove>(__tail, __result);
+ 	    }
+ 	  return {std::move(__lasti), std::move(__result)};
+ 	}
+@@ -425,10 +425,7 @@ namespace ranges
+ 	    {
+ 	      --__tail;
+ 	      --__result;
+-	      if constexpr (_IsMove)
+-		*__result = std::move(*__tail);
+-	      else
+-		*__result = *__tail;
++	      ranges::__assign_one<_IsMove>(__tail, __result);
+ 	    }
+ 	  return {std::move(__lasti), std::move(__result)};
+ 	}
+diff --git a/libstdc++-v3/testsuite/25_algorithms/copy/108846.cc b/libstdc++-v3/testsuite/25_algorithms/copy/108846.cc
+index 964028901..a283e6fcd 100644
+--- a/libstdc++-v3/testsuite/25_algorithms/copy/108846.cc
++++ b/libstdc++-v3/testsuite/25_algorithms/copy/108846.cc
+@@ -25,7 +25,16 @@ test_pr108846()
+     B *src = &dsrc;
+     // If this is optimized to memmove it will overwrite tail padding.
+     std::copy(src, src+1, dst);
++    // Check tail padding is unchanged:
+     VERIFY(ddst.x == 3);
++    // Check B subobject was copied:
++    VERIFY(ddst.i == 4 && ddst.j == 5);
++#if __cpp_lib_ranges >= 201911L
++    ddst.i = ddst.j = 99;
++    std::ranges::copy(src, src+1, dst);
++    VERIFY(ddst.x == 3);
++    VERIFY(ddst.i == 4 && ddst.j == 5);
++#endif
+ }
+ 
+ struct B2 {
+@@ -48,11 +57,55 @@ test_non_const_copy_assign()
+     B2 *src = &dsrc;
+     // Ensure the not-taken trivial copy path works for this type.
+     std::copy(src, src+1, dst);
++    // Check tail padding is unchanged:
++    VERIFY(ddst.x == 3);
++    // Check B subobject was copied:
++    VERIFY(ddst.i == 4 && ddst.j == 5);
++#if __cpp_lib_ranges >= 201911L
++    ddst.i = ddst.j = 99;
++    std::ranges::copy(src, src+1, dst);
++    VERIFY(ddst.x == 3);
++    VERIFY(ddst.i == 4 && ddst.j == 5);
++#endif
++}
++
++struct B3 {
++    B3(int i, short j) : i(i), j(j) {}
++#if __cplusplus >= 201103L
++    B3& operator=(B3& b) = default;
++#endif
++    int i;
++    short j;
++};
++struct D3 : B3 {
++    D3(int i, short j, short x) : B3(i, j), x(x) {}
++    short x; // Stored in tail padding of B3
++};
++
++void
++test_non_const_copy_assign_trivial()
++{
++    D3 ddst(1, 2, 3);
++    D3 dsrc(4, 5, 6);
++    B3 *dst = &ddst;
++    B3 *src = &dsrc;
++    // If this is optimized to memmove it will overwrite tail padding.
++    std::copy(src, src+1, dst);
++    // Check tail padding is unchanged:
++    VERIFY(ddst.x == 3);
++    // Check B subobject was copied:
++    VERIFY(ddst.i == 4 && ddst.j == 5);
++#if __cpp_lib_ranges >= 201911L
++    ddst.i = ddst.j = 99;
++    std::ranges::copy(src, src+1, dst);
+     VERIFY(ddst.x == 3);
++    VERIFY(ddst.i == 4 && ddst.j == 5);
++#endif
+ }
+ 
+ int main()
+ {
+   test_pr108846();
+   test_non_const_copy_assign();
++  test_non_const_copy_assign_trivial();
+ }
+diff --git a/libstdc++-v3/testsuite/25_algorithms/copy_backward/108846.cc b/libstdc++-v3/testsuite/25_algorithms/copy_backward/108846.cc
+index 84b3d5a28..855ee3e18 100644
+--- a/libstdc++-v3/testsuite/25_algorithms/copy_backward/108846.cc
++++ b/libstdc++-v3/testsuite/25_algorithms/copy_backward/108846.cc
+@@ -25,7 +25,16 @@ test_pr108846()
+     B *src = &dsrc;
+     // If this is optimized to memmove it will overwrite tail padding.
+     std::copy_backward(src, src+1, dst+1);
++    // Check tail padding is unchanged:
+     VERIFY(ddst.x == 3);
++    // Check B subobject was copied:
++    VERIFY(ddst.i == 4 && ddst.j == 5);
++#if __cpp_lib_ranges >= 201911L
++    ddst.i = ddst.j = 99;
++    std::ranges::copy_backward(src, src+1, dst+1);
++    VERIFY(ddst.x == 3);
++    VERIFY(ddst.i == 4 && ddst.j == 5);
++#endif
+ }
+ 
+ struct B2 {
+@@ -48,11 +57,55 @@ test_non_const_copy_assign()
+     B2 *src = &dsrc;
+     // Ensure the not-taken trivial copy path works for this type.
+     std::copy_backward(src, src+1, dst+1);
++    // Check tail padding is unchanged:
++    VERIFY(ddst.x == 3);
++    // Check B subobject was copied:
++    VERIFY(ddst.i == 4 && ddst.j == 5);
++#if __cpp_lib_ranges >= 201911L
++    ddst.i = ddst.j = 99;
++    std::ranges::copy_backward(src, src+1, dst+1);
++    VERIFY(ddst.x == 3);
++    VERIFY(ddst.i == 4 && ddst.j == 5);
++#endif
++}
++
++struct B3 {
++    B3(int i, short j) : i(i), j(j) {}
++#if __cplusplus >= 201103L
++    B3& operator=(B3& b) = default;
++#endif
++    int i;
++    short j;
++};
++struct D3 : B3 {
++    D3(int i, short j, short x) : B3(i, j), x(x) {}
++    short x; // Stored in tail padding of B3
++};
++
++void
++test_non_const_copy_assign_trivial()
++{
++    D3 ddst(1, 2, 3);
++    D3 dsrc(4, 5, 6);
++    B3 *dst = &ddst;
++    B3 *src = &dsrc;
++    // If this is optimized to memmove it will overwrite tail padding.
++    std::copy_backward(src, src+1, dst+1);
++    // Check tail padding is unchanged:
++    VERIFY(ddst.x == 3);
++    // Check B subobject was copied:
++    VERIFY(ddst.i == 4 && ddst.j == 5);
++#if __cpp_lib_ranges >= 201911L
++    ddst.i = ddst.j = 99;
++    std::ranges::copy_backward(src, src+1, dst+1);
+     VERIFY(ddst.x == 3);
++    VERIFY(ddst.i == 4 && ddst.j == 5);
++#endif
+ }
+ 
+ int main()
+ {
+   test_pr108846();
+   test_non_const_copy_assign();
++  test_non_const_copy_assign_trivial();
+ }
+diff --git a/libstdc++-v3/testsuite/25_algorithms/copy_n/108846.cc b/libstdc++-v3/testsuite/25_algorithms/copy_n/108846.cc
+index 9ed43e154..d46fb9006 100644
+--- a/libstdc++-v3/testsuite/25_algorithms/copy_n/108846.cc
++++ b/libstdc++-v3/testsuite/25_algorithms/copy_n/108846.cc
+@@ -25,12 +25,21 @@ test_pr108846()
+     B *src = &dsrc;
+     // If this is optimized to memmove it will overwrite tail padding.
+     std::copy_n(src, 1, dst);
++    // Check tail padding is unchanged:
+     VERIFY(ddst.x == 3);
++    // Check B subobject was copied:
++    VERIFY(ddst.i == 4 && ddst.j == 5);
++#if __cpp_lib_ranges >= 201911L
++    ddst.i = ddst.j = 99;
++    std::ranges::copy_n(src, 1, dst);
++    VERIFY(ddst.x == 3);
++    VERIFY(ddst.i == 4 && ddst.j == 5);
++#endif
+ }
+ 
+ struct B2 {
+     B2(int i, short j) : i(i), j(j) {}
+-    B2& operator=(B2&) = default;
++    B2& operator=(B2& b) { i = b.i; j = b.j; return *this; }
+     int i;
+     short j;
+ };
+@@ -48,11 +57,53 @@ test_non_const_copy_assign()
+     B2 *src = &dsrc;
+     // Ensure the not-taken trivial copy path works for this type.
+     std::copy_n(src, 1, dst);
++    // Check tail padding is unchanged:
++    VERIFY(ddst.x == 3);
++    // Check B subobject was copied:
++    VERIFY(ddst.i == 4 && ddst.j == 5);
++#if __cpp_lib_ranges >= 201911L
++    ddst.i = ddst.j = 99;
++    std::ranges::copy_n(src, 1, dst);
++    VERIFY(ddst.x == 3);
++    VERIFY(ddst.i == 4 && ddst.j == 5);
++#endif
++}
++
++struct B3 {
++    B3(int i, short j) : i(i), j(j) {}
++    B3& operator=(B3& b) = default;
++    int i;
++    short j;
++};
++struct D3 : B3 {
++    D3(int i, short j, short x) : B3(i, j), x(x) {}
++    short x; // Stored in tail padding of B3
++};
++
++void
++test_non_const_copy_assign_trivial()
++{
++    D3 ddst(1, 2, 3);
++    D3 dsrc(4, 5, 6);
++    B3 *dst = &ddst;
++    B3 *src = &dsrc;
++    // If this is optimized to memmove it will overwrite tail padding.
++    std::copy_n(src, 1, dst);
++    // Check tail padding is unchanged:
++    VERIFY(ddst.x == 3);
++    // Check B subobject was copied:
++    VERIFY(ddst.i == 4 && ddst.j == 5);
++#if __cpp_lib_ranges >= 201911L
++    ddst.i = ddst.j = 99;
++    std::ranges::copy_n(src, 1, dst);
+     VERIFY(ddst.x == 3);
++    VERIFY(ddst.i == 4 && ddst.j == 5);
++#endif
+ }
+ 
+ int main()
+ {
+   test_pr108846();
+   test_non_const_copy_assign();
++  test_non_const_copy_assign_trivial();
+ }
+diff --git a/libstdc++-v3/testsuite/25_algorithms/move/108846.cc b/libstdc++-v3/testsuite/25_algorithms/move/108846.cc
+index 8248b87d5..2dd52a442 100644
+--- a/libstdc++-v3/testsuite/25_algorithms/move/108846.cc
++++ b/libstdc++-v3/testsuite/25_algorithms/move/108846.cc
+@@ -26,6 +26,37 @@ test_pr108846()
+     // If this is optimized to memmove it will overwrite tail padding.
+     std::move(src, src+1, dst);
+     VERIFY(ddst.x == 3);
++#if __cpp_lib_ranges >= 201911L
++    std::ranges::move(src, src+1, dst);
++    VERIFY(ddst.x == 3);
++#endif
++}
++
++struct B2 {
++    B2(int i, short j) : i(i), j(j) {}
++    B2& operator=(B2&& b) { i = b.i; j = b.j; return *this; }
++    int i;
++    short j;
++};
++struct D2 : B2 {
++    D2(int i, short j, short x) : B2(i, j), x(x) {}
++    short x; // Stored in tail padding of B2
++};
++
++void
++test_move_only()
++{
++    D2 ddst(1, 2, 3);
++    D2 dsrc(4, 5, 6);
++    B2 *dst = &ddst;
++    B2 *src = &dsrc;
++    // Ensure the not-taken trivial copy path works for this type.
++    std::move(src, src+1, dst);
++    VERIFY(ddst.x == 3);
++#if __cpp_lib_ranges >= 201911L
++    std::ranges::move(src, src+1, dst);
++    VERIFY(ddst.x == 3);
++#endif
+ }
+ 
+ struct B3 {
+@@ -40,19 +71,24 @@ struct D3 : B3 {
+ };
+ 
+ void
+-test_move_only()
++test_move_only_trivial()
+ {
+     D3 ddst(1, 2, 3);
+     D3 dsrc(4, 5, 6);
+     B3 *dst = &ddst;
+     B3 *src = &dsrc;
+-    // Ensure the not-taken trivial copy path works for this type.
++    // If this is optimized to memmove it will overwrite tail padding.
+     std::move(src, src+1, dst);
+     VERIFY(ddst.x == 3);
++#if __cpp_lib_ranges >= 201911L
++    std::ranges::move(src, src+1, dst);
++    VERIFY(ddst.x == 3);
++#endif
+ }
+ 
+ int main()
+ {
+   test_pr108846();
+   test_move_only();
++  test_move_only_trivial();
+ }
+diff --git a/libstdc++-v3/testsuite/25_algorithms/move_backward/108846.cc b/libstdc++-v3/testsuite/25_algorithms/move_backward/108846.cc
+index 035743560..92ac0f5ba 100644
+--- a/libstdc++-v3/testsuite/25_algorithms/move_backward/108846.cc
++++ b/libstdc++-v3/testsuite/25_algorithms/move_backward/108846.cc
+@@ -26,6 +26,37 @@ test_pr108846()
+     // If this is optimized to memmove it will overwrite tail padding.
+     std::move_backward(src, src+1, dst+1);
+     VERIFY(ddst.x == 3);
++#if __cpp_lib_ranges >= 201911L
++    std::ranges::move_backward(src, src+1, dst+1);
++    VERIFY(ddst.x == 3);
++#endif
++}
++
++struct B2 {
++    B2(int i, short j) : i(i), j(j) {}
++    B2& operator=(B2&& b) { i = b.i; j = b.j; return *this; }
++    int i;
++    short j;
++};
++struct D2 : B2 {
++    D2(int i, short j, short x) : B2(i, j), x(x) {}
++    short x; // Stored in tail padding of B2
++};
++
++void
++test_move_only()
++{
++    D2 ddst(1, 2, 3);
++    D2 dsrc(4, 5, 6);
++    B2 *dst = &ddst;
++    B2 *src = &dsrc;
++    // Ensure the not-taken trivial copy path works for this type.
++    std::move_backward(src, src+1, dst+1);
++    VERIFY(ddst.x == 3);
++#if __cpp_lib_ranges >= 201911L
++    std::ranges::move_backward(src, src+1, dst+1);
++    VERIFY(ddst.x == 3);
++#endif
+ }
+ 
+ struct B3 {
+@@ -40,7 +71,7 @@ struct D3 : B3 {
+ };
+ 
+ void
+-test_move_only()
++test_move_only_trivial()
+ {
+     D3 ddst(1, 2, 3);
+     D3 dsrc(4, 5, 6);
+@@ -49,10 +80,15 @@ test_move_only()
+     // Ensure the not-taken trivial copy path works for this type.
+     std::move_backward(src, src+1, dst+1);
+     VERIFY(ddst.x == 3);
++#if __cpp_lib_ranges >= 201911L
++    std::ranges::move_backward(src, src+1, dst+1);
++    VERIFY(ddst.x == 3);
++#endif
+ }
+ 
+ int main()
+ {
+   test_pr108846();
+   test_move_only();
++  test_move_only_trivial();
+ }

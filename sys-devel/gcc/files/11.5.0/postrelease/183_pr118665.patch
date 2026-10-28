@@ -1,0 +1,98 @@
+diff --git a/libstdc++-v3/include/bits/uniform_int_dist.h b/libstdc++-v3/include/bits/uniform_int_dist.h
+index 2d83524ca..43619296f 100644
+--- a/libstdc++-v3/include/bits/uniform_int_dist.h
++++ b/libstdc++-v3/include/bits/uniform_int_dist.h
+@@ -251,18 +251,19 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
+ 	  static_assert(!_Wp_traits::__is_signed, "W must be unsigned");
+ 	  static_assert(_Wp_traits::__digits == (2 * _Up_traits::__digits),
+ 			"W must be twice as wide as U");
++	  constexpr auto __min = _Urbg::min();
+ 
+ 	  // reference: Fast Random Integer Generation in an Interval
+ 	  // ACM Transactions on Modeling and Computer Simulation 29 (1), 2019
+ 	  // https://arxiv.org/abs/1805.10941
+-	  _Wp __product = _Wp(__g()) * _Wp(__range);
++	  _Wp __product = _Wp(__g() - __min) * _Wp(__range);
+ 	  _Up __low = _Up(__product);
+ 	  if (__low < __range)
+ 	    {
+ 	      _Up __threshold = -__range % __range;
+ 	      while (__low < __threshold)
+ 		{
+-		  __product = _Wp(__g()) * _Wp(__range);
++		  __product = _Wp(__g() - __min) * _Wp(__range);
+ 		  __low = _Up(__product);
+ 		}
+ 	    }
+diff --git a/libstdc++-v3/testsuite/26_numerics/random/uniform_int_distribution/operators/values.cc b/libstdc++-v3/testsuite/26_numerics/random/uniform_int_distribution/operators/values.cc
+index 1077d23ef..5d7bca866 100644
+--- a/libstdc++-v3/testsuite/26_numerics/random/uniform_int_distribution/operators/values.cc
++++ b/libstdc++-v3/testsuite/26_numerics/random/uniform_int_distribution/operators/values.cc
+@@ -1,7 +1,7 @@
+ // { dg-do run { target c++11 } }
+ // { dg-require-cstdint "" }
+ //
+-// Copyright (C) 2011-2021 Free Software Foundation, Inc.
++// Copyright (C) 2011-2022 Free Software Foundation, Inc.
+ //
+ // This file is part of the GNU ISO C++ Library.  This library is free
+ // software; you can redistribute it and/or modify it under the
+@@ -21,9 +21,31 @@
+ // 26.5.8.2.1 Class template uniform_int_distribution [rand.dist.uni.int]
+ 
+ #include <random>
++#include <cstdint>
+ #include <functional>
+ #include <testsuite_random.h>
+ 
++// { dg-additional-options "-DSIMULATOR_TEST" { target simulator } }
++
++#ifdef SIMULATOR_TEST
++# define ARGS 100, 1000
++#else
++# define ARGS
++#endif
++
++template<std::uint64_t Offset>
++struct shifted
++{
++  using result_type = std::uint64_t;
++  static constexpr result_type min() { return Offset; }
++  static constexpr result_type max() { return Offset + std::mt19937::max(); }
++
++  result_type operator()()
++  { return Offset + eng(); }
++
++  std::mt19937 eng;
++};
++
+ void test01()
+ {
+   using namespace __gnu_test;
+@@ -32,15 +54,23 @@ void test01()
+ 
+   std::uniform_int_distribution<> uid1(0, 2);
+   auto buid1 = std::bind(uid1, eng);
+-  testDiscreteDist(buid1, [](int n) { return uniform_int_pdf(n, 0, 2); } );
++  testDiscreteDist<ARGS>(buid1, [](int n) { return uniform_int_pdf(n, 0, 2); } );
+ 
+   std::uniform_int_distribution<> uid2(3, 7);
+   auto buid2 = std::bind(uid2, eng);
+-  testDiscreteDist(buid2, [](int n) { return uniform_int_pdf(n, 3, 7); } );
++  testDiscreteDist<ARGS>(buid2, [](int n) { return uniform_int_pdf(n, 3, 7); } );
+ 
+   std::uniform_int_distribution<> uid3(1, 20);
+   auto buid3 = std::bind(uid3, eng);
+-  testDiscreteDist(buid3, [](int n) { return uniform_int_pdf(n, 1, 20); } );
++  testDiscreteDist<ARGS>(buid3, [](int n) { return uniform_int_pdf(n, 1, 20); } );
++
++  shifted<(std::uint64_t(1) << 16)> s16e;
++  auto buid4 = std::bind(uid3, s16e);
++  testDiscreteDist<ARGS>(buid4, [](int n) { return uniform_int_pdf(n, 1, 20); } );
++
++  shifted<(std::uint64_t(1) << 32)> s32e;
++  auto buid5 = std::bind(uid3, s32e);
++  testDiscreteDist<ARGS>(buid5, [](int n) { return uniform_int_pdf(n, 1, 20); } );
+ }
+ 
+ int main()

@@ -1,0 +1,67 @@
+diff --git a/gcc/testsuite/g++.dg/cpp0x/pr123818.C b/gcc/testsuite/g++.dg/cpp0x/pr123818.C
+new file mode 100644
+index 000000000..bb0b03c2d
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/cpp0x/pr123818.C
+@@ -0,0 +1,24 @@
++// PR c++/123818
++// { dg-do run { target c++11 } }
++
++struct A { A (int x) : a (x) {} int a; };
++struct B { A b; };
++
++int
++foo (B x = B { 42 })
++{
++    return x.b.a;
++}
++
++int
++bar (B x = B { 43 })
++{
++    return x.b.a;
++}
++
++int
++main ()
++{
++  if (foo () != bar () - 1)
++    __builtin_abort ();
++}
+diff --git a/gcc/tree.c b/gcc/tree.c
+index b5e97ba74..fe64c659d 100644
+--- a/gcc/tree.c
++++ b/gcc/tree.c
+@@ -6948,13 +6948,27 @@ simple_cst_equal (const_tree t1, const_tree t2)
+ 	vec<constructor_elt, va_gc> *v2 = CONSTRUCTOR_ELTS (t2);
+ 
+ 	if (vec_safe_length (v1) != vec_safe_length (v2))
+-	  return false;
++	  return 0;
+ 
+         for (idx = 0; idx < vec_safe_length (v1); ++idx)
+-	  /* ??? Should we handle also fields here? */
+-	  if (!simple_cst_equal ((*v1)[idx].value, (*v2)[idx].value))
+-	    return false;
+-	return true;
++	  {
++	    if ((*v1)[idx].index
++		&& TREE_CODE ((*v1)[idx].index) == FIELD_DECL)
++	      {
++		if ((*v1)[idx].index != (*v2)[idx].index)
++		  return 0;
++	      }
++	    else
++	      {
++		cmp = simple_cst_equal ((*v1)[idx].index, (*v2)[idx].index);
++		if (cmp <= 0)
++		  return cmp;
++	      }
++	    cmp = simple_cst_equal ((*v1)[idx].value, (*v2)[idx].value);
++	    if (cmp <= 0)
++	      return cmp;
++	  }
++	return 1;
+       }
+ 
+     case SAVE_EXPR:

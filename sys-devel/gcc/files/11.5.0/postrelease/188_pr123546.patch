@@ -1,0 +1,107 @@
+diff --git a/gcc/testsuite/gcc.dg/torture/pr123645-1.c b/gcc/testsuite/gcc.dg/torture/pr123645-1.c
+new file mode 100644
+index 000000000..c183cd31d
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/torture/pr123645-1.c
+@@ -0,0 +1,24 @@
++/* { dg-do run } */
++
++/* PR tree-optimization/123645 */
++/* Phi-opt was transforming f into __builtin_popcount which was incorrect. */
++
++__attribute__((noinline))
++int f(unsigned a)
++{
++  return a < 1 ? __builtin_popcount(a) : 0;
++}
++
++int main()
++{
++  if (f(1) != 0)
++    __builtin_abort();
++  if (f(0) != 0)
++    __builtin_abort();
++  if (f(2) != 0)
++    __builtin_abort();
++  if (f(3) != 0)
++    __builtin_abort();
++  if (f(-1) != 0)
++    __builtin_abort();
++}
+diff --git a/gcc/testsuite/gcc.dg/torture/pr123645-2.c b/gcc/testsuite/gcc.dg/torture/pr123645-2.c
+new file mode 100644
+index 000000000..8c488acfb
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/torture/pr123645-2.c
+@@ -0,0 +1,24 @@
++/* { dg-do run } */
++
++/* PR tree-optimization/123645 */
++/* Phi-opt was transforming f into __builtin_bswap which was incorrect. */
++
++__attribute__((noinline))
++int f(unsigned a)
++{
++  return a < 1 ? __builtin_bswap32(a) : 0;
++}
++
++int main()
++{
++  if (f(1) != 0)
++    __builtin_abort();
++  if (f(0) != 0)
++    __builtin_abort();
++  if (f(2) != 0)
++    __builtin_abort();
++  if (f(3) != 0)
++    __builtin_abort();
++  if (f(-1) != 0)
++    __builtin_abort();
++}
+diff --git a/gcc/tree-ssa-phiopt.c b/gcc/tree-ssa-phiopt.c
+index f9e3794fd..299514f47 100644
+--- a/gcc/tree-ssa-phiopt.c
++++ b/gcc/tree-ssa-phiopt.c
+@@ -1952,16 +1952,36 @@ cond_removal_in_popcount_clz_ctz_pattern (basic_block cond_bb,
+       || arg != gimple_cond_lhs (cond))
+     return false;
+ 
+-  /* Canonicalize.  */
+-  if ((e2->flags & EDGE_TRUE_VALUE
+-       && gimple_cond_code (cond) == NE_EXPR)
+-      || (e1->flags & EDGE_TRUE_VALUE
+-	  && gimple_cond_code (cond) == EQ_EXPR))
++  edge true_edge, false_edge;
++  /* We need to know which is the true edge and which is the false
++     edge so that we know when to invert the condition below.  */
++  extract_true_false_edges_from_block (cond_bb, &true_edge, &false_edge);
++
++  /* Forward the edges over the middle basic block.  */
++  if (true_edge->dest == middle_bb)
++    true_edge = EDGE_SUCC (true_edge->dest, 0);
++  if (false_edge->dest == middle_bb)
++    false_edge = EDGE_SUCC (false_edge->dest, 0);
++
++  /* Canonicalize the args with respect to the edges,
++     arg0 is from the true edge and arg1 is from the
++     false edge.
++     That is `cond ? arg0 : arg1`.*/
++  if (true_edge == e1)
++    gcc_assert (false_edge == e2);
++  else
+     {
++      gcc_assert (false_edge == e1);
++      gcc_assert (true_edge == e2);
+       std::swap (arg0, arg1);
+-      std::swap (e1, e2);
+     }
+ 
++  /* Canonicalize the args such that we get:
++     `arg != 0 ? arg0 : arg1`. So swap arg0/arg1
++     around if cond was an equals.  */
++  if (gimple_cond_code (cond) == EQ_EXPR)
++    std::swap (arg0, arg1);
++
+   /* Check PHI arguments.  */
+   if (lhs != arg0
+       || TREE_CODE (arg1) != INTEGER_CST

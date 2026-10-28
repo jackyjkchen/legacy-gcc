@@ -1,0 +1,130 @@
+diff --git a/gcc/cp/decl2.cc b/gcc/cp/decl2.cc
+index e48a6c2dd..3bc284a1a 100644
+--- a/gcc/cp/decl2.cc
++++ b/gcc/cp/decl2.cc
+@@ -2569,7 +2569,10 @@ min_vis_expr_r (tree *tp, int */*walk_subtrees*/, void *data)
+   int *vis_p = (int *)data;
+   int tpvis = VISIBILITY_DEFAULT;
+ 
+-  switch (TREE_CODE (*tp))
++  tree t = *tp;
++  if (TREE_CODE (t) == PTRMEM_CST)
++    t = PTRMEM_CST_MEMBER (t);
++  switch (TREE_CODE (t))
+     {
+     case CAST_EXPR:
+     case IMPLICIT_CONV_EXPR:
+@@ -2580,15 +2583,26 @@ min_vis_expr_r (tree *tp, int */*walk_subtrees*/, void *data)
+     case NEW_EXPR:
+     case CONSTRUCTOR:
+     case LAMBDA_EXPR:
+-      tpvis = type_visibility (TREE_TYPE (*tp));
++      tpvis = type_visibility (TREE_TYPE (t));
+       break;
+ 
++    case TEMPLATE_DECL:
++      if (DECL_ALIAS_TEMPLATE_P (t))
++	/* FIXME: We don't maintain TREE_PUBLIC / DECL_VISIBILITY for
++	   alias templates so we can't trust it here (PR107906).  */
++	break;
++      t = DECL_TEMPLATE_RESULT (t);
++      /* Fall through.  */
+     case VAR_DECL:
+     case FUNCTION_DECL:
+-      if (! TREE_PUBLIC (*tp))
++      if (! TREE_PUBLIC (t))
+ 	tpvis = VISIBILITY_ANON;
+       else
+-	tpvis = DECL_VISIBILITY (*tp);
++	tpvis = DECL_VISIBILITY (t);
++      break;
++
++    case FIELD_DECL:
++      tpvis = type_visibility (DECL_CONTEXT (t));
+       break;
+ 
+     default:
+diff --git a/gcc/testsuite/g++.dg/template/linkage2.C b/gcc/testsuite/g++.dg/template/linkage2.C
+new file mode 100644
+index 000000000..08fb69302
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/template/linkage2.C
+@@ -0,0 +1,13 @@
++// PR c++/70413
++// { dg-do compile { target c++11 } }
++// { dg-final { scan-assembler-not "(weak|glob)\[^\n\]*_Z" } }
++
++namespace {
++  template<class> struct A;
++}
++
++template<template<class> class Q> void f() { }
++
++int main() {
++  f<A>();
++}
+diff --git a/gcc/testsuite/g++.dg/template/linkage3.C b/gcc/testsuite/g++.dg/template/linkage3.C
+new file mode 100644
+index 000000000..257aab33b
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/template/linkage3.C
+@@ -0,0 +1,17 @@
++// PR c++/70413
++// { dg-final { scan-assembler-not "(weak|glob)\[^\n\]*_Z" } }
++
++namespace {
++  struct A {
++    void f();
++    int m;
++  };
++}
++
++template<void(A::*)()> void g() { }
++template<int A::*> void h() { }
++
++int main() {
++  g<&A::f>();
++  h<&A::m>();
++}
+diff --git a/gcc/testsuite/g++.dg/template/linkage4.C b/gcc/testsuite/g++.dg/template/linkage4.C
+new file mode 100644
+index 000000000..03630eebd
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/template/linkage4.C
+@@ -0,0 +1,16 @@
++// PR c++/107906
++// { dg-do compile { target c++11 } }
++// { dg-final { scan-assembler-not "(weak|glob)\[^\n\]*_Z" { xfail *-*-* } } }
++
++namespace {
++  template<class> using X = int;
++  struct A {
++    template<class> using X = int;
++  };
++}
++template<template<class> class Q> void f() { }
++
++int main() {
++  f<X>();
++  f<A::X>();
++}
+diff --git a/gcc/testsuite/g++.dg/template/linkage4a.C b/gcc/testsuite/g++.dg/template/linkage4a.C
+new file mode 100644
+index 000000000..f1934fd65
+--- /dev/null
++++ b/gcc/testsuite/g++.dg/template/linkage4a.C
+@@ -0,0 +1,14 @@
++// { dg-do compile { target c++11 } }
++// { dg-final { scan-assembler "(weak|glob)\[^\n\]*_Z1fI1XEvv" } }
++// { dg-final { scan-assembler "(weak|glob)\[^\n\]*_Z1fIN1A1XEEvv" } }
++
++template<class> using X = int;
++struct A {
++  template<class> using X = int;
++};
++template<template<class> class Q> void f() { }
++
++int main() {
++  f<X>();
++  f<A::X>();
++}

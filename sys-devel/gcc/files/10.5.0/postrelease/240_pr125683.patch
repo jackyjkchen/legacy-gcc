@@ -1,0 +1,231 @@
+diff --git a/gcc/simplify-rtx.c b/gcc/simplify-rtx.c
+index 9531d6510..d065fb412 100644
+--- a/gcc/simplify-rtx.c
++++ b/gcc/simplify-rtx.c
+@@ -6009,9 +6009,78 @@ simplify_ternary_operation (enum rtx_code code, machine_mode mode,
+       if (CONST_INT_P (op0))
+ 	return op0 != const0_rtx ? op1 : op2;
+ 
+-      /* Convert c ? a : a into "a".  */
++      /* Convert c ? a : a into "a".  Beware that two rtx_equal_p MEMs can
++	 still carry different memory attributes, in particular incompatible
++	 alias sets; returning one of them would narrow the aliasing of the
++	 result to that operand's, which is unsound (PR125683).  When the
++	 attributes differ, fold to a copy that keeps only what both operands
++	 guarantee, like merge_memattrs does when cross-jumping commons two
++	 memory references.  */
+       if (rtx_equal_p (op1, op2) && ! side_effects_p (op0))
+-	return op1;
++	{
++	  if (op1 == op2
++	      || !MEM_P (op1)
++	      || (mem_attrs_eq_p (get_mem_attrs (op1), get_mem_attrs (op2))
++		  && MEM_READONLY_P (op1) == MEM_READONLY_P (op2)
++		  && MEM_NOTRAP_P (op1) == MEM_NOTRAP_P (op2)
++		  && MEM_POINTER (op1) == MEM_POINTER (op2)))
++	    return op1;
++
++	  /* For BLKmode the size in MEM_ATTRS describes the access itself,
++	     so it cannot be dropped.  Volatility is not merged either: it
++	     constrains when the access happens rather than describing the
++	     memory, so unlike the flags below it cannot be weakened to what
++	     both operands allow.  Dropping it would lose a required access;
++	     merge_memattrs and noce_try_cmove_arith instead set it, which is
++	     sound but claims more than either operand did.  Those two have to
++	     put something on a reference they are already committed to, while
++	     this fold is free to do nothing, and if-conversion never reaches
++	     it with a volatile operand in any case: side_effects_p is true
++	     for one, so noce_operand_ok rejects it.  Decline the fold.  */
++	  if (GET_MODE (op1) != BLKmode
++	      && MEM_VOLATILE_P (op1) == MEM_VOLATILE_P (op2))
++	    {
++	      rtx mem = shallow_copy_rtx (op1);
++
++	      if (MEM_ALIAS_SET (op1) != MEM_ALIAS_SET (op2))
++		set_mem_alias_set (mem, 0);
++
++	      if (!mem_expr_equal_p (MEM_EXPR (op1), MEM_EXPR (op2)))
++		{
++		  set_mem_expr (mem, NULL_TREE);
++		  clear_mem_offset (mem);
++		}
++	      else if (MEM_OFFSET_KNOWN_P (op1) != MEM_OFFSET_KNOWN_P (op2)
++		       || (MEM_OFFSET_KNOWN_P (op1)
++			   && maybe_ne (MEM_OFFSET (op1), MEM_OFFSET (op2))))
++		clear_mem_offset (mem);
++
++	      /* Unlike merge_memattrs, which fixes up two references that
++		 both stay in the stream, this returns a single reference
++		 that stands in for either arm, so keep the size only when
++		 both agree rather than taking the larger one.  */
++	      if (!MEM_SIZE_KNOWN_P (op1) || !MEM_SIZE_KNOWN_P (op2)
++		  || maybe_ne (MEM_SIZE (op1), MEM_SIZE (op2)))
++		clear_mem_size (mem);
++
++	      set_mem_align (mem, MIN (MEM_ALIGN (op1), MEM_ALIGN (op2)));
++
++	      /* MEM_READONLY_P, MEM_NOTRAP_P and MEM_POINTER are rtx flag
++		 bits rather than MEM_ATTRS fields, so shallow_copy_rtx has
++		 already taken them from OP1 and they need clearing by hand.
++		 Each asserts something about the reference, so the copy may
++		 only keep it when both operands do, as merge_memattrs does
++		 for the first two.  */
++	      if (MEM_READONLY_P (op1) != MEM_READONLY_P (op2))
++		MEM_READONLY_P (mem) = 0;
++	      if (MEM_NOTRAP_P (op1) != MEM_NOTRAP_P (op2))
++		MEM_NOTRAP_P (mem) = 0;
++	      if (MEM_POINTER (op1) != MEM_POINTER (op2))
++		MEM_POINTER (mem) = 0;
++
++	      return mem;
++	    }
++	}
+ 
+       /* Convert a != b ? a : b into "a".  */
+       if (GET_CODE (op0) == NE
+diff --git a/gcc/testsuite/gcc.dg/pr125683.c b/gcc/testsuite/gcc.dg/pr125683.c
+new file mode 100644
+index 000000000..1f5706261
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/pr125683.c
+@@ -0,0 +1,38 @@
++/* PR rtl-optimization/125683 */
++/* { dg-do run } */
++/* { dg-options "-O2 -fno-tree-pre -fno-code-hoisting -fdisable-tree-phiopt1 -fdisable-tree-phiopt2 -fdisable-tree-phiopt3 -fdisable-tree-phiopt4 -fdisable-tree-cselim" } */
++
++/* if-conversion (ce1) used to collapse the two conditional loads below
++   into a single load through simplify_gen_ternary's
++   (if_then_else c X X) -> X rule, which ignores the memory attributes.
++   The two loads have incompatible alias sets, so the collapsed load kept
++   just one of them; a later pass then treated it as not aliasing the
++   long store to *d and moved it, giving the wrong value when cc == d.
++   Several tree passes (PRE/code-hoisting on the release branches, phi-opt
++   load factoring on trunk) can factor the two loads with a conservative
++   type before RTL and so hide the bug; they are disabled here so the
++   if-conversion path is exercised on every affected version.  */
++
++long __attribute__ ((noipa))
++f (int a, void *cc, long *d)
++{
++  long long c;
++  *d = 0;
++  if (a)
++    c = *(long *) cc;
++  else
++    c = *(long long *) cc;
++  *d = 1;
++  return c;
++}
++
++int
++main (void)
++{
++  long storage = -1;
++  /* cc == d, and a != 0 so the taken load reads *(long *)cc, which is a
++     type-compatible access to the object *d that was just set to 0.  */
++  if (f (1, &storage, &storage) != 0)
++    __builtin_abort ();
++  return 0;
++}
+diff --git a/gcc/testsuite/gcc.dg/rtl/aarch64/pr125683-flags.c b/gcc/testsuite/gcc.dg/rtl/aarch64/pr125683-flags.c
+new file mode 100644
+index 000000000..11b2b77d6
+--- /dev/null
++++ b/gcc/testsuite/gcc.dg/rtl/aarch64/pr125683-flags.c
+@@ -0,0 +1,96 @@
++/* { dg-do compile { target aarch64-*-* } } */
++/* { dg-options "-O2 -fdump-rtl-ce1" } */
++
++/* PR125683: when ce1 collapses "c ? a : a" the folded MEM must not claim
++   anything only one arm guaranteed.  MEM_READONLY_P and MEM_NOTRAP_P
++   disagreement cannot be produced from C source -- both are derived from
++   the base object, which two loads from the same address share -- so the
++   two MEMs are built here directly.  The else arm is the one the fold
++   copies, so it is the arm that carries the flags.
++
++   Based on the ce1 input for
++
++     long f (int a, void *cc, long *d)
++     { long c; *d = 0; if (a) c = *(long *) cc; else c = *(long *) cc;
++       *d = 1; return c; }  */
++
++long __RTL (startwith ("ce1")) f (int a, void *cc, long *d)
++{
++(function "f"
++  (param "a"
++    (DECL_RTL (reg/v:SI <3> [ a ]))
++    (DECL_RTL_INCOMING (reg:SI x0 [ a ])))
++  (param "cc"
++    (DECL_RTL (reg/v/f:DI <4> [ cc ]))
++    (DECL_RTL_INCOMING (reg:DI x1 [ cc ])))
++  (param "d"
++    (DECL_RTL (reg/v/f:DI <5> [ d ]))
++    (DECL_RTL_INCOMING (reg:DI x2 [ d ])))
++  (insn-chain
++    (block 2
++      (edge-from entry (flags "FALLTHRU"))
++      (cnote 6 [bb 2] NOTE_INSN_BASIC_BLOCK)
++      (cinsn 2 (set (reg/v:SI <3> [ a ])
++                    (reg:SI x0 [ a ])))
++      (cinsn 3 (set (reg/v/f:DI <4> [ cc ])
++                    (reg:DI x1 [ cc ])))
++      (cinsn 4 (set (reg/v/f:DI <5> [ d ])
++                    (reg:DI x2 [ d ])))
++      (cnote 5 NOTE_INSN_FUNCTION_BEG)
++      (cinsn 8 (set (mem:DI (reg/v/f:DI <5> [ d ]) [3  S8 A64])
++                    (const_int 0)))
++      (cinsn 9 (set (reg:CC cc)
++                    (compare:CC (reg/v:SI <3> [ a ])
++                        (const_int 0))))
++      (cjump_insn 10 (set (pc)
++                    (if_then_else (eq (reg:CC cc)
++                            (const_int 0))
++                        (label_ref 15)
++                        (pc))))
++      (edge-to 3 (flags "FALLTHRU"))
++      (edge-to 4)
++    ) ;; block 2
++    (block 3
++      (edge-from 2 (flags "FALLTHRU"))
++      (cnote 11 [bb 3] NOTE_INSN_BASIC_BLOCK)
++      (cinsn 12 (set (reg/v:DI <2>)
++                    (mem:DI (reg/v/f:DI <4> [ cc ]) [2  S8 A64])))
++      (edge-to 5 (flags "FALLTHRU"))
++    ) ;; block 3
++    (block 4
++      (edge-from 2)
++      (clabel 15 2)
++      (cnote 16 [bb 4] NOTE_INSN_BASIC_BLOCK)
++      (cinsn 17 (set (reg/v:DI <2>)
++                    (mem/u/c/f:DI (reg/v/f:DI <4> [ cc ]) [1  S8 A64])))
++      (edge-to 5 (flags "FALLTHRU"))
++    ) ;; block 4
++    (block 5
++      (edge-from 3 (flags "FALLTHRU"))
++      (edge-from 4 (flags "FALLTHRU"))
++      (cnote 20 [bb 5] NOTE_INSN_BASIC_BLOCK)
++      (cinsn 19 (set (reg:DI <6>)
++                    (const_int 1)))
++      (cinsn 21 (set (mem:DI (reg/v/f:DI <5> [ d ]) [3  S8 A64])
++                    (reg:DI <6>)))
++      (cinsn 22 (set (reg/i:DI x0)
++                    (reg/v:DI <2>)))
++      (cinsn 23 (use (reg/i:DI x0)))
++      (edge-to exit (flags "FALLTHRU"))
++    ) ;; block 5
++  ) ;; insn-chain
++) ;; function
++}
++
++/* The diamond must actually be collapsed, otherwise the rest proves
++   nothing.  */
++/* { dg-final { scan-rtl-dump "noce_try_ifelse_collapse" "ce1" } } */
++
++/* The alias sets disagree, so the fold drops to alias set 0.  That MEM is
++   the folded one; it must carry no flag bits, since each was set on only
++   one arm.  Before the flags were handled it came out as
++   "(mem/u/c:DI (reg...) [0  S8 A64])".  The dump also lists the pass input,
++   where the /u/c arm legitimately appears, so both checks are anchored on
++   the alias set 0 that only the folded MEM has.  */
++/* { dg-final { scan-rtl-dump "mem:DI \\(reg\[^\)\]*\\) \\\[0 " "ce1" } } */
++/* { dg-final { scan-rtl-dump-not "mem/\[a-z/\]*:DI \\(reg\[^\)\]*\\) \\\[0 " "ce1" } } */

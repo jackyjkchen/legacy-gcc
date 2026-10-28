@@ -147,6 +147,27 @@ src_prepare() {
 	eapply "${FILESDIR}"/${PV}/postrelease/103_pr112785.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/104_pr120757.patch
 	eapply "${FILESDIR}"/${PV}/postrelease/105_pr121771.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/106_pr120867.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/107_pr117423.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/108_pr118665.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/109_pr110853.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/110_pr103773.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/111_pr120837.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/112_pr124358.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/113_pr122976.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/114_pr125079.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/115_pr113255.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/116_pr108846-116471-117121.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/117_pr123546.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/118_pr116369.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/119_pr122206.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/120_pr70413-107906.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/121_pr84674-117730.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/122_pr125683.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/123_pr123818.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/124_pr42512-66375-107176.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/125_pr114525.patch
+	eapply "${FILESDIR}"/${PV}/postrelease/126_pr121776.patch
 
 	if use test ; then
 		rm -rf gcc/testsuite/gcc.c-torture/execute/vfprintf-chk-1.c gcc/testsuite/gcc.c-torture/execute/vprintf-chk-1.c gcc/testsuite/c-c++-common/Warray-bounds-2.c gcc/testsuite/c-c++-common/Wrestrict-2.c gcc/testsuite/g++.dg/warn/Wstringop-truncation-1.C gcc/testsuite/gcc.target/aarch64/cpunative/native_cpu_18.c gcc/testsuite/gcc.target/arm/asm-flag-7.c
