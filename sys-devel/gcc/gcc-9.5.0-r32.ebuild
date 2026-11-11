@@ -12,6 +12,7 @@ src_prepare() {
 	toolchain_src_prepare
 
 	is_djgpp || eapply "${FILESDIR}"/${PV}/01_fix-sanitizer-glibc-2.42.patch
+	is_djgpp || eapply "${FILESDIR}"/${PV}/02_fix-sanitizer-linux-header-7.patch
 
 	use vanilla && return 0
 

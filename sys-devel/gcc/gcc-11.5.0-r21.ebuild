@@ -30,6 +30,8 @@ src_prepare() {
 
 	toolchain_src_prepare
 
+	is_djgpp || eapply "${FILESDIR}"/${PV}/01_fix-sanitizer-linux-header-7.patch
+
 	use vanilla && return 0
 
 	eapply "${FILESDIR}"/${PV}/10_riscv-fix-multilib.patch

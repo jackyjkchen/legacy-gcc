@@ -440,6 +440,8 @@ case $(tc-arch) in
 		;;
 esac
 
+DEPEND="${RDEPEND}"
+
 if [[ ${PN} == gcc && ${PV} == *_p* ]] ; then
 	# Snapshots don't contain info pages.
 	# If they start to, adjust gcc_cv_prog_makeinfo_modern logic in toolchain_src_configure.
@@ -449,9 +451,14 @@ fi
 
 if tc_has_feature sanitize ; then
 	# libsanitizer relies on 'crypt.h' to be present
-	# on target. glibc user to provide it unconditionally.
+	# on target. glibc used to provide it unconditionally.
 	# Nowadays it's a standalone library: bug #802648
-	DEPEND+=" sanitize? ( virtual/libcrypt )"
+	DEPEND+="
+		sanitize? (
+			virtual/libcrypt
+			virtual/os-headers
+		)
+	"
 fi
 
 if tc_has_feature systemtap ; then
@@ -460,6 +467,7 @@ if tc_has_feature systemtap ; then
 fi
 
 if tc_has_feature zstd ; then
+	DEPEND+=" zstd? ( app-arch/zstd )"
 	RDEPEND+=" zstd? ( app-arch/zstd )"
 fi
 
@@ -488,8 +496,6 @@ if tc_has_feature d && tc_version_is_at_least 12 ; then
 	# bug #840182
 	BDEPEND+=" d? ( || ( sys-devel/gcc:${SLOT}[d(-)] <sys-devel/gcc-${SLOT}[d(-)] <sys-devel/gcc-12[d(-)] ) )"
 fi
-
-DEPEND="${RDEPEND}"
 
 PDEPEND="sys-devel/gcc-config"
 
